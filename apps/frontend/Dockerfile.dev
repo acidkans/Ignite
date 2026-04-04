@@ -1,0 +1,13 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+# Kopiujemy resztę, ale w docker-compose nadpiszemy to wolumenem
+COPY . .
+
+# Vite domyślnie nasłuchuje na localhost, musimy to zmienić na 0.0.0.0
+# --host pozwala na dostęp z zewnątrz kontenera
+CMD ["npm", "run", "dev", "--", "--host"]

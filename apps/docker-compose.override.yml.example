@@ -1,0 +1,19 @@
+services:
+  # Wystawienie portów dla dostępu lokalnego
+  frontend:
+    ports:
+      - "8080:5173"
+    environment:
+      - VITE_API_TARGET=http://erp-backend:3000
+
+  backend:
+    ports:
+      - "3001:3000"
+    environment:
+      # Lokalnie łączymy się do bazy po nazwie serwisu w dockerze
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-changeme}@db:5432/${DB_NAME:-erp_db}
+      - VECTOR_DB_URL=http://vector-db:6333
+
+networks:
+  traefik-public:
+    external: true

@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-black text-white min-h-screen bg-[url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop')] bg-cover bg-center;
+  /* Opcjonalnie tło kosmosu/sieci dla lepszego efektu szkła */
+}
+
+/* Slide-in right animation */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.animate-slide-in-right {
+  animation: slide-in-right 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Glassmorphism Utility */
+.glass-panel {
+  @apply bg-black/60 backdrop-blur-md border border-white/10 shadow-2xl rounded-2xl;
+}
+
+/* AG Grid Select Editor (Dropdown) Styling */
+.ag-select-list {
+  background: rgba(20, 20, 20, 0.95) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+}
+
+.ag-select-list-item {
+  color: #EEE !important;
+  background: transparent !important;
+  padding: 8px 12px !important;
+}
+
+.ag-select-list-item:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.ag-select-list-item.ag-active-item {
+  background: rgba(59, 130, 246, 0.3) !important;
+}
+
+/* Hide number input spinners */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

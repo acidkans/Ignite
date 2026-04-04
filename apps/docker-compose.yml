@@ -1,0 +1,141 @@
+services:
+  # Baza danych PostgreSQL
+  db:
+    image: postgres:15-alpine
+    container_name: erp-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-erp_db}
+    # Usuwa stary postmaster.pid po niepoprawnym zamknięciu (crash Windows/Docker)
+    command: >
+      sh -c "rm -f /var/lib/postgresql/data/postmaster.pid && exec docker-entrypoint.sh postgres"
+    volumes:
+      # Główne repozytorium (poza worktree)
+      - ../data/erp/postgres:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-erp_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Backend (Node.js/Express)
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: erp-backend
+    restart: always
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASSWORD:-changeme}@db:5432/${DB_NAME:-erp_db}
+      JWT_SECRET: ${JWT_SECRET:-supersecretkey}
+      VECTOR_DB_URL: http://erp-vector-db:6333
+    volumes:
+      - ./backend:/usr/src/app
+      - /usr/src/app/node_modules
+    ports:
+      - "3005:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.erp-backend.rule=Host(`erp.gigatel.org`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.erp-backend.entrypoints=web,websecure"
+      - "traefik.http.routers.erp-backend.tls=true"
+      - "traefik.http.routers.erp-backend.tls.certresolver=myresolver"
+      - "traefik.http.services.erp-backend.loadbalancer.server.port=3000"
+      - "traefik.docker.network=traefik-public"
+
+  # Frontend (Vite Dev Server)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: erp-frontend
+    restart: always
+    environment:
+      VITE_API_TARGET: http://erp-backend:3000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - traefik-public
+      - internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.erp-frontend.rule=Host(`erp.gigatel.org`)"
+      - "traefik.http.routers.erp-frontend.entrypoints=web,websecure"
+      - "traefik.http.routers.erp-frontend.tls=true"
+      - "traefik.http.routers.erp-frontend.tls.certresolver=myresolver"
+      - "traefik.http.services.erp-frontend.loadbalancer.server.port=5173"
+      - "traefik.docker.network=traefik-public"
+
+  # Baza wektorowa Qdrant
+  vector-db:
+    image: qdrant/qdrant:latest
+    container_name: erp-vector-db
+    restart: always
+    environment:
+      - QDRANT__SERVICE__API_KEY=erp_vector_secret_2024
+    ports:
+      - "6333:6333" # API REST
+      - "6334:6334" # gRPC
+    volumes:
+      - ../data/erp/qdrant:/qdrant/storage
+    networks:
+      - internal
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.qdrant.rule=Host(`qdrant.erp.gigatel.org`)"
+      - "traefik.http.routers.qdrant.entrypoints=web,websecure"
+      - "traefik.http.routers.qdrant.tls=true"
+      - "traefik.http.routers.qdrant.tls.certresolver=myresolver"
+      - "traefik.http.services.qdrant.loadbalancer.server.port=6333"
+      - "traefik.docker.network=traefik-public"
+
+  # Python Parser Service
+  parser-service:
+    build:
+      context: ./parser-service
+      dockerfile: Dockerfile
+    container_name: erp-parser-service
+    restart: always
+    ports:
+      - "8000:8000"
+    networks:
+      - internal
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.parser-service.rule=Host(`parser.erp.gigatel.org`)"
+      - "traefik.http.routers.parser-service.entrypoints=web,websecure"
+      - "traefik.http.routers.parser-service.tls=true"
+      - "traefik.http.routers.parser-service.tls.certresolver=myresolver"
+      - "traefik.http.services.parser-service.loadbalancer.server.port=8000"
+      - "traefik.docker.network=traefik-public"
+
+networks:
+  # Zewnętrzna sieć Traefika (już istnieje na serwerze)
+  traefik-public:
+    external: true
+  # Wewnętrzna sieć do komunikacji backend <-> baza danych
+  internal:
+    driver: bridge
