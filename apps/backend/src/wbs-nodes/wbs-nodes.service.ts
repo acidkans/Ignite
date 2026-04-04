@@ -212,21 +212,40 @@ export class WbsNodesService {
         console.log(`[WBS] getUnifiedTree: requested=${requestedNodeId}, fallback=${fallbackOrderNodeId}, versionId=${vId}`);
 
         try {
-            // Step 1: Pobierz nodes bez include - najpierw spróbuj requested, potem fallback
-            let nodes: any[] = [];
-            
-            nodes = await this.prisma.wbsNode.findMany({
-                where: { nodeId: requestedNodeId, versionId: vId || null },
-                orderBy: { sortOrder: 'asc' },
-            });
-            console.log(`[WBS]   requested node (${requestedNodeId}): found ${nodes.length} nodes`);
+            const fetchNodesForCandidate = async (candidateNodeId: string) => {
+                if (vId) {
+                    const [versionRows, baseRows] = await Promise.all([
+                        this.prisma.wbsNode.findMany({
+                            where: { nodeId: candidateNodeId, versionId: vId },
+                            orderBy: { sortOrder: 'asc' },
+                        }),
+                        this.prisma.wbsNode.findMany({
+                            where: { nodeId: candidateNodeId, versionId: null },
+                            orderBy: { sortOrder: 'asc' },
+                        }),
+                    ]);
 
-            // Fallback do order node jeśli site nie ma nodes
-            if (nodes.length === 0 && fallbackOrderNodeId !== requestedNodeId) {
-                nodes = await this.prisma.wbsNode.findMany({
-                    where: { nodeId: fallbackOrderNodeId, versionId: vId || null },
+                    if (versionRows.length === 0) return baseRows;
+                    if (baseRows.length === 0) return versionRows;
+
+                    // Merge base + version by ID: version rows override base if same UUID.
+                    const byId = new Map(baseRows.map((row) => [row.id, row]));
+                    for (const row of versionRows) byId.set(row.id, row);
+                    return Array.from(byId.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+                }
+
+                return this.prisma.wbsNode.findMany({
+                    where: { nodeId: candidateNodeId, versionId: null },
                     orderBy: { sortOrder: 'asc' },
                 });
+            };
+
+            // Step 1: try requested node first; for site, fallback to parent order.
+            let nodes: any[] = await fetchNodesForCandidate(requestedNodeId);
+            console.log(`[WBS]   requested node (${requestedNodeId}): found ${nodes.length} nodes`);
+
+            if (nodes.length === 0 && fallbackOrderNodeId !== requestedNodeId) {
+                nodes = await fetchNodesForCandidate(fallbackOrderNodeId);
                 console.log(`[WBS]   fallback to parent order (${fallbackOrderNodeId}): found ${nodes.length} nodes`);
             }
 
