@@ -1,0 +1,87 @@
+# Environment files - ALL env files are ignored for security
+*.env
+*.env.*
+.env*
+apps/.env*
+apps/backend/.env*
+!apps/ENV_README.md
+
+# Dependencies
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100, rozszerz
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+data/
+
+# Docker volumes
+apps/data/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+tmp/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Prisma
+# apps/backend/prisma/migrations/ (Odblokowane dla wdrożeń)
+
+# Archives (build artifacts)
+*.zip
+*.tar.gz
+*.tar
+*.rar
+*.7z
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# System files
+.env.vault
+.env.*.local

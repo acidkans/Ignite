@@ -1,0 +1,43 @@
+# Environment files - ALL ignored for security
+*.env
+*.env.*
+.env*
+backend/.env*
+!ENV_README.md
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+dist/
+build/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Database
+*.sqlite
+*.db
+
+# Docker volumes
+data/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Local Docker overrides (not tracked - copy from .example)
+docker-compose.override.yml

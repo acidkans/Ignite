@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init:*)",
+      "Bash(find . -type f -name *.json -o -name *.sh -o -name *.md -o -name .env* -o -name docker-compose* -o -name Dockerfile)",
+      "Bash(find /c/Users/Andrzej/.gemini/antigravity/scratch/Ignite -not -path */node_modules* -type d)",
+      "Bash(ls -la C:/Users/Andrzej/.gemini/antigravity/scratch/ERP/*.json)"
+    ]
+  }
+}

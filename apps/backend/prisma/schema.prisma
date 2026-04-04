@@ -1,0 +1,671 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String             @id @default(uuid())
+  email             String             @unique
+  password          String
+  firstName         String?
+  lastName          String?
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  supervisorId      String?
+  auditLogs         AuditLog[]
+  nodePermissions   NodePermission[]   @relation("UserNodePermissions")
+  ownedNodes        ProcessNode[]      @relation("OwnedProcessNodes")
+  assignedSubtasks  Subtask[]          @relation("AssignedSubtasks")
+  userEntityConfigs UserEntityConfig[]
+  userRoles         UserRole[]
+  supervisor        User?              @relation("UserSupervisor", fields: [supervisorId], references: [id])
+  subordinates      User[]             @relation("UserSupervisor")
+  teams             Team[]             @relation("TeamToUser")
+  comments          Comment[]
+  pushSubscriptions PushSubscription[]
+  notifications     Notification[]
+
+  @@map("users")
+}
+
+model Comment {
+  id               String   @id @default(uuid())
+  orderId          String
+  requirementId    String? // opcjonalne #oznaczenie wymagania
+  userId           String
+  text             String
+  type             String   @default("NOTE") // NOTE | QUESTION | RESOLVED | URGENT
+  mentionedUserIds String[] @default([])
+  replyToId        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user    User      @relation(fields: [userId], references: [id])
+  replyTo Comment?  @relation("CommentReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies Comment[] @relation("CommentReplies")
+
+  @@map("comments")
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("push_subscriptions")
+}
+
+model Notification {
+  id            String    @id @default(uuid())
+  userId        String
+  type          String // NEW_COMMENT | NEW_QUESTION
+  title         String
+  body          String
+  orderId       String?
+  requirementId String?
+  readAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model Team {
+  id              String           @id @default(uuid())
+  name            String           @unique
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  nodePermissions NodePermission[] @relation("TeamNodePermissions")
+  users           User[]           @relation("TeamToUser")
+
+  @@map("teams")
+}
+
+model Role {
+  id              String           @id @default(uuid())
+  name            String           @unique
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id              String           @id @default(uuid())
+  name            String           @unique
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model UserRole {
+  userId String
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id])
+  role         Role       @relation(fields: [roleId], references: [id])
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("projects")
+}
+
+model ProcessNode {
+  id                        String                     @id @default(uuid())
+  parentId                  String?
+  name                      String
+  type                      String
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  isPublic                  Boolean                    @default(false)
+  ownerId                   String?
+  visibility                String                     @default("private")
+  address                   String?
+  contactPerson             String?
+  customTypeLabel           String?
+  nip                       String?
+  region                    String?
+  storagePath               String?
+  mimeType                  String?
+  fileSize                  Int?
+  parsedPositions           String?
+  documentCategory          String?
+  budgetItems               BudgetLineItem[]
+  hardware                  Hardware[]
+  permissions               NodePermission[]           @relation("NodeACL")
+  orderRequirements         OrderRequirements[]
+  ancestors                 ProcessNodeClosure[]       @relation("NodeAncestors")
+  descendants               ProcessNodeClosure[]       @relation("NodeDescendants")
+  owner                     User?                      @relation("OwnedProcessNodes", fields: [ownerId], references: [id])
+  parent                    ProcessNode?               @relation("NodeParent", fields: [parentId], references: [id])
+  children                  ProcessNode[]              @relation("NodeParent")
+  versions                  ProjectVersion[]
+  site                      Site?
+  subtasks                  Subtask[]
+  schematicDocuments        SchematicDocument[]
+  materialRequirements      MaterialRequirement[]
+  wbsNodes                  WbsNode[]
+  materialRequirementsLists MaterialRequirementsList[]
+
+  @@map("process_nodes")
+}
+
+model ProjectVersion {
+  id                   String                @id @default(uuid())
+  nodeId               String
+  label                String
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  isActive             Boolean               @default(false)
+  notes                String?
+  budgetItems          BudgetLineItem[]
+  requirements         OrderRequirements[]
+  node                 ProcessNode           @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  subtasks             Subtask[]
+  materialRequirements MaterialRequirement[]
+  wbsNodes             WbsNode[]
+
+  @@unique([nodeId, label])
+  @@map("project_versions")
+}
+
+model OrderRequirements {
+  id                        String          @id @default(uuid())
+  nodeId                    String
+  versionId                 String?
+  offerDeadline             DateTime?
+  projectStart              DateTime?
+  projectEnd                DateTime?
+  projectGoal               String?
+  projectItems              String?
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
+  wbsDescription            String?
+  wbsTree                   String?
+  budgetNotes               String?
+  clientContacts            String?
+  clientProjectManager      String?
+  clientProjectManagerEmail String?
+  clientProjectManagerPhone String?
+  offerStatus               String?
+  offerStatusComment        String?
+  node                      ProcessNode     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  version                   ProjectVersion? @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@unique([nodeId, versionId])
+  @@map("order_requirements")
+}
+
+model Subtask {
+  id                   String                @id @default(uuid())
+  nodeId               String
+  versionId            String?
+  name                 String
+  description          String?
+  plannedStart         DateTime?
+  plannedEnd           DateTime?
+  assignedUserId       String?
+  status               String                @default("NEW")
+  visibilityType       String                @default("ALL")
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  category             String?
+  phase                String?
+  requirementItemId    String?
+  isAiGenerated        Boolean               @default(false)
+  isApproved           Boolean               @default(true)
+  budgetItems          BudgetLineItem[]
+  files                SubtaskFile[]
+  assignedUser         User?                 @relation("AssignedSubtasks", fields: [assignedUserId], references: [id])
+  node                 ProcessNode           @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  version              ProjectVersion?       @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  schematicDocuments   SchematicDocument[]
+  schematicMarkers     SchematicMarker[]
+  materialRequirements MaterialRequirement[]
+
+  @@map("subtasks")
+}
+
+model BudgetLineItem {
+  id          String          @id @default(uuid())
+  versionId   String?
+  subtaskId   String?
+  wbsNodeId   String? // UUID węzła WBS (JSON tree, nie FK)
+  type        String
+  description String
+  unit        String
+  unitCost    Float
+  quantity    Float
+  totalCost   Float
+  margin      Float
+  discount    Float           @default(0)
+  unitPrice   Float
+  totalPrice  Float
+  comment     String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  nodeId      String
+  node        ProcessNode     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  subtask     Subtask?        @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
+  version     ProjectVersion? @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@map("budget_line_items")
+}
+
+model SubtaskFile {
+  id        String   @id @default(uuid())
+  subtaskId String
+  name      String
+  path      String
+  size      Int
+  mimeType  String
+  createdAt DateTime @default(now())
+  subtask   Subtask  @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
+
+  @@map("subtask_files")
+}
+
+model SubtaskTemplate {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("subtask_templates")
+}
+
+model Hardware {
+  id             String      @id @default(uuid())
+  serialNumber   String
+  name           String
+  model          String
+  manufacturer   String
+  productionYear Int
+  siteId         String
+  site           ProcessNode @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@map("hardware")
+}
+
+model Offer {
+  id         String   @id @default(uuid())
+  nodeId     String
+  fileName   String
+  positions  String // JSON array of parsed positions
+  documentId String? // optional reference to source document (may be deleted)
+  createdAt  DateTime @default(now())
+  createdBy  String?
+}
+
+model ProcessNodeClosure {
+  ancestorId   String
+  descendantId String
+  depth        Int
+  ancestor     ProcessNode @relation("NodeAncestors", fields: [ancestorId], references: [id])
+  descendant   ProcessNode @relation("NodeDescendants", fields: [descendantId], references: [id])
+
+  @@id([ancestorId, descendantId])
+  @@map("process_node_closure")
+}
+
+model NodePermission {
+  id         String      @id @default(uuid())
+  nodeId     String
+  userId     String?
+  roleType   String?
+  permission String
+  teamId     String?
+  node       ProcessNode @relation("NodeACL", fields: [nodeId], references: [id], onDelete: Cascade)
+  team       Team?       @relation("TeamNodePermissions", fields: [teamId], references: [id], onDelete: Cascade)
+  user       User?       @relation("UserNodePermissions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([nodeId, userId])
+  @@unique([nodeId, roleType])
+  @@unique([nodeId, teamId])
+  @@map("node_permissions")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String
+  diff      Json?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@map("audit_log")
+}
+
+model FileMetadata {
+  id        String   @id @default(uuid())
+  name      String
+  size      Int
+  mimeType  String
+  path      String
+  createdAt DateTime @default(now())
+
+  @@map("files")
+}
+
+model Site {
+  id               String      @id
+  number           String?
+  structureType    String?
+  accessDesc       String?
+  additionalDesc   String?
+  drivingDesc      String?
+  shelterType      String?
+  greenfield       Boolean     @default(false)
+  addressStreet    String?
+  addressCity      String?
+  addressZipCode   String?
+  addressCountry   String?
+  addressLatitude  Float?
+  addressLongitude Float?
+  customData       Json        @default("{}")
+  contactEmail     String?
+  contactFirstName String?
+  contactLastName  String?
+  contactPhone     String?
+  processNode      ProcessNode @relation(fields: [id], references: [id], onDelete: Cascade)
+
+  @@map("sites")
+}
+
+model UserEntityConfig {
+  id         String @id @default(uuid())
+  userId     String
+  entityType String
+  config     Json
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entityType])
+  @@map("user_entity_configs")
+}
+
+model SchematicDocument {
+  id        String            @id @default(uuid())
+  nodeId    String
+  subtaskId String?
+  fileUrl   String
+  fileName  String
+  createdAt DateTime          @default(now())
+  markers   SchematicMarker[]
+  node      ProcessNode       @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  subtask   Subtask?          @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
+
+  @@map("schematic_documents")
+}
+
+model SchematicMarker {
+  id          String             @id @default(uuid())
+  schematicId String
+  subtaskId   String?
+  type        String             @default("POINT") // "POINT" lub "LINE"
+  x           Float
+  y           Float
+  x2          Float? // Dla linii: koniec X
+  y2          Float? // Dla linii: koniec Y
+  pageNumber  Int
+  note        String?
+  name        String?
+  createdAt   DateTime           @default(now())
+  schematic   SchematicDocument  @relation(fields: [schematicId], references: [id], onDelete: Cascade)
+  subtask     Subtask?           @relation(fields: [subtaskId], references: [id], onDelete: SetNull)
+  attachments MarkerAttachment[]
+  wbsLinks    WbsMarkerLink[]
+
+  @@map("schematic_markers")
+}
+
+model WbsMarkerLink {
+  id        String          @id @default(uuid())
+  wbsNodeId String
+  markerId  String
+  createdAt DateTime        @default(now())
+  marker    SchematicMarker @relation(fields: [markerId], references: [id], onDelete: Cascade)
+
+  @@unique([wbsNodeId, markerId])
+  @@map("wbs_marker_links")
+}
+
+model MarkerAttachment {
+  id        String          @id @default(uuid())
+  markerId  String
+  fileUrl   String
+  fileType  String // "IMAGE", "AUDIO", "FILE"
+  fileName  String
+  note      String?
+  createdAt DateTime        @default(now())
+  marker    SchematicMarker @relation(fields: [markerId], references: [id], onDelete: Cascade)
+
+  @@map("marker_attachments")
+}
+
+// ─── Lista Wymagań Materiałowych ────────────────────────────────────────────
+
+model MaterialRequirementsList {
+  id        String    @id @default(uuid())
+  nodeId    String
+  name      String
+  version   Int       @default(1)
+  isLocked  Boolean   @default(false)
+  lockedBy  String?
+  lockedAt  DateTime?
+  createdBy String?
+  parentId  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  node         ProcessNode                @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  parent       MaterialRequirementsList?  @relation("ListVersions", fields: [parentId], references: [id])
+  children     MaterialRequirementsList[] @relation("ListVersions")
+  requirements MaterialRequirement[]
+
+  @@map("material_requirements_lists")
+}
+
+model MaterialRequirement {
+  id        String  @id @default(uuid())
+  nodeId    String
+  versionId String?
+  listId    String?
+
+  // Nazwa wymagania (niezależna od nazwy produktu)
+  name String? // nazwa wymagania (np. "Kamera główna", "Zasilacz awaryjny")
+
+  // Referencja do materiału z Bazy Materiałów
+  materialId   String? // FK do innego MaterialRequirement (katalog materiałów)
+  material     MaterialRequirement?  @relation("MaterialToRequirement", fields: [materialId], references: [id], onDelete: SetNull)
+  requirements MaterialRequirement[] @relation("MaterialToRequirement")
+
+  // Identyfikacja produktu
+  productName    String? // nazwa handlowa produktu (nullowalny jeśli materialId ustawiony)
+  type           String // DEVICE | MATERIAL | CABLE | SOFTWARE | SERVICE
+  quantity       Float
+  unit           String // szt, m, kg, kpl
+  technicalSpec  String? // pełne wymagania techniczne z dokumentu
+  sourceDocument String? // nazwa pliku PDF źródłowego
+  manufacturer   String? // producent
+  model          String? // symbol/model
+
+  // Stan magazynowy (dla materiałów w Bazie)
+  stockStatus Decimal? // ilość na magazynie
+
+  // Pliki — karta katalogowa i karta zgodności
+  dataSheetUrl   String? // ścieżka do pliku karty katalogowej
+  dataSheetName  String? // oryginalna nazwa pliku
+  complianceUrl  String? // ścieżka do pliku karty zgodności
+  complianceName String? // oryginalna nazwa pliku
+
+  // Przypisanie do WBS
+  assignedSubtaskId  String?
+  wbsNodeId          String? // UUID węzła WBS (JSON tree, nie FK) — legacy single
+  wbsNodeIds         String? // JSON array UUID węzłów WBS (wielowybór)
+  wbsNodeAllocations String? // JSON: {nodeId: quantity} — alokacja materiałów do poszczególnych gałęzi
+  isAiAssigned       Boolean @default(false) // true = przypisane przez AI, false = ręcznie
+  aiConfidence       Float? // pewność AI 0.0–1.0
+
+  // Tabela zgodności (JSON): { requirements: string[], products: {id,name}[], matrix: {key: "spełnia"|"nie spełnia"|"częściowo"} }
+  complianceData String?
+
+  // Dane ofertowe (wypełniane przez logistyka)
+  priceNetto   Float? // cena netto za sztukę
+  seller       String? // sprzedawca / dostawca
+  offerNumber  String? // numer oferty
+  availability String? // dostępność (ile / kiedy)
+  productUrl   String? // link do strony produktu
+  imageUrl     String? // print screen / zdjęcie urządzenia (ścieżka pliku)
+
+  // Status weryfikacji
+  status String @default("PENDING") // PENDING | CONFIRMED | REJECTED | PROPOSAL
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  node            ProcessNode               @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  version         ProjectVersion?           @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  list            MaterialRequirementsList? @relation(fields: [listId], references: [id], onDelete: SetNull)
+  assignedSubtask Subtask?                  @relation(fields: [assignedSubtaskId], references: [id], onDelete: SetNull)
+  proposals       ProductProposal[]
+  wbsAllocations  WbsNodeMaterial[]
+
+  @@map("material_requirements")
+}
+
+model DefaultProjectItem {
+  id           String   @id @default(uuid())
+  category     String // terminowe | instalacyjne | organizacyjne | ...
+  name         String
+  description  String?
+  assignedRole String? // ADMIN | MANAGER | LOGISTYK | USER | null
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("default_project_items")
+}
+
+model ProductProposal {
+  id                    String @id @default(uuid())
+  materialRequirementId String
+
+  // Dane produktu znalezione przez AI / Google Search lub dodane ręcznie
+  productName  String // pełna nazwa handlowa
+  manufacturer String // producent
+  model        String? // symbol modelu
+  sourceUrl    String? // link do strony producenta lub dystrybutora
+
+  // Dodatkowe pola ofertowe (ręcznie przez logistyka)
+  priceNetto   Float? // cena netto za sztukę
+  seller       String? // sprzedawca
+  offerNumber  String? // numer oferty
+  availability String? // dostępność (ile / kiedy)
+  imageUrl     String? // print screen / zdjęcie (ścieżka pliku)
+  isManual     Boolean @default(false) // true = dodane ręcznie, false = AI
+
+  // Pliki PDF dla propozycji
+  dataSheetUrl   String?
+  dataSheetName  String?
+  complianceUrl  String?
+  complianceName String?
+
+  // Ocena dopasowania
+  matchScore Float? // 0.0–1.0: jak dobrze pasuje do wymagań technicznych
+
+  // Wybór i odrzucenie przez użytkownika
+  isSelected Boolean @default(false)
+  isRejected Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  materialRequirement MaterialRequirement @relation(fields: [materialRequirementId], references: [id], onDelete: Cascade)
+
+  @@map("product_proposals")
+}
+
+model WbsNode {
+  id        String   @id @default(uuid())
+  parentId  String?
+  nodeId    String // ProcessNode — projekt/zlecenie
+  versionId String?
+  name      String
+  type      String   @default("") // work | material | equipment | service | ""
+  status    String   @default("")
+  owner     String   @default("")
+  resources String   @default("")
+  cost      String   @default("")
+  tags      String? // JSON array
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Pola budżetowe (WORK / EXTERNAL_SERVICE)
+  budgetType String? // WORK | MATERIAL | EXTERNAL_SERVICE
+  unit       String  @default("szt")
+  unitCost   Float   @default(0)
+  quantity   Float   @default(1)
+  totalCost  Float   @default(0)
+  margin     Float   @default(0)
+  discount   Float   @default(0)
+  unitPrice  Float   @default(0)
+  totalPrice Float   @default(0)
+  comment    String?
+  phase      String? // PRZED | INSTAL | PO
+
+  parent              WbsNode?          @relation("WbsTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children            WbsNode[]         @relation("WbsTree")
+  node                ProcessNode       @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  version             ProjectVersion?   @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  materialAllocations WbsNodeMaterial[]
+
+  @@index([nodeId, versionId])
+  @@map("wbs_nodes")
+}
+
+model WbsNodeMaterial {
+  id         String @id @default(uuid())
+  wbsNodeId  String
+  materialId String
+  quantity   Float  @default(1)
+
+  wbsNode  WbsNode             @relation(fields: [wbsNodeId], references: [id], onDelete: Cascade)
+  material MaterialRequirement @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@unique([wbsNodeId, materialId])
+  @@map("wbs_node_materials")
+}

@@ -1,0 +1,6 @@
+NAME                 IMAGE                  COMMAND                  SERVICE          CREATED         STATUS                         PORTS
+erp-backend          apps-backend           "docker-entrypoint.s…"   backend          2 minutes ago   Restarting (1) 4 seconds ago   
+erp-db               postgres:15-alpine     "docker-entrypoint.s…"   db               2 minutes ago   Up 2 minutes (healthy)         0.0.0.0:5433->5432/tcp, [::]:5433->5432/tcp
+erp-frontend         apps-frontend          "docker-entrypoint.s…"   frontend         2 minutes ago   Up 2 minutes                   0.0.0.0:5173->5173/tcp, [::]:5173->5173/tcp
+erp-parser-service   apps-parser-service    "uvicorn main:app --…"   parser-service   2 days ago      Up 2 days                      0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp
+erp-vector-db        qdrant/qdrant:latest   "./entrypoint.sh"        vector-db        2 weeks ago     Up 2 weeks                     0.0.0.0:6333-6334->6333-6334/tcp, [::]:6333-6334->6333-6334/tcp
