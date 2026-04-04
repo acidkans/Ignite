@@ -209,8 +209,6 @@ export class WbsNodesService {
         const requestedNodeId = nodeId;
         const fallbackOrderNodeId = await this.resolveOrderNodeId(requestedNodeId);
 
-        console.log(`[WBS] getUnifiedTree: requested=${requestedNodeId}, fallback=${fallbackOrderNodeId}, versionId=${vId}`);
-
         try {
             const fetchNodesForCandidate = async (candidateNodeId: string) => {
                 if (vId) {
@@ -242,21 +240,17 @@ export class WbsNodesService {
 
             // Step 1: try requested node first; for site, fallback to parent order.
             let nodes: any[] = await fetchNodesForCandidate(requestedNodeId);
-            console.log(`[WBS]   requested node (${requestedNodeId}): found ${nodes.length} nodes`);
 
             if (nodes.length === 0 && fallbackOrderNodeId !== requestedNodeId) {
                 nodes = await fetchNodesForCandidate(fallbackOrderNodeId);
-                console.log(`[WBS]   fallback to parent order (${fallbackOrderNodeId}): found ${nodes.length} nodes`);
             }
 
             if (nodes.length === 0) {
-                console.log(`[WBS]   no nodes found, returning empty items`);
                 return { items: [] };
             }
 
             // Step 2: Pobierz materiały dla wszystkich nodes za jednym razem
             const nodeIds = nodes.map(n => n.id);
-            console.log(`[WBS]   fetching materials for ${nodeIds.length} nodes`);
             const allocations = await this.prisma.wbsNodeMaterial.findMany({
                 where: { wbsNodeId: { in: nodeIds } },
                 include: {
@@ -362,8 +356,7 @@ export class WbsNodesService {
         });
 
         return { items };
-        } catch (err) {
-            console.error(`[WBS] ERROR in getUnifiedTree:`, err);
+        } catch {
             return { items: [] };
         }
     }
