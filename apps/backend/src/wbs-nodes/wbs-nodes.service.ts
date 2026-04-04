@@ -215,9 +215,36 @@ export class WbsNodesService {
         console.log(`[WBS] getUnifiedTree: requested=${requestedNodeId}, fallback=${fallbackOrderNodeId}, trying=${nodeIdsToTry.join(',')}`);
 
         let nodes: any[] = [];
-        for (const candidateNodeId of nodeIdsToTry) {
+        const whereClause = vId ? { nodeId: { in: nodeIdsToTry }, versionId: vId } : { nodeId: { in: nodeIdsToTry }, versionId: null };
+        
+        nodes = await this.prisma.wbsNode.findMany({
+            where: whereClause,
+            include: {
+                materialAllocations: {
+                    include: {
+                        material: {
+                            select: {
+                                id: true, productName: true, manufacturer: true, model: true,
+                                unit: true, priceNetto: true, quantity: true, status: true,
+                                technicalSpec: true,
+                                proposals: {
+                                    where: { isSelected: true },
+                                    select: { priceNetto: true, productName: true, manufacturer: true, model: true },
+                                    take: 1,
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            orderBy: { sortOrder: 'asc' },
+        });
+        console.log(`[WBS]   found ${nodes.length} total nodes across all candidates (${nodeIdsToTry.join(',')})`);
+        
+        // If no nodes found, but site node and parent order exists, use parent order nodes
+        if (nodes.length === 0 && fallbackOrderNodeId !== requestedNodeId) {
             nodes = await this.prisma.wbsNode.findMany({
-                where: { nodeId: candidateNodeId, versionId: vId || null },
+                where: vId ? { nodeId: fallbackOrderNodeId, versionId: vId } : { nodeId: fallbackOrderNodeId, versionId: null },
                 include: {
                     materialAllocations: {
                         include: {
@@ -238,8 +265,7 @@ export class WbsNodesService {
                 },
                 orderBy: { sortOrder: 'asc' },
             });
-            console.log(`[WBS]   tried ${candidateNodeId}: found ${nodes.length} nodes`);
-            if (nodes.length > 0) break;
+            console.log(`[WBS]   fallback to order ${fallbackOrderNodeId}: found ${nodes.length} nodes`);
         }
 
         if (nodes.length === 0) return { items: [] };
