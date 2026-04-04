@@ -455,8 +455,8 @@ export default function DashboardPage() {
                     const TAB_META = {
                         files:         { label: 'Dokumentacja',    color: 'blue',    activeColor: 'text-blue-400',    bar: 'bg-blue-500',    shadow: '59,130,246',    cond: !isLogistykaArea },
                         financialFiles:{ label: 'Pliki finansowe', color: 'amber',   activeColor: 'text-amber-400',   bar: 'bg-amber-500',   shadow: '245,158,11',    cond: isOrder && isManagerOrAdmin && !currentRoles.includes('LOGISTYK') },
-                        tasks:         { label: isWorker ? 'Zadania' : 'Planowanie', color: 'blue', activeColor: 'text-blue-400', bar: 'bg-blue-500', shadow: '59,130,246', cond: isWorker || isOrder },
-                        unified:       { label: 'WBS Unified',    color: 'cyan',    activeColor: 'text-cyan-400',    bar: 'bg-cyan-500',    shadow: '6,182,212',     cond: isOrder },
+                        tasks:         { label: 'Zadania', color: 'blue', activeColor: 'text-blue-400', bar: 'bg-blue-500', shadow: '59,130,246', cond: isWorker },
+                        unified:       { label: 'planowanie',    color: 'cyan',    activeColor: 'text-cyan-400',    bar: 'bg-cyan-500',    shadow: '6,182,212',     cond: isOrder },
                         schematics:    { label: 'Schemat',         color: 'orange',  activeColor: 'text-orange-400',  bar: 'bg-orange-500',  shadow: '249,115,22',    cond: isOrder },
                     };
                     const meta = TAB_META[tabId];
@@ -569,6 +569,7 @@ export default function DashboardPage() {
                                 <UnifiedWbsPanel 
                                     nodeId={activeAreaId}
                                     versionId={selectedVersionId}
+                                    projectName={activeNode?.name || ''}
                                     userRoles={currentRoles}
                                     onWbsUpdate={() => setWbsUpdateCount(c => c + 1)}
                                 />

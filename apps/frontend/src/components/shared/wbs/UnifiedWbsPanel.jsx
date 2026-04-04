@@ -906,7 +906,7 @@ ${materialsHtml}
             };
             const subjectRootsByName = new Map();
             for (const item of wbsData) {
-                if (!item?.parentId) {
+                if (Number(item?.depth) === 0) {
                     const key = normKey(item.name);
                     if (key && !subjectRootsByName.has(key)) {
                         subjectRootsByName.set(key, item);
