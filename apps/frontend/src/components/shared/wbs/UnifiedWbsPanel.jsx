@@ -273,7 +273,7 @@ function BudgetHeaderRenderer(params) {
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
-export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRoles = [], projectName = '' }) {
+export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRoles = [], projectName = '', searchQuery = '' }) {
     const [wbsData, setWbsData] = useState([]);
     const [expandedSection, setExpandedSection] = useState(null);
     const [fullscreenSection, setFullscreenSection] = useState(null);
@@ -321,6 +321,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 
     const isLogistyk = userRoles.includes('LOGISTYK');
     const isManagerOrAdmin = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
+    const normalizedSearchQuery = String(searchQuery || '').trim().toLowerCase();
 
     const token = () => sessionStorage.getItem('token');
     const authHeaders = useCallback(() => ({
@@ -820,6 +821,114 @@ ${materialsHtml}
         setTimeout(() => { win.print(); }, 400);
     };
 
+    const handleExportBudgetExcel = async () => {
+        const rows = [];
+        if (budgetGridApiRef.current) {
+            budgetGridApiRef.current.forEachNodeAfterFilterAndSort((node) => {
+                if (node?.data) rows.push(node.data);
+            });
+        } else {
+            rows.push(...buildRows(VIEWS.BUDGET));
+        }
+
+        if (!rows.length) {
+            alert('Brak danych budżetowych do eksportu.');
+            return;
+        }
+
+        const workbook = new ExcelJS.Workbook();
+        const summarySheet = workbook.addWorksheet('Podsumowanie');
+        const budgetSheet = workbook.addWorksheet('Budzet');
+        const exportDate = new Date().toLocaleDateString('pl-PL');
+        const fileProjectName = String(projectName || 'projekt').trim() || 'projekt';
+        const safeProjectName = fileProjectName.replace(/[\\/:*?"<>|]+/g, '_');
+        const summary = summarizeBudgetRows(rows);
+        const totalQuantity = rows.reduce((sum, row) => sum + (Number(row.quantity) || 0), 0);
+        const averageDiscount = rows.length
+            ? rows.reduce((sum, row) => sum + (Number(row.discount) || 0), 0) / rows.length
+            : 0;
+        const weightedUnitCost = totalQuantity > 0 ? summary.totalCost / totalQuantity : 0;
+
+        summarySheet.columns = [
+            { width: 28 },
+            { width: 22 },
+        ];
+        summarySheet.addRow([`Budżet projektu`, fileProjectName]);
+        summarySheet.addRow(['Data eksportu', exportDate]);
+        summarySheet.addRow(['Liczba wierszy', summary.rows]);
+        summarySheet.addRow(['Koszt całkowity', summary.totalCost]);
+        summarySheet.addRow(['Przychód całkowity', summary.totalRevenue]);
+        summarySheet.addRow(['Zysk', summary.profit]);
+        summarySheet.addRow(['Marża', summary.marginPct / 100]);
+
+        summarySheet.getColumn(2).numFmt = '#,##0.00';
+        summarySheet.getCell('B7').numFmt = '0.00%';
+        summarySheet.getRow(1).font = { bold: true, size: 14 };
+
+        budgetSheet.columns = [
+            { header: 'Lp.', key: 'index', width: 6 },
+            { header: 'Przedmiot', key: 'subjectName', width: 28 },
+            { header: 'Nazwa', key: 'name', width: 34 },
+            { header: 'Typ', key: 'type', width: 16 },
+            { header: 'Koszt jednostkowy', key: 'unitCost', width: 18 },
+            { header: 'Ilość', key: 'quantity', width: 12 },
+            { header: 'Jednostka', key: 'unit', width: 14 },
+            { header: 'Koszt całościowy', key: 'totalCost', width: 18 },
+            { header: 'Marża (%)', key: 'margin', width: 12 },
+            { header: 'Rabat (%)', key: 'discount', width: 12 },
+            { header: 'Cena ofertowa', key: 'offerPrice', width: 18 },
+            { header: 'Komentarz', key: 'comment', width: 32 },
+            { header: 'Status', key: 'status', width: 18 },
+        ];
+
+        const headerRow = budgetSheet.getRow(1);
+        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+
+        rows.forEach((row, index) => {
+            budgetSheet.addRow({
+                index: index + 1,
+                subjectName: row.subjectName || '',
+                name: row.name || '',
+                type: TYPE_LABELS[row.type] || row.type || '',
+                unitCost: Number(row.unitCost) || 0,
+                quantity: Number(row.quantity) || 0,
+                unit: row.unit || '',
+                totalCost: Number(row.totalCost) || 0,
+                margin: (Number(row.margin) || 0) / 100,
+                discount: (Number(row.discount) || 0) / 100,
+                offerPrice: Number(row.offerPrice) || 0,
+                comment: row.comment || '',
+                status: row.status || '',
+            });
+        });
+
+        const totalsRow = budgetSheet.addRow({
+            subjectName: 'Razem',
+            totalCost: summary.totalCost,
+            offerPrice: summary.totalRevenue,
+        });
+        totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+
+        ['E', 'H', 'K'].forEach((column) => {
+            budgetSheet.getColumn(column).numFmt = '#,##0.00';
+        });
+        budgetSheet.getColumn('F').numFmt = '#,##0.00';
+        budgetSheet.getColumn('I').numFmt = '0.00%';
+        budgetSheet.getColumn('J').numFmt = '0.00%';
+        budgetSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `budzet_${safeProjectName}_${exportDate.replace(/\./g, '-')}.xlsx`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+    };
+
     const addNode = useCallback(async (parentId = null) => {
         try {
             const res = await fetch(`${API_URL}/wbs-nodes`, {
@@ -1162,6 +1271,10 @@ ${materialsHtml}
 
     const buildRows = (view) => {
         const byId = new Map(wbsData.map(item => [item.id, item]));
+        const matchesSearch = (...values) => {
+            if (!normalizedSearchQuery) return true;
+            return values.some((value) => String(value ?? '').toLowerCase().includes(normalizedSearchQuery));
+        };
         const getSubjectInfo = (item) => {
             let current = item;
             while (current?.parentId) {
@@ -1241,7 +1354,21 @@ ${materialsHtml}
                         quantity,
                         inheritedFromMaterials,
                     };
-                });
+                })
+                .filter((row) => matchesSearch(
+                    row.subjectName,
+                    row.name,
+                    TYPE_LABELS[row.type] || row.type,
+                    row.status,
+                    row.comment,
+                    row.unit,
+                    row.quantity,
+                    row.unitCost,
+                    row.totalCost,
+                    row.margin,
+                    row.discount,
+                    row.offerPrice,
+                ));
         }
 
         const childrenMap = new Map();
@@ -1262,6 +1389,23 @@ ${materialsHtml}
         };
 
         if (view === VIEWS.STRUCTURE) {
+            const matchesById = new Map();
+            const branchMatches = (item) => {
+                if (!item) return false;
+                if (matchesById.has(item.id)) return matchesById.get(item.id);
+                const selfMatches = matchesSearch(
+                    item.name,
+                    TYPE_LABELS[item.type] || item.type,
+                    item.status,
+                    item.owner,
+                    item.path,
+                );
+                const childMatch = (childrenMap.get(item.id) || []).some(branchMatches);
+                const result = selfMatches || childMatch;
+                matchesById.set(item.id, result);
+                return result;
+            };
+
             const hasRootChildren = (childrenMap.get('__root__') || []).length > 0;
             rows.push({
                 id: syntheticRootId,
@@ -1275,7 +1419,17 @@ ${materialsHtml}
                 _syntheticRoot: true,
                 materialsCount: 0,
             });
-            if (expandedIds.has(syntheticRootId)) addVisible(null, 1);
+            if (normalizedSearchQuery) {
+                const filteredRoots = (childrenMap.get('__root__') || []).filter(branchMatches);
+                const addFilteredVisible = (items, depth) => {
+                    for (const item of items) {
+                        rows.push({ ...item, status: getInheritedMaterialStatus(item), _depth: depth, _hasChildren: childrenMap.has(item.id) });
+                        const matchingChildren = (childrenMap.get(item.id) || []).filter(branchMatches);
+                        if (matchingChildren.length) addFilteredVisible(matchingChildren, depth + 1);
+                    }
+                };
+                addFilteredVisible(filteredRoots, 1);
+            } else if (expandedIds.has(syntheticRootId)) addVisible(null, 1);
             return rows;
         }
 
@@ -1335,13 +1489,13 @@ ${materialsHtml}
 
     const displayedBudgetSummary = useMemo(() => {
         const baseRevenue = budgetSummary.totalRevenue;
-        const parsedDiscountPercent = Number(String(budgetDiscountPercent).replace(',', '.'));
-        const parsedDiscountAmount = Number(String(budgetDiscountAmount).replace(',', '.'));
-        const discountAmountFromAmountModule = Number.isFinite(parsedDiscountAmount) ? Math.max(0, parsedDiscountAmount) : 0;
-        const discountAmountFromPercentModule = Number.isFinite(parsedDiscountPercent)
-            ? Math.max(0, parsedDiscountPercent) / 100 * baseRevenue
+        const parsedPercentDiscount = Number(String(budgetDiscountPercent).replace(',', '.'));
+        const parsedAmountDiscount = Number(String(budgetDiscountAmount).replace(',', '.'));
+        const discountAmountFromPercent = Number.isFinite(parsedPercentDiscount)
+            ? Math.max(0, parsedPercentDiscount) / 100 * baseRevenue
             : 0;
-        const totalDiscount = discountAmountFromAmountModule + discountAmountFromPercentModule;
+        const discountAmountFromValue = Number.isFinite(parsedAmountDiscount) ? Math.max(0, parsedAmountDiscount) : 0;
+        const totalDiscount = discountAmountFromPercent + discountAmountFromValue;
 
         if (totalDiscount <= 0) {
             return budgetSummary;
@@ -1519,31 +1673,40 @@ ${materialsHtml}
         }
     }, []);
 
-    const renderGrid = (v) => (
-        <div className="flex-1 min-h-[400px]" onDoubleClick={(e) => e.stopPropagation()}>
-            <AgGridReact
-                ref={gridRef}
-                theme={darkTheme}
-                modules={MODULES}
-                rowData={buildRows(v)}
-                columnDefs={getColumnDefs(v)}
-                getRowId={p => p.data.id}
-                onCellValueChanged={onCellValueChanged}
-                onGridReady={v === VIEWS.BUDGET ? (params) => {
-                    budgetGridApiRef.current = params.api;
-                    refreshBudgetSummaryFromApi(params.api);
-                } : undefined}
-                onFilterChanged={v === VIEWS.BUDGET ? (params) => refreshBudgetSummaryFromApi(params.api) : undefined}
-                onModelUpdated={v === VIEWS.BUDGET ? (params) => refreshBudgetSummaryFromApi(params.api) : undefined}
-                onCellKeyDown={onGridCellKeyDown}
-                defaultColDef={v === VIEWS.BUDGET
-                    ? { resizable: true, sortable: true, filter: true, floatingFilter: false }
-                    : { resizable: true, sortable: false }}
-                singleClickEdit={v === VIEWS.BUDGET}
-                animateRows={true}
-            />
-        </div>
-    );
+    const renderGrid = (v) => {
+        const isBudgetView = v === VIEWS.BUDGET;
+
+        return (
+            <div
+                className={isBudgetView ? 'flex-1 min-h-[400px] overflow-x-auto overflow-y-hidden pb-2 custom-scrollbar' : 'flex-1 min-h-[400px]'}
+                onDoubleClick={(e) => e.stopPropagation()}
+            >
+                <div className="h-full" style={isBudgetView ? { minWidth: '1820px' } : undefined}>
+                    <AgGridReact
+                        ref={gridRef}
+                        theme={darkTheme}
+                        modules={MODULES}
+                        rowData={buildRows(v)}
+                        columnDefs={getColumnDefs(v)}
+                        getRowId={p => p.data.id}
+                        onCellValueChanged={onCellValueChanged}
+                        onGridReady={v === VIEWS.BUDGET ? (params) => {
+                            budgetGridApiRef.current = params.api;
+                            refreshBudgetSummaryFromApi(params.api);
+                        } : undefined}
+                        onFilterChanged={v === VIEWS.BUDGET ? (params) => refreshBudgetSummaryFromApi(params.api) : undefined}
+                        onModelUpdated={v === VIEWS.BUDGET ? (params) => refreshBudgetSummaryFromApi(params.api) : undefined}
+                        onCellKeyDown={onGridCellKeyDown}
+                        defaultColDef={v === VIEWS.BUDGET
+                            ? { resizable: true, sortable: true, filter: true, floatingFilter: false }
+                            : { resizable: true, sortable: false }}
+                        singleClickEdit={v === VIEWS.BUDGET}
+                        animateRows={true}
+                    />
+                </div>
+            </div>
+        );
+    };
 
     const budgetSummaryCards = (
         <div className="grid grid-cols-2 xl:grid-cols-6 gap-2">
@@ -1565,7 +1728,33 @@ ${materialsHtml}
                 <div className="text-[10px] text-green-200/70 mt-0.5">Po filtrze: {displayedBudgetSummary.rows} wierszy</div>
             </div>
             <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 px-3 py-2">
-                <div className="text-[10px] uppercase tracking-widest text-orange-300/90 font-bold">Wartośc %</div>
+                <div className="text-[10px] uppercase tracking-widest text-orange-300/90 font-bold">Rabat - wartość procentowa</div>
+                <div className="relative mt-1">
+                    <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={budgetDiscountPercent}
+                        onChange={(e) => setBudgetDiscountPercent(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full rounded-lg border border-orange-400/25 bg-black/30 px-2 py-1.5 pr-8 text-sm font-black text-orange-100 focus:outline-none focus:border-orange-400"
+                        placeholder="0,00"
+                    />
+                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-black text-orange-200/80">%</span>
+                </div>
+                {budgetDiscountPercent !== '' && (
+                    <div className="text-[10px] text-orange-200/70 mt-0.5">
+                        {(() => {
+                            const pct = Number(String(budgetDiscountPercent).replace(',', '.'));
+                            const amount = Number.isFinite(pct) ? budgetSummary.totalRevenue * Math.max(0, pct) / 100 : 0;
+                            return `Przeliczenie tego pola: ${fmtPLNFull(amount)} PLN`;
+                        })()}
+                    </div>
+                )}
+            </div>
+            <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 px-3 py-2">
+                <div className="text-[10px] uppercase tracking-widest text-orange-300/90 font-bold">Rabat - wartość kwotowa</div>
                 <input
                     type="number"
                     min="0"
@@ -1574,7 +1763,7 @@ ${materialsHtml}
                     onChange={(e) => setBudgetDiscountAmount(e.target.value)}
                     onClick={(e) => e.stopPropagation()}
                     className="mt-1 w-full rounded-lg border border-orange-400/25 bg-black/30 px-2 py-1.5 text-sm font-black text-orange-100 focus:outline-none focus:border-orange-400"
-                    placeholder="0,00"
+                    placeholder="0,0"
                 />
                 {budgetDiscountAmount !== '' && (
                     <div className="text-[10px] text-orange-200/70 mt-0.5">
@@ -1582,29 +1771,6 @@ ${materialsHtml}
                             const amount = Number(String(budgetDiscountAmount).replace(',', '.'));
                             const pct = budgetSummary.totalRevenue > 0 && Number.isFinite(amount) ? (Math.max(0, amount) / budgetSummary.totalRevenue) * 100 : 0;
                             return `Przeliczenie tego pola: ${fmtPctFull(pct)}`;
-                        })()}
-                    </div>
-                )}
-            </div>
-            <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 px-3 py-2">
-                <div className="text-[10px] uppercase tracking-widest text-orange-300/90 font-bold">Wartośc kwotowa</div>
-                <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    value={budgetDiscountPercent}
-                    onChange={(e) => setBudgetDiscountPercent(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="mt-1 w-full rounded-lg border border-orange-400/25 bg-black/30 px-2 py-1.5 text-sm font-black text-orange-100 focus:outline-none focus:border-orange-400"
-                    placeholder="0,0"
-                />
-                {budgetDiscountPercent !== '' && (
-                    <div className="text-[10px] text-orange-200/70 mt-0.5">
-                        {(() => {
-                            const pct = Number(String(budgetDiscountPercent).replace(',', '.'));
-                            const amount = Number.isFinite(pct) ? budgetSummary.totalRevenue * Math.max(0, pct) / 100 : 0;
-                            return `Przeliczenie tego pola: ${fmtPLNFull(amount)} PLN`;
                         })()}
                     </div>
                 )}
@@ -1759,6 +1925,15 @@ ${materialsHtml}
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
+                            handleExportBudgetExcel();
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-lg text-green-300 text-[10px] font-bold uppercase tracking-widest transition-all"
+                    >
+                        <FileDown size={11} /> Eksport budżetu do Excel
+                    </button>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
                             budgetImportFileInputRef.current?.click();
                         }}
                         className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all"
@@ -1774,6 +1949,7 @@ ${materialsHtml}
                     nodeId={nodeId}
                     versionId={versionId}
                     isEmbedded={true}
+                    searchQuery={searchQuery}
                     onWbsUpdate={refreshUnified}
                     userRoles={userRoles}
                 />

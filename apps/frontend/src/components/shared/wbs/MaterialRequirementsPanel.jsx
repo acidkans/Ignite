@@ -1867,6 +1867,17 @@ function WbsMultiSelect({ r, wbsProjectItems, subtasks, patchItem, addToWbsTree,
         return () => document.removeEventListener('mousedown', h);
     }, [open, setOpen]);
 
+        const clearSelection = () => {
+            setSelectedIds([]);
+            setAllocations({});
+            patchItem(r.id, { wbsNodeIds: '[]', wbsNodeId: null, wbsNodeAllocations: null, isAiAssigned: false });
+        };
+
+        const handleOptionRowClick = (event, nodeId) => {
+            if (event.target.closest('input')) return;
+            toggle(nodeId);
+        };
+
     if (readOnly) {
         return <span className="text-sm text-blue-300 px-2">
             {selectedItems.length === 0 ? '—' : selectedItems.map(n => `${n.name}: ${allocations[n.id] || r.quantity || '?'}`).join(', ')}
@@ -1900,12 +1911,12 @@ function WbsMultiSelect({ r, wbsProjectItems, subtasks, patchItem, addToWbsTree,
             {open && (
                 <div onClick={e => e.stopPropagation()} className="absolute z-[200] top-full left-0 mt-1 w-80 bg-gray-900 border border-white/10 rounded-lg shadow-xl p-1 max-h-[calc(100vh-200px)] overflow-y-auto">
                     <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 rounded cursor-pointer border-b border-white/5 mb-1">
-                        <input type="checkbox" checked={selectedIds.length === 0} onChange={() => { setSelectedIds([]); setAllocations({}); patchItem(r.id, { wbsNodeIds: '[]', wbsNodeId: null, wbsNodeAllocations: null, isAiAssigned: false }); }} className="accent-blue-500" />
+                        <input type="checkbox" checked={selectedIds.length === 0} onChange={clearSelection} className="accent-blue-500" />
                         <span className="text-xs text-gray-400">— Nieprzypisane —</span>
                     </label>
                     {items.map(n => (
-                        <div key={n.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 rounded border-b border-white/5 last:border-b-0">
-                            <input type="checkbox" checked={selectedIds.includes(n.id)} onChange={(e) => { e.stopPropagation(); toggle(n.id); }} className="accent-blue-500" />
+                        <div key={n.id} onClick={(e) => handleOptionRowClick(e, n.id)} className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 rounded border-b border-white/5 last:border-b-0 cursor-pointer">
+                            <input type="checkbox" checked={selectedIds.includes(n.id)} onChange={(e) => { e.stopPropagation(); toggle(n.id); }} onClick={e => e.stopPropagation()} className="accent-blue-500" />
                             <span className="text-sm text-gray-200 flex-1">{n.name}</span>
                             {selectedIds.includes(n.id) && (
                                 <input
@@ -2513,9 +2524,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
 
     // Sync searchQuery prop to internal filter state
     useEffect(() => {
-        if (searchQuery) {
-            setInternalGlobalFilter(searchQuery);
-        }
+        setInternalGlobalFilter(searchQuery || '');
     }, [searchQuery]);
 
     const globalFilter   = searchQuery || (externalFilters ? externalFilters.global   : internalGlobalFilter);

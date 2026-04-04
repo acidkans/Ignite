@@ -570,6 +570,7 @@ export default function DashboardPage() {
                                     nodeId={activeAreaId}
                                     versionId={selectedVersionId}
                                     projectName={activeNode?.name || ''}
+                                    searchQuery={searchQuery}
                                     userRoles={currentRoles}
                                     onWbsUpdate={() => setWbsUpdateCount(c => c + 1)}
                                 />
