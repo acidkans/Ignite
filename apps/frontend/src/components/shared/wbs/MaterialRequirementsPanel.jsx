@@ -1986,14 +1986,35 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
 
     const fetchRequirements = useCallback(async (listId) => {
         setLoading(true);
-        const [r, s, reqRes] = await Promise.all([
+        const [r, s, reqRes, unifiedRes] = await Promise.all([
             fetch(`${API_URL}/material-requirements/node/${nodeId}${listId ? `?listId=${listId}` : ''}${versionId ? `&versionId=${versionId}` : ''}`, { headers: authHeaders }),
             fetch(`${API_URL}/subtasks/node/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders }),
             fetch(`${API_URL}/order-requirements/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders }),
+            fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders }),
         ]);
         if (r.ok) setRequirements(await r.json());
         if (s.ok) setSubtasks(await s.json());
-        if (reqRes.ok) {
+
+        // Primary source: unified WBS (already merged: selected version + base structure)
+        let loadedFromUnified = false;
+        if (unifiedRes.ok) {
+            try {
+                const unifiedData = await unifiedRes.json();
+                const rootItems = (unifiedData.items || [])
+                    .filter(node => (node.depth ?? 0) === 0)
+                    .map(node => ({ id: node.id, name: node.name, materiałyId: null }));
+
+                if (rootItems.length > 0) {
+                    setWbsProjectItems(rootItems);
+                    loadedFromUnified = true;
+                }
+            } catch {
+                // Fallback below
+            }
+        }
+
+        // Fallback source: legacy tree JSON from order_requirements
+        if (reqRes.ok && !loadedFromUnified) {
             try {
                 const reqData = await reqRes.json();
                 const tree = JSON.parse(reqData.wbsTree || '{}');
