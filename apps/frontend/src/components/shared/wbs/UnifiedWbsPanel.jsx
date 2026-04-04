@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import ExcelJS from 'exceljs';
 import { AgGridReact } from 'ag-grid-react';
 import {
     ClientSideRowModelModule,
@@ -30,10 +31,28 @@ const VIEWS = {
     BUDGET: 'budget',
 };
 
-const TYPE_LABELS = { work: 'Praca', material: 'Materiał', equipment: 'Sprzęt', service: 'Usługa' };
-const TYPE_OPTIONS = ['', 'work', 'material', 'equipment', 'service'];
+const TYPE_LABELS = { work: 'Praca', material: 'Materiał', equipment: 'Sprzęt', service: 'Usługa', lodging: 'Nocleg', fuel: 'Paliwo' };
+const TYPE_OPTIONS = ['', 'work', 'material', 'equipment', 'service', 'lodging', 'fuel'];
 const BUDGET_TYPE_LABELS = { WORK: 'Praca', MATERIAL: 'Materiał', EXTERNAL_SERVICE: 'Usługa Obca' };
-const UNIT_OPTIONS = ['kpl', 'szt', 'dzień', 'm', 'rbh', 'm-c'];
+const UNIT_OPTIONS = [
+    'sztuki',
+    'kilometry',
+    'metry',
+    'dni',
+    'godziny',
+    'tygodnie',
+    'miesiące',
+    'l',
+    'kg',
+    't',
+    'm2',
+    'm3',
+    'kpl',
+    'rbh',
+    'kurs',
+    'usługa',
+    'pakiet',
+];
 const MATERIAL_STATUS_LABELS = {
     PENDING: 'Oczekuje',
     PROPOSAL: 'Propozycja',
@@ -52,8 +71,8 @@ const darkTheme = themeQuartz.withParams({
     rowHoverColor: 'rgba(255,255,255,0.03)',
     borderColor: 'rgba(255,255,255,0.06)',
     cellHorizontalPaddingScale: 0.6,
-    fontSize: 12,
-    headerFontSize: 10,
+    fontSize: 13,
+    headerFontSize: 12,
     rowHeight: 32,
     headerHeight: 34,
 });
@@ -65,6 +84,46 @@ const fmtPLNFull = v => (Number(v) || 0).toLocaleString('pl-PL', { minimumFracti
 const fmtPctFull = v => (Number(v) || 0).toLocaleString('pl-PL', { maximumFractionDigits: 1 }) + '%';
 const normKey = (value) => String(value || '').trim().toLowerCase();
 const makeMaterialLookupKey = (subjectName, itemName) => `${normKey(subjectName)}::${normKey(itemName)}`;
+const parseLocaleNumber = (value) => {
+    if (value == null) return null;
+    const normalized = String(value).trim().replace(/\s/g, '').replace(',', '.');
+    if (!normalized) return null;
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : null;
+};
+const excelColumnLetter = (num) => {
+    let n = Number(num) || 0;
+    let out = '';
+    while (n > 0) {
+        const rem = (n - 1) % 26;
+        out = String.fromCharCode(65 + rem) + out;
+        n = Math.floor((n - 1) / 26);
+    }
+    return out || 'A';
+};
+const excelCellToText = (cellValue) => {
+    if (cellValue == null) return '';
+    if (typeof cellValue === 'object') {
+        if (Array.isArray(cellValue.richText)) {
+            return cellValue.richText.map((t) => t.text || '').join('');
+        }
+        if (cellValue.text != null) return String(cellValue.text);
+        if (cellValue.result != null) return String(cellValue.result);
+    }
+    return String(cellValue);
+};
+const BUDGET_IMPORT_FIELD_DEFS = [
+    { key: 'subjectName', label: 'Przedmiot' },
+    { key: 'name', label: 'Nazwa pozycji' },
+    { key: 'type', label: 'Typ' },
+    { key: 'quantity', label: 'Ilość' },
+    { key: 'unit', label: 'Jednostki' },
+    { key: 'unitCost', label: 'Koszt jednostkowy' },
+    { key: 'totalCost', label: 'Koszt całościowy (opcjonalnie)' },
+    { key: 'margin', label: 'Marża (%)' },
+    { key: 'discount', label: 'Rabat (%)' },
+    { key: 'comment', label: 'Komentarz' },
+];
 
 // ─── Hierarchical name renderer ──────────────────────────────────────────────
 
@@ -74,6 +133,7 @@ function TreeNameRenderer({ data, context }) {
     const expanded = context?.expandedIds?.has(data.id);
     const toggleExpand = context?.toggleExpand;
     const isSelected = context?.selectedId === data.id;
+    const onAddChild = context?.onAddChild;
 
     return (
         <div
@@ -82,16 +142,87 @@ function TreeNameRenderer({ data, context }) {
             onClick={() => context?.onSelectRow?.(data.id)}
         >
             {hasChildren ? (
-                <button onClick={(e) => { e.stopPropagation(); toggleExpand?.(data.id); }} className="text-gray-500 hover:text-white w-4">
+                <button
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); toggleExpand?.(data.id); }}
+                    className="text-gray-500 hover:text-white w-4"
+                >
                     {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                 </button>
             ) : <span className="w-4" />}
             <span className={`truncate ${depth === 0 ? 'font-semibold text-white' : 'text-gray-300'}`}>
                 {data.name}
             </span>
+            <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onAddChild?.(data.id);
+                }}
+                className="ml-1 text-gray-500 hover:text-emerald-400"
+                title="Dodaj podgałąź"
+            >
+                <Plus size={12} />
+            </button>
             {data.materialsCount > 0 && (
                 <span className="text-[10px] text-blue-400/60 ml-1">({data.materialsCount})</span>
             )}
+        </div>
+    );
+}
+
+function RowActionsRenderer({ data, context }) {
+    if (data?._syntheticRoot) return null;
+
+    return (
+        <div className="h-full flex items-center justify-end pr-1">
+            <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    context?.onDeleteRow?.(data?.id);
+                }}
+                className="text-gray-500 hover:text-red-400"
+                title="Usuń węzeł"
+            >
+                <Trash2 size={13} />
+            </button>
+        </div>
+    );
+}
+
+function MarkerIconsRenderer({ data, context }) {
+    if (!data || data._syntheticRoot) return null;
+
+    const links = context?.markerLinksCache?.[data.id] || [];
+    const allAtts = links.flatMap((l) => (l.marker?.attachments || []));
+    if (allAtts.length === 0) return <span className="text-[10px] text-gray-600">-</span>;
+
+    const openAttachment = context?.onOpenAttachment;
+
+    const iconFor = (fileType) => {
+        if (fileType === 'IMAGE') return '🖼';
+        if (fileType === 'AUDIO') return '🎵';
+        return '📎';
+    };
+
+    return (
+        <div className="flex items-center gap-1" title={allAtts.map((a) => a.fileName).join('\n')}>
+            {allAtts.slice(0, 4).map((att) => (
+                <button
+                    key={att.id}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        openAttachment?.(att);
+                    }}
+                    className="inline-flex items-center justify-center w-5 h-5 rounded bg-white/5 border border-white/10 hover:border-cyan-400/60 hover:bg-cyan-500/10 transition-all text-[10px]"
+                    title={att.fileName}
+                >
+                    {iconFor(att.fileType)}
+                </button>
+            ))}
+            {allAtts.length > 4 && <span className="text-[10px] text-gray-300">+{allAtts.length - 4}</span>}
         </div>
     );
 }
@@ -142,7 +273,7 @@ function BudgetHeaderRenderer(params) {
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
-export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRoles = [] }) {
+export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRoles = [], projectName = '' }) {
     const [wbsData, setWbsData] = useState([]);
     const [expandedSection, setExpandedSection] = useState(null);
     const [fullscreenSection, setFullscreenSection] = useState(null);
@@ -165,14 +296,28 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         profit: 0,
         marginPct: 0,
     });
+    const [markerLinksCache, setMarkerLinksCache] = useState({});
+    const [previewAttachment, setPreviewAttachment] = useState(null);
+    const [budgetImportOpen, setBudgetImportOpen] = useState(false);
+    const [budgetImportLoading, setBudgetImportLoading] = useState(false);
+    const [budgetImportSheets, setBudgetImportSheets] = useState([]);
+    const [budgetImportSheetName, setBudgetImportSheetName] = useState('');
+    const [budgetImportRows, setBudgetImportRows] = useState([]);
+    const [budgetImportFileName, setBudgetImportFileName] = useState('');
+    const [budgetImportHeaderRow, setBudgetImportHeaderRow] = useState(1);
+    const [budgetImportLastRow, setBudgetImportLastRow] = useState(1);
+    const [budgetImportMapping, setBudgetImportMapping] = useState({});
 
-    const showGlobalPdfExport = userRoles.includes('MANAGER') && expandedSection === null && fullscreenSection === null;
+    const syntheticRootId = `__root__:${nodeId}`;
+
+    const showGlobalPdfExport = fullscreenSection === null;
     
     const gridRef = useRef();
     const budgetGridApiRef = useRef(null);
     const materialRef = useRef();
     const strategyRef = useRef();
     const strategySaveTimeout = useRef(null);
+    const budgetImportFileInputRef = useRef(null);
 
     const isLogistyk = userRoles.includes('LOGISTYK');
     const isManagerOrAdmin = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
@@ -182,6 +327,97 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         Authorization: `Bearer ${token()}`,
         'Content-Type': 'application/json',
     }), []);
+
+    const normalizeImportedType = (value) => {
+        const raw = normKey(value);
+        if (!raw) return '';
+        if (['work', 'praca', 'robocizna'].includes(raw)) return 'work';
+        if (['material', 'materiał', 'materialy', 'materiały'].includes(raw)) return 'material';
+        if (['equipment', 'sprzet', 'sprzęt', 'urzadzenie', 'urządzenie'].includes(raw)) return 'equipment';
+        if (['service', 'usluga', 'usługa'].includes(raw)) return 'service';
+        if (['lodging', 'nocleg', 'noclegi'].includes(raw)) return 'lodging';
+        if (['fuel', 'paliwo', 'paliwa'].includes(raw)) return 'fuel';
+        return raw;
+    };
+
+    const buildBudgetImportAutoMapping = useCallback((header) => {
+        const autoMapping = {};
+        const safeHeader = Array.isArray(header) ? header : [];
+        const findCol = (patterns) => safeHeader.findIndex((h) => patterns.some((p) => normKey(h).includes(p)));
+        const setMapped = (key, patterns) => {
+            const idx = findCol(patterns);
+            if (idx >= 0) autoMapping[key] = String(idx);
+        };
+        setMapped('subjectName', ['przedmiot', 'subject']);
+        setMapped('name', ['nazwa', 'pozycja', 'element', 'opis']);
+        setMapped('type', ['typ', 'type']);
+        setMapped('quantity', ['ilosc', 'ilość', 'qty', 'quantity']);
+        setMapped('unit', ['jednost', 'unit', 'jm']);
+        setMapped('unitCost', ['koszt jednostk', 'cena jednostk', 'unit cost']);
+        setMapped('totalCost', ['koszt cal', 'koszt cał', 'wartosc', 'wartość', 'suma']);
+        setMapped('margin', ['marza', 'marża', 'margin']);
+        setMapped('discount', ['rabat', 'discount']);
+        setMapped('comment', ['komentarz', 'uwagi', 'comment', 'notes']);
+        return autoMapping;
+    }, []);
+
+    const budgetImportColumnOptions = useMemo(() => {
+        const header = budgetImportRows[budgetImportHeaderRow - 1] || [];
+        return header.map((value, idx) => ({
+            value: String(idx),
+            label: `${excelColumnLetter(idx + 1)} - ${value || '(pusta)'}`,
+        }));
+    }, [budgetImportRows, budgetImportHeaderRow]);
+
+    const handleBudgetImportFileChange = useCallback(async (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        try {
+            const buffer = await file.arrayBuffer();
+            const wb = new ExcelJS.Workbook();
+            await wb.xlsx.load(buffer);
+            const worksheets = wb.worksheets || [];
+            if (!worksheets.length) {
+                alert('Plik Excel nie zawiera arkusza.');
+                return;
+            }
+
+            const parsedSheets = worksheets.map((sheet, idx) => {
+                const rowCount = sheet.rowCount || 0;
+                const colCount = sheet.columnCount || 0;
+                const rows = [];
+                for (let r = 1; r <= rowCount; r++) {
+                    const rowValues = [];
+                    for (let c = 1; c <= colCount; c++) {
+                        rowValues.push(excelCellToText(sheet.getRow(r).getCell(c).value).trim());
+                    }
+                    rows.push(rowValues);
+                }
+                return {
+                    name: sheet.name || `Arkusz ${idx + 1}`,
+                    rows,
+                };
+            });
+
+            const firstSheet = parsedSheets[0];
+            const rows = firstSheet?.rows || [];
+            const header = rows[0] || [];
+
+            setBudgetImportSheets(parsedSheets);
+            setBudgetImportSheetName(firstSheet?.name || '');
+            setBudgetImportRows(rows);
+            setBudgetImportFileName(file.name);
+            setBudgetImportHeaderRow(1);
+            setBudgetImportLastRow(Math.max(1, rows.length));
+            setBudgetImportMapping(buildBudgetImportAutoMapping(header));
+            setBudgetImportOpen(true);
+        } catch (e) {
+            console.error('Budget Excel parse error:', e);
+            alert('Nie udało się odczytać pliku Excel.');
+        } finally {
+            if (event.target) event.target.value = '';
+        }
+    }, [buildBudgetImportAutoMapping]);
 
     const fetchData = useCallback(async () => {
         try {
@@ -193,6 +429,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 const topIds = (data.items || []).filter(n => n.depth === 0).map(n => n.id);
                 setExpandedIds(prev => {
                     const next = new Set(prev);
+                    next.add(syntheticRootId);
                     topIds.forEach(id => next.add(id));
                     return next;
                 });
@@ -234,12 +471,18 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                         for (const candidateName of nameCandidates) {
                             const key = makeMaterialLookupKey(subjectName, candidateName);
                             if (!nextLookupMeta[key]) {
-                                nextLookupMeta[key] = { statuses: [], cost: 0 };
+                                nextLookupMeta[key] = { statuses: [], cost: 0, quantity: 0, unit: '' };
                             }
                             if (statusLabel && !nextLookupMeta[key].statuses.includes(statusLabel)) {
                                 nextLookupMeta[key].statuses.push(statusLabel);
                             }
-                            if (req.status === 'CONFIRMED' && unitNet > 0 && quantity > 0) {
+                            if (quantity > 0) {
+                                nextLookupMeta[key].quantity += quantity;
+                            }
+                            if (!nextLookupMeta[key].unit && req.unit) {
+                                nextLookupMeta[key].unit = String(req.unit);
+                            }
+                            if (unitNet > 0 && quantity > 0) {
                                 nextLookupMeta[key].cost += unitNet * quantity;
                             }
                         }
@@ -274,7 +517,34 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 setMaterialMetaByLookupKey(nextLookupMeta);
             }
         } catch (e) { console.error('Fetch WBS error:', e); }
-    }, [nodeId, versionId]);
+    }, [nodeId, versionId, syntheticRootId]);
+
+    useEffect(() => {
+        let active = true;
+
+        const loadMarkerLinks = async () => {
+            const nodeIds = Array.from(new Set(wbsData.map(n => n.id).filter(Boolean)));
+            if (nodeIds.length === 0) {
+                if (active) setMarkerLinksCache({});
+                return;
+            }
+
+            const entries = await Promise.all(nodeIds.map(async (id) => {
+                try {
+                    const res = await fetch(`${API_URL}/schematics/wbs-node-markers/${id}`, { headers: { Authorization: `Bearer ${token()}` } });
+                    const data = res.ok ? await res.json() : [];
+                    return [id, data];
+                } catch {
+                    return [id, []];
+                }
+            }));
+
+            if (active) setMarkerLinksCache(Object.fromEntries(entries));
+        };
+
+        loadMarkerLinks();
+        return () => { active = false; };
+    }, [wbsData]);
 
     const fetchUsers = useCallback(async () => {
         const t = token();
@@ -424,6 +694,26 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             }
         }
 
+        const markerSummary = (nodeId) => {
+            const links = markerLinksCache[nodeId] || [];
+            const allAtts = links.flatMap((l) => (l.marker?.attachments || []));
+            if (allAtts.length === 0) return '';
+
+            const itemsHtml = allAtts.map((a) => {
+                const url = `${API_URL}/schematics/file/${a.fileUrl || ''}`;
+                const name = esc(a.fileName || 'plik');
+                if (a.fileType === 'IMAGE' && a.fileUrl) {
+                    return `<div style="margin:4px 0 8px 0;">
+                        <div style="font-size:10px;color:#4b5563;margin-bottom:3px;">${name}</div>
+                        <img src="${esc(url)}" alt="${name}" style="max-width:260px;width:100%;height:auto;object-fit:contain;border:1px solid #d1d5db;border-radius:4px;" />
+                    </div>`;
+                }
+                return `<div style="font-size:10px;color:#374151;margin:2px 0;">📎 ${name}</div>`;
+            }).join('');
+
+            return `<div><div style="font-size:10px;color:#111827;font-weight:bold;margin-bottom:4px;">📎 ${allAtts.length}</div>${itemsHtml}</div>`;
+        };
+
         const buildTreeRows = (parentId, depth, includeBudget) => {
             const children = wbsData
                 .filter(n => (n.parentId || null) === (parentId || null))
@@ -434,12 +724,14 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 const budgetCols = includeBudget ? `
                     <td class="num">${fmtPLN(n.unitCost)}</td>
                     <td class="num">${fmtQty(n.quantity)}</td>
+                    <td>${esc(n.unit || 'sztuki')}</td>
                     <td class="num">${fmtPct(n.margin)}</td>
                     <td class="num">${fmtPLN(n.totalCost)}</td>
                     <td class="num">${fmtPLN(n.totalPrice)}</td>` : `
-                    <td>${TYPE_LABELS[n.type] || n.type || ''}</td>
-                    <td>${n.status || ''}</td>
-                    <td>${n.owner || ''}</td>`;
+                    <td>${esc(TYPE_LABELS[n.type] || n.type || '')}</td>
+                    <td>${esc(n.status || '')}</td>
+                    <td>${esc(n.owner || '')}</td>
+                    <td>${markerSummary(n.id)}</td>`;
                 return `<tr>
                     <td style="padding-left:${8 + indent}px;${nameStyle}">${depth > 0 ? '└ ' : ''}${(n.name || '').replace(/</g, '&lt;')}</td>
                     ${budgetCols}
@@ -457,8 +749,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             <div class="section">
                 <div class="section-header">Struktura zadań projektu</div>
                 <table>
-                    <thead><tr><th>Nazwa</th><th>Typ</th><th>Status</th><th>Osoba</th></tr></thead>
-                    <tbody>${wbsData.length ? buildTreeRows(null, 0, false) : '<tr><td colspan="4">Brak danych WBS</td></tr>'}</tbody>
+                    <thead><tr><th>Nazwa</th><th>Typ</th><th>Status</th><th>Osoba</th><th>Znaczniki</th></tr></thead>
+                    <tbody>${wbsData.length ? buildTreeRows(null, 0, false) : '<tr><td colspan="5">Brak danych WBS</td></tr>'}</tbody>
                 </table>
             </div>` : '';
 
@@ -466,8 +758,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             <div class="section">
                 <div class="section-header">Plan i harmonogram (Budżet)</div>
                 <table>
-                    <thead><tr><th>Nazwa</th><th>Koszt jedn.</th><th>Ilość</th><th>Marża%</th><th>Koszt sum.</th><th>Suma netto</th></tr></thead>
-                    <tbody>${wbsData.length ? buildTreeRows(null, 0, true) : '<tr><td colspan="6">Brak danych budżetowych</td></tr>'}</tbody>
+                    <thead><tr><th>Nazwa</th><th>Koszt jednostkowy</th><th>Ilość</th><th>Jednostki</th><th>Marża%</th><th>Koszt całościowy</th><th>Suma netto</th></tr></thead>
+                    <tbody>${wbsData.length ? buildTreeRows(null, 0, true) : '<tr><td colspan="7">Brak danych budżetowych</td></tr>'}</tbody>
                 </table>
             </div>` : '';
 
@@ -557,6 +849,15 @@ ${materialsHtml}
         } catch (e) { console.error('Delete node error:', e); }
     }, [selectedId, authHeaders, refreshUnified]);
 
+    const deleteNodeById = useCallback(async (id) => {
+        if (!id || !window.confirm('Usunąć ten węzeł?')) return;
+        try {
+            await fetch(`${API_URL}/wbs-nodes/${id}`, { method: 'DELETE', headers: authHeaders() });
+            if (selectedId === id) setSelectedId(null);
+            await refreshUnified();
+        } catch (e) { console.error('Delete node error:', e); }
+    }, [authHeaders, refreshUnified, selectedId]);
+
     const updateNodeField = useCallback(async (id, field, value) => {
         try {
             await fetch(`${API_URL}/wbs-nodes/${id}`, {
@@ -581,11 +882,191 @@ ${materialsHtml}
         setWbsData(prev => prev.map(item => item.id === wbsNodeId ? { ...item, ...patch } : item));
     }, []);
 
+    const applyBudgetImport = useCallback(async () => {
+        if (!budgetImportRows.length) return;
+        setBudgetImportLoading(true);
+        try {
+            const startDataRow = Math.max(1, Number(budgetImportHeaderRow) || 1) + 1;
+            const lastDataRow = Math.max(startDataRow, Number(budgetImportLastRow) || budgetImportRows.length);
+            const getMapped = (rowValues, key) => {
+                const idxRaw = budgetImportMapping[key];
+                if (idxRaw === undefined || idxRaw === '') return '';
+                const idx = Number(idxRaw);
+                return Number.isInteger(idx) ? String(rowValues[idx] || '').trim() : '';
+            };
+
+            const byId = new Map(wbsData.map((n) => [n.id, n]));
+            const getSubjectNameForNode = (node) => {
+                if (!node) return '';
+                let current = node;
+                while (current?.parentId && byId.get(current.parentId)) {
+                    current = byId.get(current.parentId);
+                }
+                return current?.name || node.name || '';
+            };
+            const subjectRootsByName = new Map();
+            for (const item of wbsData) {
+                if (!item?.parentId) {
+                    const key = normKey(item.name);
+                    if (key && !subjectRootsByName.has(key)) {
+                        subjectRootsByName.set(key, item);
+                    }
+                }
+            }
+            const budgetRows = [...wbsData]
+                .sort((a, b) => (a.path || '').localeCompare(b.path || '', 'pl'));
+            const used = new Set();
+            let imported = 0;
+            let updated = 0;
+            let created = 0;
+            let skipped = 0;
+
+            for (let rowNo = startDataRow; rowNo <= lastDataRow && rowNo <= budgetImportRows.length; rowNo++) {
+                const rowValues = budgetImportRows[rowNo - 1] || [];
+                const importedRow = {
+                    subjectName: getMapped(rowValues, 'subjectName'),
+                    name: getMapped(rowValues, 'name'),
+                    type: getMapped(rowValues, 'type'),
+                    quantity: getMapped(rowValues, 'quantity'),
+                    unit: getMapped(rowValues, 'unit'),
+                    unitCost: getMapped(rowValues, 'unitCost'),
+                    totalCost: getMapped(rowValues, 'totalCost'),
+                    margin: getMapped(rowValues, 'margin'),
+                    discount: getMapped(rowValues, 'discount'),
+                    comment: getMapped(rowValues, 'comment'),
+                };
+
+                const hasData = Object.values(importedRow).some((v) => String(v || '').trim() !== '');
+                if (!hasData) continue;
+                imported += 1;
+
+                const wantedName = normKey(importedRow.name);
+                const wantedSubject = normKey(importedRow.subjectName);
+
+                let target = null;
+                if (wantedName) {
+                    target = budgetRows.find((row) => (
+                        !used.has(row.id)
+                        && normKey(row.name) === wantedName
+                        && (!wantedSubject || normKey(getSubjectNameForNode(row)) === wantedSubject)
+                    ));
+                }
+
+                if (!target) {
+                    const subjectRoot = subjectRootsByName.get(wantedSubject);
+                    if (!subjectRoot || !importedRow.name) {
+                        skipped += 1;
+                        continue;
+                    }
+
+                    const createRes = await fetch(`${API_URL}/wbs-nodes`, {
+                        method: 'POST',
+                        headers: authHeaders(),
+                        body: JSON.stringify({
+                            nodeId,
+                            versionId: versionId || null,
+                            parentId: subjectRoot.id,
+                            name: importedRow.name,
+                        }),
+                    });
+                    if (!createRes.ok) continue;
+                    const createdNode = await createRes.json().catch(() => null);
+                    if (!createdNode?.id) continue;
+                    target = {
+                        id: createdNode.id,
+                        name: createdNode.name || importedRow.name || `Pozycja ${importIndex + 1}`,
+                        quantity: 1,
+                        unitCost: 0,
+                    };
+                    budgetRows.push(target);
+                    created += 1;
+                }
+                used.add(target.id);
+
+                const parsedQuantity = parseLocaleNumber(importedRow.quantity);
+                const parsedUnitCost = parseLocaleNumber(importedRow.unitCost);
+                const parsedTotalCost = parseLocaleNumber(importedRow.totalCost);
+                const resolvedQuantity = parsedQuantity != null ? parsedQuantity : (parseFloat(target.quantity) || 1);
+                const resolvedUnitCost = parsedUnitCost != null
+                    ? parsedUnitCost
+                    : (parsedTotalCost != null && resolvedQuantity > 0 ? parsedTotalCost / resolvedQuantity : null);
+
+                const nodePatch = {};
+                const budgetPatch = {};
+
+                if (importedRow.name) nodePatch.name = importedRow.name;
+                const mappedType = normalizeImportedType(importedRow.type);
+                if (mappedType && TYPE_OPTIONS.includes(mappedType)) nodePatch.type = mappedType;
+
+                if (resolvedQuantity != null) budgetPatch.quantity = resolvedQuantity;
+                if (importedRow.unit) budgetPatch.unit = importedRow.unit;
+                if (resolvedUnitCost != null) budgetPatch.unitCost = resolvedUnitCost;
+                const parsedMargin = parseLocaleNumber(importedRow.margin);
+                if (parsedMargin != null) budgetPatch.margin = parsedMargin;
+                const parsedDiscount = parseLocaleNumber(importedRow.discount);
+                if (parsedDiscount != null) budgetPatch.discount = parsedDiscount;
+                if (importedRow.comment) budgetPatch.comment = importedRow.comment;
+
+                const previewUnitCost = budgetPatch.unitCost != null ? budgetPatch.unitCost : (parseFloat(target.unitCost) || 0);
+                const previewQuantity = budgetPatch.quantity != null ? budgetPatch.quantity : (parseFloat(target.quantity) || 1);
+                const previewPatch = {
+                    ...nodePatch,
+                    ...budgetPatch,
+                    totalCost: previewUnitCost * previewQuantity,
+                };
+
+                updateLocalWbsBudgetRow(target.id, previewPatch);
+
+                if (Object.keys(nodePatch).length > 0) {
+                    await fetch(`${API_URL}/wbs-nodes/${target.id}`, {
+                        method: 'PATCH',
+                        headers: authHeaders(),
+                        body: JSON.stringify(nodePatch),
+                    });
+                }
+
+                if (Object.keys(budgetPatch).length > 0) {
+                    await saveBudgetField(target.id, budgetPatch);
+                }
+
+                updated += 1;
+            }
+
+            await refreshUnified();
+            setBudgetImportOpen(false);
+            alert(`Import zakończony: przetworzono ${imported} wierszy, zaktualizowano ${updated}, dodano ${created}, pominięto ${skipped}.`);
+        } catch (e) {
+            console.error('Budget import apply error:', e);
+            alert('Wystąpił błąd podczas importu budżetu.');
+        } finally {
+            setBudgetImportLoading(false);
+        }
+    }, [
+        budgetImportRows,
+        budgetImportHeaderRow,
+        budgetImportLastRow,
+        budgetImportMapping,
+        updateLocalWbsBudgetRow,
+        authHeaders,
+        saveBudgetField,
+        refreshUnified,
+        wbsData,
+        nodeId,
+        versionId,
+    ]);
+
     const onCellValueChanged = useCallback((params) => {
         const row = params.data;
         if (!row) return;
         const field = params.colDef.field;
-        if (['name', 'type', 'status', 'owner'].includes(field)) {
+        if (['subjectName', 'name', 'type', 'status', 'owner'].includes(field)) {
+            if (field === 'subjectName') {
+                if (row.subjectId && row.subjectName) {
+                    updateNodeField(row.subjectId, 'name', row.subjectName);
+                    setWbsData(prev => prev.map(item => item.id === row.subjectId ? { ...item, name: row.subjectName } : item));
+                }
+                return;
+            }
             if (field === 'status') {
                 const normalizedType = String(row.type || '').toLowerCase();
                 if (normalizedType === 'work') {
@@ -599,21 +1080,39 @@ ${materialsHtml}
                 const inheritedFromMaterials = normalizedType === 'material' || normalizedType === 'equipment';
                 const quantity = parseFloat(row.quantity) || 1;
                 const lookupKey = makeMaterialLookupKey(row.subjectName || row.name, row.name);
+                const inheritedQuantity = parseFloat(materialMetaByLookupKey[lookupKey]?.quantity) || 0;
                 const inheritedCost = parseFloat(materialMetaByLookupKey[lookupKey]?.cost)
                     || parseFloat(row.materialTabCost)
                     || parseFloat(row.materialsTotalCost)
                     || 0;
-                const cost = inheritedFromMaterials
+                const resolvedQuantity = inheritedFromMaterials
+                    ? (inheritedQuantity > 0 ? inheritedQuantity : quantity)
+                    : quantity;
+                const inheritedUnitCost = inheritedQuantity > 0 ? inheritedCost / inheritedQuantity : 0;
+                const resolvedUnitCost = inheritedFromMaterials
+                    ? inheritedUnitCost
+                    : (parseFloat(row.unitCost) || 0);
+                const totalCost = inheritedFromMaterials
                     ? inheritedCost
-                    : (Number.isFinite(parseFloat(row.totalCost)) ? parseFloat(row.totalCost) : (parseFloat(row.unitCost) || 0) * quantity);
+                    : (Number.isFinite(parseFloat(row.totalCost)) ? parseFloat(row.totalCost) : resolvedUnitCost * resolvedQuantity);
                 const margin = parseFloat(row.margin) || 0;
                 row.inheritedFromMaterials = inheritedFromMaterials;
-                row.cost = cost;
-                row.totalCost = cost;
-                row.offerPrice = margin !== 0 ? cost * (1 + margin / 100) : 0;
+                row.quantity = resolvedQuantity;
+                row.unit = inheritedFromMaterials
+                    ? (materialMetaByLookupKey[lookupKey]?.unit || row.unit || 'sztuki')
+                    : (row.unit || 'sztuki');
+                row.unitCost = inheritedFromMaterials
+                    ? resolvedUnitCost
+                    : (resolvedQuantity > 0 ? totalCost / resolvedQuantity : totalCost);
+                row.cost = totalCost;
+                row.totalCost = totalCost;
+                row.offerPrice = margin !== 0 ? totalCost * (1 + margin / 100) : 0;
                 row.totalPrice = row.offerPrice;
                 updateLocalWbsBudgetRow(row.id, {
                     type: row.type,
+                    quantity: row.quantity,
+                    unit: row.unit,
+                    unitCost: row.unitCost,
                     totalCost: row.totalCost,
                     totalPrice: row.totalPrice,
                     margin: row.margin,
@@ -622,20 +1121,23 @@ ${materialsHtml}
             }
         } else {
             const q = parseFloat(row.quantity) || 1;
-            const cost = parseFloat(row.cost) || 0;
-            const uc = q > 0 ? cost / q : cost;
+            const uc = parseFloat(row.unitCost) || 0;
+            const totalCost = uc * q;
             const m = parseFloat(row.margin) || 0;
             const d = parseFloat(row.discount) || 0;
             let up = uc;
             if (uc > 0 && m !== 0) up = uc * (1 + m / 100);
             if (d > 0) up = up * (1 - d / 100);
 
-            row.totalCost = cost;
-            row.cost = cost;
+            row.unit = row.unit || 'sztuki';
+            row.unitCost = uc;
+            row.totalCost = totalCost;
+            row.cost = totalCost;
             row.unitPrice = up;
             row.totalPrice = m !== 0 ? up * q : 0;
             row.offerPrice = row.totalPrice;
             updateLocalWbsBudgetRow(row.id, {
+                unit: row.unit,
                 totalCost: row.totalCost,
                 totalPrice: row.totalPrice,
                 unitPrice: row.unitPrice,
@@ -647,6 +1149,7 @@ ${materialsHtml}
             });
             params.api.applyTransaction({ update: [row] });
             saveBudgetField(row.id, {
+                unit: row.unit,
                 unitCost: uc,
                 quantity: q,
                 margin: m,
@@ -659,20 +1162,23 @@ ${materialsHtml}
 
     const buildRows = (view) => {
         const byId = new Map(wbsData.map(item => [item.id, item]));
-        const getSubjectName = (item) => {
+        const getSubjectInfo = (item) => {
             let current = item;
             while (current?.parentId) {
                 const parent = byId.get(current.parentId);
                 if (!parent) break;
                 current = parent;
             }
-            return current?.name || item.name || '';
+            return {
+                id: current?.id || item.id,
+                name: current?.name || item.name || '',
+            };
         };
 
         const getInheritedMaterialStatus = (item) => {
             const normalizedType = String(item.type || '').toLowerCase();
             if (!['material', 'equipment'].includes(normalizedType)) return item.status;
-            const lookupKey = makeMaterialLookupKey(getSubjectName(item), item.name);
+            const lookupKey = makeMaterialLookupKey(getSubjectInfo(item).name, item.name);
             const lookupStatuses = materialMetaByLookupKey[lookupKey]?.statuses || [];
             if (lookupStatuses.length) return lookupStatuses.join(', ');
             const statuses = Array.from(new Set((item.materials || [])
@@ -688,31 +1194,47 @@ ${materialsHtml}
                 .map(item => {
                     const normalizedType = String(item.type || '').toLowerCase();
                     const inheritedFromMaterials = normalizedType === 'material' || normalizedType === 'equipment';
-                    const quantity = parseFloat(item.quantity) || 1;
-                    const subjectName = getSubjectName(item);
+                    const subject = getSubjectInfo(item);
+                    const subjectName = subject.name;
                     const lookupKey = makeMaterialLookupKey(subjectName, item.name);
+                    const inheritedQuantity = parseFloat(materialMetaByLookupKey[lookupKey]?.quantity) || 0;
                     const inheritedCost = parseFloat(materialMetaByLookupKey[lookupKey]?.cost)
                         || parseFloat(materialCostsByNode[item.id])
                         || parseFloat(item.materialsTotalCost)
                         || 0;
-                    const cost = inheritedFromMaterials
+                    const persistedQuantity = parseFloat(item.quantity) || 1;
+                    const quantity = inheritedFromMaterials
+                        ? (inheritedQuantity > 0 ? inheritedQuantity : persistedQuantity)
+                        : persistedQuantity;
+                    const totalCost = inheritedFromMaterials
                         ? inheritedCost
                         : (Number.isFinite(parseFloat(item.totalCost))
                             ? parseFloat(item.totalCost)
                             : (parseFloat(item.unitCost) || 0) * quantity);
-                    const clearDerivedFields = inheritedFromMaterials && cost <= 0;
+                    const unitCost = inheritedFromMaterials
+                        ? (inheritedQuantity > 0 ? inheritedCost / inheritedQuantity : (quantity > 0 ? totalCost / quantity : totalCost))
+                        : (Number.isFinite(parseFloat(item.unitCost))
+                            ? parseFloat(item.unitCost)
+                            : (quantity > 0 ? totalCost / quantity : 0));
+                    const clearDerivedFields = inheritedFromMaterials && totalCost <= 0;
                     const margin = clearDerivedFields ? 0 : (parseFloat(item.margin) || 0);
                     const discount = clearDerivedFields ? 0 : (parseFloat(item.discount) || 0);
-                    let offerPrice = margin !== 0 ? cost * (1 + margin / 100) : 0;
+                    let offerPrice = margin !== 0 ? totalCost * (1 + margin / 100) : 0;
                     if (discount > 0) {
                         offerPrice = offerPrice * (1 - discount / 100);
                     }
                     return {
                         ...item,
+                        subjectId: subject.id,
                         subjectName,
                         status: getInheritedMaterialStatus(item),
+                        unit: inheritedFromMaterials
+                            ? (materialMetaByLookupKey[lookupKey]?.unit || item.unit || 'sztuki')
+                            : (item.unit || 'sztuki'),
                         materialTabCost: inheritedCost,
-                        cost,
+                        unitCost,
+                        totalCost,
+                        cost: totalCost,
                         margin,
                         discount,
                         offerPrice,
@@ -738,6 +1260,25 @@ ${materialsHtml}
                 if (expandedIds.has(item.id)) addVisible(item.id, depth + 1);
             }
         };
+
+        if (view === VIEWS.STRUCTURE) {
+            const hasRootChildren = (childrenMap.get('__root__') || []).length > 0;
+            rows.push({
+                id: syntheticRootId,
+                parentId: null,
+                name: projectName || 'Projekt',
+                type: 'project',
+                status: '',
+                owner: '',
+                _depth: 0,
+                _hasChildren: hasRootChildren,
+                _syntheticRoot: true,
+                materialsCount: 0,
+            });
+            if (expandedIds.has(syntheticRootId)) addVisible(null, 1);
+            return rows;
+        }
+
         addVisible(null, 0);
         return rows;
     };
@@ -821,8 +1362,20 @@ ${materialsHtml}
         const nameCol = {
             field: 'name', headerName: 'Nazwa', flex: 1, minWidth: 250,
             cellRenderer: TreeNameRenderer,
-            cellRendererParams: { context: { expandedIds, toggleExpand: (id) => setExpandedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; }), selectedId, onSelectRow: setSelectedId } },
-            editable: true
+            cellRendererParams: {
+                context: {
+                    expandedIds,
+                    toggleExpand: (id) => setExpandedIds(prev => {
+                        const n = new Set(prev);
+                        if (n.has(id)) n.delete(id); else n.add(id);
+                        return n;
+                    }),
+                    selectedId,
+                    onSelectRow: setSelectedId,
+                    onAddChild: (id) => addNode(String(id).startsWith('__root__:') ? null : id),
+                },
+            },
+            editable: (params) => !params.data?._syntheticRoot
         };
         
         const ownerCol = {
@@ -831,45 +1384,140 @@ ${materialsHtml}
             cellEditorParams: {
                 values: ['', ...projectUsers.map(u => [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email)]
             },
-            editable: true
+            editable: (params) => !params.data?._syntheticRoot
         };
 
         if (view === VIEWS.STRUCTURE) return [
             nameCol, 
-            { field: 'type', headerName: 'Typ', width: 100, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: TYPE_OPTIONS }, valueFormatter: p => TYPE_LABELS[p.value] || p.value, editable: true }, 
+            { field: 'type', headerName: 'Typ', width: 100, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: TYPE_OPTIONS }, valueFormatter: p => TYPE_LABELS[p.value] || p.value, editable: (params) => !params.data?._syntheticRoot }, 
             {
                 field: 'status',
                 headerName: 'Status',
                 width: 140,
-                editable: (params) => String(params.data?.type || '').toLowerCase() === 'work',
+                editable: (params) => !params.data?._syntheticRoot && String(params.data?.type || '').toLowerCase() === 'work',
                 tooltipValueGetter: (params) => String(params.data?.type || '').toLowerCase() === 'work' ? '' : 'Status dziedziczony z zakładki Materiały'
             },
-            ownerCol
+            ownerCol,
+            {
+                headerName: 'Znaczniki',
+                minWidth: 120,
+                flex: 1,
+                sortable: false,
+                filter: false,
+                editable: false,
+                cellRenderer: MarkerIconsRenderer,
+                cellRendererParams: { context: { markerLinksCache, onOpenAttachment: setPreviewAttachment } },
+            },
+            {
+                headerName: '',
+                width: 64,
+                pinned: 'right',
+                sortable: false,
+                filter: false,
+                editable: false,
+                cellRenderer: RowActionsRenderer,
+                cellRendererParams: { context: { onDeleteRow: deleteNodeById } },
+            }
         ];
 
         if (view === VIEWS.BUDGET) return [
-            { field: 'subjectName', headerName: 'Przedmiot', minWidth: 220, flex: 1, sortable: true, editable: false, headerComponent: BudgetHeaderRenderer },
+            { field: 'subjectName', headerName: 'Przedmiot', minWidth: 220, flex: 1, sortable: true, editable: true, headerComponent: BudgetHeaderRenderer },
             { field: 'name', headerName: 'Nazwa', minWidth: 220, flex: 1, sortable: true, editable: true, headerComponent: BudgetHeaderRenderer },
             { field: 'type', headerName: 'Typ', width: 130, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: TYPE_OPTIONS }, valueFormatter: p => TYPE_LABELS[p.value] || p.value, editable: true, sortable: true, headerComponent: BudgetHeaderRenderer },
             {
-                field: 'cost',
-                headerName: 'Koszt',
-                width: 130,
+                field: 'unitCost',
+                headerName: 'Koszt jednostkowy',
+                width: 170,
+                cellEditor: 'agTextCellEditor',
                 editable: (params) => !params.data?.inheritedFromMaterials,
                 sortable: true,
                 valueFormatter: p => fmtPLN(p.value),
                 cellClass: (params) => params.data?.inheritedFromMaterials ? 'text-red-300' : '',
-                tooltipValueGetter: (params) => params.data?.inheritedFromMaterials ? 'Koszt dziedziczony z zakładki Materiały' : '',
+                tooltipValueGetter: (params) => params.data?.inheritedFromMaterials ? 'Koszt dziedziczony z zakładki Materiały (wyliczony względem ilości)' : '',
                 headerComponent: BudgetHeaderRenderer
             },
-            { field: 'margin', headerName: 'Marża (%)', width: 110, editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-green-300', headerComponent: BudgetHeaderRenderer },
-            { field: 'discount', headerName: 'Rabat (%)', width: 110, editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-orange-300', headerComponent: BudgetHeaderRenderer },
+            { field: 'quantity', headerName: 'Ilość', width: 110, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtQty(p.value), headerComponent: BudgetHeaderRenderer },
+            { field: 'unit', headerName: 'Jednostki', width: 140, editable: true, sortable: true, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: UNIT_OPTIONS }, headerComponent: BudgetHeaderRenderer },
+            { field: 'totalCost', headerName: 'Koszt całościowy', width: 170, editable: false, sortable: true, valueFormatter: p => fmtPLN(p.value), headerComponent: BudgetHeaderRenderer },
+            { field: 'margin', headerName: 'Marża (%)', width: 110, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-green-300', headerComponent: BudgetHeaderRenderer },
+            { field: 'discount', headerName: 'Rabat (%)', width: 110, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-orange-300', headerComponent: BudgetHeaderRenderer },
             { field: 'offerPrice', headerName: 'Cena ofertowa', width: 150, sortable: true, valueFormatter: p => fmtPLN(p.value), headerComponent: BudgetHeaderRenderer },
-            { field: 'comment', headerName: 'Komentarz', minWidth: 220, flex: 1, editable: true, sortable: true, headerComponent: BudgetHeaderRenderer }
+            { field: 'comment', headerName: 'Komentarz', minWidth: 220, flex: 1, editable: true, sortable: true, headerComponent: BudgetHeaderRenderer },
+            {
+                headerName: '',
+                width: 64,
+                pinned: 'right',
+                sortable: false,
+                filter: false,
+                editable: false,
+                cellRenderer: RowActionsRenderer,
+                cellRendererParams: { context: { onDeleteRow: deleteNodeById } },
+            }
         ];
 
         return [nameCol, { field: 'status', width: 100 }];
     };
+
+    const onGridCellKeyDown = useCallback((params) => {
+        const key = params?.event?.key;
+        if (!key) return;
+
+        const rowIndex = params?.node?.rowIndex;
+        const currentColumn = params?.column;
+        if (rowIndex == null || !currentColumn) return;
+
+        const api = params.api;
+        const allCols = api.getAllDisplayedColumns?.() || [];
+        const currentColId = currentColumn.getColId();
+        const isEditable = (column, nextRowIndex) => {
+            const rowNode = api.getDisplayedRowAtIndex(nextRowIndex);
+            if (!rowNode || rowNode.data?._syntheticRoot) return false;
+            const colDef = column.getColDef();
+            const editable = colDef.editable;
+            if (typeof editable === 'function') {
+                return !!editable({
+                    ...params,
+                    colDef,
+                    column,
+                    data: rowNode.data,
+                    node: rowNode,
+                    rowIndex: nextRowIndex,
+                });
+            }
+            return !!editable;
+        };
+
+        if (key === 'Enter' && !params.event.shiftKey) {
+            params.event.preventDefault();
+            params.event.stopPropagation();
+            const currentIdx = allCols.findIndex((c) => c.getColId() === currentColId);
+            if (currentIdx < 0) return;
+            for (let i = currentIdx + 1; i < allCols.length; i++) {
+                const nextCol = allCols[i];
+                if (!isEditable(nextCol, rowIndex)) continue;
+                api.stopEditing();
+                api.setFocusedCell(rowIndex, nextCol.getColId());
+                api.startEditingCell({ rowIndex, colKey: nextCol.getColId() });
+                return;
+            }
+            return;
+        }
+
+        if (key === 'ArrowUp' || key === 'ArrowDown') {
+            params.event.preventDefault();
+            params.event.stopPropagation();
+            const delta = key === 'ArrowUp' ? -1 : 1;
+            const targetRow = rowIndex + delta;
+            const rowCount = api.getDisplayedRowCount();
+            if (targetRow < 0 || targetRow >= rowCount) return;
+
+            api.stopEditing();
+            api.setFocusedCell(targetRow, currentColId);
+            if (isEditable(currentColumn, targetRow)) {
+                api.startEditingCell({ rowIndex: targetRow, colKey: currentColId });
+            }
+        }
+    }, []);
 
     const renderGrid = (v) => (
         <div className="flex-1 min-h-[400px]" onDoubleClick={(e) => e.stopPropagation()}>
@@ -887,10 +1535,11 @@ ${materialsHtml}
                 } : undefined}
                 onFilterChanged={v === VIEWS.BUDGET ? (params) => refreshBudgetSummaryFromApi(params.api) : undefined}
                 onModelUpdated={v === VIEWS.BUDGET ? (params) => refreshBudgetSummaryFromApi(params.api) : undefined}
+                onCellKeyDown={onGridCellKeyDown}
                 defaultColDef={v === VIEWS.BUDGET
                     ? { resizable: true, sortable: true, filter: true, floatingFilter: false }
                     : { resizable: true, sortable: false }}
-                singleClickEdit={v === VIEWS.STRUCTURE || v === VIEWS.BUDGET}
+                singleClickEdit={v === VIEWS.BUDGET}
                 animateRows={true}
             />
         </div>
@@ -1006,15 +1655,22 @@ ${materialsHtml}
 
     return (
         <div className={`flex flex-col w-full h-full relative overflow-y-auto pr-2 custom-scrollbar bg-[#0a0c10]/50 rounded-[40px] border border-white/[0.03] ${showGlobalPdfExport ? 'gap-2 p-2 pt-1' : 'gap-1 p-2 pt-0'}`}>
+            <input
+                ref={budgetImportFileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={handleBudgetImportFileChange}
+            />
             {/* Global Header */}
             {showGlobalPdfExport && (
-                <div className="flex items-center justify-end mb-0">
+                <div className="flex items-center justify-center mb-0">
                     <button 
                         onClick={() => handleExportPDF('all')}
                         className="group relative flex items-center gap-3 px-6 py-2.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/20 rounded-2xl text-blue-300 text-xs font-black uppercase tracking-[0.1em] transition-all overflow-hidden"
                     >
                         <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-white/5 to-blue-500/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                        <FileDown size={14} className="group-hover:translate-y-[-2px] transition-transform" /> PDF
+                        <FileDown size={14} className="group-hover:translate-y-[-2px] transition-transform" /> Eksport PDF - wszystkie sekcje
                     </button>
                 </div>
             )}
@@ -1081,13 +1737,11 @@ ${materialsHtml}
                 </div>
             ))}
 
-            {renderSection('wbs', 'Struktura zadań projektu', Layers, 'blue', (
-                <div className="flex flex-col gap-4 h-full">
-                    <div className="flex items-center gap-2 pb-2">
-                        <button onClick={() => addNode(null)} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-500/20 transition-all">+ Element Główny</button>
+            {renderSection('wbs', `Struktura zadań projektu: ${projectName || '—'}`, Layers, 'blue', (
+                <div className="flex flex-col gap-0 h-full">
+                    <div className="flex items-center gap-2 mb-2 px-1 py-1 rounded-lg border border-white/10 bg-black/20">
                         {selectedId && <button onClick={() => addNode(selectedId)} className="px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-blue-500/20 transition-all">+ Pod-Element</button>}
                         {selectedId && <button onClick={deleteNode} className="p-1.5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-all"><Trash2 size={14} /></button>}
-                        <button onClick={refreshUnified} className="ml-auto p-1.5 text-gray-600 hover:text-white transition-all"><RefreshCw size={14} /></button>
                     </div>
                     {renderGrid(VIEWS.STRUCTURE)}
                 </div>
@@ -1100,7 +1754,19 @@ ${materialsHtml}
                     </div>
                     {renderGrid(VIEWS.BUDGET)}
                 </div>
-            ), () => handleExportPDF('budget'))}
+            ), () => handleExportPDF('budget'), (
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            budgetImportFileInputRef.current?.click();
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all"
+                    >
+                        <FileDown size={11} /> Import budżetu z Excel
+                    </button>
+                </div>
+            ))}
 
             {renderSection('materials', 'Materiały', Zap, 'yellow', (
                 <MaterialRequirementsPanel 
@@ -1158,6 +1824,171 @@ ${materialsHtml}
                                 dangerouslySetInnerHTML={{ __html: `<p>${renderStrategyHtml(wbsDescription || 'Brak treści strategii')}</p>` }}
                             />
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {budgetImportOpen && (
+                <div className="fixed inset-0 z-[125] bg-[#05070bcc] backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !budgetImportLoading && setBudgetImportOpen(false)}>
+                    <div className="w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl border border-white/10 bg-[#0b0f17]" onClick={(e) => e.stopPropagation()}>
+                        <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-white">Import budżetu z Excel</h3>
+                                <p className="text-[10px] text-gray-500 uppercase tracking-widest">Plik: {budgetImportFileName || '—'}</p>
+                            </div>
+                            <button
+                                onClick={() => !budgetImportLoading && setBudgetImportOpen(false)}
+                                className="p-2 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 transition-all"
+                                aria-label="Zamknij import budżetu"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+
+                        <div className="p-5 overflow-auto max-h-[calc(90vh-64px)] custom-scrollbar space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <label className="text-xs text-gray-300 flex flex-col gap-1">
+                                    Zakładka arkusza
+                                    <select
+                                        value={budgetImportSheetName}
+                                        onChange={(e) => {
+                                            const nextName = e.target.value;
+                                            const nextSheet = budgetImportSheets.find((s) => s.name === nextName);
+                                            const nextRows = nextSheet?.rows || [];
+                                            setBudgetImportSheetName(nextName);
+                                            setBudgetImportRows(nextRows);
+                                            setBudgetImportHeaderRow(1);
+                                            setBudgetImportLastRow(Math.max(1, nextRows.length));
+                                            setBudgetImportMapping(buildBudgetImportAutoMapping(nextRows[0] || []));
+                                        }}
+                                        className="rounded-lg border border-white/10 bg-black/30 px-2 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
+                                    >
+                                        {budgetImportSheets.map((sheet) => (
+                                            <option key={sheet.name} value={sheet.name}>{sheet.name}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <label className="text-xs text-gray-300 flex flex-col gap-1">
+                                    Wiersz nagłówka
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max={Math.max(1, budgetImportRows.length)}
+                                        value={budgetImportHeaderRow}
+                                        onChange={(e) => setBudgetImportHeaderRow(Math.max(1, Number(e.target.value) || 1))}
+                                        className="rounded-lg border border-white/10 bg-black/30 px-2 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
+                                    />
+                                </label>
+                                <label className="text-xs text-gray-300 flex flex-col gap-1">
+                                    Ostatni wiersz budżetu
+                                    <input
+                                        type="number"
+                                        min={Math.max(2, Number(budgetImportHeaderRow) + 1)}
+                                        max={Math.max(1, budgetImportRows.length)}
+                                        value={budgetImportLastRow}
+                                        onChange={(e) => setBudgetImportLastRow(e.target.value)}
+                                        onBlur={(e) => {
+                                            const minRow = Math.max(2, Number(budgetImportHeaderRow) + 1);
+                                            const maxRow = Math.max(1, budgetImportRows.length);
+                                            const parsed = Number(e.target.value);
+                                            const safeValue = Number.isFinite(parsed) ? parsed : minRow;
+                                            setBudgetImportLastRow(Math.max(minRow, Math.min(maxRow, safeValue)));
+                                        }}
+                                        className="rounded-lg border border-white/10 bg-black/30 px-2 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
+                                    />
+                                </label>
+                            </div>
+
+                            <div className="rounded-xl border border-white/10 overflow-hidden">
+                                <div className="px-3 py-2 text-[11px] uppercase tracking-widest text-gray-400 bg-white/5">Mapowanie kolumn Excel → aplikacja</div>
+                                <div className="max-h-[260px] overflow-auto custom-scrollbar divide-y divide-white/5">
+                                    {BUDGET_IMPORT_FIELD_DEFS.map((field) => (
+                                        <div key={field.key} className="grid grid-cols-[240px,1fr] gap-3 px-3 py-2 items-center">
+                                            <div className="text-xs text-gray-300">{field.label}</div>
+                                            <select
+                                                value={budgetImportMapping[field.key] ?? ''}
+                                                onChange={(e) => setBudgetImportMapping((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                                                className="rounded-lg border border-white/10 bg-black/30 px-2 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                                            >
+                                                <option value="">(nie mapuj)</option>
+                                                {budgetImportColumnOptions.map((opt) => (
+                                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="rounded-xl border border-white/10 overflow-auto">
+                                <table className="min-w-full text-xs">
+                                    <thead className="bg-white/5">
+                                        <tr>
+                                            <th className="px-2 py-2 text-left text-gray-300">#</th>
+                                            {(budgetImportRows[budgetImportHeaderRow - 1] || []).slice(0, 8).map((h, idx) => (
+                                                <th key={idx} className="px-2 py-2 text-left text-gray-300">{excelColumnLetter(idx + 1)}: {h || '(pusta)'}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {budgetImportRows.slice(Math.max(0, budgetImportHeaderRow), Math.max(0, budgetImportHeaderRow) + 5).map((row, rowIdx) => (
+                                            <tr key={rowIdx} className="border-t border-white/5">
+                                                <td className="px-2 py-1 text-gray-500">{budgetImportHeaderRow + rowIdx + 1}</td>
+                                                {row.slice(0, 8).map((cell, cellIdx) => (
+                                                    <td key={cellIdx} className="px-2 py-1 text-gray-200 max-w-[220px] truncate" title={cell}>{cell || '—'}</td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2">
+                                <button
+                                    onClick={() => setBudgetImportOpen(false)}
+                                    disabled={budgetImportLoading}
+                                    className="px-4 py-2 rounded-lg border border-white/10 text-gray-300 hover:bg-white/10 transition-all disabled:opacity-50"
+                                >
+                                    Anuluj
+                                </button>
+                                <button
+                                    onClick={applyBudgetImport}
+                                    disabled={budgetImportLoading}
+                                    className="px-4 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 transition-all disabled:opacity-50"
+                                >
+                                    {budgetImportLoading ? 'Importowanie...' : 'Importuj'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {previewAttachment && (
+                <div className="fixed inset-0 z-[130] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setPreviewAttachment(null)}>
+                    <div className="max-w-[92vw] max-h-[88vh]" onClick={(e) => e.stopPropagation()}>
+                        {previewAttachment.fileType === 'IMAGE' && previewAttachment.fileUrl ? (
+                            <img
+                                src={`${API_URL}/schematics/file/${previewAttachment.fileUrl}`}
+                                alt={previewAttachment.fileName || 'attachment'}
+                                className="max-w-[92vw] max-h-[88vh] w-auto h-auto object-contain rounded-xl border border-white/15 shadow-2xl"
+                            />
+                        ) : (
+                            <div className="bg-[#0b0f17] border border-white/10 rounded-xl p-6 min-w-[360px]">
+                                <h4 className="text-sm font-bold text-white mb-2">Podgląd załącznika</h4>
+                                <p className="text-xs text-gray-300 mb-4">{previewAttachment.fileName || 'plik'}</p>
+                                {previewAttachment.fileUrl && (
+                                    <a
+                                        href={`${API_URL}/schematics/file/${previewAttachment.fileUrl}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-cyan-300 text-sm hover:underline"
+                                    >
+                                        Otwórz plik
+                                    </a>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
