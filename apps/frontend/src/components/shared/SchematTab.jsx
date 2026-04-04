@@ -1331,25 +1331,6 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                     />
                 </div>
 
-                {nodeId && (
-                    <div>
-                        <label className="text-xs text-gray-500 uppercase font-bold block mb-2">Przedmiot WBS</label>
-                        <select
-                            value={selectedSubtaskId}
-                            onChange={handleSubtaskChange}
-                            className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-orange-500/50"
-                        >
-                            <option value="">— brak przypisania —</option>
-                            {subtasks
-                                .filter((s, idx, arr) => arr.findIndex(t => t.name === s.name) === idx)
-                                .map(s => (
-                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                ))
-                            }
-                        </select>
-                    </div>
-                )}
-
                 {nodeId && wbsNodes.length > 0 && (
                     <div>
                         <div className="flex items-center gap-1.5 mb-2">
