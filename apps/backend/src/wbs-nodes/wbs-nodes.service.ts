@@ -211,38 +211,40 @@ export class WbsNodesService {
 
         console.log(`[WBS] getUnifiedTree: requested=${requestedNodeId}, fallback=${fallbackOrderNodeId}, versionId=${vId}`);
 
-        // Step 1: Pobierz nodes bez include - najpierw spróbuj requested, potem fallback
-        let nodes: any[] = [];
-        
-        nodes = await this.prisma.wbsNode.findMany({
-            where: { nodeId: requestedNodeId, versionId: vId || null },
-            orderBy: { sortOrder: 'asc' },
-        });
-        console.log(`[WBS]   requested node (${requestedNodeId}): found ${nodes.length} nodes`);
-
-        // Fallback do order node jeśli site nie ma nodes
-        if (nodes.length === 0 && fallbackOrderNodeId !== requestedNodeId) {
+        try {
+            // Step 1: Pobierz nodes bez include - najpierw spróbuj requested, potem fallback
+            let nodes: any[] = [];
+            
             nodes = await this.prisma.wbsNode.findMany({
-                where: { nodeId: fallbackOrderNodeId, versionId: vId || null },
+                where: { nodeId: requestedNodeId, versionId: vId || null },
                 orderBy: { sortOrder: 'asc' },
             });
-            console.log(`[WBS]   fallback to parent order (${fallbackOrderNodeId}): found ${nodes.length} nodes`);
-        }
+            console.log(`[WBS]   requested node (${requestedNodeId}): found ${nodes.length} nodes`);
 
-        if (nodes.length === 0) {
-            console.log(`[WBS]   no nodes found, returning empty items`);
-            return { items: [] };
-        }
+            // Fallback do order node jeśli site nie ma nodes
+            if (nodes.length === 0 && fallbackOrderNodeId !== requestedNodeId) {
+                nodes = await this.prisma.wbsNode.findMany({
+                    where: { nodeId: fallbackOrderNodeId, versionId: vId || null },
+                    orderBy: { sortOrder: 'asc' },
+                });
+                console.log(`[WBS]   fallback to parent order (${fallbackOrderNodeId}): found ${nodes.length} nodes`);
+            }
 
-        // Step 2: Pobierz materiały dla wszystkich nodes za jednym razem
-        const nodeIds = nodes.map(n => n.id);
-        const allocations = await this.prisma.wbsNodeMaterial.findMany({
-            where: { wbsNodeId: { in: nodeIds } },
-            include: {
-                material: {
-                    select: {
-                        id: true, productName: true, manufacturer: true, model: true,
-                        unit: true, priceNetto: true, quantity: true, status: true,
+            if (nodes.length === 0) {
+                console.log(`[WBS]   no nodes found, returning empty items`);
+                return { items: [] };
+            }
+
+            // Step 2: Pobierz materiały dla wszystkich nodes za jednym razem
+            const nodeIds = nodes.map(n => n.id);
+            console.log(`[WBS]   fetching materials for ${nodeIds.length} nodes`);
+            const allocations = await this.prisma.wbsNodeMaterial.findMany({
+                where: { wbsNodeId: { in: nodeIds } },
+                include: {
+                    material: {
+                        select: {
+                            id: true, productName: true, manufacturer: true, model: true,
+                            unit: true, priceNetto: true, quantity: true, status: true,
                         technicalSpec: true,
                         proposals: {
                             where: { isSelected: true },
@@ -341,6 +343,10 @@ export class WbsNodesService {
         });
 
         return { items };
+        } catch (err) {
+            console.error(`[WBS] ERROR in getUnifiedTree:`, err);
+            return { items: [] };
+        }
     }
 
     /**
