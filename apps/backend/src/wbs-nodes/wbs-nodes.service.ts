@@ -118,6 +118,21 @@ export class WbsNodesService {
         return (!versionId || versionId === 'null' || versionId === 'undefined') ? null : versionId;
     }
 
+    private async resolveOrderNodeId(nodeId: string): Promise<string> {
+        let currentId = nodeId;
+        for (let i = 0; i < 10; i++) {
+            const node = await this.prisma.processNode.findUnique({
+                where: { id: currentId },
+                select: { id: true, type: true, parentId: true },
+            });
+            if (!node) break;
+            if (String(node.type || '').toLowerCase() === 'order') return node.id;
+            if (!node.parentId) break;
+            currentId = node.parentId;
+        }
+        return nodeId;
+    }
+
     private buildTree(nodes: any[], parentId: string | null): WbsTreeItem[] {
         return nodes
             .filter(n => n.parentId === parentId)
@@ -191,28 +206,38 @@ export class WbsNodesService {
     async getUnifiedTree(nodeId: string, versionId?: string) {
         const vId = this.normalizeVersionId(versionId);
 
-        const nodes = await this.prisma.wbsNode.findMany({
-            where: { nodeId, versionId: vId || null },
-            include: {
-                materialAllocations: {
-                    include: {
-                        material: {
-                            select: {
-                                id: true, productName: true, manufacturer: true, model: true,
-                                unit: true, priceNetto: true, quantity: true, status: true,
-                                technicalSpec: true,
-                                proposals: {
-                                    where: { isSelected: true },
-                                    select: { priceNetto: true, productName: true, manufacturer: true, model: true },
-                                    take: 1,
+        const requestedNodeId = nodeId;
+        const fallbackOrderNodeId = await this.resolveOrderNodeId(requestedNodeId);
+        const nodeIdsToTry = fallbackOrderNodeId !== requestedNodeId
+            ? [requestedNodeId, fallbackOrderNodeId]
+            : [requestedNodeId];
+
+        let nodes: any[] = [];
+        for (const candidateNodeId of nodeIdsToTry) {
+            nodes = await this.prisma.wbsNode.findMany({
+                where: { nodeId: candidateNodeId, versionId: vId || null },
+                include: {
+                    materialAllocations: {
+                        include: {
+                            material: {
+                                select: {
+                                    id: true, productName: true, manufacturer: true, model: true,
+                                    unit: true, priceNetto: true, quantity: true, status: true,
+                                    technicalSpec: true,
+                                    proposals: {
+                                        where: { isSelected: true },
+                                        select: { priceNetto: true, productName: true, manufacturer: true, model: true },
+                                        take: 1,
+                                    },
                                 },
                             },
                         },
                     },
                 },
-            },
-            orderBy: { sortOrder: 'asc' },
-        });
+                orderBy: { sortOrder: 'asc' },
+            });
+            if (nodes.length > 0) break;
+        }
 
         if (nodes.length === 0) return { items: [] };
 
