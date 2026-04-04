@@ -10,14 +10,30 @@ export class OrderRequirementsService {
         private wbsNodes: WbsNodesService,
     ) { }
 
+    private async resolveOrderNodeId(nodeId: string): Promise<string> {
+        let currentId = nodeId;
+        for (let i = 0; i < 10; i++) {
+            const node = await this.prisma.processNode.findUnique({
+                where: { id: currentId },
+                select: { id: true, type: true, parentId: true },
+            });
+            if (!node) break;
+            if (String(node.type || '').toLowerCase() === 'order') return node.id;
+            if (!node.parentId) break;
+            currentId = node.parentId;
+        }
+        return nodeId;
+    }
+
     async findByNodeId(nodeId: string, versionId?: string) {
         if (!nodeId) return null;
+        const effectiveNodeId = await this.resolveOrderNodeId(nodeId);
         // 1. Try global version first
         const global = await this.prisma.orderRequirements.findFirst({
-            where: { nodeId, versionId: null },
+            where: { nodeId: effectiveNodeId, versionId: null },
         });
         const record = global || await this.prisma.orderRequirements.findFirst({
-            where: { nodeId },
+            where: { nodeId: effectiveNodeId },
             orderBy: { updatedAt: 'desc' },
         });
 
@@ -25,7 +41,7 @@ export class OrderRequirementsService {
 
         // 2. Spróbuj zbudować wbsTree z tabeli relacyjnej WbsNode (źródło prawdy)
         try {
-            const relationalTree = await this.wbsNodes.getTree(nodeId, versionId);
+            const relationalTree = await this.wbsNodes.getTree(effectiveNodeId, versionId);
             if (relationalTree) {
                 return { ...record, wbsTree: JSON.stringify(relationalTree) };
             }
@@ -39,16 +55,17 @@ export class OrderRequirementsService {
 
     async upsert(dto: UpsertOrderRequirementsDto) {
         const { nodeId, ...data } = dto;
+        const effectiveNodeId = await this.resolveOrderNodeId(nodeId);
         const vId = (dto.versionId === 'null' || dto.versionId === 'undefined' || !dto.versionId) ? null : dto.versionId;
 
         // Verify node exists
-        const node = await this.prisma.processNode.findUnique({ where: { id: nodeId } });
-        if (!node) throw new NotFoundException(`Node ${nodeId} not found`);
+        const node = await this.prisma.processNode.findUnique({ where: { id: effectiveNodeId } });
+        if (!node) throw new NotFoundException(`Node ${effectiveNodeId} not found`);
 
         const result = await this.prisma.$transaction(async (tx) => {
             // Requirements are ALWAYS global for the node
             const existing = await tx.orderRequirements.findFirst({
-                where: { nodeId, versionId: null }
+                where: { nodeId: effectiveNodeId, versionId: null }
             });
 
             const requirementFields: any = {};
@@ -92,20 +109,20 @@ export class OrderRequirementsService {
                             // 1. Sync all subtasks named after this item or linked via requirementItemId
                             // Update by requirementItemId is most reliable
                             await tx.subtask.updateMany({
-                                where: { nodeId, requirementItemId: item.id },
+                                where: { nodeId: effectiveNodeId, requirementItemId: item.id },
                                 data: { name: item.name }
                             });
 
                             // 2. Sync subtasks that might match the old name exactly but lack the ID (legacy)
                             await tx.subtask.updateMany({
-                                where: { nodeId, name: oldName, requirementItemId: null },
+                                where: { nodeId: effectiveNodeId, name: oldName, requirementItemId: null },
                                 data: { name: item.name }
                             });
 
                             // 3. Sync Budget Items linked to these subtasks
                             // Find all subtasks for this item ID across all versions
                             const relatedSubtasks = await tx.subtask.findMany({
-                                where: { nodeId, requirementItemId: item.id },
+                                where: { nodeId: effectiveNodeId, requirementItemId: item.id },
                                 select: { id: true }
                             });
 
@@ -128,7 +145,7 @@ export class OrderRequirementsService {
                     if (deletedItemIds.length > 0) {
                         // Thanks to onDelete: Cascade on schema, deleting Subtasks will automatically delete BudgetLineItems
                         await tx.subtask.deleteMany({
-                            where: { nodeId, requirementItemId: { in: deletedItemIds } }
+                            where: { nodeId: effectiveNodeId, requirementItemId: { in: deletedItemIds } }
                         });
                         console.log(`Usunięto osierocone Subtaski dla usuniętych z listy przedmiotów projektu.`);
                     }
@@ -146,7 +163,7 @@ export class OrderRequirementsService {
             } else {
                 return tx.orderRequirements.create({
                     data: {
-                        nodeId,
+                        nodeId: effectiveNodeId,
                         versionId: null,
                         ...requirementFields
                     },
@@ -158,7 +175,7 @@ export class OrderRequirementsService {
         if (data.wbsTree !== undefined) {
             try {
                 const tree = JSON.parse(data.wbsTree || '{"items":[]}');
-                await this.wbsNodes.saveTree(nodeId, undefined, tree);
+                await this.wbsNodes.saveTree(effectiveNodeId, undefined, tree);
             } catch (e) {
                 console.error('WbsNode dual-write failed (non-blocking):', e?.message);
             }
