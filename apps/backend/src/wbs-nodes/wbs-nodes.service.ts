@@ -212,6 +212,8 @@ export class WbsNodesService {
             ? [requestedNodeId, fallbackOrderNodeId]
             : [requestedNodeId];
 
+        console.log(`[WBS] getUnifiedTree: requested=${requestedNodeId}, fallback=${fallbackOrderNodeId}, trying=${nodeIdsToTry.join(',')}`);
+
         let nodes: any[] = [];
         for (const candidateNodeId of nodeIdsToTry) {
             nodes = await this.prisma.wbsNode.findMany({
@@ -236,6 +238,7 @@ export class WbsNodesService {
                 },
                 orderBy: { sortOrder: 'asc' },
             });
+            console.log(`[WBS]   tried ${candidateNodeId}: found ${nodes.length} nodes`);
             if (nodes.length > 0) break;
         }
 
