@@ -208,65 +208,61 @@ export class WbsNodesService {
 
         const requestedNodeId = nodeId;
         const fallbackOrderNodeId = await this.resolveOrderNodeId(requestedNodeId);
-        const nodeIdsToTry = fallbackOrderNodeId !== requestedNodeId
-            ? [requestedNodeId, fallbackOrderNodeId]
-            : [requestedNodeId];
 
-        console.log(`[WBS] getUnifiedTree: requested=${requestedNodeId}, fallback=${fallbackOrderNodeId}, trying=${nodeIdsToTry.join(',')}`);
+        console.log(`[WBS] getUnifiedTree: requested=${requestedNodeId}, fallback=${fallbackOrderNodeId}, versionId=${vId}`);
 
+        // Step 1: Pobierz nodes bez include - najpierw spróbuj requested, potem fallback
         let nodes: any[] = [];
-        const whereClause = vId ? { nodeId: { in: nodeIdsToTry }, versionId: vId } : { nodeId: { in: nodeIdsToTry }, versionId: null };
         
         nodes = await this.prisma.wbsNode.findMany({
-            where: whereClause,
+            where: { nodeId: requestedNodeId, versionId: vId || null },
+            orderBy: { sortOrder: 'asc' },
+        });
+        console.log(`[WBS]   requested node (${requestedNodeId}): found ${nodes.length} nodes`);
+
+        // Fallback do order node jeśli site nie ma nodes
+        if (nodes.length === 0 && fallbackOrderNodeId !== requestedNodeId) {
+            nodes = await this.prisma.wbsNode.findMany({
+                where: { nodeId: fallbackOrderNodeId, versionId: vId || null },
+                orderBy: { sortOrder: 'asc' },
+            });
+            console.log(`[WBS]   fallback to parent order (${fallbackOrderNodeId}): found ${nodes.length} nodes`);
+        }
+
+        if (nodes.length === 0) {
+            console.log(`[WBS]   no nodes found, returning empty items`);
+            return { items: [] };
+        }
+
+        // Step 2: Pobierz materiały dla wszystkich nodes za jednym razem
+        const nodeIds = nodes.map(n => n.id);
+        const allocations = await this.prisma.wbsNodeMaterial.findMany({
+            where: { wbsNodeId: { in: nodeIds } },
             include: {
-                materialAllocations: {
-                    include: {
-                        material: {
-                            select: {
-                                id: true, productName: true, manufacturer: true, model: true,
-                                unit: true, priceNetto: true, quantity: true, status: true,
-                                technicalSpec: true,
-                                proposals: {
-                                    where: { isSelected: true },
-                                    select: { priceNetto: true, productName: true, manufacturer: true, model: true },
-                                    take: 1,
-                                },
-                            },
+                material: {
+                    select: {
+                        id: true, productName: true, manufacturer: true, model: true,
+                        unit: true, priceNetto: true, quantity: true, status: true,
+                        technicalSpec: true,
+                        proposals: {
+                            where: { isSelected: true },
+                            select: { priceNetto: true, productName: true, manufacturer: true, model: true },
+                            take: 1,
                         },
                     },
                 },
             },
-            orderBy: { sortOrder: 'asc' },
         });
-        console.log(`[WBS]   found ${nodes.length} total nodes across all candidates (${nodeIdsToTry.join(',')})`);
+        const allocByNodeId = new Map();
+        allocations.forEach(a => {
+            if (!allocByNodeId.has(a.wbsNodeId)) allocByNodeId.set(a.wbsNodeId, []);
+            allocByNodeId.get(a.wbsNodeId).push(a);
+        });
         
-        // If no nodes found, but site node and parent order exists, use parent order nodes
-        if (nodes.length === 0 && fallbackOrderNodeId !== requestedNodeId) {
-            nodes = await this.prisma.wbsNode.findMany({
-                where: vId ? { nodeId: fallbackOrderNodeId, versionId: vId } : { nodeId: fallbackOrderNodeId, versionId: null },
-                include: {
-                    materialAllocations: {
-                        include: {
-                            material: {
-                                select: {
-                                    id: true, productName: true, manufacturer: true, model: true,
-                                    unit: true, priceNetto: true, quantity: true, status: true,
-                                    technicalSpec: true,
-                                    proposals: {
-                                        where: { isSelected: true },
-                                        select: { priceNetto: true, productName: true, manufacturer: true, model: true },
-                                        take: 1,
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-                orderBy: { sortOrder: 'asc' },
-            });
-            console.log(`[WBS]   fallback to order ${fallbackOrderNodeId}: found ${nodes.length} nodes`);
-        }
+        // Dołącz materiały do nodes
+        nodes.forEach(node => {
+            node.materialAllocations = allocByNodeId.get(node.id) || [];
+        });
 
         if (nodes.length === 0) return { items: [] };
 
