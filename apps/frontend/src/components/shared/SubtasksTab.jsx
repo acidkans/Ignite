@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Save, Sparkles, HelpCircle, AlertTriangle, CheckCircle, Clock, X, Plus, GripVertical, Trash2, Zap, ArrowRight, BrainCircuit, RefreshCw, Layers, LayoutList, GripHorizontal, CheckCircle2, ChevronRight, FileDown } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Save, Sparkles, HelpCircle, AlertTriangle, CheckCircle, Clock, X, Plus, GripVertical, Trash2, Zap, ArrowRight, BrainCircuit, RefreshCw, Layers, LayoutList, GripHorizontal, CheckCircle2, ChevronRight, FileDown, Package } from 'lucide-react';
 import { API_URL } from '../../config';
 import ProjectItemsPanel from './wbs/ProjectItemsPanel';
 import CalendarView from './wbs/CalendarView';
@@ -45,6 +45,9 @@ export default function SubtasksTab({ nodeId, versionId, workerView = false, fil
     const [matStatusFilter, setMatStatusFilter] = useState('');
     const [matRefreshKey, setMatRefreshKey] = useState(0);
     const latestWbsTreeRef = useRef({});
+    const [unassignedRequirements, setUnassignedRequirements] = useState([]);
+    const [extractingForWbs, setExtractingForWbs] = useState(false);
+    const isManager = workerRoles.some(r => ['MANAGER', 'ADMIN'].includes(r));
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -242,11 +245,93 @@ export default function SubtasksTab({ nodeId, versionId, workerView = false, fil
         }
     };
 
+    const fetchUnassignedRequirements = useCallback(async () => {
+        if (!nodeId) return;
+        try {
+            const token = sessionStorage.getItem('token');
+            const res = await fetch(`${API_URL}/material-requirements/node/${nodeId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const unassigned = data.filter(r => {
+                    try {
+                        const allocRaw = r.wbsNodeAllocations;
+                        const alloc = typeof allocRaw === 'string'
+                            ? (JSON.parse(allocRaw || '{}') || {})
+                            : (allocRaw || {});
+                        return Object.keys(alloc).length === 0;
+                    } catch {
+                        return true;
+                    }
+                });
+                setUnassignedRequirements(unassigned);
+            }
+        } catch {
+            setUnassignedRequirements([]);
+        }
+    }, [nodeId]);
+
+    const handleWbsExtract = async () => {
+        setExtractingForWbs(true);
+        try {
+            const token = sessionStorage.getItem('token');
+            const params = new URLSearchParams();
+            if (versionId) params.append('versionId', versionId);
+            const res = await fetch(`${API_URL}/material-requirements/extract/${nodeId}?${params}`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.extracted === 0 && (!data.items || data.items.length === 0)) {
+                    alert('Zaimportuj najpierw pliki wsadowe');
+                }
+                await fetchUnassignedRequirements();
+                setMatRefreshKey(k => k + 1);
+            }
+        } catch (e) {
+            console.error('WBS extract error:', e);
+        } finally {
+            setExtractingForWbs(false);
+        }
+    };
+
+    const handleRequirementAssignToWbs = async (wbsNodeId, reqId) => {
+        if (!isManager) return;
+        const req = unassignedRequirements.find(r => r.id === reqId);
+        if (!req) return;
+        const token = sessionStorage.getItem('token');
+        const qty = Number(req.quantity) > 0 ? Number(req.quantity) : 1;
+        try {
+            await fetch(`${API_URL}/material-requirements/${reqId}`, {
+                method: 'PATCH',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    wbsNodeId,
+                    wbsNodeIds: JSON.stringify([wbsNodeId]),
+                    wbsNodeAllocations: JSON.stringify({ [wbsNodeId]: qty }),
+                }),
+            });
+            setUnassignedRequirements(prev => prev.filter(r => r.id !== reqId));
+            setMatRefreshKey(k => k + 1);
+        } catch (e) {
+            console.error('Failed to assign requirement:', e);
+        }
+    };
+
     const handleWbsRefresh = () => {
         // Przeładuj WBS tree gdy materiały zostaną zmienione (bez spinnera — nie odmontowuje paneli)
         fetchData(false);
         onWbsUpdate?.();
+        fetchUnassignedRequirements();
     };
+
+    useEffect(() => {
+        if (showWBSTable && nodeId) {
+            fetchUnassignedRequirements();
+        }
+    }, [showWBSTable, nodeId, fetchUnassignedRequirements]);
 
     const handleExportStrategyPDF = () => {
         const md = wbsDescription || '';
@@ -701,8 +786,8 @@ ${rows}
                     <span className="text-[10px] text-gray-600 font-mono mr-2">
                         {(wbsTree?.items || []).length} elementów
                     </span>
-                    {expandedSection === 'wbs' && (
-                        <div className="flex items-center gap-2 mr-3 flex-shrink-0">
+                    <div className="flex items-center gap-2 mr-3 flex-shrink-0">
+                        {expandedSection === 'wbs' && (<>
                             <div role="button" tabIndex={0} onClick={e => { e.stopPropagation(); handleExportWbsPDF(); }} onKeyDown={e => e.key === 'Enter' && handleExportWbsPDF()} className="flex items-center gap-1.5 px-3 py-1 bg-red-700/60 hover:bg-red-600/80 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer">
                                 <FileDown size={12} /><span>PDF</span>
                             </div>
@@ -710,8 +795,17 @@ ${rows}
                                 {saving ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : saved ? <CheckCircle size={12} /> : <Save size={12} />}
                                 <span>{saved ? 'Zapisano' : 'Zapisz'}</span>
                             </div>
-                        </div>
-                    )}
+                        </>)}
+                        {isManager && (
+                            <div role="button" tabIndex={0}
+                                onClick={e => { e.stopPropagation(); handleWbsExtract(); }}
+                                onKeyDown={e => e.key === 'Enter' && handleWbsExtract()}
+                                className={`flex items-center gap-1.5 px-3 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${extractingForWbs ? 'opacity-50 pointer-events-none' : ''}`}>
+                                {extractingForWbs ? <div className="w-3 h-3 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" /> : <Sparkles size={12} />}
+                                <span>Wyciągnij z dokumentów</span>
+                            </div>
+                        )}
+                    </div>
                     <ChevronRight size={14} className={`text-gray-500 transition-transform flex-shrink-0 ${showWBSTable ? 'rotate-90' : ''}`} />
                 </button>
                 {showWBSTable && (
@@ -726,7 +820,34 @@ ${rows}
                             users={assignedUsers}
                             onNodesDeleted={handleWbsNodesDeleted}
                             onMaterialNodeCreated={handleMaterialNodeCreated}
+                            onRequirementDrop={isManager ? handleRequirementAssignToWbs : null}
+                            isManager={isManager}
                         />
+                        {isManager && unassignedRequirements.length > 0 && (
+                            <div className="px-5 py-3 border-t border-white/5">
+                                <p className="text-[10px] uppercase tracking-widest text-amber-500/70 font-bold mb-2 flex items-center gap-1.5">
+                                    <Package size={10} />
+                                    Koszyk - nieprzypisane ({unassignedRequirements.length})
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {unassignedRequirements.map(req => (
+                                        <div
+                                            key={req.id}
+                                            draggable
+                                            onDragStart={e => {
+                                                e.dataTransfer.setData('application/requirement-id', req.id);
+                                                e.dataTransfer.effectAllowed = 'copy';
+                                            }}
+                                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs cursor-grab select-none hover:bg-emerald-500/20 transition-all"
+                                        >
+                                            <GripVertical size={10} className="text-emerald-500/60" />
+                                            <span>{req.name || req.productName || '-'}</span>
+                                            {req.quantity && <span className="text-[9px] text-emerald-500/70 ml-1">{req.quantity} {req.unit || ''}</span>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </section>

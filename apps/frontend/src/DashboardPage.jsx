@@ -215,13 +215,6 @@ export default function DashboardPage() {
         setSearchQuery('');
     };
 
-    const handleNavigateToMaterials = (orderId) => {
-        if (orderId && setActiveAreaId) {
-            setActiveAreaId(orderId);
-        }
-        setActiveTab('materials');
-    };
-
     const handleNavigateToOrderPlanning = (orderId) => {
         if (!orderId || !setActiveAreaId) return;
         pendingTabRef.current = 'tasks';
@@ -256,8 +249,6 @@ export default function DashboardPage() {
         ? 'Szukaj po nazwie, statusie, osobie, dacie…'
         : activeTab === 'materialDatabase'
         ? 'Szukaj w materiałach i kartach katalogowych…'
-        : activeTab === 'materials'
-        ? 'Szukaj po nazwie, producencie, modelu, statusie…'
         : 'Szukaj po nazwie pliku, dacie…';
 
     return (
@@ -426,15 +417,6 @@ export default function DashboardPage() {
                     </>
                 )}
 
-                {/* Materiały — tylko dla logistyka, zawsze widoczna na zamówieniu */}
-                {activeNode && isLogistyk && isOrder && (
-                    <button onClick={() => handleTabChange('materials')}
-                        className={`px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all relative ${activeTab === 'materials' ? 'text-teal-400' : 'text-gray-500 hover:text-gray-300'}`}>
-                        Materiały
-                        {activeTab === 'materials' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-500 shadow-[0_0_10px_rgba(20,184,166,0.5)]" />}
-                    </button>
-                )}
-
                 {/* Informacje o węźle — niewidoczna dla pracownika i obszaru Logistyka */}
                 {activeNode && !isWorker && !isLogistykaArea && (
                     <button onClick={() => handleTabChange('requirements')}
@@ -539,30 +521,9 @@ export default function DashboardPage() {
                                 workerView={isWorker}
                                 filterUserId={isWorker ? currentUserId : null}
                                 workerRoles={currentRoles}
-                                onNavigateToMaterials={isLogistyk ? handleNavigateToMaterials : null}
                                 nodeName={activeNode?.name}
                                 onWbsUpdate={() => setWbsUpdateCount(c => c + 1)}
                             />
-                        )}
-                        {activeTab === 'materials' && isOrder && (
-                            <div className="flex flex-col gap-3">
-                                {isLogistyk && (
-                                    <button onClick={() => handleTabChange('tasks')}
-                                        className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white text-xs font-semibold transition-all border border-white/10">
-                                        ← Wróć do zadań
-                                    </button>
-                                )}
-                                <MaterialRequirementsPanel
-                                    key={`materials-${activeAreaId}-${selectedVersionId}`}
-                                    nodeId={activeAreaId}
-                                    versionId={selectedVersionId}
-                                    readOnlyWbs={isLogistyk}
-                                    initialExpandedId={focusedRequirementId}
-                                    searchQuery={searchQuery}
-                                    onWbsUpdate={() => setWbsUpdateCount(c => c + 1)}
-                                    refreshKey={wbsUpdateCount}
-                                />
-                            </div>
                         )}
                         {activeTab === 'unified' && isOrder && (
                             <div className="h-[calc(100vh-180px)]">
