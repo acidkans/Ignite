@@ -93,8 +93,39 @@ export class MaterialRequirementsService {
             orderBy: { createdAt: 'asc' },
         });
 
+        const staleAiRows = items.filter((item) => {
+            const hasName = String(item.name || '').trim().length > 0;
+            const hasProductName = String(item.productName || '').trim().length > 0;
+            const hasSelectedProposal = (item.proposals || []).some((proposal) => proposal.isSelected);
+            const comesFromDocument = String(item.sourceDocument || '').trim().length > 0;
+            return !hasName && hasProductName && !item.materialId && !hasSelectedProposal && comesFromDocument;
+        });
+
+        if (staleAiRows.length > 0) {
+            await Promise.all(staleAiRows.map((item) =>
+                this.prisma.materialRequirement.update({
+                    where: { id: item.id },
+                    data: {
+                        name: item.productName,
+                        productName: null,
+                    },
+                }).catch(() => null)
+            ));
+        }
+
         // Dual-read: jeśli tabela relacyjna ma dane, nadpisz JSON blob
         return items.map(item => {
+            const hasSelectedProposal = (item.proposals || []).some((proposal) => proposal.isSelected);
+            const comesFromDocument = !!String(item.sourceDocument || '').trim();
+            const isStaleAiRow = !String(item.name || '').trim()
+                && !!String(item.productName || '').trim()
+                && !item.materialId
+                && !hasSelectedProposal
+                && comesFromDocument;
+
+            const normalizedItem = isStaleAiRow
+                ? { ...item, name: item.productName, productName: null }
+                : item;
             const allocs = (item as any).wbsAllocations;
             if (allocs && allocs.length > 0) {
                 const allocMap: Record<string, number> = {};
@@ -104,7 +135,7 @@ export class MaterialRequirementsService {
                     nodeIds.push(a.wbsNodeId);
                 }
                 return {
-                    ...item,
+                    ...normalizedItem,
                     wbsNodeAllocations: JSON.stringify(allocMap),
                     wbsNodeIds: JSON.stringify(nodeIds),
                     wbsNodeId: nodeIds[0] || null,
@@ -112,7 +143,7 @@ export class MaterialRequirementsService {
                 };
             }
             // Fallback: zwróć oryginalne pola JSON
-            const { wbsAllocations: _, ...rest } = item as any;
+            const { wbsAllocations: _, ...rest } = normalizedItem as any;
             return rest;
         });
     }
@@ -195,6 +226,7 @@ export class MaterialRequirementsService {
                     nodeId: r.nodeId,
                     versionId: r.versionId,
                     listId: newList.id,
+                    name: r.name,
                     productName: r.productName,
                     type: r.type,
                     quantity: r.quantity,
@@ -204,6 +236,7 @@ export class MaterialRequirementsService {
                     manufacturer: r.manufacturer,
                     model: r.model,
                     assignedSubtaskId: r.assignedSubtaskId,
+                    isAiAssigned: r.isAiAssigned,
                     status: 'PENDING',
                 },
             })
@@ -495,9 +528,9 @@ ZASADY (obowiązkowe):
 FORMAT (tylko surowy JSON, bez markdown, bez komentarzy):
 [
   {
-    "productName": "pełna nazwa handlowa urządzenia/materiału",
+        "name": "nazwa wymagania / pozycji z dokumentu",
     "type": "DEVICE|MATERIAL|CABLE|SOFTWARE|SERVICE",
-    "quantity": liczba,
+        "quantity": 0,
     "unit": "szt|m|kg|kpl|mb|par",
     "technicalSpec": "pełne wymagania techniczne z dokumentu",
     "sourceDocument": "nazwa pliku źródłowego",
@@ -522,7 +555,7 @@ ${context}`;
         // 4. Deduplikacja wewnątrz wyników AI (między partiami)
         const seenKeys = new Set<string>();
         const items = allItems.filter(item => {
-            const key = `${item.productName?.toLowerCase().trim()}|${(item.manufacturer ?? '').toLowerCase().trim()}|${(item.model ?? '').toLowerCase().trim()}`;
+            const key = `${(item.name ?? item.productName ?? '').toLowerCase().trim()}|${(item.manufacturer ?? '').toLowerCase().trim()}|${(item.model ?? '').toLowerCase().trim()}`;
             if (seenKeys.has(key)) return false;
             seenKeys.add(key);
             return true;
@@ -532,14 +565,14 @@ ${context}`;
         // 7. Pobierz istniejące wymagania dla deduplikacji
         const existing = await this.prisma.materialRequirement.findMany({
             where: { nodeId },
-            select: { productName: true, manufacturer: true, model: true },
+            select: { name: true, productName: true, manufacturer: true, model: true },
         });
         const existingKeys = new Set(existing.map(e =>
-            `${e.productName?.toLowerCase().trim()}|${e.manufacturer?.toLowerCase().trim() ?? ''}|${e.model?.toLowerCase().trim() ?? ''}`
+            `${(e.name ?? e.productName ?? '').toLowerCase().trim()}|${e.manufacturer?.toLowerCase().trim() ?? ''}|${e.model?.toLowerCase().trim() ?? ''}`
         ));
 
         const newItems = items.filter(item => {
-            const key = `${item.productName?.toLowerCase().trim()}|${(item.manufacturer ?? '').toLowerCase().trim()}|${(item.model ?? '').toLowerCase().trim()}`;
+            const key = `${(item.name ?? item.productName ?? '').toLowerCase().trim()}|${(item.manufacturer ?? '').toLowerCase().trim()}|${(item.model ?? '').toLowerCase().trim()}`;
             return !existingKeys.has(key);
         });
         this.logger.log(`[Extract] Po deduplikacji: ${newItems.length} nowych (pominięto ${items.length - newItems.length} duplikatów)`);
@@ -552,14 +585,15 @@ ${context}`;
                         nodeId,
                         versionId: versionId || null,
                         listId: listId || null,
-                        productName: item.productName,
+                        name: item.name,
+                        productName: null,
                         type: item.type || 'DEVICE',
-                        quantity: Number(item.quantity) || 1,
+                        quantity: Number(item.quantity) || 0,
                         unit: item.unit || 'szt',
                         technicalSpec: item.technicalSpec || null,
                         sourceDocument: item.sourceDocument || null,
                         assignedSubtaskId: item.assignedSubtaskId || null,
-                        isAiAssigned: !!item.assignedSubtaskId,
+                        isAiAssigned: true,
                         aiConfidence: item.aiConfidence || null,
                         status: 'PENDING',
                     },
@@ -652,13 +686,14 @@ Oceń na podstawie typowych parametrów znanych produktów. Jeśli nie możesz o
     async searchProducts(id: string): Promise<any[]> {
         const req = await this.findOne(id);
 
-        this.logger.log(`[Search] Szukam produktów dla: "${req.productName}"`);
+        const requirementLabel = req.name || req.productName || '';
+        this.logger.log(`[Search] Szukam produktów dla: "${requirementLabel}"`);
 
         // Prompt — LLM na podstawie swojej wiedzy proponuje konkretne produkty
         const analysisPrompt = `Działasz jako starszy inżynier systemów z 15-letnim doświadczeniem w branży AV, CCTV i instalacji słaboprądowych.
 
 WYMAGANIE:
-Nazwa: ${req.productName}
+Nazwa: ${requirementLabel}
 Specyfikacja techniczna: ${req.technicalSpec || '—'}
 
 ZADANIE: Znajdź 3 konkretne modele produktów dostępne na rynku europejskim, które spełniają WSZYSTKIE podane parametry techniczne. Dla każdego modelu sprawdź zgodność z każdym punktem specyfikacji. Jeśli jakiś parametr jest niemożliwy do spełnienia, wskaż najbliższą alternatywę i opisz to w polu productName.
@@ -1029,12 +1064,12 @@ Zasady: ceny jako liczby bez waluty, null gdy pole nieznane, wyodrębnij wszystk
 
             // Walidacja schematu każdej pozycji
             return items.filter(item =>
-                typeof item.productName === 'string' && item.productName.length > 0 && item.productName.length < 300
+                typeof (item.name ?? item.productName) === 'string' && String(item.name ?? item.productName).length > 0 && String(item.name ?? item.productName).length < 300
             ).map(item => ({
-                productName: String(item.productName).slice(0, 300),
+                name: String(item.name ?? item.productName).slice(0, 300),
                 type: ['DEVICE', 'MATERIAL', 'CABLE', 'SOFTWARE', 'SERVICE'].includes(item.type)
                     ? item.type : 'DEVICE',
-                quantity: Math.max(0, Number(item.quantity) || 1),
+                quantity: Math.max(0, Number(item.quantity) || 0),
                 unit: String(item.unit || 'szt').slice(0, 20),
                 technicalSpec: item.technicalSpec ? String(item.technicalSpec).slice(0, 2000) : null,
                 sourceDocument: item.sourceDocument ? String(item.sourceDocument).slice(0, 300) : null,

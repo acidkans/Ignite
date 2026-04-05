@@ -445,7 +445,7 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal }) 
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [] }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], onRequirementDrop = null, isManager = false }) {
     const [expanded, setExpanded] = useState(() => new Set(['root']));
     const [dragId, setDragId] = useState(null);
     const [dragOver, setDragOver] = useState(null);
@@ -455,6 +455,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [attachmentModal, setAttachmentModal] = useState(null); // { wbsNodeId, wbsNodeName }
     const tagInputRef = useRef(null);
     const [materialStatuses, setMaterialStatuses] = useState({});
+    const [reqDragOverNode, setReqDragOverNode] = useState(null);
 
     useEffect(() => {
         if (!processNodeId) return;
@@ -585,6 +586,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const onDragOver = (e, nodeId, depth) => {
         e.preventDefault();
         e.stopPropagation();
+        const dragTypes = Array.from(e.dataTransfer?.types || []);
+        if (isManager && onRequirementDrop && dragTypes.includes('application/requirement-id')) {
+            setReqDragOverNode(nodeId);
+            e.dataTransfer.dropEffect = 'copy';
+            return;
+        }
         if (!dragId || dragId === nodeId) return;
         const dragNode = findNode(items, dragId);
         if (dragNode && subtreeContains(dragNode, nodeId)) return;
@@ -598,11 +605,19 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         e.dataTransfer.dropEffect = 'move';
     };
 
-    const onDragLeave = e => { e.stopPropagation(); setDragOver(null); };
+    const onDragLeave = e => { e.stopPropagation(); setDragOver(null); setReqDragOverNode(null); };
 
     const onDrop = (e, nodeId) => {
         e.preventDefault();
         e.stopPropagation();
+        if (isManager && onRequirementDrop) {
+            const reqId = e.dataTransfer.getData('application/requirement-id');
+            if (reqId) {
+                setReqDragOverNode(null);
+                onRequirementDrop(nodeId, reqId);
+                return;
+            }
+        }
         if (!dragId || !dragOver || dragOver.nodeId !== nodeId || dragId === nodeId) {
             setDragId(null); setDragOver(null); return;
         }
@@ -613,7 +628,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         setDragId(null); setDragOver(null);
     };
 
-    const onDragEnd = () => { setDragId(null); setDragOver(null); };
+    const onDragEnd = () => { setDragId(null); setDragOver(null); setReqDragOverNode(null); };
 
     // ── Totals ────────────────────────────────────────────────────────────────
     const totalRes  = items.reduce((a, n) => a + nodeTotal(n).res,  0);
@@ -657,6 +672,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             : overPos === 'after'  ? 'border-b-[2px] border-b-blue-500'
             : overPos === 'into'   ? '!bg-blue-500/10 outline outline-1 outline-blue-500/30'
             : '';
+        const reqDropHighlight = reqDragOverNode === node.id ? '!bg-emerald-500/10 outline outline-1 outline-emerald-500/40' : '';
 
         rows.push(
             <tr
@@ -667,7 +683,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 onDragOver={e => onDragOver(e, node.id, depth)}
                 onDragLeave={onDragLeave}
                 onDrop={e => onDrop(e, node.id)}
-                className={`border-b border-white/5 cursor-pointer select-none group/node transition-opacity ${d.rowBg} ${d.leftBorder} ${isDragging ? 'opacity-25' : ''} ${dropBorder}`}
+                className={`border-b border-white/5 cursor-pointer select-none group/node transition-opacity ${d.rowBg} ${d.leftBorder} ${isDragging ? 'opacity-25' : ''} ${dropBorder} ${reqDropHighlight}`}
                 onClick={e => hasChildren && toggle(rowId, e)}
             >
                 {/* WBS ID */}

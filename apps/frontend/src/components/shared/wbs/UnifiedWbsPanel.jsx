@@ -62,6 +62,34 @@ const MATERIAL_STATUS_LABELS = {
     IN_STOCK: 'Na magazynie',
     ISSUED: 'Wydane',
 };
+const STRUCTURE_STATUS_META = {
+    '': { label: 'Brak', color: 'text-gray-400' },
+    PENDING: { label: 'Oczekuje', color: 'text-amber-400' },
+    PROPOSAL: { label: 'Propozycja', color: 'text-blue-400' },
+    CONFIRMED: { label: 'Potwierdzone', color: 'text-green-400' },
+    REJECTED: { label: 'Odrzucone', color: 'text-red-400' },
+    ORDERED: { label: 'Zamowione', color: 'text-violet-400' },
+    IN_STOCK: { label: 'Na magazynie', color: 'text-cyan-400' },
+    ISSUED: { label: 'Wydane', color: 'text-emerald-400' },
+    MIXED: { label: 'Mieszany', color: 'text-sky-300' },
+};
+const MATERIAL_STATUS_LABEL_TO_CODE = Object.fromEntries(
+    Object.entries(MATERIAL_STATUS_LABELS).map(([code, label]) => [String(label).toUpperCase(), code])
+);
+const STRUCTURE_COMMON_CELL_CLASS = 'text-sm leading-6';
+
+const normalizeStatusCode = (value) => {
+    if (value == null) return '';
+    const raw = String(value).trim();
+    if (!raw) return '';
+    const upper = raw.toUpperCase();
+    return MATERIAL_STATUS_LABEL_TO_CODE[upper] || upper;
+};
+
+const getStatusLabel = (code, fallback = '') => {
+    const normalized = normalizeStatusCode(code);
+    return STRUCTURE_STATUS_META[normalized]?.label || fallback || String(code || '').trim() || 'Brak';
+};
 
 const darkTheme = themeQuartz.withParams({
     backgroundColor: '#0a0a0f',
@@ -127,19 +155,21 @@ const BUDGET_IMPORT_FIELD_DEFS = [
 
 // ─── Hierarchical name renderer ──────────────────────────────────────────────
 
-function TreeNameRenderer({ data, context }) {
+function TreeNameRenderer({ data, context, api, rowIndex, column }) {
     const depth = data._depth || 0;
     const hasChildren = data._hasChildren;
     const expanded = context?.expandedIds?.has(data.id);
     const toggleExpand = context?.toggleExpand;
     const isSelected = context?.selectedId === data.id;
     const onAddChild = context?.onAddChild;
+    const onSelectRow = context?.onSelectRow;
+    const isRequirementLeaf = data?._isRequirementLeaf;
 
     return (
         <div
             className={`flex items-center gap-1 cursor-pointer ${isSelected ? 'ring-1 ring-cyan-500/40 rounded px-1 -mx-1' : ''}`}
             style={{ paddingLeft: depth * 20 }}
-            onClick={() => context?.onSelectRow?.(data.id)}
+            onClick={() => onSelectRow?.(data.id)}
         >
             {hasChildren ? (
                 <button
@@ -150,21 +180,32 @@ function TreeNameRenderer({ data, context }) {
                     {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                 </button>
             ) : <span className="w-4" />}
-            <span className={`truncate ${depth === 0 ? 'font-semibold text-white' : 'text-gray-300'}`}>
+            {isRequirementLeaf && <Package size={12} className="text-blue-400/70 flex-shrink-0" />}
+            <span
+                className={`truncate ${depth === 0 ? 'font-semibold text-white' : isRequirementLeaf ? 'text-blue-200' : 'text-gray-300'}`}
+                onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    if (!isRequirementLeaf && api) {
+                        api.startEditingCell({ rowIndex, colKey: column.getColId() });
+                    }
+                }}
+            >
                 {data.name}
             </span>
-            <button
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onAddChild?.(data.id);
-                }}
-                className="ml-1 text-gray-500 hover:text-emerald-400"
-                title="Dodaj podgałąź"
-            >
-                <Plus size={12} />
-            </button>
-            {data.materialsCount > 0 && (
+            {!isRequirementLeaf && (
+                <button
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onAddChild?.(data.id);
+                    }}
+                    className="ml-1 text-gray-500 hover:text-emerald-400"
+                    title="Dodaj podgałąź"
+                >
+                    <Plus size={12} />
+                </button>
+            )}
+            {!isRequirementLeaf && data.materialsCount > 0 && (
                 <span className="text-[10px] text-blue-400/60 ml-1">({data.materialsCount})</span>
             )}
         </div>
@@ -172,7 +213,7 @@ function TreeNameRenderer({ data, context }) {
 }
 
 function RowActionsRenderer({ data, context }) {
-    if (data?._syntheticRoot) return null;
+    if (data?._isRequirementLeaf) return null;
 
     return (
         <div className="h-full flex items-center justify-end pr-1">
@@ -192,7 +233,7 @@ function RowActionsRenderer({ data, context }) {
 }
 
 function MarkerIconsRenderer({ data, context }) {
-    if (!data || data._syntheticRoot) return null;
+    if (!data) return null;
 
     const links = context?.markerLinksCache?.[data.id] || [];
     const allAtts = links.flatMap((l) => (l.marker?.attachments || []));
@@ -224,6 +265,17 @@ function MarkerIconsRenderer({ data, context }) {
             ))}
             {allAtts.length > 4 && <span className="text-[10px] text-gray-300">+{allAtts.length - 4}</span>}
         </div>
+    );
+}
+
+function StructureStatusRenderer({ value, data }) {
+    const code = normalizeStatusCode(value);
+    const meta = STRUCTURE_STATUS_META[code] || { label: data?.statusLabel || getStatusLabel(code), color: 'text-gray-300' };
+    const label = data?.statusLabel || meta.label;
+    return (
+        <span className={`inline-flex items-center text-xs font-semibold ${meta.color}`}>
+            {label}
+        </span>
     );
 }
 
@@ -284,9 +336,12 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const [strategySaving, setStrategySaving] = useState(false);
     const [strategySaved, setStrategySaved] = useState(false);
     const [projectUsers, setProjectUsers] = useState([]);
+    const [nodeTeamIds, setNodeTeamIds] = useState([]);
     const [logistykUsers, setLogistykUsers] = useState([]);
     const [materialCostsByNode, setMaterialCostsByNode] = useState({});
     const [materialMetaByLookupKey, setMaterialMetaByLookupKey] = useState({});
+    const [requirementsQtyByNode, setRequirementsQtyByNode] = useState({});
+    const [requirementByNodeId, setRequirementByNodeId] = useState({});
     const [budgetDiscountAmount, setBudgetDiscountAmount] = useState('');
     const [budgetDiscountPercent, setBudgetDiscountPercent] = useState('');
     const [budgetSummary, setBudgetSummary] = useState({
@@ -308,26 +363,77 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const [budgetImportLastRow, setBudgetImportLastRow] = useState(1);
     const [budgetImportMapping, setBudgetImportMapping] = useState({});
 
-    const syntheticRootId = `__root__:${nodeId}`;
-
-    const showGlobalPdfExport = fullscreenSection === null;
-    
     const gridRef = useRef();
     const budgetGridApiRef = useRef(null);
     const materialRef = useRef();
     const strategyRef = useRef();
     const strategySaveTimeout = useRef(null);
     const budgetImportFileInputRef = useRef(null);
+    const reqDropTargetRef = useRef(null);
 
     const isLogistyk = userRoles.includes('LOGISTYK');
     const isManagerOrAdmin = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
     const normalizedSearchQuery = String(searchQuery || '').trim().toLowerCase();
+
+    const [extractingForWbs, setExtractingForWbs] = useState(false);
+    const [unassignedRequirements, setUnassignedRequirements] = useState([]);
+    const [allRequirements, setAllRequirements] = useState([]);
+    const [reqRefreshKey, setReqRefreshKey] = useState(0);
+
+    const assignableProjectUsers = useMemo(() => {
+        if (!Array.isArray(projectUsers) || projectUsers.length === 0) return [];
+        if (!Array.isArray(nodeTeamIds) || nodeTeamIds.length === 0) return projectUsers;
+
+        const usersWithTeams = projectUsers.filter((u) => Array.isArray(u?.teams) && u.teams.length > 0);
+        if (usersWithTeams.length === 0) return projectUsers;
+
+        return usersWithTeams.filter((u) => u.teams.some((t) => nodeTeamIds.includes(t.id)));
+    }, [projectUsers, nodeTeamIds]);
+
+    const assignableOwnerValues = useMemo(() => {
+        const names = assignableProjectUsers
+            .map((u) => [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email)
+            .filter(Boolean);
+        return ['', ...Array.from(new Set(names))];
+    }, [assignableProjectUsers]);
 
     const token = () => sessionStorage.getItem('token');
     const authHeaders = useCallback(() => ({
         Authorization: `Bearer ${token()}`,
         'Content-Type': 'application/json',
     }), []);
+
+    const fetchUnassignedRequirements = useCallback(async () => {
+        if (!nodeId) return;
+        try {
+            const res = await fetch(`${API_URL}/material-requirements/node/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders() });
+            if (!res.ok) return;
+            const data = await res.json();
+            const list = Array.isArray(data) ? data : (data.items || []);
+            setAllRequirements(list);
+            const unassigned = list.filter(r => {
+                try { return Object.keys(JSON.parse(r.wbsNodeAllocations || '{}')).length === 0; } catch { return true; }
+            });
+            setUnassignedRequirements(unassigned);
+        } catch (err) {
+            console.error('[WBS fetchUnassigned]', err);
+        }
+    }, [nodeId, versionId, authHeaders]);
+
+    const handleWbsExtract = useCallback(async () => {
+        if (!nodeId || !isManagerOrAdmin) return;
+        setExtractingForWbs(true);
+        try {
+            const url = `${API_URL}/material-requirements/extract/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`;
+            const res = await fetch(url, { method: 'POST', headers: authHeaders() });
+            if (!res.ok) throw new Error('Extract failed');
+            await fetchUnassignedRequirements();
+        } catch (err) {
+            console.error('[WBS extract]', err);
+        } finally {
+            setExtractingForWbs(false);
+        }
+    }, [nodeId, versionId, isManagerOrAdmin, authHeaders, fetchUnassignedRequirements]);
 
     const normalizeImportedType = (value) => {
         const raw = normKey(value);
@@ -420,23 +526,32 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         }
     }, [buildBudgetImportAutoMapping]);
 
-    const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async (listIdOverride = null) => {
         try {
+            let nextRequirementsQtyByNode = {};
             const res = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: { Authorization: `Bearer ${token()}` } });
             if (res.ok) {
                 const data = await res.json();
                 setWbsData(data.items || []);
-                // Expand top-level nodes by default
-                const topIds = (data.items || []).filter(n => n.depth === 0).map(n => n.id);
+                nextRequirementsQtyByNode = Object.fromEntries(
+                    (data.items || [])
+                        .filter((n) => n?.id != null && Number.isFinite(Number(n.quantity)))
+                        .map((n) => [n.id, Number(n.quantity)])
+                );
+                // Expand top-level and second-level nodes by default
+                const autoExpandIds = (data.items || []).filter(n => n.depth === 0 || n.depth === 1).map(n => n.id);
                 setExpandedIds(prev => {
                     const next = new Set(prev);
-                    next.add(syntheticRootId);
-                    topIds.forEach(id => next.add(id));
+                    autoExpandIds.forEach(id => next.add(id));
                     return next;
                 });
             }
 
-            const materialsRes = await fetch(`${API_URL}/material-requirements/node/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: { Authorization: `Bearer ${token()}` } });
+            const materialsParams = new URLSearchParams();
+            if (versionId) materialsParams.append('versionId', String(versionId));
+            if (listIdOverride) materialsParams.append('listId', String(listIdOverride));
+            const materialsQuery = materialsParams.toString();
+            const materialsRes = await fetch(`${API_URL}/material-requirements/node/${nodeId}${materialsQuery ? `?${materialsQuery}` : ''}`, { headers: { Authorization: `Bearer ${token()}` } });
             if (materialsRes.ok) {
                 const requirements = await materialsRes.json();
                 const nextCosts = {};
@@ -459,11 +574,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 }
 
                 for (const req of Array.isArray(requirements) ? requirements : []) {
-                    const statusLabel = MATERIAL_STATUS_LABELS[req.status] || req.status || '';
+                    const statusCode = normalizeStatusCode(req.status);
                     const selected = (req.proposals || []).find((p) => p.isSelected);
                     const unitNet = parseFloat(req.priceNetto ?? selected?.priceNetto) || 0;
                     const nameCandidates = Array.from(new Set([
-                        req.productName,
                         req.name,
                     ].filter(Boolean).map(name => String(name).trim())));
 
@@ -474,8 +588,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                             if (!nextLookupMeta[key]) {
                                 nextLookupMeta[key] = { statuses: [], cost: 0, quantity: 0, unit: '' };
                             }
-                            if (statusLabel && !nextLookupMeta[key].statuses.includes(statusLabel)) {
-                                nextLookupMeta[key].statuses.push(statusLabel);
+                            if (statusCode && !nextLookupMeta[key].statuses.includes(statusCode)) {
+                                nextLookupMeta[key].statuses.push(statusCode);
                             }
                             if (quantity > 0) {
                                 nextLookupMeta[key].quantity += quantity;
@@ -517,8 +631,64 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 setMaterialCostsByNode(nextCosts);
                 setMaterialMetaByLookupKey(nextLookupMeta);
             }
+            setRequirementsQtyByNode(nextRequirementsQtyByNode);
         } catch (e) { console.error('Fetch WBS error:', e); }
-    }, [nodeId, versionId, syntheticRootId]);
+    }, [nodeId, versionId]);
+
+    const syncMaterialRequirementsFromWbsQuantity = useCallback(async (wbsNodeId, quantityRaw, wbsNodeName = '') => {
+        const nextQuantity = parseFloat(quantityRaw);
+        if (!wbsNodeId || !Number.isFinite(nextQuantity) || nextQuantity < 0) return;
+
+        try {
+            const res = await fetch(`${API_URL}/material-requirements/node/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: { Authorization: `Bearer ${token()}` } });
+            if (!res.ok) return;
+            const requirements = await res.json();
+            if (!Array.isArray(requirements) || !requirements.length) return;
+
+            const normalizedNodeName = normKey(wbsNodeName);
+            const linked = (requirements || []).filter((req) => {
+                if (!req || !['MATERIAL', 'DEVICE'].includes(String(req.type || '').toUpperCase())) return false;
+                let alloc = {};
+                try { alloc = req.wbsNodeAllocations ? JSON.parse(req.wbsNodeAllocations) : {}; } catch { alloc = {}; }
+                let ids = [];
+                try {
+                    const parsedIds = req.wbsNodeIds ? JSON.parse(req.wbsNodeIds) : [];
+                    ids = Array.isArray(parsedIds) ? parsedIds : [];
+                } catch {
+                    ids = [];
+                }
+                return req.wbsNodeId === wbsNodeId || ids.includes(wbsNodeId) || Object.prototype.hasOwnProperty.call(alloc || {}, wbsNodeId);
+            });
+
+            if (!linked.length) return;
+
+            const exactByName = linked.find((req) => {
+                if (!normalizedNodeName) return false;
+                return normKey(req.name) === normalizedNodeName;
+            });
+            const targetReq = exactByName || linked[0];
+
+            let currentAlloc = {};
+            try { currentAlloc = targetReq.wbsNodeAllocations ? JSON.parse(targetReq.wbsNodeAllocations) : {}; } catch { currentAlloc = {}; }
+            const nextAlloc = { ...(currentAlloc || {}), [wbsNodeId]: nextQuantity };
+            const totalQty = Object.values(nextAlloc).reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
+
+            await fetch(`${API_URL}/material-requirements/${targetReq.id}`, {
+                method: 'PATCH',
+                headers: authHeaders(),
+                body: JSON.stringify({
+                    quantity: totalQty,
+                    wbsNodeId: targetReq.wbsNodeId || wbsNodeId,
+                    wbsNodeIds: targetReq.wbsNodeIds || JSON.stringify([wbsNodeId]),
+                    wbsNodeAllocations: Object.keys(nextAlloc).length > 0 ? JSON.stringify(nextAlloc) : null,
+                    isAiAssigned: false,
+                }),
+            });
+            await fetchData();
+        } catch (e) {
+            console.error('Sync material requirements from WBS quantity error:', e);
+        }
+    }, [nodeId, versionId, authHeaders, fetchData]);
 
     useEffect(() => {
         let active = true;
@@ -550,13 +720,35 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const fetchUsers = useCallback(async () => {
         const t = token();
         if (!t) return;
-        fetch(`${API_URL}/users`, { headers: { Authorization: `Bearer ${t}` } })
-            .then(r => r.ok ? r.json() : [])
-            .then(setProjectUsers);
-        fetch(`${API_URL}/users/by-role/LOGISTYK`, { headers: { Authorization: `Bearer ${t}` } })
-            .then(r => r.ok ? r.json() : [])
-            .then(setLogistykUsers);
-    }, []);
+        try {
+            const [usersRes, logistykRes, permissionsRes] = await Promise.all([
+                fetch(`${API_URL}/users`, { headers: { Authorization: `Bearer ${t}` } }),
+                fetch(`${API_URL}/users/by-role/LOGISTYK`, { headers: { Authorization: `Bearer ${t}` } }),
+                nodeId
+                    ? fetch(`${API_URL}/process-tree/${nodeId}/permissions`, { headers: { Authorization: `Bearer ${t}` } })
+                    : Promise.resolve(null),
+            ]);
+
+            setProjectUsers(usersRes?.ok ? await usersRes.json() : []);
+            setLogistykUsers(logistykRes?.ok ? await logistykRes.json() : []);
+
+            if (permissionsRes?.ok) {
+                const permissionsData = await permissionsRes.json();
+                const teamIds = Array.from(new Set(
+                    (permissionsData?.permissions || [])
+                        .filter((p) => p.teamId)
+                        .map((p) => p.teamId)
+                ));
+                setNodeTeamIds(teamIds);
+            } else {
+                setNodeTeamIds([]);
+            }
+        } catch {
+            setProjectUsers([]);
+            setLogistykUsers([]);
+            setNodeTeamIds([]);
+        }
+    }, [nodeId]);
 
     const fetchStrategy = useCallback(async () => {
         try {
@@ -575,13 +767,53 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             fetchData(); 
             fetchUsers();
             fetchStrategy();
+            fetchUnassignedRequirements();
         } 
-    }, [nodeId, versionId, fetchData, fetchUsers, fetchStrategy]);
+    }, [nodeId, versionId, fetchData, fetchUsers, fetchStrategy, fetchUnassignedRequirements]);
 
-    const refreshUnified = useCallback(async () => {
-        await fetchData();
+    const refreshUnified = useCallback(async (listId = null) => {
+        await fetchData(listId);
         onWbsUpdate?.();
     }, [fetchData, onWbsUpdate]);
+
+    const handleRequirementAssignToWbs = useCallback(async (wbsNodeId, reqId) => {
+        if (!wbsNodeId || !reqId) return;
+        try {
+            const req = unassignedRequirements.find(r => r.id === reqId);
+            const qty = parseFloat(req?.quantity) || 1;
+            const alloc = { [wbsNodeId]: qty };
+            const res = await fetch(`${API_URL}/material-requirements/${reqId}`, {
+                method: 'PATCH',
+                headers: authHeaders(),
+                body: JSON.stringify({ wbsNodeId, wbsNodeAllocations: JSON.stringify(alloc) }),
+            });
+            if (!res.ok) throw new Error('Assign failed');
+
+            // Twórz węzeł WBS jako dziecko docelowej gałęzi
+            const reqType = String(req?.type || '').toUpperCase();
+            const wbsType = reqType === 'DEVICE' ? 'equipment' : 'material';
+            const wbsName = req?.name || req?.productName || 'Wymaganie';
+            await fetch(`${API_URL}/wbs-nodes`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({
+                    nodeId,
+                    versionId: versionId || undefined,
+                    parentId: wbsNodeId,
+                    name: wbsName,
+                    type: wbsType,
+                    tags: [`req:${reqId}`, 'auto-requirement'],
+                }),
+            });
+
+            setUnassignedRequirements(prev => prev.filter(r => r.id !== reqId));
+            setAllRequirements(prev => prev.map(r => r.id === reqId ? { ...r, wbsNodeAllocations: JSON.stringify(alloc) } : r));
+            setReqRefreshKey(k => k + 1);
+            await refreshUnified();
+        } catch (err) {
+            console.error('[WBS assign]', err);
+        }
+    }, [authHeaders, refreshUnified, unassignedRequirements, wbsData, nodeId, versionId]);
 
     const saveStrategy = useCallback(async (desc) => {
         setStrategySaving(true);
@@ -656,45 +888,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         const show = (key) => sectionKey === key || sectionKey === 'all';
         const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-        let materialRowsHtml = '<tr><td colspan="6">Brak danych materiałowych</td></tr>';
-        if (show('materials') && nodeId) {
-            try {
-                const url = `${API_URL}/material-requirements/node/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`;
-                const res = await fetch(url, { headers: { Authorization: `Bearer ${token()}` } });
-                if (res.ok) {
-                    const materials = await res.json();
-                    if (Array.isArray(materials) && materials.length) {
-                        const typeLabel = (t) => t === 'DEVICE' ? 'Urządzenie' : t === 'MATERIAL' ? 'Materiał' : t;
-                        const statusLabel = (s) => ({
-                            PENDING: 'Oczekuje',
-                            PROPOSAL: 'Propozycja',
-                            CONFIRMED: 'Potwierdzone',
-                            REJECTED: 'Odrzucone',
-                            ORDERED: 'Zamówione',
-                            IN_STOCK: 'Na magazynie',
-                            ISSUED: 'Wydane',
-                        }[s] || s || '');
-                        materialRowsHtml = materials.map((m) => {
-                            const selected = (m.proposals || []).find((p) => p.isSelected);
-                            const product = m.material?.productName || selected?.productName || m.productName || '';
-                            const manufacturer = m.material?.manufacturer || m.manufacturer || '';
-                            return `<tr>
-                                <td>${esc(m.name)}</td>
-                                <td>${esc(typeLabel(m.type))}</td>
-                                <td class="num">${esc(m.quantity)} ${esc(m.unit)}</td>
-                                <td>${esc(product)}</td>
-                                <td>${esc(manufacturer)}</td>
-                                <td>${esc(statusLabel(m.status))}</td>
-                            </tr>`;
-                        }).join('');
-                    }
-                }
-            } catch (e) {
-                console.error('Material export error:', e);
-                materialRowsHtml = '<tr><td colspan="6">Błąd pobierania danych materiałowych</td></tr>';
-            }
-        }
-
         const markerSummary = (nodeId) => {
             const links = markerLinksCache[nodeId] || [];
             const allAtts = links.flatMap((l) => (l.marker?.attachments || []));
@@ -764,15 +957,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 </table>
             </div>` : '';
 
-        const materialsHtml = show('materials') ? `
-            <div class="section">
-                <div class="section-header">Materiały</div>
-                <table>
-                    <thead><tr><th>Nazwa</th><th>Typ</th><th>Ilość</th><th>Produkt</th><th>Producent</th><th>Status</th></tr></thead>
-                    <tbody>${materialRowsHtml}</tbody>
-                </table>
-            </div>` : '';
-
         const html = `<!DOCTYPE html>
 <html lang="pl">
 <head>
@@ -809,7 +993,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 ${strategyHtml}
 ${wbsHtml}
 ${budgetHtml}
-${materialsHtml}
 </body>
 </html>`;
 
@@ -843,6 +1026,18 @@ ${materialsHtml}
         const fileProjectName = String(projectName || 'projekt').trim() || 'projekt';
         const safeProjectName = fileProjectName.replace(/[\\/:*?"<>|]+/g, '_');
         const summary = summarizeBudgetRows(rows);
+        const parsedPercentDiscount = Number(String(budgetDiscountPercent).replace(',', '.'));
+        const parsedAmountDiscount = Number(String(budgetDiscountAmount).replace(',', '.'));
+        const discountAmountFromPercent = Number.isFinite(parsedPercentDiscount)
+            ? Math.max(0, parsedPercentDiscount) / 100 * summary.totalRevenue
+            : 0;
+        const discountAmountFromValue = Number.isFinite(parsedAmountDiscount) ? Math.max(0, parsedAmountDiscount) : 0;
+        const exportedTotalDiscount = discountAmountFromPercent + discountAmountFromValue;
+        const exportedRevenueAfterDiscount = Math.max(0, summary.totalRevenue - exportedTotalDiscount);
+        const exportedProfitAfterDiscount = exportedRevenueAfterDiscount - summary.totalCost;
+        const exportedMarginAfterDiscount = exportedRevenueAfterDiscount > 0
+            ? (exportedProfitAfterDiscount / exportedRevenueAfterDiscount) * 100
+            : 0;
         const totalQuantity = rows.reduce((sum, row) => sum + (Number(row.quantity) || 0), 0);
         const averageDiscount = rows.length
             ? rows.reduce((sum, row) => sum + (Number(row.discount) || 0), 0) / rows.length
@@ -857,12 +1052,17 @@ ${materialsHtml}
         summarySheet.addRow(['Data eksportu', exportDate]);
         summarySheet.addRow(['Liczba wierszy', summary.rows]);
         summarySheet.addRow(['Koszt całkowity', summary.totalCost]);
-        summarySheet.addRow(['Przychód całkowity', summary.totalRevenue]);
-        summarySheet.addRow(['Zysk', summary.profit]);
-        summarySheet.addRow(['Marża', summary.marginPct / 100]);
+        summarySheet.addRow(['Przychód przed rabatami', summary.totalRevenue]);
+        summarySheet.addRow(['Rabat procentowy', parsedPercentDiscount / 100 || 0]);
+        summarySheet.addRow(['Rabat kwotowy', discountAmountFromValue]);
+        summarySheet.addRow(['Łączny rabat', exportedTotalDiscount]);
+        summarySheet.addRow(['Przychód po rabatach', exportedRevenueAfterDiscount]);
+        summarySheet.addRow(['Zysk po rabatach', exportedProfitAfterDiscount]);
+        summarySheet.addRow(['Marża po rabatach', exportedMarginAfterDiscount / 100]);
 
         summarySheet.getColumn(2).numFmt = '#,##0.00';
-        summarySheet.getCell('B7').numFmt = '0.00%';
+        summarySheet.getCell('B6').numFmt = '0.00%';
+        summarySheet.getCell('B11').numFmt = '0.00%';
         summarySheet.getRow(1).font = { bold: true, size: 14 };
 
         budgetSheet.columns = [
@@ -906,7 +1106,7 @@ ${materialsHtml}
         const totalsRow = budgetSheet.addRow({
             subjectName: 'Razem',
             totalCost: summary.totalCost,
-            offerPrice: summary.totalRevenue,
+            offerPrice: exportedRevenueAfterDiscount,
         });
         totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
@@ -949,15 +1149,6 @@ ${materialsHtml}
         } catch (e) { console.error('Add node error:', e); }
     }, [nodeId, versionId, authHeaders, refreshUnified]);
 
-    const deleteNode = useCallback(async () => {
-        if (!selectedId || !window.confirm('Usunąć zaznaczony element?')) return;
-        try {
-            await fetch(`${API_URL}/wbs-nodes/${selectedId}`, { method: 'DELETE', headers: authHeaders() });
-            setSelectedId(null);
-            await refreshUnified();
-        } catch (e) { console.error('Delete node error:', e); }
-    }, [selectedId, authHeaders, refreshUnified]);
-
     const deleteNodeById = useCallback(async (id) => {
         if (!id || !window.confirm('Usunąć ten węzeł?')) return;
         try {
@@ -985,6 +1176,17 @@ ${materialsHtml}
                 body: JSON.stringify(data),
             });
         } catch (e) { console.error('Save budget field error:', e); }
+    }, [authHeaders]);
+
+    const updateMaterialRequirementField = useCallback(async (id, patch) => {
+        if (!id || !patch || Object.keys(patch).length === 0) return;
+        try {
+            await fetch(`${API_URL}/material-requirements/${id}`, {
+                method: 'PATCH',
+                headers: authHeaders(),
+                body: JSON.stringify(patch),
+            });
+        } catch (e) { console.error('Update material requirement error:', e); }
     }, [authHeaders]);
 
     const updateLocalWbsBudgetRow = useCallback((wbsNodeId, patch) => {
@@ -1168,7 +1370,7 @@ ${materialsHtml}
         const row = params.data;
         if (!row) return;
         const field = params.colDef.field;
-        if (['subjectName', 'name', 'type', 'status', 'owner'].includes(field)) {
+        if (['subjectName', 'name', 'type', 'status', 'owner', 'requirementsQty'].includes(field)) {
             if (field === 'subjectName') {
                 if (row.subjectId && row.subjectName) {
                     updateNodeField(row.subjectId, 'name', row.subjectName);
@@ -1176,13 +1378,25 @@ ${materialsHtml}
                 }
                 return;
             }
+            if (field === 'requirementsQty') {
+                const parsedQuantity = parseLocaleNumber(row[field]);
+                if (parsedQuantity == null || parsedQuantity < 0) return;
+                row[field] = parsedQuantity;
+                setRequirementsQtyByNode((prev) => ({ ...prev, [row.id]: parsedQuantity }));
+                updateLocalWbsBudgetRow(row.id, { quantity: parsedQuantity });
+                saveBudgetField(row.id, { quantity: parsedQuantity });
+                syncMaterialRequirementsFromWbsQuantity(row.id, parsedQuantity, row.name);
+                return;
+            }
             if (field === 'status') {
                 const normalizedType = String(row.type || '').toLowerCase();
-                if (normalizedType === 'work') {
-                    updateNodeField(row.id, field, row[field]);
-                }
+                if (['material', 'equipment'].includes(normalizedType)) return;
+                row.statusLabel = getStatusLabel(row[field], row[field]);
+                updateNodeField(row.id, field, row[field]);
+                setWbsData(prev => prev.map(item => item.id === row.id ? { ...item, [field]: row[field], statusLabel: row.statusLabel } : item));
             } else {
                 updateNodeField(row.id, field, row[field]);
+                setWbsData(prev => prev.map(item => item.id === row.id ? { ...item, [field]: row[field] } : item));
             }
             if (field === 'type') {
                 const normalizedType = String(row.type || '').toLowerCase();
@@ -1267,10 +1481,42 @@ ${materialsHtml}
                 comment: row.comment ?? '',
             });
         }
-    }, [saveBudgetField, updateNodeField, materialMetaByLookupKey, updateLocalWbsBudgetRow]);
+    }, [saveBudgetField, updateNodeField, materialMetaByLookupKey, updateLocalWbsBudgetRow, syncMaterialRequirementsFromWbsQuantity]);
 
     const buildRows = (view) => {
         const byId = new Map(wbsData.map(item => [item.id, item]));
+        const requirementRowsByNodeId = new Map();
+        for (const requirement of allRequirements) {
+            let allocations = {};
+            try {
+                allocations = JSON.parse(requirement?.wbsNodeAllocations || '{}');
+            } catch {
+                allocations = {};
+            }
+
+            for (const [allocatedNodeId, allocatedQty] of Object.entries(allocations)) {
+                if (!allocatedNodeId) continue;
+                if (!requirementRowsByNodeId.has(allocatedNodeId)) requirementRowsByNodeId.set(allocatedNodeId, []);
+                requirementRowsByNodeId.get(allocatedNodeId).push({
+                    id: `__req__:${allocatedNodeId}:${requirement.id}`,
+                    requirementId: requirement.id,
+                    parentId: allocatedNodeId,
+                    name: requirement.name || requirement.productName || 'Wymaganie',
+                    type: String(requirement.type || '').toLowerCase(),
+                    status: requirement.status || '',
+                    statusLabel: requirement.statusLabel || requirement.status || '',
+                    owner: '',
+                    quantity: Number(allocatedQty) || Number(requirement.quantity) || 1,
+                    requirementsQty: Number(allocatedQty) || Number(requirement.quantity) || 1,
+                    unit: requirement.unit || '',
+                    tags: [],
+                    materialsCount: 0,
+                    _isRequirementLeaf: true,
+                    _hasChildren: false,
+                });
+            }
+        }
+
         const matchesSearch = (...values) => {
             if (!normalizedSearchQuery) return true;
             return values.some((value) => String(value ?? '').toLowerCase().includes(normalizedSearchQuery));
@@ -1290,15 +1536,34 @@ ${materialsHtml}
 
         const getInheritedMaterialStatus = (item) => {
             const normalizedType = String(item.type || '').toLowerCase();
-            if (!['material', 'equipment'].includes(normalizedType)) return item.status;
+            if (!['material', 'equipment'].includes(normalizedType)) {
+                const code = normalizeStatusCode(item.status);
+                return { code, label: getStatusLabel(code, item.status) };
+            }
             const lookupKey = makeMaterialLookupKey(getSubjectInfo(item).name, item.name);
-            const lookupStatuses = materialMetaByLookupKey[lookupKey]?.statuses || [];
-            if (lookupStatuses.length) return lookupStatuses.join(', ');
-            const statuses = Array.from(new Set((item.materials || [])
+            const lookupStatuses = Array.from(new Set((materialMetaByLookupKey[lookupKey]?.statuses || [])
+                .map((s) => normalizeStatusCode(s))
+                .filter(Boolean)));
+            const statuses = lookupStatuses.length ? lookupStatuses : Array.from(new Set((item.materials || [])
                 .map(m => m.status)
                 .filter(Boolean)
-                .map(s => MATERIAL_STATUS_LABELS[s] || s)));
-            return statuses.length ? statuses.join(', ') : item.status;
+                .map((s) => normalizeStatusCode(s))
+                .filter(Boolean)));
+
+            if (statuses.length === 0) {
+                const fallbackCode = normalizeStatusCode(item.status);
+                return { code: fallbackCode, label: getStatusLabel(fallbackCode, item.status) };
+            }
+
+            if (statuses.length === 1) {
+                const code = statuses[0];
+                return { code, label: getStatusLabel(code) };
+            }
+
+            return {
+                code: 'MIXED',
+                label: statuses.map((code) => getStatusLabel(code)).join(', '),
+            };
         };
 
         if (view === VIEWS.BUDGET) {
@@ -1336,11 +1601,13 @@ ${materialsHtml}
                     if (discount > 0) {
                         offerPrice = offerPrice * (1 - discount / 100);
                     }
+                    const inheritedStatus = getInheritedMaterialStatus(item);
                     return {
                         ...item,
                         subjectId: subject.id,
                         subjectName,
-                        status: getInheritedMaterialStatus(item),
+                        status: inheritedStatus.code,
+                        statusLabel: inheritedStatus.label,
                         unit: inheritedFromMaterials
                             ? (materialMetaByLookupKey[lookupKey]?.unit || item.unit || 'sztuki')
                             : (item.unit || 'sztuki'),
@@ -1378,13 +1645,40 @@ ${materialsHtml}
             childrenMap.get(pid).push(item);
         }
         const rows = [];
+        const getRequirementsQty = (id) => Object.prototype.hasOwnProperty.call(requirementsQtyByNode, id)
+            ? requirementsQtyByNode[id]
+            : 1;
+        const pushRequirementRows = (nodeId, depth) => {
+            const linkedRequirements = [...(requirementRowsByNodeId.get(nodeId) || [])]
+                .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pl'));
+            for (const requirementRow of linkedRequirements) {
+                rows.push({
+                    ...requirementRow,
+                    _depth: depth,
+                });
+            }
+        };
         const addVisible = (pId, depth) => {
             const children = childrenMap.get(pId || '__root__') || [];
             // Sort by sortOrder if present
             children.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
             for (const item of children) {
-                rows.push({ ...item, status: getInheritedMaterialStatus(item), _depth: depth, _hasChildren: childrenMap.has(item.id) });
-                if (expandedIds.has(item.id)) addVisible(item.id, depth + 1);
+                const inheritedStatus = getInheritedMaterialStatus(item);
+                const linkedRequirements = requirementRowsByNodeId.get(item.id) || [];
+                rows.push({
+                    ...item,
+                    status: inheritedStatus.code,
+                    statusLabel: inheritedStatus.label,
+                    requirementsQty: getRequirementsQty(item.id),
+                    _isProjectItem: depth === 0,
+                    _depth: depth,
+                    _hasChildren: childrenMap.has(item.id) || linkedRequirements.length > 0,
+                    materialsCount: Number(item.materialsCount) || linkedRequirements.length,
+                });
+                if (expandedIds.has(item.id)) {
+                    addVisible(item.id, depth + 1);
+                    pushRequirementRows(item.id, depth + 1);
+                }
             }
         };
 
@@ -1401,35 +1695,53 @@ ${materialsHtml}
                     item.path,
                 );
                 const childMatch = (childrenMap.get(item.id) || []).some(branchMatches);
-                const result = selfMatches || childMatch;
+                const requirementMatch = (requirementRowsByNodeId.get(item.id) || []).some((requirementRow) => matchesSearch(
+                    requirementRow.name,
+                    TYPE_LABELS[requirementRow.type] || requirementRow.type,
+                    requirementRow.status,
+                    requirementRow.quantity,
+                    requirementRow.unit,
+                ));
+                const result = selfMatches || childMatch || requirementMatch;
                 matchesById.set(item.id, result);
                 return result;
             };
 
-            const hasRootChildren = (childrenMap.get('__root__') || []).length > 0;
-            rows.push({
-                id: syntheticRootId,
-                parentId: null,
-                name: projectName || 'Projekt',
-                type: 'project',
-                status: '',
-                owner: '',
-                _depth: 0,
-                _hasChildren: hasRootChildren,
-                _syntheticRoot: true,
-                materialsCount: 0,
-            });
             if (normalizedSearchQuery) {
                 const filteredRoots = (childrenMap.get('__root__') || []).filter(branchMatches);
                 const addFilteredVisible = (items, depth) => {
                     for (const item of items) {
-                        rows.push({ ...item, status: getInheritedMaterialStatus(item), _depth: depth, _hasChildren: childrenMap.has(item.id) });
+                        const inheritedStatus = getInheritedMaterialStatus(item);
+                        const linkedRequirements = requirementRowsByNodeId.get(item.id) || [];
+                        rows.push({
+                            ...item,
+                            status: inheritedStatus.code,
+                            statusLabel: inheritedStatus.label,
+                            requirementsQty: getRequirementsQty(item.id),
+                            _isProjectItem: depth === 0,
+                            _depth: depth,
+                            _hasChildren: childrenMap.has(item.id) || linkedRequirements.length > 0,
+                            materialsCount: Number(item.materialsCount) || linkedRequirements.length,
+                        });
                         const matchingChildren = (childrenMap.get(item.id) || []).filter(branchMatches);
                         if (matchingChildren.length) addFilteredVisible(matchingChildren, depth + 1);
+                        const matchingRequirements = linkedRequirements.filter((requirementRow) => matchesSearch(
+                            requirementRow.name,
+                            TYPE_LABELS[requirementRow.type] || requirementRow.type,
+                            requirementRow.status,
+                            requirementRow.quantity,
+                            requirementRow.unit,
+                        ));
+                        for (const requirementRow of matchingRequirements) {
+                            rows.push({
+                                ...requirementRow,
+                                _depth: depth + 1,
+                            });
+                        }
                     }
                 };
-                addFilteredVisible(filteredRoots, 1);
-            } else if (expandedIds.has(syntheticRootId)) addVisible(null, 1);
+                addFilteredVisible(filteredRoots, 0);
+            } else addVisible(null, 0);
             return rows;
         }
 
@@ -1514,7 +1826,10 @@ ${materialsHtml}
 
     const getColumnDefs = (view) => {
         const nameCol = {
-            field: 'name', headerName: 'Nazwa', flex: 1, minWidth: 250,
+            field: 'name',
+            headerName: 'Nazwa',
+            flex: 1,
+            minWidth: 250,
             cellRenderer: TreeNameRenderer,
             cellRendererParams: {
                 context: {
@@ -1526,30 +1841,71 @@ ${materialsHtml}
                     }),
                     selectedId,
                     onSelectRow: setSelectedId,
-                    onAddChild: (id) => addNode(String(id).startsWith('__root__:') ? null : id),
+                    onAddChild: (id) => addNode(id),
                 },
             },
-            editable: (params) => !params.data?._syntheticRoot
+            cellEditor: 'agTextCellEditor',
+            cellEditorParams: {
+                maxLength: 255,
+            },
+            editable: (params) => !params.data?._isRequirementLeaf,
         };
         
         const ownerCol = {
             field: 'owner', headerName: 'Osoba', width: 140,
             cellEditor: 'agSelectCellEditor',
             cellEditorParams: {
-                values: ['', ...projectUsers.map(u => [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email)]
+                values: assignableOwnerValues
             },
-            editable: (params) => !params.data?._syntheticRoot
+            editable: (params) => !params.data?._isRequirementLeaf,
+            valueFormatter: (p) => p.value || 'Brak',
+            cellClass: STRUCTURE_COMMON_CELL_CLASS,
         };
 
         if (view === VIEWS.STRUCTURE) return [
             nameCol, 
-            { field: 'type', headerName: 'Typ', width: 100, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: TYPE_OPTIONS }, valueFormatter: p => TYPE_LABELS[p.value] || p.value, editable: (params) => !params.data?._syntheticRoot }, 
+            {
+                field: 'type',
+                headerName: 'Typ',
+                width: 100,
+                cellEditor: 'agSelectCellEditor',
+                cellEditorParams: { values: TYPE_OPTIONS },
+                valueFormatter: (p) => p.data?._isProjectItem ? '' : (TYPE_LABELS[p.value] || p.value || 'Brak'),
+                editable: (params) => !params.data?._isProjectItem && !params.data?._isRequirementLeaf,
+                cellClass: STRUCTURE_COMMON_CELL_CLASS,
+            },
+            {
+                field: 'requirementsQty',
+                headerName: 'Ilość wymagań',
+                width: 140,
+                editable: (params) => {
+                    if (params.data?._isProjectItem) return false;
+                    if (params.data?._isRequirementLeaf) return false;
+                    if (params.data?._hasChildren) return false;
+                    return true;
+                },
+                cellEditor: 'agTextCellEditor',
+                sortable: true,
+                valueFormatter: (p) => {
+                    if (p.data?._isProjectItem || p.data?._hasChildren) return '';
+                    return fmtQty(p.value) || '1';
+                },
+                cellClass: `${STRUCTURE_COMMON_CELL_CLASS} text-gray-300`,
+            },
             {
                 field: 'status',
                 headerName: 'Status',
-                width: 140,
-                editable: (params) => !params.data?._syntheticRoot && String(params.data?.type || '').toLowerCase() === 'work',
-                tooltipValueGetter: (params) => String(params.data?.type || '').toLowerCase() === 'work' ? '' : 'Status dziedziczony z zakładki Materiały'
+                width: 160,
+                cellEditor: 'agSelectCellEditor',
+                cellEditorParams: { values: Object.keys(STRUCTURE_STATUS_META) },
+                valueFormatter: (p) => p.data?.statusLabel || getStatusLabel(p.value, p.value),
+                cellRenderer: StructureStatusRenderer,
+                cellClass: STRUCTURE_COMMON_CELL_CLASS,
+                editable: (params) => {
+                    if (params.data?._isRequirementLeaf) return false;
+                    const normalizedType = String(params.data?.type || '').toLowerCase();
+                    return !['material', 'equipment'].includes(normalizedType);
+                },
             },
             ownerCol,
             {
@@ -1625,7 +1981,7 @@ ${materialsHtml}
         const currentColId = currentColumn.getColId();
         const isEditable = (column, nextRowIndex) => {
             const rowNode = api.getDisplayedRowAtIndex(nextRowIndex);
-            if (!rowNode || rowNode.data?._syntheticRoot) return false;
+            if (!rowNode) return false;
             const colDef = column.getColDef();
             const editable = colDef.editable;
             if (typeof editable === 'function') {
@@ -1673,13 +2029,57 @@ ${materialsHtml}
         }
     }, []);
 
+    const onGridCellClicked = useCallback((params) => {
+        if (params?.colDef?.field !== 'type') return;
+        if (!params?.column || params?.node?.rowIndex == null) return;
+
+        const editable = params.colDef?.editable;
+        const canEdit = typeof editable === 'function' ? !!editable(params) : !!editable;
+        if (!canEdit) return;
+
+        const editingCells = params.api.getEditingCells?.() || [];
+        const isSameCellAlreadyEditing = editingCells.some((cell) => {
+            const editingRow = cell?.rowIndex;
+            const editingColId = cell?.column?.getColId?.() || cell?.colId;
+            return editingRow === params.node.rowIndex && editingColId === params.column.getColId();
+        });
+        if (isSameCellAlreadyEditing) return;
+
+        params.api.startEditingCell({
+            rowIndex: params.node.rowIndex,
+            colKey: params.column.getColId(),
+        });
+    }, []);
+
     const renderGrid = (v) => {
         const isBudgetView = v === VIEWS.BUDGET;
+        const isStructureView = v === VIEWS.STRUCTURE;
 
         return (
             <div
                 className={isBudgetView ? 'flex-1 min-h-[400px] overflow-x-auto overflow-y-hidden pb-2 custom-scrollbar' : 'flex-1 min-h-[400px]'}
                 onDoubleClick={(e) => e.stopPropagation()}
+                onDragOver={isStructureView ? (e) => {
+                    const types = Array.from(e.dataTransfer?.types || []);
+                    if (!types.includes('application/requirement-id')) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'copy';
+                    const rowEl = e.target.closest('[row-id]');
+                    if (rowEl) {
+                        const rowId = rowEl.getAttribute('row-id');
+                        if (rowId && !rowId.startsWith('__req__:')) reqDropTargetRef.current = rowId;
+                    }
+                } : undefined}
+                onDragLeave={isStructureView ? () => { reqDropTargetRef.current = null; } : undefined}
+                onDrop={isStructureView ? (e) => {
+                    const reqId = e.dataTransfer.getData('application/requirement-id');
+                    const targetNodeId = reqDropTargetRef.current;
+                    reqDropTargetRef.current = null;
+                    if (reqId && targetNodeId) {
+                        e.preventDefault();
+                        handleRequirementAssignToWbs(targetNodeId, reqId);
+                    }
+                } : undefined}
             >
                 <div className="h-full" style={isBudgetView ? { minWidth: '1820px' } : undefined}>
                     <AgGridReact
@@ -1696,6 +2096,7 @@ ${materialsHtml}
                         } : undefined}
                         onFilterChanged={v === VIEWS.BUDGET ? (params) => refreshBudgetSummaryFromApi(params.api) : undefined}
                         onModelUpdated={v === VIEWS.BUDGET ? (params) => refreshBudgetSummaryFromApi(params.api) : undefined}
+                        onCellClicked={onGridCellClicked}
                         onCellKeyDown={onGridCellKeyDown}
                         defaultColDef={v === VIEWS.BUDGET
                             ? { resizable: true, sortable: true, filter: true, floatingFilter: false }
@@ -1780,16 +2181,12 @@ ${materialsHtml}
 
     const renderSection = (key, title, Icon, colorClass, content, onExport, extraButtons = null) => {
         const isActive = expandedSection === key;
-        const isFullscreen = fullscreenSection === key;
-        if (expandedSection !== null && !isActive && !isFullscreen) return null;
+        if (expandedSection !== null && !isActive) return null;
 
         return (
             <div 
-                className={`flex flex-col glass-panel rounded-2xl border border-white/5 transition-all duration-300 overflow-hidden shadow-2xl ${isActive || isFullscreen ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
-                onDoubleClick={() => setFullscreenSection(isFullscreen ? null : key)}
-                style={isFullscreen
-                    ? { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 100, padding: '20px', background: '#0a0c10' }
-                    : (isActive ? { minHeight: 'calc(100vh - 200px)' } : {})}
+                className={`flex flex-col glass-panel rounded-2xl border border-white/5 transition-all duration-300 overflow-hidden shadow-2xl ${isActive ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
+                style={isActive ? { minHeight: 'calc(100vh - 200px)' } : {}}
             >
                 <div 
                     className={`flex items-center gap-2 px-5 py-3 transition-colors text-left flex-shrink-0 border-b border-white/10 ${isActive ? 'bg-white/[0.07]' : 'bg-white/[0.04]'}`}
@@ -1800,17 +2197,25 @@ ${materialsHtml}
                     <div className="flex-1 px-4">{isActive && extraButtons}</div>
                     <div className="flex items-center gap-2">
                         {onExport && (
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); onExport(); }} 
-                                className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg text-gray-400 text-[10px] font-bold uppercase tracking-widest transition-all"
-                            >
-                                <FileDown size={11} /> PDF
-                            </button>
+                            <>
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); handleExportPDF('all'); }} 
+                                    className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all"
+                                >
+                                    <FileDown size={11} /> PDF wszystkie sekcje
+                                </button>
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); onExport(); }} 
+                                    className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all"
+                                >
+                                    <FileDown size={11} /> PDF
+                                </button>
+                            </>
                         )}
                         <ChevronRight size={14} className={`text-gray-500 transition-transform flex-shrink-0 ${isActive ? 'rotate-90' : ''}`} />
                     </div>
                 </div>
-                {(isActive || isFullscreen) && (
+                {isActive && (
                     <div className="flex-1 overflow-auto p-4 animate-fade-in custom-scrollbar h-full">
                         {content}
                     </div>
@@ -1820,7 +2225,7 @@ ${materialsHtml}
     };
 
     return (
-        <div className={`flex flex-col w-full h-full relative overflow-y-auto pr-2 custom-scrollbar bg-[#0a0c10]/50 rounded-[40px] border border-white/[0.03] ${showGlobalPdfExport ? 'gap-2 p-2 pt-1' : 'gap-1 p-2 pt-0'}`}>
+        <div className="flex flex-col w-full h-full relative overflow-y-auto pr-2 custom-scrollbar bg-[#0a0c10]/50 rounded-[40px] border border-white/[0.03] gap-1 p-2 pt-0">
             <input
                 ref={budgetImportFileInputRef}
                 type="file"
@@ -1828,19 +2233,6 @@ ${materialsHtml}
                 className="hidden"
                 onChange={handleBudgetImportFileChange}
             />
-            {/* Global Header */}
-            {showGlobalPdfExport && (
-                <div className="flex items-center justify-center mb-0">
-                    <button 
-                        onClick={() => handleExportPDF('all')}
-                        className="group relative flex items-center gap-3 px-6 py-2.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/20 rounded-2xl text-blue-300 text-xs font-black uppercase tracking-[0.1em] transition-all overflow-hidden"
-                    >
-                        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-white/5 to-blue-500/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                        <FileDown size={14} className="group-hover:translate-y-[-2px] transition-transform" /> Eksport PDF - wszystkie sekcje
-                    </button>
-                </div>
-            )}
-
             {renderSection('strategy', 'Jak to chcemy zrobić', HelpCircle, 'blue', (
                 <div className="flex flex-col gap-4 h-full min-h-[calc(100vh-320px)]">
                     <div className="flex justify-end p-1">
@@ -1905,13 +2297,71 @@ ${materialsHtml}
 
             {renderSection('wbs', `Struktura zadań projektu: ${projectName || '—'}`, Layers, 'blue', (
                 <div className="flex flex-col gap-0 h-full">
-                    <div className="flex items-center gap-2 mb-2 px-1 py-1 rounded-lg border border-white/10 bg-black/20">
-                        {selectedId && <button onClick={() => addNode(selectedId)} className="px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-blue-500/20 transition-all">+ Pod-Element</button>}
-                        {selectedId && <button onClick={deleteNode} className="p-1.5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-all"><Trash2 size={14} /></button>}
-                    </div>
                     {renderGrid(VIEWS.STRUCTURE)}
+                    {selectedId && !selectedId.startsWith('__req__:') && (() => {
+                        const node = wbsData.find(n => n.id === selectedId);
+                        const assignedReqs = allRequirements.filter(r => {
+                            try { return !!JSON.parse(r.wbsNodeAllocations || '{}')[selectedId]; } catch { return false; }
+                        });
+                        if (!assignedReqs.length) return null;
+                        return (
+                            <div className="mt-2 px-1 py-3 border-t border-white/10">
+                                <p className="text-[10px] uppercase tracking-widest text-blue-400/70 font-bold mb-2 flex items-center gap-1.5">
+                                    <Package size={10} />
+                                    Wymagania dla: {node?.name} ({assignedReqs.length})
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {assignedReqs.map(r => (
+                                        <div key={r.id} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-900/20 border border-blue-500/20 rounded-lg text-blue-300 text-[11px]">
+                                            <span>{r.name || r.productName || '—'}</span>
+                                            {r.quantity > 0 && <span className="text-blue-400/60 text-[10px]">×{r.quantity}{r.unit ? ` ${r.unit}` : ''}</span>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })()}
+                    {isManagerOrAdmin && unassignedRequirements.length > 0 && (
+                        <div className="mt-3 px-1 py-3 border-t border-white/10">
+                            <p className="text-[10px] uppercase tracking-widest text-amber-500/70 font-bold mb-2 flex items-center gap-1.5">
+                                <Package size={10} />
+                                Koszyk — nieprzypisane ({unassignedRequirements.length})
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                                {unassignedRequirements.map(req => (
+                                    <div key={req.id}
+                                        draggable
+                                        onDragStart={e => {
+                                            e.dataTransfer.setData('application/requirement-id', req.id);
+                                            e.dataTransfer.effectAllowed = 'copy';
+                                        }}
+                                        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-900/30 border border-emerald-500/20 rounded-lg text-emerald-300 text-[11px] cursor-grab select-none"
+                                    >
+                                        <span>{req.name || req.productName || '—'}</span>
+                                        {req.quantity && <span className="text-emerald-500/60 text-[10px]">×{req.quantity}{req.unit ? ` ${req.unit}` : ''}</span>}
+                                        {selectedId && !selectedId.startsWith('__req__:') && (
+                                            <button
+                                                onClick={e => { e.stopPropagation(); handleRequirementAssignToWbs(selectedId, req.id); }}
+                                                className="ml-1 px-1.5 py-0.5 bg-emerald-600/40 hover:bg-emerald-600/70 rounded text-[9px] font-bold text-emerald-200 cursor-pointer"
+                                                title="Przypisz do zaznaczonej gałęzi"
+                                            >→ Przypisz</button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
-            ), () => handleExportPDF('wbs'))}
+            ), () => handleExportPDF('wbs'), isManagerOrAdmin ? (
+                <button
+                    onClick={(e) => { e.stopPropagation(); handleWbsExtract(); }}
+                    disabled={extractingForWbs}
+                    className={`flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all ${extractingForWbs ? 'opacity-50 pointer-events-none' : ''}`}
+                >
+                    {extractingForWbs ? <div className="w-3 h-3 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" /> : <Sparkles size={11} />}
+                    Wyciągnij z dokumentów
+                </button>
+            ) : null)}
 
             {isManagerOrAdmin && renderSection('budget', 'Plan i harmonogram (Budżet)', DollarSign, 'green', (
                 <div className="flex flex-col gap-3 h-full">
@@ -1943,32 +2393,16 @@ ${materialsHtml}
                 </div>
             ))}
 
-            {renderSection('materials', 'Materiały', Zap, 'yellow', (
-                <MaterialRequirementsPanel 
-                    ref={materialRef}
+            {renderSection('materials2', 'Materiały2', Zap, 'yellow', (
+                <MaterialRequirementsPanel
                     nodeId={nodeId}
                     versionId={versionId}
-                    isEmbedded={true}
-                    searchQuery={searchQuery}
+                    readOnly={!isManagerOrAdmin}
                     onWbsUpdate={refreshUnified}
-                    userRoles={userRoles}
+                    useWbsRequirementSelection={true}
+                    refreshKey={reqRefreshKey}
                 />
-            ), () => handleExportPDF('materials'), (
-                <div className="flex items-center gap-3">
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); materialRef.current?.handleAddRequirement(); }}
-                        className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg text-gray-400 text-[10px] font-bold uppercase tracking-widest transition-all"
-                    >
-                        <Plus size={11} /> Dodaj wymaganie
-                    </button>
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); materialRef.current?.handleExtract(); }}
-                        className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/10 rounded-lg text-blue-400 text-[10px] font-bold uppercase tracking-widest transition-all"
-                    >
-                        <Sparkles size={11} /> Wyciągnij z dokumentów
-                    </button>
-                </div>
-            ))}
+            ), () => handleExportPDF('materials'))}
 
             {strategyPreviewOpen && (
                 <div className="fixed inset-0 z-[120] bg-[#05070bcc] backdrop-blur-sm flex flex-col">
@@ -1980,7 +2414,7 @@ ${materialsHtml}
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={() => handleExportPDF('strategy')}
-                                className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all"
+                                className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all"
                             >
                                 <FileDown size={11} /> PDF
                             </button>

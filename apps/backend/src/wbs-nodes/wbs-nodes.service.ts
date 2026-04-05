@@ -352,6 +352,7 @@ export class WbsNodesService {
                 materials,
                 materialsTotalCost,
                 materialsCount: materials.length,
+                tags: this.parseTags(node.tags),
             };
         });
 
@@ -364,7 +365,7 @@ export class WbsNodesService {
     /**
      * Tworzy nowy węzeł WBS.
      */
-    async createNode(data: { nodeId: string; parentId?: string; versionId?: string; name: string; type?: string }) {
+    async createNode(data: { nodeId: string; parentId?: string; versionId?: string; name: string; type?: string; tags?: string[] }) {
         const vId = this.normalizeVersionId(data.versionId);
 
         // Oblicz sortOrder — ostatni wśród rodzeństwa
@@ -383,6 +384,7 @@ export class WbsNodesService {
                 name: data.name,
                 type: data.type || '',
                 sortOrder,
+                tags: data.tags?.length ? JSON.stringify(data.tags) : undefined,
             },
         });
     }
@@ -394,6 +396,11 @@ export class WbsNodesService {
         const allowed: Record<string, any> = {};
         for (const key of ['name', 'type', 'status', 'owner', 'resources', 'cost', 'parentId', 'sortOrder']) {
             if (data[key] !== undefined) allowed[key] = data[key];
+        }
+        if (data.tags !== undefined) {
+            allowed.tags = Array.isArray(data.tags) && data.tags.length > 0
+                ? JSON.stringify(data.tags)
+                : null;
         }
         return this.prisma.wbsNode.update({ where: { id }, data: allowed });
     }

@@ -296,7 +296,7 @@ function TreeNode({ node, onDelete, onAddChild, onRefresh, onPermissions, onHard
                 {/* Expand/Collapse button */}
                 {node.children && node.children.length > 0 && (
                     <button
-                        onClick={() => setExpanded(!expanded)}
+                        onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
                         className="w-5 h-5 flex items-center justify-center text-gray-500 hover:text-gray-300 transition-colors"
                     >
                         {expanded ? '▼' : '▶'}
@@ -332,8 +332,9 @@ function TreeNode({ node, onDelete, onAddChild, onRefresh, onPermissions, onHard
                     />
                 ) : (
                     <span
-                        onClick={() => setEditing(true)}
+                        onDoubleClick={() => setEditing(true)}
                         className="flex-1 text-gray-200 cursor-pointer hover:text-white truncate font-medium"
+                        title="Podwójne kliknięcie, aby zmienić nazwę"
                     >
                         {node.name}
                     </span>

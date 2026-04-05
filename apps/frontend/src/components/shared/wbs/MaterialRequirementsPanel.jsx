@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, f
 import ExcelJS from 'exceljs';
 import { useReactTable, getCoreRowModel, getExpandedRowModel, getSortedRowModel, getFilteredRowModel, flexRender } from '@tanstack/react-table';
 import {
-    ChevronRight, ChevronDown, Plus, Sparkles, Package, Wrench,
+    ChevronRight, ChevronDown, Plus, Package, Wrench,
     FileText, Upload, CheckCircle, Clock, XCircle,
     Search, Trash2, Link, AlertCircle, Star, X, PenLine, ShieldCheck,
     GripVertical, ArrowUpDown, ArrowUp, ArrowDown, Filter,
@@ -1746,17 +1746,32 @@ function exportToPdf(listName, listVersion, requirements) {
 
 // ─── WBS multi-select ──────────────────────────────────────────────────────────
 
-function WbsMultiSelect({ r, wbsProjectItems, subtasks, patchItem, addToWbsTree, removeFromWbsTree, readOnly, open = false, setOpen = () => {} }) {
+function WbsMultiSelect({ r, wbsProjectItems, nodeToProjectItemId = {}, subtasks, patchItem, addToWbsTree, removeFromWbsTree, readOnly, open = false, setOpen = () => {} }) {
     const ref = React.useRef(null);
     const items = wbsProjectItems;
     const validIds = React.useMemo(() => new Set(items.map(n => n.id)), [items]);
+    const itemsById = React.useMemo(() => new Map(items.map(n => [n.id, n])), [items]);
+    const normalizeNodeId = React.useCallback((id) => {
+        const key = String(id || '');
+        return nodeToProjectItemId[key] || key;
+    }, [nodeToProjectItemId]);
+    const normalizeSelectedIds = React.useCallback((ids) => {
+        const mapped = ids
+            .map((id) => normalizeNodeId(id))
+            .filter((id) => validIds.has(id));
+        return Array.from(new Set(mapped));
+    }, [normalizeNodeId, validIds]);
 
     const [allocations, setAllocations] = React.useState(() => {
         try {
             const raw = r.wbsNodeAllocations ? JSON.parse(r.wbsNodeAllocations) : {};
-            // Odfiltruj alokacje do usuniętych przedmiotów
+            // Mapuj alokacje z dowolnego węzła WBS do nadrzędnego przedmiotu projektu.
             const clean = {};
-            for (const [k, v] of Object.entries(raw)) { if (validIds.has(k)) clean[k] = v; }
+            for (const [k, v] of Object.entries(raw)) {
+                const mappedId = normalizeNodeId(k);
+                if (!validIds.has(mappedId)) continue;
+                clean[mappedId] = (Number(clean[mappedId]) || 0) + (Number(v) || 0);
+            }
             return clean;
         } catch { return {}; }
     });
@@ -1765,7 +1780,7 @@ function WbsMultiSelect({ r, wbsProjectItems, subtasks, patchItem, addToWbsTree,
         let ids = [];
         if (r.wbsNodeIds) { try { ids = JSON.parse(r.wbsNodeIds); } catch { ids = []; } }
         else if (r.wbsNodeId) { ids = [r.wbsNodeId]; }
-        return ids.filter(id => validIds.has(id));
+        return normalizeSelectedIds(ids);
     });
 
     // Sync z danymi z serwera + czyść stale references do usuniętych przedmiotów
@@ -1773,7 +1788,7 @@ function WbsMultiSelect({ r, wbsProjectItems, subtasks, patchItem, addToWbsTree,
         let ids = [];
         if (r.wbsNodeIds) { try { ids = JSON.parse(r.wbsNodeIds); } catch { ids = []; } }
         else if (r.wbsNodeId) { ids = [r.wbsNodeId]; }
-        const cleanIds = ids.filter(id => validIds.has(id));
+        const cleanIds = normalizeSelectedIds(ids);
         setSelectedIds(cleanIds);
 
         let rawAlloc = {};
@@ -1781,20 +1796,26 @@ function WbsMultiSelect({ r, wbsProjectItems, subtasks, patchItem, addToWbsTree,
         const cleanAlloc = {};
         let stale = false;
         for (const [k, v] of Object.entries(rawAlloc)) {
-            if (validIds.has(k)) { cleanAlloc[k] = v; } else { stale = true; }
+            const mappedId = normalizeNodeId(k);
+            if (validIds.has(mappedId)) {
+                cleanAlloc[mappedId] = (Number(cleanAlloc[mappedId]) || 0) + (Number(v) || 0);
+                if (mappedId !== k) stale = true;
+            } else {
+                stale = true;
+            }
         }
         if (ids.length !== cleanIds.length) stale = true;
         setAllocations(cleanAlloc);
 
         // Jeśli wykryto stale references — wyczyść je w bazie
-        if (stale) {
+        if (stale && !readOnly) {
             patchItem(r.id, {
                 wbsNodeIds: JSON.stringify(cleanIds),
                 wbsNodeId: cleanIds[0] || null,
                 wbsNodeAllocations: Object.keys(cleanAlloc).length > 0 ? JSON.stringify(cleanAlloc) : null,
             });
         }
-    }, [r.wbsNodeIds, r.wbsNodeId, r.wbsNodeAllocations, validIds]);
+    }, [r.wbsNodeIds, r.wbsNodeId, r.wbsNodeAllocations, validIds, normalizeSelectedIds, normalizeNodeId, readOnly]);
 
     const selectedItems = items.filter(n => selectedIds.includes(n.id));
 
@@ -1824,7 +1845,8 @@ function WbsMultiSelect({ r, wbsProjectItems, subtasks, patchItem, addToWbsTree,
             : [...selectedIds, nodeId];
 
         const newAlloc = { ...allocations };
-        const maxQty = Number(r.quantity) || 0;
+        const selectedNodeQty = Number(itemsById.get(nodeId)?.quantity) || 0;
+        const maxQty = (Number(r.quantity) || 0) > 0 ? Number(r.quantity) : selectedNodeQty;
         if (isCurrentlySelected) {
             delete newAlloc[nodeId];
             // Jeśli zostaje jedno przypisanie — przypisz całą ilość automatycznie
@@ -1846,18 +1868,17 @@ function WbsMultiSelect({ r, wbsProjectItems, subtasks, patchItem, addToWbsTree,
         setSelectedIds(next);
         setAllocations(newAlloc);
 
-        patchItem(r.id, {
+        const patch = {
             wbsNodeIds: JSON.stringify(next),
             wbsNodeId: next[0] || null,
             wbsNodeAllocations: Object.keys(newAlloc).length > 0 ? JSON.stringify(newAlloc) : null,
             isAiAssigned: false
-        });
-
-        if (!isCurrentlySelected) {
-            addToWbsTree(nodeId, r.productName || r.name, r.type);
-        } else {
-            removeFromWbsTree?.(nodeId, r.id, r.productName || r.name);
+        };
+        if ((Number(r.quantity) || 0) <= 0 && maxQty > 0) {
+            patch.quantity = maxQty;
         }
+
+        patchItem(r.id, patch);
     };
 
     React.useEffect(() => {
@@ -1917,7 +1938,9 @@ function WbsMultiSelect({ r, wbsProjectItems, subtasks, patchItem, addToWbsTree,
                     {items.map(n => (
                         <div key={n.id} onClick={(e) => handleOptionRowClick(e, n.id)} className="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 rounded border-b border-white/5 last:border-b-0 cursor-pointer">
                             <input type="checkbox" checked={selectedIds.includes(n.id)} onChange={(e) => { e.stopPropagation(); toggle(n.id); }} onClick={e => e.stopPropagation()} className="accent-blue-500" />
-                            <span className="text-sm text-gray-200 flex-1">{n.name}</span>
+                            <span className="text-sm text-gray-200 flex-1" style={{ paddingLeft: `${(Number(n.depth) || 0) * 14}px` }}>
+                                {n.depth > 0 ? '└ ' : ''}{n.name}
+                            </span>
                             {selectedIds.includes(n.id) && (
                                 <input
                                     type="number"
@@ -1944,16 +1967,15 @@ function WbsMultiSelect({ r, wbsProjectItems, subtasks, patchItem, addToWbsTree,
 
 // ─── Główny panel ──────────────────────────────────────────────────────────────
 
-const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel({ nodeId, versionId, readOnly = false, readOnlyWbs = false, externalFilters = null, initialExpandedId = null, onWbsUpdate = null, searchQuery = '', refreshKey = 0, isEmbedded = false }, ref) {
+const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel({ nodeId, versionId, readOnly = false, readOnlyWbs = false, externalFilters = null, initialExpandedId = null, onWbsUpdate = null, searchQuery = '', refreshKey = 0, isEmbedded = false, useWbsRequirementSelection = false }, ref) {
     const [lists, setLists] = useState([]);
     const [activeListId, setActiveListId] = useState(null);
     const [requirements, setRequirements] = useState([]);
+    const [wbsFallbackRequirements, setWbsFallbackRequirements] = useState([]);
     const [subtasks, setSubtasks] = useState([]);
     const [wbsProjectItems, setWbsProjectItems] = useState([]); // [{id, name, materiałyId}]
+    const [wbsNodeToProjectItemId, setWbsNodeToProjectItemId] = useState({});
     const [loading, setLoading] = useState(false);
-    const [extracting, setExtracting] = useState(false);
-    const [showAddModal, setShowAddModal] = useState(false);
-    const [addModalKey, setAddModalKey] = useState(0);
     const [showNewListModal, setShowNewListModal] = useState(false);
     const [newListIsVersion, setNewListIsVersion] = useState(false);
     const [expandedId, setExpandedId] = useState(initialExpandedId);
@@ -1972,8 +1994,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     const authHeaders = { Authorization: `Bearer ${token}` };
 
     const activeList = lists.find(l => l.id === activeListId) || null;
-    const isLocked = (activeList?.isLocked ?? false) || readOnly;
-    const isWbsLocked = isLocked || readOnlyWbs;
+    const baseIsLocked = (activeList?.isLocked ?? false) || readOnly;
 
     // ─── Pliki ofert (z zakładki Oferty) ─────────────────────────────────────
     useEffect(() => {
@@ -1997,50 +2018,136 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
 
     const fetchRequirements = useCallback(async (listId) => {
         setLoading(true);
-        const [r, s, reqRes, unifiedRes] = await Promise.all([
-            fetch(`${API_URL}/material-requirements/node/${nodeId}${listId ? `?listId=${listId}` : ''}${versionId ? `&versionId=${versionId}` : ''}`, { headers: authHeaders }),
-            fetch(`${API_URL}/subtasks/node/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders }),
-            fetch(`${API_URL}/order-requirements/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders }),
-            fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders }),
-        ]);
-        if (r.ok) setRequirements(await r.json());
-        if (s.ok) setSubtasks(await s.json());
+        setWbsNodeToProjectItemId({});
+        try {
+            // Gdy useWbsRequirementSelection — pobieraj WSZYSTKIE wymagania (bez listId), bo liście WBS mogą nie mieć listId
+            const reqParams = new URLSearchParams();
+            if (!useWbsRequirementSelection && listId) reqParams.append('listId', listId);
+            if (versionId) reqParams.append('versionId', versionId);
+            const reqQuery = reqParams.toString() ? `?${reqParams.toString()}` : '';
 
-        // Primary source: unified WBS (already merged: selected version + base structure)
-        let loadedFromUnified = false;
-        if (unifiedRes.ok) {
-            try {
-                const unifiedData = await unifiedRes.json();
-                const rootItems = (unifiedData.items || [])
-                    .filter(node => (node.depth ?? 0) === 0)
-                    .map(node => ({ id: node.id, name: node.name, materiałyId: null }));
-
-                if (rootItems.length > 0) {
-                    setWbsProjectItems(rootItems);
-                    loadedFromUnified = true;
-                }
-            } catch {
-                // Fallback below
+            const [r, s, unifiedRes] = await Promise.all([
+                fetch(`${API_URL}/material-requirements/node/${nodeId}${reqQuery}`, { headers: authHeaders }),
+                fetch(`${API_URL}/subtasks/node/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders }),
+                fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders }),
+            ]);
+            let reqItems = [];
+            if (r.ok) {
+                reqItems = await r.json();
             }
-        }
+            if (s.ok) setSubtasks(await s.json());
 
-        // Fallback source: legacy tree JSON from order_requirements
-        if (reqRes.ok && !loadedFromUnified) {
-            try {
-                const reqData = await reqRes.json();
-                const tree = JSON.parse(reqData.wbsTree || '{}');
-                // Filtruj tylko przedmioty projektu: węzły bez typu lub type='product' na root poziomie
-                const items = (tree.items || [])
-                    .filter(node => !node.type || node.type === 'product')
-                    .map(node => {
-                        const materiałyChild = (node.children || []).find(c => c.name === 'Materiały');
-                        return { id: node.id, name: node.name, materiałyId: materiałyChild?.id };
-                    });
-                setWbsProjectItems(items);
-            } catch { setWbsProjectItems([]); }
+            // Primary source: unified WBS (already merged: selected version + base structure)
+            let unifiedItems = [];
+            if (unifiedRes.ok) {
+                try {
+                    const unifiedData = await unifiedRes.json();
+                    unifiedItems = unifiedData.items || [];
+                    console.log('[Mat2] unified items:', unifiedItems.length, 'sample:', unifiedItems.slice(0, 3).map(n => ({ id: n.id, name: n.name, type: n.type, budgetType: n.budgetType, depth: n.depth, parentId: n.parentId })));
+                    const byId = new Map(unifiedItems.map((node) => [node.id, node]));
+                    const nodeToProject = {};
+                    const isSelectableBranch = (node) => {
+                        const normalizedType = String(node?.type || '').toLowerCase();
+                        const normalizedBudgetType = String(node?.budgetType || '').toUpperCase();
+                        const hasRequirementTag = Array.isArray(node?.tags) && node.tags.some((tag) => String(tag).startsWith('req:') || String(tag) === 'auto-requirement');
+                        if (hasRequirementTag) return false;
+                        if (['material', 'equipment', 'device'].includes(normalizedType)) return false;
+                        if (['MATERIAL', 'DEVICE'].includes(normalizedBudgetType)) return false;
+                        return true;
+                    };
+                    const findSelectableBranchId = (startId) => {
+                        let currentId = startId;
+                        let guard = 0;
+                        while (currentId && guard < 2000) {
+                            const current = byId.get(currentId);
+                            if (!current) return startId;
+                            if (isSelectableBranch(current)) return current.id;
+                            currentId = current.parentId;
+                            guard += 1;
+                        }
+                        return startId;
+                    };
+                    for (const node of unifiedItems) {
+                        nodeToProject[String(node.id)] = String(findSelectableBranchId(node.id));
+                    }
+                    setWbsNodeToProjectItemId(nodeToProject);
+
+                    const rootItems = (unifiedData.items || [])
+                        .filter(isSelectableBranch)
+                        .map(node => ({
+                            id: node.id,
+                            name: node.name,
+                            quantity: Number(node.quantity) || 0,
+                            depth: Number(node.depth) || 0,
+                            parentId: node.parentId || null,
+                            materiałyId: null,
+                        }));
+
+                    if (rootItems.length > 0) {
+                        setWbsProjectItems(rootItems);
+                    }
+
+                    // Pokaż węzły WBS depth>=1 o typie materiał/urządzenie (depth 0=Przedmiot Projektu, 1+=elementy)
+                    const fallbackItems = (unifiedData.items || [])
+                        .filter((node) => {
+                            if (!node?.name) return false;
+                            const depth = Number(node?.depth) || 0;
+                            if (depth < 1) return false;
+                            const t = String(node?.type || '').toLowerCase();
+                            const bt = String(node?.budgetType || '').toUpperCase();
+                            return ['material', 'materiał', 'equipment', 'device'].includes(t)
+                                || ['MATERIAL', 'DEVICE'].includes(bt);
+                        })
+                        .map((node) => {
+                            const normalizedType = String(node?.type || '').toLowerCase();
+                            const normalizedBudgetType = String(node?.budgetType || '').toUpperCase();
+                            const requirementType = normalizedType === 'material' || normalizedBudgetType === 'MATERIAL' ? 'MATERIAL' : 'DEVICE';
+                            const quantity = Number(node?.quantity) > 0 ? Number(node.quantity) : 1;
+                            return {
+                                id: `__wbs_fallback__:${node.id}`,
+                                wbsNodeId: node.id,
+                                wbsNodeIds: JSON.stringify([node.id]),
+                                wbsNodeAllocations: JSON.stringify({ [String(node.id)]: quantity }),
+                                name: node?.name || 'Wymaganie',
+                                type: requirementType,
+                                quantity,
+                                unit: node?.unit || 'szt',
+                                status: 'PENDING',
+                                proposals: [],
+                                material: null,
+                                productName: '',
+                                manufacturer: '',
+                                model: '',
+                                technicalSpec: '',
+                                _virtualWbsRequirement: true,
+                            };
+                        });
+                    console.log('[Mat2] fallback items:', fallbackItems.length, fallbackItems.map(f => f.name));
+                    setWbsFallbackRequirements(fallbackItems);
+                } catch (err) {
+                    console.error('[Mat2] unified parse error:', err);
+                    setWbsFallbackRequirements([]);
+                }
+            } else {
+                console.warn('[Mat2] unified endpoint failed, status:', unifiedRes.status);
+            }
+
+            setRequirements(reqItems);
+            console.log('[Mat2] final reqItems:', reqItems.length, 'wbsFallback will be used:', reqItems.length === 0);
+
+            if (Array.isArray(reqItems)) {
+                await syncRequirementNodesInWbsTree(reqItems);
+            }
+        } catch (error) {
+            console.error('[MaterialRequirementsPanel] fetchRequirements failed:', error);
+            setRequirements([]);
+            setWbsFallbackRequirements([]);
+            setWbsProjectItems([]);
+            setWbsNodeToProjectItemId({});
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
-    }, [nodeId, versionId]);
+    }, [nodeId, versionId, useWbsRequirementSelection]);
 
     // Na starcie: załaduj listy, jeśli brak — utwórz domyślną
     useEffect(() => {
@@ -2056,148 +2163,277 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                     setLists([created]);
                     setActiveListId(created.id);
                     setListNameValue(created.name);
-                    fetchRequirements(created.id);
+                    fetchRequirements(created.id).catch((error) => console.error('[MaterialRequirementsPanel] initial fetch failed:', error));
                 }
             } else {
                 const last = data[data.length - 1];
                 setActiveListId(last.id);
                 setListNameValue(last.name);
-                fetchRequirements(last.id);
+                fetchRequirements(last.id).catch((error) => console.error('[MaterialRequirementsPanel] initial fetch failed:', error));
             }
-        })();
+        })().catch((error) => console.error('[MaterialRequirementsPanel] startup failed:', error));
     }, [nodeId, versionId]);
 
     // Refresh when parent signals a WBS change
     useEffect(() => {
         if (refreshKey > 0 && activeListId) {
-            fetchRequirements(activeListId);
+            fetchRequirements(activeListId).catch((error) => console.error('[MaterialRequirementsPanel] refresh fetch failed:', error));
         }
-    }, [refreshKey]);
+    }, [refreshKey, activeListId, fetchRequirements]);
 
     const switchList = (listId) => {
         const list = lists.find(l => l.id === listId);
         setActiveListId(listId);
         setListNameValue(list?.name || '');
         setExpandedId(null);
-        fetchRequirements(listId);
+        fetchRequirements(listId).catch((error) => console.error('[MaterialRequirementsPanel] switch list fetch failed:', error));
     };
 
-    const addToWbsTree = useCallback(async (parentNodeId, requirementName, requirementType) => {
-        if (!parentNodeId || !requirementName) return;
-        try {
-            const res = await fetch(`${API_URL}/order-requirements/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders });
-            if (!res.ok) return;
-            const reqData = await res.json();
-            const tree = JSON.parse(reqData.wbsTree || '{}');
+    const syncUnifiedRefresh = useCallback(() => {
+        onWbsUpdate?.(activeListId);
+    }, [onWbsUpdate, activeListId]);
 
-            const addChild = (nodes, targetId, child) => {
-                return nodes.map(n => {
-                    if (n.id === targetId) {
-                        return { ...n, children: [...(n.children || []), child] };
-                    }
-                    return { ...n, children: addChild(n.children || [], targetId, child) };
-                });
-            };
+    const syncAllocationsWithQuantity = useCallback((requirement, nextQuantityRaw) => {
+        if (!requirement) return null;
 
-            // Blokada duplikatów — nie dodawaj jeśli element o tej nazwie już istnieje pod docelowym węzłem
-            const childAlreadyExists = (nodes, tId, name) => {
-                for (const n of nodes) {
-                    if (n.id === tId) return (n.children || []).some(c => c.name === name);
-                    if (childAlreadyExists(n.children || [], tId, name)) return true;
-                }
-                return false;
-            };
-            if (childAlreadyExists(tree.items || [], parentNodeId, requirementName)) {
+        const nextQuantity = Number(nextQuantityRaw);
+        if (!Number.isFinite(nextQuantity) || nextQuantity < 0) return null;
+
+        let selectedIds = [];
+        if (requirement.wbsNodeIds) {
+            try { selectedIds = JSON.parse(requirement.wbsNodeIds) || []; } catch { selectedIds = []; }
+        } else if (requirement.wbsNodeId) {
+            selectedIds = [requirement.wbsNodeId];
+        }
+        selectedIds = selectedIds.filter(Boolean);
+
+        if (!selectedIds.length) return null;
+
+        let currentAllocations = {};
+        try { currentAllocations = requirement.wbsNodeAllocations ? JSON.parse(requirement.wbsNodeAllocations) : {}; } catch { currentAllocations = {}; }
+
+        const positiveEntries = selectedIds
+            .map((nodeId) => [nodeId, Number(currentAllocations[nodeId]) || 0])
+            .filter(([, qty]) => qty > 0);
+
+        if (selectedIds.length === 1) {
+            return JSON.stringify(nextQuantity > 0 ? { [selectedIds[0]]: nextQuantity } : {});
+        }
+
+        if (!positiveEntries.length) {
+            const evenQty = selectedIds.length > 0 ? nextQuantity / selectedIds.length : 0;
+            const nextAllocations = {};
+            selectedIds.forEach((nodeId, index) => {
+                nextAllocations[nodeId] = index === selectedIds.length - 1
+                    ? Math.max(0, nextQuantity - evenQty * (selectedIds.length - 1))
+                    : evenQty;
+            });
+            return JSON.stringify(nextAllocations);
+        }
+
+        const currentTotal = positiveEntries.reduce((sum, [, qty]) => sum + qty, 0);
+        if (currentTotal <= 0) return null;
+
+        const nextAllocations = {};
+        let assigned = 0;
+        positiveEntries.forEach(([nodeId, qty], index) => {
+            if (index === positiveEntries.length - 1) {
+                nextAllocations[nodeId] = Math.max(0, nextQuantity - assigned);
                 return;
             }
+            const scaledQty = Number(((qty / currentTotal) * nextQuantity).toFixed(6));
+            nextAllocations[nodeId] = scaledQty;
+            assigned += scaledQty;
+        });
 
-            // Map requirement type to WBS node type
-            const typeMap = { DEVICE: 'equipment', MATERIAL: 'material' };
-            const nodeType = typeMap[requirementType] || '';
+        return JSON.stringify(nextAllocations);
+    }, []);
 
-            const newChild = { id: crypto.randomUUID(), name: requirementName, type: nodeType, status: '', owner: '', resources: '', cost: '', tags: [], children: [] };
-            const newTree = { ...tree, items: addChild(tree.items || [], parentNodeId, newChild) };
-            await fetch(`${API_URL}/order-requirements`, {
-                method: 'POST',
-                headers: { ...authHeaders, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nodeId, versionId, wbsTree: JSON.stringify(newTree) }),
-            });
-            onWbsUpdate?.();
-        } catch (e) {
-            // Silently handle errors
+    const syncWbsQuantitiesFromRequirement = useCallback(async (requirement) => {
+        if (!requirement) return;
+
+        const totalQuantity = Number(requirement.quantity);
+        if (!Number.isFinite(totalQuantity) || totalQuantity < 0) return;
+
+        let selectedIds = [];
+        if (requirement.wbsNodeIds) {
+            try { selectedIds = JSON.parse(requirement.wbsNodeIds) || []; } catch { selectedIds = []; }
+        } else if (requirement.wbsNodeId) {
+            selectedIds = [requirement.wbsNodeId];
         }
-    }, [nodeId, versionId, token, onWbsUpdate]);
+        // Filtruj tylko węzły znane lokalnie — zapobiega 404 gdy dev-DB nie ma danych z prod
+        const knownIds = new Set(Object.keys(wbsNodeToProjectItemId));
+        selectedIds = Array.from(new Set((selectedIds || []).filter(Boolean).filter(id => !knownIds.size || knownIds.has(String(id)))));
+        if (!selectedIds.length) return;
 
-    const removeFromWbsTree = useCallback(async (parentNodeId, requirementId, requirementName) => {
-        try {
-            const res = await fetch(`${API_URL}/order-requirements/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders });
-            if (!res.ok) return;
-            const reqData = await res.json();
-            const tree = JSON.parse(reqData.wbsTree || '{}');
+        let allocations = {};
+        try { allocations = requirement.wbsNodeAllocations ? JSON.parse(requirement.wbsNodeAllocations) : {}; } catch { allocations = {}; }
 
-            const deleteNodeFromParent = (nodes, parentId, nodeName) => {
-                return nodes.map(n => {
-                    if (n.id === parentId) {
-                        return { ...n, children: (n.children || []).filter(c => c.name !== nodeName) };
-                    }
-                    return { ...n, children: deleteNodeFromParent(n.children || [], parentId, nodeName) };
+        const patches = [];
+        if (Object.keys(allocations || {}).length > 0) {
+            for (const nodeId of selectedIds) {
+                const qty = Number(allocations[nodeId]);
+                patches.push([nodeId, Number.isFinite(qty) ? Math.max(0, qty) : 0]);
+            }
+        } else if (selectedIds.length === 1) {
+            patches.push([selectedIds[0], totalQuantity]);
+        } else {
+            return;
+        }
+
+        await Promise.all(patches.map(async ([wbsNodeId, quantity]) => {
+            try {
+                await fetch(`${API_URL}/wbs-nodes/${wbsNodeId}/budget`, {
+                    method: 'PATCH',
+                    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ quantity }),
                 });
-            };
+            } catch {
+                // best-effort, ignoruj błędy sieciowe
+            }
+        })).catch(() => {});
+    }, [authHeaders, wbsNodeToProjectItemId]);
 
-            const newTree = { ...tree, items: deleteNodeFromParent(tree.items || [], parentNodeId, requirementName) };
-            await fetch(`${API_URL}/order-requirements`, {
-                method: 'POST',
-                headers: { ...authHeaders, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nodeId, versionId, wbsTree: JSON.stringify(newTree) }),
-            });
-            onWbsUpdate?.();
-        } catch (e) {
-            // Silently handle errors
+    const syncRequirementNodesInWbsTree = useCallback(async (requirementRows) => {
+        if (!useWbsRequirementSelection || !Array.isArray(requirementRows)) return;
+
+        try {
+            // Czytaj węzły z tabeli relacyjnej (nie z JSON blob)
+            const res = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders });
+            if (!res.ok) return;
+            const data = await res.json();
+            const currentNodes = data.items || [];
+            const existingNodeIds = new Set(currentNodes.map((n) => String(n.id)));
+
+            // Usuń osierocone wymagania — węzeł WBS usunięty, ale material_requirement pozostało
+            const orphanReqIds = [];
+            for (const req of requirementRows) {
+                let nodeIds = [];
+                try { nodeIds = req.wbsNodeAllocations ? Object.keys(JSON.parse(req.wbsNodeAllocations)) : []; } catch { nodeIds = []; }
+                if (req.wbsNodeId) nodeIds.push(String(req.wbsNodeId));
+                nodeIds = [...new Set(nodeIds.map(String))];
+                if (nodeIds.length > 0 && !nodeIds.some((id) => existingNodeIds.has(id))) {
+                    orphanReqIds.push(String(req.id));
+                    await fetch(`${API_URL}/material-requirements/${req.id}`, { method: 'DELETE', headers: authHeaders }).catch(() => {});
+                }
+            }
+            if (orphanReqIds.length > 0) {
+                setRequirements((prev) => prev.filter((r) => !orphanReqIds.includes(String(r.id))));
+            }
+
+            const typeMap = { DEVICE: 'equipment', MATERIAL: 'material', CABLE: 'material', SOFTWARE: 'service', SERVICE: 'service' };
+
+            const desiredRequirements = (requirementRows || [])
+                .map((r) => ({ ...r, resolvedName: String(r?.name || r?.productName || '').trim() }))
+                .filter((r) => r.id && r.resolvedName);
+
+            const desiredIds = new Set(desiredRequirements.map((r) => String(r.id)));
+
+            // Węzły z tagiem req:
+            const reqTaggedNodes = currentNodes.filter((node) =>
+                Array.isArray(node.tags) && node.tags.some((tag) => String(tag).startsWith('req:'))
+            );
+
+            // Usuń osierocone węzły (req: tag ale wymaganie już nie istnieje)
+            for (const node of reqTaggedNodes) {
+                const reqTag = (node.tags || []).find((tag) => String(tag).startsWith('req:'));
+                const reqId = reqTag ? String(reqTag).slice(4) : null;
+                if (reqId && !desiredIds.has(reqId)) {
+                    await fetch(`${API_URL}/wbs-nodes/${node.id}`, { method: 'DELETE', headers: authHeaders }).catch(() => {});
+                }
+            }
+
+            // Mapa: reqId -> istniejący węzeł
+            const existingByReqId = new Map();
+            for (const node of reqTaggedNodes) {
+                const reqTag = (node.tags || []).find((tag) => String(tag).startsWith('req:'));
+                if (reqTag) existingByReqId.set(String(reqTag).slice(4), node);
+            }
+
+            for (const requirement of desiredRequirements) {
+                if (existingByReqId.has(String(requirement.id))) continue; // węzeł już istnieje
+
+                // Ustal rodzica z alokacji lub wbsNodeId
+                let parentId = null;
+                let alloc = {};
+                try { alloc = requirement.wbsNodeAllocations ? JSON.parse(requirement.wbsNodeAllocations) : {}; } catch { alloc = {}; }
+                const allocIds = Object.keys(alloc || {});
+                if (allocIds.length > 0) parentId = allocIds[0];
+                else if (requirement.wbsNodeId) parentId = requirement.wbsNodeId;
+
+                if (!parentId) continue;
+
+                const nodeType = typeMap[String(requirement.type || '').toUpperCase()] || '';
+                const reqTag = `req:${requirement.id}`;
+
+                // Szukaj istniejącego węzła o tej samej nazwie pod tym samym rodzicem (bez tagów req)
+                const matchingUntagged = currentNodes.find((node) =>
+                    node.parentId === parentId &&
+                    String(node.name || '').trim().toLowerCase() === requirement.resolvedName.toLowerCase() &&
+                    !(Array.isArray(node.tags) && node.tags.some((t) => String(t).startsWith('req:') || t === 'auto-requirement'))
+                );
+
+                if (matchingUntagged) {
+                    // Otaguj istniejący węzeł zamiast tworzyć nowy
+                    await fetch(`${API_URL}/wbs-nodes/${matchingUntagged.id}`, {
+                        method: 'PATCH',
+                        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tags: [reqTag, 'auto-requirement'] }),
+                    }).catch(() => {});
+                } else {
+                    // Utwórz nowy węzeł tylko jeśli rodzic istnieje
+                    if (!currentNodes.find((n) => n.id === parentId)) continue;
+                    await fetch(`${API_URL}/wbs-nodes`, {
+                        method: 'POST',
+                        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            nodeId,
+                            versionId: versionId || undefined,
+                            parentId,
+                            name: requirement.resolvedName,
+                            type: nodeType,
+                            tags: [reqTag, 'auto-requirement'],
+                        }),
+                    }).catch(() => {});
+                }
+            }
+        } catch {
+            // best effort
         }
-    }, [nodeId, versionId, token, onWbsUpdate]);
-
-    const syncUnifiedRefresh = useCallback(() => {
-        onWbsUpdate?.();
-    }, [onWbsUpdate]);
+    }, [useWbsRequirementSelection, nodeId, versionId, authHeaders]);
 
     const patchItem = useCallback(async (id, data) => {
+        const currentRequirement = requirements.find((requirement) => requirement.id === id);
+        const payload = { ...data };
+
+        if (payload.quantity !== undefined && payload.wbsNodeAllocations === undefined) {
+            const syncedAllocations = syncAllocationsWithQuantity(currentRequirement, payload.quantity);
+            if (syncedAllocations !== null) {
+                payload.wbsNodeAllocations = syncedAllocations === '{}' ? null : syncedAllocations;
+            }
+        }
+
         const res = await fetch(`${API_URL}/material-requirements/${id}`, {
-            method: 'PATCH', headers: { ...authHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+            method: 'PATCH', headers: { ...authHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
         });
         if (res.ok) {
             const updated = await res.json();
-            setRequirements(prev => prev.map(r => r.id === id ? { ...r, ...updated } : r));
+            const nextRequirements = requirements.map(r => r.id === id ? { ...r, ...updated } : r);
+            setRequirements(nextRequirements);
+            if (payload.wbsNodeAllocations !== undefined || payload.quantity !== undefined || payload.wbsNodeId !== undefined || payload.wbsNodeIds !== undefined) {
+                await syncWbsQuantitiesFromRequirement(updated);
+            }
+            if (payload.wbsNodeAllocations !== undefined || payload.wbsNodeId !== undefined || payload.wbsNodeIds !== undefined || payload.name !== undefined || payload.type !== undefined) {
+                await syncRequirementNodesInWbsTree(nextRequirements);
+            }
             // Odśwież Unified gdy zmienią się alokacje lub ilość/cena materiałów
-            if (data.wbsNodeAllocations !== undefined || data.quantity !== undefined || data.priceNetto !== undefined) {
+            if (payload.wbsNodeAllocations !== undefined || payload.quantity !== undefined || payload.priceNetto !== undefined) {
                 setTimeout(() => syncUnifiedRefresh(), 100);
             }
         }
-    }, [token, syncUnifiedRefresh]);
+    }, [requirements, syncAllocationsWithQuantity, syncUnifiedRefresh, syncWbsQuantitiesFromRequirement, syncRequirementNodesInWbsTree]);
 
-    const handleExtract = async () => {
-        setExtracting(true);
-        const params = new URLSearchParams();
-        if (versionId) params.append('versionId', versionId);
-        if (activeListId) params.append('listId', activeListId);
-        const res = await fetch(`${API_URL}/material-requirements/extract/${nodeId}?${params}`, { method: 'POST', headers: authHeaders });
-        if (res.ok) {
-            const data = await res.json();
-            if (data.extracted === 0 && (!data.items || data.items.length === 0)) {
-                alert('Zaimportuj najpierw pliki wsadowe');
-            } else {
-                await fetchRequirements(activeListId);
-            }
-        }
-        setExtracting(false);
-    };
-
-    useImperativeHandle(ref, () => ({
-        handleAddRequirement: () => {
-            setAddModalKey(k => k + 1);
-            setShowAddModal(true);
-        },
-        handleExtract,
-    }), [handleExtract]);
+    useImperativeHandle(ref, () => ({}), []);
 
     const syncUnifiedDebounceRef = useRef(null);
     const debouncedUnifiedSync = useCallback(() => {
@@ -2221,33 +2457,27 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
 
     const handleDeleted = useCallback(async (id) => {
         // Find requirement to clean up WBS and budget before deleting
-        const req = requirements.find(r => r.id === id);
-        const wbsIds = req?.wbsNodeIds ? (typeof req.wbsNodeIds === 'string' ? JSON.parse(req.wbsNodeIds) : req.wbsNodeIds) : [];
+        const nextRequirements = requirements.filter(r => r.id !== id);
 
         await fetch(`${API_URL}/material-requirements/${id}`, { method: 'DELETE', headers: authHeaders });
-        setRequirements(prev => prev.filter(r => r.id !== id));
+        setRequirements(nextRequirements);
         setExpandedId(p => p === id ? null : p);
-
-        // Remove from WBS tree for each assigned node
-        if (wbsIds.length > 0 && req?.name) {
-            for (const wbsNodeId of wbsIds) {
-                await removeFromWbsTree(wbsNodeId, id, req.name).catch(() => {});
-            }
-        }
+        await syncRequirementNodesInWbsTree(nextRequirements);
         // Odśwież Unified po usunięciu.
         syncUnifiedRefresh();
         onWbsUpdate?.();
-    }, [requirements, removeFromWbsTree, syncUnifiedRefresh, onWbsUpdate]);
+    }, [requirements, syncRequirementNodesInWbsTree, syncUnifiedRefresh, onWbsUpdate]);
 
     const handleDeleteAll = useCallback(async () => {
         if (!window.confirm(`Usunąć wszystkie ${requirements.length} wymagań?`)) return;
         await fetch(`${API_URL}/material-requirements/node/${nodeId}/all`, { method: 'DELETE', headers: authHeaders });
         setRequirements([]);
         setExpandedId(null);
+        await syncRequirementNodesInWbsTree([]);
         // Odśwież Unified po usunięciu wszystkich.
         syncUnifiedRefresh();
         onWbsUpdate?.();
-    }, [nodeId, requirements.length, syncUnifiedRefresh, onWbsUpdate]);
+    }, [nodeId, requirements.length, syncRequirementNodesInWbsTree, syncUnifiedRefresh, onWbsUpdate]);
 
     // ─── Zatwierdzenie listy ───────────────────────────────────────────────────
     const handleLockList = async () => {
@@ -2303,8 +2533,19 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
         fetchRequirements(newList.id);
     };
 
+    const displayedRequirements = requirements.length > 0 ? requirements : wbsFallbackRequirements;
+    const hasVirtualRequirements = requirements.length === 0 && wbsFallbackRequirements.length > 0;
+    const isLocked = baseIsLocked || hasVirtualRequirements;
+    const isWbsLocked = isLocked || readOnlyWbs;
+
     // ─── Czy można zatwierdzić ─────────────────────────────────────────────────
-    const allConfirmed = requirements.length > 0 && requirements.every(r => r.status === 'CONFIRMED');
+    const allConfirmed = displayedRequirements.length > 0 && displayedRequirements.every(r => r.status === 'CONFIRMED');
+
+    useEffect(() => {
+        if (!expandedId) return;
+        if (requirements.some((requirement) => requirement.id === expandedId)) return;
+        setExpandedId(null);
+    }, [expandedId, requirements]);
 
     // ─── Drag & drop kolumn ─────────────────────────────────────────────────
     const STORAGE_KEY = 'matreq-col-order';
@@ -2420,14 +2661,20 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
         },
         product: {
             id: 'product', size: 200, enableSorting: true,
-            accessorFn: r => r.material?.productName || r.productName || r.manufacturer || '',
+            accessorFn: r => {
+                const selected = (r.proposals || []).find(p => p.isSelected);
+                const legacyAiProductName = !r.materialId && !selected && !!r.sourceDocument && (!r.name || r.name === r.productName);
+                if (legacyAiProductName) return '';
+                return r.material?.productName || r.productName || r.manufacturer || '';
+            },
             header: () => <span>Produkt</span>,
             cell: ({ row }) => {
                 const r = row.original;
                 const mat = r.material; // powiązany materiał z bazy
                 const selected = (r.proposals || []).find(p => p.isSelected);
+                const legacyAiProductName = !r.materialId && !selected && !!r.sourceDocument && (!r.name || r.name === r.productName);
                 // Dane produktu: priorytet material (z bazy) > selected proposal > requirement's own fields
-                const prodName = mat?.productName || selected?.productName || r.productName || '';
+                const prodName = legacyAiProductName ? '' : (mat?.productName || selected?.productName || r.productName || '');
                 const mfr = mat?.manufacturer || selected?.manufacturer || r.manufacturer || '';
                 const mdl = mat?.model || selected?.model || r.model || '';
                 const isLinked = !!r.materialId;
@@ -2465,11 +2712,10 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                 <WbsMultiSelect
                     r={row.original}
                     wbsProjectItems={wbsProjectItems}
+                    nodeToProjectItemId={wbsNodeToProjectItemId}
                     subtasks={subtasks}
                     patchItem={patchItem}
-                    addToWbsTree={addToWbsTree}
-                    removeFromWbsTree={removeFromWbsTree}
-                    readOnly={isWbsLocked}
+                    readOnly={isLocked || readOnlyWbs}
                     open={wbsSelectOpen.get(row.original.id) || false}
                     setOpen={(value) => setWbsSelectOpen(prev => {
                         const m = new Map(prev);
@@ -2535,7 +2781,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     const setStatusFilter  = externalFilters ? externalFilters.setStatus  : setInternalStatusFilter;
 
     const filteredData = React.useMemo(() => {
-        let data = requirements;
+        let data = displayedRequirements;
         if (typeFilter) data = data.filter(r => r.type === typeFilter);
         if (statusFilter) data = data.filter(r => r.status === statusFilter);
         // Apply global search filter
@@ -2557,7 +2803,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
             });
         }
         return data;
-    }, [requirements, typeFilter, statusFilter, globalFilter]);
+    }, [displayedRequirements, typeFilter, statusFilter, globalFilter]);
 
     // Filtrowanie globalne po wszystkich polach tekstowych
     const globalFilterFn = React.useCallback((row, _columnId, filterValue) => {
@@ -2590,8 +2836,8 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
         getExpandedRowModel: getExpandedRowModel(),
     });
 
-    const pending = requirements.filter(r => r.status === 'PENDING').length;
-    const confirmed = requirements.filter(r => r.status === 'CONFIRMED').length;
+    const pending = displayedRequirements.filter(r => r.status === 'PENDING').length;
+    const confirmed = displayedRequirements.filter(r => r.status === 'CONFIRMED').length;
 
     const content = (
         <>
@@ -2630,8 +2876,8 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                 <div className="flex-1 min-w-2" />
 
                 {/* Akcje kontekstowe aktywnej listy */}
-                {requirements.length > 0 && (<>
-                    <button onClick={() => exportToExcel(activeList?.name || 'Lista', activeList?.version || 1, requirements)}
+                {displayedRequirements.length > 0 && (<>
+                    <button onClick={() => exportToExcel(activeList?.name || 'Lista', activeList?.version || 1, displayedRequirements)}
                         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-green-600/10 hover:bg-green-600/20 text-green-300 text-xs font-semibold transition-all flex-shrink-0">
                         <FileDown size={11} /> Excel
                     </button>
@@ -2649,32 +2895,22 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                     </button>
                 )}
                 {!isLocked && (<>
-                    {requirements.length > 0 && (
+                    {displayedRequirements.length > 0 && (
                         <button onClick={handleDeleteAll}
                             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-600/10 hover:bg-red-600/20 text-red-400 text-xs font-semibold transition-all flex-shrink-0">
                             <Trash2 size={11} /> Usuń wszystkie
                         </button>
                     )}
-                    <button onClick={() => { setAddModalKey(k => k + 1); setShowAddModal(true); }}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-semibold transition-all flex-shrink-0">
-                        <Plus size={11} /> Dodaj wymaganie
-                    </button>
-                    <button onClick={handleExtract} disabled={extracting}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-xs font-semibold transition-all disabled:opacity-50 flex-shrink-0">
-                        {extracting ? <div className="w-3 h-3 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" /> : <Sparkles size={11} />}
-                        Wyciągnij z dokumentów
-                    </button>
                 </>)}
             </div>
 
             {/* Tabela */}
             {loading ? (
                 <div className="flex justify-center py-12"><div className="w-8 h-8 border-2 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" /></div>
-            ) : requirements.length === 0 ? (
+            ) : displayedRequirements.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-3 text-gray-500">
                     <AlertCircle size={28} className="text-gray-600" />
                     <p className="text-sm">Brak wymagań materiałowych</p>
-                    {!isLocked && <p className="text-xs text-gray-600">Kliknij „Wyciągnij z dokumentów" lub „Dodaj wymaganie"</p>}
                 </div>
             ) : (<>
                 {/* Pasek filtrów — ukryty gdy filtry w nagłówku sekcji */}
@@ -2739,12 +2975,6 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                     </table>
                 </div>
             </>)}
-
-            {showAddModal && (
-                <AddRequirementModal key={addModalKey} nodeId={nodeId} versionId={versionId} listId={activeListId} token={token}
-                    onSaved={item => setRequirements(prev => [...prev, item])}
-                    onClose={() => setShowAddModal(false)} />
-            )}
 
             {showNewListModal && (
                 <NewListModal

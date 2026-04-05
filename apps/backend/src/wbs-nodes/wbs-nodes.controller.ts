@@ -20,7 +20,7 @@ export class WbsNodesController {
      * Tworzy nowy węzeł WBS.
      */
     @Post()
-    create(@Body() data: { nodeId: string; parentId?: string; versionId?: string; name: string; type?: string }) {
+    create(@Body() data: { nodeId: string; parentId?: string; versionId?: string; name: string; type?: string; tags?: string[] }) {
         return this.service.createNode(data);
     }
 
