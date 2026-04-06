@@ -529,13 +529,15 @@ export default function DashboardPage() {
                         )}
                         {activeTab === 'unified' && isOrder && (
                             <div className="h-[calc(100vh-180px)]">
-                                <UnifiedWbsPanel 
+                                <UnifiedWbsPanel
                                     nodeId={activeAreaId}
                                     versionId={selectedVersionId}
                                     projectName={activeNode?.name || ''}
                                     searchQuery={searchQuery}
                                     userRoles={currentRoles}
                                     onWbsUpdate={() => setWbsUpdateCount(c => c + 1)}
+                                    setLeftVisible={setLeftVisible}
+                                    setAiVisible={setAiVisible}
                                 />
                             </div>
                         )}

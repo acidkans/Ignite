@@ -234,7 +234,7 @@ function MarkerIconsRenderer({ data, context }) {
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
-export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRoles = [], projectName = '', searchQuery = '' }) {
+export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRoles = [], projectName = '', searchQuery = '', setLeftVisible, setAiVisible }) {
     const [wbsData, setWbsData] = useState([]);
     const [expandedSection, setExpandedSection] = useState(() => {
         // Jeśli nie ma żadnego węzła głównego, domyślnie rozwijaj sekcję WBS
@@ -602,6 +602,17 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             console.error('Sync material requirements from WBS quantity error:', e);
         }
     }, [nodeId, versionId, authHeaders, fetchData]);
+
+    // Auto-collapse sidebars when budget/materials section is expanded
+    useEffect(() => {
+        const isFocusedSection = expandedSection === 'budget' || expandedSection === 'materials2';
+        if (isFocusedSection) {
+            setLeftVisible?.(false);
+            setAiVisible?.(false);
+        } else {
+            setLeftVisible?.(true);
+        }
+    }, [expandedSection, setLeftVisible, setAiVisible]);
 
     useEffect(() => {
         let active = true;
