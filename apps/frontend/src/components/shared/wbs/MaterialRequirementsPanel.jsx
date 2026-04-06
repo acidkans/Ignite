@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import ExcelJS from 'exceljs';
 import { useReactTable, getCoreRowModel, getExpandedRowModel, getSortedRowModel, getFilteredRowModel, flexRender } from '@tanstack/react-table';
 import {
@@ -2674,18 +2675,15 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     });
     const dragCol = useRef(null);
     const dragOverCol = useRef(null);
-    const expandedRowRef = useRef(null);
+    const allDisplayed = useMemo(() => [...requirements, ...wbsFallbackRequirements], [requirements, wbsFallbackRequirements]);
+    const expandedReq = useMemo(() => expandedId ? allDisplayed.find(r => r.id === expandedId) : null, [expandedId, allDisplayed]);
 
-    // Scroll to initially expanded requirement
     useEffect(() => {
-        if (!initialExpandedId) return;
-        const timer = setTimeout(() => {
-            if (expandedRowRef.current) {
-                expandedRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-        }, 400);
-        return () => clearTimeout(timer);
-    }, [initialExpandedId]);
+        if (!expandedId) return;
+        const handler = (e) => { if (e.key === 'Escape') setExpandedId(null); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [expandedId]);
 
     const handleDragStart = (colId) => { dragCol.current = colId; };
     const handleDragOver = (e, colId) => { e.preventDefault(); dragOverCol.current = colId; };
@@ -3029,10 +3027,9 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                     <p className="text-sm">Brak wymagań materiałowych</p>
                 </div>
             ) : (<>
-                {/* Pasek filtrów — ukryty gdy filtry w nagłówku sekcji */}
-                <div className={`flex-1 custom-scrollbar ${expandedId ? 'overflow-visible' : 'overflow-auto'}`}>
+                <div className="flex-1 custom-scrollbar overflow-auto">
                     <table className="w-full">
-                        <thead className={`${expandedId ? '' : 'sticky top-0'} z-10 bg-gray-950`}>
+                        <thead className="sticky top-0 z-10 bg-gray-950">
                             {table.getHeaderGroups().map(hg => (
                                 <tr key={hg.id} className="border-b border-white/10 bg-black/40">
                                     {hg.headers.map(h => {
@@ -3059,29 +3056,39 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                             ))}
                         </thead>
                         <tbody>
-                            {table.getRowModel().rows
-                                .filter(row => !expandedId || expandedId === row.original.id)
-                                .map(row => (
-                                <React.Fragment key={row.original.id}>
-                                    <tr ref={expandedId === row.original.id ? expandedRowRef : null} className={`border-b border-white/[0.03] transition-colors ${expandedId === row.original.id ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
-                                        {row.getVisibleCells().map(cell => (
-                                            <td key={cell.id} style={{ width: cell.column.columnDef.size }} className="px-2 py-1 align-middle">
-                                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                            </td>
-                                        ))}
-                                    </tr>
-                                    {expandedId === row.original.id && (
-                                        <tr className="bg-white/[0.02]">
-                                            <td colSpan={columns.length} style={{ overflow: 'visible' }}>
-                                                <ExpandedRow req={row.original} token={token} onUpdated={handleUpdated} onDeleted={handleDeleted} readOnly={isLocked} readOnlyDelete={isLocked || readOnlyWbs} offerFiles={offerFiles} nodeId={nodeId} showCompliance={complianceOpen.get(row.original.id) ?? false} onToggleCompliance={() => toggleCompliance(row.original.id)} />
-                                            </td>
-                                        </tr>
-                                    )}
-                                </React.Fragment>
+                            {table.getRowModel().rows.map(row => (
+                                <tr key={row.original.id} className={`border-b border-white/[0.03] transition-colors ${expandedId === row.original.id ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
+                                    {row.getVisibleCells().map(cell => (
+                                        <td key={cell.id} style={{ width: cell.column.columnDef.size }} className="px-2 py-1 align-middle">
+                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                        </td>
+                                    ))}
+                                </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
+
+                {/* Fullscreen modal for expanded requirement */}
+                {expandedId && expandedReq && createPortal(
+                    <div className="fixed inset-0 z-[9999] flex flex-col bg-gray-950/95 backdrop-blur-sm" onClick={() => setExpandedId(null)}>
+                        <div className="flex-1 overflow-auto p-6" onClick={e => e.stopPropagation()}>
+                            <div className="max-w-5xl mx-auto">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-lg font-semibold text-white truncate">
+                                        {expandedReq.name}
+                                        {expandedReq.type && <span className="ml-2 text-xs text-gray-400 font-normal">{expandedReq.type}</span>}
+                                    </h2>
+                                    <button onClick={() => setExpandedId(null)} className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                                        <X size={20} />
+                                    </button>
+                                </div>
+                                <ExpandedRow req={expandedReq} token={token} onUpdated={handleUpdated} onDeleted={handleDeleted} readOnly={isLocked} readOnlyDelete={isLocked || readOnlyWbs} offerFiles={offerFiles} nodeId={nodeId} showCompliance={complianceOpen.get(expandedReq.id) ?? false} onToggleCompliance={() => toggleCompliance(expandedReq.id)} />
+                            </div>
+                        </div>
+                    </div>,
+                    document.body
+                )}
             </>)}
 
             {showNewListModal && (
@@ -3097,11 +3104,11 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     );
 
     if (isEmbedded) {
-        return <div className={`flex flex-col h-full bg-transparent ${expandedId ? 'overflow-visible' : 'overflow-hidden'}`}>{content}</div>;
+        return <div className="flex flex-col h-full bg-transparent overflow-hidden">{content}</div>;
     }
 
     return (
-        <section className={`glass-panel rounded-2xl border border-white/5 bg-white/[0.02] flex flex-col flex-1 min-h-0 ${expandedId ? 'overflow-visible' : 'overflow-hidden'}`}>
+        <section className="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] flex flex-col flex-1 min-h-0 overflow-hidden">
             {content}
         </section>
     );
