@@ -2078,20 +2078,20 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
             if (versionId) reqParams.append('versionId', versionId);
             const reqQuery = reqParams.toString() ? `?${reqParams.toString()}` : '';
 
-            const [r, s, unifiedRes] = await Promise.all([
+            const [r, s, unifiedRes] = await Promise.allSettled([
                 fetch(`${API_URL}/material-requirements/node/${nodeId}${reqQuery}`, { headers: authHeaders }),
                 fetch(`${API_URL}/subtasks/node/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders }),
                 fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders }),
-            ]);
+            ]).then(results => results.map(result => result.status === 'fulfilled' ? result.value : null));
             let reqItems = [];
-            if (r.ok) {
+            if (r?.ok) {
                 reqItems = await r.json();
             }
-            if (s.ok) setSubtasks(await s.json());
+            if (s?.ok) setSubtasks(await s.json());
 
             // Primary source: unified WBS (already merged: selected version + base structure)
             let unifiedItems = [];
-            if (unifiedRes.ok) {
+            if (unifiedRes?.ok) {
                 try {
                     const unifiedData = await unifiedRes.json();
                     unifiedItems = unifiedData.items || [];
@@ -2181,7 +2181,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                     setWbsFallbackRequirements([]);
                 }
             } else {
-                console.warn('[Mat2] unified endpoint failed, status:', unifiedRes.status);
+                console.warn('[Mat2] unified endpoint failed, status:', unifiedRes?.status);
             }
 
             setRequirements(reqItems);
