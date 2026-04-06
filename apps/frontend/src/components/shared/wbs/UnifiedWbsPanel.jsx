@@ -2219,11 +2219,11 @@ ${materialsHtml}
 
         return (
             <div
-                className={`flex flex-col glass-panel border border-white/5 transition-all duration-300 overflow-hidden shadow-2xl ${isCompactSection && isActive ? 'rounded-none -mx-2' : 'rounded-2xl'} ${isActive ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
-                style={isActive ? { minHeight: isCompactSection ? 'calc(100vh - 120px)' : 'calc(100vh - 200px)' } : {}}
+                className={`flex flex-col glass-panel border border-white/5 transition-all duration-300 shadow-2xl ${isCompactSection && isActive ? 'rounded-none h-full overflow-hidden' : 'rounded-2xl overflow-hidden'} ${isActive ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
+                style={isActive && !isCompactSection ? { minHeight: 'calc(100vh - 200px)' } : {}}
             >
                 <div
-                    className={`flex items-center gap-2 px-5 py-3 transition-colors text-left flex-shrink-0 border-b border-white/10 ${isActive ? 'bg-white/[0.07]' : 'bg-white/[0.04]'}`}
+                    className={`flex items-center gap-2 px-5 py-2 transition-colors text-left flex-shrink-0 border-b border-white/10 sticky top-0 z-20 ${isActive ? 'bg-[#0b0f17]' : 'bg-white/[0.04]'}`}
                     onClick={() => setExpandedSection(isActive ? null : key)}
                 >
                     <Icon size={16} className={`text-${colorClass}-400 flex-shrink-0`} />
@@ -2262,7 +2262,7 @@ ${materialsHtml}
                     </div>
                 </div>
                 {isActive && (
-                    <div className={`flex-1 overflow-auto animate-fade-in custom-scrollbar h-full ${isCompactSection ? 'p-1' : 'p-4'}`}>
+                    <div className={`flex-1 min-h-0 animate-fade-in custom-scrollbar ${isCompactSection ? 'p-0 overflow-auto' : 'p-4 overflow-auto'}`}>
                         {content}
                     </div>
                 )}
@@ -2270,8 +2270,10 @@ ${materialsHtml}
         );
     };
 
+    const isCompactActive = (expandedSection === 'budget' || expandedSection === 'materials2');
+
     return (
-        <div className="flex flex-col w-full h-full relative overflow-y-auto pr-2 custom-scrollbar bg-[#0a0c10]/50 rounded-[40px] border border-white/[0.03] gap-1 p-2 pt-0">
+        <div className={`flex flex-col w-full h-full relative bg-[#0a0c10]/50 border border-white/[0.03] gap-1 pt-0 ${isCompactActive ? 'overflow-hidden p-0' : 'overflow-y-auto pr-2 custom-scrollbar rounded-[40px] p-2'}`}>
             <input
                 ref={budgetImportFileInputRef}
                 type="file"
