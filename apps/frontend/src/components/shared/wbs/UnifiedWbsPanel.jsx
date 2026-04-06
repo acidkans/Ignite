@@ -486,6 +486,23 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                     console.error('Fetch project items mapping error:', e);
                 }
 
+                // Build WBS node ID → root parent name map from relational WBS data
+                const wbsNodesById = new Map((wbsData || []).map(n => [n.id, n]));
+                const wbsNodeToRootName = {};
+                for (const node of (wbsData || [])) {
+                    let current = node;
+                    while (current?.parentId) {
+                        const parent = wbsNodesById.get(current.parentId);
+                        if (!parent) break;
+                        current = parent;
+                    }
+                    wbsNodeToRootName[node.id] = current?.name || '';
+                    // Also map to direct parent name for nodes at depth 1
+                    if (!projectItemNamesById[node.id] && current?.name) {
+                        projectItemNamesById[node.id] = current.name;
+                    }
+                }
+
                 for (const req of Array.isArray(requirements) ? requirements : []) {
                     const statusCode = normalizeStatusCode(req.status);
                     const selected = (req.proposals || []).find((p) => p.isSelected);
@@ -524,7 +541,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                             const qty = parseFloat(qtyRaw) || 0;
                             if (!wbsNodeId || qty <= 0) continue;
                             registerLookupMeta(projectItemNamesById[wbsNodeId], qty);
-                            if (req.status === 'CONFIRMED') {
+                            if (unitNet > 0) {
                                 nextCosts[wbsNodeId] = (nextCosts[wbsNodeId] || 0) + unitNet * qty;
                             }
                         }
@@ -535,7 +552,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                         const qty = parseFloat(req.quantity) || 0;
                         if (qty > 0) {
                             registerLookupMeta(projectItemNamesById[req.wbsNodeId], qty);
-                            if (req.status === 'CONFIRMED') {
+                            if (unitNet > 0) {
                                 nextCosts[req.wbsNodeId] = (nextCosts[req.wbsNodeId] || 0) + unitNet * qty;
                             }
                         }
@@ -546,7 +563,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             }
             setRequirementsQtyByNode(nextRequirementsQtyByNode);
         } catch (e) { console.error('Fetch WBS error:', e); }
-    }, [nodeId, versionId]);
+    }, [nodeId, versionId, wbsData]);
 
     const syncMaterialRequirementsFromWbsQuantity = useCallback(async (wbsNodeId, quantityRaw, wbsNodeName = '') => {
         const nextQuantity = parseFloat(quantityRaw);
@@ -2203,7 +2220,7 @@ ${materialsHtml}
         return (
             <div
                 className={`flex flex-col glass-panel border border-white/5 transition-all duration-300 overflow-hidden shadow-2xl ${isCompactSection && isActive ? 'rounded-none -mx-2' : 'rounded-2xl'} ${isActive ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
-                style={isActive && !isCompactSection ? { minHeight: 'calc(100vh - 200px)' } : {}}
+                style={isActive ? { minHeight: isCompactSection ? 'calc(100vh - 120px)' : 'calc(100vh - 200px)' } : {}}
             >
                 <div
                     className={`flex items-center gap-2 px-5 py-3 transition-colors text-left flex-shrink-0 border-b border-white/10 ${isActive ? 'bg-white/[0.07]' : 'bg-white/[0.04]'}`}
