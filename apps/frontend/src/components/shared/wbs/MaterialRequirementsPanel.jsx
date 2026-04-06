@@ -1835,6 +1835,7 @@ function WbsMultiSelect({ r, wbsProjectItems, nodeToProjectItemId = {}, subtasks
     });
 
     // Sync z danymi z serwera + czyść stale references do usuniętych przedmiotów
+    const stalePatchedRef = React.useRef(new Set());
     React.useEffect(() => {
         let ids = [];
         if (r.wbsNodeIds) { try { ids = JSON.parse(r.wbsNodeIds); } catch { ids = []; } }
@@ -1858,8 +1859,10 @@ function WbsMultiSelect({ r, wbsProjectItems, nodeToProjectItemId = {}, subtasks
         if (ids.length !== cleanIds.length) stale = true;
         setAllocations(cleanAlloc);
 
-        // Jeśli wykryto stale references — wyczyść je w bazie
-        if (stale && !readOnly) {
+        // Jeśli wykryto stale references — wyczyść je w bazie (raz per wiersz)
+        const fingerprint = `${r.id}:${r.wbsNodeIds}:${r.wbsNodeAllocations}`;
+        if (stale && !readOnly && !stalePatchedRef.current.has(fingerprint)) {
+            stalePatchedRef.current.add(fingerprint);
             patchItem(r.id, {
                 wbsNodeIds: JSON.stringify(cleanIds),
                 wbsNodeId: cleanIds[0] || null,
@@ -2840,13 +2843,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                 const r = row.original;
                 if (isLocked) return <StatusBadge status={r.status} />;
                 return (
-                    <select value={r.status} onChange={e => {
-                        const newStatus = e.target.value;
-                        // Optimistic update — natychmiastowa zmiana w UI
-                        setRequirements(prev => prev.map(req => req.id === r.id ? { ...req, status: newStatus } : req));
-                        setWbsFallbackRequirements(prev => prev.map(req => req.id === r.id ? { ...req, status: newStatus } : req));
-                        patchItem(r.id, { status: newStatus });
-                    }}
+                    <select value={r.status} onChange={e => patchItem(r.id, { status: e.target.value })}
                         className={`w-full border rounded px-2 py-2 text-sm font-semibold focus:outline-none cursor-pointer transition-colors ${STATUS_META[r.status]?.color || ''} bg-transparent border-current/20`}>
                         {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k} className="bg-gray-900 text-white">{v.label}</option>)}
                     </select>
