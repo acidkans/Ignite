@@ -7,7 +7,7 @@ export default defineConfig({
     server: {
         host: true,
         port: 5173,
-        strictPort: false,
+        strictPort: true,
         allowedHosts: ['erp.gigatel.org', 'localhost'],
         proxy: {
             '/api': {

@@ -14,6 +14,21 @@ import { themeQuartz } from 'ag-grid-community';
 import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, LayoutList, Zap, Sparkles, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
+import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, STRUCTURE_STATUS_META, STRUCTURE_COMMON_CELL_CLASS, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode } from './wbsConstants';
+
+const darkTheme = themeQuartz.withParams({
+    backgroundColor: '#0a0a0f',
+    foregroundColor: '#e5e7eb',
+    headerBackgroundColor: '#111118',
+    headerTextColor: '#9ca3af',
+    rowHoverColor: 'rgba(255,255,255,0.03)',
+    borderColor: 'rgba(255,255,255,0.06)',
+    cellHorizontalPaddingScale: 0.6,
+    fontSize: 13,
+    headerFontSize: 12,
+    rowHeight: 32,
+    headerHeight: 34,
+});
 
 const MODULES = [
     ClientSideRowModelModule,
@@ -59,31 +74,6 @@ const MATERIAL_STATUS_LABELS = {
     CONFIRMED: 'Potwierdzone',
     REJECTED: 'Odrzucone',
     ORDERED: 'Zamówione',
-    IN_STOCK: 'Na magazynie',
-    ISSUED: 'Wydane',
-};
-const STRUCTURE_STATUS_META = {
-    '': { label: 'Brak', color: 'text-gray-400' },
-    PENDING: { label: 'Oczekuje', color: 'text-amber-400' },
-    PROPOSAL: { label: 'Propozycja', color: 'text-blue-400' },
-    CONFIRMED: { label: 'Potwierdzone', color: 'text-green-400' },
-    REJECTED: { label: 'Odrzucone', color: 'text-red-400' },
-    ORDERED: { label: 'Zamowione', color: 'text-violet-400' },
-    IN_STOCK: { label: 'Na magazynie', color: 'text-cyan-400' },
-    ISSUED: { label: 'Wydane', color: 'text-emerald-400' },
-    MIXED: { label: 'Mieszany', color: 'text-sky-300' },
-};
-const MATERIAL_STATUS_LABEL_TO_CODE = Object.fromEntries(
-    Object.entries(MATERIAL_STATUS_LABELS).map(([code, label]) => [String(label).toUpperCase(), code])
-);
-const STRUCTURE_COMMON_CELL_CLASS = 'text-sm leading-6';
-
-const normalizeStatusCode = (value) => {
-    if (value == null) return '';
-    const raw = String(value).trim();
-    if (!raw) return '';
-    const upper = raw.toUpperCase();
-    return MATERIAL_STATUS_LABEL_TO_CODE[upper] || upper;
 };
 
 const getStatusLabel = (code, fallback = '') => {
@@ -91,34 +81,6 @@ const getStatusLabel = (code, fallback = '') => {
     return STRUCTURE_STATUS_META[normalized]?.label || fallback || String(code || '').trim() || 'Brak';
 };
 
-const darkTheme = themeQuartz.withParams({
-    backgroundColor: '#0a0a0f',
-    foregroundColor: '#e5e7eb',
-    headerBackgroundColor: '#111118',
-    headerTextColor: '#9ca3af',
-    rowHoverColor: 'rgba(255,255,255,0.03)',
-    borderColor: 'rgba(255,255,255,0.06)',
-    cellHorizontalPaddingScale: 0.6,
-    fontSize: 13,
-    headerFontSize: 12,
-    rowHeight: 32,
-    headerHeight: 34,
-});
-
-const fmtPLN = v => v != null && v !== 0 ? v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
-const fmtQty = v => v != null && v !== 0 ? v.toLocaleString('pl-PL', { maximumFractionDigits: 2 }) : '';
-const fmtPct = v => v != null && v !== 0 ? v.toLocaleString('pl-PL', { maximumFractionDigits: 1 }) + '%' : '';
-const fmtPLNFull = v => (Number(v) || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtPctFull = v => (Number(v) || 0).toLocaleString('pl-PL', { maximumFractionDigits: 1 }) + '%';
-const normKey = (value) => String(value || '').trim().toLowerCase();
-const makeMaterialLookupKey = (subjectName, itemName) => `${normKey(subjectName)}::${normKey(itemName)}`;
-const parseLocaleNumber = (value) => {
-    if (value == null) return null;
-    const normalized = String(value).trim().replace(/\s/g, '').replace(',', '.');
-    if (!normalized) return null;
-    const n = Number(normalized);
-    return Number.isFinite(n) ? n : null;
-};
 const excelColumnLetter = (num) => {
     let n = Number(num) || 0;
     let out = '';
@@ -129,6 +91,7 @@ const excelColumnLetter = (num) => {
     }
     return out || 'A';
 };
+
 const excelCellToText = (cellValue) => {
     if (cellValue == null) return '';
     if (typeof cellValue === 'object') {
@@ -140,20 +103,6 @@ const excelCellToText = (cellValue) => {
     }
     return String(cellValue);
 };
-const BUDGET_IMPORT_FIELD_DEFS = [
-    { key: 'subjectName', label: 'Przedmiot' },
-    { key: 'name', label: 'Nazwa pozycji' },
-    { key: 'type', label: 'Typ' },
-    { key: 'quantity', label: 'Ilość' },
-    { key: 'unit', label: 'Jednostki' },
-    { key: 'unitCost', label: 'Koszt jednostkowy' },
-    { key: 'totalCost', label: 'Koszt całościowy (opcjonalnie)' },
-    { key: 'margin', label: 'Marża (%)' },
-    { key: 'discount', label: 'Rabat (%)' },
-    { key: 'comment', label: 'Komentarz' },
-];
-
-// ─── Hierarchical name renderer ──────────────────────────────────────────────
 
 function TreeNameRenderer({ data, context, api, rowIndex, column }) {
     const depth = data._depth || 0;
@@ -173,9 +122,8 @@ function TreeNameRenderer({ data, context, api, rowIndex, column }) {
         >
             {hasChildren ? (
                 <button
-                    onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => { e.stopPropagation(); toggleExpand?.(data.id); }}
-                    className="text-gray-500 hover:text-white w-4"
+                    className="text-gray-500 hover:text-white"
                 >
                     {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                 </button>
@@ -208,6 +156,33 @@ function TreeNameRenderer({ data, context, api, rowIndex, column }) {
             {!isRequirementLeaf && data.materialsCount > 0 && (
                 <span className="text-[10px] text-blue-400/60 ml-1">({data.materialsCount})</span>
             )}
+        </div>
+    );
+}
+
+function StructureStatusRenderer({ value, data }) {
+    const code = normalizeStatusCode(value);
+    const meta = STRUCTURE_STATUS_META[code] || { label: data?.statusLabel || getStatusLabel(code), color: 'text-gray-300' };
+    const label = data?.statusLabel || meta.label;
+    return (
+        <span className={`inline-flex items-center text-xs font-semibold ${meta.color}`}>
+            {label}
+        </span>
+    );
+}
+
+function BudgetHeaderRenderer(params) {
+    const sort = params.column?.getSort?.() || null;
+    const SortIcon = sort === 'asc' ? ArrowUp : sort === 'desc' ? ArrowDown : ArrowUpDown;
+    return (
+        <div
+            className="flex items-center gap-1 w-full cursor-pointer select-none"
+            onClick={() => params.progressSort?.()}
+        >
+            <span className="truncate text-gray-400 text-[11px] uppercase tracking-wider font-bold">
+                {params.displayName}
+            </span>
+            <SortIcon size={11} className={sort ? 'text-cyan-400' : 'text-gray-600'} />
         </div>
     );
 }
@@ -250,84 +225,22 @@ function MarkerIconsRenderer({ data, context }) {
     return (
         <div className="flex items-center gap-1" title={allAtts.map((a) => a.fileName).join('\n')}>
             {allAtts.slice(0, 4).map((att) => (
-                <button
-                    key={att.id}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        openAttachment?.(att);
-                    }}
-                    className="inline-flex items-center justify-center w-5 h-5 rounded bg-white/5 border border-white/10 hover:border-cyan-400/60 hover:bg-cyan-500/10 transition-all text-[10px]"
-                    title={att.fileName}
-                >
-                    {iconFor(att.fileType)}
-                </button>
+                <span key={att.id}>{iconFor(att.fileType)}</span>
             ))}
-            {allAtts.length > 4 && <span className="text-[10px] text-gray-300">+{allAtts.length - 4}</span>}
         </div>
     );
 }
 
-function StructureStatusRenderer({ value, data }) {
-    const code = normalizeStatusCode(value);
-    const meta = STRUCTURE_STATUS_META[code] || { label: data?.statusLabel || getStatusLabel(code), color: 'text-gray-300' };
-    const label = data?.statusLabel || meta.label;
-    return (
-        <span className={`inline-flex items-center text-xs font-semibold ${meta.color}`}>
-            {label}
-        </span>
-    );
-}
-
-function BudgetHeaderRenderer(params) {
-    const sort = params.column?.getSort?.() || null;
-    const SortIcon = sort === 'asc' ? ArrowUp : sort === 'desc' ? ArrowDown : ArrowUpDown;
-
-    const openFilterPopup = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (params.showColumnMenu) {
-            params.showColumnMenu(e.currentTarget);
-            return;
-        }
-        if (params.showColumnMenuAfterMouseClick) {
-            params.showColumnMenuAfterMouseClick(e);
-        }
-    };
-
-    const toggleSort = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        params.progressSort?.(e.shiftKey);
-    };
-
-    return (
-        <div className="w-full h-full flex items-center justify-between gap-2 px-1">
-            <button
-                type="button"
-                className="truncate text-left text-gray-300 hover:text-white transition-colors"
-                onClick={openFilterPopup}
-                title="Filtruj kolumnę"
-            >
-                {params.displayName}
-            </button>
-            <button
-                type="button"
-                className="text-gray-400 hover:text-white transition-colors"
-                onClick={toggleSort}
-                title="Sortuj kolumnę"
-            >
-                <SortIcon size={12} />
-            </button>
-        </div>
-    );
-}
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRoles = [], projectName = '', searchQuery = '' }) {
     const [wbsData, setWbsData] = useState([]);
-    const [expandedSection, setExpandedSection] = useState(null);
+    const [expandedSection, setExpandedSection] = useState(() => {
+        // Jeśli nie ma żadnego węzła głównego, domyślnie rozwijaj sekcję WBS
+        if (wbsData && wbsData.filter(n => n.parentId == null).length === 0) return 'wbs';
+        return null;
+    });
     const [fullscreenSection, setFullscreenSection] = useState(null);
     const [expandedIds, setExpandedIds] = useState(new Set());
     const [selectedId, setSelectedId] = useState(null);
@@ -789,26 +702,37 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             });
             if (!res.ok) throw new Error('Assign failed');
 
-            // Twórz węzeł WBS jako dziecko docelowej gałęzi
-            const reqType = String(req?.type || '').toUpperCase();
-            const wbsType = reqType === 'DEVICE' ? 'equipment' : 'material';
-            const wbsName = req?.name || req?.productName || 'Wymaganie';
-            await fetch(`${API_URL}/wbs-nodes`, {
-                method: 'POST',
-                headers: authHeaders(),
-                body: JSON.stringify({
-                    nodeId,
-                    versionId: versionId || undefined,
-                    parentId: wbsNodeId,
-                    name: wbsName,
-                    type: wbsType,
-                    tags: [`req:${reqId}`, 'auto-requirement'],
-                }),
-            });
-
             setUnassignedRequirements(prev => prev.filter(r => r.id !== reqId));
             setAllRequirements(prev => prev.map(r => r.id === reqId ? { ...r, wbsNodeAllocations: JSON.stringify(alloc) } : r));
+
+            // Utwórz węzeł WBS pod docelową gałęzią (tag req: do synchronizacji z Materiały)
+            const reqName = String(req?.name || req?.productName || '').trim();
+            const typeMap = { DEVICE: 'equipment', MATERIAL: 'material', CABLE: 'material', SOFTWARE: 'service', SERVICE: 'service' };
+            const nodeType = typeMap[String(req?.type || '').toUpperCase()] || '';
+            if (reqName) {
+                // Sprawdź czy węzeł z tagiem req: już istnieje
+                const existing = wbsData.find(n =>
+                    Array.isArray(n.tags) && n.tags.includes(`req:${reqId}`)
+                );
+                if (!existing) {
+                    await fetch(`${API_URL}/wbs-nodes`, {
+                        method: 'POST',
+                        headers: authHeaders(),
+                        body: JSON.stringify({
+                            nodeId, versionId: versionId || undefined, parentId: wbsNodeId,
+                            name: reqName, type: nodeType, tags: [`req:${reqId}`, 'auto-requirement'],
+                        }),
+                    }).catch(() => {});
+                }
+            }
+
             setReqRefreshKey(k => k + 1);
+            // Rozwiń gałąź docelową aby nowy węzeł był widoczny
+            setExpandedIds(prev => {
+                const next = new Set(prev);
+                next.add(wbsNodeId);
+                return next;
+            });
             await refreshUnified();
         } catch (err) {
             console.error('[WBS assign]', err);
@@ -957,6 +881,37 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 </table>
             </div>` : '';
 
+        const matStatusLabel = (code) => {
+            const labels = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
+            return labels[code] || code || '—';
+        };
+        const matTypeLabel = (code) => {
+            const labels = { DEVICE: 'Urządzenie', MATERIAL: 'Materiał', CABLE: 'Kabel', SOFTWARE: 'Oprogramowanie', SERVICE: 'Usługa' };
+            return labels[String(code || '').toUpperCase()] || code || '—';
+        };
+        const materialsHtml = show('materials') ? (() => {
+            const reqs = allRequirements.filter(r => r.id);
+            if (!reqs.length) return '';
+            const rows = reqs.map(r => {
+                const name = esc(r.name || r.productName || '—');
+                const type = esc(matTypeLabel(r.type));
+                const qty = r.quantity != null ? `${r.quantity}` : '—';
+                const unit = esc(r.unit || '');
+                const status = esc(matStatusLabel(r.status));
+                const spec = esc(String(r.technicalSpec || '').slice(0, 120));
+                const price = r.priceNetto != null ? fmtPLN(r.priceNetto) : '—';
+                return `<tr><td>${name}</td><td>${type}</td><td class="num">${qty}</td><td>${unit}</td><td>${status}</td><td class="num">${price}</td><td style="font-size:9px;color:#6b7280">${spec}</td></tr>`;
+            }).join('');
+            return `
+            <div class="section">
+                <div class="section-header">Materiały</div>
+                <table>
+                    <thead><tr><th>Nazwa</th><th>Typ</th><th>Ilość</th><th>Jedn.</th><th>Status</th><th>Cena netto</th><th>Specyfikacja</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+        })() : '';
+
         const html = `<!DOCTYPE html>
 <html lang="pl">
 <head>
@@ -992,7 +947,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 </div>
 ${strategyHtml}
 ${wbsHtml}
-${budgetHtml}
+${materialsHtml}
 </body>
 </html>`;
 
@@ -1065,10 +1020,22 @@ ${budgetHtml}
         summarySheet.getCell('B11').numFmt = '0.00%';
         summarySheet.getRow(1).font = { bold: true, size: 14 };
 
+        // Mapa WBS nodeId → nazwa wymagania
+        const reqNameByNodeId = {};
+        for (const req of allRequirements) {
+            try {
+                const alloc = JSON.parse(req.wbsNodeAllocations || '{}');
+                for (const nid of Object.keys(alloc)) {
+                    if (nid) reqNameByNodeId[nid] = req.name || req.productName || '';
+                }
+            } catch {}
+        }
+
         budgetSheet.columns = [
             { header: 'Lp.', key: 'index', width: 6 },
             { header: 'Przedmiot', key: 'subjectName', width: 28 },
             { header: 'Nazwa', key: 'name', width: 34 },
+            { header: 'Nazwa wymagania', key: 'requirementName', width: 30 },
             { header: 'Typ', key: 'type', width: 16 },
             { header: 'Koszt jednostkowy', key: 'unitCost', width: 18 },
             { header: 'Ilość', key: 'quantity', width: 12 },
@@ -1090,6 +1057,7 @@ ${budgetHtml}
                 index: index + 1,
                 subjectName: row.subjectName || '',
                 name: row.name || '',
+                requirementName: reqNameByNodeId[row.id] || '',
                 type: TYPE_LABELS[row.type] || row.type || '',
                 unitCost: Number(row.unitCost) || 0,
                 quantity: Number(row.quantity) || 0,
@@ -1111,12 +1079,12 @@ ${budgetHtml}
         totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
 
-        ['E', 'H', 'K'].forEach((column) => {
+        ['F', 'I', 'L'].forEach((column) => {
             budgetSheet.getColumn(column).numFmt = '#,##0.00';
         });
-        budgetSheet.getColumn('F').numFmt = '#,##0.00';
-        budgetSheet.getColumn('I').numFmt = '0.00%';
+        budgetSheet.getColumn('G').numFmt = '#,##0.00';
         budgetSheet.getColumn('J').numFmt = '0.00%';
+        budgetSheet.getColumn('K').numFmt = '0.00%';
         budgetSheet.views = [{ state: 'frozen', ySplit: 1 }];
 
         const buffer = await workbook.xlsx.writeBuffer();
@@ -1152,11 +1120,26 @@ ${budgetHtml}
     const deleteNodeById = useCallback(async (id) => {
         if (!id || !window.confirm('Usunąć ten węzeł?')) return;
         try {
+            // Sprawdź czy usuwany węzeł ma tag req: — jeśli tak, odłącz wymaganie
+            const node = wbsData.find(n => n.id === id);
+            const reqTag = (node?.tags || []).find(t => String(t).startsWith('req:'));
+            if (reqTag) {
+                const reqId = reqTag.slice(4);
+                // Odłącz wymaganie od węzła WBS (wróci do koszyka nieprzypisanych)
+                await fetch(`${API_URL}/material-requirements/${reqId}`, {
+                    method: 'PATCH',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ wbsNodeId: null, wbsNodeIds: '[]', wbsNodeAllocations: null, isAiAssigned: false }),
+                }).catch(() => {});
+            }
+
             await fetch(`${API_URL}/wbs-nodes/${id}`, { method: 'DELETE', headers: authHeaders() });
             if (selectedId === id) setSelectedId(null);
+            setReqRefreshKey(k => k + 1);
             await refreshUnified();
+            await fetchUnassignedRequirements();
         } catch (e) { console.error('Delete node error:', e); }
-    }, [authHeaders, refreshUnified, selectedId]);
+    }, [authHeaders, refreshUnified, selectedId, wbsData, fetchUnassignedRequirements]);
 
     const updateNodeField = useCallback(async (id, field, value) => {
         try {
@@ -1165,8 +1148,22 @@ ${budgetHtml}
                 headers: authHeaders(),
                 body: JSON.stringify({ [field]: value }),
             });
+            // Synchronizuj nazwę do powiązanego wymagania materialnego
+            if (field === 'name') {
+                const node = wbsData.find(n => n.id === id);
+                const reqTag = (node?.tags || []).find(t => String(t).startsWith('req:'));
+                if (reqTag) {
+                    const reqId = reqTag.slice(4);
+                    await fetch(`${API_URL}/material-requirements/${reqId}`, {
+                        method: 'PATCH',
+                        headers: authHeaders(),
+                        body: JSON.stringify({ name: value }),
+                    }).catch(() => {});
+                    setReqRefreshKey(k => k + 1);
+                }
+            }
         } catch (e) { console.error('Update node error:', e); }
-    }, [authHeaders]);
+    }, [authHeaders, wbsData]);
 
     const saveBudgetField = useCallback(async (wbsNodeId, data) => {
         try {
@@ -1390,10 +1387,25 @@ ${budgetHtml}
             }
             if (field === 'status') {
                 const normalizedType = String(row.type || '').toLowerCase();
-                if (['material', 'equipment'].includes(normalizedType)) return;
+                const wbsNode = wbsData.find(n => n.id === row.id);
+                const reqTag = (wbsNode?.tags || []).find(t => String(t).startsWith('req:'));
+                // Dla material/equipment bez tagu req: — status dziedziczony, blokuj edycję
+                if (['material', 'equipment'].includes(normalizedType) && !reqTag) return;
                 row.statusLabel = getStatusLabel(row[field], row[field]);
                 updateNodeField(row.id, field, row[field]);
                 setWbsData(prev => prev.map(item => item.id === row.id ? { ...item, [field]: row[field], statusLabel: row.statusLabel } : item));
+                // Synchronizuj status do powiązanego wymagania materialnego
+                if (reqTag) {
+                    const reqId = reqTag.slice(4);
+                    fetch(`${API_URL}/material-requirements/${reqId}`, {
+                        method: 'PATCH',
+                        headers: authHeaders(),
+                        body: JSON.stringify({ status: row[field] }),
+                    }).then(async () => {
+                        setReqRefreshKey(k => k + 1);
+                        await refreshUnified();
+                    }).catch(() => {});
+                }
             } else {
                 updateNodeField(row.id, field, row[field]);
                 setWbsData(prev => prev.map(item => item.id === row.id ? { ...item, [field]: row[field] } : item));
@@ -1485,37 +1497,6 @@ ${budgetHtml}
 
     const buildRows = (view) => {
         const byId = new Map(wbsData.map(item => [item.id, item]));
-        const requirementRowsByNodeId = new Map();
-        for (const requirement of allRequirements) {
-            let allocations = {};
-            try {
-                allocations = JSON.parse(requirement?.wbsNodeAllocations || '{}');
-            } catch {
-                allocations = {};
-            }
-
-            for (const [allocatedNodeId, allocatedQty] of Object.entries(allocations)) {
-                if (!allocatedNodeId) continue;
-                if (!requirementRowsByNodeId.has(allocatedNodeId)) requirementRowsByNodeId.set(allocatedNodeId, []);
-                requirementRowsByNodeId.get(allocatedNodeId).push({
-                    id: `__req__:${allocatedNodeId}:${requirement.id}`,
-                    requirementId: requirement.id,
-                    parentId: allocatedNodeId,
-                    name: requirement.name || requirement.productName || 'Wymaganie',
-                    type: String(requirement.type || '').toLowerCase(),
-                    status: requirement.status || '',
-                    statusLabel: requirement.statusLabel || requirement.status || '',
-                    owner: '',
-                    quantity: Number(allocatedQty) || Number(requirement.quantity) || 1,
-                    requirementsQty: Number(allocatedQty) || Number(requirement.quantity) || 1,
-                    unit: requirement.unit || '',
-                    tags: [],
-                    materialsCount: 0,
-                    _isRequirementLeaf: true,
-                    _hasChildren: false,
-                });
-            }
-        }
 
         const matchesSearch = (...values) => {
             if (!normalizedSearchQuery) return true;
@@ -1648,23 +1629,11 @@ ${budgetHtml}
         const getRequirementsQty = (id) => Object.prototype.hasOwnProperty.call(requirementsQtyByNode, id)
             ? requirementsQtyByNode[id]
             : 1;
-        const pushRequirementRows = (nodeId, depth) => {
-            const linkedRequirements = [...(requirementRowsByNodeId.get(nodeId) || [])]
-                .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pl'));
-            for (const requirementRow of linkedRequirements) {
-                rows.push({
-                    ...requirementRow,
-                    _depth: depth,
-                });
-            }
-        };
         const addVisible = (pId, depth) => {
             const children = childrenMap.get(pId || '__root__') || [];
-            // Sort by sortOrder if present
             children.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
             for (const item of children) {
                 const inheritedStatus = getInheritedMaterialStatus(item);
-                const linkedRequirements = requirementRowsByNodeId.get(item.id) || [];
                 rows.push({
                     ...item,
                     status: inheritedStatus.code,
@@ -1672,12 +1641,11 @@ ${budgetHtml}
                     requirementsQty: getRequirementsQty(item.id),
                     _isProjectItem: depth === 0,
                     _depth: depth,
-                    _hasChildren: childrenMap.has(item.id) || linkedRequirements.length > 0,
-                    materialsCount: Number(item.materialsCount) || linkedRequirements.length,
+                    _hasChildren: childrenMap.has(item.id),
+                    materialsCount: Number(item.materialsCount) || 0,
                 });
                 if (expandedIds.has(item.id)) {
                     addVisible(item.id, depth + 1);
-                    pushRequirementRows(item.id, depth + 1);
                 }
             }
         };
@@ -1695,14 +1663,7 @@ ${budgetHtml}
                     item.path,
                 );
                 const childMatch = (childrenMap.get(item.id) || []).some(branchMatches);
-                const requirementMatch = (requirementRowsByNodeId.get(item.id) || []).some((requirementRow) => matchesSearch(
-                    requirementRow.name,
-                    TYPE_LABELS[requirementRow.type] || requirementRow.type,
-                    requirementRow.status,
-                    requirementRow.quantity,
-                    requirementRow.unit,
-                ));
-                const result = selfMatches || childMatch || requirementMatch;
+                const result = selfMatches || childMatch;
                 matchesById.set(item.id, result);
                 return result;
             };
@@ -1712,7 +1673,6 @@ ${budgetHtml}
                 const addFilteredVisible = (items, depth) => {
                     for (const item of items) {
                         const inheritedStatus = getInheritedMaterialStatus(item);
-                        const linkedRequirements = requirementRowsByNodeId.get(item.id) || [];
                         rows.push({
                             ...item,
                             status: inheritedStatus.code,
@@ -1720,24 +1680,11 @@ ${budgetHtml}
                             requirementsQty: getRequirementsQty(item.id),
                             _isProjectItem: depth === 0,
                             _depth: depth,
-                            _hasChildren: childrenMap.has(item.id) || linkedRequirements.length > 0,
-                            materialsCount: Number(item.materialsCount) || linkedRequirements.length,
+                            _hasChildren: childrenMap.has(item.id),
+                            materialsCount: Number(item.materialsCount) || 0,
                         });
                         const matchingChildren = (childrenMap.get(item.id) || []).filter(branchMatches);
                         if (matchingChildren.length) addFilteredVisible(matchingChildren, depth + 1);
-                        const matchingRequirements = linkedRequirements.filter((requirementRow) => matchesSearch(
-                            requirementRow.name,
-                            TYPE_LABELS[requirementRow.type] || requirementRow.type,
-                            requirementRow.status,
-                            requirementRow.quantity,
-                            requirementRow.unit,
-                        ));
-                        for (const requirementRow of matchingRequirements) {
-                            rows.push({
-                                ...requirementRow,
-                                _depth: depth + 1,
-                            });
-                        }
                     }
                 };
                 addFilteredVisible(filteredRoots, 0);
@@ -1904,7 +1851,12 @@ ${budgetHtml}
                 editable: (params) => {
                     if (params.data?._isRequirementLeaf) return false;
                     const normalizedType = String(params.data?.type || '').toLowerCase();
-                    return !['material', 'equipment'].includes(normalizedType);
+                    if (['material', 'equipment'].includes(normalizedType)) {
+                        // Dozwól edycję statusu dla węzłów z tagiem req: (synchronizacja z Materiały)
+                        const node = wbsData.find(n => n.id === params.data?.id);
+                        return Array.isArray(node?.tags) && node.tags.some(t => String(t).startsWith('req:'));
+                    }
+                    return true;
                 },
             },
             ownerCol,
@@ -2194,19 +2146,31 @@ ${budgetHtml}
                 >
                     <Icon size={16} className={`text-${colorClass}-400 flex-shrink-0`} />
                     <h3 className="text-xs font-bold uppercase tracking-widest text-gray-300 font-inter">{title}</h3>
-                    <div className="flex-1 px-4">{isActive && extraButtons}</div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex-1 px-4 flex items-center gap-2 flex-nowrap min-w-0">{isActive && extraButtons}</div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                        {key === 'wbs' && (
+                            <button
+                                className="ml-2 px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-xs rounded-lg font-bold shadow border border-emerald-900/40 transition-all flex-shrink-0"
+                                onClick={e => {
+                                    e.stopPropagation();
+                                    console.log('[WBS] Dodaj produkt projektu kliknięty');
+                                    addNode(null);
+                                }}
+                            >
+                                + Dodaj produkt projektu
+                            </button>
+                        )}
                         {onExport && (
                             <>
                                 <button 
                                     onClick={(e) => { e.stopPropagation(); handleExportPDF('all'); }} 
-                                    className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all"
+                                    className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                                 >
                                     <FileDown size={11} /> PDF wszystkie sekcje
                                 </button>
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); onExport(); }} 
-                                    className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all"
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onExport(); }}
+                                    className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0"
                                 >
                                     <FileDown size={11} /> PDF
                                 </button>
@@ -2295,8 +2259,12 @@ ${budgetHtml}
                 </div>
             ))}
 
-            {renderSection('wbs', `Struktura zadań projektu: ${projectName || '—'}`, Layers, 'blue', (
-                <div className="flex flex-col gap-0 h-full">
+            {renderSection(
+                'wbs',
+                `Struktura zadań projektu: ${projectName || '—'}`,
+                Layers,
+                'blue',
+                (<div className="flex flex-col gap-0 h-full">
                     {renderGrid(VIEWS.STRUCTURE)}
                     {selectedId && !selectedId.startsWith('__req__:') && (() => {
                         const node = wbsData.find(n => n.id === selectedId);
@@ -2353,14 +2321,14 @@ ${budgetHtml}
                     )}
                 </div>
             ), () => handleExportPDF('wbs'), isManagerOrAdmin ? (
-                <button
-                    onClick={(e) => { e.stopPropagation(); handleWbsExtract(); }}
-                    disabled={extractingForWbs}
-                    className={`flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all ${extractingForWbs ? 'opacity-50 pointer-events-none' : ''}`}
-                >
-                    {extractingForWbs ? <div className="w-3 h-3 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" /> : <Sparkles size={11} />}
-                    Wyciągnij z dokumentów
-                </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); handleWbsExtract(); }}
+                        disabled={extractingForWbs}
+                        className={`flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 ${extractingForWbs ? 'opacity-50 pointer-events-none' : ''}`}
+                    >
+                        {extractingForWbs ? <div className="w-3 h-3 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" /> : <Sparkles size={11} />}
+                        Wyciągnij z dokumentów
+                    </button>
             ) : null)}
 
             {isManagerOrAdmin && renderSection('budget', 'Plan i harmonogram (Budżet)', DollarSign, 'green', (
@@ -2391,9 +2359,20 @@ ${budgetHtml}
                         <FileDown size={11} /> Import budżetu z Excel
                     </button>
                 </div>
-            ))}
+            ),
+            null,
+            // extraButtons
+            wbsData.filter(n => n.parentId == null).length === 0 ? (
+                <button
+                    className="ml-2 px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-xs rounded-lg font-bold shadow border border-emerald-900/40 transition-all"
+                    onClick={e => { e.stopPropagation(); addNode(null); }}
+                >
+                    + Dodaj produkt projektu
+                </button>
+            ) : null
+        )}
 
-            {renderSection('materials2', 'Materiały2', Zap, 'yellow', (
+            {renderSection('materials2', 'Materiały', Zap, 'yellow', (
                 <MaterialRequirementsPanel
                     nodeId={nodeId}
                     versionId={versionId}
@@ -2401,6 +2380,7 @@ ${budgetHtml}
                     onWbsUpdate={refreshUnified}
                     useWbsRequirementSelection={true}
                     refreshKey={reqRefreshKey}
+                    searchQuery={searchQuery}
                 />
             ), () => handleExportPDF('materials'))}
 

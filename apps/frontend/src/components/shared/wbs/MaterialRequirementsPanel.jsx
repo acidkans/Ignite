@@ -1229,7 +1229,7 @@ function ProductCard({
                                         onChange={e => { setF(k, e.target.value); setComboOpen(k); }}
                                         onFocus={() => setComboOpen(k)}
                                         onBlur={e => {
-                                            setTimeout(() => setComboOpen(prev => prev === k ? null : prev), 150);
+                                            setTimeout(() => setComboOpen(prev => prev === k ? null : prev), 200);
                                             const val = e.target.value;
                                             // Gdy materialId ustawiony i użytkownik wyczyścił pole — odłącz materiał i wyczyść kartę katalogową
                                             if (materialId && ['manufacturer', 'model', 'productName'].includes(k)) {
@@ -1241,14 +1241,24 @@ function ProductCard({
                                             }
                                             if (val !== (initialData[k] ?? '')) patchFields({ [k]: val || null });
                                         }}
-                                        onKeyDown={e => { if (e.key === 'Escape') setComboOpen(null); }}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Escape') setComboOpen(null);
+                                            if (e.key === 'ArrowDown' && suggestions.length > 0) {
+                                                e.preventDefault();
+                                                setComboOpen(k);
+                                            }
+                                            if (e.key === 'Enter' && comboOpen === k && suggestions.length > 0) {
+                                                e.preventDefault();
+                                                selectSuggestion(suggestions[0]);
+                                            }
+                                        }}
                                         disabled={readOnly}
                                         placeholder="— wpisz lub wybierz —"
                                         className={fc(k)}
                                         autoComplete="off"
                                     />
                                     {comboOpen === k && suggestions.length > 0 && !readOnly && (
-                                        <div className="absolute z-[300] top-full left-0 w-full min-w-[180px] bg-gray-900 border border-white/15 rounded-lg mt-0.5 max-h-52 overflow-y-auto shadow-2xl">
+                                        <div className="absolute z-[300] top-full left-0 w-full min-w-[180px] bg-gray-900 border border-white/15 rounded-lg mt-0.5 max-h-52 overflow-y-auto shadow-2xl" style={{ position: 'absolute' }}>
                                             {suggestions.map(mat => (
                                                 <button key={mat.id} onMouseDown={e => { e.preventDefault(); selectSuggestion(mat); }}
                                                     className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 text-white truncate border-b border-white/5 last:border-0">
@@ -1651,7 +1661,7 @@ async function exportToExcel(listName, listVersion, requirements) {
     ws.addRow([]);
 
     // Nagłówki kolumn
-    ws.addRow(['Lp.', 'Nazwa', 'Typ', 'Ilość', 'Jedn.', 'Status', 'Produkt', 'Producent', 'Model']);
+    ws.addRow(['Lp.', 'Nazwa wymagania', 'Typ', 'Ilość', 'Jedn.', 'Status', 'Produkt', 'Producent', 'Model']);
 
     requirements.forEach((r, i) => {
         const selected = (r.proposals || []).find(p => p.isSelected);
@@ -1674,6 +1684,40 @@ async function exportToExcel(listName, listVersion, requirements) {
             });
         }
     });
+
+    // Arkusz tabeli zgodności
+    const reqsWithCompliance = requirements.filter(r => r.complianceData);
+    if (reqsWithCompliance.length > 0) {
+        const csWs = wb.addWorksheet('Tabela zgodności');
+        reqsWithCompliance.forEach((r, ri) => {
+            let compliance;
+            try { compliance = JSON.parse(r.complianceData); } catch { return; }
+            const reqs = compliance.requirements?.length
+                ? compliance.requirements
+                : (r.technicalSpec || '').split(/\n/).map(s => s.trim()).filter(s => s.length > 2);
+            const products = (r.proposals || []).length > 0
+                ? (r.proposals || []).map(p => ({ id: p.id, name: `${p.manufacturer} ${p.model || p.productName}`.trim() }))
+                : (compliance.products || []);
+            const matrix = compliance.matrix || {};
+            const userCol = compliance.userProduct || {};
+
+            if (ri > 0) csWs.addRow([]);
+            csWs.addRow([`Nazwa wymagania: ${r.name || '—'}`]);
+            const headerRow = ['Wymaganie', ...products.map(p => p.name || '—')];
+            if (userCol.name) headerRow.push(userCol.name);
+            csWs.addRow(headerRow);
+
+            reqs.forEach((req, reqIdx) => {
+                const row = [req];
+                products.forEach(p => {
+                    row.push(matrix[`${reqIdx}_${p.id}`] || '—');
+                });
+                if (userCol.name) row.push((userCol.matrix || {})[`${reqIdx}`] || '—');
+                csWs.addRow(row);
+            });
+        });
+        csWs.columns = [{ width: 40 }, ...Array(10).fill({ width: 18 })];
+    }
 
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -2426,9 +2470,28 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
             if (payload.wbsNodeAllocations !== undefined || payload.wbsNodeId !== undefined || payload.wbsNodeIds !== undefined || payload.name !== undefined || payload.type !== undefined) {
                 await syncRequirementNodesInWbsTree(nextRequirements);
             }
-            // Odśwież Unified gdy zmienią się alokacje lub ilość/cena materiałów
-            if (payload.wbsNodeAllocations !== undefined || payload.quantity !== undefined || payload.priceNetto !== undefined) {
-                setTimeout(() => syncUnifiedRefresh(), 100);
+            // Synchronizuj status do powiązanego węzła WBS (tag req:)
+            if (payload.status !== undefined) {
+                try {
+                    const unifiedRes = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders });
+                    if (unifiedRes.ok) {
+                        const unifiedData = await unifiedRes.json();
+                        const wbsNode = (unifiedData.items || []).find(n =>
+                            Array.isArray(n.tags) && n.tags.includes(`req:${id}`)
+                        );
+                        if (wbsNode) {
+                            await fetch(`${API_URL}/wbs-nodes/${wbsNode.id}`, {
+                                method: 'PATCH',
+                                headers: { ...authHeaders, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ status: payload.status }),
+                            }).catch(() => {});
+                        }
+                    }
+                } catch {}
+            }
+            // Odśwież Unified gdy zmienią się alokacje, ilość/cena materiałów lub status
+            if (payload.wbsNodeAllocations !== undefined || payload.quantity !== undefined || payload.priceNetto !== undefined || payload.status !== undefined) {
+                syncUnifiedRefresh();
             }
         }
     }, [requirements, syncAllocationsWithQuantity, syncUnifiedRefresh, syncWbsQuantitiesFromRequirement, syncRequirementNodesInWbsTree]);
@@ -2543,9 +2606,10 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
 
     useEffect(() => {
         if (!expandedId) return;
-        if (requirements.some((requirement) => requirement.id === expandedId)) return;
+        const allRows = requirements.length > 0 ? requirements : wbsFallbackRequirements;
+        if (allRows.some((requirement) => requirement.id === expandedId)) return;
         setExpandedId(null);
-    }, [expandedId, requirements]);
+    }, [expandedId, requirements, wbsFallbackRequirements]);
 
     // ─── Drag & drop kolumn ─────────────────────────────────────────────────
     const STORAGE_KEY = 'matreq-col-order';
@@ -2914,15 +2978,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                 </div>
             ) : (<>
                 {/* Pasek filtrów — ukryty gdy filtry w nagłówku sekcji */}
-                {!externalFilters && <div className="flex items-center gap-3 px-6 py-2 border-b border-white/5">
-                    <div className="flex items-center gap-1.5">
-                        <Filter size={11} className="text-gray-600" />
-                        <input value={globalFilter} onChange={e => setGlobalFilter(e.target.value)}
-                            placeholder="Szukaj..."
-                            className="bg-black/30 border border-white/5 rounded px-2 py-1 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 w-40" />
-                    </div>
-                </div>}
-                <div className="flex-1 overflow-auto custom-scrollbar">
+                <div className={`flex-1 custom-scrollbar ${expandedId ? 'overflow-visible' : 'overflow-auto'}`}>
                     <table className="w-full">
                         <thead className="sticky top-0 z-10 bg-gray-950">
                             {table.getHeaderGroups().map(hg => (
@@ -2964,7 +3020,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                                     </tr>
                                     {expandedId === row.original.id && (
                                         <tr className="bg-white/[0.02]">
-                                            <td colSpan={columns.length}>
+                                            <td colSpan={columns.length} style={{ overflow: 'visible' }}>
                                                 <ExpandedRow req={row.original} token={token} onUpdated={handleUpdated} onDeleted={handleDeleted} readOnly={isLocked} readOnlyDelete={isLocked || readOnlyWbs} offerFiles={offerFiles} nodeId={nodeId} showCompliance={complianceOpen.get(row.original.id) ?? false} onToggleCompliance={() => toggleCompliance(row.original.id)} />
                                             </td>
                                         </tr>
