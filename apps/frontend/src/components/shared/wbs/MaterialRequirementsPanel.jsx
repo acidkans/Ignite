@@ -3055,7 +3055,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     }
 
     return (
-        <section className="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] flex flex-col h-full overflow-hidden">
+        <section className="glass-panel rounded-2xl border border-white/5 bg-white/[0.02] flex flex-col flex-1 min-h-0 overflow-hidden">
             {content}
         </section>
     );
