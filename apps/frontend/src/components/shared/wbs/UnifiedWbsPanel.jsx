@@ -1492,6 +1492,14 @@ ${materialsHtml}
                 unitPrice: up,
                 comment: row.comment ?? '',
             });
+            // Sync budget quantity → WBS for work-type nodes
+            if (field === 'quantity') {
+                const normalizedType = String(row.type || row.budgetType || '').toLowerCase();
+                if (normalizedType === 'work' || normalizedType === 'praca') {
+                    setRequirementsQtyByNode((prev) => ({ ...prev, [row.id]: q }));
+                    syncMaterialRequirementsFromWbsQuantity(row.id, q, row.name);
+                }
+            }
         }
     }, [saveBudgetField, updateNodeField, materialMetaByLookupKey, updateLocalWbsBudgetRow, syncMaterialRequirementsFromWbsQuantity]);
 
@@ -1549,6 +1557,7 @@ ${materialsHtml}
 
         if (view === VIEWS.BUDGET) {
             return [...wbsData]
+                .filter(item => item.parentId != null)
                 .sort((a, b) => (a.path || '').localeCompare(b.path || '', 'pl'))
                 .map(item => {
                     const normalizedType = String(item.type || '').toLowerCase();
@@ -1562,9 +1571,14 @@ ${materialsHtml}
                         || parseFloat(item.materialsTotalCost)
                         || 0;
                     const persistedQuantity = parseFloat(item.quantity) || 1;
+                    const isWorkType = normalizedType === 'work' || normalizedType === 'praca'
+                        || String(item.budgetType || '').toUpperCase() === 'WORK';
+                    const wbsReqQty = Object.prototype.hasOwnProperty.call(requirementsQtyByNode, item.id)
+                        ? requirementsQtyByNode[item.id]
+                        : null;
                     const quantity = inheritedFromMaterials
                         ? (inheritedQuantity > 0 ? inheritedQuantity : persistedQuantity)
-                        : persistedQuantity;
+                        : (isWorkType && wbsReqQty != null ? wbsReqQty : persistedQuantity);
                     const totalCost = inheritedFromMaterials
                         ? inheritedCost
                         : (Number.isFinite(parseFloat(item.totalCost))
