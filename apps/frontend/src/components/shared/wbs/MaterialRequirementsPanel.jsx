@@ -1180,14 +1180,12 @@ function ProductCard({
                     {/* Wiersz 1 — combobox z wyszukiwaniem z bazy */}
                     <div className="grid grid-cols-7 gap-2">
                         {[['manufacturer','Producent'],['model','Model'],['productName','Nazwa handlowa']].map(([k, lbl]) => {
-                            // Cross-filtering hierarchiczne: manufacturer → model → productName
-                            // Każde pole filtruje tylko po polach "wyżej" w hierarchii
+                            // Cross-filtering dwukierunkowe: wybór dowolnego pola zawęża pozostałe
+                            const otherFields = ['manufacturer', 'model', 'productName'].filter(f => f !== k);
                             let baseDb = materialDb;
                             const ciEq = (a, b) => (a || '').toLowerCase() === (b || '').toLowerCase();
-                            if (k === 'model' && fields.manufacturer) baseDb = baseDb.filter(m => ciEq(m.manufacturer, fields.manufacturer));
-                            if (k === 'productName') {
-                                if (fields.manufacturer) baseDb = baseDb.filter(m => ciEq(m.manufacturer, fields.manufacturer));
-                                if (fields.model) baseDb = baseDb.filter(m => ciEq(m.model, fields.model));
+                            for (const f of otherFields) {
+                                if (fields[f]) baseDb = baseDb.filter(m => ciEq(m[f], fields[f]));
                             }
 
                             // Filtruj po wpisanym tekście (productName: tylko wpisy z ustawionym productName)
@@ -2986,7 +2984,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                 </div>
             ) : (<>
                 {/* Pasek filtrów — ukryty gdy filtry w nagłówku sekcji */}
-                <div className={`flex-1 custom-scrollbar ${expandedId ? 'overflow-visible' : 'overflow-auto'}`}>
+                <div className="flex-1 custom-scrollbar overflow-auto">
                     <table className="w-full">
                         <thead className="sticky top-0 z-10 bg-gray-950">
                             {table.getHeaderGroups().map(hg => (
