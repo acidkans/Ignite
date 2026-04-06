@@ -1904,7 +1904,7 @@ ${materialsHtml}
             { field: 'margin', headerName: 'Marża (%)', width: 110, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-green-300', headerComponent: BudgetHeaderRenderer },
             { field: 'discount', headerName: 'Rabat (%)', width: 110, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-orange-300', headerComponent: BudgetHeaderRenderer },
             { field: 'offerPrice', headerName: 'Cena ofertowa', width: 150, sortable: true, valueFormatter: p => fmtPLN(p.value), headerComponent: BudgetHeaderRenderer },
-            { field: 'comment', headerName: 'Komentarz', minWidth: 220, flex: 1, editable: true, sortable: true, headerComponent: BudgetHeaderRenderer },
+            { field: 'comment', headerName: 'Komentarz', minWidth: 220, flex: 1, editable: true, sortable: true, wrapText: true, autoHeight: true, cellStyle: { whiteSpace: 'normal', lineHeight: '1.4' }, headerComponent: BudgetHeaderRenderer },
             {
                 headerName: '',
                 width: 64,
@@ -2009,7 +2009,7 @@ ${materialsHtml}
 
         return (
             <div
-                className={isBudgetView ? 'flex-1 min-h-[400px] overflow-x-auto overflow-y-hidden pb-2 custom-scrollbar' : 'flex-1 min-h-[400px]'}
+                className={isBudgetView ? 'flex-1 min-h-[200px] overflow-x-auto overflow-y-hidden pb-2 custom-scrollbar' : 'flex-1 min-h-[400px]'}
                 onDoubleClick={(e) => e.stopPropagation()}
                 onDragOver={isStructureView ? (e) => {
                     const types = Array.from(e.dataTransfer?.types || []);
@@ -2134,13 +2134,14 @@ ${materialsHtml}
     const renderSection = (key, title, Icon, colorClass, content, onExport, extraButtons = null) => {
         const isActive = expandedSection === key;
         if (expandedSection !== null && !isActive) return null;
+        const isCompactSection = key === 'budget' || key === 'materials2';
 
         return (
-            <div 
-                className={`flex flex-col glass-panel rounded-2xl border border-white/5 transition-all duration-300 overflow-hidden shadow-2xl ${isActive ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
-                style={isActive ? { minHeight: 'calc(100vh - 200px)' } : {}}
+            <div
+                className={`flex flex-col glass-panel border border-white/5 transition-all duration-300 overflow-hidden shadow-2xl ${isCompactSection && isActive ? 'rounded-none -mx-2' : 'rounded-2xl'} ${isActive ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
+                style={isActive && !isCompactSection ? { minHeight: 'calc(100vh - 200px)' } : {}}
             >
-                <div 
+                <div
                     className={`flex items-center gap-2 px-5 py-3 transition-colors text-left flex-shrink-0 border-b border-white/10 ${isActive ? 'bg-white/[0.07]' : 'bg-white/[0.04]'}`}
                     onClick={() => setExpandedSection(isActive ? null : key)}
                 >
@@ -2180,7 +2181,7 @@ ${materialsHtml}
                     </div>
                 </div>
                 {isActive && (
-                    <div className="flex-1 overflow-auto p-4 animate-fade-in custom-scrollbar h-full">
+                    <div className={`flex-1 overflow-auto animate-fade-in custom-scrollbar h-full ${isCompactSection ? 'p-1' : 'p-4'}`}>
                         {content}
                     </div>
                 )}
