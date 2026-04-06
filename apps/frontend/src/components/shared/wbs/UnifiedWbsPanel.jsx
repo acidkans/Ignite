@@ -1453,6 +1453,45 @@ ${materialsHtml}
                     margin: row.margin,
                 });
                 params.api.applyTransaction({ update: [row] });
+
+                // Auto-create MaterialRequirement when type set to material/equipment and no req: tag yet
+                if (inheritedFromMaterials) {
+                    const wbsNode = wbsData.find(n => n.id === row.id);
+                    const hasReqTag = Array.isArray(wbsNode?.tags) && wbsNode.tags.some(t => String(t).startsWith('req:'));
+                    if (!hasReqTag) {
+                        const reqType = normalizedType === 'equipment' ? 'DEVICE' : 'MATERIAL';
+                        fetch(`${API_URL}/material-requirements`, {
+                            method: 'POST',
+                            headers: authHeaders(),
+                            body: JSON.stringify({
+                                nodeId,
+                                versionId: versionId || null,
+                                name: row.name || 'Nowy element',
+                                type: reqType,
+                                quantity: resolvedQuantity,
+                                unit: row.unit || 'szt',
+                                wbsNodeId: row.id,
+                                wbsNodeIds: JSON.stringify([row.id]),
+                                wbsNodeAllocations: JSON.stringify({ [row.id]: resolvedQuantity }),
+                            }),
+                        }).then(async (res) => {
+                            if (!res.ok) return;
+                            const created = await res.json().catch(() => null);
+                            if (created?.id) {
+                                // Tag the WBS node with req:<id> for bidirectional sync
+                                const currentTags = Array.isArray(wbsNode?.tags) ? [...wbsNode.tags] : [];
+                                currentTags.push(`req:${created.id}`);
+                                await fetch(`${API_URL}/wbs-nodes/${row.id}`, {
+                                    method: 'PATCH',
+                                    headers: authHeaders(),
+                                    body: JSON.stringify({ tags: currentTags }),
+                                }).catch(() => {});
+                                setReqRefreshKey(k => k + 1);
+                                await refreshUnified();
+                            }
+                        }).catch(() => {});
+                    }
+                }
             }
         } else {
             const q = parseFloat(row.quantity) || 1;
@@ -1501,7 +1540,7 @@ ${materialsHtml}
                 }
             }
         }
-    }, [saveBudgetField, updateNodeField, materialMetaByLookupKey, updateLocalWbsBudgetRow, syncMaterialRequirementsFromWbsQuantity]);
+    }, [saveBudgetField, updateNodeField, materialMetaByLookupKey, updateLocalWbsBudgetRow, syncMaterialRequirementsFromWbsQuantity, authHeaders, nodeId, versionId, wbsData, refreshUnified]);
 
     const buildRows = (view) => {
         const byId = new Map(wbsData.map(item => [item.id, item]));
