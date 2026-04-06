@@ -247,6 +247,8 @@ export default function DashboardPage() {
     const showSearch = activeTab !== 'requirements';
     const searchPlaceholder = activeTab === 'tasks'
         ? 'Szukaj po nazwie, statusie, osobie, dacie…'
+        : activeTab === 'unified'
+        ? 'Szukaj w strukturze, budżecie, materiałach…'
         : activeTab === 'materialDatabase'
         ? 'Szukaj w materiałach i kartach katalogowych…'
         : 'Szukaj po nazwie pliku, dacie…';

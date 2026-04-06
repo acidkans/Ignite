@@ -11,5 +11,5 @@ RUN npx prisma generate
 
 COPY . .
 
-# Push schema, seed roles + users (dev only), start bez watch
-CMD ["sh", "-c", "npx prisma db push && node prisma/seed.js && ([ \"$NODE_ENV\" != \"production\" ] && node prisma/seed-users-from-json.js || true) && npm run start"]
+# Push schema, seed roles + users (dev only), build and start
+CMD ["sh", "-c", "npx prisma generate && npx prisma db push && node prisma/seed.js && ([ \"$NODE_ENV\" != \"production\" ] && node prisma/seed-users-from-json.js || true) && rm -f tsconfig.tsbuildinfo && npx tsc -p tsconfig.json && node dist/main"]

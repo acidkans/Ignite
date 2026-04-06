@@ -776,6 +776,35 @@ ${rows}
 
 
 
+            <section className={`glass-panel rounded-2xl border border-white/5 bg-white/[0.02] flex flex-col overflow-hidden ${expandedSection === 'strategy' ? 'h-[calc(100vh-160px)]' : ''} ${expandedSection !== null && expandedSection !== 'strategy' ? 'hidden' : ''}`}>
+                <button
+                    className={`w-full flex items-center gap-2 p-5 transition-colors text-left flex-shrink-0 border-b border-white/10 bg-white/[0.04] ${expandedSection === 'strategy' ? 'bg-white/[0.07]' : 'hover:bg-white/[0.06]'}`}
+                    onClick={() => toggleSection('strategy', setShowStrategy)}
+                >
+                    <HelpCircle size={16} className="text-blue-400 flex-shrink-0" />
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-gray-300 flex-1">Strategia realizacji</h3>
+                    {expandedSection === 'strategy' && (
+                        <div className="flex items-center gap-2 mr-3 flex-shrink-0">
+                            <div role="button" tabIndex={0} onClick={e => { e.stopPropagation(); handleExportStrategyPDF(); }} onKeyDown={e => e.key === 'Enter' && handleExportStrategyPDF()} className="flex items-center gap-1.5 px-3 py-1 bg-red-700/60 hover:bg-red-600/80 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer">
+                                <FileDown size={12} /><span>PDF</span>
+                            </div>
+                        </div>
+                    )}
+                    <ChevronRight size={14} className={`text-gray-500 transition-transform flex-shrink-0 ${showStrategy ? 'rotate-90' : ''}`} />
+                </button>
+                {showStrategy && (
+                    <div className={`px-5 pb-5 pt-3 ${expandedSection === 'strategy' ? 'flex-1 overflow-y-auto' : ''}`}>
+                        <textarea
+                            ref={strategyRef}
+                            value={wbsDescription}
+                            onChange={e => setWbsDescription(e.target.value)}
+                            className="w-full min-h-[200px] bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-sm focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed resize-none"
+                            placeholder="Zdefiniuj plan i strategię realizacji projektu..."
+                        />
+                    </div>
+                )}
+            </section>
+
             <section className={`glass-panel rounded-2xl border border-white/5 bg-white/[0.02] flex flex-col overflow-hidden ${expandedSection === 'wbs' ? 'h-[calc(100vh-160px)]' : ''} ${expandedSection !== null && expandedSection !== 'wbs' ? 'hidden' : ''}`}>
                 <button
                     className={`w-full flex items-center gap-2 p-5 transition-colors text-left flex-shrink-0 border-b border-white/10 bg-white/[0.04] ${expandedSection === 'wbs' ? 'bg-white/[0.07]' : 'hover:bg-white/[0.06]'}`}
