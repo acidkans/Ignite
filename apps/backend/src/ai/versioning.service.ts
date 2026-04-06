@@ -96,7 +96,76 @@ export class VersioningService {
                 });
             }
 
-            // 6. Deactivate other versions
+            // 6. Clone WBS Nodes with ID mapping
+            const wbsNodes = await tx.wbsNode.findMany({
+                where: { nodeId, ...sourceFilter },
+                orderBy: { sortOrder: 'asc' },
+            });
+
+            const wbsIdMap = new Map<string, string>();
+
+            // First pass: create all nodes without parentId
+            for (const wn of wbsNodes) {
+                const newId = require('crypto').randomUUID();
+                wbsIdMap.set(wn.id, newId);
+                await tx.wbsNode.create({
+                    data: {
+                        id: newId,
+                        nodeId,
+                        versionId: newVersion.id,
+                        parentId: null, // set in second pass
+                        name: wn.name,
+                        type: wn.type,
+                        status: wn.status,
+                        owner: wn.owner,
+                        resources: wn.resources,
+                        cost: wn.cost,
+                        tags: wn.tags,
+                        sortOrder: wn.sortOrder,
+                        budgetType: wn.budgetType,
+                        unit: wn.unit,
+                        unitCost: wn.unitCost,
+                        quantity: wn.quantity,
+                        totalCost: wn.totalCost,
+                        margin: wn.margin,
+                        discount: wn.discount,
+                        unitPrice: wn.unitPrice,
+                        totalPrice: wn.totalPrice,
+                        comment: wn.comment,
+                        phase: wn.phase,
+                    },
+                });
+            }
+
+            // Second pass: set parentId references
+            for (const wn of wbsNodes) {
+                if (wn.parentId && wbsIdMap.has(wn.parentId)) {
+                    await tx.wbsNode.update({
+                        where: { id: wbsIdMap.get(wn.id)! },
+                        data: { parentId: wbsIdMap.get(wn.parentId)! },
+                    });
+                }
+            }
+
+            // 7. Clone WBS Node Material allocations
+            const wbsMaterials = await tx.wbsNodeMaterial.findMany({
+                where: { wbsNodeId: { in: wbsNodes.map(n => n.id) } },
+            });
+
+            for (const wm of wbsMaterials) {
+                const newWbsId = wbsIdMap.get(wm.wbsNodeId);
+                if (newWbsId) {
+                    await tx.wbsNodeMaterial.create({
+                        data: {
+                            wbsNodeId: newWbsId,
+                            materialId: wm.materialId,
+                            quantity: wm.quantity,
+                        },
+                    });
+                }
+            }
+
+            // 8. Deactivate other versions
             await tx.projectVersion.updateMany({
                 where: {
                     nodeId,
@@ -105,7 +174,7 @@ export class VersioningService {
                 data: { isActive: false }
             });
 
-            // 5. Clone Order Requirements (including wbsDescription and budgetNotes)
+            // 9. Clone Order Requirements (including wbsDescription and budgetNotes)
             const sourceReqs = await tx.orderRequirements.findMany({
                 where: { nodeId, versionId: sourceFilter.versionId }
             });

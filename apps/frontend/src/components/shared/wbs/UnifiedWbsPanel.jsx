@@ -620,15 +620,16 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         }
     }, [nodeId, versionId, authHeaders, fetchData]);
 
-    // Auto-collapse sidebars when budget/materials section is expanded
+    // Zwinięcie sidebara na wejściu do Planowanie
     useEffect(() => {
-        const isFocusedSection = expandedSection === 'budget' || expandedSection === 'materials2';
-        if (isFocusedSection) {
-            setLeftVisible?.(false);
-            setAiVisible?.(false);
-        } else {
-            setLeftVisible?.(true);
-        }
+        setLeftVisible?.(false);
+        setAiVisible?.(false);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Zwinięcie sidebara przy każdej zmianie sekcji
+    useEffect(() => {
+        setLeftVisible?.(false);
+        setAiVisible?.(false);
     }, [expandedSection, setLeftVisible, setAiVisible]);
 
     useEffect(() => {
@@ -2219,7 +2220,7 @@ ${materialsHtml}
 
         return (
             <div
-                className={`flex flex-col glass-panel border border-white/5 transition-all duration-300 shadow-2xl ${isCompactSection && isActive ? 'rounded-none h-full overflow-hidden' : 'rounded-2xl overflow-hidden'} ${isActive ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
+                className={`flex flex-col glass-panel border border-white/5 transition-all duration-300 shadow-2xl ${isCompactSection && isActive ? 'rounded-none h-full' : 'rounded-2xl overflow-hidden'} ${isActive ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
                 style={isActive && !isCompactSection ? { minHeight: 'calc(100vh - 200px)' } : {}}
             >
                 <div
