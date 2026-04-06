@@ -2220,7 +2220,7 @@ ${materialsHtml}
 
         return (
             <div
-                className={`flex flex-col glass-panel border border-white/5 transition-all duration-300 shadow-2xl ${isCompactSection && isActive ? 'rounded-none h-full' : 'rounded-2xl overflow-hidden'} ${isActive ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
+                className={`flex flex-col glass-panel border border-white/5 transition-all duration-300 shadow-2xl overflow-hidden ${isCompactSection && isActive ? 'rounded-none h-full' : 'rounded-2xl'} ${isActive ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
                 style={isActive && !isCompactSection ? { minHeight: 'calc(100vh - 200px)' } : {}}
             >
                 <div
