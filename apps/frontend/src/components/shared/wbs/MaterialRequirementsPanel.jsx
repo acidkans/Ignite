@@ -1834,42 +1834,24 @@ function WbsMultiSelect({ r, wbsProjectItems, nodeToProjectItemId = {}, subtasks
         return normalizeSelectedIds(ids);
     });
 
-    // Sync z danymi z serwera + czyść stale references do usuniętych przedmiotów
-    const stalePatchedRef = React.useRef(new Set());
+    // Sync z danymi z serwera (tylko local state, BEZ patchItem — unikamy infinite loop)
     React.useEffect(() => {
         let ids = [];
         if (r.wbsNodeIds) { try { ids = JSON.parse(r.wbsNodeIds); } catch { ids = []; } }
         else if (r.wbsNodeId) { ids = [r.wbsNodeId]; }
-        const cleanIds = normalizeSelectedIds(ids);
-        setSelectedIds(cleanIds);
+        setSelectedIds(normalizeSelectedIds(ids));
 
         let rawAlloc = {};
         try { rawAlloc = r.wbsNodeAllocations ? JSON.parse(r.wbsNodeAllocations) : {}; } catch {}
         const cleanAlloc = {};
-        let stale = false;
         for (const [k, v] of Object.entries(rawAlloc)) {
             const mappedId = normalizeNodeId(k);
             if (validIds.has(mappedId)) {
                 cleanAlloc[mappedId] = (Number(cleanAlloc[mappedId]) || 0) + (Number(v) || 0);
-                if (mappedId !== k) stale = true;
-            } else {
-                stale = true;
             }
         }
-        if (ids.length !== cleanIds.length) stale = true;
         setAllocations(cleanAlloc);
-
-        // Jeśli wykryto stale references — wyczyść je w bazie (raz per wiersz)
-        const fingerprint = `${r.id}:${r.wbsNodeIds}:${r.wbsNodeAllocations}`;
-        if (stale && !readOnly && !stalePatchedRef.current.has(fingerprint)) {
-            stalePatchedRef.current.add(fingerprint);
-            patchItem(r.id, {
-                wbsNodeIds: JSON.stringify(cleanIds),
-                wbsNodeId: cleanIds[0] || null,
-                wbsNodeAllocations: Object.keys(cleanAlloc).length > 0 ? JSON.stringify(cleanAlloc) : null,
-            });
-        }
-    }, [r.wbsNodeIds, r.wbsNodeId, r.wbsNodeAllocations, validIds, normalizeSelectedIds, normalizeNodeId, readOnly]);
+    }, [r.wbsNodeIds, r.wbsNodeId, r.wbsNodeAllocations, validIds, normalizeSelectedIds, normalizeNodeId]);
 
     const selectedItems = items.filter(n => selectedIds.includes(n.id));
 
@@ -2188,11 +2170,6 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
 
             setRequirements(reqItems);
             console.log('[Mat2] final reqItems:', reqItems.length, 'wbsFallback will be used:', reqItems.length === 0);
-
-            // Sync w tle — nie blokuj ładowania, przekaż już pobrane węzły
-            if (Array.isArray(reqItems)) {
-                syncRequirementNodesInWbsTree(reqItems, { prefetchedNodes: unifiedItems }).catch(() => {});
-            }
         } catch (error) {
             console.error('[MaterialRequirementsPanel] fetchRequirements failed:', error);
             setRequirements([]);
