@@ -1762,7 +1762,7 @@ ${materialsHtml}
             totalRevenue += Number.isFinite(revenue) ? revenue : fallbackRevenue;
         }
         const profit = totalRevenue - totalCost;
-        const marginPct = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
+        const marginPct = totalCost > 0 ? (profit / totalCost) * 100 : 0;
         return {
             rows: rows.length,
             totalCost,
@@ -1815,7 +1815,7 @@ ${materialsHtml}
 
         const totalRevenue = Math.max(0, baseRevenue - totalDiscount);
         const profit = totalRevenue - budgetSummary.totalCost;
-        const marginPct = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
+        const marginPct = budgetSummary.totalCost > 0 ? (profit / budgetSummary.totalCost) * 100 : 0;
         return {
             ...budgetSummary,
             totalRevenue,
@@ -2062,7 +2062,7 @@ ${materialsHtml}
 
         return (
             <div
-                className={isBudgetView ? 'flex-1 min-h-[200px] overflow-x-auto overflow-y-hidden pb-2 custom-scrollbar' : 'flex-1 min-h-[400px]'}
+                className={isBudgetView ? 'flex-1 min-h-[200px] overflow-hidden pb-2' : 'flex-1 min-h-[400px]'}
                 onDoubleClick={(e) => e.stopPropagation()}
                 onDragOver={isStructureView ? (e) => {
                     const types = Array.from(e.dataTransfer?.types || []);
@@ -2086,7 +2086,7 @@ ${materialsHtml}
                     }
                 } : undefined}
             >
-                <div className="h-full" style={isBudgetView ? { minWidth: '1820px' } : undefined}>
+                <div className="h-full">
                     <AgGridReact
                         ref={gridRef}
                         theme={darkTheme}
