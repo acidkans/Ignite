@@ -2262,7 +2262,7 @@ ${materialsHtml}
                     </div>
                 </div>
                 {isActive && (
-                    <div className={`flex-1 min-h-0 animate-fade-in custom-scrollbar ${isCompactSection ? 'p-0 overflow-auto' : 'p-4 overflow-auto'}`}>
+                    <div className={`flex-1 min-h-0 animate-fade-in ${isCompactSection ? 'p-0 overflow-hidden' : 'p-4 overflow-auto custom-scrollbar'}`}>
                         {content}
                     </div>
                 )}
