@@ -1206,8 +1206,16 @@ function ProductCard({
                                 .sort((a, b) => getVal(a).localeCompare(getVal(b)));
 
                             const selectSuggestion = async (mat) => {
-                                // Tylko powiązanie przez materialId — nie kopiujemy danych produktu na wymaganie
+                                // Powiązanie przez materialId + kopiowanie karty katalogowej z bazy materiałów
                                 const updates = { materialId: mat.id };
+                                if (mat.dataSheetUrl) {
+                                    updates.dataSheetUrl = mat.dataSheetUrl;
+                                    updates.dataSheetName = mat.dataSheetName || mat.productName || 'karta_katalogowa.pdf';
+                                }
+                                if (mat.complianceUrl) {
+                                    updates.complianceUrl = mat.complianceUrl;
+                                    updates.complianceName = mat.complianceName || 'karta_zgodnosci.pdf';
+                                }
 
                                 // UI: pokaż dane materiału w polach (tylko lokalnie, bez zapisu)
                                 const uiFields = {};
