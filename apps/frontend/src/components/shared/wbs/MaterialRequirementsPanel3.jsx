@@ -3,6 +3,7 @@ import {
     ChevronRight, ChevronDown, Plus, Package, Wrench,
     CheckCircle, Clock, XCircle, Star, Trash2, AlertCircle,
     ShoppingCart, Warehouse, LogOut, Lock, X, Filter, GitBranch,
+    FileText, Search,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
 
@@ -59,6 +60,8 @@ const MaterialRequirementsPanel3 = forwardRef(function MaterialRequirementsPanel
     const [expandedId, setExpandedId] = useState(null);
     const [wbsNodes, setWbsNodes] = useState([]);
     const [activeTypes, setActiveTypes] = useState(['MATERIAL', 'DEVICE']);
+    const [materialDb, setMaterialDb] = useState([]);
+    const [offers, setOffers] = useState([]);
 
     // Ref do unikania stale closures
     const reqRef = useRef(requirements);
@@ -113,7 +116,6 @@ const MaterialRequirementsPanel3 = forwardRef(function MaterialRequirementsPanel
             const res = await fetch(url, { headers });
             if (res.ok) {
                 const data = await res.json();
-                // API returns { items: [...] } — already flat with id, parentId, depth
                 setWbsNodes(data.items || []);
             }
         } catch (err) {
@@ -121,14 +123,30 @@ const MaterialRequirementsPanel3 = forwardRef(function MaterialRequirementsPanel
         }
     }, [nodeId, versionId]);
 
+    const fetchMaterialDb = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_URL}/material-requirements/database`, { headers });
+            if (res.ok) setMaterialDb(await res.json());
+        } catch {}
+    }, []);
+
+    const fetchOffers = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_URL}/offers/node/${nodeId}`, { headers });
+            if (res.ok) setOffers(await res.json());
+        } catch {}
+    }, [nodeId]);
+
     // ─── Init ───────────────────────────────────────────────────────────────
 
     useEffect(() => {
         if (!nodeId) return;
         let cancelled = false;
         (async () => {
-            // Fetch WBS tree in parallel with lists
+            // Fetch WBS tree, material DB and offers in parallel with lists
             fetchWbsNodes();
+            fetchMaterialDb();
+            fetchOffers();
             let data = await fetchLists();
             if (cancelled) return;
             if (data.length === 0) {
@@ -275,7 +293,7 @@ const MaterialRequirementsPanel3 = forwardRef(function MaterialRequirementsPanel
                                     />
                                     {expandedId === r.id && (
                                         <tr><td colSpan={isLocked ? 8 : 9} className="p-0 bg-black/20 border-b border-white/5">
-                                            <ExpandedDetail r={r} token={token} onRefresh={() => fetchRequirements(activeListId)} />
+                                            <ExpandedDetail r={r} token={token} onRefresh={() => fetchRequirements(activeListId)} onPatch={patchItem} materialDb={materialDb} offers={offers} isLocked={isLocked} />
                                         </td></tr>
                                     )}
                                 </React.Fragment>
@@ -394,43 +412,312 @@ function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMa
     );
 }
 
-// ─── ExpandedDetail (placeholder — tu docelowo ProductCard itp.) ─────────────
+// ─── ExpandedDetail ──────────────────────────────────────────────────────────
 
-function ExpandedDetail({ r, token, onRefresh }) {
+function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLocked }) {
+    const headers = { Authorization: `Bearer ${token}` };
+    const jsonHeaders = { ...headers, 'Content-Type': 'application/json' };
+    const readOnly = isLocked;
+
+    // Local editable fields
+    const [fields, setFields] = useState({
+        manufacturer: r.manufacturer || '',
+        model: r.model || '',
+        productName: r.productName || '',
+        availability: r.availability || '',
+        technicalSpec: r.technicalSpec || '',
+        priceNetto: r.priceNetto ?? '',
+    });
+    const [comboOpen, setComboOpen] = useState(null);
+    const [selectedOfferId, setSelectedOfferId] = useState(null);
+    const [selectedPositionIdx, setSelectedPositionIdx] = useState(null);
+
+    const setF = (k, v) => setFields(prev => ({ ...prev, [k]: v }));
+
+    const patchFields = async (data) => {
+        await onPatch(r.id, data);
+    };
+
+    // ─── Cross-filtering comboboxes ─────────────────────────────────────────
+    const ciEq = (a, b) => (a || '').toLowerCase() === (b || '').toLowerCase();
+
+    const comboFields = [
+        ['manufacturer', 'Producent'],
+        ['model', 'Model'],
+        ['productName', 'Nazwa handlowa'],
+    ];
+
+    const getFilteredSuggestions = (fieldKey) => {
+        const otherFields = ['manufacturer', 'model', 'productName'].filter(f => f !== fieldKey);
+        let baseDb = materialDb;
+        for (const f of otherFields) {
+            if (fields[f]) baseDb = baseDb.filter(m => ciEq(m[f], fields[f]));
+        }
+        const typed = (fields[fieldKey] || '').toLowerCase();
+        const filtered = baseDb.filter(m => {
+            const v = m[fieldKey] || '';
+            if (!v) return false;
+            return typed ? v.toLowerCase().includes(typed) : true;
+        });
+        const seen = new Set();
+        return filtered.filter(m => {
+            const v = (m[fieldKey] || '').toLowerCase();
+            return !seen.has(v) && seen.add(v);
+        }).sort((a, b) => (a[fieldKey] || '').localeCompare(b[fieldKey] || ''));
+    };
+
+    const selectMaterial = async (mat) => {
+        const uiFields = {};
+        if (mat.manufacturer) uiFields.manufacturer = mat.manufacturer;
+        if (mat.model) uiFields.model = mat.model;
+        if (mat.productName) uiFields.productName = mat.productName;
+        setFields(prev => ({ ...prev, ...uiFields }));
+        setComboOpen(null);
+
+        const updates = { materialId: mat.id };
+        if (mat.manufacturer) updates.manufacturer = mat.manufacturer;
+        if (mat.model) updates.model = mat.model;
+        if (mat.productName) updates.productName = mat.productName;
+        if (mat.dataSheetUrl) {
+            updates.dataSheetUrl = mat.dataSheetUrl;
+            updates.dataSheetName = mat.dataSheetName || mat.productName || 'karta_katalogowa.pdf';
+        }
+        await patchFields(updates);
+    };
+
+    // ─── Offers ─────────────────────────────────────────────────────────────
+    // Flatten all offer positions with offer metadata
+    const allOfferPositions = useMemo(() => {
+        const result = [];
+        for (const offer of offers) {
+            const positions = offer.positions || [];
+            positions.forEach((pos, idx) => {
+                result.push({
+                    ...pos,
+                    _offerId: offer.id,
+                    _offerFileName: offer.fileName,
+                    _posIdx: idx,
+                });
+            });
+        }
+        return result;
+    }, [offers]);
+
+    const selectOfferPosition = async (pos) => {
+        const offer = offers.find(o => o.id === pos._offerId);
+        setSelectedOfferId(pos._offerId);
+        setSelectedPositionIdx(pos._posIdx);
+        const updates = {
+            offerNumber: offer?.fileName || '',
+            seller: offer?.createdBy || '',
+            priceNetto: pos.priceNetto ?? null,
+        };
+        if (pos.manufacturer) updates.manufacturer = pos.manufacturer;
+        if (pos.model) updates.model = pos.model;
+
+        setFields(prev => ({
+            ...prev,
+            manufacturer: pos.manufacturer || prev.manufacturer,
+            model: pos.model || prev.model,
+            priceNetto: pos.priceNetto ?? prev.priceNetto,
+        }));
+
+        await patchFields(updates);
+    };
+
+    // ─── Technical requirements (newline = separate requirement) ─────────────
+    const techRequirements = useMemo(() => {
+        return (fields.technicalSpec || '').split(/\n/).map(s => s.trim()).filter(s => s.length > 2);
+    }, [fields.technicalSpec]);
+
+    const saveTechSpec = async (newSpec) => {
+        setF('technicalSpec', newSpec);
+        await patchFields({ technicalSpec: newSpec || null });
+    };
+
+    // ─── Input class ────────────────────────────────────────────────────────
+    const ic = 'w-full bg-black/40 border border-white/10 rounded px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-blue-500 transition-colors';
+
     return (
-        <div className="px-4 py-3">
-            <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="px-4 py-3 space-y-3">
+            {/* Row 1: Producent, Model, Nazwa handlowa — comboboxes */}
+            <div className="grid grid-cols-3 gap-3">
+                {comboFields.map(([k, lbl]) => {
+                    const suggestions = getFilteredSuggestions(k);
+                    return (
+                        <div key={k} className="relative">
+                            <label className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 block">{lbl}</label>
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    value={fields[k]}
+                                    onChange={e => { setF(k, e.target.value); setComboOpen(k); }}
+                                    onFocus={() => setComboOpen(k)}
+                                    onBlur={() => {
+                                        setTimeout(() => setComboOpen(prev => prev === k ? null : prev), 200);
+                                        const val = fields[k];
+                                        if (val !== (r[k] ?? '')) patchFields({ [k]: val || null });
+                                    }}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Escape') setComboOpen(null);
+                                        if (e.key === 'Enter' && comboOpen === k && suggestions.length > 0) {
+                                            e.preventDefault();
+                                            selectMaterial(suggestions[0]);
+                                        }
+                                    }}
+                                    disabled={readOnly}
+                                    placeholder="— wpisz lub wybierz —"
+                                    className={ic}
+                                    autoComplete="off"
+                                />
+                                <Search size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-600" />
+                            </div>
+                            {comboOpen === k && suggestions.length > 0 && !readOnly && (
+                                <div className="absolute z-[300] top-full left-0 w-full bg-gray-900 border border-white/15 rounded-lg mt-0.5 max-h-48 overflow-y-auto shadow-2xl">
+                                    {suggestions.map(mat => (
+                                        <button key={mat.id} onMouseDown={e => { e.preventDefault(); selectMaterial(mat); }}
+                                            className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 text-white truncate border-b border-white/5 last:border-0">
+                                            {mat[k]}
+                                            {k === 'manufacturer' && mat.model && <span className="text-gray-500 ml-1">· {mat.model}</span>}
+                                            {k === 'model' && mat.manufacturer && <span className="text-gray-500 ml-1">· {mat.manufacturer}</span>}
+                                            {k === 'productName' && mat.model && <span className="text-gray-500 ml-1">· {mat.model}</span>}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Row 2: Nr oferty, Sprzedawca, Dostępność, Cena netto */}
+            <div className="grid grid-cols-4 gap-3">
                 <div>
-                    <span className="text-gray-500 text-xs uppercase">Producent</span>
-                    <p className="text-white">{r.manufacturer || '—'}</p>
+                    <label className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 block">Nr oferty</label>
+                    <p className="text-white text-xs bg-black/20 rounded px-2.5 py-1.5 border border-white/5 min-h-[30px]">
+                        {r.offerNumber || '—'}
+                    </p>
                 </div>
                 <div>
-                    <span className="text-gray-500 text-xs uppercase">Model</span>
-                    <p className="text-white">{r.model || '—'}</p>
+                    <label className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 block">Sprzedawca</label>
+                    <p className="text-white text-xs bg-black/20 rounded px-2.5 py-1.5 border border-white/5 min-h-[30px]">
+                        {r.seller || '—'}
+                    </p>
                 </div>
                 <div>
-                    <span className="text-gray-500 text-xs uppercase">Nazwa handlowa</span>
-                    <p className="text-white">{r.productName || '—'}</p>
+                    <label className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 block">Dostępność</label>
+                    <input
+                        type="text"
+                        value={fields.availability}
+                        onChange={e => setF('availability', e.target.value)}
+                        onBlur={e => {
+                            if (e.target.value !== (r.availability ?? '')) patchFields({ availability: e.target.value || null });
+                        }}
+                        disabled={readOnly}
+                        placeholder="np. 2-3 tyg."
+                        className={ic}
+                    />
                 </div>
                 <div>
-                    <span className="text-gray-500 text-xs uppercase">Sprzedawca</span>
-                    <p className="text-white">{r.seller || '—'}</p>
-                </div>
-                <div>
-                    <span className="text-gray-500 text-xs uppercase">Nr oferty</span>
-                    <p className="text-white">{r.offerNumber || '—'}</p>
-                </div>
-                <div>
-                    <span className="text-gray-500 text-xs uppercase">Dostępność</span>
-                    <p className="text-white">{r.availability || '—'}</p>
+                    <label className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 block">Cena netto</label>
+                    <div className="relative">
+                        <input
+                            type="number"
+                            step="0.01"
+                            value={fields.priceNetto}
+                            onChange={e => setF('priceNetto', e.target.value)}
+                            onBlur={e => {
+                                const val = e.target.value ? parseFloat(e.target.value) : null;
+                                if (val !== (r.priceNetto ?? null)) patchFields({ priceNetto: val });
+                            }}
+                            disabled={readOnly}
+                            placeholder="0.00"
+                            className={`${ic} pr-8`}
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-[10px]">zł</span>
+                    </div>
                 </div>
             </div>
-            {r.technicalSpec && (
-                <div className="mt-3">
-                    <span className="text-gray-500 text-xs uppercase">Wymagania techniczne</span>
-                    <pre className="text-gray-300 text-xs mt-1 whitespace-pre-wrap font-mono bg-black/20 rounded p-2">{r.technicalSpec}</pre>
+
+            {/* Row 3: Pozycja z oferty */}
+            {allOfferPositions.length > 0 && (
+                <div>
+                    <label className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 block">
+                        <FileText size={10} className="inline mr-1" />
+                        Pozycja z oferty ({allOfferPositions.length} pozycji w {offers.length} ofertach)
+                    </label>
+                    <div className="max-h-36 overflow-y-auto bg-black/20 rounded border border-white/5">
+                        {offers.map(offer => (
+                            <div key={offer.id}>
+                                <div className="px-2 py-1 text-[10px] text-gray-500 bg-white/[0.02] border-b border-white/5 font-semibold uppercase tracking-wider">
+                                    {offer.fileName}
+                                </div>
+                                {(offer.positions || []).map((pos, idx) => {
+                                    const isSelected = selectedOfferId === offer.id && selectedPositionIdx === idx;
+                                    return (
+                                        <button
+                                            key={idx}
+                                            onClick={() => !readOnly && selectOfferPosition({ ...pos, _offerId: offer.id, _posIdx: idx })}
+                                            disabled={readOnly}
+                                            className={`w-full text-left px-3 py-1.5 text-xs border-b border-white/[0.03] transition-colors flex items-center gap-3 ${isSelected ? 'bg-green-500/10 border-green-500/20' : 'hover:bg-white/[0.04]'} ${readOnly ? 'cursor-default' : 'cursor-pointer'}`}
+                                        >
+                                            <span className="text-gray-600 w-5 text-right font-mono">{pos.lp || idx + 1}.</span>
+                                            <span className="text-white flex-1 truncate">{pos.description}</span>
+                                            {pos.manufacturer && <span className="text-gray-500 text-[10px]">{pos.manufacturer}</span>}
+                                            <span className="text-gray-400 font-mono w-14 text-right">{pos.quantity} {pos.unit || 'szt'}</span>
+                                            <span className="text-green-400 font-mono w-20 text-right">{pos.priceNetto ? `${Number(pos.priceNetto).toFixed(2)} zł` : '—'}</span>
+                                            {isSelected && <Star size={10} className="text-green-400 fill-green-400 shrink-0" />}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
+
+            {/* Row 4: Wymagania techniczne */}
+            <div>
+                <label className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 block">
+                    Wymagania techniczne
+                    {techRequirements.length > 0 && <span className="text-gray-600 ml-1">({techRequirements.length})</span>}
+                </label>
+                {readOnly ? (
+                    techRequirements.length > 0 ? (
+                        <div className="space-y-0.5">
+                            {techRequirements.map((req, i) => (
+                                <div key={i} className="flex items-start gap-2 text-xs text-gray-300 bg-black/20 rounded px-2.5 py-1 border border-white/5">
+                                    <span className="text-gray-600 font-mono w-4 text-right shrink-0">{i + 1}.</span>
+                                    <span>{req}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-xs text-gray-600">—</p>
+                    )
+                ) : (
+                    <>
+                        <textarea
+                            rows={3}
+                            value={fields.technicalSpec}
+                            onChange={e => setF('technicalSpec', e.target.value)}
+                            onBlur={e => saveTechSpec(e.target.value)}
+                            placeholder="Każda nowa linia = osobne wymaganie techniczne..."
+                            className={`${ic} resize-none font-mono`}
+                        />
+                        {techRequirements.length > 0 && (
+                            <div className="mt-1 space-y-0.5">
+                                {techRequirements.map((req, i) => (
+                                    <div key={i} className="flex items-start gap-2 text-[11px] text-gray-400">
+                                        <span className="text-gray-600 font-mono w-4 text-right shrink-0">{i + 1}.</span>
+                                        <span>{req}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
         </div>
     );
 }
