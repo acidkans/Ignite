@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import ExcelJS from 'exceljs';
 import { useReactTable, getCoreRowModel, getExpandedRowModel, getSortedRowModel, getFilteredRowModel, flexRender } from '@tanstack/react-table';
 import {
@@ -2449,19 +2448,22 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
         return created;
     }, [nodeId, versionId, activeListId, authHeaders]);
 
+    const requirementsRef = useRef(requirements);
+    requirementsRef.current = requirements;
+    const wbsFallbackRef = useRef(wbsFallbackRequirements);
+    wbsFallbackRef.current = wbsFallbackRequirements;
+
     const patchItem = useCallback(async (id, data) => {
         // Jeśli to wirtualne wymaganie — zmaterializuj je najpierw
-        const virtualReq = wbsFallbackRequirements.find(r => r.id === id);
+        const virtualReq = wbsFallbackRef.current.find(r => r.id === id);
         if (virtualReq) {
             const merged = { ...virtualReq, ...data };
             const created = await materializeVirtual({ ...virtualReq, quantity: merged.quantity, type: merged.type, unit: merged.unit });
             if (!created) return;
-            // Jeśli zmieniono coś więcej niż materializacja, patchuj
             const extraKeys = Object.keys(data).filter(k => !['quantity', 'type', 'unit', 'name'].includes(k));
             if (extraKeys.length > 0) {
                 const extraPayload = {};
                 extraKeys.forEach(k => { extraPayload[k] = data[k]; });
-                // Rekurencyjne wywołanie patchItem z prawdziwym ID
                 const res2 = await fetch(`${API_URL}/material-requirements/${created.id}`, {
                     method: 'PATCH', headers: { ...authHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify(extraPayload),
                 });
@@ -2470,11 +2472,10 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                     setRequirements(prev => prev.map(r => r.id === created.id ? { ...r, ...updated2 } : r));
                 }
             }
-            syncUnifiedRefresh();
             return;
         }
 
-        const currentRequirement = requirements.find((requirement) => requirement.id === id);
+        const currentRequirement = requirementsRef.current.find((requirement) => requirement.id === id);
         const payload = { ...data };
 
         if (payload.quantity !== undefined && payload.wbsNodeAllocations === undefined) {
@@ -2491,7 +2492,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
             const updated = await res.json();
             setRequirements(prev => prev.map(r => r.id === id ? { ...r, ...updated } : r));
         }
-    }, [requirements, wbsFallbackRequirements, materializeVirtual, syncAllocationsWithQuantity]);
+    }, [materializeVirtual, syncAllocationsWithQuantity, authHeaders]);
 
     useImperativeHandle(ref, () => ({}), []);
 
@@ -2995,38 +2996,24 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                         </thead>
                         <tbody>
                             {table.getRowModel().rows.map(row => (
-                                <tr key={row.original.id} className={`border-b border-white/[0.03] transition-colors ${expandedId === row.original.id ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
-                                    {row.getVisibleCells().map(cell => (
-                                        <td key={cell.id} style={{ width: cell.column.columnDef.size }} className="px-2 py-1 align-middle">
-                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                        </td>
-                                    ))}
-                                </tr>
+                                <React.Fragment key={row.original.id}>
+                                    <tr className={`border-b border-white/[0.03] transition-colors ${expandedId === row.original.id ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
+                                        {row.getVisibleCells().map(cell => (
+                                            <td key={cell.id} style={{ width: cell.column.columnDef.size }} className="px-2 py-1 align-middle">
+                                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                            </td>
+                                        ))}
+                                    </tr>
+                                    {expandedId === row.original.id && (
+                                        <tr><td colSpan={columns.length} className="p-0">
+                                            <ExpandedRow req={row.original} token={token} onUpdated={handleUpdated} onDeleted={handleDeleted} readOnly={isLocked} readOnlyDelete={isLocked || readOnlyWbs} offerFiles={offerFiles} nodeId={nodeId} showCompliance={complianceOpen.get(row.original.id) ?? false} onToggleCompliance={() => toggleCompliance(row.original.id)} />
+                                        </td></tr>
+                                    )}
+                                </React.Fragment>
                             ))}
                         </tbody>
                     </table>
                 </div>
-
-                {/* Fullscreen modal for expanded requirement */}
-                {expandedId && expandedReq && createPortal(
-                    <div className="fixed inset-0 z-[9999] flex flex-col bg-gray-950/95 backdrop-blur-sm" onClick={() => setExpandedId(null)}>
-                        <div className="flex-1 overflow-auto p-6" onClick={e => e.stopPropagation()}>
-                            <div className="max-w-5xl mx-auto">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h2 className="text-lg font-semibold text-white truncate">
-                                        {expandedReq.name}
-                                        {expandedReq.type && <span className="ml-2 text-xs text-gray-400 font-normal">{expandedReq.type}</span>}
-                                    </h2>
-                                    <button onClick={() => setExpandedId(null)} className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
-                                        <X size={20} />
-                                    </button>
-                                </div>
-                                <ExpandedRow req={expandedReq} token={token} onUpdated={handleUpdated} onDeleted={handleDeleted} readOnly={isLocked} readOnlyDelete={isLocked || readOnlyWbs} offerFiles={offerFiles} nodeId={nodeId} showCompliance={complianceOpen.get(expandedReq.id) ?? false} onToggleCompliance={() => toggleCompliance(expandedReq.id)} />
-                            </div>
-                        </div>
-                    </div>,
-                    document.body
-                )}
             </>)}
 
             {showNewListModal && (
