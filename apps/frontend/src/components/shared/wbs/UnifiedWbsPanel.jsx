@@ -23,7 +23,7 @@ const darkTheme = themeQuartz.withParams({
     headerBackgroundColor: '#111118',
     headerTextColor: '#9ca3af',
     rowHoverColor: 'rgba(255,255,255,0.03)',
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderColor: 'rgba(255,255,255,0.12)',
     cellHorizontalPaddingScale: 0.6,
     fontSize: 13,
     headerFontSize: 12,

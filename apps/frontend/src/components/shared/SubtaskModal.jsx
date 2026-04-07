@@ -153,8 +153,8 @@ export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSu
                         </div>
                     )}
 
-                    <div className="space-y-6">
-                        <div>
+                    <div className="space-y-0">
+                        <div className="px-4 py-4 bg-white/[0.02] border-b border-white/5">
                             <label className="block text-xs font-bold text-gray-400 mb-2 uppercase tracking-tight">Nazwa zadania</label>
                             <input
                                 required
@@ -166,7 +166,7 @@ export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSu
                             />
                         </div>
 
-                        <div>
+                        <div className="px-4 py-4 bg-white/[0.05] border-b border-white/5">
                             <label className="block text-xs font-bold text-gray-400 mb-2 uppercase tracking-tight">Opis (opcjonalnie)</label>
                             <textarea
                                 value={formData.description}
@@ -176,7 +176,7 @@ export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSu
                             />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="px-4 py-4 bg-white/[0.02] border-b border-white/5 grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-xs font-bold text-gray-400 mb-2 uppercase tracking-tight">Status</label>
                                 <select
@@ -207,7 +207,7 @@ export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSu
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="px-4 py-4 bg-white/[0.05] border-b border-white/5 grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-xs font-bold text-gray-400 mb-2 uppercase tracking-tight">Data rozpoczęcia</label>
                                 <input
@@ -228,7 +228,7 @@ export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSu
                             </div>
                         </div>
 
-                        <div>
+                        <div className="px-4 py-4 bg-white/[0.02] border-b border-white/5">
                             <label className="block text-xs font-bold text-gray-400 mb-2 uppercase tracking-tight">Przypisz do użytkownika</label>
                             <select
                                 value={formData.assignedUserId}
@@ -243,7 +243,7 @@ export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSu
                         </div>
 
                         {!subtask && (
-                            <label className="flex items-center gap-3 cursor-pointer group">
+                            <label className="flex items-center gap-3 cursor-pointer group px-4 py-4 bg-white/[0.05]">
                                 <input
                                     type="checkbox"
                                     checked={formData.saveAsTemplate}
