@@ -2489,39 +2489,9 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
         });
         if (res.ok) {
             const updated = await res.json();
-            const nextRequirements = requirements.map(r => r.id === id ? { ...r, ...updated } : r);
-            setRequirements(nextRequirements);
-            if (payload.wbsNodeAllocations !== undefined || payload.quantity !== undefined || payload.wbsNodeId !== undefined || payload.wbsNodeIds !== undefined) {
-                await syncWbsQuantitiesFromRequirement(updated);
-            }
-            if (payload.wbsNodeAllocations !== undefined || payload.wbsNodeId !== undefined || payload.wbsNodeIds !== undefined || payload.name !== undefined || payload.type !== undefined) {
-                await syncRequirementNodesInWbsTree(nextRequirements);
-            }
-            // Synchronizuj status do powiązanego węzła WBS (tag req:)
-            if (payload.status !== undefined) {
-                try {
-                    const unifiedRes = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders });
-                    if (unifiedRes.ok) {
-                        const unifiedData = await unifiedRes.json();
-                        const wbsNode = (unifiedData.items || []).find(n =>
-                            Array.isArray(n.tags) && n.tags.includes(`req:${id}`)
-                        );
-                        if (wbsNode) {
-                            await fetch(`${API_URL}/wbs-nodes/${wbsNode.id}`, {
-                                method: 'PATCH',
-                                headers: { ...authHeaders, 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ status: payload.status }),
-                            }).catch(() => {});
-                        }
-                    }
-                } catch {}
-            }
-            // Odśwież Unified gdy zmienią się alokacje, ilość/cena materiałów lub status
-            if (payload.wbsNodeAllocations !== undefined || payload.quantity !== undefined || payload.priceNetto !== undefined || payload.status !== undefined) {
-                syncUnifiedRefresh();
-            }
+            setRequirements(prev => prev.map(r => r.id === id ? { ...r, ...updated } : r));
         }
-    }, [requirements, wbsFallbackRequirements, materializeVirtual, syncAllocationsWithQuantity, syncUnifiedRefresh, syncWbsQuantitiesFromRequirement, syncRequirementNodesInWbsTree]);
+    }, [requirements, wbsFallbackRequirements, materializeVirtual, syncAllocationsWithQuantity]);
 
     useImperativeHandle(ref, () => ({}), []);
 
@@ -2534,16 +2504,10 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     const handleUpdated = useCallback((updated) => {
         if (!updated) {
             fetchRequirements(activeListId);
-            // Po przeładowaniu (np. wybór propozycji) odśwież Unified.
-            debouncedUnifiedSync();
             return;
         }
         setRequirements(prev => prev.map(r => r.id === updated.id ? { ...r, ...updated } : r));
-        // Odśwież Unified gdy zmieni się cena lub ilość materiału.
-        if (updated.priceNetto !== undefined || updated.quantity !== undefined) {
-            debouncedUnifiedSync();
-        }
-    }, [fetchRequirements, activeListId, debouncedUnifiedSync]);
+    }, [fetchRequirements, activeListId]);
 
     const handleDeleted = useCallback(async (id) => {
         // Find requirement to clean up WBS and budget before deleting
