@@ -70,6 +70,7 @@ export default function RequirementsTab({ nodeId, versionId }) {
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
 
+    const goalRef = useRef(null);
     const [form, setForm] = useState({
         offerDeadlineDate: '',
         offerDeadlineTime: '',
@@ -555,7 +556,6 @@ export default function RequirementsTab({ nodeId, versionId }) {
                     }
 
                     if (panelId === 'goal') {
-                        const goalRef = React.createRef();
                         const insertFormat = (prefix, suffix = '') => {
                             const ta = goalRef.current;
                             if (!ta) return;
