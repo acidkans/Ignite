@@ -65,7 +65,7 @@ export default function SubtasksTab({ nodeId, versionId, workerView = false, fil
     const [nodeTeamIds, setNodeTeamIds] = useState([]);
     const saveTimeoutRef = useRef(null);
     const strategyRef = useRef(null);
-    const strategyDirtyRef = useRef(false);
+    const strategyLoadedRef = useRef(false);
 
     // Tracking refs to solve race conditions during async saves
     const latestSubtasksRef = useRef(subtasks);
@@ -131,9 +131,10 @@ export default function SubtasksTab({ nodeId, versionId, workerView = false, fil
                     const data = text ? JSON.parse(text) : null;
                     if (!data) { setLoading(false); return; }
                     setReqData(data);
-                    // Don't overwrite wbsDescription while user has unsaved edits
-                    if (!strategyDirtyRef.current) {
+                    // Only set wbsDescription on initial load, never overwrite after
+                    if (!strategyLoadedRef.current) {
                         setWbsDescription(data.wbsDescription || '');
+                        strategyLoadedRef.current = true;
                     }
                     try { setProjectItems(JSON.parse(data.projectItems || '{}')); }
                     catch { setProjectItems({}); }
@@ -668,7 +669,6 @@ ${rows}
 
                 if (res.ok) {
                     setSaved(true);
-                    strategyDirtyRef.current = false;
                     const savedTasks = await res.json();
                     setSubtasks(savedTasks || []);
                     latestSubtasksRef.current = savedTasks || [];
@@ -809,7 +809,7 @@ ${rows}
                         <textarea
                             ref={strategyRef}
                             value={wbsDescription}
-                            onChange={e => { strategyDirtyRef.current = true; setWbsDescription(e.target.value); }}
+                            onChange={e => setWbsDescription(e.target.value)}
                             onBlur={() => { handleSaveWBS(null, null, true); }}
                             className="w-full min-h-[200px] bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-sm focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed resize-none"
                             placeholder="Zdefiniuj plan i strategię realizacji projektu..."
