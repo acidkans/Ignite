@@ -78,12 +78,11 @@ export class MaterialRequirementsService {
     }
 
     async findAllByNode(nodeId: string, versionId?: string, listId?: string) {
+        const where: any = { nodeId };
+        if (versionId) where.versionId = versionId;
+        if (listId) where.OR = [{ listId }, { listId: null }];
         const items = await this.prisma.materialRequirement.findMany({
-            where: {
-                nodeId,
-                ...(versionId ? { versionId } : {}),
-                ...(listId ? { listId } : {}),
-            },
+            where,
             include: {
                 proposals: true,
                 assignedSubtask: { select: { id: true, name: true } },
