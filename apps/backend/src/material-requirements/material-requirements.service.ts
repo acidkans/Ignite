@@ -77,6 +77,32 @@ export class MaterialRequirementsService {
         });
     }
 
+    /** All materials with manufacturer filled (no dataSheetUrl requirement) */
+    async findAllMaterials() {
+        const items = await this.prisma.materialRequirement.findMany({
+            where: {
+                AND: [
+                    { manufacturer: { not: null } },
+                    { NOT: { manufacturer: '' } },
+                ]
+            },
+            select: {
+                id: true, manufacturer: true, model: true, productName: true,
+                dataSheetUrl: true, dataSheetName: true, complianceUrl: true, complianceName: true,
+                type: true,
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+        // Deduplicate by manufacturer+model (case-insensitive), keep first (newest)
+        const seen = new Set();
+        return items.filter(m => {
+            const key = `${(m.manufacturer || '').toLowerCase()}|${(m.model || '').toLowerCase()}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    }
+
     async findAllByNode(nodeId: string, versionId?: string, listId?: string) {
         const where: any = { nodeId };
         if (versionId) where.versionId = versionId;
