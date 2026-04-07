@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Save, Sparkles, HelpCircle, AlertTriangle, CheckCircle, Clock, X, Plus, GripVertical, Trash2, Zap, ArrowRight, BrainCircuit, RefreshCw, Layers, LayoutList, GripHorizontal, CheckCircle2, ChevronRight, FileDown, Package } from 'lucide-react';
+import { Save, Sparkles, HelpCircle, AlertTriangle, CheckCircle, Clock, X, Plus, GripVertical, Trash2, Zap, ArrowRight, BrainCircuit, RefreshCw, Layers, LayoutList, GripHorizontal, CheckCircle2, ChevronRight, FileDown, Package, Bold, Italic, List, Heading, Minus } from 'lucide-react';
 import { API_URL } from '../../config';
 import ProjectItemsPanel from './wbs/ProjectItemsPanel';
 import CalendarView from './wbs/CalendarView';
@@ -65,7 +65,8 @@ export default function SubtasksTab({ nodeId, versionId, workerView = false, fil
     const [nodeTeamIds, setNodeTeamIds] = useState([]);
     const saveTimeoutRef = useRef(null);
     const strategyRef = useRef(null);
-    
+    const strategyFocusedRef = useRef(false);
+
     // Tracking refs to solve race conditions during async saves
     const latestSubtasksRef = useRef(subtasks);
     const latestItemsRef = useRef(projectItems);
@@ -130,7 +131,10 @@ export default function SubtasksTab({ nodeId, versionId, workerView = false, fil
                     const data = text ? JSON.parse(text) : null;
                     if (!data) { setLoading(false); return; }
                     setReqData(data);
-                    setWbsDescription(data.wbsDescription || '');
+                    // Don't overwrite wbsDescription while user is actively editing
+                    if (!strategyFocusedRef.current) {
+                        setWbsDescription(data.wbsDescription || '');
+                    }
                     try { setProjectItems(JSON.parse(data.projectItems || '{}')); }
                     catch { setProjectItems({}); }
                     try {
@@ -794,10 +798,19 @@ ${rows}
                 </button>
                 {showStrategy && (
                     <div className={`px-5 pb-5 pt-3 ${expandedSection === 'strategy' ? 'flex-1 overflow-y-auto' : ''}`}>
+                        <div className="flex items-center gap-1 mb-2 px-1">
+                            <button type="button" onMouseDown={e => { e.preventDefault(); const ta = strategyRef.current; if (!ta) return; const s = ta.selectionStart, end = ta.selectionEnd, t = wbsDescription || '', sel = t.substring(s, end); setWbsDescription(t.substring(0, s) + '**' + sel + '**' + t.substring(end)); setTimeout(() => { ta.focus(); ta.selectionStart = s + 2; ta.selectionEnd = s + 2 + sel.length; }, 0); }} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Pogrubienie"><Bold size={14} /></button>
+                            <button type="button" onMouseDown={e => { e.preventDefault(); const ta = strategyRef.current; if (!ta) return; const s = ta.selectionStart, end = ta.selectionEnd, t = wbsDescription || '', sel = t.substring(s, end); setWbsDescription(t.substring(0, s) + '_' + sel + '_' + t.substring(end)); setTimeout(() => { ta.focus(); ta.selectionStart = s + 1; ta.selectionEnd = s + 1 + sel.length; }, 0); }} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Kursywa"><Italic size={14} /></button>
+                            <button type="button" onMouseDown={e => { e.preventDefault(); const ta = strategyRef.current; if (!ta) return; const s = ta.selectionStart, t = wbsDescription || ''; setWbsDescription(t.substring(0, s) + '## ' + t.substring(s)); setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = s + 3; }, 0); }} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Nagłówek"><Heading size={14} /></button>
+                            <button type="button" onMouseDown={e => { e.preventDefault(); const ta = strategyRef.current; if (!ta) return; const s = ta.selectionStart, t = wbsDescription || ''; setWbsDescription(t.substring(0, s) + '- ' + t.substring(s)); setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = s + 2; }, 0); }} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Lista"><List size={14} /></button>
+                            <button type="button" onMouseDown={e => { e.preventDefault(); const ta = strategyRef.current; if (!ta) return; const s = ta.selectionStart, t = wbsDescription || ''; setWbsDescription(t.substring(0, s) + '\n---\n' + t.substring(s)); setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = s + 5; }, 0); }} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Separator"><Minus size={14} /></button>
+                        </div>
                         <textarea
                             ref={strategyRef}
                             value={wbsDescription}
                             onChange={e => setWbsDescription(e.target.value)}
+                            onFocus={() => { strategyFocusedRef.current = true; }}
+                            onBlur={() => { strategyFocusedRef.current = false; handleSaveWBS(null, null, true); }}
                             className="w-full min-h-[200px] bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-sm focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed resize-none"
                             placeholder="Zdefiniuj plan i strategię realizacji projektu..."
                         />
