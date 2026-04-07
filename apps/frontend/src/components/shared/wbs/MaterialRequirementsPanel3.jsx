@@ -1,16 +1,19 @@
-import React, { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
 import {
     ChevronRight, ChevronDown, Plus, Package, Wrench,
     CheckCircle, Clock, XCircle, Star, Trash2, AlertCircle,
-    ShoppingCart, Warehouse, LogOut, Lock, X,
+    ShoppingCart, Warehouse, LogOut, Lock, X, Filter, GitBranch,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
 
 const TYPE_META = {
-    DEVICE:   { label: 'Urządzenie', icon: Package, color: 'text-blue-300' },
+    DEVICE:   { label: 'Sprzęt',    icon: Package, color: 'text-blue-300' },
     MATERIAL: { label: 'Materiał',   icon: Wrench,  color: 'text-amber-300' },
+    CABLE:    { label: 'Kabel',      icon: Wrench,  color: 'text-orange-300' },
+    SOFTWARE: { label: 'Software',   icon: Package, color: 'text-violet-300' },
+    SERVICE:  { label: 'Usługa',     icon: Wrench,  color: 'text-pink-300' },
 };
 
 const STATUS_META = {
@@ -22,6 +25,17 @@ const STATUS_META = {
     IN_STOCK:  { label: 'Na magazynie', icon: Warehouse,     color: 'text-cyan-400' },
     ISSUED:    { label: 'Wydane',       icon: LogOut,        color: 'text-emerald-400' },
 };
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function parseWbsNodeIds(r) {
+    // wbsNodeIds is a JSON string array, or wbsNodeId is a single string
+    try {
+        if (r.wbsNodeIds) return JSON.parse(r.wbsNodeIds);
+    } catch {}
+    if (r.wbsNodeId) return [r.wbsNodeId];
+    return [];
+}
 
 // ─── Komponent ────────────────────────────────────────────────────────────────
 
@@ -43,10 +57,30 @@ const MaterialRequirementsPanel3 = forwardRef(function MaterialRequirementsPanel
     const [requirements, setRequirements] = useState([]);
     const [loading, setLoading] = useState(true);
     const [expandedId, setExpandedId] = useState(null);
+    const [wbsNodes, setWbsNodes] = useState([]);
+    const [activeTypes, setActiveTypes] = useState(['MATERIAL', 'DEVICE']);
 
     // Ref do unikania stale closures
     const reqRef = useRef(requirements);
     reqRef.current = requirements;
+
+    // ─── WBS level map ──────────────────────────────────────────────────────
+    const wbsMap = useMemo(() => {
+        const map = {};
+        for (const n of wbsNodes) map[n.id] = n;
+        return map;
+    }, [wbsNodes]);
+
+    const wbsLevelMap = useMemo(() => {
+        const levels = {};
+        for (const n of wbsNodes) levels[n.id] = n.depth ?? 0;
+        return levels;
+    }, [wbsNodes]);
+
+    // ─── Filtered requirements ──────────────────────────────────────────────
+    const filtered = useMemo(() => {
+        return requirements.filter(r => activeTypes.includes(r.type));
+    }, [requirements, activeTypes]);
 
     // ─── Fetch ──────────────────────────────────────────────────────────────
 
@@ -73,12 +107,28 @@ const MaterialRequirementsPanel3 = forwardRef(function MaterialRequirementsPanel
         }
     }, [nodeId, versionId]);
 
+    const fetchWbsNodes = useCallback(async () => {
+        try {
+            const url = `${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`;
+            const res = await fetch(url, { headers });
+            if (res.ok) {
+                const data = await res.json();
+                // API returns { items: [...] } — already flat with id, parentId, depth
+                setWbsNodes(data.items || []);
+            }
+        } catch (err) {
+            console.error('[Mat3] wbs fetch error:', err);
+        }
+    }, [nodeId, versionId]);
+
     // ─── Init ───────────────────────────────────────────────────────────────
 
     useEffect(() => {
         if (!nodeId) return;
         let cancelled = false;
         (async () => {
+            // Fetch WBS tree in parallel with lists
+            fetchWbsNodes();
             let data = await fetchLists();
             if (cancelled) return;
             if (data.length === 0) {
@@ -163,15 +213,37 @@ const MaterialRequirementsPanel3 = forwardRef(function MaterialRequirementsPanel
                 ))}
             </div>
 
+            {/* Filter bar */}
+            <div className="flex items-center gap-2 px-3 py-1.5 border-b border-white/5 flex-shrink-0">
+                <Filter size={12} className="text-gray-500" />
+                {Object.entries(TYPE_META).map(([key, meta]) => {
+                    const count = requirements.filter(r => r.type === key).length;
+                    const active = activeTypes.includes(key);
+                    return (
+                        <button key={key} onClick={() => setActiveTypes(prev =>
+                            prev.includes(key) ? prev.filter(t => t !== key) : [...prev, key]
+                        )}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold transition-all ${active ? `${meta.color} bg-white/[0.06] border border-white/10` : 'text-gray-600 hover:text-gray-400'}`}>
+                            <meta.icon size={10} />
+                            {meta.label}
+                            {count > 0 && <span className="ml-0.5 opacity-60">({count})</span>}
+                        </button>
+                    );
+                })}
+                <span className="ml-auto text-[10px] text-gray-600">
+                    {filtered.length}/{requirements.length}
+                </span>
+            </div>
+
             {/* Table */}
             {loading ? (
                 <div className="flex justify-center py-12">
                     <div className="w-8 h-8 border-2 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
                 </div>
-            ) : requirements.length === 0 ? (
+            ) : filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-3 text-gray-500">
                     <AlertCircle size={28} className="text-gray-600" />
-                    <p className="text-sm">Brak wymagań materiałowych</p>
+                    <p className="text-sm">{requirements.length === 0 ? 'Brak wymagań materiałowych' : 'Brak wymagań dla wybranych filtrów'}</p>
                 </div>
             ) : (
                 <div className="flex-1 overflow-auto custom-scrollbar">
@@ -181,6 +253,7 @@ const MaterialRequirementsPanel3 = forwardRef(function MaterialRequirementsPanel
                                 <th className="w-9 px-2 py-2" />
                                 <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-24">Typ</th>
                                 <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold">Nazwa</th>
+                                <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-32">Gałąź WBS</th>
                                 <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-20">Ilość</th>
                                 <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-28">Cena netto</th>
                                 <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-36">Produkt</th>
@@ -189,7 +262,7 @@ const MaterialRequirementsPanel3 = forwardRef(function MaterialRequirementsPanel
                             </tr>
                         </thead>
                         <tbody>
-                            {requirements.map(r => (
+                            {filtered.map(r => (
                                 <React.Fragment key={r.id}>
                                     <Row
                                         r={r}
@@ -198,9 +271,10 @@ const MaterialRequirementsPanel3 = forwardRef(function MaterialRequirementsPanel
                                         onPatch={patchItem}
                                         onDelete={deleteItem}
                                         isLocked={isLocked}
+                                        wbsMap={wbsMap}
                                     />
                                     {expandedId === r.id && (
-                                        <tr><td colSpan={isLocked ? 7 : 8} className="p-0 bg-black/20 border-b border-white/5">
+                                        <tr><td colSpan={isLocked ? 8 : 9} className="p-0 bg-black/20 border-b border-white/5">
                                             <ExpandedDetail r={r} token={token} onRefresh={() => fetchRequirements(activeListId)} />
                                         </td></tr>
                                     )}
@@ -216,9 +290,13 @@ const MaterialRequirementsPanel3 = forwardRef(function MaterialRequirementsPanel
 
 // ─── Row ─────────────────────────────────────────────────────────────────────
 
-function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked }) {
+function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMap }) {
     const TypeIcon = TYPE_META[r.type]?.icon || Package;
     const StatusIcon = STATUS_META[r.status]?.icon || Clock;
+
+    // Resolve WBS branch names
+    const nodeIds = parseWbsNodeIds(r);
+    const branchNames = nodeIds.map(id => wbsMap[id]?.name).filter(Boolean);
 
     return (
         <tr className={`border-b border-white/[0.03] transition-colors ${isExpanded ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
@@ -240,6 +318,22 @@ function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked }) {
             {/* Nazwa */}
             <td className="px-3 py-1">
                 <span className="text-white text-sm font-medium">{r.name}</span>
+            </td>
+
+            {/* Gałąź WBS */}
+            <td className="px-3 py-1">
+                {branchNames.length > 0 ? (
+                    <div className="flex flex-wrap gap-0.5">
+                        {branchNames.map((name, i) => (
+                            <span key={i} className="inline-flex items-center gap-0.5 text-[10px] text-teal-400 bg-teal-500/10 px-1.5 py-0.5 rounded">
+                                <GitBranch size={8} />
+                                {name}
+                            </span>
+                        ))}
+                    </div>
+                ) : (
+                    <span className="text-[10px] text-gray-600">—</span>
+                )}
             </td>
 
             {/* Ilość */}
