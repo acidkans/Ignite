@@ -1909,15 +1909,13 @@ ${materialsHtml}
                 headerName: 'Ilość wymagań',
                 width: 140,
                 editable: (params) => {
-                    if (params.data?._isProjectItem) return false;
                     if (params.data?._isRequirementLeaf) return false;
-                    if (params.data?._hasChildren) return false;
                     return true;
                 },
                 cellEditor: 'agTextCellEditor',
                 sortable: true,
                 valueFormatter: (p) => {
-                    if (p.data?._isProjectItem || p.data?._hasChildren) return '';
+                    if (p.data?._isRequirementLeaf) return '';
                     return fmtQty(p.value) || '1';
                 },
                 cellClass: `${STRUCTURE_COMMON_CELL_CLASS} text-gray-300`,
