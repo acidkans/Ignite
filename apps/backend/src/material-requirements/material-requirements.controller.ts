@@ -23,6 +23,12 @@ export class MaterialRequirementsController {
         return this.service.findGlobalDatabase();
     }
 
+    /** Wszystkie materiały z producentem (bez wymagania karty katalogowej) */
+    @Get('all-materials')
+    findAllMaterials() {
+        return this.service.findAllMaterials();
+    }
+
     /** Wszystkie materiały zaimportowane z kart katalogowych (globalnie) */
     @Get('datasheets')
     findAllDatasheetItems() {

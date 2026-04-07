@@ -29,6 +29,12 @@ const STATUS_META = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/** Normalize: "DAHUA" → "Dahua", "dahua" → "Dahua" */
+function normalizeName(s) {
+    if (!s) return s;
+    return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
 function parseWbsNodeIds(r) {
     // wbsNodeIds is a JSON string array, or wbsNodeId is a single string
     try {
@@ -125,8 +131,13 @@ const MaterialRequirementsPanel3 = forwardRef(function MaterialRequirementsPanel
 
     const fetchMaterialDb = useCallback(async () => {
         try {
-            const res = await fetch(`${API_URL}/material-requirements/database`, { headers });
-            if (res.ok) setMaterialDb(await res.json());
+            const res = await fetch(`${API_URL}/material-requirements/all-materials`, { headers });
+            if (res.ok) {
+                const data = await res.json();
+                // Normalize manufacturer names: first letter uppercase, rest lowercase
+                const normalize = s => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
+                setMaterialDb(data.map(m => ({ ...m, manufacturer: normalize(m.manufacturer) })));
+            }
         } catch {}
     }, []);
 
@@ -512,12 +523,12 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
             seller: offer?.createdBy || '',
             priceNetto: pos.priceNetto ?? null,
         };
-        if (pos.manufacturer) updates.manufacturer = pos.manufacturer;
+        if (pos.manufacturer) updates.manufacturer = normalizeName(pos.manufacturer);
         if (pos.model) updates.model = pos.model;
 
         setFields(prev => ({
             ...prev,
-            manufacturer: pos.manufacturer || prev.manufacturer,
+            manufacturer: normalizeName(pos.manufacturer) || prev.manufacturer,
             model: pos.model || prev.model,
             priceNetto: pos.priceNetto ?? prev.priceNetto,
         }));
@@ -555,7 +566,12 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
                                     onFocus={() => setComboOpen(k)}
                                     onBlur={() => {
                                         setTimeout(() => setComboOpen(prev => prev === k ? null : prev), 200);
-                                        const val = fields[k];
+                                        let val = fields[k];
+                                        // Normalize manufacturer name on blur
+                                        if (k === 'manufacturer' && val) {
+                                            val = normalizeName(val);
+                                            setF(k, val);
+                                        }
                                         if (val !== (r[k] ?? '')) patchFields({ [k]: val || null });
                                     }}
                                     onKeyDown={e => {
