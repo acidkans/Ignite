@@ -477,23 +477,33 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
         }).sort((a, b) => (a[fieldKey] || '').localeCompare(b[fieldKey] || ''));
     };
 
-    const selectMaterial = async (mat) => {
+    const selectMaterial = async (mat, fromField) => {
         const uiFields = {};
-        if (mat.manufacturer) uiFields.manufacturer = mat.manufacturer;
-        if (mat.model) uiFields.model = mat.model;
-        if (mat.productName) uiFields.productName = mat.productName;
+        const updates = {};
+
+        // Producent → only set manufacturer (let user pick model next)
+        // Model → set manufacturer + model
+        // productName → set all three + materialId
+        if (fromField === 'manufacturer') {
+            if (mat.manufacturer) { uiFields.manufacturer = mat.manufacturer; updates.manufacturer = mat.manufacturer; }
+        } else if (fromField === 'model') {
+            if (mat.manufacturer) { uiFields.manufacturer = mat.manufacturer; updates.manufacturer = mat.manufacturer; }
+            if (mat.model) { uiFields.model = mat.model; updates.model = mat.model; }
+        } else {
+            // productName — full link
+            updates.materialId = mat.id;
+            if (mat.manufacturer) { uiFields.manufacturer = mat.manufacturer; updates.manufacturer = mat.manufacturer; }
+            if (mat.model) { uiFields.model = mat.model; updates.model = mat.model; }
+            if (mat.productName) { uiFields.productName = mat.productName; updates.productName = mat.productName; }
+            if (mat.dataSheetUrl) {
+                updates.dataSheetUrl = mat.dataSheetUrl;
+                updates.dataSheetName = mat.dataSheetName || mat.productName || 'karta_katalogowa.pdf';
+            }
+        }
+
         setFields(prev => ({ ...prev, ...uiFields }));
         setComboOpen(null);
-
-        const updates = { materialId: mat.id };
-        if (mat.manufacturer) updates.manufacturer = mat.manufacturer;
-        if (mat.model) updates.model = mat.model;
-        if (mat.productName) updates.productName = mat.productName;
-        if (mat.dataSheetUrl) {
-            updates.dataSheetUrl = mat.dataSheetUrl;
-            updates.dataSheetName = mat.dataSheetName || mat.productName || 'karta_katalogowa.pdf';
-        }
-        await patchFields(updates);
+        if (Object.keys(updates).length > 0) await patchFields(updates);
     };
 
     // ─── Offers ─────────────────────────────────────────────────────────────
@@ -578,7 +588,7 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
                                         if (e.key === 'Escape') setComboOpen(null);
                                         if (e.key === 'Enter' && comboOpen === k && suggestions.length > 0) {
                                             e.preventDefault();
-                                            selectMaterial(suggestions[0]);
+                                            selectMaterial(suggestions[0], k);
                                         }
                                     }}
                                     disabled={readOnly}
@@ -591,7 +601,7 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
                             {comboOpen === k && suggestions.length > 0 && !readOnly && (
                                 <div className="absolute z-[300] top-full left-0 w-full bg-gray-900 border border-white/15 rounded-lg mt-0.5 max-h-48 overflow-y-auto shadow-2xl">
                                     {suggestions.map(mat => (
-                                        <button key={mat.id} onMouseDown={e => { e.preventDefault(); selectMaterial(mat); }}
+                                        <button key={mat.id} onMouseDown={e => { e.preventDefault(); selectMaterial(mat, k); }}
                                             className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 text-white truncate border-b border-white/5 last:border-0">
                                             {mat[k]}
                                             {k === 'manufacturer' && mat.model && <span className="text-gray-500 ml-1">· {mat.model}</span>}
