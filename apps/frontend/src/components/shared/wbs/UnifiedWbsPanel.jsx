@@ -14,6 +14,7 @@ import { themeQuartz } from 'ag-grid-community';
 import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, LayoutList, Zap, Sparkles, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
+import MaterialRequirementsPanel3 from './MaterialRequirementsPanel3';
 import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, STRUCTURE_STATUS_META, STRUCTURE_COMMON_CELL_CLASS, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode } from './wbsConstants';
 
 const darkTheme = themeQuartz.withParams({
@@ -2458,14 +2459,13 @@ ${materialsHtml}
         )}
 
             {renderSection('materials2', 'Materiały', Zap, 'yellow', (
-                <MaterialRequirementsPanel
+                <MaterialRequirementsPanel3
                     nodeId={nodeId}
                     versionId={versionId}
                     readOnly={!isManagerOrAdmin}
                     onWbsUpdate={refreshUnified}
-                    useWbsRequirementSelection={true}
                     refreshKey={reqRefreshKey}
-                    searchQuery={searchQuery}
+                    isEmbedded={true}
                 />
             ), () => handleExportPDF('materials'))}
 
