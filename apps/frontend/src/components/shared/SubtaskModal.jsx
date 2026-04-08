@@ -56,14 +56,13 @@ export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSu
         setLoading(true);
         try {
             const token = sessionStorage.getItem('token');
-            const url = subtask ? `${API_URL}/subtasks/${subtask.id}` : `${API_URL}/subtasks`;
-            const method = subtask ? 'PATCH' : 'POST';
+            const isEdit = subtask?.id;
+            const url = isEdit ? `${API_URL}/subtasks/${subtask.id}` : `${API_URL}/subtasks`;
+            const method = isEdit ? 'PATCH' : 'POST';
 
             const payload = { ...formData, nodeId, versionId };
             if (!payload.assignedUserId) payload.assignedUserId = null;
-            if (!subtask) {
-                // only new subtasks can be saved as template during creation, per my service logic
-            } else {
+            if (isEdit) {
                 delete payload.saveAsTemplate; // Backend update doesn't handle this
             }
 
