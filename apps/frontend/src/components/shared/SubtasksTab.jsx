@@ -484,6 +484,31 @@ ${renderNodes(wbsTree?.items || [])}
         </tr>`;
         }).join('');
         const matSection = matReqs.length > 0 ? `<div class="section"><h2>Wymagania materiałowe</h2><table><thead><tr><th>Nazwa wymagania</th><th>Nazwa handlowa</th><th>Producent</th><th>Model</th><th>Ilość</th><th>Typ</th><th>Status</th></tr></thead><tbody>${matRows}</tbody></table></div>` : '';
+
+        // Sekcja: Informacje o zamówieniu
+        const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pl-PL') : '—';
+        let contacts = [];
+        try { contacts = reqData?.clientContacts ? JSON.parse(reqData.clientContacts) : []; } catch { contacts = []; }
+        const contactRows = contacts.map(c => `<tr>
+            <td style="padding:3px 8px;border-bottom:1px solid #e5e7eb">${c.name || '—'}</td>
+            <td style="padding:3px 8px;border-bottom:1px solid #e5e7eb">${c.role || '—'}</td>
+            <td style="padding:3px 8px;border-bottom:1px solid #e5e7eb">${c.phone || '—'}</td>
+            <td style="padding:3px 8px;border-bottom:1px solid #e5e7eb">${c.email || '—'}</td>
+        </tr>`).join('');
+        const orderInfoSection = `<div class="section">
+<h2>Informacje o zamówieniu</h2>
+<table>
+<tbody>
+<tr><td style="padding:3px 8px;border-bottom:1px solid #e5e7eb;font-weight:bold;width:200px">Termin oferty</td><td style="padding:3px 8px;border-bottom:1px solid #e5e7eb">${fmtDate(reqData?.offerDeadline)}</td></tr>
+<tr><td style="padding:3px 8px;border-bottom:1px solid #e5e7eb;font-weight:bold">Rozpoczęcie projektu</td><td style="padding:3px 8px;border-bottom:1px solid #e5e7eb">${fmtDate(reqData?.projectStart)}</td></tr>
+<tr><td style="padding:3px 8px;border-bottom:1px solid #e5e7eb;font-weight:bold">Zakończenie projektu</td><td style="padding:3px 8px;border-bottom:1px solid #e5e7eb">${fmtDate(reqData?.projectEnd)}</td></tr>
+<tr><td style="padding:3px 8px;border-bottom:1px solid #e5e7eb;font-weight:bold">Status oferty</td><td style="padding:3px 8px;border-bottom:1px solid #e5e7eb">${reqData?.offerStatus || '—'}</td></tr>
+<tr><td style="padding:3px 8px;border-bottom:1px solid #e5e7eb;font-weight:bold">Cel projektu</td><td style="padding:3px 8px;border-bottom:1px solid #e5e7eb">${reqData?.projectGoal || '—'}</td></tr>
+</tbody>
+</table>
+${contacts.length > 0 ? `<h3>Kontakty klienta</h3><table><thead><tr><th>Imię i nazwisko</th><th>Rola</th><th>Telefon</th><th>Email</th></tr></thead><tbody>${contactRows}</tbody></table>` : ''}
+</div>`;
+
         const html = `<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8">
 <title>Planowanie – ${title}</title>
 <style>
@@ -500,6 +525,7 @@ ${renderNodes(wbsTree?.items || [])}
   @media print{@page{margin:1.5cm}body{margin:0}}
 </style></head><body>
 <h1>Planowanie: ${title}</h1>
+${orderInfoSection}
 <div class="section">
 <h2>Strategia realizacji</h2>
 ${toHtml(md)}
