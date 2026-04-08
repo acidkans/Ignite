@@ -322,6 +322,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
                 </div>
 
                 <div className="px-6 flex-1 overflow-y-auto space-y-8 pb-8 no-scrollbar">
+                    {/* Nazwa (tooltip) */}
                     <div className="space-y-3">
                         <label className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em] px-1">NAZWA (tooltip)</label>
                         <input
@@ -333,60 +334,10 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
                         />
                     </div>
 
+                    {/* Przyciski dodawania załączników — zaraz pod nazwą */}
                     <div className="space-y-3">
-                        <label className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em] px-1">NOTATKA</label>
-                        <textarea
-                            value={editNote}
-                            onChange={e => setEditNote(e.target.value)}
-                            onBlur={handleUpdateNote}
-                            className="w-full bg-[#1e293b]/50 border border-white/5 rounded-2xl p-4 text-sm text-gray-100 resize-none h-32 focus:outline-none focus:border-blue-500/50 transition-all shadow-inner placeholder:text-gray-600"
-                            placeholder="Wpisz tutaj swoje uwagi..."
-                        />
-                    </div>
-
-
-
-                    {nodeId && wbsNodes.length > 0 && (
-                        <div className="space-y-3">
-                            <div className="flex items-center gap-2 px-1">
-                                <Layers size={12} className="text-gray-500" />
-                                <label className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em]">
-                                    PRZEDMIOTY PROJEKTU ({wbsLinks.length > 0 ? `${wbsLinks.length} przypisane` : 'brak'})
-                                </label>
-                            </div>
-                            <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                                {wbsNodes.map(node => {
-                                    const linked = wbsLinks.some(l => l.wbsNodeId === node.id);
-                                    const toggling = wbsToggling === node.id;
-                                    const indent = (node.path.split('.').length - 1) * 12;
-                                    return (
-                                        <button
-                                            key={node.id}
-                                            onClick={() => toggleWbsLink(node.id)}
-                                            disabled={toggling}
-                                            style={{ paddingLeft: `${12 + indent}px` }}
-                                            className={`w-full flex items-center gap-2.5 py-2 pr-3 rounded-xl text-left text-xs transition-all ${
-                                                linked
-                                                    ? 'bg-blue-500/15 border border-blue-500/30 text-blue-300'
-                                                    : 'bg-[#1e293b]/40 border border-white/5 text-gray-400 hover:bg-white/5 hover:text-gray-200'
-                                            } ${toggling ? 'opacity-50' : ''}`}
-                                        >
-                                            {linked
-                                                ? <CheckSquare size={13} className="text-blue-400 flex-shrink-0" />
-                                                : <Square size={13} className="text-gray-600 flex-shrink-0" />
-                                            }
-                                            <span className="font-mono text-[10px] text-gray-500 flex-shrink-0">{node.path}</span>
-                                            <span className="truncate">{node.name}</span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="space-y-4">
                         <div className="flex items-center justify-between px-1">
-                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em]">ZAŁĄCZNIKI</label>
+                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em]">DODAJ</label>
                             {uploading && (
                                 <div className="flex items-center gap-2 animate-pulse">
                                     <div className="w-2 h-2 bg-blue-500 rounded-full" />
@@ -399,8 +350,8 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
                             <div className="relative bg-black rounded-3xl overflow-hidden border-2 border-blue-500/40 shadow-2xl mb-4">
                                 <video ref={videoRef} autoPlay playsInline className="w-full h-auto aspect-square object-cover" />
                                 <div className="absolute inset-x-0 bottom-6 flex justify-center">
-                                    <button 
-                                        onClick={capturePhoto} 
+                                    <button
+                                        onClick={capturePhoto}
                                         className="bg-blue-600 text-white px-8 py-3 rounded-full text-xs font-black shadow-2xl active:scale-95 transition-all border border-blue-400/30"
                                     >
                                         ZRÓB ZDJĘCIE
@@ -411,14 +362,14 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
                         )}
 
                         <div className="grid grid-cols-2 gap-2">
-                            <button 
+                            <button
                                 onClick={isRecording ? stopRecording : startRecording}
                                 className={`flex items-center justify-center gap-2 px-4 py-3 w-full rounded-xl text-xs font-bold transition-all shadow-lg active:scale-95 ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-[#1e293b] text-gray-300 border border-white/5'}`}
                             >
                                 <Mic size={16} className={isRecording ? 'text-white' : 'text-orange-500'} />
                                 Głos
                             </button>
-                            
+
                             {isMobile ? (
                                 <label className="flex items-center justify-center gap-2 px-4 py-3 w-full rounded-xl text-xs font-bold transition-all shadow-lg active:scale-95 cursor-pointer bg-[#1e293b] text-gray-300 border border-white/5">
                                     <Camera size={16} className="text-orange-500" />
@@ -476,65 +427,120 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
                                 />
                             </label>
                         </div>
+                    </div>
 
-                        <div className="grid grid-cols-2 gap-3 pt-2">
-                            {marker.attachments?.map(att => (
-                                <div key={att.id} className="relative rounded-2xl overflow-hidden bg-[#1e293b] border border-white/5 group shadow-xl">
-                                    <div className="aspect-square">
-                                        {att.fileType === 'IMAGE' ? (
-                                            <img src={getFileUrl(att.fileUrl)} className="w-full h-full object-cover" alt="attachment" />
+                    {/* Notatka */}
+                    <div className="space-y-3">
+                        <label className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em] px-1">NOTATKA</label>
+                        <textarea
+                            value={editNote}
+                            onChange={e => setEditNote(e.target.value)}
+                            onBlur={handleUpdateNote}
+                            className="w-full bg-[#1e293b]/50 border border-white/5 rounded-2xl p-4 text-sm text-gray-100 resize-none h-32 focus:outline-none focus:border-blue-500/50 transition-all shadow-inner placeholder:text-gray-600"
+                            placeholder="Wpisz tutaj swoje uwagi..."
+                        />
+                    </div>
+
+                    {/* Przedmioty projektu (WBS) */}
+                    {nodeId && wbsNodes.length > 0 && (
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 px-1">
+                                <Layers size={12} className="text-gray-500" />
+                                <label className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em]">
+                                    PRZEDMIOTY PROJEKTU ({wbsLinks.length > 0 ? `${wbsLinks.length} przypisane` : 'brak'})
+                                </label>
+                            </div>
+                            <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                                {wbsNodes.map(node => {
+                                    const linked = wbsLinks.some(l => l.wbsNodeId === node.id);
+                                    const toggling = wbsToggling === node.id;
+                                    const indent = (node.path.split('.').length - 1) * 12;
+                                    return (
+                                        <button
+                                            key={node.id}
+                                            onClick={() => toggleWbsLink(node.id)}
+                                            disabled={toggling}
+                                            style={{ paddingLeft: `${12 + indent}px` }}
+                                            className={`w-full flex items-center gap-2.5 py-2 pr-3 rounded-xl text-left text-xs transition-all ${
+                                                linked
+                                                    ? 'bg-blue-500/15 border border-blue-500/30 text-blue-300'
+                                                    : 'bg-[#1e293b]/40 border border-white/5 text-gray-400 hover:bg-white/5 hover:text-gray-200'
+                                            } ${toggling ? 'opacity-50' : ''}`}
+                                        >
+                                            {linked
+                                                ? <CheckSquare size={13} className="text-blue-400 flex-shrink-0" />
+                                                : <Square size={13} className="text-gray-600 flex-shrink-0" />
+                                            }
+                                            <span className="font-mono text-[10px] text-gray-500 flex-shrink-0">{node.path}</span>
+                                            <span className="truncate">{node.name}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Podgląd wszystkich załączników na dole */}
+                    {marker.attachments?.length > 0 && (
+                        <div className="space-y-3">
+                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em] px-1">ZAŁĄCZNIKI ({marker.attachments.length})</label>
+                            <div className="grid grid-cols-2 gap-3">
+                                {marker.attachments.map(att => (
+                                    <div key={att.id} className="relative rounded-2xl overflow-hidden bg-[#1e293b] border border-white/5 group shadow-xl">
+                                        <div className="aspect-square">
+                                            {att.fileType === 'IMAGE' ? (
+                                                <img src={getFileUrl(att.fileUrl)} className="w-full h-full object-cover" alt="attachment" />
+                                            ) : (
+                                                <div className="w-full h-full flex flex-col items-center justify-center gap-2 p-2">
+                                                    {att.fileType === 'AUDIO' ? <Mic size={24} className="text-purple-400" /> : <Save size={24} className="text-gray-500" />}
+                                                    <span className="text-[10px] text-center text-gray-400 truncate w-full px-2">{att.fileName}</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Note overlay at bottom */}
+                                        {editingAttNote?.id === att.id ? (
+                                            <div className="bg-black/80 px-2 py-1.5 flex gap-1 items-center">
+                                                <input
+                                                    autoFocus
+                                                    value={editingAttNote.note}
+                                                    onChange={e => setEditingAttNote({ ...editingAttNote, note: e.target.value })}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') handleUpdateAttachmentNote(att.id, editingAttNote.note);
+                                                        if (e.key === 'Escape') setEditingAttNote(null);
+                                                    }}
+                                                    className="flex-1 bg-transparent text-white text-[11px] outline-none placeholder:text-gray-500 min-w-0"
+                                                    placeholder="Wpisz notatkę..."
+                                                />
+                                                <button onClick={() => handleUpdateAttachmentNote(att.id, editingAttNote.note)} className="text-blue-400 shrink-0"><Save size={12}/></button>
+                                            </div>
                                         ) : (
-                                            <div className="w-full h-full flex flex-col items-center justify-center gap-2 p-2">
-                                                {att.fileType === 'AUDIO' ? <Mic size={24} className="text-purple-400" /> : <Save size={24} className="text-gray-500" />}
-                                                <span className="text-[10px] text-center text-gray-400 truncate w-full px-2">{att.fileName}</span>
+                                            <div
+                                                className="bg-black/60 px-2 py-1 cursor-pointer min-h-[26px] flex items-center"
+                                                onClick={() => setEditingAttNote({ id: att.id, note: att.note || '' })}
+                                            >
+                                                <span className="text-[11px] text-gray-300 truncate w-full">
+                                                    {att.note || <span className="text-gray-600 italic">+ notatka</span>}
+                                                </span>
                                             </div>
                                         )}
-                                    </div>
 
-                                    {/* Note overlay at bottom */}
-                                    {editingAttNote?.id === att.id ? (
-                                        <div className="bg-black/80 px-2 py-1.5 flex gap-1 items-center">
-                                            <input
-                                                autoFocus
-                                                value={editingAttNote.note}
-                                                onChange={e => setEditingAttNote({ ...editingAttNote, note: e.target.value })}
-                                                onKeyDown={e => {
-                                                    if (e.key === 'Enter') handleUpdateAttachmentNote(att.id, editingAttNote.note);
-                                                    if (e.key === 'Escape') setEditingAttNote(null);
-                                                }}
-                                                className="flex-1 bg-transparent text-white text-[11px] outline-none placeholder:text-gray-500 min-w-0"
-                                                placeholder="Wpisz notatkę..."
-                                            />
-                                            <button onClick={() => handleUpdateAttachmentNote(att.id, editingAttNote.note)} className="text-blue-400 shrink-0"><Save size={12}/></button>
-                                        </div>
-                                    ) : (
-                                        <div
-                                            className="bg-black/60 px-2 py-1 cursor-pointer min-h-[26px] flex items-center"
-                                            onClick={() => setEditingAttNote({ id: att.id, note: att.note || '' })}
+                                        <button
+                                            onClick={() => handleDeleteAttachment(att.id)}
+                                            className="absolute top-2 right-2 p-1.5 bg-black/60 text-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                                         >
-                                            <span className="text-[11px] text-gray-300 truncate w-full">
-                                                {att.note || <span className="text-gray-600 italic">+ notatka</span>}
-                                            </span>
-                                        </div>
-                                    )}
+                                            <Trash2 size={12} />
+                                        </button>
+                                        <button
+                                            onClick={() => downloadFile(att)}
+                                            className="absolute top-2 left-2 p-1.5 bg-black/60 text-blue-400 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                        >
+                                            <Download size={12} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
 
-                                    <button
-                                        onClick={() => handleDeleteAttachment(att.id)}
-                                        className="absolute top-2 right-2 p-1.5 bg-black/60 text-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                                    >
-                                        <Trash2 size={12} />
-                                    </button>
-                                    <button
-                                        onClick={() => downloadFile(att)}
-                                        className="absolute top-2 left-2 p-1.5 bg-black/60 text-blue-400 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                                    >
-                                        <Download size={12} />
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-
-                        {(marker.attachments?.length > 0) && (
                             <button
                                 onClick={downloadAll}
                                 className="w-full flex items-center justify-center gap-2 py-3 mt-1 text-xs font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-2xl hover:bg-blue-500/20 active:scale-[0.98] transition-all"
@@ -542,8 +548,8 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
                                 <Download size={14} />
                                 Pobierz wszystko ({marker.attachments.length})
                             </button>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="p-6 border-t border-white/5 bg-black/10">

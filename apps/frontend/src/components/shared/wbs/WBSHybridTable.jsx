@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Plus, Trash2, ChevronRight, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink } from 'lucide-react';
+import { Plus, Trash2, ChevronRight, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown } from 'lucide-react';
 
 const API_URL = '/api';
 
@@ -409,7 +409,7 @@ function MarkerAttachmentsModal({ wbsNodeId, wbsNodeName, processNodeId, onClose
 }
 
 // ── Attachment preview cell ───────────────────────────────────────────────────
-function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal }) {
+function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal, onPreview }) {
     const links = markerLinksCache[wbsNodeId] || [];
 
     const allAtts = links.flatMap(l => (l.marker?.attachments || []));
@@ -421,7 +421,7 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal }) 
     return (
         <div className="flex items-center gap-1 flex-wrap">
             {imgAtts.slice(0, 3).map(att => (
-                <AttachmentThumb key={att.id} att={att} onClick={() => onOpenModal({ wbsNodeId, wbsNodeName: nodeName })} />
+                <AttachmentThumb key={att.id} att={att} onClick={(a) => onPreview?.(a)} />
             ))}
             {otherCount > 0 && (
                 <span className="text-[9px] text-gray-500 flex items-center gap-0.5">
@@ -453,6 +453,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [tagInput, setTagInput] = useState('');
     const [markerLinksCache, setMarkerLinksCache] = useState({});
     const [attachmentModal, setAttachmentModal] = useState(null); // { wbsNodeId, wbsNodeName }
+    const [lightboxAtt, setLightboxAtt] = useState(null); // attachment for fullscreen preview
     const tagInputRef = useRef(null);
     const [materialStatuses, setMaterialStatuses] = useState({});
     const [reqDragOverNode, setReqDragOverNode] = useState(null);
@@ -499,8 +500,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
     const items = wbsTree?.items || [];
 
-    // Pre-fetch marker links for all WBS nodes
-    useEffect(() => {
+    // Pre-fetch marker links for all WBS nodes (+ periodic refresh)
+    const fetchMarkerLinks = useCallback(() => {
         if (!processNodeId) return;
         const allIds = [];
         const collectAllIds = (nodes) => nodes.forEach(n => { allIds.push(n.id); collectAllIds(n.children || []); });
@@ -509,11 +510,17 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             const res = await fetch(`${API_URL}/schematics/wbs-node-markers/${id}`);
             if (res.ok) {
                 const data = await res.json();
-                if (data.length > 0) setMarkerLinksCache(prev => ({ ...prev, [id]: data }));
+                setMarkerLinksCache(prev => ({ ...prev, [id]: data }));
             }
         });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [processNodeId, wbsTree?.items?.length]);
+    }, [processNodeId, items.length]);
+
+    useEffect(() => {
+        fetchMarkerLinks();
+        const iv = setInterval(fetchMarkerLinks, 30000);
+        return () => clearInterval(iv);
+    }, [fetchMarkerLinks]);
 
     const toggle = (id, e) => {
         e?.stopPropagation();
@@ -839,6 +846,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             nodeName={node.name}
                             markerLinksCache={markerLinksCache}
                             onOpenModal={setAttachmentModal}
+                            onPreview={setLightboxAtt}
                         />
                     ) : null}
                 </td>
@@ -884,9 +892,106 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         }
     };
 
+    // ── PDF export with full-size images ─────────────────────────────────────
+    const handleExportPdf = useCallback(async () => {
+        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+
+        // Convert image URL to base64 for embedding in print HTML
+        const toBase64 = async (fileUrl) => {
+            try {
+                const res = await fetch(`${API_URL}/schematics/file/${fileUrl}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (!res.ok) return null;
+                const blob = await res.blob();
+                return new Promise(resolve => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.readAsDataURL(blob);
+                });
+            } catch { return null; }
+        };
+
+        // Collect all nodes with their attachments
+        const nodeRows = [];
+        const collectNodes = (nodes, prefix = '') => {
+            nodes.forEach((n, i) => {
+                const path = prefix ? `${prefix}.${i + 1}` : `${i + 1}`;
+                const links = markerLinksCache[n.id] || [];
+                const atts = links.flatMap(l => (l.marker?.attachments || []));
+                nodeRows.push({ path, name: n.name || '(bez nazwy)', type: n.type || '', status: n.status || '', owner: n.owner || '', tags: n.tags || [], atts });
+                collectNodes(n.children || [], path);
+            });
+        };
+        collectNodes(items);
+
+        // Pre-fetch all images as base64
+        const allImageAtts = nodeRows.flatMap(r => r.atts.filter(a => a.fileType === 'IMAGE'));
+        const b64Map = {};
+        await Promise.all(allImageAtts.map(async att => {
+            b64Map[att.fileUrl] = await toBase64(att.fileUrl);
+        }));
+
+        // Build HTML
+        const tableRows = nodeRows.map(r => {
+            const imagesHtml = r.atts.filter(a => a.fileType === 'IMAGE').map(a => {
+                const src = b64Map[a.fileUrl];
+                return src ? `<div style="page-break-inside:avoid;margin:8px 0"><img src="${src}" style="max-width:100%;height:auto;border-radius:4px" />${a.note ? `<p style="font-size:10px;color:#666;margin:2px 0">${a.note}</p>` : ''}</div>` : '';
+            }).join('');
+            const filesHtml = r.atts.filter(a => a.fileType !== 'IMAGE').map(a =>
+                `<span style="display:inline-block;padding:2px 6px;background:#f0f0f0;border-radius:4px;font-size:10px;margin:2px">${a.fileName}</span>`
+            ).join('');
+            const tagsHtml = r.tags.map(t => `<span style="display:inline-block;padding:1px 6px;background:#e0e7ff;border-radius:8px;font-size:10px;margin:1px">${t}</span>`).join(' ');
+
+            return `<tr>
+                <td style="padding:6px 8px;border:1px solid #ddd;white-space:nowrap;font-family:monospace;font-size:11px;vertical-align:top">${r.path}</td>
+                <td style="padding:6px 8px;border:1px solid #ddd;vertical-align:top">${r.name}</td>
+                <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;vertical-align:top">${r.type}</td>
+                <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;vertical-align:top">${r.status}</td>
+                <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;vertical-align:top">${r.owner}</td>
+                <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;vertical-align:top">${tagsHtml}</td>
+                <td style="padding:6px 8px;border:1px solid #ddd;vertical-align:top">${imagesHtml}${filesHtml}</td>
+            </tr>`;
+        }).join('');
+
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>WBS - ${nodeName}</title>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; margin: 20px; color: #1a1a1a; }
+            h1 { font-size: 18px; margin-bottom: 16px; }
+            table { width: 100%; border-collapse: collapse; }
+            th { background: #f3f4f6; padding: 8px; border: 1px solid #ddd; font-size: 10px; text-transform: uppercase; text-align: left; }
+            img { max-width: 100%; }
+            @media print { body { margin: 10mm; } }
+        </style></head><body>
+        <h1>WBS — ${nodeName}</h1>
+        <table>
+            <thead><tr>
+                <th>WBS</th><th>Nazwa</th><th>Typ</th><th>Status</th><th>Właściciel</th><th>Znaczniki</th><th>Załączniki</th>
+            </tr></thead>
+            <tbody>${tableRows}</tbody>
+        </table>
+        </body></html>`;
+
+        const win = window.open('', '_blank');
+        win.document.write(html);
+        win.document.close();
+        setTimeout(() => win.print(), 600);
+    }, [items, markerLinksCache, nodeName]);
+
     return (
         <>
             <div className="rounded-xl border border-white/5 bg-black/20">
+                {/* Header z przyciskiem PDF */}
+                <div className="flex items-center justify-between px-4 py-2 border-b border-white/5">
+                    <span className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">Struktura WBS</span>
+                    <button
+                        onClick={handleExportPdf}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-[11px] font-medium transition-all"
+                        title="Eksportuj WBS do PDF z pełnymi załącznikami"
+                    >
+                        <FileDown size={12} /> PDF
+                    </button>
+                </div>
                 <table className="w-full text-sm border-collapse">
                     <thead className="sticky top-0 z-10 bg-gray-900">
                         <tr className="border-b border-white/10">
@@ -904,6 +1009,35 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     <tbody>{rows}</tbody>
                 </table>
             </div>
+
+            {/* Lightbox — powiększenie załącznika */}
+            {lightboxAtt && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95" onClick={() => setLightboxAtt(null)}>
+                    <div className="relative w-full h-full flex items-center justify-center p-6" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setLightboxAtt(null)}
+                            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white z-10 transition-all">
+                            <X size={20} />
+                        </button>
+                        {lightboxAtt.fileType === 'IMAGE' ? (
+                            <img src={`${API_URL}/schematics/file/${lightboxAtt.fileUrl}`}
+                                alt={lightboxAtt.fileName}
+                                className="max-w-full max-h-full rounded-xl object-contain" />
+                        ) : lightboxAtt.fileType === 'AUDIO' ? (
+                            <audio controls src={`${API_URL}/schematics/file/${lightboxAtt.fileUrl}`} />
+                        ) : (
+                            <div className="bg-gray-900 rounded-xl p-10 text-center">
+                                <FileText size={56} className="text-gray-500 mx-auto mb-4" />
+                                <p className="text-white text-sm">{lightboxAtt.fileName}</p>
+                                <a href={`${API_URL}/schematics/file/${lightboxAtt.fileUrl}`} target="_blank" rel="noreferrer"
+                                    className="mt-3 inline-block text-blue-400 text-sm hover:underline">Otwórz plik</a>
+                            </div>
+                        )}
+                        {lightboxAtt.note && (
+                            <p className="absolute bottom-6 left-0 right-0 text-xs text-gray-400 text-center">{lightboxAtt.note}</p>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {attachmentModal && (
                 <MarkerAttachmentsModal

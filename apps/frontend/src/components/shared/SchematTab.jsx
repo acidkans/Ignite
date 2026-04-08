@@ -154,9 +154,9 @@ export default function SchematTab({ nodeId }) {
         }
     }, [schematics]);
 
-    const fetchSchematics = async () => {
+    const fetchSchematics = async (silent = false) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             const token = sessionStorage.getItem('token');
             const res = await fetch(`${API_URL}/schematics/node/${nodeId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -355,8 +355,8 @@ export default function SchematTab({ nodeId }) {
         }
 
         // Standardowy Point
-        const note = prompt('Podaj krótką notatkę dla tego znacznika:');
-        if (note === null) {
+        const name = prompt('Nazwa znacznika (tooltip):');
+        if (name === null) {
             setIsAddingMarker(false);
             return;
         }
@@ -365,11 +365,11 @@ export default function SchematTab({ nodeId }) {
             const token = sessionStorage.getItem('token');
             const res = await fetch(`${API_URL}/schematics/${selectedSchematic.id}/markers`, {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ type: 'POINT', x, y, pageNumber, note })
+                body: JSON.stringify({ type: 'POINT', x, y, pageNumber, name, note: '' })
             });
             if (!res.ok) throw new Error('Błąd zapisu znacznika');
             setIsAddingMarker(false);
@@ -906,7 +906,7 @@ export default function SchematTab({ nodeId }) {
                             key={selectedMarker.id}
                             marker={selectedMarker}
                             onClose={() => setSelectedMarker(null)}
-                            onRefresh={fetchSchematics}
+                            onRefresh={() => fetchSchematics(true)}
                             onMarkerUpdated={(updates) => {
                                 setSelectedMarker(m => ({ ...m, ...updates }));
                                 setSelectedSchematic(sch => sch ? ({
