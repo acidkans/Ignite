@@ -25,10 +25,21 @@ export default function EditUserModal({ user, users, teams, onClose, onSuccess }
     const set = (field, value) => setForm(f => ({ ...f, [field]: value }));
 
     const toggleRole = (role) => {
-        setForm(f => ({
-            ...f,
-            roles: f.roles.includes(role) ? f.roles.filter(r => r !== role) : [...f.roles, role]
-        }));
+        setForm(f => {
+            const has = f.roles.includes(role);
+            let next;
+            if (has) {
+                next = f.roles.filter(r => r !== role);
+                if (next.length === 0) next = ['USER'];
+            } else if (role === 'USER') {
+                // USER wyklucza inne role
+                next = ['USER'];
+            } else {
+                // Inne role wykluczają USER
+                next = [...f.roles.filter(r => r !== 'USER'), role];
+            }
+            return { ...f, roles: next };
+        });
     };
 
     const toggleTeam = (teamId) => {

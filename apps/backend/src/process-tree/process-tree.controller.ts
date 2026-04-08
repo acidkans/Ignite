@@ -21,6 +21,11 @@ export class ProcessTreeController {
         return this.processTreeService.takeSnapshot();
     }
 
+    @Get(':id/info')
+    getNodeInfo(@Param('id') id: string) {
+        return this.processTreeService.getNodeInfo(id);
+    }
+
     @Get(':id')
     getNode(@Param('id') id: string, @Req() req: any) {
         return this.processTreeService.getNode(id, req.user);

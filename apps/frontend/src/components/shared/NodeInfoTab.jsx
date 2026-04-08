@@ -22,7 +22,7 @@ export default function NodeInfoTab({ nodeId }) {
             setLoading(true);
             try {
                 const token = sessionStorage.getItem('token');
-                const res = await fetch(`${API_URL}/process-tree/${nodeId}`, {
+                const res = await fetch(`${API_URL}/process-tree/${nodeId}/info`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {
