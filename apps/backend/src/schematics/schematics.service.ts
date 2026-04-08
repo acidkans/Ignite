@@ -120,7 +120,7 @@ export class SchematicsService {
     }
 
     // --- Markers ---
-    async createMarker(schematicId: string, data: { type?: string; x: number; y: number; x2?: number; y2?: number; pageNumber: number; note?: string }) {
+    async createMarker(schematicId: string, data: { type?: string; x: number; y: number; x2?: number; y2?: number; pageNumber: number; note?: string; name?: string }) {
         return this.prisma.schematicMarker.create({
             data: {
                 schematicId,
@@ -131,6 +131,7 @@ export class SchematicsService {
                 y2: data.y2 || null,
                 pageNumber: data.pageNumber,
                 note: data.note || null,
+                name: data.name || null,
             },
             include: { attachments: true, subtask: { select: { id: true, name: true } } }
         });

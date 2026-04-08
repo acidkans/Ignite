@@ -44,7 +44,7 @@ export class SchematicsController {
   @Post(':schematicId/markers')
   async createMarker(
     @Param('schematicId') schematicId: string,
-    @Body() data: { type?: string; x: number; y: number; x2?: number; y2?: number; pageNumber: number; note?: string }
+    @Body() data: { type?: string; x: number; y: number; x2?: number; y2?: number; pageNumber: number; note?: string; name?: string }
   ) {
     return this.schematicsService.createMarker(schematicId, data);
   }
