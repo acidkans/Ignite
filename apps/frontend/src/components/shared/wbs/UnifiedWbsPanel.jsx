@@ -476,16 +476,19 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 try {
                     const reqRes = await fetch(`${API_URL}/order-requirements/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: { Authorization: `Bearer ${token()}` } });
                     if (reqRes.ok) {
-                        const reqData = await reqRes.json();
-                        const tree = JSON.parse(reqData.wbsTree || '{}');
-                        projectItemNamesById = Object.fromEntries(
-                            (tree.items || [])
-                                .filter(item => !item.type || item.type === 'product')
-                                .map(item => [item.id, item.name])
-                        );
+                        const text = await reqRes.text();
+                        if (text) {
+                            const reqData = JSON.parse(text);
+                            const tree = JSON.parse(reqData.wbsTree || '{}');
+                            projectItemNamesById = Object.fromEntries(
+                                (tree.items || [])
+                                    .filter(item => !item.type || item.type === 'product')
+                                    .map(item => [item.id, item.name])
+                            );
+                        }
                     }
                 } catch (e) {
-                    console.error('Fetch project items mapping error:', e);
+                    // Silent — project items mapping is non-critical
                 }
 
                 // Build WBS node ID → root parent name map from relational WBS data
@@ -616,11 +619,11 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                     isAiAssigned: false,
                 }),
             });
-            await fetchData();
+            // Don't call fetchData() here — it overwrites local wbsData and reverts user edits
         } catch (e) {
             console.error('Sync material requirements from WBS quantity error:', e);
         }
-    }, [nodeId, versionId, authHeaders, fetchData]);
+    }, [nodeId, versionId, authHeaders]);
 
     // Zwinięcie sidebara na wejściu do Planowanie
     useEffect(() => {

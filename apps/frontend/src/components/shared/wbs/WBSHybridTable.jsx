@@ -479,16 +479,20 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     });
                     setMaterialStatuses(map);
 
-                    // Update tree to set types for nodes matching requirements
+                    // Update tree to set types for nodes matching requirements — only if something changed
                     setWbsTree(prev => {
+                        let changed = false;
                         const updateTypes = (nodes) => nodes.map(n => {
-                            const reqType = typeMap[n.name.toLowerCase()];
-                            const updated = { ...n, children: updateTypes(n.children || []) };
-                            // Set type from requirement if available (always override with requirement type)
-                            if (reqType) updated.type = reqType;
-                            return updated;
+                            const reqType = typeMap[(n.name || '').toLowerCase()];
+                            const children = updateTypes(n.children || []);
+                            if (reqType && reqType !== n.type) {
+                                changed = true;
+                                return { ...n, type: reqType, children };
+                            }
+                            return children !== n.children ? { ...n, children } : n;
                         });
-                        return { ...prev, items: updateTypes(prev.items || []) };
+                        const newItems = updateTypes(prev.items || []);
+                        return changed ? { ...prev, items: newItems } : prev;
                     });
                 }
             } catch (e) {}

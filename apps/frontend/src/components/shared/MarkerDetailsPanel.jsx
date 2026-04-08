@@ -57,14 +57,24 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
 
     useEffect(() => {
         if (!nodeId) return;
-        // Fetch WBS tree
         const token = sessionStorage.getItem('token');
-        fetch(`${API_URL}/order-requirements/${nodeId}`, {
+        // Fetch WBS from relational table (same source as UnifiedWbsPanel)
+        fetch(`${API_URL}/wbs-nodes/unified/${nodeId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         }).then(r => r.json()).then(data => {
             try {
-                const tree = JSON.parse(data.wbsTree || '{}');
-                setWbsNodes(flattenWbsNodes(tree.items || []));
+                const items = data.items || [];
+                // Build tree from flat list with parentId
+                const byId = new Map(items.map(n => [n.id, { ...n, children: [] }]));
+                const roots = [];
+                for (const n of byId.values()) {
+                    if (n.parentId && byId.has(n.parentId)) {
+                        byId.get(n.parentId).children.push(n);
+                    } else {
+                        roots.push(n);
+                    }
+                }
+                setWbsNodes(flattenWbsNodes(roots));
             } catch { setWbsNodes([]); }
         }).catch(() => {});
         fetchWbsLinks();
@@ -316,7 +326,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
                         </div>
                         <h3 className="font-black text-sm tracking-tight text-white">Szczegóły znacznika</h3>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full text-gray-400">
+                    <button onClick={onClose} className="p-2.5 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all">
                         {isMobile ? <ChevronDown size={20}/> : <X size={20}/>}
                     </button>
                 </div>
