@@ -149,13 +149,9 @@ export default function UsersPage() {
         },
         {
             headerName: 'Uprawnienia',
-            field: 'roleName', // Wirtualne pole
+            field: 'roleName',
             valueGetter: p => p.data.userRoles?.map(r => r.role.name === 'USER' ? 'Pracownik' : r.role.name === 'ADMIN' ? 'Administrator' : r.role.name === 'MANAGER' ? 'Menadżer' : r.role.name === 'LOGISTYK' ? 'Logistyk' : r.role.name).join(', ') || 'Pracownik',
-            editable: isAdminOrManager,
-            cellEditor: 'agSelectCellEditor',
-            cellEditorParams: {
-                values: ['Pracownik', 'Logistyk', 'Menadżer', 'Administrator']
-            },
+            editable: false,
             flex: 1
         },
         {

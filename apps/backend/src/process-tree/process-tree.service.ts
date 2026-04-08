@@ -83,6 +83,18 @@ export class ProcessTreeService {
     }
 
     /**
+     * Get basic node info (lightweight, no relations)
+     */
+    async getNodeInfo(id: string) {
+        const node = await this.prisma.processNode.findUnique({
+            where: { id },
+            select: { id: true, name: true, customTypeLabel: true, address: true, nip: true, region: true, contactPerson: true, type: true },
+        });
+        if (!node) throw new NotFoundException(`Node ${id} not found`);
+        return node;
+    }
+
+    /**
      * Get single node with its direct children
      */
     async getNode(id: string, user?: any, bypassAuth: boolean = false) {

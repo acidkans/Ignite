@@ -66,6 +66,8 @@ export default function SubtasksTab({ nodeId, versionId, workerView = false, fil
     const saveTimeoutRef = useRef(null);
     const strategyRef = useRef(null);
     const strategyLoadedRef = useRef(false);
+    const strategyFocusedRef = useRef(false);
+    const savedWbsDescRef = useRef('');
 
     // Tracking refs to solve race conditions during async saves
     const latestSubtasksRef = useRef(subtasks);
@@ -74,7 +76,10 @@ export default function SubtasksTab({ nodeId, versionId, workerView = false, fil
 
     useEffect(() => { latestSubtasksRef.current = subtasks; }, [subtasks]);
     useEffect(() => { latestItemsRef.current = projectItems; }, [projectItems]);
+    // wbsDescription synced from DOM ref, not React state
     useEffect(() => { latestWbsDescRef.current = wbsDescription; }, [wbsDescription]);
+    const getStrategyText = () => strategyRef.current ? strategyRef.current.value : latestWbsDescRef.current;
+    const setStrategyText = (val) => { setWbsDescription(val); latestWbsDescRef.current = val; };
     useEffect(() => { latestWbsTreeRef.current = wbsTree; }, [wbsTree]);
 
     useEffect(() => {
@@ -82,18 +87,21 @@ export default function SubtasksTab({ nodeId, versionId, workerView = false, fil
             strategyRef.current.style.height = 'auto';
             strategyRef.current.style.height = strategyRef.current.scrollHeight + 'px';
         }
-    }, [loading, wbsDescription]);
+    }, [loading]);
 
     useEffect(() => {
         const token = sessionStorage.getItem('token');
+        const canManage = workerRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
         fetch(`${API_URL}/users/by-role/LOGISTYK`, { headers: { Authorization: `Bearer ${token}` } })
             .then(r => r.ok ? r.json() : [])
             .then(setLogistykUsers)
             .catch(() => {});
-        fetch(`${API_URL}/users`, { headers: { Authorization: `Bearer ${token}` } })
-            .then(r => r.ok ? r.json() : [])
-            .then(setProjectUsers)
-            .catch(() => {});
+        if (canManage) {
+            fetch(`${API_URL}/users`, { headers: { Authorization: `Bearer ${token}` } })
+                .then(r => r.ok ? r.json() : [])
+                .then(setProjectUsers)
+                .catch(() => {});
+        }
     }, []);
 
     useEffect(() => {
@@ -132,8 +140,9 @@ export default function SubtasksTab({ nodeId, versionId, workerView = false, fil
                     if (!data) { setLoading(false); return; }
                     setReqData(data);
                     // Only set wbsDescription on initial load, never overwrite after
-                    if (!strategyLoadedRef.current) {
+                    if (!strategyLoadedRef.current && !strategyFocusedRef.current) {
                         setWbsDescription(data.wbsDescription || '');
+                        savedWbsDescRef.current = data.wbsDescription || '';
                         strategyLoadedRef.current = true;
                     }
                     try { setProjectItems(JSON.parse(data.projectItems || '{}')); }
@@ -339,7 +348,7 @@ export default function SubtasksTab({ nodeId, versionId, workerView = false, fil
     }, [showWBSTable, nodeId, fetchUnassignedRequirements]);
 
     const handleExportStrategyPDF = () => {
-        const md = wbsDescription || '';
+        const md = getStrategyText() || '';
         const toHtml = (text) => {
             const lines = text.split('\n');
             const out = [];
@@ -415,7 +424,7 @@ ${renderNodes(wbsTree?.items || [])}
 
     const handleExportAllPDF = async () => {
         const title = nodeName || reqData?.name || 'Projekt';
-        const md = wbsDescription || '';
+        const md = getStrategyText() || '';
 
         // Pobierz wymagania materiałowe
         let matReqs = [];
@@ -639,7 +648,7 @@ ${rows}
             try {
                 const token = sessionStorage.getItem('token');
                 const currentTasks = Array.isArray(overrideSubtasks) ? overrideSubtasks : latestSubtasksRef.current;
-                const currentDesc = overrideWbsDesc !== null ? overrideWbsDesc : latestWbsDescRef.current;
+                const currentDesc = overrideWbsDesc !== null ? overrideWbsDesc : getStrategyText();
                 const currentItems = overrideItems !== null ? overrideItems : latestItemsRef.current;
                 const currentWbsTree = latestWbsTreeRef.current;
 
@@ -669,6 +678,7 @@ ${rows}
 
                 if (res.ok) {
                     setSaved(true);
+                    savedWbsDescRef.current = currentDesc;
                     const savedTasks = await res.json();
                     setSubtasks(savedTasks || []);
                     latestSubtasksRef.current = savedTasks || [];
@@ -760,9 +770,13 @@ ${rows}
 
     const toggleSection = (key, setShow) => {
         if (expandedSection === key) {
+            // Save strategy text when collapsing strategy section
+            if (key === 'strategy') handleSaveWBS(null, getStrategyText(), true);
             setExpandedSection(null);
             setShow(false);
         } else {
+            // Save strategy text when switching away from strategy
+            if (expandedSection === 'strategy') handleSaveWBS(null, getStrategyText(), true);
             setExpandedSection(key);
             setShow(true);
         }
@@ -790,6 +804,10 @@ ${rows}
                     <h3 className="text-xs font-bold uppercase tracking-widest text-gray-300 flex-1">Strategia realizacji</h3>
                     {expandedSection === 'strategy' && (
                         <div className="flex items-center gap-2 mr-3 flex-shrink-0">
+                            <div role="button" tabIndex={0} onClick={e => { e.stopPropagation(); handleSaveWBS(null, getStrategyText(), true); }} onKeyDown={e => e.key === 'Enter' && handleSaveWBS(null, getStrategyText(), true)} className={`flex items-center gap-1.5 px-3 py-1 bg-blue-600/80 hover:bg-blue-500 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${saving ? 'opacity-50 pointer-events-none' : ''}`}>
+                                {saving ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : saved ? <CheckCircle size={12} /> : <Save size={12} />}
+                                <span>{saved ? 'Zapisano' : 'Zapisz'}</span>
+                            </div>
                             <div role="button" tabIndex={0} onClick={e => { e.stopPropagation(); handleExportStrategyPDF(); }} onKeyDown={e => e.key === 'Enter' && handleExportStrategyPDF()} className="flex items-center gap-1.5 px-3 py-1 bg-red-700/60 hover:bg-red-600/80 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer">
                                 <FileDown size={12} /><span>PDF</span>
                             </div>
@@ -800,17 +818,16 @@ ${rows}
                 {showStrategy && (
                     <div className={`px-5 pb-5 pt-3 ${expandedSection === 'strategy' ? 'flex-1 overflow-y-auto' : ''}`}>
                         <div className="flex items-center gap-1 mb-2 px-1">
-                            <button type="button" onMouseDown={e => { e.preventDefault(); const ta = strategyRef.current; if (!ta) return; const s = ta.selectionStart, end = ta.selectionEnd, t = wbsDescription || '', sel = t.substring(s, end); setWbsDescription(t.substring(0, s) + '**' + sel + '**' + t.substring(end)); setTimeout(() => { ta.focus(); ta.selectionStart = s + 2; ta.selectionEnd = s + 2 + sel.length; }, 0); }} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Pogrubienie"><Bold size={14} /></button>
-                            <button type="button" onMouseDown={e => { e.preventDefault(); const ta = strategyRef.current; if (!ta) return; const s = ta.selectionStart, end = ta.selectionEnd, t = wbsDescription || '', sel = t.substring(s, end); setWbsDescription(t.substring(0, s) + '_' + sel + '_' + t.substring(end)); setTimeout(() => { ta.focus(); ta.selectionStart = s + 1; ta.selectionEnd = s + 1 + sel.length; }, 0); }} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Kursywa"><Italic size={14} /></button>
-                            <button type="button" onMouseDown={e => { e.preventDefault(); const ta = strategyRef.current; if (!ta) return; const s = ta.selectionStart, t = wbsDescription || ''; setWbsDescription(t.substring(0, s) + '## ' + t.substring(s)); setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = s + 3; }, 0); }} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Nagłówek"><Heading size={14} /></button>
-                            <button type="button" onMouseDown={e => { e.preventDefault(); const ta = strategyRef.current; if (!ta) return; const s = ta.selectionStart, t = wbsDescription || ''; setWbsDescription(t.substring(0, s) + '- ' + t.substring(s)); setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = s + 2; }, 0); }} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Lista"><List size={14} /></button>
-                            <button type="button" onMouseDown={e => { e.preventDefault(); const ta = strategyRef.current; if (!ta) return; const s = ta.selectionStart, t = wbsDescription || ''; setWbsDescription(t.substring(0, s) + '\n---\n' + t.substring(s)); setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = s + 5; }, 0); }} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Separator"><Minus size={14} /></button>
+                            <button type="button" onMouseDown={e => { e.preventDefault(); const ta = strategyRef.current; if (!ta) return; const s = ta.selectionStart, end = ta.selectionEnd, t = ta.value, sel = t.substring(s, end); setStrategyText(t.substring(0, s) + '**' + sel + '**' + t.substring(end)); setTimeout(() => { ta.focus(); ta.selectionStart = s + 2; ta.selectionEnd = s + 2 + sel.length; }, 0); }} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Pogrubienie"><Bold size={14} /></button>
+                            <button type="button" onMouseDown={e => { e.preventDefault(); const ta = strategyRef.current; if (!ta) return; const s = ta.selectionStart, end = ta.selectionEnd, t = ta.value, sel = t.substring(s, end); setStrategyText(t.substring(0, s) + '_' + sel + '_' + t.substring(end)); setTimeout(() => { ta.focus(); ta.selectionStart = s + 1; ta.selectionEnd = s + 1 + sel.length; }, 0); }} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Kursywa"><Italic size={14} /></button>
+                            <button type="button" onMouseDown={e => { e.preventDefault(); const ta = strategyRef.current; if (!ta) return; const s = ta.selectionStart, t = ta.value; setStrategyText(t.substring(0, s) + '## ' + t.substring(s)); setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = s + 3; }, 0); }} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Nagłówek"><Heading size={14} /></button>
+                            <button type="button" onMouseDown={e => { e.preventDefault(); const ta = strategyRef.current; if (!ta) return; const s = ta.selectionStart, t = ta.value; setStrategyText(t.substring(0, s) + '- ' + t.substring(s)); setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = s + 2; }, 0); }} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Lista"><List size={14} /></button>
+                            <button type="button" onMouseDown={e => { e.preventDefault(); const ta = strategyRef.current; if (!ta) return; const s = ta.selectionStart, t = ta.value; setStrategyText(t.substring(0, s) + '\n---\n' + t.substring(s)); setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = s + 5; }, 0); }} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Separator"><Minus size={14} /></button>
                         </div>
                         <textarea
                             ref={strategyRef}
                             value={wbsDescription}
-                            onChange={e => setWbsDescription(e.target.value)}
-                            onBlur={() => { handleSaveWBS(null, null, true); }}
+                            onChange={e => { setWbsDescription(e.target.value); latestWbsDescRef.current = e.target.value; }}
                             className="w-full min-h-[200px] bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-sm focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed resize-none"
                             placeholder="Zdefiniuj plan i strategię realizacji projektu..."
                         />

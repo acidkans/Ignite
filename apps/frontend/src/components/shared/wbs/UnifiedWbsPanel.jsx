@@ -281,6 +281,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const budgetGridApiRef = useRef(null);
     const materialRef = useRef();
     const strategyRef = useRef();
+    const strategyLoadedRef = useRef(false);
     const strategySaveTimeout = useRef(null);
     const budgetImportFileInputRef = useRef(null);
     const reqDropTargetRef = useRef(null);
@@ -663,14 +664,20 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const fetchUsers = useCallback(async () => {
         const t = token();
         if (!t) return;
+        const canManage = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
         try {
-            const [usersRes, logistykRes, permissionsRes] = await Promise.all([
-                fetch(`${API_URL}/users`, { headers: { Authorization: `Bearer ${t}` } }),
-                fetch(`${API_URL}/users/by-role/LOGISTYK`, { headers: { Authorization: `Bearer ${t}` } }),
-                nodeId
-                    ? fetch(`${API_URL}/process-tree/${nodeId}/permissions`, { headers: { Authorization: `Bearer ${t}` } })
-                    : Promise.resolve(null),
-            ]);
+            const promises = [];
+            // GET /users requires ADMIN/MANAGER role
+            promises.push(canManage
+                ? fetch(`${API_URL}/users`, { headers: { Authorization: `Bearer ${t}` } })
+                : Promise.resolve(null));
+            promises.push(fetch(`${API_URL}/users/by-role/LOGISTYK`, { headers: { Authorization: `Bearer ${t}` } }));
+            // GET /process-tree/:id/permissions requires TREE_VIEW permission (managers only)
+            promises.push(nodeId && canManage
+                ? fetch(`${API_URL}/process-tree/${nodeId}/permissions`, { headers: { Authorization: `Bearer ${t}` } })
+                : Promise.resolve(null));
+
+            const [usersRes, logistykRes, permissionsRes] = await Promise.all(promises);
 
             setProjectUsers(usersRes?.ok ? await usersRes.json() : []);
             setLogistykUsers(logistykRes?.ok ? await logistykRes.json() : []);
@@ -691,7 +698,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             setLogistykUsers([]);
             setNodeTeamIds([]);
         }
-    }, [nodeId]);
+    }, [nodeId, userRoles]);
+
+    const getStrategyText = useCallback(() => strategyRef.current ? strategyRef.current.value : wbsDescription, [wbsDescription]);
+    const setStrategyText = useCallback((val) => { if (strategyRef.current) strategyRef.current.value = val; }, []);
 
     const fetchStrategy = useCallback(async () => {
         try {
@@ -700,7 +710,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             if (res.ok) {
                 const text = await res.text();
                 const data = text ? JSON.parse(text) : null;
-                if (data) setWbsDescription(data.wbsDescription || '');
+                if (data && !strategyLoadedRef.current) {
+                    setWbsDescription(data.wbsDescription || '');
+                    strategyLoadedRef.current = true;
+                }
             }
         } catch (e) { console.error('Fetch strategy error:', e); }
     }, [nodeId, versionId]);
@@ -785,46 +798,45 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 
     const handleStrategySave = useCallback((immediate = false) => {
         if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
-        if (immediate) { saveStrategy(wbsDescription); return; }
-        strategySaveTimeout.current = setTimeout(() => saveStrategy(wbsDescription), 1000);
+        const text = strategyRef.current ? strategyRef.current.value : wbsDescription;
+        if (immediate) { saveStrategy(text); return; }
+        strategySaveTimeout.current = setTimeout(() => saveStrategy(text), 1000);
     }, [wbsDescription, saveStrategy]);
 
     const wrapSelection = useCallback((before, after = before, placeholder = 'tekst') => {
         const ta = strategyRef.current;
         if (!ta) return;
+        const text = ta.value;
         const start = ta.selectionStart ?? 0;
         const end = ta.selectionEnd ?? 0;
-        const selected = wbsDescription.slice(start, end);
+        const selected = text.slice(start, end);
         const insert = `${before}${selected || placeholder}${after}`;
-        const next = `${wbsDescription.slice(0, start)}${insert}${wbsDescription.slice(end)}`;
-        setWbsDescription(next);
+        const next = `${text.slice(0, start)}${insert}${text.slice(end)}`;
+        ta.value = next;
         setTimeout(() => {
             ta.focus();
             const cursor = selected ? start + insert.length : start + before.length + placeholder.length;
             ta.setSelectionRange(cursor, cursor);
         }, 0);
-        if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
-        strategySaveTimeout.current = setTimeout(() => saveStrategy(next), 1000);
-    }, [wbsDescription, saveStrategy]);
+    }, []);
 
     const prefixSelectionLines = useCallback((prefix, placeholder = 'punkt') => {
         const ta = strategyRef.current;
         if (!ta) return;
+        const text = ta.value;
         const start = ta.selectionStart ?? 0;
         const end = ta.selectionEnd ?? 0;
-        const selected = wbsDescription.slice(start, end);
+        const selected = text.slice(start, end);
         const base = selected || placeholder;
         const transformed = base.split('\n').map(line => `${prefix}${line}`).join('\n');
-        const next = `${wbsDescription.slice(0, start)}${transformed}${wbsDescription.slice(end)}`;
-        setWbsDescription(next);
+        const next = `${text.slice(0, start)}${transformed}${text.slice(end)}`;
+        ta.value = next;
         setTimeout(() => {
             ta.focus();
             const cursor = start + transformed.length;
             ta.setSelectionRange(cursor, cursor);
         }, 0);
-        if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
-        strategySaveTimeout.current = setTimeout(() => saveStrategy(next), 1000);
-    }, [wbsDescription, saveStrategy]);
+    }, []);
 
     const renderStrategyHtml = useCallback((text) => {
         return (text || '')
@@ -890,7 +902,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         const strategyHtml = show('strategy') ? `
             <div class="section">
                 <div class="section-header">Jak to chcemy zrobić</div>
-                <div class="strategy-text"><p>${renderStrategyHtml(wbsDescription || 'Brak treści strategii')}</p></div>
+                <div class="strategy-text"><p>${renderStrategyHtml(getStrategyText() || 'Brak treści strategii')}</p></div>
             </div>` : '';
 
         const wbsHtml = show('wbs') ? `
@@ -2214,13 +2226,13 @@ ${materialsHtml}
 
     const renderSection = (key, title, Icon, colorClass, content, onExport, extraButtons = null) => {
         const isActive = expandedSection === key;
-        if (expandedSection !== null && !isActive) return null;
+        const isHidden = expandedSection !== null && !isActive;
         const isCompactSection = key === 'budget' || key === 'materials2';
 
         return (
             <div
                 className={`flex flex-col glass-panel border border-white/5 transition-all duration-300 shadow-2xl overflow-hidden ${isCompactSection && isActive ? 'rounded-none h-full' : 'rounded-2xl'} ${isActive ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
-                style={isActive && !isCompactSection ? { minHeight: 'calc(100vh - 200px)' } : {}}
+                style={isActive && !isCompactSection ? { minHeight: 'calc(100vh - 200px)' } : isHidden ? { display: 'none' } : {}}
             >
                 <div
                     className={`flex items-center gap-2 px-5 py-2 transition-colors text-left flex-shrink-0 border-b border-white/10 sticky top-0 z-20 ${isActive ? 'bg-[#0b0f17]' : 'bg-white/[0.04]'}`}
@@ -2261,11 +2273,9 @@ ${materialsHtml}
                         <ChevronRight size={14} className={`text-gray-500 transition-transform flex-shrink-0 ${isActive ? 'rotate-90' : ''}`} />
                     </div>
                 </div>
-                {isActive && (
-                    <div className={`flex-1 min-h-0 animate-fade-in flex flex-col ${isCompactSection ? 'p-0' : 'p-4 overflow-auto custom-scrollbar'}`}>
-                        {content}
-                    </div>
-                )}
+                <div className={`flex-1 min-h-0 flex flex-col ${isCompactSection ? 'p-0' : 'p-4 overflow-auto custom-scrollbar'}`} style={isActive ? {} : { display: 'none' }}>
+                    {content}
+                </div>
             </div>
         );
     };
@@ -2283,16 +2293,18 @@ ${materialsHtml}
             />
             {renderSection('strategy', 'Jak to chcemy zrobić', HelpCircle, 'blue', (
                 <div className="flex flex-col gap-4 h-full min-h-[calc(100vh-320px)]">
-                    <div className="flex justify-end p-1">
+                    <div className="flex justify-end items-center gap-3 p-1">
                         <span className={`text-[10px] font-bold uppercase tracking-widest ${strategySaved ? 'text-emerald-400' : 'text-gray-500'}`}>
-                            {strategySaving ? 'Oczekiwanie...' : strategySaved ? 'Zapisano pomyślnie' : 'Auto-zapis aktywny'}
+                            {strategySaving ? 'Zapisywanie...' : strategySaved ? 'Zapisano' : ''}
                         </span>
+                        <button onClick={() => handleStrategySave(true)} disabled={strategySaving} className={`flex items-center gap-1.5 px-3 py-1 bg-blue-600/80 hover:bg-blue-500 text-white text-[11px] font-bold rounded-lg transition-colors ${strategySaving ? 'opacity-50 pointer-events-none' : ''}`}>
+                            {strategySaving ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save size={12} />}
+                            <span>Zapisz</span>
+                        </button>
                     </div>
-                    <textarea 
+                    <textarea
                         ref={strategyRef}
-                        value={wbsDescription}
-                        onChange={(e) => { setWbsDescription(e.target.value); handleStrategySave(); }}
-                        onBlur={() => handleStrategySave(true)}
+                        defaultValue={wbsDescription}
                         className="flex-1 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-sm focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed"
                         placeholder="Zdefiniuj plan i strategię realizacji projektu..."
                     />
@@ -2494,7 +2506,7 @@ ${materialsHtml}
                         <div className="mx-auto max-w-5xl bg-black/40 border border-white/10 rounded-2xl p-8 min-h-full text-gray-200 leading-relaxed">
                             <div
                                 className="prose prose-invert max-w-none"
-                                dangerouslySetInnerHTML={{ __html: `<p>${renderStrategyHtml(wbsDescription || 'Brak treści strategii')}</p>` }}
+                                dangerouslySetInnerHTML={{ __html: `<p>${renderStrategyHtml(getStrategyText() || 'Brak treści strategii')}</p>` }}
                             />
                         </div>
                     </div>
