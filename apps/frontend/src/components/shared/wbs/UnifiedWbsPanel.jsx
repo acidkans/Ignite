@@ -706,6 +706,14 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const getStrategyText = useCallback(() => strategyRef.current ? strategyRef.current.value : wbsDescription, [wbsDescription]);
     const setStrategyText = useCallback((val) => { if (strategyRef.current) strategyRef.current.value = val; }, []);
 
+    // Reset strategy state when switching nodes/versions so the new record loads fresh.
+    // Pending autosave timeouts are left intact — they capture the old saveStrategy closure
+    // (with the old nodeId) so typed-but-unsaved text still flushes to the correct record.
+    useEffect(() => {
+        strategyLoadedRef.current = false;
+        setWbsDescription('');
+    }, [nodeId, versionId]);
+
     const fetchStrategy = useCallback(async () => {
         try {
             const url = versionId ? `${API_URL}/order-requirements/${nodeId}?versionId=${versionId}` : `${API_URL}/order-requirements/${nodeId}`;
@@ -803,7 +811,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
         const text = strategyRef.current ? strategyRef.current.value : wbsDescription;
         if (immediate) { saveStrategy(text); return; }
-        strategySaveTimeout.current = setTimeout(() => saveStrategy(text), 1000);
+        strategySaveTimeout.current = setTimeout(() => saveStrategy(text), 1500);
     }, [wbsDescription, saveStrategy]);
 
     const wrapSelection = useCallback((before, after = before, placeholder = 'tekst') => {
@@ -815,13 +823,15 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         const selected = text.slice(start, end);
         const insert = `${before}${selected || placeholder}${after}`;
         const next = `${text.slice(0, start)}${insert}${text.slice(end)}`;
-        ta.value = next;
+        setWbsDescription(next);
         setTimeout(() => {
             ta.focus();
             const cursor = selected ? start + insert.length : start + before.length + placeholder.length;
             ta.setSelectionRange(cursor, cursor);
         }, 0);
-    }, []);
+        if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
+        strategySaveTimeout.current = setTimeout(() => saveStrategy(next), 1500);
+    }, [saveStrategy]);
 
     const prefixSelectionLines = useCallback((prefix, placeholder = 'punkt') => {
         const ta = strategyRef.current;
@@ -833,13 +843,15 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         const base = selected || placeholder;
         const transformed = base.split('\n').map(line => `${prefix}${line}`).join('\n');
         const next = `${text.slice(0, start)}${transformed}${text.slice(end)}`;
-        ta.value = next;
+        setWbsDescription(next);
         setTimeout(() => {
             ta.focus();
             const cursor = start + transformed.length;
             ta.setSelectionRange(cursor, cursor);
         }, 0);
-    }, []);
+        if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
+        strategySaveTimeout.current = setTimeout(() => saveStrategy(next), 1500);
+    }, [saveStrategy]);
 
     const renderStrategyHtml = useCallback((text) => {
         return (text || '')
@@ -2307,7 +2319,9 @@ ${materialsHtml}
                     </div>
                     <textarea
                         ref={strategyRef}
-                        defaultValue={wbsDescription}
+                        value={wbsDescription}
+                        onChange={(e) => { setWbsDescription(e.target.value); handleStrategySave(); }}
+                        onBlur={() => handleStrategySave(true)}
                         className="flex-1 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-sm focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed"
                         placeholder="Zdefiniuj plan i strategię realizacji projektu..."
                     />
