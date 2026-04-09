@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Save, User, MapPin, Hash, Globe, CheckCircle2 } from 'lucide-react';
+import { Save, User, MapPin, Hash, Globe, CheckCircle2, FileDown } from 'lucide-react';
 import { API_URL } from '../../config';
+import { exportProjectPdf } from '../../utils/projectPdfExport';
 
 export default function NodeInfoTab({ nodeId }) {
     const [loading, setLoading] = useState(true);
@@ -93,6 +94,16 @@ export default function NodeInfoTab({ nodeId }) {
     return (
         <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
 
+            {/* Top action bar */}
+            <div className="flex justify-end">
+                <button
+                    onClick={() => exportProjectPdf({ nodeId })}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all"
+                    title="Eksportuj informacje i planowanie do PDF"
+                >
+                    <FileDown size={11} /> PDF wszystkie sekcje
+                </button>
+            </div>
 
             {/* Basic Information */}
             <div className="bg-black/40 backdrop-blur-md rounded-2xl border border-white/10 p-6 shadow-2xl">

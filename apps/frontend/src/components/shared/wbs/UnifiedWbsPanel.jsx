@@ -16,6 +16,7 @@ import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import MaterialRequirementsPanel3 from './MaterialRequirementsPanel3';
 import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, STRUCTURE_STATUS_META, STRUCTURE_COMMON_CELL_CLASS, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode } from './wbsConstants';
+import { exportProjectPdf } from '../../../utils/projectPdfExport';
 
 const darkTheme = themeQuartz.withParams({
     backgroundColor: '#0a0a0f',
@@ -976,13 +977,14 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 <title>Unified WBS — ${date}</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 28px 32px; }
-  .doc-header { border-bottom: 3px solid #1a1a2e; padding-bottom: 10px; margin-bottom: 22px; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 0 32px 28px 32px; }
+  .doc-header { border-bottom: 3px solid #1a1a2e; padding: 18px 0 10px 0; margin: 0 0 18px 0; break-after: avoid; page-break-after: avoid; }
   .doc-header h1 { font-size: 20px; margin: 0 0 2px 0; }
   .doc-header .sub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: #6b7280; }
   .doc-header .meta { font-size: 10px; color: #9ca3af; margin-top: 4px; }
-  .section { margin-bottom: 26px; page-break-inside: avoid; }
-  .section-header { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; background: #1a1a2e; color: #fff; padding: 7px 12px; }
+  .section { margin-bottom: 22px; }
+  .section-header { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; background: #1a1a2e; color: #fff; padding: 7px 12px; break-after: avoid; page-break-after: avoid; }
   .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.7; }
   .strategy-text p { margin: 0 0 10px 0; }
   .strategy-text h3 { font-size: 12px; margin: 14px 0 4px 0; }
@@ -993,7 +995,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
   td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
   td.num { text-align: right; font-family: monospace; font-size: 10px; }
   tr:nth-child(even) td { background: #f9fafb; }
-  @media print { @page { margin: 15mm; } body { margin: 0; } }
+  thead { display: table-header-group; }
+  tr { page-break-inside: avoid; break-inside: avoid; }
+  @page { margin: 12mm 12mm 14mm 12mm; }
+  @media print { body { padding: 0 12mm; } .doc-header { padding-top: 8px; } }
 </style>
 </head>
 <body>
@@ -2271,8 +2276,8 @@ ${materialsHtml}
                         )}
                         {onExport && (
                             <>
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); handleExportPDF('all'); }} 
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); exportProjectPdf({ nodeId, versionId, projectName }); }}
                                     className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                                 >
                                     <FileDown size={11} /> PDF wszystkie sekcje
