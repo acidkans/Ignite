@@ -153,21 +153,30 @@ export default function SchematTab({ nodeId }) {
 
     // Utrzymuj aktualny stan wybranego znacznika po odświeżeniu schematów
     // + odtwórz z sessionStorage po przeładowaniu strony (mobile camera return)
+    const markerSyncRef = useRef(null);
     useEffect(() => {
         if (schematics.length === 0) return;
         const savedMarkerId = selectedMarker?.id || sessionStorage.getItem('erp_selectedMarkerId');
-        if (savedMarkerId) {
-            const updatedSchematic = schematics.find(s => s.markers.some(m => m.id === savedMarkerId));
-            if (updatedSchematic) {
-                const updatedMarker = updatedSchematic.markers.find(m => m.id === savedMarkerId);
-                if (updatedMarker && JSON.stringify(updatedMarker) !== JSON.stringify(selectedMarker)) {
-                    setSelectedMarker(updatedMarker);
-                    if (!selectedSchematic || selectedSchematic.id !== updatedSchematic.id) {
-                        setSelectedSchematic(updatedSchematic);
-                    }
-                }
-            } else if (selectedMarker) {
-                setSelectedMarker(null);
+        if (!savedMarkerId) return;
+
+        const updatedSchematic = schematics.find(s => s.markers.some(m => m.id === savedMarkerId));
+        if (!updatedSchematic) {
+            if (selectedMarker) { _setSelectedMarker(null); sessionStorage.removeItem('erp_selectedMarkerId'); }
+            return;
+        }
+        const updatedMarker = updatedSchematic.markers.find(m => m.id === savedMarkerId);
+        if (!updatedMarker) return;
+
+        // Porównaj tylko liczbę załączników — nie pełny stringify (unika pętli)
+        const prevCount = markerSyncRef.current;
+        const newCount = (updatedMarker.attachments || []).length;
+        const isRestore = !selectedMarker && savedMarkerId;
+
+        if (isRestore || prevCount !== newCount) {
+            markerSyncRef.current = newCount;
+            _setSelectedMarker(updatedMarker);
+            if (!selectedSchematic || selectedSchematic.id !== updatedSchematic.id) {
+                setSelectedSchematic(updatedSchematic);
             }
         }
     }, [schematics]);
