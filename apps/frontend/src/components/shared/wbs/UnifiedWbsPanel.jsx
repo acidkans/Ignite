@@ -2156,6 +2156,7 @@ ${materialsHtml}
                         rowData={buildRows(v)}
                         columnDefs={getColumnDefs(v)}
                         getRowId={p => p.data.id}
+                        context={{ onDeleteRow: deleteNodeById }}
                         onCellValueChanged={onCellValueChanged}
                         onGridReady={v === VIEWS.BUDGET ? (params) => {
                             budgetGridApiRef.current = params.api;

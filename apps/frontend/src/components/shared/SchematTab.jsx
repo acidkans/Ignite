@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { API_URL } from '../../config';
+import { enqueueUpload, removeFromQueue, flushPendingUploads } from '../../utils/uploadQueue';
 import {
     Upload, X, MapPin, Image as ImageIcon, Mic, Trash2,
     MousePointer2, Minus, Type, ZoomIn, ZoomOut, Maximize, Minimize2, Hand, Camera, Download, FileText, Save, FileDown,
@@ -36,7 +37,12 @@ export default function SchematTab({ nodeId }) {
     const [numPages, setNumPages] = useState(null);
     const [pageNumber, setPageNumber] = useState(1);
 
-    const [selectedMarker, setSelectedMarker] = useState(null);
+    const [selectedMarker, _setSelectedMarker] = useState(null);
+    const setSelectedMarker = (m) => {
+        if (m?.id) sessionStorage.setItem('erp_selectedMarkerId', m.id);
+        else sessionStorage.removeItem('erp_selectedMarkerId');
+        _setSelectedMarker(m);
+    };
     const [isAddingMarker, setIsAddingMarker] = useState(false);
     const [activeTool, setActiveTool] = useState('POINT'); // 'POINT', 'LINE', 'TEXT', 'MOVE'
     const [lineStart, setLineStart] = useState(null);
@@ -138,17 +144,29 @@ export default function SchematTab({ nodeId }) {
         if (nodeId) fetchSchematics();
     }, [nodeId]);
 
-    // Utrzymuj aktualny stan wybranego znacznika po odświeżeniu schematów
+    // Przy mountowaniu — doślij zaległe uploady z IndexedDB (po reloadzie mobilnym)
     useEffect(() => {
-        if (selectedMarker && schematics.length > 0) {
-            const updatedSchematic = schematics.find(s => s.markers.some(m => m.id === selectedMarker.id));
+        flushPendingUploads(API_URL, () => fetchSchematics(true)).then(sent => {
+            if (sent > 0) console.log(`[UploadQueue] Dosłano ${sent} zaległych załączników`);
+        }).catch(() => {});
+    }, []);
+
+    // Utrzymuj aktualny stan wybranego znacznika po odświeżeniu schematów
+    // + odtwórz z sessionStorage po przeładowaniu strony (mobile camera return)
+    useEffect(() => {
+        if (schematics.length === 0) return;
+        const savedMarkerId = selectedMarker?.id || sessionStorage.getItem('erp_selectedMarkerId');
+        if (savedMarkerId) {
+            const updatedSchematic = schematics.find(s => s.markers.some(m => m.id === savedMarkerId));
             if (updatedSchematic) {
-                const updatedMarker = updatedSchematic.markers.find(m => m.id === selectedMarker.id);
-                // Porównaj czy cokolwiek się zmieniło np. liczba załączników
+                const updatedMarker = updatedSchematic.markers.find(m => m.id === savedMarkerId);
                 if (updatedMarker && JSON.stringify(updatedMarker) !== JSON.stringify(selectedMarker)) {
                     setSelectedMarker(updatedMarker);
+                    if (!selectedSchematic || selectedSchematic.id !== updatedSchematic.id) {
+                        setSelectedSchematic(updatedSchematic);
+                    }
                 }
-            } else {
+            } else if (selectedMarker) {
                 setSelectedMarker(null);
             }
         }
@@ -1209,6 +1227,19 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
 
     const uploadFile = async (file) => {
         setUploading(true);
+        // Zapisz do IndexedDB PRZED wysłaniem (przetrwa reload)
+        let queueId = null;
+        try {
+            queueId = await enqueueUpload({
+                markerId: marker.id,
+                fileName: file.name,
+                fileType: file.type,
+                blob: file,
+            });
+        } catch (e) {
+            console.warn('[UploadQueue] Nie udało się zapisać do kolejki:', e);
+        }
+
         const formData = new FormData();
         formData.append('file', file);
         try {
@@ -1219,9 +1250,12 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                 body: formData
             });
             if (!res.ok) throw new Error('Błąd wgrywania pliku');
+            // Sukces — usuń z kolejki
+            if (queueId) await removeFromQueue(queueId).catch(() => {});
             onRefresh();
         } catch (err) {
-            alert(err.message);
+            // Plik pozostaje w IndexedDB — zostanie dosłany po reloadzie
+            console.warn('[Upload] Nie wysłano, plik w kolejce do retry:', err.message);
         } finally {
             setUploading(false);
         }
