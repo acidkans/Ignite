@@ -189,7 +189,9 @@ function BudgetHeaderRenderer(params) {
     );
 }
 
-function RowActionsRenderer({ data, context }) {
+function RowActionsRenderer(params) {
+    const data = params.data;
+    const onDelete = params.onDeleteRow || params.context?.onDeleteRow;
     if (data?._isRequirementLeaf) return null;
 
     return (
@@ -198,7 +200,7 @@ function RowActionsRenderer({ data, context }) {
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                     e.stopPropagation();
-                    context?.onDeleteRow?.(data?.id);
+                    if (onDelete) onDelete(data?.id);
                 }}
                 className="text-gray-500 hover:text-red-400"
                 title="Usuń węzeł"
@@ -1991,7 +1993,7 @@ ${materialsHtml}
                 filter: false,
                 editable: false,
                 cellRenderer: RowActionsRenderer,
-                cellRendererParams: { context: { onDeleteRow: deleteNodeById } },
+                cellRendererParams: { onDeleteRow: deleteNodeById },
             }
         ];
 
@@ -2026,7 +2028,7 @@ ${materialsHtml}
                 filter: false,
                 editable: false,
                 cellRenderer: RowActionsRenderer,
-                cellRendererParams: { context: { onDeleteRow: deleteNodeById } },
+                cellRendererParams: { onDeleteRow: deleteNodeById },
             }
         ];
 
