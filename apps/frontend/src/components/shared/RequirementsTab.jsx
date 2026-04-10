@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Save, Clock, Calendar, Target, Package, AlertTriangle, CheckCircle2, Plus, Trash2, GripVertical, Wrench, ClipboardList, ShieldCheck, User, Users, Mail, Phone, PhoneCall, Bold, Italic, List, Heading, Minus, FileDown } from 'lucide-react';
 import { API_URL } from '../../config';
 import { exportProjectPdf } from '../../utils/projectPdfExport';
+import { exportRequirementsPdf } from '../../utils/requirementsPdfExport';
 
 function countWorkingDays(startStr, endStr) {
     if (!startStr || !endStr) return null;
@@ -397,6 +398,13 @@ export default function RequirementsTab({ nodeId, versionId }) {
         <div className="animate-fade-in flex flex-col gap-4 w-full h-full min-h-[800px]">
             {/* Top action bar */}
             <div className="flex justify-end items-center gap-3">
+                <button
+                    onClick={() => exportRequirementsPdf({ form, countdown, workingDays })}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/25 rounded-lg text-purple-300 text-[10px] font-bold uppercase tracking-widest transition-all"
+                    title="Eksportuj informacje o zamówieniu do PDF"
+                >
+                    <FileDown size={11} /> PDF tej zakładki
+                </button>
                 <button
                     onClick={() => exportProjectPdf({ nodeId, versionId })}
                     className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all"

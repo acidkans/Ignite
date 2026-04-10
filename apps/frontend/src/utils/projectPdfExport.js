@@ -87,6 +87,39 @@ export async function exportProjectPdf({ nodeId, versionId, projectName }) {
     const wbsNodes = Array.isArray(wbsResp?.items) ? wbsResp.items : [];
     const materials = Array.isArray(matsResp) ? matsResp : (Array.isArray(matsResp?.items) ? matsResp.items : []);
 
+    // === Section: Informacje o zamówieniu (RequirementsTab) ===
+    const reqData = orderReq || {};
+    const offerDl = reqData.offerDeadline ? new Date(reqData.offerDeadline) : null;
+    const STATUS_LABELS = { accepted: 'Zaakceptowana', rejected: 'Odrzucona' };
+    const reqRows = [
+        offerDl && ['Termin złożenia oferty', offerDl.toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' }) + (offerDl.getHours() ? ` ${String(offerDl.getHours()).padStart(2, '0')}:00` : '')],
+        reqData.offerStatus && ['Status oferty', STATUS_LABELS[reqData.offerStatus] || reqData.offerStatus],
+        reqData.offerStatusComment && ['Komentarz do statusu', reqData.offerStatusComment],
+        reqData.projectStart && ['Początek projektu', new Date(reqData.projectStart).toLocaleDateString('pl-PL')],
+        reqData.projectEnd && ['Koniec projektu', new Date(reqData.projectEnd).toLocaleDateString('pl-PL')],
+        reqData.projectGoal && ['Cel projektu', null],
+        reqData.clientProjectManager && ['Project Manager', reqData.clientProjectManager],
+        reqData.clientProjectManagerPhone && ['Telefon PM', reqData.clientProjectManagerPhone],
+        reqData.clientProjectManagerEmail && ['E-mail PM', reqData.clientProjectManagerEmail],
+    ].filter(Boolean);
+
+    let contactsHtml = '';
+    try {
+        const contacts = reqData.clientContacts ? JSON.parse(reqData.clientContacts) : [];
+        if (contacts.length > 0) {
+            contactsHtml = `<table style="margin-top:8px"><thead><tr><th>Rola</th><th>Imię</th><th>Nazwisko</th><th>Telefon</th><th>E-mail</th></tr></thead><tbody>${contacts.map(c => `<tr><td>${esc(c.role || '')}</td><td>${esc(c.name || '')}</td><td>${esc(c.surname || '')}</td><td>${esc(c.phone || '')}</td><td>${esc(c.email || '')}</td></tr>`).join('')}</tbody></table>`;
+        }
+    } catch (_) {}
+
+    const requirementsHtml = reqRows.length > 0 ? `
+        <div class="section">
+            <div class="section-header">Informacje o zamówieniu</div>
+            <table class="kv"><tbody>
+                ${reqRows.map(([k, v]) => v ? `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>` : `<tr><th colspan="2" style="padding-top:10px;font-weight:bold">${esc(k)}</th></tr><tr><td colspan="2"><div class="strategy-text"><p>${renderStrategyHtml(reqData.projectGoal)}</p></div></td></tr>`).join('')}
+            </tbody></table>
+            ${contactsHtml ? `<div style="margin-top:10px"><div style="font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.1em;color:#4b5563;margin-bottom:4px">Dodatkowe kontakty</div>${contactsHtml}</div>` : ''}
+        </div>` : '';
+
     // === Section: Informacje o projekcie ===
     const infoRows = info ? [
         ['Nazwa', info.name],
@@ -191,6 +224,7 @@ export async function exportProjectPdf({ nodeId, versionId, projectName }) {
   <div class="sub">Informacje o projekcie i planowanie</div>
   <div class="meta">Wygenerowano: ${date}</div>
 </div>
+${requirementsHtml}
 ${infoHtml}
 ${strategyHtml}
 ${wbsHtml}
