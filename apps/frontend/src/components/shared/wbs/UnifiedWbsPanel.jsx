@@ -191,37 +191,20 @@ function BudgetHeaderRenderer(params) {
 
 function RowActionsRenderer({ data, context }) {
     if (data?._isRequirementLeaf) return null;
-    const isRoot = data?.parentId == null;
 
     return (
-        <div className="h-full flex items-center justify-end pr-1 gap-1">
-            {isRoot && (
-                <button
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        if (!window.confirm(`Usunąć przedmiot projektu "${data?.name || ''}" i wszystkie jego podzadania?`)) return;
-                        context?.onDeleteRow?.(data?.id);
-                    }}
-                    className="text-gray-500 hover:text-red-400"
-                    title="Usuń przedmiot projektu"
-                >
-                    <Trash2 size={13} />
-                </button>
-            )}
-            {!isRoot && (
-                <button
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        context?.onDeleteRow?.(data?.id);
-                    }}
-                    className="text-gray-500 hover:text-red-400"
-                    title="Usuń węzeł"
-                >
-                    <Trash2 size={13} />
-                </button>
-            )}
+        <div className="h-full flex items-center justify-end pr-1">
+            <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    context?.onDeleteRow?.(data?.id);
+                }}
+                className="text-gray-500 hover:text-red-400"
+                title="Usuń węzeł"
+            >
+                <Trash2 size={13} />
+            </button>
         </div>
     );
 }
