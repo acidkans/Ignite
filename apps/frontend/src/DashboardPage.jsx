@@ -64,7 +64,15 @@ export default function DashboardPage() {
     const isLogistyk = currentRoles.includes('LOGISTYK');
     const isManagerOrAdmin = currentRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
 
-    const [activeTab, setActiveTab] = useState(isWorker ? 'tasks' : 'files');
+    const [activeTab, _setActiveTab] = useState(() => {
+        const saved = sessionStorage.getItem('erp_activeTab');
+        if (saved) return saved;
+        return isWorker ? 'tasks' : 'files';
+    });
+    const setActiveTab = (tab) => {
+        sessionStorage.setItem('erp_activeTab', tab);
+        _setActiveTab(tab);
+    };
     const [tabOrder, setTabOrder] = useState(() => {
         const ALL_TABS = ['files', 'financialFiles', 'tasks', 'unified', 'schematics'];
         try {

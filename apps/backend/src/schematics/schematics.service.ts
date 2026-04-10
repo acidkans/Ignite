@@ -164,23 +164,28 @@ export class SchematicsService {
     // --- Attachments ---
     async uploadMarkerAttachment(markerId: string, file: Express.Multer.File) {
         this.ensureUploadDir();
-        
+
         const fileExtension = path.extname(file.originalname);
         const fileName = `${uuidv4()}${fileExtension}`;
         const filePath = path.join(this.UPLOAD_DIR, fileName);
 
         fs.writeFileSync(filePath, file.buffer);
 
-        const attachment = await this.prisma.markerAttachment.create({
-            data: {
-                markerId,
-                fileUrl: fileName,
-                fileType: this.getFileType(file.mimetype),
-                fileName: Buffer.from(file.originalname, 'latin1').toString('utf8'),
-            }
-        });
-
-        return attachment;
+        try {
+            const attachment = await this.prisma.markerAttachment.create({
+                data: {
+                    markerId,
+                    fileUrl: fileName,
+                    fileType: this.getFileType(file.mimetype),
+                    fileName: Buffer.from(file.originalname, 'latin1').toString('utf8'),
+                }
+            });
+            return attachment;
+        } catch (dbError) {
+            // Rollback: usuń plik z dysku jeśli zapis do DB się nie powiódł
+            try { fs.unlinkSync(filePath); } catch (_) {}
+            throw dbError;
+        }
     }
 
     async updateMarkerAttachment(attachmentId: string, data: { note: string }) {
