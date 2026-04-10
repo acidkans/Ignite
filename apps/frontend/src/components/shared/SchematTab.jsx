@@ -167,13 +167,13 @@ export default function SchematTab({ nodeId }) {
         const updatedMarker = updatedSchematic.markers.find(m => m.id === savedMarkerId);
         if (!updatedMarker) return;
 
-        // Porównaj tylko liczbę załączników — nie pełny stringify (unika pętli)
-        const prevCount = markerSyncRef.current;
-        const newCount = (updatedMarker.attachments || []).length;
+        // Porównaj lekki podpis (count + nazwy) zamiast pełnego stringify (unika pętli)
+        const atts = updatedMarker.attachments || [];
+        const sig = `${atts.length}:${atts.map(a => a.id).join(',')}:${updatedMarker.name}:${updatedMarker.note || ''}`;
         const isRestore = !selectedMarker && savedMarkerId;
 
-        if (isRestore || prevCount !== newCount) {
-            markerSyncRef.current = newCount;
+        if (isRestore || sig !== markerSyncRef.current) {
+            markerSyncRef.current = sig;
             _setSelectedMarker(updatedMarker);
             if (!selectedSchematic || selectedSchematic.id !== updatedSchematic.id) {
                 setSelectedSchematic(updatedSchematic);

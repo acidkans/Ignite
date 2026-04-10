@@ -191,7 +191,6 @@ function BudgetHeaderRenderer(params) {
 
 function RowActionsRenderer(params) {
     const data = params.data;
-    const onDelete = params.onDeleteRow || params.context?.onDeleteRow;
     if (data?._isRequirementLeaf) return null;
 
     return (
@@ -200,7 +199,11 @@ function RowActionsRenderer(params) {
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                     e.stopPropagation();
-                    if (onDelete) onDelete(data?.id);
+                    // Zawsze pobieraj najświeższą referencję z context (AG Grid aktualizuje context dynamicznie)
+                    const freshDelete = params.api?.getGridOption?.('context')?.onDeleteRow
+                        || params.context?.onDeleteRow
+                        || params.onDeleteRow;
+                    if (freshDelete) freshDelete(data?.id);
                 }}
                 className="text-gray-500 hover:text-red-400"
                 title="Usuń węzeł"
@@ -240,6 +243,8 @@ function MarkerIconsRenderer({ data, context }) {
 
 export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRoles = [], projectName = '', searchQuery = '', setLeftVisible, setAiVisible }) {
     const [wbsData, setWbsData] = useState([]);
+    const wbsDataRef = useRef(wbsData);
+    wbsDataRef.current = wbsData;
     const [expandedSection, setExpandedSection] = useState(() => {
         // Jeśli nie ma żadnego węzła głównego, domyślnie rozwijaj sekcję WBS
         if (wbsData && wbsData.filter(n => n.parentId == null).length === 0) return 'wbs';
@@ -495,9 +500,11 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 }
 
                 // Build WBS node ID → root parent name map from relational WBS data
-                const wbsNodesById = new Map((wbsData || []).map(n => [n.id, n]));
+                // Użyj ref zamiast stanu aby uniknąć pętli fetchData → setWbsData → fetchData
+                const currentWbs = wbsDataRef.current || [];
+                const wbsNodesById = new Map(currentWbs.map(n => [n.id, n]));
                 const wbsNodeToRootName = {};
-                for (const node of (wbsData || [])) {
+                for (const node of currentWbs) {
                     let current = node;
                     while (current?.parentId) {
                         const parent = wbsNodesById.get(current.parentId);
@@ -571,7 +578,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             }
             setRequirementsQtyByNode(nextRequirementsQtyByNode);
         } catch (e) { console.error('Fetch WBS error:', e); }
-    }, [nodeId, versionId, wbsData]);
+    }, [nodeId, versionId]);
 
     const syncMaterialRequirementsFromWbsQuantity = useCallback(async (wbsNodeId, quantityRaw, wbsNodeName = '') => {
         const nextQuantity = parseFloat(quantityRaw);
@@ -1181,8 +1188,9 @@ ${materialsHtml}
         } catch (e) { console.error('Add node error:', e); }
     }, [nodeId, versionId, authHeaders, refreshUnified]);
 
+    const deleteNodeByIdRef = useRef(null);
     const deleteNodeById = useCallback(async (id) => {
-        if (!id || !window.confirm('Usunąć ten węzeł?')) return;
+        if (!id || !window.confirm('Usunąć ten węzeł i wszystkie podgałęzie?')) return;
         try {
             // Sprawdź czy usuwany węzeł ma tag req: — jeśli tak, odłącz wymaganie
             const node = wbsData.find(n => n.id === id);
@@ -1197,13 +1205,18 @@ ${materialsHtml}
                 }).catch(() => {});
             }
 
-            await fetch(`${API_URL}/wbs-nodes/${id}`, { method: 'DELETE', headers: authHeaders() });
+            const res = await fetch(`${API_URL}/wbs-nodes/${id}`, { method: 'DELETE', headers: authHeaders() });
+            if (!res.ok) {
+                console.error('[WBS delete] Błąd serwera:', res.status, await res.text().catch(() => ''));
+                return;
+            }
             if (selectedId === id) setSelectedId(null);
             setReqRefreshKey(k => k + 1);
             await refreshUnified();
             await fetchUnassignedRequirements();
         } catch (e) { console.error('Delete node error:', e); }
     }, [authHeaders, refreshUnified, selectedId, wbsData, fetchUnassignedRequirements]);
+    deleteNodeByIdRef.current = deleteNodeById;
 
     const updateNodeField = useCallback(async (id, field, value) => {
         try {
@@ -2156,7 +2169,7 @@ ${materialsHtml}
                         rowData={buildRows(v)}
                         columnDefs={getColumnDefs(v)}
                         getRowId={p => p.data.id}
-                        context={{ onDeleteRow: deleteNodeById }}
+                        context={{ onDeleteRow: (...a) => deleteNodeByIdRef.current?.(...a) }}
                         onCellValueChanged={onCellValueChanged}
                         onGridReady={v === VIEWS.BUDGET ? (params) => {
                             budgetGridApiRef.current = params.api;

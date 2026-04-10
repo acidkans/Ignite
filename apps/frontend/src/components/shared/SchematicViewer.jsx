@@ -83,12 +83,17 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
     }, [nodeId, subtaskId]);
 
     // Aktualizuj selectedMarker gdy schematics się zmienią (np. po dodaniu załącznika)
+    const viewerSyncRef = useRef(null);
     useEffect(() => {
         if (selectedMarker && schematics) {
             const updatedSchematic = schematics.find(s => s.markers?.some(m => m.id === selectedMarker.id));
             if (updatedSchematic) {
                 const updatedMarker = updatedSchematic.markers.find(m => m.id === selectedMarker.id);
-                if (updatedMarker && JSON.stringify(updatedMarker) !== JSON.stringify(selectedMarker)) {
+                if (!updatedMarker) return;
+                // Porównaj lekki podpis zamiast pełnego stringify (unika pętli renderowania)
+                const sig = `${(updatedMarker.attachments || []).length}:${updatedMarker.name}:${updatedMarker.note || ''}`;
+                if (sig !== viewerSyncRef.current) {
+                    viewerSyncRef.current = sig;
                     setSelectedMarker(updatedMarker);
                 }
             }
