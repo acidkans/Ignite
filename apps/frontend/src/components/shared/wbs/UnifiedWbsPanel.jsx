@@ -2343,7 +2343,7 @@ ${materialsHtml}
                         value={wbsDescription}
                         onChange={(e) => { setWbsDescription(e.target.value); handleStrategySave(); }}
                         onBlur={() => handleStrategySave(true)}
-                        className="flex-1 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-sm focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed"
+                        className="flex-1 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed"
                         placeholder="Zdefiniuj plan i strategię realizacji projektu..."
                     />
                 </div>
