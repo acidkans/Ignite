@@ -2517,10 +2517,7 @@ ${materialsHtml}
                         nodeName={projectName || 'Projekt'}
                         processNodeId={nodeId}
                         onSave={handleSaveHybridWBS}
-                        onTopLevelAdded={() => refreshUnified()}
                         users={assignedUsers}
-                        onNodesDeleted={() => refreshUnified()}
-                        onMaterialNodeCreated={() => refreshUnified()}
                         onRequirementDrop={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
                         isManager={isManagerOrAdmin}
                     />
