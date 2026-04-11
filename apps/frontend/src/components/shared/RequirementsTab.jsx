@@ -621,29 +621,29 @@ export default function RequirementsTab({ nodeId, versionId }) {
                                         <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center">
                                             <User size={12} className="text-green-400" />
                                         </div>
-                                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Project Manager</span>
+                                        <span className="text-[14px] font-bold uppercase tracking-wider text-gray-400">Project Manager</span>
                                     </div>
                                     <div className="grid grid-cols-4 gap-3">
                                         <div>
-                                            <label className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię</label>
-                                            <input type="text" value={form.pmName} onChange={set('pmName')} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[11px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię</label>
+                                            <input type="text" value={form.pmName} onChange={set('pmName')} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
                                         </div>
                                         <div>
-                                            <label className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Nazwisko</label>
-                                            <input type="text" value={form.pmSurname} onChange={set('pmSurname')} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[11px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Nazwisko</label>
+                                            <input type="text" value={form.pmSurname} onChange={set('pmSurname')} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
                                         </div>
                                         <div>
-                                            <label className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Telefon</label>
+                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Telefon</label>
                                             <div className="relative">
                                                 <Phone size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                                                <input type="text" value={form.clientProjectManagerPhone} onChange={set('clientProjectManagerPhone')} onBlur={() => handleSave()} placeholder="+48 ..." className="w-full bg-black/40 border border-white/5 rounded pl-9 pr-2 py-2 text-[11px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                                <input type="text" value={form.clientProjectManagerPhone} onChange={set('clientProjectManagerPhone')} onBlur={() => handleSave()} placeholder="+48 ..." className="w-full bg-black/40 border border-white/5 rounded pl-9 pr-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
                                             </div>
                                         </div>
                                         <div>
-                                            <label className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">E-mail</label>
+                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">E-mail</label>
                                             <div className="relative">
                                                 <Mail size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                                                <input type="email" value={form.clientProjectManagerEmail} onChange={set('clientProjectManagerEmail')} onBlur={() => handleSave()} placeholder="example@..." className="w-full bg-black/40 border border-white/5 rounded pl-9 pr-2 py-2 text-[11px] text-gray-200 focus:outline-none focus:border-blue-500/30 truncate" />
+                                                <input type="email" value={form.clientProjectManagerEmail} onChange={set('clientProjectManagerEmail')} onBlur={() => handleSave()} placeholder="example@..." className="w-full bg-black/40 border border-white/5 rounded pl-9 pr-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30 truncate" />
                                             </div>
                                         </div>
                                     </div>
@@ -673,7 +673,7 @@ export default function RequirementsTab({ nodeId, versionId }) {
                                                                 onChange={e => updateContact(contact.id, 'role', e.target.value)}
                                                                 onBlur={() => handleSave()}
                                                                 placeholder="Rola (np. Inżynier)"
-                                                                className="bg-transparent text-[9px] font-bold uppercase tracking-widest text-blue-400 focus:outline-none focus:text-blue-300 w-full"
+                                                                className="bg-transparent text-[13px] font-bold uppercase tracking-widest text-blue-400 focus:outline-none focus:text-blue-300 w-full"
                                                             />
                                                         </div>
                                                         <button
@@ -685,25 +685,25 @@ export default function RequirementsTab({ nodeId, versionId }) {
                                                     </div>
                                                     <div className="grid grid-cols-4 gap-3">
                                                         <div>
-                                                            <label className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię</label>
-                                                            <input type="text" value={contact.name} onChange={e => updateContact(contact.id, 'name', e.target.value)} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[11px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię</label>
+                                                            <input type="text" value={contact.name} onChange={e => updateContact(contact.id, 'name', e.target.value)} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
                                                         </div>
                                                         <div>
-                                                            <label className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Nazwisko</label>
-                                                            <input type="text" value={contact.surname} onChange={e => updateContact(contact.id, 'surname', e.target.value)} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[11px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Nazwisko</label>
+                                                            <input type="text" value={contact.surname} onChange={e => updateContact(contact.id, 'surname', e.target.value)} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
                                                         </div>
                                                         <div>
-                                                            <label className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Telefon</label>
+                                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Telefon</label>
                                                             <div className="relative">
                                                                 <Phone size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                                                                <input type="text" value={contact.phone} onChange={e => updateContact(contact.id, 'phone', e.target.value)} onBlur={() => handleSave()} placeholder="+48..." className="w-full bg-black/40 border border-white/5 rounded pl-9 pr-2 py-2 text-[11px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                                                <input type="text" value={contact.phone} onChange={e => updateContact(contact.id, 'phone', e.target.value)} onBlur={() => handleSave()} placeholder="+48..." className="w-full bg-black/40 border border-white/5 rounded pl-9 pr-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
                                                             </div>
                                                         </div>
                                                         <div>
-                                                            <label className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">E-mail</label>
+                                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">E-mail</label>
                                                             <div className="relative">
                                                                 <Mail size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                                                                <input type="email" value={contact.email} onChange={e => updateContact(contact.id, 'email', e.target.value)} onBlur={() => handleSave()} placeholder="example@..." className="w-full bg-black/40 border border-white/5 rounded pl-9 pr-2 py-2 text-[11px] text-gray-200 focus:outline-none focus:border-blue-500/30 truncate" />
+                                                                <input type="email" value={contact.email} onChange={e => updateContact(contact.id, 'email', e.target.value)} onBlur={() => handleSave()} placeholder="example@..." className="w-full bg-black/40 border border-white/5 rounded pl-9 pr-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30 truncate" />
                                                             </div>
                                                         </div>
                                                     </div>
