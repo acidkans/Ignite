@@ -11,12 +11,13 @@ import {
     ValidationModule,
 } from 'ag-grid-community';
 import { themeQuartz } from 'ag-grid-community';
-import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, LayoutList, Zap, Sparkles, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, LayoutList, Zap, Sparkles, ArrowUpDown, ArrowUp, ArrowDown, ListTree } from 'lucide-react';
 import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import MaterialRequirementsPanel3 from './MaterialRequirementsPanel3';
 import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, STRUCTURE_STATUS_META, STRUCTURE_COMMON_CELL_CLASS, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode } from './wbsConstants';
 import { exportProjectPdf } from '../../../utils/projectPdfExport';
+import WBSHybridTable from './WBSHybridTable';
 
 const darkTheme = themeQuartz.withParams({
     backgroundColor: '#0a0a0f',
@@ -285,6 +286,11 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const [budgetImportLastRow, setBudgetImportLastRow] = useState(1);
     const [budgetImportMapping, setBudgetImportMapping] = useState({});
 
+    // ── WBS Hybrid Tree state ──
+    const [wbsTree, setWbsTree] = useState({ items: [] });
+    const wbsTreeRef = useRef(wbsTree);
+    useEffect(() => { wbsTreeRef.current = wbsTree; }, [wbsTree]);
+
     const gridRef = useRef();
     const budgetGridApiRef = useRef(null);
     const materialRef = useRef();
@@ -488,6 +494,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                         if (text) {
                             const reqData = JSON.parse(text);
                             const tree = JSON.parse(reqData.wbsTree || '{}');
+                            // Preserve wbsTree for HybridTable
+                            const normalizedTree = Array.isArray(tree.items) ? tree : { items: [] };
+                            setWbsTree(normalizedTree);
+                            wbsTreeRef.current = normalizedTree;
                             projectItemNamesById = Object.fromEntries(
                                 (tree.items || [])
                                     .filter(item => !item.type || item.type === 'product')
@@ -747,6 +757,40 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             fetchUnassignedRequirements();
         } 
     }, [nodeId, versionId, fetchData, fetchUsers, fetchStrategy, fetchUnassignedRequirements]);
+
+    // ── Hybrid WBS save ──
+    const hybridSaveRef = useRef(false);
+    const hybridSaveTimeout = useRef(null);
+    const handleSaveHybridWBS = useCallback(async () => {
+        if (hybridSaveTimeout.current) clearTimeout(hybridSaveTimeout.current);
+        hybridSaveTimeout.current = setTimeout(async () => {
+            if (hybridSaveRef.current) return;
+            hybridSaveRef.current = true;
+            try {
+                await fetch(`${API_URL}/order-requirements`, {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({
+                        nodeId,
+                        versionId,
+                        wbsTree: JSON.stringify(wbsTreeRef.current),
+                    }),
+                });
+                await fetchData();
+                onWbsUpdate?.();
+            } catch (err) {
+                console.error('[HybridWBS save]', err);
+            } finally {
+                hybridSaveRef.current = false;
+            }
+        }, 400);
+    }, [nodeId, versionId, authHeaders, fetchData, onWbsUpdate]);
+
+    const assignedUsers = useMemo(() => {
+        if (!Array.isArray(projectUsers) || !projectUsers.length) return [];
+        if (!Array.isArray(nodeTeamIds) || !nodeTeamIds.length) return projectUsers;
+        return projectUsers.filter(u => Array.isArray(u?.teams) && u.teams.some(t => nodeTeamIds.includes(t.id)));
+    }, [projectUsers, nodeTeamIds]);
 
     const refreshUnified = useCallback(async (listId = null) => {
         await fetchData(listId);
@@ -2464,6 +2508,24 @@ ${materialsHtml}
                         Wyciągnij z dokumentów
                     </button>
             ) : null)}
+
+            {renderSection('wbs-hybrid', `Struktura projektu: ${projectName || '—'}`, ListTree, 'violet', (
+                <div className="flex flex-col h-full">
+                    <WBSHybridTable
+                        wbsTree={wbsTree}
+                        setWbsTree={setWbsTree}
+                        nodeName={projectName || 'Projekt'}
+                        processNodeId={nodeId}
+                        onSave={handleSaveHybridWBS}
+                        onTopLevelAdded={() => refreshUnified()}
+                        users={assignedUsers}
+                        onNodesDeleted={() => refreshUnified()}
+                        onMaterialNodeCreated={() => refreshUnified()}
+                        onRequirementDrop={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
+                        isManager={isManagerOrAdmin}
+                    />
+                </div>
+            ), () => handleExportPDF('wbs'))}
 
             {isManagerOrAdmin && renderSection('budget', 'Plan i harmonogram (Budżet)', DollarSign, 'green', (
                 <div className="flex flex-col gap-3 h-full">
