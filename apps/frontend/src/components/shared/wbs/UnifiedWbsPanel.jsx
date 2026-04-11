@@ -1232,6 +1232,44 @@ ${materialsHtml}
         } catch (e) { console.error('Add node error:', e); }
     }, [nodeId, versionId, authHeaders, refreshUnified]);
 
+    // Gdy w HybridWBS zmieni się typ na material/equipment — auto-utwórz MaterialRequirement
+    const handleMaterialNodeCreated = useCallback(async ({ wbsNodeId, name, type }) => {
+        if (!wbsNodeId || !name) return;
+        const normalizedType = String(type || '').toLowerCase();
+        if (normalizedType !== 'material' && normalizedType !== 'equipment') return;
+        // Sprawdź czy węzeł już ma tag req: (nie duplikuj)
+        const wbsNode = wbsData.find(n => n.id === wbsNodeId);
+        const hasReqTag = Array.isArray(wbsNode?.tags) && wbsNode.tags.some(t => String(t).startsWith('req:'));
+        if (hasReqTag) return;
+        try {
+            const reqType = normalizedType === 'equipment' ? 'DEVICE' : 'MATERIAL';
+            const res = await fetch(`${API_URL}/material-requirements`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({
+                    nodeId, versionId: versionId || null,
+                    name, type: reqType, quantity: 1, unit: 'szt',
+                    wbsNodeId,
+                    wbsNodeIds: JSON.stringify([wbsNodeId]),
+                    wbsNodeAllocations: JSON.stringify({ [wbsNodeId]: 1 }),
+                }),
+            });
+            if (!res.ok) return;
+            const created = await res.json().catch(() => null);
+            if (created?.id) {
+                const currentTags = Array.isArray(wbsNode?.tags) ? [...wbsNode.tags] : [];
+                currentTags.push(`req:${created.id}`, 'auto-requirement');
+                await fetch(`${API_URL}/wbs-nodes/${wbsNodeId}`, {
+                    method: 'PATCH',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ tags: currentTags }),
+                }).catch(() => {});
+                setReqRefreshKey(k => k + 1);
+                await refreshUnified();
+            }
+        } catch (e) { console.error('Auto-create material requirement error:', e); }
+    }, [nodeId, versionId, authHeaders, wbsData, refreshUnified]);
+
     const deleteNodeByIdRef = useRef(null);
     const deleteNodeById = useCallback(async (id) => {
         if (!id || !window.confirm('Usunąć ten węzeł i wszystkie podgałęzie?')) return;
@@ -2520,6 +2558,7 @@ ${materialsHtml}
                         users={assignedUsers}
                         onRequirementDrop={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
                         isManager={isManagerOrAdmin}
+                        onMaterialNodeCreated={handleMaterialNodeCreated}
                     />
                 </div>
             ), () => handleExportPDF('wbs'))}
