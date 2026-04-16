@@ -1168,7 +1168,8 @@ ${materialsHtml}
         headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
 
         rows.forEach((row, index) => {
-            budgetSheet.addRow({
+            const excelRow = index + 2; // row 1 = header
+            const addedRow = budgetSheet.addRow({
                 index: index + 1,
                 subjectName: row.subjectName || '',
                 name: row.name || '',
@@ -1177,19 +1178,21 @@ ${materialsHtml}
                 unitCost: Number(row.unitCost) || 0,
                 quantity: Number(row.quantity) || 0,
                 unit: row.unit || '',
-                totalCost: Number(row.totalCost) || 0,
+                totalCost: { formula: `=F${excelRow}*G${excelRow}`, result: Number(row.totalCost) || 0 },
                 margin: (Number(row.margin) || 0) / 100,
                 discount: (Number(row.discount) || 0) / 100,
-                offerPrice: Number(row.offerPrice) || 0,
+                offerPrice: { formula: `=I${excelRow}*(1+J${excelRow})*(1-K${excelRow})`, result: Number(row.offerPrice) || 0 },
                 comment: row.comment || '',
                 status: row.status || '',
             });
+            void addedRow;
         });
 
+        const totalsRowNum = rows.length + 2;
         const totalsRow = budgetSheet.addRow({
             subjectName: 'Razem',
-            totalCost: summary.totalCost,
-            offerPrice: exportedRevenueAfterDiscount,
+            totalCost: { formula: `=SUM(I2:I${totalsRowNum - 1})`, result: summary.totalCost },
+            offerPrice: { formula: `=SUM(L2:L${totalsRowNum - 1})`, result: exportedRevenueAfterDiscount },
         });
         totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
@@ -1612,6 +1615,14 @@ ${materialsHtml}
                     margin: row.margin,
                 });
                 params.api.applyTransaction({ update: [row] });
+                saveBudgetField(row.id, {
+                    unit: row.unit,
+                    unitCost: row.unitCost,
+                    quantity: row.quantity,
+                    margin: row.margin,
+                    discount: row.discount ?? 0,
+                    comment: row.comment ?? '',
+                });
 
                 // Auto-create MaterialRequirement when type set to material/equipment and no req: tag yet
                 if (inheritedFromMaterials) {
