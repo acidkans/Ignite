@@ -325,7 +325,11 @@ function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMa
 
     // Resolve WBS branch names
     const nodeIds = parseWbsNodeIds(r);
-    const branchNames = nodeIds.map(id => wbsMap[id]?.name).filter(Boolean);
+    const branchNames = nodeIds.map(id => {
+        const node = wbsMap[id];
+        const parent = node?.parentId ? wbsMap[node.parentId] : null;
+        return parent?.name || node?.name;
+    }).filter(Boolean);
 
     return (
         <tr className={`border-b border-white/[0.03] transition-colors ${isExpanded ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>

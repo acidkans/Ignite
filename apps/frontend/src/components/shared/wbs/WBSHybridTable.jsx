@@ -1,43 +1,58 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Plus, Trash2, ChevronRight, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown } from 'lucide-react';
+import { Plus, Trash2, ChevronRight, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package } from 'lucide-react';
 
 const API_URL = '/api';
 
-const STATUS_OPTIONS = ['', 'Not Started', 'In Progress', 'Completed', 'On Hold'];
-const STATUS_STYLES = {
-    '': 'bg-transparent text-gray-600 border-transparent',
-    'Not Started': 'bg-gray-500/20 text-gray-400 border-gray-500/30',
-    'In Progress': 'bg-orange-500/20 text-orange-300 border-orange-500/30',
-    'Completed': 'bg-green-500/20 text-green-300 border-green-500/30',
-    'On Hold': 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
+const STRUCT_STATUS_META = {
+    '':        { label: 'Brak',         style: 'bg-transparent text-gray-600 border-transparent' },
+    PENDING:   { label: 'Oczekuje',     style: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+    PROPOSAL:  { label: 'Propozycja',   style: 'bg-blue-500/20 text-blue-300 border-blue-500/30' },
+    CONFIRMED: { label: 'Potwierdzone', style: 'bg-green-500/20 text-green-300 border-green-500/30' },
+    REJECTED:  { label: 'Odrzucone',    style: 'bg-red-500/20 text-red-300 border-red-500/30' },
+    ORDERED:   { label: 'Zamówione',    style: 'bg-violet-500/20 text-violet-300 border-violet-500/30' },
+    IN_STOCK:  { label: 'Na magazynie', style: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' },
+    ISSUED:    { label: 'Wydane',       style: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+    MIXED:     { label: 'Mieszany',     style: 'bg-sky-500/20 text-sky-300 border-sky-500/30' },
 };
 
 function StatusSelect({ value, onChange }) {
+    const meta = STRUCT_STATUS_META[value || ''] || STRUCT_STATUS_META[''];
     return (
         <select
             value={value || ''}
             onChange={e => onChange(e.target.value)}
-            className={`text-[10px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 cursor-pointer focus:outline-none focus:ring-0 transition-colors ${STATUS_STYLES[value || '']}`}
+            className={`text-[10px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 cursor-pointer focus:outline-none focus:ring-0 transition-colors ${meta.style}`}
             onClick={e => e.stopPropagation()}
         >
-            {STATUS_OPTIONS.map(s => (
-                <option key={s} value={s} className="bg-gray-900 text-white">{s || '—'}</option>
+            {Object.entries(STRUCT_STATUS_META).map(([code, { label }]) => (
+                <option key={code} value={code} className="bg-gray-900 text-white">{label}</option>
             ))}
         </select>
     );
 }
 
-const MAT_STATUS_META = {
-    PENDING:   { label: 'Oczekuje',     color: 'text-amber-300 bg-amber-500/20 border-amber-500/30' },
-    PROPOSAL:  { label: 'Propozycja',   color: 'text-blue-300 bg-blue-500/20 border-blue-500/30' },
-    CONFIRMED: { label: 'Potwierdzone', color: 'text-green-300 bg-green-500/20 border-green-500/30' },
-    REJECTED:  { label: 'Odrzucone',    color: 'text-red-300 bg-red-500/20 border-red-500/30' },
-};
-
 function InheritedStatusBadge({ status }) {
-    const meta = MAT_STATUS_META[status];
+    const meta = STRUCT_STATUS_META[status];
     if (!meta) return <span className="text-[10px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 text-gray-500 border-gray-600/30 flex items-center gap-1 w-max"><Link size={8}/> {status}</span>;
-    return <span title="Status dziedziczony z zapotrzebowania" className={`text-[10px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 flex items-center gap-1 w-max cursor-default ${meta.color}`}><Link size={8}/> {meta.label}</span>;
+    return <span title="Status dziedziczony z zapotrzebowania" className={`text-[10px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 flex items-center gap-1 w-max cursor-default ${meta.style}`}><Link size={8}/> {meta.label}</span>;
+}
+
+function QtyInput({ value, onChange }) {
+    const [local, setLocal] = useState(value != null ? String(value) : '');
+    useEffect(() => { setLocal(value != null ? String(value) : ''); }, [value]);
+    return (
+        <input
+            type="text"
+            value={local}
+            onChange={e => setLocal(e.target.value)}
+            onBlur={() => {
+                const v = parseFloat(local.replace(',', '.'));
+                if (!isNaN(v) && v >= 0) onChange(v);
+            }}
+            placeholder="1"
+            className="bg-transparent border-none focus:outline-none text-xs w-full text-right placeholder-gray-700"
+        />
+    );
 }
 
 // Node types: 'project' (root), 'product' (przedmiot projektu), 'material'|'work'|'service' (typy pracy)
@@ -176,11 +191,14 @@ const DEPTH = [
 const MAX_DEPTH = DEPTH.length - 1;
 
 // ── Tag chips ─────────────────────────────────────────────────────────────────
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function TagChips({ tags = [], tagColor, onRemove, onTagClick }) {
+    const visible = tags.map((t, i) => ({ tag: t, idx: i })).filter(({ tag }) => !UUID_RE.test(tag));
     return (
         <div className="flex flex-wrap gap-1">
-            {tags.map((tag, i) => (
-                <span key={i} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium border ${tagColor}`}>
+            {visible.map(({ tag, idx }) => (
+                <span key={idx} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium border ${tagColor}`}>
                     <Tag size={8} className="flex-shrink-0" />
                     <span>{tag}</span>
                     {onTagClick && (
@@ -194,7 +212,7 @@ function TagChips({ tags = [], tagColor, onRemove, onTagClick }) {
                     )}
                     {onRemove && (
                         <button
-                            onClick={e => { e.stopPropagation(); onRemove(i); }}
+                            onClick={e => { e.stopPropagation(); onRemove(idx); }}
                             className="hover:opacity-70 transition-opacity"
                         >
                             <X size={8} />
@@ -445,7 +463,7 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal, on
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], onRequirementDrop = null, isManager = false }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign }) {
     const [expanded, setExpanded] = useState(() => new Set(['root']));
     const [dragId, setDragId] = useState(null);
     const [dragOver, setDragOver] = useState(null);
@@ -457,6 +475,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const tagInputRef = useRef(null);
     const [materialStatuses, setMaterialStatuses] = useState({});
     const [reqDragOverNode, setReqDragOverNode] = useState(null);
+    const [selectedNodeId, setSelectedNodeId] = useState(null);
 
     useEffect(() => {
         if (!processNodeId) return;
@@ -694,8 +713,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 onDragOver={e => onDragOver(e, node.id, depth)}
                 onDragLeave={onDragLeave}
                 onDrop={e => onDrop(e, node.id)}
-                className={`border-b border-white/5 cursor-pointer select-none group/node transition-opacity ${d.rowBg} ${d.leftBorder} ${isDragging ? 'opacity-25' : ''} ${dropBorder} ${reqDropHighlight}`}
-                onClick={e => hasChildren && toggle(rowId, e)}
+                className={`border-b border-white/5 cursor-pointer select-none group/node transition-opacity ${d.rowBg} ${d.leftBorder} ${isDragging ? 'opacity-25' : ''} ${dropBorder} ${reqDropHighlight} ${selectedNodeId === node.id ? 'outline outline-1 outline-blue-500/40 !bg-blue-500/5' : ''}`}
+                onClick={e => { setSelectedNodeId(node.id); hasChildren && toggle(rowId, e); }}
             >
                 {/* WBS ID */}
                 <td className="px-3 py-2.5">
@@ -766,14 +785,32 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     )}
                 </td>
 
+                {/* Ilość wymagań */}
+                <td className="px-3 py-2.5 text-right" onClick={e => e.stopPropagation()}>
+                    {depth >= 1 && (
+                        <QtyInput
+                            value={requirementsQtyByNode[node.id] ?? null}
+                            onChange={v => onRequirementsQtyChange?.(node.id, v, node.name)}
+                        />
+                    )}
+                </td>
+
                 {/* Status */}
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                     {(() => {
-                        const inherited = node.name ? materialStatuses[node.name.toLowerCase()] : null;
-                        if (inherited) {
-                            return <InheritedStatusBadge status={inherited} />;
-                        }
-                        return <StatusSelect value={node.status} onChange={v => { handleField(node.id, 'status', v); onSave?.(); }} />;
+                        const reqTag = (node.tags || []).find(t => String(t).startsWith('req:'));
+                        const inherited = !reqTag && node.name ? materialStatuses[node.name.toLowerCase()] : null;
+                        if (inherited) return <InheritedStatusBadge status={inherited} />;
+                        return (
+                            <StatusSelect
+                                value={node.status}
+                                onChange={v => {
+                                    handleField(node.id, 'status', v);
+                                    onSave?.();
+                                    if (reqTag) onNodeStatusChange?.(node.id, v, reqTag.slice(4));
+                                }}
+                            />
+                        );
                     })()}
                 </td>
 
@@ -987,23 +1024,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     return (
         <>
             <div className="rounded-xl border border-white/5 bg-black/20">
-                {/* Header z przyciskiem PDF */}
-                <div className="flex items-center justify-between px-4 py-2 border-b border-white/5">
-                    <span className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">Struktura WBS</span>
-                    <button
-                        onClick={handleExportPdf}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-[11px] font-medium transition-all"
-                        title="Eksportuj WBS do PDF z pełnymi załącznikami"
-                    >
-                        <FileDown size={12} /> PDF
-                    </button>
-                </div>
                 <table className="w-full text-sm border-collapse">
                     <thead className="sticky top-0 z-10 bg-gray-900">
                         <tr className="border-b border-white/10">
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-16"></th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">Nazwa</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-28">Typ</th>
+                            <th className="text-right px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-28">Ilość wymagań</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-32">Status</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-32">Właściciel</th>
                             <th className="text-right px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-24">Zasoby (h)</th>
@@ -1015,6 +1042,40 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     <tbody>{rows}</tbody>
                 </table>
             </div>
+
+            {/* Koszyk nieprzypisanych wymagań */}
+            {isManager && unassignedRequirements.length > 0 && (
+                <div className="mt-3 px-3 py-3 border border-white/5 rounded-xl bg-black/10">
+                    <p className="text-[10px] uppercase tracking-widest text-amber-500/70 font-bold mb-2 flex items-center gap-1.5">
+                        <Package size={10} />
+                        Koszyk — nieprzypisane ({unassignedRequirements.length})
+                        {selectedNodeId && <span className="ml-2 text-gray-600 normal-case tracking-normal font-normal">przeciągnij na wiersz lub kliknij → Przypisz</span>}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        {unassignedRequirements.map(req => (
+                            <div
+                                key={req.id}
+                                draggable
+                                onDragStart={e => {
+                                    e.dataTransfer.setData('application/requirement-id', req.id);
+                                    e.dataTransfer.effectAllowed = 'copy';
+                                }}
+                                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-900/30 border border-emerald-500/20 rounded-lg text-emerald-300 text-[11px] cursor-grab select-none"
+                            >
+                                <span>{req.name || req.productName || '—'}</span>
+                                {req.quantity > 0 && <span className="text-emerald-500/60 text-[10px]">×{req.quantity}{req.unit ? ` ${req.unit}` : ''}</span>}
+                                {selectedNodeId && (
+                                    <button
+                                        onClick={e => { e.stopPropagation(); onRequirementAssign?.(selectedNodeId, req.id); }}
+                                        className="ml-1 px-1.5 py-0.5 bg-emerald-600/40 hover:bg-emerald-600/70 rounded text-[9px] font-bold text-emerald-200 cursor-pointer"
+                                        title="Przypisz do zaznaczonej gałęzi"
+                                    >→ Przypisz</button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Lightbox — powiększenie załącznika */}
             {lightboxAtt && (

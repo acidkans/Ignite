@@ -148,7 +148,7 @@ function TreeNameRenderer({ data, context, api, rowIndex, column }) {
             {isRequirementLeaf && <Package size={12} className="text-blue-400/70 flex-shrink-0" />}
             <span
                 className={`truncate ${depth === 0 ? 'font-semibold text-white' : isRequirementLeaf ? 'text-blue-200' : 'text-gray-300'}`}
-                onDoubleClick={(e) => {
+                onClick={(e) => {
                     e.stopPropagation();
                     if (!isRequirementLeaf && api) {
                         api.startEditingCell({ rowIndex, colKey: column.getColId() });
@@ -1378,6 +1378,25 @@ ${materialsHtml}
     const updateLocalWbsBudgetRow = useCallback((wbsNodeId, patch) => {
         setWbsData(prev => prev.map(item => item.id === wbsNodeId ? { ...item, ...patch } : item));
     }, []);
+
+    const handleHybridRequirementsQtyChange = useCallback((id, qty, name) => {
+        setRequirementsQtyByNode(prev => ({ ...prev, [id]: qty }));
+        updateLocalWbsBudgetRow(id, { quantity: qty });
+        saveBudgetField(id, { quantity: qty });
+        syncMaterialRequirementsFromWbsQuantity(id, qty, name || '');
+    }, [updateLocalWbsBudgetRow, saveBudgetField, syncMaterialRequirementsFromWbsQuantity]);
+
+    const handleHybridNodeStatusChange = useCallback(async (_wbsNodeId, status, reqId) => {
+        try {
+            await fetch(`${API_URL}/material-requirements/${reqId}`, {
+                method: 'PATCH',
+                headers: authHeaders(),
+                body: JSON.stringify({ status }),
+            });
+            setReqRefreshKey(k => k + 1);
+            await refreshUnified();
+        } catch {}
+    }, [authHeaders, refreshUnified]);
 
     const applyBudgetImport = useCallback(async () => {
         if (!budgetImportRows.length) return;
@@ -2652,9 +2671,23 @@ ${materialsHtml}
                         onRequirementDrop={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
                         isManager={isManagerOrAdmin}
                         onMaterialNodeCreated={handleMaterialNodeCreated}
+                        requirementsQtyByNode={requirementsQtyByNode}
+                        onRequirementsQtyChange={handleHybridRequirementsQtyChange}
+                        onNodeStatusChange={handleHybridNodeStatusChange}
+                        unassignedRequirements={isManagerOrAdmin ? unassignedRequirements : []}
+                        onRequirementAssign={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
                     />
                 </div>
-            ), () => handleExportPDF('wbs'))}
+            ), () => handleExportPDF('wbs'), isManagerOrAdmin ? (
+                <button
+                    onClick={(e) => { e.stopPropagation(); handleWbsExtract(); }}
+                    disabled={extractingForWbs}
+                    className={`flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 ${extractingForWbs ? 'opacity-50 pointer-events-none' : ''}`}
+                >
+                    {extractingForWbs ? <div className="w-3 h-3 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" /> : <Sparkles size={11} />}
+                    Wyciągnij z dokumentów
+                </button>
+            ) : null)}
 
             {isManagerOrAdmin && renderSection('budget', 'Plan i harmonogram (Budżet)', DollarSign, 'green', (
                 <div className="flex flex-col gap-3 h-full">
