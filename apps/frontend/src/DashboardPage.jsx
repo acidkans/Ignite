@@ -123,11 +123,18 @@ export default function DashboardPage() {
         if (activeAreaId && isOrder) {
             fetchVersions();
             const targetTab = pendingTabRef.current || 'requirements';
+            const openComments = targetTab === 'comments';
             pendingTabRef.current = null;
             const reqId = contextPendingRequirementIdRef?.current || null;
             if (contextPendingRequirementIdRef) contextPendingRequirementIdRef.current = null;
             setFocusedRequirementId(reqId);
-            setActiveTab(targetTab);
+            if (openComments) {
+                setShowComments(true);
+                setActiveTab('requirements');
+            } else {
+                setShowComments(false);
+                setActiveTab(targetTab);
+            }
         } else if (activeAreaId && isLogistykaArea) {
             pendingTabRef.current = null;
             setVersions([]);

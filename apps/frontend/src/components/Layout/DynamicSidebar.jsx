@@ -188,7 +188,7 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                     `}
                     style={{ paddingLeft: `${level * 10 + 8}px` }}
                 >
-                    {/* Expand/Collapse or Add button */}
+                    {/* Expand/Collapse button */}
                     {hasChildren ? (
                         <span
                             className="text-[10px] w-4 h-4 flex items-center justify-center hover:bg-white/20 rounded-sm cursor-pointer flex-shrink-0"
@@ -197,16 +197,7 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                             {isExpanded ? '▼' : '▶'}
                         </span>
                     ) : (
-                        <span
-                            role="button"
-                            tabIndex={0}
-                            onClick={(e) => { e.stopPropagation(); onAddNode(node); }}
-                            onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onAddNode(node); } }}
-                            className="w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-green-500/30 text-green-400 rounded transition-all text-[10px] flex-shrink-0 cursor-pointer"
-                            title="Dodaj element podrzędny"
-                        >
-                            ➕
-                        </span>
+                        <span className="w-4 h-4 flex-shrink-0" />
                     )}
                     <span className={`text-xs scale-90 flex-shrink-0${isLogistykArea ? ' opacity-60 saturate-0' : ''}`}
                         style={isLogistykArea ? { filter: 'sepia(1) hue-rotate(180deg) saturate(3) brightness(1.2)' } : undefined}
@@ -237,6 +228,16 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                             )}
                         </span>
                     )}
+                    <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => { e.stopPropagation(); onAddNode(node); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onAddNode(node); } }}
+                        className="w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-green-500/30 text-green-400 rounded transition-all text-[10px] flex-shrink-0 cursor-pointer"
+                        title="Dodaj podgałąź"
+                    >
+                        +
+                    </span>
                 </div>
             </div>
 
