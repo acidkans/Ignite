@@ -887,21 +887,30 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         strategySaveTimeout.current = setTimeout(() => saveStrategy(next), 1500);
     }, [saveStrategy]);
 
-    const prefixSelectionLines = useCallback((prefix, placeholder = 'punkt') => {
+    const prefixSelectionLines = useCallback((prefix) => {
         const ta = strategyRef.current;
         if (!ta) return;
         const text = ta.value;
         const start = ta.selectionStart ?? 0;
         const end = ta.selectionEnd ?? 0;
         const selected = text.slice(start, end);
-        const base = selected || placeholder;
-        const transformed = base.split('\n').map(line => `${prefix}${line}`).join('\n');
-        const next = `${text.slice(0, start)}${transformed}${text.slice(end)}`;
+
+        let next, cursorPos;
+        if (selected) {
+            const transformed = selected.split('\n').map(line => `${prefix}${line}`).join('\n');
+            next = `${text.slice(0, start)}${transformed}${text.slice(end)}`;
+            cursorPos = start + transformed.length;
+        } else {
+            // Znajdź początek bieżącej linii
+            const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+            next = `${text.slice(0, lineStart)}${prefix}${text.slice(lineStart)}`;
+            cursorPos = lineStart + prefix.length + (start - lineStart);
+        }
+
         setWbsDescription(next);
         setTimeout(() => {
             ta.focus();
-            const cursor = start + transformed.length;
-            ta.setSelectionRange(cursor, cursor);
+            ta.setSelectionRange(cursorPos, cursorPos);
         }, 0);
         if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
         strategySaveTimeout.current = setTimeout(() => saveStrategy(next), 1500);
@@ -1040,7 +1049,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
   .section-header { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; background: #1a1a2e; color: #fff; padding: 7px 12px; break-after: avoid; page-break-after: avoid; }
   .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.7; }
   .strategy-text p { margin: 0 0 10px 0; }
-  .strategy-text h3 { font-size: 12px; margin: 14px 0 4px 0; }
+  .strategy-text h3 { font-size: 14px; margin: 14px 0 4px 0; }
   .strategy-text h4 { font-size: 11px; margin: 10px 0 3px 0; color: #374151; }
   .md-h2 { font-size: 13px; margin: 16px 0 5px 0; }
   table { border-collapse: collapse; width: 100%; }
@@ -2450,28 +2459,28 @@ ${materialsHtml}
                         B
                     </button>
                     <button
-                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('## ', 'Nagłówek sekcji'); }}
+                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('## '); }}
                         className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
                         title="Nagłówek H2"
                     >
                         H2
                     </button>
                     <button
-                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('### ', 'Podnagłówek'); }}
+                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('### '); }}
                         className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
                         title="Nagłówek H3"
                     >
                         H3
                     </button>
                     <button
-                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('- ', 'punkt listy'); }}
+                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('- '); }}
                         className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
                         title="Lista punktowana"
                     >
                         Lista
                     </button>
                     <button
-                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('1. ', 'pierwszy krok'); }}
+                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('1. '); }}
                         className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
                         title="Lista numerowana"
                     >
