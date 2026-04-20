@@ -88,7 +88,7 @@ export default function LoginPage({ onLogin }) {
 
             <div className="relative z-10 flex flex-col items-center">
                 <h1 className="text-3xl font-bold mb-1 tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-                    GIGATEL ERP
+                    GIGATEL
                 </h1>
                 <p className="text-gray-400 mb-6 text-sm">
                     {isLogin ? 'Zaloguj się do systemu' : 'Utwórz nowe konto'}
@@ -206,7 +206,7 @@ export default function LoginPage({ onLogin }) {
                     )}
                 </div>
 
-					<p className="mt-6 text-[10px] text-gray-600 tracking-widest">v2026.04.16.97</p>
+					<p className="mt-6 text-[10px] text-gray-600 tracking-widest">v2026.04.20.98</p>
             </div>
         </div>
     );

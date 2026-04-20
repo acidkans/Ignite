@@ -160,7 +160,7 @@ export default function MainLayout({ onLogout }) {
                 {/* User Footer */}
                 <div className="p-2 border-t border-white/5 bg-black/20 backdrop-blur-sm">
                     <div className="flex items-center gap-2">
-                        <NotificationBell onNavigateToOrder={(orderId, requirementId) => { pendingTabRef.current = 'materials'; pendingRequirementIdRef.current = requirementId || null; handleNodeChange(orderId); }} />
+                        <NotificationBell onNavigateToOrder={(orderId, requirementId) => { pendingTabRef.current = requirementId ? 'materials' : 'comments'; pendingRequirementIdRef.current = requirementId || null; handleNodeChange(orderId); }} />
                         <button
                             onClick={onLogout}
                             className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors flex-shrink-0"
