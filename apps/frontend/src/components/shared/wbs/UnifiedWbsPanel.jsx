@@ -95,6 +95,20 @@ const excelColumnLetter = (num) => {
     return out || 'A';
 };
 
+const BUDGET_IMPORT_FIELD_DEFS = [
+    { key: 'subjectName', label: 'Przedmiot (gałąź nadrzędna)' },
+    { key: 'parentName', label: 'Podgałąź (opcjonalne grupowanie)' },
+    { key: 'name', label: 'Nazwa pozycji' },
+    { key: 'type', label: 'Typ (praca/materiał/sprzęt...)' },
+    { key: 'quantity', label: 'Ilość' },
+    { key: 'unit', label: 'Jednostka' },
+    { key: 'unitCost', label: 'Koszt jednostkowy' },
+    { key: 'totalCost', label: 'Wartość całkowita' },
+    { key: 'margin', label: 'Marża (%)' },
+    { key: 'discount', label: 'Rabat (%)' },
+    { key: 'comment', label: 'Komentarz / uwagi' },
+];
+
 const excelCellToText = (cellValue) => {
     if (cellValue == null) return '';
     if (typeof cellValue === 'object') {
@@ -285,6 +299,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const [budgetImportHeaderRow, setBudgetImportHeaderRow] = useState(1);
     const [budgetImportLastRow, setBudgetImportLastRow] = useState(1);
     const [budgetImportMapping, setBudgetImportMapping] = useState({});
+    const [budgetImportMode, setBudgetImportMode] = useState('update'); // 'update' | 'branch'
+    const [budgetImportBranchName, setBudgetImportBranchName] = useState('');
 
     // ── WBS Hybrid Tree state ──
     const [wbsTree, setWbsTree] = useState({ items: [] });
@@ -385,6 +401,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             if (idx >= 0) autoMapping[key] = String(idx);
         };
         setMapped('subjectName', ['przedmiot', 'subject']);
+        setMapped('parentName', ['galaz', 'gałąź', 'podgalaz', 'podgałąź', 'group', 'section']);
         setMapped('name', ['nazwa', 'pozycja', 'element', 'opis']);
         setMapped('type', ['typ', 'type']);
         setMapped('quantity', ['ilosc', 'ilość', 'qty', 'quantity']);
@@ -887,21 +904,30 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         strategySaveTimeout.current = setTimeout(() => saveStrategy(next), 1500);
     }, [saveStrategy]);
 
-    const prefixSelectionLines = useCallback((prefix, placeholder = 'punkt') => {
+    const prefixSelectionLines = useCallback((prefix) => {
         const ta = strategyRef.current;
         if (!ta) return;
         const text = ta.value;
         const start = ta.selectionStart ?? 0;
         const end = ta.selectionEnd ?? 0;
         const selected = text.slice(start, end);
-        const base = selected || placeholder;
-        const transformed = base.split('\n').map(line => `${prefix}${line}`).join('\n');
-        const next = `${text.slice(0, start)}${transformed}${text.slice(end)}`;
+
+        let next, cursorPos;
+        if (selected) {
+            const transformed = selected.split('\n').map(line => `${prefix}${line}`).join('\n');
+            next = `${text.slice(0, start)}${transformed}${text.slice(end)}`;
+            cursorPos = start + transformed.length;
+        } else {
+            // Znajdź początek bieżącej linii
+            const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+            next = `${text.slice(0, lineStart)}${prefix}${text.slice(lineStart)}`;
+            cursorPos = lineStart + prefix.length + (start - lineStart);
+        }
+
         setWbsDescription(next);
         setTimeout(() => {
             ta.focus();
-            const cursor = start + transformed.length;
-            ta.setSelectionRange(cursor, cursor);
+            ta.setSelectionRange(cursorPos, cursorPos);
         }, 0);
         if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
         strategySaveTimeout.current = setTimeout(() => saveStrategy(next), 1500);
@@ -1040,7 +1066,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
   .section-header { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; background: #1a1a2e; color: #fff; padding: 7px 12px; break-after: avoid; page-break-after: avoid; }
   .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.7; }
   .strategy-text p { margin: 0 0 10px 0; }
-  .strategy-text h3 { font-size: 12px; margin: 14px 0 4px 0; }
+  .strategy-text h3 { font-size: 14px; margin: 14px 0 4px 0; }
   .strategy-text h4 { font-size: 11px; margin: 10px 0 3px 0; color: #374151; }
   .md-h2 { font-size: 13px; margin: 16px 0 5px 0; }
   table { border-collapse: collapse; width: 100%; }
@@ -1146,9 +1172,11 @@ ${materialsHtml}
             } catch {}
         }
 
+        // Columns: A=Lp B=Przedmiot C=Podgałąź D=Nazwa E=Nazwawymagania F=Typ G=KosztJedn H=Ilość I=Jednostka J=KosztCałościowy=G*H K=Marża L=Rabat M=CenaOfertowa=J*(1+K)*(1-L)
         budgetSheet.columns = [
             { header: 'Lp.', key: 'index', width: 6 },
             { header: 'Przedmiot', key: 'subjectName', width: 28 },
+            { header: 'Podgałąź', key: 'parentName', width: 24 },
             { header: 'Nazwa', key: 'name', width: 34 },
             { header: 'Nazwa wymagania', key: 'requirementName', width: 30 },
             { header: 'Typ', key: 'type', width: 16 },
@@ -1172,16 +1200,17 @@ ${materialsHtml}
             const addedRow = budgetSheet.addRow({
                 index: index + 1,
                 subjectName: row.subjectName || '',
+                parentName: row.parentName || '',
                 name: row.name || '',
                 requirementName: reqNameByNodeId[row.id] || '',
                 type: TYPE_LABELS[row.type] || row.type || '',
                 unitCost: Number(row.unitCost) || 0,
                 quantity: Number(row.quantity) || 0,
                 unit: row.unit || '',
-                totalCost: { formula: `=F${excelRow}*G${excelRow}`, result: Number(row.totalCost) || 0 },
+                totalCost: { formula: `=G${excelRow}*H${excelRow}`, result: Number(row.totalCost) || 0 },
                 margin: (Number(row.margin) || 0) / 100,
                 discount: (Number(row.discount) || 0) / 100,
-                offerPrice: { formula: `=I${excelRow}*(1+J${excelRow})*(1-K${excelRow})`, result: Number(row.offerPrice) || 0 },
+                offerPrice: { formula: `=J${excelRow}*(1+K${excelRow})*(1-L${excelRow})`, result: Number(row.offerPrice) || 0 },
                 comment: row.comment || '',
                 status: row.status || '',
             });
@@ -1191,18 +1220,18 @@ ${materialsHtml}
         const totalsRowNum = rows.length + 2;
         const totalsRow = budgetSheet.addRow({
             subjectName: 'Razem',
-            totalCost: { formula: `=SUM(I2:I${totalsRowNum - 1})`, result: summary.totalCost },
-            offerPrice: { formula: `=SUM(L2:L${totalsRowNum - 1})`, result: exportedRevenueAfterDiscount },
+            totalCost: { formula: `=SUM(J2:J${totalsRowNum - 1})`, result: summary.totalCost },
+            offerPrice: { formula: `=SUM(M2:M${totalsRowNum - 1})`, result: exportedRevenueAfterDiscount },
         });
         totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
 
-        ['F', 'I', 'L'].forEach((column) => {
+        ['G', 'J', 'M'].forEach((column) => {
             budgetSheet.getColumn(column).numFmt = '#,##0.00';
         });
-        budgetSheet.getColumn('G').numFmt = '#,##0.00';
-        budgetSheet.getColumn('J').numFmt = '0.00%';
+        budgetSheet.getColumn('H').numFmt = '#,##0.00';
         budgetSheet.getColumn('K').numFmt = '0.00%';
+        budgetSheet.getColumn('L').numFmt = '0.00%';
         budgetSheet.views = [{ state: 'frozen', ySplit: 1 }];
 
         const buffer = await workbook.xlsx.writeBuffer();
@@ -1395,6 +1424,7 @@ ${materialsHtml}
                 const rowValues = budgetImportRows[rowNo - 1] || [];
                 const importedRow = {
                     subjectName: getMapped(rowValues, 'subjectName'),
+                    parentName: getMapped(rowValues, 'parentName'),
                     name: getMapped(rowValues, 'name'),
                     type: getMapped(rowValues, 'type'),
                     quantity: getMapped(rowValues, 'quantity'),
@@ -1412,14 +1442,20 @@ ${materialsHtml}
 
                 const wantedName = normKey(importedRow.name);
                 const wantedSubject = normKey(importedRow.subjectName);
+                const wantedParent = normKey(importedRow.parentName);
 
                 let target = null;
                 if (wantedName) {
-                    target = budgetRows.find((row) => (
-                        !used.has(row.id)
-                        && normKey(row.name) === wantedName
-                        && (!wantedSubject || normKey(getSubjectNameForNode(row)) === wantedSubject)
-                    ));
+                    target = budgetRows.find((row) => {
+                        if (used.has(row.id)) return false;
+                        if (normKey(row.name) !== wantedName) return false;
+                        if (wantedSubject && normKey(getSubjectNameForNode(row)) !== wantedSubject) return false;
+                        if (wantedParent) {
+                            const directParent = byId.get(row.parentId);
+                            if (!directParent || normKey(directParent.name) !== wantedParent) return false;
+                        }
+                        return true;
+                    });
                 }
 
                 if (!target) {
@@ -1429,13 +1465,23 @@ ${materialsHtml}
                         continue;
                     }
 
+                    // Find parent node to create under (parentName → subject root)
+                    let createParentId = subjectRoot.id;
+                    if (wantedParent) {
+                        const parentNode = budgetRows.find((row) =>
+                            normKey(row.name) === wantedParent
+                            && normKey(getSubjectNameForNode(row)) === wantedSubject
+                        );
+                        if (parentNode) createParentId = parentNode.id;
+                    }
+
                     const createRes = await fetch(`${API_URL}/wbs-nodes`, {
                         method: 'POST',
                         headers: authHeaders(),
                         body: JSON.stringify({
                             nodeId,
                             versionId: versionId || null,
-                            parentId: subjectRoot.id,
+                            parentId: createParentId,
                             name: importedRow.name,
                         }),
                     });
@@ -1444,7 +1490,8 @@ ${materialsHtml}
                     if (!createdNode?.id) continue;
                     target = {
                         id: createdNode.id,
-                        name: createdNode.name || importedRow.name || `Pozycja ${importIndex + 1}`,
+                        parentId: createParentId,
+                        name: createdNode.name || importedRow.name,
                         quantity: 1,
                         unitCost: 0,
                     };
@@ -1523,6 +1570,122 @@ ${materialsHtml}
         wbsData,
         nodeId,
         versionId,
+    ]);
+
+    const applyBranchImport = useCallback(async () => {
+        if (!budgetImportRows.length || !budgetImportBranchName.trim()) return;
+        setBudgetImportLoading(true);
+        try {
+            const startDataRow = Math.max(1, Number(budgetImportHeaderRow) || 1) + 1;
+            const lastDataRow = Math.max(startDataRow, Number(budgetImportLastRow) || budgetImportRows.length);
+            const getMapped = (rowValues, key) => {
+                const idxRaw = budgetImportMapping[key];
+                if (idxRaw === undefined || idxRaw === '') return '';
+                const idx = Number(idxRaw);
+                return Number.isInteger(idx) ? String(rowValues[idx] || '').trim() : '';
+            };
+
+            // 1. Create root branch node
+            const rootRes = await fetch(`${API_URL}/wbs-nodes`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({ nodeId, versionId: versionId || null, parentId: null, name: budgetImportBranchName.trim() }),
+            });
+            if (!rootRes.ok) throw new Error('Nie udało się utworzyć gałęzi głównej.');
+            const rootNode = await rootRes.json();
+            if (!rootNode?.id) throw new Error('Brak ID nowej gałęzi.');
+
+            // 2. Collect rows and create sub-group nodes on demand
+            const subGroupMap = new Map(); // subGroupName -> id
+            const getOrCreateSubGroup = async (subGroupName) => {
+                if (!subGroupName) return rootNode.id;
+                const key = subGroupName.trim();
+                if (!key) return rootNode.id;
+                if (subGroupMap.has(key)) return subGroupMap.get(key);
+                const res = await fetch(`${API_URL}/wbs-nodes`, {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ nodeId, versionId: versionId || null, parentId: rootNode.id, name: key }),
+                });
+                if (!res.ok) return rootNode.id;
+                const created = await res.json();
+                if (created?.id) { subGroupMap.set(key, created.id); return created.id; }
+                return rootNode.id;
+            };
+
+            let created = 0;
+            let skipped = 0;
+            for (let rowNo = startDataRow; rowNo <= lastDataRow && rowNo <= budgetImportRows.length; rowNo++) {
+                const rowValues = budgetImportRows[rowNo - 1] || [];
+                const importedRow = {
+                    parentName: getMapped(rowValues, 'parentName'),
+                    name: getMapped(rowValues, 'name'),
+                    type: getMapped(rowValues, 'type'),
+                    quantity: getMapped(rowValues, 'quantity'),
+                    unit: getMapped(rowValues, 'unit'),
+                    unitCost: getMapped(rowValues, 'unitCost'),
+                    totalCost: getMapped(rowValues, 'totalCost'),
+                    margin: getMapped(rowValues, 'margin'),
+                    discount: getMapped(rowValues, 'discount'),
+                    comment: getMapped(rowValues, 'comment'),
+                };
+                if (!importedRow.name) { skipped++; continue; }
+
+                const parentId = await getOrCreateSubGroup(importedRow.parentName);
+                const leafRes = await fetch(`${API_URL}/wbs-nodes`, {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ nodeId, versionId: versionId || null, parentId, name: importedRow.name }),
+                });
+                if (!leafRes.ok) { skipped++; continue; }
+                const leafNode = await leafRes.json();
+                if (!leafNode?.id) { skipped++; continue; }
+
+                const mappedType = normalizeImportedType(importedRow.type);
+                if (mappedType && TYPE_OPTIONS.includes(mappedType)) {
+                    await fetch(`${API_URL}/wbs-nodes/${leafNode.id}`, {
+                        method: 'PATCH',
+                        headers: authHeaders(),
+                        body: JSON.stringify({ type: mappedType }),
+                    });
+                }
+
+                const parsedQuantity = parseLocaleNumber(importedRow.quantity);
+                const parsedUnitCost = parseLocaleNumber(importedRow.unitCost);
+                const parsedTotalCost = parseLocaleNumber(importedRow.totalCost);
+                const resolvedQuantity = parsedQuantity != null ? parsedQuantity : 1;
+                const resolvedUnitCost = parsedUnitCost != null
+                    ? parsedUnitCost
+                    : (parsedTotalCost != null && resolvedQuantity > 0 ? parsedTotalCost / resolvedQuantity : null);
+
+                const budgetPatch = {};
+                if (resolvedQuantity != null) budgetPatch.quantity = resolvedQuantity;
+                if (importedRow.unit) budgetPatch.unit = importedRow.unit;
+                if (resolvedUnitCost != null) budgetPatch.unitCost = resolvedUnitCost;
+                const parsedMargin = parseLocaleNumber(importedRow.margin);
+                if (parsedMargin != null) budgetPatch.margin = parsedMargin;
+                const parsedDiscount = parseLocaleNumber(importedRow.discount);
+                if (parsedDiscount != null) budgetPatch.discount = parsedDiscount;
+                if (importedRow.comment) budgetPatch.comment = importedRow.comment;
+
+                if (Object.keys(budgetPatch).length > 0) {
+                    await saveBudgetField(leafNode.id, budgetPatch);
+                }
+                created++;
+            }
+
+            await refreshUnified();
+            setBudgetImportOpen(false);
+            alert(`Import gałęzi zakończony: utworzono ${created} pozycji${skipped ? `, pominięto ${skipped}` : ''}.`);
+        } catch (e) {
+            console.error('Branch import error:', e);
+            alert(`Błąd importu gałęzi: ${e.message || 'nieznany błąd'}`);
+        } finally {
+            setBudgetImportLoading(false);
+        }
+    }, [
+        budgetImportRows, budgetImportHeaderRow, budgetImportLastRow, budgetImportMapping,
+        budgetImportBranchName, authHeaders, saveBudgetField, refreshUnified, nodeId, versionId,
     ]);
 
     const onCellValueChanged = useCallback((params) => {
@@ -1806,10 +1969,14 @@ ${materialsHtml}
                         offerPrice = offerPrice * (1 - discount / 100);
                     }
                     const inheritedStatus = getInheritedMaterialStatus(item);
+                    const directParent = item.parentId ? byId.get(item.parentId) : null;
+                    const parentIsRoot = !directParent?.parentId;
+                    const parentName = (directParent && !parentIsRoot) ? (directParent.name || '') : '';
                     return {
                         ...item,
                         subjectId: subject.id,
                         subjectName,
+                        parentName,
                         status: inheritedStatus.code,
                         statusLabel: inheritedStatus.label,
                         unit: inheritedFromMaterials
@@ -2450,28 +2617,28 @@ ${materialsHtml}
                         B
                     </button>
                     <button
-                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('## ', 'Nagłówek sekcji'); }}
+                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('## '); }}
                         className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
                         title="Nagłówek H2"
                     >
                         H2
                     </button>
                     <button
-                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('### ', 'Podnagłówek'); }}
+                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('### '); }}
                         className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
                         title="Nagłówek H3"
                     >
                         H3
                     </button>
                     <button
-                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('- ', 'punkt listy'); }}
+                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('- '); }}
                         className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
                         title="Lista punktowana"
                     >
                         Lista
                     </button>
                     <button
-                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('1. ', 'pierwszy krok'); }}
+                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('1. '); }}
                         className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
                         title="Lista numerowana"
                     >
@@ -2595,11 +2762,23 @@ ${materialsHtml}
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
+                            setBudgetImportMode('update');
                             budgetImportFileInputRef.current?.click();
                         }}
                         className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all"
                     >
                         <FileDown size={11} /> Import budżetu z Excel
+                    </button>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setBudgetImportMode('branch');
+                            setBudgetImportBranchName('');
+                            budgetImportFileInputRef.current?.click();
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 rounded-lg text-teal-300 text-[10px] font-bold uppercase tracking-widest transition-all"
+                    >
+                        <ListTree size={11} /> Import gałęzi z Excel
                     </button>
                 </div>
             ),
@@ -2664,9 +2843,23 @@ ${materialsHtml}
                 <div className="fixed inset-0 z-[125] bg-[#05070bcc] backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !budgetImportLoading && setBudgetImportOpen(false)}>
                     <div className="w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl border border-white/10 bg-[#0b0f17]" onClick={(e) => e.stopPropagation()}>
                         <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between">
-                            <div>
+                            <div className="flex flex-col gap-1">
                                 <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-white">Import budżetu z Excel</h3>
                                 <p className="text-[10px] text-gray-500 uppercase tracking-widest">Plik: {budgetImportFileName || '—'}</p>
+                                <div className="flex gap-1 mt-1">
+                                    <button
+                                        onClick={() => setBudgetImportMode('update')}
+                                        className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all border ${budgetImportMode === 'update' ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'border-white/10 text-gray-500 hover:text-gray-300'}`}
+                                    >
+                                        Aktualizuj istniejące
+                                    </button>
+                                    <button
+                                        onClick={() => setBudgetImportMode('branch')}
+                                        className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all border ${budgetImportMode === 'branch' ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'border-white/10 text-gray-500 hover:text-gray-300'}`}
+                                    >
+                                        Nowa gałąź z Excel
+                                    </button>
+                                </div>
                             </div>
                             <button
                                 onClick={() => !budgetImportLoading && setBudgetImportOpen(false)}
@@ -2731,6 +2924,23 @@ ${materialsHtml}
                                 </label>
                             </div>
 
+                            {budgetImportMode === 'branch' && (
+                                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                                    <p className="text-[11px] text-emerald-300 uppercase tracking-widest font-bold mb-3">Tryb: Nowa gałąź z Excel</p>
+                                    <label className="text-xs text-gray-300 flex flex-col gap-1">
+                                        Nazwa głównej gałęzi (nowy węzeł root)
+                                        <input
+                                            type="text"
+                                            value={budgetImportBranchName}
+                                            onChange={(e) => setBudgetImportBranchName(e.target.value)}
+                                            placeholder="np. Instalacja elektryczna"
+                                            className="rounded-lg border border-emerald-500/30 bg-black/30 px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+                                        />
+                                    </label>
+                                    <p className="text-[10px] text-gray-500 mt-2">Wiersze z Excel zostaną dodane jako nowe pozycje pod tą gałęzią. Kolumna „Podgałąź" (opcjonalnie) tworzy poziom pośredni.</p>
+                                </div>
+                            )}
+
                             <div className="rounded-xl border border-white/10 overflow-hidden">
                                 <div className="px-3 py-2 text-[11px] uppercase tracking-widest text-gray-400 bg-white/5">Mapowanie kolumn Excel → aplikacja</div>
                                 <div className="max-h-[260px] overflow-auto custom-scrollbar divide-y divide-white/5">
@@ -2784,11 +2994,11 @@ ${materialsHtml}
                                     Anuluj
                                 </button>
                                 <button
-                                    onClick={applyBudgetImport}
-                                    disabled={budgetImportLoading}
+                                    onClick={budgetImportMode === 'branch' ? applyBranchImport : applyBudgetImport}
+                                    disabled={budgetImportLoading || (budgetImportMode === 'branch' && !budgetImportBranchName.trim())}
                                     className="px-4 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 transition-all disabled:opacity-50"
                                 >
-                                    {budgetImportLoading ? 'Importowanie...' : 'Importuj'}
+                                    {budgetImportLoading ? 'Importowanie...' : budgetImportMode === 'branch' ? 'Utwórz gałąź' : 'Importuj'}
                                 </button>
                             </div>
                         </div>
