@@ -316,7 +316,7 @@ export class WbsNodesService {
                     productName: selectedProposal?.productName || mat.productName || '',
                     manufacturer: selectedProposal?.manufacturer || mat.manufacturer || '',
                     model: selectedProposal?.model || mat.model || '',
-                    unit: mat.unit || 'szt',
+                    unit: mat.unit || 'sztuki',
                     priceNetto: price,
                     quantity: alloc.quantity,
                     totalPrice: price * alloc.quantity,
@@ -394,7 +394,7 @@ export class WbsNodesService {
      */
     async updateNode(id: string, data: any) {
         const allowed: Record<string, any> = {};
-        for (const key of ['name', 'type', 'status', 'owner', 'resources', 'cost', 'parentId', 'sortOrder', 'comment']) {
+        for (const key of ['name', 'type', 'status', 'owner', 'resources', 'cost', 'parentId', 'sortOrder', 'comment', 'unit']) {
             if (data[key] !== undefined) allowed[key] = data[key];
         }
         if (data.tags !== undefined) {
@@ -459,7 +459,7 @@ export class WbsNodesService {
             where: { id },
             data: {
                 budgetType: data.budgetType || data.type || null,
-                unit: data.unit || 'szt',
+                unit: data.unit || 'sztuki',
                 unitCost,
                 quantity,
                 totalCost,
