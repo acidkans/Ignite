@@ -531,7 +531,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             const reqUnit = reqId ? reqIdUnitMap[reqId] : undefined;
                             const children = updateTypes(n.children || []);
                             const updates = {};
-                            if (reqType && reqType !== n.type) { updates.type = reqType; changed = true; }
+                            if (reqType && !n.type) { updates.type = reqType; changed = true; }
                             if (reqStatus !== undefined && reqStatus !== n.status) { updates.status = reqStatus; changed = true; }
                             if (reqUnit !== undefined && reqUnit !== n.unit) { updates.unit = reqUnit; changed = true; }
                             if (Object.keys(updates).length) return { ...n, ...updates, children };
@@ -544,8 +544,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             } catch (e) {}
         };
         fetchMat();
-        const iv = setInterval(fetchMat, 30000);
-        return () => clearInterval(iv);
     }, [processNodeId, setWbsTree, materialRefreshKey]);
 
     const items = wbsTree?.items || [];
