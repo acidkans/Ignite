@@ -9,6 +9,10 @@ export default defineConfig({
         port: 5173,
         strictPort: true,
         allowedHosts: ['erp.gigatel.org', 'localhost'],
+        watch: {
+            usePolling: true,
+            interval: 300,
+        },
         proxy: {
             '/api': {
                 target: process.env.VITE_API_TARGET || 'http://127.0.0.1:3005',

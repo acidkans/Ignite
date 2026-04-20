@@ -260,11 +260,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const [wbsData, setWbsData] = useState([]);
     const wbsDataRef = useRef(wbsData);
     wbsDataRef.current = wbsData;
-    const [expandedSection, setExpandedSection] = useState(() => {
-        // Jeśli nie ma żadnego węzła głównego, domyślnie rozwijaj sekcję WBS
-        if (wbsData && wbsData.filter(n => n.parentId == null).length === 0) return 'wbs';
-        return null;
-    });
+    const [expandedSection, setExpandedSection] = useState('wbs-hybrid');
     const [fullscreenSection, setFullscreenSection] = useState(null);
     const [expandedIds, setExpandedIds] = useState(new Set());
     const [selectedId, setSelectedId] = useState(null);
@@ -1974,48 +1970,6 @@ ${materialsHtml}
             }
         };
 
-        if (view === VIEWS.STRUCTURE) {
-            const matchesById = new Map();
-            const branchMatches = (item) => {
-                if (!item) return false;
-                if (matchesById.has(item.id)) return matchesById.get(item.id);
-                const selfMatches = matchesSearch(
-                    item.name,
-                    TYPE_LABELS[item.type] || item.type,
-                    item.status,
-                    item.owner,
-                    item.path,
-                );
-                const childMatch = (childrenMap.get(item.id) || []).some(branchMatches);
-                const result = selfMatches || childMatch;
-                matchesById.set(item.id, result);
-                return result;
-            };
-
-            if (normalizedSearchQuery) {
-                const filteredRoots = (childrenMap.get('__root__') || []).filter(branchMatches);
-                const addFilteredVisible = (items, depth) => {
-                    for (const item of items) {
-                        const inheritedStatus = getInheritedMaterialStatus(item);
-                        rows.push({
-                            ...item,
-                            status: inheritedStatus.code,
-                            statusLabel: inheritedStatus.label,
-                            requirementsQty: getRequirementsQty(item.id),
-                            _isProjectItem: depth === 0,
-                            _depth: depth,
-                            _hasChildren: childrenMap.has(item.id),
-                            materialsCount: Number(item.materialsCount) || 0,
-                        });
-                        const matchingChildren = (childrenMap.get(item.id) || []).filter(branchMatches);
-                        if (matchingChildren.length) addFilteredVisible(matchingChildren, depth + 1);
-                    }
-                };
-                addFilteredVisible(filteredRoots, 0);
-            } else addVisible(null, 0);
-            return rows;
-        }
-
         addVisible(null, 0);
         return rows;
     };
@@ -2132,77 +2086,6 @@ ${materialsHtml}
             valueFormatter: (p) => p.value || 'Brak',
             cellClass: STRUCTURE_COMMON_CELL_CLASS,
         };
-
-        if (view === VIEWS.STRUCTURE) return [
-            nameCol, 
-            {
-                field: 'type',
-                headerName: 'Typ',
-                width: 100,
-                cellEditor: 'agSelectCellEditor',
-                cellEditorParams: { values: TYPE_OPTIONS },
-                valueFormatter: (p) => p.data?._isProjectItem ? '' : (TYPE_LABELS[p.value] || p.value || 'Brak'),
-                editable: (params) => !params.data?._isProjectItem && !params.data?._isRequirementLeaf,
-                cellClass: STRUCTURE_COMMON_CELL_CLASS,
-            },
-            {
-                field: 'requirementsQty',
-                headerName: 'Ilość wymagań',
-                width: 140,
-                editable: (params) => {
-                    if (params.data?._isRequirementLeaf) return false;
-                    return true;
-                },
-                cellEditor: 'agTextCellEditor',
-                sortable: true,
-                valueFormatter: (p) => {
-                    if (p.data?._isRequirementLeaf) return '';
-                    return fmtQty(p.value) || '1';
-                },
-                cellClass: `${STRUCTURE_COMMON_CELL_CLASS} text-gray-300`,
-            },
-            {
-                field: 'status',
-                headerName: 'Status',
-                width: 160,
-                cellEditor: 'agSelectCellEditor',
-                cellEditorParams: { values: Object.keys(STRUCTURE_STATUS_META) },
-                valueFormatter: (p) => p.data?.statusLabel || getStatusLabel(p.value, p.value),
-                cellRenderer: StructureStatusRenderer,
-                cellClass: STRUCTURE_COMMON_CELL_CLASS,
-                editable: (params) => {
-                    if (params.data?._isRequirementLeaf) return false;
-                    const normalizedType = String(params.data?.type || '').toLowerCase();
-                    if (['material', 'equipment'].includes(normalizedType)) {
-                        // Dozwól edycję statusu dla węzłów z tagiem req: (synchronizacja z Materiały)
-                        const node = wbsData.find(n => n.id === params.data?.id);
-                        return Array.isArray(node?.tags) && node.tags.some(t => String(t).startsWith('req:'));
-                    }
-                    return true;
-                },
-            },
-            ownerCol,
-            {
-                headerName: 'Znaczniki',
-                minWidth: 120,
-                flex: 1,
-                sortable: false,
-                filter: false,
-                editable: false,
-                cellRenderer: MarkerIconsRenderer,
-                cellRendererParams: { context: { markerLinksCache, onOpenAttachment: setPreviewAttachment } },
-            },
-            {
-                headerName: '',
-                width: 64,
-                pinned: 'right',
-                sortable: false,
-                filter: false,
-                editable: false,
-                cellRenderer: RowActionsRenderer,
-                cellRendererParams: { onDeleteRow: deleteNodeById },
-            }
-        ];
 
         if (view === VIEWS.BUDGET) return [
             { field: 'subjectName', headerName: 'Przedmiot', minWidth: 220, flex: 1, sortable: true, editable: true, headerComponent: BudgetHeaderRenderer },
@@ -2327,33 +2210,11 @@ ${materialsHtml}
 
     const renderGrid = (v) => {
         const isBudgetView = v === VIEWS.BUDGET;
-        const isStructureView = v === VIEWS.STRUCTURE;
 
         return (
             <div
                 className={isBudgetView ? 'flex-1 min-h-[200px] overflow-hidden pb-2' : 'flex-1 min-h-[400px]'}
                 onDoubleClick={(e) => e.stopPropagation()}
-                onDragOver={isStructureView ? (e) => {
-                    const types = Array.from(e.dataTransfer?.types || []);
-                    if (!types.includes('application/requirement-id')) return;
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'copy';
-                    const rowEl = e.target.closest('[row-id]');
-                    if (rowEl) {
-                        const rowId = rowEl.getAttribute('row-id');
-                        if (rowId && !rowId.startsWith('__req__:')) reqDropTargetRef.current = rowId;
-                    }
-                } : undefined}
-                onDragLeave={isStructureView ? () => { reqDropTargetRef.current = null; } : undefined}
-                onDrop={isStructureView ? (e) => {
-                    const reqId = e.dataTransfer.getData('application/requirement-id');
-                    const targetNodeId = reqDropTargetRef.current;
-                    reqDropTargetRef.current = null;
-                    if (reqId && targetNodeId) {
-                        e.preventDefault();
-                        handleRequirementAssignToWbs(targetNodeId, reqId);
-                    }
-                } : undefined}
             >
                 <div className="h-full">
                     <AgGridReact
@@ -2457,7 +2318,7 @@ ${materialsHtml}
     const renderSection = (key, title, Icon, colorClass, content, onExport, extraButtons = null) => {
         const isActive = expandedSection === key;
         const isHidden = expandedSection !== null && !isActive;
-        const isCompactSection = key === 'budget' || key === 'materials2';
+        const isCompactSection = key === 'budget' || key === 'materials2' || key === 'wbs-hybrid';
 
         return (
             <div
@@ -2587,78 +2448,6 @@ ${materialsHtml}
                 </div>
             ))}
 
-            {renderSection(
-                'wbs',
-                `Struktura zadań projektu: ${projectName || '—'}`,
-                Layers,
-                'blue',
-                (<div className="flex flex-col gap-0 h-full">
-                    {renderGrid(VIEWS.STRUCTURE)}
-                    {selectedId && !selectedId.startsWith('__req__:') && (() => {
-                        const node = wbsData.find(n => n.id === selectedId);
-                        const assignedReqs = allRequirements.filter(r => {
-                            try { return !!JSON.parse(r.wbsNodeAllocations || '{}')[selectedId]; } catch { return false; }
-                        });
-                        if (!assignedReqs.length) return null;
-                        return (
-                            <div className="mt-2 px-1 py-3 border-t border-white/10">
-                                <p className="text-[10px] uppercase tracking-widest text-blue-400/70 font-bold mb-2 flex items-center gap-1.5">
-                                    <Package size={10} />
-                                    Wymagania dla: {node?.name} ({assignedReqs.length})
-                                </p>
-                                <div className="flex flex-wrap gap-2">
-                                    {assignedReqs.map(r => (
-                                        <div key={r.id} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-900/20 border border-blue-500/20 rounded-lg text-blue-300 text-[11px]">
-                                            <span>{r.name || r.productName || '—'}</span>
-                                            {r.quantity > 0 && <span className="text-blue-400/60 text-[10px]">×{r.quantity}{r.unit ? ` ${r.unit}` : ''}</span>}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        );
-                    })()}
-                    {isManagerOrAdmin && unassignedRequirements.length > 0 && (
-                        <div className="mt-3 px-1 py-3 border-t border-white/10">
-                            <p className="text-[10px] uppercase tracking-widest text-amber-500/70 font-bold mb-2 flex items-center gap-1.5">
-                                <Package size={10} />
-                                Koszyk — nieprzypisane ({unassignedRequirements.length})
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                                {unassignedRequirements.map(req => (
-                                    <div key={req.id}
-                                        draggable
-                                        onDragStart={e => {
-                                            e.dataTransfer.setData('application/requirement-id', req.id);
-                                            e.dataTransfer.effectAllowed = 'copy';
-                                        }}
-                                        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-900/30 border border-emerald-500/20 rounded-lg text-emerald-300 text-[11px] cursor-grab select-none"
-                                    >
-                                        <span>{req.name || req.productName || '—'}</span>
-                                        {req.quantity && <span className="text-emerald-500/60 text-[10px]">×{req.quantity}{req.unit ? ` ${req.unit}` : ''}</span>}
-                                        {selectedId && !selectedId.startsWith('__req__:') && (
-                                            <button
-                                                onClick={e => { e.stopPropagation(); handleRequirementAssignToWbs(selectedId, req.id); }}
-                                                className="ml-1 px-1.5 py-0.5 bg-emerald-600/40 hover:bg-emerald-600/70 rounded text-[9px] font-bold text-emerald-200 cursor-pointer"
-                                                title="Przypisz do zaznaczonej gałęzi"
-                                            >→ Przypisz</button>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            ), () => handleExportPDF('wbs'), isManagerOrAdmin ? (
-                    <button
-                        onClick={(e) => { e.stopPropagation(); handleWbsExtract(); }}
-                        disabled={extractingForWbs}
-                        className={`flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 ${extractingForWbs ? 'opacity-50 pointer-events-none' : ''}`}
-                    >
-                        {extractingForWbs ? <div className="w-3 h-3 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" /> : <Sparkles size={11} />}
-                        Wyciągnij z dokumentów
-                    </button>
-            ) : null)}
-
             {renderSection('wbs-hybrid', `Struktura projektu: ${projectName || '—'}`, ListTree, 'violet', (
                 <div className="flex flex-col h-full">
                     <WBSHybridTable
@@ -2676,6 +2465,7 @@ ${materialsHtml}
                         onNodeStatusChange={handleHybridNodeStatusChange}
                         unassignedRequirements={isManagerOrAdmin ? unassignedRequirements : []}
                         onRequirementAssign={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
+                        onNodeFieldSave={updateNodeField}
                     />
                 </div>
             ), () => handleExportPDF('wbs'), isManagerOrAdmin ? (
