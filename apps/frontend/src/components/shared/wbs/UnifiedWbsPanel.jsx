@@ -13,7 +13,6 @@ import {
 import { themeQuartz } from 'ag-grid-community';
 import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, LayoutList, Zap, Sparkles, ArrowUpDown, ArrowUp, ArrowDown, ListTree } from 'lucide-react';
 import { API_URL } from '../../../config';
-import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import MaterialRequirementsPanel3 from './MaterialRequirementsPanel3';
 import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, STRUCTURE_STATUS_META, STRUCTURE_COMMON_CELL_CLASS, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode } from './wbsConstants';
 import { exportProjectPdf } from '../../../utils/projectPdfExport';
@@ -470,9 +469,11 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         try {
             let nextRequirementsQtyByNode = {};
             const res = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: { Authorization: `Bearer ${token()}` } });
+            let wbsItemsById = new Map();
             if (res.ok) {
                 const data = await res.json();
                 setWbsData(data.items || []);
+                wbsItemsById = new Map((data.items || []).map(n => [n.id, n]));
                 nextRequirementsQtyByNode = Object.fromEntries(
                     (data.items || [])
                         .filter((n) => n?.id != null && Number.isFinite(Number(n.quantity)))
@@ -507,8 +508,15 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                             const tree = JSON.parse(reqData.wbsTree || '{}');
                             // Preserve wbsTree for HybridTable
                             const normalizedTree = Array.isArray(tree.items) ? tree : { items: [] };
-                            setWbsTree(normalizedTree);
-                            wbsTreeRef.current = normalizedTree;
+                            // Merge relational fields (comment, status, owner) from wbsData into tree nodes
+                            const mergeRelational = nodes => nodes.map(n => {
+                                const rel = wbsItemsById.get(n.id);
+                                const merged = rel ? { ...n, comment: rel.comment ?? n.comment, status: rel.status ?? n.status, owner: rel.owner ?? n.owner, unit: rel.unit ?? n.unit, quantity: rel.quantity ?? n.quantity } : n;
+                                return merged.children?.length ? { ...merged, children: mergeRelational(merged.children) } : merged;
+                            });
+                            const mergedTree = { ...normalizedTree, items: mergeRelational(normalizedTree.items || []) };
+                            setWbsTree(mergedTree);
+                            wbsTreeRef.current = mergedTree;
                             projectItemNamesById = Object.fromEntries(
                                 (tree.items || [])
                                     .filter(item => !item.type || item.type === 'product')
@@ -599,6 +607,84 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             }
             setRequirementsQtyByNode(nextRequirementsQtyByNode);
         } catch (e) { console.error('Fetch WBS error:', e); }
+    }, [nodeId, versionId]);
+
+    // Lekkie odświeżenie kosztów materiałów — bez setWbsData (nie cofa edytów inline)
+    const refreshMaterialCosts = useCallback(async (listIdOverride = null) => {
+        try {
+            const params = new URLSearchParams();
+            if (versionId) params.append('versionId', String(versionId));
+            if (listIdOverride) params.append('listId', String(listIdOverride));
+            const qs = params.toString();
+            const res = await fetch(`${API_URL}/material-requirements/node/${nodeId}${qs ? `?${qs}` : ''}`, { headers: { Authorization: `Bearer ${token()}` } });
+            if (!res.ok) return;
+            const requirements = await res.json();
+            const nextCosts = {};
+            const nextLookupMeta = {};
+
+            const tree = wbsTreeRef.current || { items: [] };
+            const projectItemNamesById = Object.fromEntries(
+                (tree.items || [])
+                    .filter(item => !item.type || item.type === 'product')
+                    .map(item => [item.id, item.name])
+            );
+            const currentWbs = wbsDataRef.current || [];
+            const wbsNodesById = new Map(currentWbs.map(n => [n.id, n]));
+            for (const node of currentWbs) {
+                let current = node;
+                while (current?.parentId) {
+                    const parent = wbsNodesById.get(current.parentId);
+                    if (!parent) break;
+                    current = parent;
+                }
+                if (!projectItemNamesById[node.id] && current?.name) {
+                    projectItemNamesById[node.id] = current.name;
+                }
+            }
+
+            for (const req of Array.isArray(requirements) ? requirements : []) {
+                const statusCode = normalizeStatusCode(req.status);
+                const selected = (req.proposals || []).find((p) => p.isSelected);
+                const unitNet = parseFloat(req.priceNetto ?? selected?.priceNetto) || 0;
+                const nameCandidates = Array.from(new Set([req.name].filter(Boolean).map(n => String(n).trim())));
+
+                const registerLookupMeta = (subjectName, quantity) => {
+                    if (!subjectName || !nameCandidates.length) return;
+                    for (const candidateName of nameCandidates) {
+                        const key = makeMaterialLookupKey(subjectName, candidateName);
+                        if (!nextLookupMeta[key]) nextLookupMeta[key] = { statuses: [], cost: 0, quantity: 0, unit: '' };
+                        if (statusCode && !nextLookupMeta[key].statuses.includes(statusCode)) nextLookupMeta[key].statuses.push(statusCode);
+                        if (quantity > 0) nextLookupMeta[key].quantity += quantity;
+                        if (!nextLookupMeta[key].unit && req.unit) nextLookupMeta[key].unit = String(req.unit);
+                        if (unitNet > 0 && quantity > 0) nextLookupMeta[key].cost += unitNet * quantity;
+                    }
+                };
+
+                let alloc = {};
+                try { alloc = req.wbsNodeAllocations ? JSON.parse(req.wbsNodeAllocations) : {}; } catch {}
+                const allocEntries = Object.entries(alloc || {});
+
+                if (allocEntries.length > 0) {
+                    for (const [wbsNodeId, qtyRaw] of allocEntries) {
+                        const qty = parseFloat(qtyRaw) || 0;
+                        if (!wbsNodeId || qty <= 0) continue;
+                        registerLookupMeta(projectItemNamesById[wbsNodeId], qty);
+                        if (unitNet > 0) nextCosts[wbsNodeId] = (nextCosts[wbsNodeId] || 0) + unitNet * qty;
+                    }
+                    continue;
+                }
+
+                if (req.wbsNodeId) {
+                    const qty = parseFloat(req.quantity) || 0;
+                    if (qty > 0) {
+                        registerLookupMeta(projectItemNamesById[req.wbsNodeId], qty);
+                        if (unitNet > 0) nextCosts[req.wbsNodeId] = (nextCosts[req.wbsNodeId] || 0) + unitNet * qty;
+                    }
+                }
+            }
+            setMaterialCostsByNode(nextCosts);
+            setMaterialMetaByLookupKey(nextLookupMeta);
+        } catch (e) { console.error('Refresh material costs error:', e); }
     }, [nodeId, versionId]);
 
     const syncMaterialRequirementsFromWbsQuantity = useCallback(async (wbsNodeId, quantityRaw, wbsNodeName = '') => {
@@ -787,7 +873,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                         wbsTree: JSON.stringify(wbsTreeRef.current),
                     }),
                 });
-                await fetchData();
                 onWbsUpdate?.();
             } catch (err) {
                 console.error('[HybridWBS save]', err);
@@ -1274,7 +1359,7 @@ ${materialsHtml}
                 headers: authHeaders(),
                 body: JSON.stringify({
                     nodeId, versionId: versionId || null,
-                    name, type: reqType, quantity: 1, unit: 'szt',
+                    name, type: reqType, quantity: 1, unit: 'sztuki',
                     wbsNodeId,
                     wbsNodeIds: JSON.stringify([wbsNodeId]),
                     wbsNodeAllocations: JSON.stringify({ [wbsNodeId]: 1 }),
@@ -1290,8 +1375,14 @@ ${materialsHtml}
                     headers: authHeaders(),
                     body: JSON.stringify({ tags: currentTags }),
                 }).catch(() => {});
+                // Aktualizuj lokalny stan bez pełnego fetchData
+                setWbsData(prev => prev.map(n => n.id === wbsNodeId ? { ...n, tags: currentTags } : n));
+                setWbsTree(prev => {
+                    const upd = items => items.map(n => n.id === wbsNodeId ? { ...n, tags: currentTags } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
+                    return { ...prev, items: upd(prev.items || []) };
+                });
                 setReqRefreshKey(k => k + 1);
-                await refreshUnified();
+                await refreshMaterialCosts();
             }
         } catch (e) { console.error('Auto-create material requirement error:', e); }
     }, [nodeId, versionId, authHeaders, wbsData, refreshUnified]);
@@ -1326,6 +1417,24 @@ ${materialsHtml}
     }, [authHeaders, refreshUnified, selectedId, wbsData, fetchUnassignedRequirements]);
     deleteNodeByIdRef.current = deleteNodeById;
 
+    const handleMaterialStatusChange = useCallback(async (reqId, newStatus) => {
+        const node = wbsData.find(n => (n.tags || []).some(t => t === `req:${reqId}`));
+        if (node) {
+            await fetch(`${API_URL}/wbs-nodes/${node.id}`, {
+                method: 'PATCH',
+                headers: authHeaders(),
+                body: JSON.stringify({ status: newStatus }),
+            }).catch(() => {});
+            setWbsData(prev => prev.map(n => n.id === node.id ? { ...n, status: newStatus } : n));
+            setWbsTree(prev => {
+                const upd = items => items.map(n => n.id === node.id ? { ...n, status: newStatus } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
+                return { ...prev, items: upd(prev.items || []) };
+            });
+        }
+        await refreshMaterialCosts();
+        setReqRefreshKey(k => k + 1);
+    }, [wbsData, authHeaders, refreshMaterialCosts]);
+
     const updateNodeField = useCallback(async (id, field, value) => {
         try {
             await fetch(`${API_URL}/wbs-nodes/${id}`, {
@@ -1333,8 +1442,13 @@ ${materialsHtml}
                 headers: authHeaders(),
                 body: JSON.stringify({ [field]: value }),
             });
-            // Synchronizuj nazwę do powiązanego wymagania materialnego
-            if (field === 'name') {
+            setWbsData(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+            setWbsTree(prev => {
+                const upd = items => items.map(n => n.id === id ? { ...n, [field]: value } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
+                return { ...prev, items: upd(prev.items || []) };
+            });
+            // Synchronizuj nazwę/jednostkę do powiązanego wymagania materialnego
+            if (field === 'name' || field === 'unit') {
                 const node = wbsData.find(n => n.id === id);
                 const reqTag = (node?.tags || []).find(t => String(t).startsWith('req:'));
                 if (reqTag) {
@@ -1342,13 +1456,16 @@ ${materialsHtml}
                     await fetch(`${API_URL}/material-requirements/${reqId}`, {
                         method: 'PATCH',
                         headers: authHeaders(),
-                        body: JSON.stringify({ name: value }),
+                        body: JSON.stringify({ [field]: value }),
                     }).catch(() => {});
                     setReqRefreshKey(k => k + 1);
                 }
+                if (field === 'unit') {
+                    await refreshMaterialCosts();
+                }
             }
         } catch (e) { console.error('Update node error:', e); }
-    }, [authHeaders, wbsData]);
+    }, [authHeaders, wbsData, refreshMaterialCosts]);
 
     const saveBudgetField = useCallback(async (wbsNodeId, data) => {
         try {
@@ -1732,7 +1849,7 @@ ${materialsHtml}
                                 name: row.name || 'Nowy element',
                                 type: reqType,
                                 quantity: resolvedQuantity,
-                                unit: row.unit || 'szt',
+                                unit: row.unit || 'sztuki',
                                 wbsNodeId: row.id,
                                 wbsNodeIds: JSON.stringify([row.id]),
                                 wbsNodeAllocations: JSON.stringify({ [row.id]: resolvedQuantity }),
@@ -1757,8 +1874,8 @@ ${materialsHtml}
                 }
             }
         } else {
-            const q = parseFloat(row.quantity) || 1;
-            const uc = parseFloat(row.unitCost) || 0;
+            const q = parseLocaleNumber(row.quantity) ?? 1;
+            const uc = parseLocaleNumber(row.unitCost) ?? 0;
             const totalCost = uc * q;
             const m = parseFloat(row.margin) || 0;
             const d = parseFloat(row.discount) || 0;
@@ -1800,6 +1917,50 @@ ${materialsHtml}
                 if (normalizedType === 'work' || normalizedType === 'praca') {
                     setRequirementsQtyByNode((prev) => ({ ...prev, [row.id]: q }));
                     syncMaterialRequirementsFromWbsQuantity(row.id, q, row.name);
+                }
+            }
+            // Sync unitCost → priceNetto in material-requirements for material/equipment rows
+            if (field === 'unitCost') {
+                const normalizedType = String(row.type || row.budgetType || '').toLowerCase();
+                if (normalizedType === 'material' || normalizedType === 'equipment') {
+                    const lookupKey = makeMaterialLookupKey(row.subjectName || row.name, row.name);
+                    setMaterialMetaByLookupKey(prev => {
+                        const existing = prev[lookupKey];
+                        const existingQty = parseFloat(existing?.quantity) || q;
+                        return { ...prev, [lookupKey]: { ...(existing || {}), cost: uc * existingQty, quantity: existingQty } };
+                    });
+                    const reqTag = (row.tags || []).find(t => String(t).startsWith('req:'));
+                    if (reqTag) {
+                        const reqId = reqTag.slice(4);
+                        fetch(`${API_URL}/material-requirements/${reqId}`, {
+                            method: 'PATCH',
+                            headers: authHeaders(),
+                            body: JSON.stringify({ priceNetto: uc }),
+                        }).then(async () => {
+                            setReqRefreshKey(k => k + 1);
+                            await refreshMaterialCosts();
+                        }).catch(() => {});
+                    }
+                }
+            }
+            // Sync unit → material-requirements for material/equipment rows (fixes grid reset)
+            if (field === 'unit') {
+                const normalizedType = String(row.type || row.budgetType || '').toLowerCase();
+                if (normalizedType === 'material' || normalizedType === 'equipment') {
+                    const lookupKey = makeMaterialLookupKey(row.subjectName || row.name, row.name);
+                    setMaterialMetaByLookupKey(prev => ({
+                        ...prev,
+                        [lookupKey]: { ...(prev[lookupKey] || {}), unit: row.unit },
+                    }));
+                    const reqTag = (row.tags || []).find(t => String(t).startsWith('req:'));
+                    if (reqTag) {
+                        const reqId = reqTag.slice(4);
+                        fetch(`${API_URL}/material-requirements/${reqId}`, {
+                            method: 'PATCH',
+                            headers: authHeaders(),
+                            body: JSON.stringify({ unit: row.unit }),
+                        }).then(() => setReqRefreshKey(k => k + 1)).catch(() => {});
+                    }
                 }
             }
         }
@@ -2096,11 +2257,11 @@ ${materialsHtml}
                 headerName: 'Koszt jednostkowy',
                 width: 170,
                 cellEditor: 'agTextCellEditor',
-                editable: (params) => !params.data?.inheritedFromMaterials,
+                editable: true,
                 sortable: true,
                 valueFormatter: p => fmtPLN(p.value),
-                cellClass: (params) => params.data?.inheritedFromMaterials ? 'text-red-300' : '',
-                tooltipValueGetter: (params) => params.data?.inheritedFromMaterials ? 'Koszt dziedziczony z zakładki Materiały (wyliczony względem ilości)' : '',
+                cellClass: (params) => params.data?.inheritedFromMaterials ? 'text-amber-300' : '',
+                tooltipValueGetter: (params) => params.data?.inheritedFromMaterials ? 'Edycja synchronizuje cenę w zakładce Materiały' : '',
                 headerComponent: BudgetHeaderRenderer
             },
             { field: 'quantity', headerName: 'Ilość', width: 110, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtQty(p.value), headerComponent: BudgetHeaderRenderer },
@@ -2371,7 +2532,7 @@ ${materialsHtml}
         );
     };
 
-    const isCompactActive = (expandedSection === 'budget' || expandedSection === 'materials2');
+    const isCompactActive = (expandedSection === 'budget' || expandedSection === 'materials2' || expandedSection === 'wbs-hybrid');
 
     return (
         <div className={`flex flex-col w-full h-full relative bg-[#0a0c10]/50 border border-white/[0.03] gap-1 pt-0 ${isCompactActive ? 'overflow-hidden p-0' : 'overflow-y-auto pr-2 custom-scrollbar rounded-[40px] p-2'}`}>
@@ -2466,6 +2627,7 @@ ${materialsHtml}
                         unassignedRequirements={isManagerOrAdmin ? unassignedRequirements : []}
                         onRequirementAssign={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
                         onNodeFieldSave={updateNodeField}
+                        materialRefreshKey={reqRefreshKey}
                     />
                 </div>
             ), () => handleExportPDF('wbs'), isManagerOrAdmin ? (
@@ -2525,7 +2687,8 @@ ${materialsHtml}
                     nodeId={nodeId}
                     versionId={versionId}
                     readOnly={!isManagerOrAdmin}
-                    onWbsUpdate={refreshUnified}
+                    onWbsUpdate={async () => { await refreshMaterialCosts(); setReqRefreshKey(k => k + 1); }}
+                    onMaterialStatusChange={handleMaterialStatusChange}
                     refreshKey={reqRefreshKey}
                     isEmbedded={true}
                 />

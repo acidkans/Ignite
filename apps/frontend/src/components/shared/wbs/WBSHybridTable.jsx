@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Plus, Trash2, ChevronRight, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package } from 'lucide-react';
+import { UNIT_OPTIONS } from './wbsConstants';
 
 const API_URL = '/api';
 
@@ -465,8 +466,21 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal, on
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0 }) {
+    const getAllIds = useCallback((items) => {
+        const ids = ['root'];
+        const walk = (nodes) => nodes?.forEach(n => { ids.push(`node_${n.id}`); walk(n.children); });
+        walk(items);
+        return new Set(ids);
+    }, []);
     const [expanded, setExpanded] = useState(() => new Set(['root']));
+    const initialExpandDone = useRef(false);
+    useEffect(() => {
+        if (!initialExpandDone.current && wbsTree?.items?.length) {
+            setExpanded(getAllIds(wbsTree.items));
+            initialExpandDone.current = true;
+        }
+    }, [wbsTree, getAllIds]);
     const [dragId, setDragId] = useState(null);
     const [dragOver, setDragOver] = useState(null);
     const [editingTagsFor, setEditingTagsFor] = useState(null);
@@ -491,25 +505,36 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     const data = await res.json();
                     const map = {};
                     const typeMap = {};
+                    const reqIdStatusMap = {};
+                    const reqIdUnitMap = {};
                     const typeMapValue = { DEVICE: 'equipment', MATERIAL: 'material' };
                     data.forEach(r => {
                         if (r.name) {
                             map[r.name.toLowerCase()] = r.status;
                             typeMap[r.name.toLowerCase()] = typeMapValue[r.type] || '';
                         }
+                        if (r.id) {
+                            reqIdStatusMap[String(r.id)] = r.status;
+                            if (r.unit) reqIdUnitMap[String(r.id)] = r.unit;
+                        }
                     });
                     setMaterialStatuses(map);
 
-                    // Update tree to set types for nodes matching requirements — only if something changed
+                    // Update tree: set types and sync status/unit from linked requirements
                     setWbsTree(prev => {
                         let changed = false;
                         const updateTypes = (nodes) => nodes.map(n => {
                             const reqType = typeMap[(n.name || '').toLowerCase()];
+                            const reqTag = (n.tags || []).find(t => String(t).startsWith('req:'));
+                            const reqId = reqTag ? reqTag.slice(4) : null;
+                            const reqStatus = reqId ? reqIdStatusMap[reqId] : undefined;
+                            const reqUnit = reqId ? reqIdUnitMap[reqId] : undefined;
                             const children = updateTypes(n.children || []);
-                            if (reqType && reqType !== n.type) {
-                                changed = true;
-                                return { ...n, type: reqType, children };
-                            }
+                            const updates = {};
+                            if (reqType && reqType !== n.type) { updates.type = reqType; changed = true; }
+                            if (reqStatus !== undefined && reqStatus !== n.status) { updates.status = reqStatus; changed = true; }
+                            if (reqUnit !== undefined && reqUnit !== n.unit) { updates.unit = reqUnit; changed = true; }
+                            if (Object.keys(updates).length) return { ...n, ...updates, children };
                             return children !== n.children ? { ...n, children } : n;
                         });
                         const newItems = updateTypes(prev.items || []);
@@ -521,7 +546,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         fetchMat();
         const iv = setInterval(fetchMat, 30000);
         return () => clearInterval(iv);
-    }, [processNodeId, setWbsTree]);
+    }, [processNodeId, setWbsTree, materialRefreshKey]);
 
     const items = wbsTree?.items || [];
 
@@ -748,7 +773,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 }
                             }}
                             placeholder={depth === 0 ? 'Nazwa przedmiotu projektu…' : 'Nazwa elementu…'}
-                            className={`bg-transparent border-none focus:outline-none placeholder-gray-700 ${d.nameClass}`}
+                            className={`bg-transparent border-none focus:outline-none placeholder-gray-700 w-full min-w-0 ${d.nameClass}`}
                         />
                         {depth < MAX_DEPTH && (
                             <button
@@ -770,6 +795,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             onChange={e => {
                                 const newType = e.target.value;
                                 handleField(node.id, 'type', newType);
+                                onNodeFieldSave?.(node.id, 'type', newType);
                                 onSave?.();
                                 if ((newType === 'equipment' || newType === 'material') && node.name) {
                                     onMaterialNodeCreated?.({ wbsNodeId: node.id, name: node.name, type: newType, parentId });
@@ -795,6 +821,18 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             value={requirementsQtyByNode[node.id] ?? null}
                             onChange={v => onRequirementsQtyChange?.(node.id, v, node.name)}
                         />
+                    )}
+                </td>
+
+                {/* Jednostka */}
+                <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                    {depth >= 1 && (
+                        <select value={node.unit || ''}
+                            onChange={e => { handleField(node.id, 'unit', e.target.value); onNodeFieldSave?.(node.id, 'unit', e.target.value); onSave?.(); }}
+                            className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-xs w-full focus:outline-none focus:border-blue-500 cursor-pointer ${d.fieldClass}`}>
+                            <option value="" className="bg-gray-900">—</option>
+                            {UNIT_OPTIONS.map(u => <option key={u} value={u} className="bg-gray-900">{u}</option>)}
+                        </select>
                     )}
                 </td>
 
@@ -1035,10 +1073,11 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 <table className="w-full text-sm border-collapse">
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
                         <tr className="border-b border-white/10">
-                            <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-16"></th>
-                            <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">Nazwa</th>
+                            <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-10"></th>
+                            <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 min-w-[220px]">Nazwa</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-28">Typ</th>
                             <th className="text-right px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-28">Ilość wymagań</th>
+                            <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-20">Jednostka</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-32">Status</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-32">Właściciel</th>
                             <th className="text-right px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-24">Zasoby (h)</th>
