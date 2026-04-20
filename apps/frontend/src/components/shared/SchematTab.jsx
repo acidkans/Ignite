@@ -55,7 +55,8 @@ export default function SchematTab({ nodeId }) {
     const [inlineEdits, setInlineEdits] = useState({});
     const [showTable, setShowTable] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
-    
+    const [isDragging, setIsDragging] = useState(false);
+
     const pageRef = useRef(null);
     const containerRef = useRef(null);
     const [containerWidth, setContainerWidth] = useState(800);
@@ -181,6 +182,14 @@ export default function SchematTab({ nodeId }) {
         }
     }, [schematics]);
 
+    const lsKey = nodeId ? `erp_lastSchematicId_${nodeId}` : null;
+
+    const selectSchematic = (sch) => {
+        setSelectedSchematic(sch);
+        setPageNumber(1);
+        if (lsKey && sch?.id) localStorage.setItem(lsKey, sch.id);
+    };
+
     const fetchSchematics = async (silent = false) => {
         try {
             if (!silent) setLoading(true);
@@ -192,13 +201,13 @@ export default function SchematTab({ nodeId }) {
             const data = await res.json();
             setSchematics(data);
             if (data.length > 0) {
-                // Automatycznie wybierz najnowszy schemat, lub pozostaw aktywny jeżeli już jest
-                if (!selectedSchematic || !data.find(s => s.id === selectedSchematic.id)) {
-                    setSelectedSchematic(data[0]);
-                    setPageNumber(1);
-                } else {
-                    setSelectedSchematic(data.find(s => s.id === selectedSchematic.id));
-                }
+                const currentId = selectedSchematic?.id;
+                const savedId = lsKey ? localStorage.getItem(lsKey) : null;
+                const preferred = (currentId && data.find(s => s.id === currentId))
+                    || (savedId && data.find(s => s.id === savedId))
+                    || data[0];
+                setSelectedSchematic(preferred);
+                if (!currentId || currentId !== preferred.id) setPageNumber(1);
             } else {
                 setSelectedSchematic(null);
             }
@@ -209,15 +218,12 @@ export default function SchematTab({ nodeId }) {
         }
     };
 
-    const handleUpload = async (e) => {
-        const file = e.target.files?.[0];
+    const uploadFile = async (file) => {
         if (!file) return;
-
         setUploading(true);
         const formData = new FormData();
         formData.append('file', file);
         formData.append('nodeId', nodeId);
-
         try {
             const token = sessionStorage.getItem('token');
             const res = await fetch(`${API_URL}/schematics/upload`, {
@@ -225,7 +231,6 @@ export default function SchematTab({ nodeId }) {
                 headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
             });
-
             if (!res.ok) throw new Error('Błąd wgrywania pliku');
             await fetchSchematics();
         } catch (err) {
@@ -233,6 +238,18 @@ export default function SchematTab({ nodeId }) {
         } finally {
             setUploading(false);
         }
+    };
+
+    const handleUpload = (e) => uploadFile(e.target.files?.[0]);
+
+    const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); };
+    const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); };
+    const handleDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) uploadFile(file);
     };
 
     const handleDeleteSchematic = async (id) => {
@@ -513,7 +530,13 @@ export default function SchematTab({ nodeId }) {
     return (
         <div className="flex flex-col md:flex-row h-full bg-gray-900/50 rounded-xl overflow-hidden border border-white/5 relative">
             {/* Lewy panel - narzędzia i lista schematów */}
-            <div className="w-full md:w-64 h-48 md:h-auto bg-black/40 border-b md:border-b-0 md:border-r border-white/5 flex flex-col p-4 flex-shrink-0">
+            <div
+                className={`w-full md:w-64 h-48 md:h-auto bg-black/40 border-b md:border-b-0 md:border-r border-white/5 flex flex-col p-4 flex-shrink-0 transition-colors ${isDragging ? 'bg-blue-500/10 border-blue-500/40' : ''}`}
+                onDragOver={handleDragOver}
+                onDragEnter={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+            >
                 <h3 className="text-white font-bold mb-4 uppercase tracking-wider text-xs flex items-center gap-2">
                     <MapPin size={14} className="text-orange-400" /> Schematy
                 </h3>
@@ -527,7 +550,7 @@ export default function SchematTab({ nodeId }) {
                                 ? 'bg-orange-500/20 border-orange-500/50 text-orange-200' 
                                 : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-gray-200'
                             }`}
-                            onClick={() => { setSelectedSchematic(sch); setPageNumber(1); }}
+                            onClick={() => selectSchematic(sch)}
                         >
                             <div className="text-xs truncate pr-6" title={sch.fileName}>{sch.fileName}</div>
                             <div className="text-[10px] opacity-60 mt-1">Znaczników: {sch.markers.length}</div>
@@ -543,7 +566,7 @@ export default function SchematTab({ nodeId }) {
                     ))}
                     {schematics.length === 0 && (
                         <div className="text-xs text-gray-500 text-center mt-10">
-                            Brak wgranych schematów.
+                            {isDragging ? 'Upuść plik PDF / JPG' : 'Brak wgranych schematów.'}
                         </div>
                     )}
                 </div>
@@ -921,8 +944,24 @@ export default function SchematTab({ nodeId }) {
                         </div>
                     </div>
                 ) : (
-                    <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
-                        Wybierz z listy lub wgraj nowy schemat PDF.
+                    <div
+                        className={`flex-1 flex flex-col items-center justify-center text-gray-500 text-sm gap-3 transition-colors ${isDragging ? 'bg-blue-500/10' : ''}`}
+                        onDragOver={handleDragOver}
+                        onDragEnter={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                    >
+                        {isDragging ? (
+                            <div className="flex flex-col items-center gap-2 text-blue-400 pointer-events-none">
+                                <Upload size={32} />
+                                <span className="font-medium">Upuść plik PDF / JPG</span>
+                            </div>
+                        ) : (
+                            <>
+                                <span>Wybierz z listy lub wgraj nowy schemat PDF.</span>
+                                <span className="text-xs text-gray-600">Możesz też przeciągnąć plik tutaj lub na panel listy.</span>
+                            </>
+                        )}
                     </div>
                 )}
                 </div>
