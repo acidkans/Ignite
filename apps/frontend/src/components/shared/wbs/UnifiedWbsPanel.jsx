@@ -1348,10 +1348,25 @@ ${materialsHtml}
         if (!wbsNodeId || !name) return;
         const normalizedType = String(type || '').toLowerCase();
         if (normalizedType !== 'material' && normalizedType !== 'equipment') return;
-        // Sprawdź czy węzeł już ma tag req: (nie duplikuj)
+        // Sprawdź czy węzeł już ma tag req: i czy wymaganie faktycznie istnieje
         const wbsNode = wbsData.find(n => n.id === wbsNodeId);
-        const hasReqTag = Array.isArray(wbsNode?.tags) && wbsNode.tags.some(t => String(t).startsWith('req:'));
-        if (hasReqTag) return;
+        const reqTag = Array.isArray(wbsNode?.tags) ? wbsNode.tags.find(t => String(t).startsWith('req:')) : null;
+        if (reqTag) {
+            const reqId = reqTag.slice(4);
+            // Zweryfikuj czy wymaganie istnieje w backendzie — jeśli tak, nie duplikuj
+            try {
+                const checkRes = await fetch(`${API_URL}/material-requirements/${reqId}`, { headers: { Authorization: `Bearer ${token()}` } });
+                if (checkRes.ok) return;
+            } catch {}
+            // Wymaganie nie istnieje (zostało usunięte) — usuń nieważny tag i kontynuuj tworzenie nowego
+            const cleanedTags = (wbsNode.tags || []).filter(t => t !== reqTag && t !== 'auto-requirement');
+            await fetch(`${API_URL}/wbs-nodes/${wbsNodeId}`, {
+                method: 'PATCH',
+                headers: authHeaders(),
+                body: JSON.stringify({ tags: cleanedTags }),
+            }).catch(() => {});
+            setWbsData(prev => prev.map(n => n.id === wbsNodeId ? { ...n, tags: cleanedTags } : n));
+        }
         try {
             const reqType = normalizedType === 'equipment' ? 'DEVICE' : 'MATERIAL';
             const res = await fetch(`${API_URL}/material-requirements`, {
@@ -1447,20 +1462,29 @@ ${materialsHtml}
                 const upd = items => items.map(n => n.id === id ? { ...n, [field]: value } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
                 return { ...prev, items: upd(prev.items || []) };
             });
-            // Synchronizuj nazwę/jednostkę do powiązanego wymagania materialnego
-            if (field === 'name' || field === 'unit') {
+            // Synchronizuj nazwę/jednostkę/typ do powiązanego wymagania materialnego
+            if (field === 'name' || field === 'unit' || field === 'type') {
                 const node = wbsData.find(n => n.id === id);
                 const reqTag = (node?.tags || []).find(t => String(t).startsWith('req:'));
                 if (reqTag) {
                     const reqId = reqTag.slice(4);
-                    await fetch(`${API_URL}/material-requirements/${reqId}`, {
-                        method: 'PATCH',
-                        headers: authHeaders(),
-                        body: JSON.stringify({ [field]: value }),
-                    }).catch(() => {});
-                    setReqRefreshKey(k => k + 1);
+                    let body;
+                    if (field === 'type') {
+                        const reqType = value === 'equipment' ? 'DEVICE' : (value === 'material' ? 'MATERIAL' : null);
+                        body = reqType ? { type: reqType } : null;
+                    } else {
+                        body = { [field]: value };
+                    }
+                    if (body) {
+                        await fetch(`${API_URL}/material-requirements/${reqId}`, {
+                            method: 'PATCH',
+                            headers: authHeaders(),
+                            body: JSON.stringify(body),
+                        }).catch(() => {});
+                        setReqRefreshKey(k => k + 1);
+                    }
                 }
-                if (field === 'unit') {
+                if (field === 'unit' || field === 'type') {
                     await refreshMaterialCosts();
                 }
             }
