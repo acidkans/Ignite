@@ -67,6 +67,7 @@ const mkNode = (withDefaults = false) => {
         cost: '',
         tags: [],
         type: '', // 'product', 'material', 'work', 'service' - empty for root
+        comment: '',
         children: [],
     };
 };
@@ -156,7 +157,7 @@ const DEPTH = [
         rowBg: 'bg-blue-950/30 hover:bg-blue-900/30',
         leftBorder: 'border-l-[3px] border-blue-500',
         badge: 'bg-blue-600 text-white shadow shadow-blue-900/60',
-        nameClass: 'text-xl font-bold uppercase text-white',
+        nameClass: 'text-base font-bold uppercase text-white',
         fieldClass: 'text-blue-200',
         tagColor: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
     },
@@ -194,7 +195,8 @@ const MAX_DEPTH = DEPTH.length - 1;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function TagChips({ tags = [], tagColor, onRemove, onTagClick }) {
-    const visible = tags.map((t, i) => ({ tag: t, idx: i })).filter(({ tag }) => !UUID_RE.test(tag));
+    const visible = tags.map((t, i) => ({ tag: t, idx: i })).filter(({ tag }) =>
+        !UUID_RE.test(tag) && !String(tag).startsWith('req:') && tag !== 'auto-requirement');
     return (
         <div className="flex flex-wrap gap-1">
             {visible.map(({ tag, idx }) => (
@@ -463,7 +465,7 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal, on
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null }) {
     const [expanded, setExpanded] = useState(() => new Set(['root']));
     const [dragId, setDragId] = useState(null);
     const [dragOver, setDragOver] = useState(null);
@@ -674,7 +676,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             </td>
             <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-white uppercase tracking-wide">{nodeName}</span>
+                    <span className="text-xl font-bold text-white uppercase tracking-wide">{nodeName}</span>
                     <button onClick={handleAddTopLevel} className="p-0.5 hover:bg-white/10 rounded text-gray-600 hover:text-blue-400 transition-all" title="Dodaj przedmiot projektu">
                         <Plus size={12} />
                     </button>
@@ -683,6 +685,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3 text-right"><span className="text-xs text-gray-300 font-mono">{fmt(totalRes)}</span></td>
+            <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
@@ -840,7 +843,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         placeholder="0" className={`bg-transparent border-none focus:outline-none text-xs w-full text-right placeholder-gray-700 ${d.fieldClass}`} />
                 </td>
 
-
+                {/* Komentarz */}
+                <td className="px-3 py-2.5 min-w-[180px]" onClick={e => e.stopPropagation()}>
+                    <input type="text" value={node.comment || ''} onChange={e => handleField(node.id, 'comment', e.target.value)}
+                        onBlur={e => { onNodeFieldSave?.(node.id, 'comment', e.target.value); onSave?.(); }}
+                        placeholder="—" className={`bg-transparent border-none focus:outline-none text-xs w-full placeholder-gray-700 ${d.fieldClass}`} />
+                </td>
 
                 {/* Znaczniki */}
                 <td className="px-3 py-2.5 min-w-[180px]" onClick={e => e.stopPropagation()}>
@@ -914,7 +922,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         if (items.length === 0) {
             rows.push(
                 <tr key="empty">
-                    <td colSpan={8} className="px-3 py-3 pl-16 text-[10px] text-gray-700 italic">
+                    <td colSpan={11} className="px-3 py-3 pl-16 text-[10px] text-gray-700 italic">
                         Brak przedmiotów — kliknij <span className="text-gray-500">+</span> przy projekcie, aby dodać
                     </td>
                 </tr>
@@ -1023,9 +1031,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
     return (
         <>
-            <div className="rounded-xl border border-white/5 bg-black/20">
+            <div className="w-full overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
-                    <thead className="sticky top-0 z-10 bg-gray-900">
+                    <thead className="sticky top-0 z-10 bg-[#0b0f17]">
                         <tr className="border-b border-white/10">
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-16"></th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">Nazwa</th>
@@ -1034,6 +1042,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-32">Status</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-32">Właściciel</th>
                             <th className="text-right px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-24">Zasoby (h)</th>
+                            <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-48">Komentarz</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-48">Znaczniki</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-36">Załączniki</th>
                             <th className="w-12" />

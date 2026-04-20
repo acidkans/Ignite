@@ -394,7 +394,7 @@ export class WbsNodesService {
      */
     async updateNode(id: string, data: any) {
         const allowed: Record<string, any> = {};
-        for (const key of ['name', 'type', 'status', 'owner', 'resources', 'cost', 'parentId', 'sortOrder']) {
+        for (const key of ['name', 'type', 'status', 'owner', 'resources', 'cost', 'parentId', 'sortOrder', 'comment']) {
             if (data[key] !== undefined) allowed[key] = data[key];
         }
         if (data.tags !== undefined) {
