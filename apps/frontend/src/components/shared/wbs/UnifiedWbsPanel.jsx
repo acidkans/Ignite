@@ -1549,9 +1549,9 @@ ${materialsHtml}
                 if (importedRow.unit) budgetPatch.unit = importedRow.unit;
                 if (resolvedUnitCost != null) budgetPatch.unitCost = resolvedUnitCost;
                 const parsedMargin = parseLocaleNumber(importedRow.margin);
-                if (parsedMargin != null) budgetPatch.margin = parsedMargin;
+                if (parsedMargin != null) budgetPatch.margin = parsedMargin * 100;
                 const parsedDiscount = parseLocaleNumber(importedRow.discount);
-                if (parsedDiscount != null) budgetPatch.discount = parsedDiscount;
+                if (parsedDiscount != null) budgetPatch.discount = parsedDiscount * 100;
                 if (importedRow.comment) budgetPatch.comment = importedRow.comment;
 
                 const previewUnitCost = budgetPatch.unitCost != null ? budgetPatch.unitCost : (parseFloat(target.unitCost) || 0);
