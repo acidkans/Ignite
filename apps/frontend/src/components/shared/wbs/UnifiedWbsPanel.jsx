@@ -697,7 +697,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             const nextAlloc = { ...(currentAlloc || {}), [wbsNodeId]: nextQuantity };
             const totalQty = Object.values(nextAlloc).reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
 
-            await fetch(`${API_URL}/material-requirements/${targetReq.id}`, {
+            const patchRes = await fetch(`${API_URL}/material-requirements/${targetReq.id}`, {
                 method: 'PATCH',
                 headers: authHeaders(),
                 body: JSON.stringify({
@@ -708,6 +708,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                     isAiAssigned: false,
                 }),
             });
+            if (patchRes.ok) setReqRefreshKey(k => k + 1);
             // Don't call fetchData() here — it overwrites local wbsData and reverts user edits
         } catch (e) {
             console.error('Sync material requirements from WBS quantity error:', e);
@@ -2110,10 +2111,31 @@ ${materialsHtml}
         const getRequirementsQty = (id) => Object.prototype.hasOwnProperty.call(requirementsQtyByNode, id)
             ? requirementsQtyByNode[id]
             : 1;
+
+        // Gdy aktywne wyszukiwanie — oblicz zbiór widocznych węzłów (pasujące + ich przodkowie)
+        let searchVisibleIds = null;
+        if (normalizedSearchQuery) {
+            const matching = new Set();
+            for (const item of wbsData) {
+                if (matchesSearch(item.name, TYPE_LABELS[item.type] || item.type, item.status, item.owner, item.comment, item.unit, String(item.quantity ?? ''))) {
+                    matching.add(item.id);
+                }
+            }
+            searchVisibleIds = new Set(matching);
+            for (const id of matching) {
+                let current = byId.get(id);
+                while (current?.parentId) {
+                    searchVisibleIds.add(current.parentId);
+                    current = byId.get(current.parentId);
+                }
+            }
+        }
+
         const addVisible = (pId, depth) => {
             const children = childrenMap.get(pId || '__root__') || [];
             children.sort((a,b) => (a.sortOrder || 0) - (b.sortOrder || 0));
             for (const item of children) {
+                if (searchVisibleIds && !searchVisibleIds.has(item.id)) continue;
                 const inheritedStatus = getInheritedMaterialStatus(item);
                 rows.push({
                     ...item,
@@ -2125,7 +2147,7 @@ ${materialsHtml}
                     _hasChildren: childrenMap.has(item.id),
                     materialsCount: Number(item.materialsCount) || 0,
                 });
-                if (expandedIds.has(item.id)) {
+                if (searchVisibleIds || expandedIds.has(item.id)) {
                     addVisible(item.id, depth + 1);
                 }
             }
