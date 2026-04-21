@@ -46,6 +46,20 @@ export class ProcessTreeService {
         `;
             }
 
+            // Auto-create "Wizja lokalna" subtask for every new order
+            if (dto.type === NodeType.ORDER) {
+                await tx.subtask.create({
+                    data: {
+                        nodeId: node.id,
+                        name: 'Wizja lokalna',
+                        assignedUserId: node.ownerId || null,
+                        plannedStart: node.createdAt,
+                        plannedEnd: node.createdAt,
+                        status: 'NEW',
+                    },
+                });
+            }
+
             return node;
         });
     }
