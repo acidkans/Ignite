@@ -75,6 +75,12 @@ export const UNIT_OPTIONS = [
   'pakiet',
 ];
 
+export function defaultUnitForType(type) {
+  const t = String(type || '').toLowerCase();
+  if (t === 'work' || t === 'praca') return 'dni';
+  return 'sztuki';
+}
+
 export const MATERIAL_STATUS_LABELS = {
   PENDING: 'Oczekuje',
   PROPOSAL: 'Propozycja',

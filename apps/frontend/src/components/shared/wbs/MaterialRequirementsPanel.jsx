@@ -66,6 +66,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     refreshKey = 0,
     onWbsUpdate = null,
     onMaterialStatusChange = null,
+    onMaterialQtyChange = null,
     externalRequirements = null,
     externalWbsNodes = null,
     requirementsQtyByNode = null,
@@ -103,12 +104,11 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     }, [wbsNodes]);
 
     // ─── Filtered requirements ──────────────────────────────────────────────
-    const filtered = useMemo(() => {
+    // Etap 1: tylko filtr WBS (podstawa liczników w przyciskach)
+    const wbsFiltered = useMemo(() => {
         const source = externalRequirements || requirements;
         const validIds = new Set((externalWbsNodes || wbsNodes).map(n => n.id));
         return source.filter(r => {
-            if (!activeTypes.includes(r.type)) return false;
-            // Brak węzłów — pokaż tylko pozycje z jakąkolwiek alokacją (fallback)
             if (validIds.size === 0) {
                 let allocIds = [];
                 try { allocIds = Object.keys(JSON.parse(r.wbsNodeAllocations || '{}')).filter(k => parseFloat(JSON.parse(r.wbsNodeAllocations)[k]) > 0); } catch {}
@@ -123,7 +123,12 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
             const linked = [...ids, ...allocIds, r.wbsNodeId].filter(Boolean);
             return linked.some(id => validIds.has(id));
         });
-    }, [externalRequirements, externalWbsNodes, requirements, activeTypes, wbsNodes]);
+    }, [externalRequirements, externalWbsNodes, requirements, wbsNodes]);
+
+    // Etap 2: dodatkowo filtr typów (to co widać w tabeli)
+    const filtered = useMemo(() =>
+        wbsFiltered.filter(r => activeTypes.includes(r.type)),
+    [wbsFiltered, activeTypes]);
 
     // ─── Fetch ──────────────────────────────────────────────────────────────
 
@@ -233,6 +238,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                 const updated = await res.json();
                 setRequirements(prev => prev.map(r => r.id === id ? { ...r, ...updated } : r));
                 if ('status' in data) onMaterialStatusChange?.(id, data.status);
+                if ('quantity' in data) onMaterialQtyChange?.(updated);
                 if ('priceNetto' in data || 'status' in data || 'quantity' in data || 'unit' in data) onWbsUpdate?.();
             }
         } catch (err) {
@@ -283,7 +289,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
             <div className="flex items-center gap-2 px-3 py-1.5 border-b border-white/5 flex-shrink-0">
                 <Filter size={12} className="text-gray-500" />
                 {Object.entries(TYPE_META).map(([key, meta]) => {
-                    const count = requirements.filter(r => r.type === key).length;
+                    const count = wbsFiltered.filter(r => r.type === key).length;
                     const active = activeTypes.includes(key);
                     return (
                         <button key={key} onClick={() => setActiveTypes(prev =>
@@ -297,7 +303,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                     );
                 })}
                 <span className="ml-auto text-[10px] text-gray-600">
-                    {filtered.length}/{requirements.length}
+                    {filtered.length}/{wbsFiltered.length}
                 </span>
             </div>
 
@@ -363,10 +369,19 @@ function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMa
     // Resolve WBS branch names
     const nodeIds = parseWbsNodeIds(r);
     const branchNames = nodeIds.map(id => {
-        const node = wbsMap[id];
-        const parent = node?.parentId ? wbsMap[node.parentId] : null;
+        const node = wbsMap?.[id];
+        const parent = node?.parentId ? wbsMap?.[node.parentId] : null;
         return parent?.name || node?.name;
     }).filter(Boolean);
+
+    // Policz aktywne alokacje (wbsNodeAllocations z quantity > 0).
+    // Gdy > 1 — pole "Ilość" w głównym wierszu jest zablokowane (edycja per gałąź w ExpandedDetail).
+    let allocCount = 0;
+    try {
+        const alloc = r.wbsNodeAllocations ? JSON.parse(r.wbsNodeAllocations) : {};
+        allocCount = Object.values(alloc).filter(v => parseFloat(v) > 0).length;
+    } catch {}
+    const qtyLocked = isLocked || allocCount > 1;
 
     return (
         <tr className={`border-b border-white/[0.03] transition-colors ${isExpanded ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
@@ -409,17 +424,27 @@ function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMa
             {/* Ilość */}
             <td className="px-3 py-1">
                 <div className="flex items-center gap-1">
-                    <span className="text-sm text-gray-300 font-mono">{(() => {
-                        if (requirementsQtyByNode) {
-                            try {
-                                const alloc = JSON.parse(r.wbsNodeAllocations || '{}');
-                                const sum = Object.keys(alloc).reduce((acc, id) =>
-                                    acc + (requirementsQtyByNode[id] ?? parseFloat(alloc[id]) ?? 0), 0);
-                                if (sum > 0) return sum;
-                            } catch {}
-                        }
-                        return r.quantity;
-                    })()}</span>
+                    {qtyLocked ? (
+                        <span
+                            className="text-sm text-gray-300 font-mono"
+                            title={allocCount > 1 ? `Suma z ${allocCount} gałęzi WBS — edytuj per gałąź w rozwinięciu` : undefined}
+                        >
+                            {r.quantity}
+                            {allocCount > 1 && <Lock size={9} className="inline ml-1 text-gray-500 -mt-0.5" />}
+                        </span>
+                    ) : (
+                        <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={r.quantity ?? ''}
+                            onChange={e => {
+                                const v = parseFloat(e.target.value);
+                                if (!isNaN(v) && v >= 0) onPatch(r.id, { quantity: v });
+                            }}
+                            className="w-16 bg-transparent border-b border-white/20 text-sm text-gray-300 font-mono focus:outline-none focus:border-blue-400 text-right"
+                        />
+                    )}
                     {isLocked ? (
                         <span className="text-xs text-gray-400 font-mono">{r.unit || 'sztuki'}</span>
                     ) : (
