@@ -1,3 +1,7 @@
+# Word documents
+*.docx
+~$*.docx
+
 # Environment files - ALL env files are ignored for security
 *.env
 *.env.*
