@@ -11,10 +11,11 @@ import {
     ValidationModule,
 } from 'ag-grid-community';
 import { themeQuartz } from 'ag-grid-community';
-import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, LayoutList, Zap, Sparkles, ArrowUpDown, ArrowUp, ArrowDown, ListTree } from 'lucide-react';
+import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, LayoutList, Zap, Sparkles, ArrowUpDown, ArrowUp, ArrowDown, ListTree, CalendarDays } from 'lucide-react';
 import { API_URL } from '../../../config';
-import MaterialRequirementsPanel3 from './MaterialRequirementsPanel3';
-import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, STRUCTURE_STATUS_META, STRUCTURE_COMMON_CELL_CLASS, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode } from './wbsConstants';
+import MaterialRequirementsPanel from './MaterialRequirementsPanel';
+import TasksCalendarSection from './TasksCalendarSection';
+import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, STRUCTURE_STATUS_META, STRUCTURE_COMMON_CELL_CLASS, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, BUDGET_TYPE_LABELS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS } from './wbsConstants';
 import { exportProjectPdf } from '../../../utils/projectPdfExport';
 import WBSHybridTable from './WBSHybridTable';
 
@@ -48,35 +49,6 @@ const VIEWS = {
     BUDGET: 'budget',
 };
 
-const TYPE_LABELS = { work: 'Praca', material: 'Materiał', equipment: 'Sprzęt', service: 'Usługa', lodging: 'Nocleg', fuel: 'Paliwo' };
-const TYPE_OPTIONS = ['', 'work', 'material', 'equipment', 'service', 'lodging', 'fuel'];
-const BUDGET_TYPE_LABELS = { WORK: 'Praca', MATERIAL: 'Materiał', EXTERNAL_SERVICE: 'Usługa Obca' };
-const UNIT_OPTIONS = [
-    'sztuki',
-    'kilometry',
-    'metry',
-    'dni',
-    'godziny',
-    'tygodnie',
-    'miesiące',
-    'l',
-    'kg',
-    't',
-    'm2',
-    'm3',
-    'kpl',
-    'rbh',
-    'kurs',
-    'usługa',
-    'pakiet',
-];
-const MATERIAL_STATUS_LABELS = {
-    PENDING: 'Oczekuje',
-    PROPOSAL: 'Propozycja',
-    CONFIRMED: 'Potwierdzone',
-    REJECTED: 'Odrzucone',
-    ORDERED: 'Zamówione',
-};
 
 const getStatusLabel = (code, fallback = '') => {
     const normalized = normalizeStatusCode(code);
@@ -1530,10 +1502,14 @@ ${materialsHtml}
                 headers: authHeaders(),
                 body: JSON.stringify({ status }),
             });
+            // refreshUnified() intentionally omitted: it calls fetchData() which merges
+            // rel.status from wbs_nodes (still stale at this point — hybrid WBS save has
+            // a 400ms debounce) and reverts the local edit. setReqRefreshKey triggers
+            // fetchMat in WBSHybridTable which re-syncs status from material-requirements
+            // (already updated above) into the tree without the stale-backend problem.
             setReqRefreshKey(k => k + 1);
-            await refreshUnified();
         } catch {}
-    }, [authHeaders, refreshUnified]);
+    }, [authHeaders]);
 
     const applyBudgetImport = useCallback(async () => {
         if (!budgetImportRows.length) return;
@@ -2273,8 +2249,8 @@ ${materialsHtml}
         };
 
         if (view === VIEWS.BUDGET) return [
-            { field: 'subjectName', headerName: 'Przedmiot', minWidth: 220, flex: 1, sortable: true, editable: true, headerComponent: BudgetHeaderRenderer },
-            { field: 'name', headerName: 'Nazwa', minWidth: 220, flex: 1, sortable: true, editable: true, headerComponent: BudgetHeaderRenderer },
+            { field: 'subjectName', headerName: 'Przedmiot', minWidth: 80, sortable: true, editable: true, headerComponent: BudgetHeaderRenderer },
+            { field: 'name', headerName: 'Nazwa', minWidth: 80, sortable: true, editable: true, headerComponent: BudgetHeaderRenderer },
             { field: 'type', headerName: 'Typ', width: 130, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: TYPE_OPTIONS }, valueFormatter: p => TYPE_LABELS[p.value] || p.value, editable: true, sortable: true, headerComponent: BudgetHeaderRenderer },
             {
                 field: 'unitCost',
@@ -2294,7 +2270,7 @@ ${materialsHtml}
             { field: 'margin', headerName: 'Marża (%)', width: 110, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-green-300', headerComponent: BudgetHeaderRenderer },
             { field: 'discount', headerName: 'Rabat (%)', width: 110, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-orange-300', headerComponent: BudgetHeaderRenderer },
             { field: 'offerPrice', headerName: 'Cena ofertowa', width: 150, sortable: true, valueFormatter: p => fmtPLN(p.value), headerComponent: BudgetHeaderRenderer },
-            { field: 'comment', headerName: 'Komentarz', minWidth: 220, flex: 1, editable: true, sortable: true, wrapText: true, autoHeight: true, cellStyle: { whiteSpace: 'normal', lineHeight: '1.4' }, headerComponent: BudgetHeaderRenderer },
+            { field: 'comment', headerName: 'Komentarz', minWidth: 80, editable: true, sortable: true, wrapText: true, autoHeight: true, cellStyle: { whiteSpace: 'normal', lineHeight: '1.4' }, headerComponent: BudgetHeaderRenderer },
             {
                 headerName: '',
                 width: 64,
@@ -2420,8 +2396,9 @@ ${materialsHtml}
                         onCellClicked={onGridCellClicked}
                         onCellKeyDown={onGridCellKeyDown}
                         defaultColDef={v === VIEWS.BUDGET
-                            ? { resizable: true, sortable: true, filter: true, floatingFilter: false }
+                            ? { resizable: true, sortable: true, filter: true, floatingFilter: false, wrapHeaderText: true }
                             : { resizable: true, sortable: false }}
+                        {...(v === VIEWS.BUDGET ? { autoSizeStrategy: { type: 'fitCellContents' }, autoHeaderHeight: true } : {})}
                         singleClickEdit={v === VIEWS.BUDGET}
                         animateRows={true}
                     />
@@ -2503,7 +2480,7 @@ ${materialsHtml}
     const renderSection = (key, title, Icon, colorClass, content, onExport, extraButtons = null) => {
         const isActive = expandedSection === key;
         const isHidden = expandedSection !== null && !isActive;
-        const isCompactSection = key === 'budget' || key === 'materials2' || key === 'wbs-hybrid';
+        const isCompactSection = key === 'budget' || key === 'materials' || key === 'wbs-hybrid';
 
         return (
             <div
@@ -2556,7 +2533,7 @@ ${materialsHtml}
         );
     };
 
-    const isCompactActive = (expandedSection === 'budget' || expandedSection === 'materials2' || expandedSection === 'wbs-hybrid');
+    const isCompactActive = (expandedSection === 'budget' || expandedSection === 'materials' || expandedSection === 'wbs-hybrid');
 
     return (
         <div className={`flex flex-col w-full h-full relative bg-[#0a0c10]/50 border border-white/[0.03] gap-1 pt-0 ${isCompactActive ? 'overflow-hidden p-0' : 'overflow-y-auto pr-2 custom-scrollbar rounded-[40px] p-2'}`}>
@@ -2633,6 +2610,15 @@ ${materialsHtml}
                 </div>
             ))}
 
+            {renderSection('tasks', 'Zadania', CalendarDays, 'blue', (
+                <TasksCalendarSection
+                    nodeId={nodeId}
+                    versionId={versionId}
+                    nodeName={projectName}
+                    onWbsUpdate={onWbsUpdate}
+                />
+            ))}
+
             {renderSection('wbs-hybrid', `Struktura projektu: ${projectName || '—'}`, ListTree, 'violet', (
                 <div className="flex flex-col h-full">
                     <WBSHybridTable
@@ -2706,8 +2692,8 @@ ${materialsHtml}
             ) : null
         )}
 
-            {renderSection('materials2', 'Materiały', Zap, 'yellow', (
-                <MaterialRequirementsPanel3
+            {renderSection('materials', 'Materiały', Zap, 'yellow', (
+                <MaterialRequirementsPanel
                     nodeId={nodeId}
                     versionId={versionId}
                     readOnly={!isManagerOrAdmin}

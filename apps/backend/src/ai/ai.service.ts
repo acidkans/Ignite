@@ -129,7 +129,7 @@ export class AiService {
                         versionId: vId,
                         type: item.type || 'MATERIAL',
                         description: item.description || 'Nowy element',
-                        unit: item.unit || 'szt',
+                        unit: item.unit || 'sztuki',
                         unitCost,
                         quantity,
                         totalCost: unitCost * quantity,

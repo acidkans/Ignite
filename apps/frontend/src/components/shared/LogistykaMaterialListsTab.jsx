@@ -72,9 +72,7 @@ export default function LogistykaMaterialListsTab({ menuTree = [], onNavigateToO
                     <MaterialRequirementsPanel
                         key={`logistyka-full-${fullscreenId}`}
                         nodeId={String(fullscreenOrder.id)}
-                        readOnlyWbs={false}
                         isEmbedded={true}
-                        userRoles={userRoles}
                     />
                 </div>
             </div>
@@ -136,9 +134,7 @@ export default function LogistykaMaterialListsTab({ menuTree = [], onNavigateToO
                                 <MaterialRequirementsPanel
                                     key={`logistyka-${order.id}`}
                                     nodeId={String(order.id)}
-                                    readOnlyWbs={false}
                                     isEmbedded={true}
-                                    userRoles={userRoles}
                                 />
                             </div>
                         )}

@@ -141,7 +141,26 @@
       "Bash(cmd /c \"docker ps\")",
       "Bash(docker exec *)",
       "Bash(git restore *)",
-      "Bash(grep -E \"\\\\.ts$\")"
+      "Bash(grep -E \"\\\\.ts$\")",
+      "Bash(ssh -T git@github.com)",
+      "Read(//c/Users/Andrzej/.ssh/**)",
+      "Bash(find /c/Users/Andrzej/.gemini/antigravity/scratch/Ignite/apps/frontend/src/components -type f \\\\\\( -name \"*.tsx\" -o -name \"*.jsx\" \\\\\\) -exec grep -l \"delete\\\\|remove\" {} \\\\;)",
+      "Bash(find /c/Users/Andrzej/.gemini/antigravity/scratch/Ignite/apps/frontend/src -type f \\\\\\( -name \"*.tsx\" -o -name \"*.jsx\" \\\\\\) -exec grep -l \"budget\\\\|budżet\" {} \\\\;)",
+      "Bash(xargs basename *)",
+      "Bash(findstr \":3005 \")",
+      "Bash(docker stop *)",
+      "Bash(wsl --shutdown)",
+      "Bash(tasklist)",
+      "Bash(findstr -i docker)",
+      "Bash(docker -H npipe:////./pipe/dockerDesktopEngine stop erp-frontend)",
+      "Bash(npx --no-install vite build --mode development)",
+      "Bash(node --input-type=module --experimental-vm-modules)",
+      "Bash(node -e \"require\\('@babel/parser'\\).parse\\(require\\('fs'\\).readFileSync\\('src/components/shared/wbs/UnifiedWbsPanel.jsx','utf8'\\),{sourceType:'module',plugins:['jsx','nullishCoalescingOperator','optionalChaining','objectRestSpread']}\\); console.log\\('OK'\\)\")",
+      "Bash(git merge *)",
+      "Bash(find \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\\\\apps\\\\frontend\\\\src\" -type f \\\\\\( -name \"*.jsx\" -o -name \"*.tsx\" \\\\\\) -exec basename {} \\\\;)",
+      "Bash(grep -rn \"import.*from.*\\\\\\\\./\" \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\\\\apps\\\\frontend\\\\src\" --include=\"*.jsx\")",
+      "Bash(xargs wc *)",
+      "Bash(xargs -I {} basename {})"
     ]
   }
 }

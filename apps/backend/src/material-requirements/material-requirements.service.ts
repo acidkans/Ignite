@@ -614,7 +614,7 @@ ${context}`;
                         productName: null,
                         type: item.type || 'DEVICE',
                         quantity: Number(item.quantity) || 0,
-                        unit: item.unit || 'szt',
+                        unit: item.unit || 'sztuki',
                         technicalSpec: item.technicalSpec || null,
                         sourceDocument: item.sourceDocument || null,
                         assignedSubtaskId: item.assignedSubtaskId || null,
@@ -993,7 +993,7 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
                     model,
                     type: ['DEVICE', 'MATERIAL', 'CABLE', 'SOFTWARE', 'SERVICE'].includes(item.type) ? item.type : 'DEVICE',
                     quantity: 1,
-                    unit: 'szt',
+                    unit: 'sztuki',
                     dataSheetUrl,
                     dataSheetName,
                     status: 'PENDING',
@@ -1033,7 +1033,7 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
     "description": "pełna nazwa produktu",
     "manufacturer": "producent lub null",
     "model": "model/nr katalogowy lub null",
-    "unit": "szt",
+    "unit": "sztuki",
     "quantity": 1,
     "priceNetto": 100.00
   }
@@ -1095,7 +1095,7 @@ Zasady: ceny jako liczby bez waluty, null gdy pole nieznane, wyodrębnij wszystk
                 type: ['DEVICE', 'MATERIAL', 'CABLE', 'SOFTWARE', 'SERVICE'].includes(item.type)
                     ? item.type : 'DEVICE',
                 quantity: Math.max(0, Number(item.quantity) || 0),
-                unit: String(item.unit || 'szt').slice(0, 20),
+                unit: String(item.unit || 'sztuki').slice(0, 20),
                 technicalSpec: item.technicalSpec ? String(item.technicalSpec).slice(0, 2000) : null,
                 sourceDocument: item.sourceDocument ? String(item.sourceDocument).slice(0, 300) : null,
                 assignedSubtaskId: typeof item.assignedSubtaskId === 'string'

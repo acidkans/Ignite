@@ -1,3 +1,7 @@
+# Word documents
+*.docx
+~$*.docx
+
 # Environment files - ALL env files are ignored for security
 *.env
 *.env.*
@@ -85,3 +89,5 @@ coverage/
 # System files
 .env.vault
 .env.*.local
+ERP- planowanie projektu.docx
+ERP- planowanie perojektu.docx
