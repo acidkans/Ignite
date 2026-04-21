@@ -660,7 +660,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         e.dataTransfer.dropEffect = 'move';
     };
 
-    const onDragLeave = e => { e.stopPropagation(); setDragOver(null); setReqDragOverNode(null); };
+    const onDragLeave = e => {
+        e.stopPropagation();
+        if (e.currentTarget.contains(e.relatedTarget)) return;
+        setDragOver(null);
+        setReqDragOverNode(null);
+    };
 
     const onDrop = (e, nodeId) => {
         e.preventDefault();
@@ -764,22 +769,23 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         rows.push(
             <tr
                 key={rowId}
-                draggable
-                onDragStart={e => onDragStart(e, node.id)}
-                onDragEnd={onDragEnd}
                 onDragOver={e => onDragOver(e, node.id, depth)}
                 onDragLeave={onDragLeave}
                 onDrop={e => onDrop(e, node.id)}
-                className={`border-b border-white/5 cursor-pointer select-none group/node transition-opacity ${d.rowBg} ${d.leftBorder} ${isDragging ? 'opacity-25' : ''} ${dropBorder} ${reqDropHighlight} ${selectedNodeId === node.id ? 'outline outline-1 outline-blue-500/40 !bg-blue-500/5' : ''}`}
+                className={`border-b border-white/5 cursor-pointer group/node transition-opacity ${d.rowBg} ${d.leftBorder} ${isDragging ? 'opacity-25' : ''} ${dropBorder} ${reqDropHighlight} ${selectedNodeId === node.id ? 'outline outline-1 outline-blue-500/40 !bg-blue-500/5' : ''}`}
                 onClick={e => { setSelectedNodeId(node.id); hasChildren && toggle(rowId, e); }}
             >
-                {/* WBS ID */}
-                <td className="px-1 py-2.5">
+                {/* WBS ID — uchwyt drag */}
+                <td
+                    className="px-1 py-2.5 cursor-grab"
+                    draggable
+                    onDragStart={e => onDragStart(e, node.id)}
+                    onDragEnd={onDragEnd}
+                >
                     <div className="flex items-center gap-1.5">
                         <GripVertical
                             size={11}
-                            className="text-gray-700 group-hover/node:text-gray-500 cursor-grab flex-shrink-0"
-                            onMouseDown={e => e.stopPropagation()}
+                            className="text-gray-700 group-hover/node:text-gray-500 flex-shrink-0"
                         />
                         {hasChildren
                             ? <ChevronRight size={12} className={`text-gray-400 transition-transform flex-shrink-0 ${isOpen(rowId) ? 'rotate-90' : ''}`} />
@@ -789,12 +795,17 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 </td>
 
                 {/* Nazwa */}
-                <td className="px-3 py-2.5" style={{ paddingLeft: `calc(0.75rem + ${depth * 14}px)` }} onClick={e => e.stopPropagation()}>
-                    <div className="flex items-center gap-1.5">
-                        <input
-                            type="text"
+                <td className="px-3 py-1.5 select-text" style={{ paddingLeft: `calc(0.75rem + ${depth * 14}px)` }} onClick={e => e.stopPropagation()}>
+                    <div className="flex items-start gap-1.5">
+                        <textarea
+                            rows={1}
                             value={node.name || ''}
-                            onChange={e => handleField(node.id, 'name', e.target.value)}
+                            onChange={e => {
+                                handleField(node.id, 'name', e.target.value);
+                                e.target.style.height = 'auto';
+                                e.target.style.height = e.target.scrollHeight + 'px';
+                            }}
+                            onFocus={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
                             onBlur={() => {
                                 onSave?.();
                                 if ((node.type === 'equipment' || node.type === 'material') && node.name) {
@@ -802,7 +813,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 }
                             }}
                             placeholder={depth === 0 ? 'Nazwa przedmiotu projektu…' : 'Nazwa elementu…'}
-                            className={`bg-transparent border-none focus:outline-none placeholder-gray-700 w-full min-w-0 ${d.nameClass}`}
+                            className={`bg-transparent border-none resize-none overflow-hidden focus:outline-none placeholder-gray-700 w-full min-w-0 select-text leading-snug ${d.nameClass}`}
+                            style={{ height: 'auto', minHeight: '1.4em' }}
                         />
                         {depth < MAX_DEPTH && (
                             <button
