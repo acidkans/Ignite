@@ -5,7 +5,7 @@ import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
-import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType } from './wbsConstants';
+import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType } from './wbsConstants';
 import { exportProjectPdf } from '../../../utils/projectPdfExport';
 import WBSHybridTable from './WBSHybridTable';
 import BudgetTable from './BudgetTable';
@@ -84,13 +84,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const [requirementByNodeId, setRequirementByNodeId] = useState({});
     const [budgetDiscountAmount, setBudgetDiscountAmount] = useState('');
     const [budgetDiscountPercent, setBudgetDiscountPercent] = useState('');
-    const [budgetSummary, setBudgetSummary] = useState({
-        rows: 0,
-        totalCost: 0,
-        totalRevenue: 0,
-        profit: 0,
-        marginPct: 0,
-    });
     const [markerLinksCache, setMarkerLinksCache] = useState({});
     const [previewAttachment, setPreviewAttachment] = useState(null);
     const [budgetImportOpen, setBudgetImportOpen] = useState(false);
@@ -2048,107 +2041,6 @@ ${materialsHtml}
         };
     }, []);
 
-    useEffect(() => {
-        setBudgetSummary(summarizeBudgetRows(buildRows(VIEWS.BUDGET)));
-    }, [wbsData, expandedIds, materialCostsByNode, materialMetaByLookupKey, summarizeBudgetRows]);
-
-
-    const displayedBudgetSummary = useMemo(() => {
-        const baseRevenue = budgetSummary.totalRevenue;
-        const parsedPercentDiscount = Number(String(budgetDiscountPercent).replace(',', '.'));
-        const parsedAmountDiscount = Number(String(budgetDiscountAmount).replace(',', '.'));
-        const discountAmountFromPercent = Number.isFinite(parsedPercentDiscount)
-            ? Math.max(0, parsedPercentDiscount) / 100 * baseRevenue
-            : 0;
-        const discountAmountFromValue = Number.isFinite(parsedAmountDiscount) ? Math.max(0, parsedAmountDiscount) : 0;
-        const totalDiscount = discountAmountFromPercent + discountAmountFromValue;
-
-        if (totalDiscount <= 0) {
-            return budgetSummary;
-        }
-
-        const totalRevenue = Math.max(0, baseRevenue - totalDiscount);
-        const profit = totalRevenue - budgetSummary.totalCost;
-        const marginPct = budgetSummary.totalCost > 0 ? (profit / budgetSummary.totalCost) * 100 : 0;
-        return {
-            ...budgetSummary,
-            totalRevenue,
-            profit,
-            marginPct,
-        };
-    }, [budgetSummary, budgetDiscountAmount, budgetDiscountPercent]);
-
-
-    const budgetSummaryCards = (
-        <div className="grid grid-cols-2 xl:grid-cols-6 gap-2">
-            <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2">
-                <div className="text-[10px] uppercase tracking-widest text-red-300/90 font-bold">Koszt</div>
-                <div className="text-sm font-black text-red-200">{fmtPLNFull(displayedBudgetSummary.totalCost)} PLN</div>
-            </div>
-            <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2">
-                <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Przychód</div>
-                <div className="text-sm font-black text-green-200">{fmtPLNFull(displayedBudgetSummary.totalRevenue)} PLN</div>
-            </div>
-            <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2">
-                <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Zysk</div>
-                <div className="text-sm font-black text-green-200">{fmtPLNFull(displayedBudgetSummary.profit)} PLN</div>
-            </div>
-            <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2">
-                <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Marża</div>
-                <div className="text-sm font-black text-green-200">{fmtPctFull(displayedBudgetSummary.marginPct)}</div>
-                <div className="text-[10px] text-green-200/70 mt-0.5">Po filtrze: {displayedBudgetSummary.rows} wierszy</div>
-            </div>
-            <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 px-3 py-2">
-                <div className="text-[10px] uppercase tracking-widest text-orange-300/90 font-bold">Rabat - wartość procentowa</div>
-                <div className="relative mt-1">
-                    <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        value={budgetDiscountPercent}
-                        onChange={(e) => setBudgetDiscountPercent(e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-full rounded-lg border border-orange-400/25 bg-black/30 px-2 py-1.5 pr-8 text-sm font-black text-orange-100 focus:outline-none focus:border-orange-400"
-                        placeholder="0,00"
-                    />
-                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-black text-orange-200/80">%</span>
-                </div>
-                {budgetDiscountPercent !== '' && (
-                    <div className="text-[10px] text-orange-200/70 mt-0.5">
-                        {(() => {
-                            const pct = Number(String(budgetDiscountPercent).replace(',', '.'));
-                            const amount = Number.isFinite(pct) ? budgetSummary.totalRevenue * Math.max(0, pct) / 100 : 0;
-                            return `Przeliczenie tego pola: ${fmtPLNFull(amount)} PLN`;
-                        })()}
-                    </div>
-                )}
-            </div>
-            <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 px-3 py-2">
-                <div className="text-[10px] uppercase tracking-widest text-orange-300/90 font-bold">Rabat - wartość kwotowa</div>
-                <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={budgetDiscountAmount}
-                    onChange={(e) => setBudgetDiscountAmount(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="mt-1 w-full rounded-lg border border-orange-400/25 bg-black/30 px-2 py-1.5 text-sm font-black text-orange-100 focus:outline-none focus:border-orange-400"
-                    placeholder="0,0"
-                />
-                {budgetDiscountAmount !== '' && (
-                    <div className="text-[10px] text-orange-200/70 mt-0.5">
-                        {(() => {
-                            const amount = Number(String(budgetDiscountAmount).replace(',', '.'));
-                            const pct = budgetSummary.totalRevenue > 0 && Number.isFinite(amount) ? (Math.max(0, amount) / budgetSummary.totalRevenue) * 100 : 0;
-                            return `Przeliczenie tego pola: ${fmtPctFull(pct)}`;
-                        })()}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-
     const commitPendingEdits = useCallback(() => {
         const active = document.activeElement;
         if (active && active !== document.body && typeof active.blur === 'function') {
@@ -2337,18 +2229,15 @@ ${materialsHtml}
             ) : null)}
 
             {isManagerOrAdmin && renderSection('budget', 'Budżet', DollarSign, 'green', (
-                <div className="flex flex-col gap-3 h-full">
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-2.5">
-                        {budgetSummaryCards}
-                    </div>
-                    <div className="flex-1 min-h-[200px] overflow-auto pb-2">
-                        <BudgetTable
-                            rows={buildRows(VIEWS.BUDGET)}
-                            onFieldChange={onBudgetFieldChange}
-                            onDeleteRow={(id) => deleteNodeByIdRef.current?.(id)}
-                        />
-                    </div>
-                </div>
+                <BudgetTable
+                    rows={buildRows(VIEWS.BUDGET)}
+                    onFieldChange={onBudgetFieldChange}
+                    onDeleteRow={(id) => deleteNodeByIdRef.current?.(id)}
+                    discountPercent={budgetDiscountPercent}
+                    discountAmount={budgetDiscountAmount}
+                    onDiscountPercentChange={setBudgetDiscountPercent}
+                    onDiscountAmountChange={setBudgetDiscountAmount}
+                />
             ), () => handleExportPDF('budget'), (
                 <div className="flex items-center gap-2">
                     <button
