@@ -141,14 +141,17 @@ export class SubtasksService {
         return this.prisma.$transaction(async (tx) => {
             // 1. Fetch current state
             const currentTasks = await tx.subtask.findMany({ where: { nodeId, versionId: vId } });
+            const autoTasks = await tx.subtask.findMany({ where: { nodeId, versionId: null } });
+            const autoTaskIds = new Set(autoTasks.map(t => t.id));
             const currentBudgetItems = await tx.budgetLineItem.findMany({ where: { nodeId, versionId: vId } });
 
             const preservedIds = new Set<string>();
             const savedTasks = [];
 
-            // 2. Process ALL tasks from the payload
+            // 2. Process ALL tasks from the payload (skip auto-tasks with versionId=null)
             for (const t of tasks) {
                 if (!t.name) continue;
+                if (t.id && autoTaskIds.has(t.id)) continue;
 
                 // Attempt to find existing task by ID or by matching segment (item + start date)
                 let existing = t.id && !t.id.startsWith('temp_') 
@@ -284,7 +287,9 @@ export class SubtasksService {
                 });
             }
 
-            return tx.subtask.findMany({ where: { nodeId, versionId: vId }, orderBy: { createdAt: 'asc' } });
+            const versionedTasks = await tx.subtask.findMany({ where: { nodeId, versionId: vId }, orderBy: { createdAt: 'asc' } });
+            const freshAutoTasks = await tx.subtask.findMany({ where: { nodeId, versionId: null }, orderBy: { createdAt: 'asc' } });
+            return [...freshAutoTasks, ...versionedTasks];
         });
     }
 
