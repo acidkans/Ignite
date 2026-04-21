@@ -2252,19 +2252,21 @@ ${materialsHtml}
     }, [wbsData, expandedIds, materialCostsByNode, materialMetaByLookupKey, summarizeBudgetRows, refreshBudgetSummaryFromApi]);
 
     // Re-apply saved column widths gdy sekcja budget staje się widoczna.
-    // applyColumnState na display:none nie działa — grid nie ma wymiarów.
-    // Potrzebny requestAnimationFrame × 2 żeby przeglądarka zdążyła zrobić layout.
     useEffect(() => {
         if (expandedSection !== 'budget') return;
+        console.log('[budget-col] expandedSection=budget, api=', !!budgetGridApiRef.current);
         const api = budgetGridApiRef.current;
         if (!api) return;
         const apply = () => {
             try {
                 const saved = localStorage.getItem('wbs-budget-col-state');
-                if (saved) api.applyColumnState({ state: JSON.parse(saved), applyOrder: true });
-            } catch {}
+                console.log('[budget-col] rAF apply, saved=', saved ? saved.length+'b' : 'BRAK', 'api=', !!budgetGridApiRef.current);
+                if (saved) {
+                    const ok = api.applyColumnState({ state: JSON.parse(saved), applyOrder: true });
+                    console.log('[budget-col] applyColumnState result=', ok);
+                }
+            } catch(e) { console.error('[budget-col] restore error:', e); }
         };
-        // Podwójny rAF — pierwszy czeka na commit DOM, drugi na paint
         requestAnimationFrame(() => requestAnimationFrame(apply));
     }, [expandedSection]);
 
