@@ -66,6 +66,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     refreshKey = 0,
     onWbsUpdate = null,
     onMaterialStatusChange = null,
+    onMaterialQtyChange = null,
     externalRequirements = null,
     externalWbsNodes = null,
     requirementsQtyByNode = null,
@@ -237,6 +238,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                 const updated = await res.json();
                 setRequirements(prev => prev.map(r => r.id === id ? { ...r, ...updated } : r));
                 if ('status' in data) onMaterialStatusChange?.(id, data.status);
+                if ('quantity' in data) onMaterialQtyChange?.(updated);
                 if ('priceNetto' in data || 'status' in data || 'quantity' in data || 'unit' in data) onWbsUpdate?.();
             }
         } catch (err) {
@@ -342,7 +344,6 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                                         onDelete={deleteItem}
                                         isLocked={isLocked}
                                         wbsMap={wbsMap}
-                                        requirementsQtyByNode={requirementsQtyByNode}
                                     />
                                     {expandedId === r.id && (
                                         <tr><td colSpan={isLocked ? 8 : 9} className="p-0 bg-black/20 border-b border-white/5">
@@ -361,7 +362,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
 
 // ─── Row ─────────────────────────────────────────────────────────────────────
 
-function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMap, requirementsQtyByNode }) {
+function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMap }) {
     const TypeIcon = TYPE_META[r.type]?.icon || Package;
     const StatusIcon = STATUS_META[r.status]?.icon || Clock;
 
@@ -414,17 +415,21 @@ function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMa
             {/* Ilość */}
             <td className="px-3 py-1">
                 <div className="flex items-center gap-1">
-                    <span className="text-sm text-gray-300 font-mono">{(() => {
-                        if (requirementsQtyByNode) {
-                            try {
-                                const alloc = JSON.parse(r.wbsNodeAllocations || '{}');
-                                const sum = Object.keys(alloc).reduce((acc, id) =>
-                                    acc + (requirementsQtyByNode[id] ?? parseFloat(alloc[id]) ?? 0), 0);
-                                if (sum > 0) return sum;
-                            } catch {}
-                        }
-                        return r.quantity;
-                    })()}</span>
+                    {isLocked ? (
+                        <span className="text-sm text-gray-300 font-mono">{r.quantity}</span>
+                    ) : (
+                        <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={r.quantity ?? ''}
+                            onChange={e => {
+                                const v = parseFloat(e.target.value);
+                                if (!isNaN(v) && v >= 0) onPatch(r.id, { quantity: v });
+                            }}
+                            className="w-16 bg-transparent border-b border-white/20 text-sm text-gray-300 font-mono focus:outline-none focus:border-blue-400 text-right"
+                        />
+                    )}
                     {isLocked ? (
                         <span className="text-xs text-gray-400 font-mono">{r.unit || 'sztuki'}</span>
                     ) : (
