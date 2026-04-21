@@ -2251,6 +2251,20 @@ ${materialsHtml}
         setBudgetSummary(summarizeBudgetRows(buildRows(VIEWS.BUDGET)));
     }, [wbsData, expandedIds, materialCostsByNode, materialMetaByLookupKey, summarizeBudgetRows, refreshBudgetSummaryFromApi]);
 
+    // Re-apply saved column widths gdy sekcja budget staje się widoczna
+    // (applyColumnState na display:none nie działa — grid nie ma wymiarów)
+    useEffect(() => {
+        if (expandedSection !== 'budget') return;
+        const api = budgetGridApiRef.current;
+        if (!api) return;
+        try {
+            const saved = localStorage.getItem('wbs-budget-col-state');
+            if (saved) {
+                api.applyColumnState({ state: JSON.parse(saved), applyOrder: true });
+            }
+        } catch {}
+    }, [expandedSection]);
+
     const displayedBudgetSummary = useMemo(() => {
         const baseRevenue = budgetSummary.totalRevenue;
         const parsedPercentDiscount = Number(String(budgetDiscountPercent).replace(',', '.'));
