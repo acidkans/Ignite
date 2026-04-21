@@ -2660,6 +2660,7 @@ ${materialsHtml}
                         onRequirementAssign={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
                         onNodeFieldSave={updateNodeField}
                         materialRefreshKey={reqRefreshKey}
+                        searchQuery={normalizedSearchQuery}
                     />
                 </div>
             ), () => handleExportPDF('wbs'), isManagerOrAdmin ? (

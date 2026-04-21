@@ -466,7 +466,7 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal, on
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0 }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '' }) {
     const getAllIds = useCallback((items) => {
         const ids = ['root'];
         const walk = (nodes) => nodes?.forEach(n => { ids.push(`node_${n.id}`); walk(n.children); });
@@ -689,6 +689,32 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const totalRes  = items.reduce((a, n) => a + nodeTotal(n).res,  0);
     const totalCost = items.reduce((a, n) => a + nodeTotal(n).cost, 0);
 
+    // ── Search filter ─────────────────────────────────────────────────────────
+    const normalizedSearch = String(searchQuery || '').trim().toLowerCase();
+    let searchVisibleIds = null;
+    if (normalizedSearch) {
+        const STRUCT_STATUS_LABELS = Object.fromEntries(Object.entries(STRUCT_STATUS_META).map(([k, v]) => [k, v.label.toLowerCase()]));
+        const nodeMatchesSearch = (n) => {
+            const fields = [n.name, n.type, n.status ? STRUCT_STATUS_LABELS[n.status] : '', n.owner, n.unit, String(n.quantity ?? '')];
+            return fields.some(f => String(f || '').toLowerCase().includes(normalizedSearch));
+        };
+        const matchingIds = new Set();
+        const collectMatching = (nodes) => nodes.forEach(n => {
+            if (nodeMatchesSearch(n)) matchingIds.add(n.id);
+            collectMatching(n.children || []);
+        });
+        collectMatching(items);
+        // Include ancestors of all matching nodes
+        const nodeById = new Map();
+        const buildMap = (nodes, parent = null) => nodes.forEach(n => { nodeById.set(n.id, { ...n, _parentId: parent }); buildMap(n.children || [], n.id); });
+        buildMap(items);
+        searchVisibleIds = new Set(matchingIds);
+        for (const id of matchingIds) {
+            let cur = nodeById.get(id);
+            while (cur?._parentId) { searchVisibleIds.add(cur._parentId); cur = nodeById.get(cur._parentId); }
+        }
+    }
+
     const rows = [];
 
     // ── Root row ──────────────────────────────────────────────────────────────
@@ -717,6 +743,11 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
     // ── Recursive renderer ────────────────────────────────────────────────────
     const renderNode = (node, depth, wbsPath, parentId = null) => {
+        if (searchVisibleIds && !searchVisibleIds.has(node.id)) {
+            // Recurse children even when parent is hidden (ancestors are included, but keep going for matching descendants)
+            (node.children || []).forEach((child, ci) => renderNode(child, depth + 1, `${wbsPath}.${ci + 1}`, node.id));
+            return;
+        }
         const rowId = `node_${node.id}`;
         const d = DEPTH[Math.min(depth, MAX_DEPTH)];
         const hasChildren = (node.children || []).length > 0;
@@ -947,7 +978,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             </tr>
         );
 
-        if (isOpen(rowId)) {
+        if (searchVisibleIds || isOpen(rowId)) {
             (node.children || []).forEach((child, ci) => {
                 renderNode(child, depth + 1, `${wbsPath}.${ci + 1}`, node.id);
             });
