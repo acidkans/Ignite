@@ -2477,14 +2477,19 @@ ${materialsHtml}
                         onGridReady={v === VIEWS.BUDGET ? (params) => {
                             budgetGridApiRef.current = params.api;
                             refreshBudgetSummaryFromApi(params.api);
+                            const saved = localStorage.getItem('wbs-budget-col-state');
+                            console.log('[budget-grid] onGridReady, saved=', saved ? 'TAK ('+saved.length+'b)' : 'BRAK');
                             try {
-                                const saved = localStorage.getItem('wbs-budget-col-state');
                                 if (saved) params.api.applyColumnState({ state: JSON.parse(saved), applyOrder: true });
-                            } catch {}
+                            } catch (e) { console.error('[budget-grid] applyColumnState error:', e); }
                         } : undefined}
                         onColumnResized={v === VIEWS.BUDGET ? (params) => {
                             if (!params.finished) return;
-                            try { localStorage.setItem('wbs-budget-col-state', JSON.stringify(params.api.getColumnState())); } catch {}
+                            try {
+                                const state = JSON.stringify(params.api.getColumnState());
+                                localStorage.setItem('wbs-budget-col-state', state);
+                                console.log('[budget-grid] onColumnResized → saved', state.length, 'b');
+                            } catch (e) { console.error('[budget-grid] save error:', e); }
                         } : undefined}
                         onColumnMoved={v === VIEWS.BUDGET ? (params) => {
                             try { localStorage.setItem('wbs-budget-col-state', JSON.stringify(params.api.getColumnState())); } catch {}
@@ -2764,7 +2769,7 @@ ${materialsHtml}
                 </button>
             ) : null)}
 
-            {isManagerOrAdmin && renderSection('budget', 'Plan i harmonogram (Budżet)', DollarSign, 'green', (
+            {isManagerOrAdmin && renderSection('budget', 'Budżet', DollarSign, 'green', (
                 <div className="flex flex-col gap-3 h-full">
                     <div className="rounded-2xl border border-white/10 bg-black/30 p-2.5">
                         {budgetSummaryCards}
