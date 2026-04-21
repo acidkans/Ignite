@@ -3,9 +3,10 @@ import {
     ChevronRight, ChevronDown, Plus, Package, Wrench,
     CheckCircle, Clock, XCircle, Star, Trash2, AlertCircle,
     ShoppingCart, Warehouse, LogOut, Lock, X, Filter, GitBranch,
-    FileText, Search,
+    FileText, Search, Sparkles, Link as LinkIcon,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
+import { UNIT_OPTIONS } from './wbsConstants';
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
 
@@ -36,11 +37,22 @@ function normalizeName(s) {
 }
 
 function parseWbsNodeIds(r) {
-    // wbsNodeIds is a JSON string array, or wbsNodeId is a single string
+    // wbsNodeIds is a JSON string array, or wbsNodeId is a single string,
+    // lub wbsNodeAllocations zawiera klucze z ID węzłów (fallback)
     try {
-        if (r.wbsNodeIds) return JSON.parse(r.wbsNodeIds);
+        if (r.wbsNodeIds) {
+            const ids = JSON.parse(r.wbsNodeIds);
+            if (Array.isArray(ids) && ids.length > 0) return ids;
+        }
     } catch {}
     if (r.wbsNodeId) return [r.wbsNodeId];
+    try {
+        if (r.wbsNodeAllocations) {
+            const alloc = JSON.parse(r.wbsNodeAllocations);
+            const keys = Object.keys(alloc || {}).filter(k => k && parseFloat(alloc[k]) > 0);
+            if (keys.length > 0) return keys;
+        }
+    } catch {}
     return [];
 }
 
@@ -53,6 +65,7 @@ const MaterialRequirementsPanel3 = forwardRef(function MaterialRequirementsPanel
     isEmbedded = false,
     refreshKey = 0,
     onWbsUpdate = null,
+    onMaterialStatusChange = null,
 }, ref) {
     const token = sessionStorage.getItem('token');
     const headers = { Authorization: `Bearer ${token}` };
@@ -87,9 +100,22 @@ const MaterialRequirementsPanel3 = forwardRef(function MaterialRequirementsPanel
     }, [wbsNodes]);
 
     // ─── Filtered requirements ──────────────────────────────────────────────
+    // Pokazuj tylko materiały przypisane do istniejących węzłów WBS.
+    // Nieprzypisane (koszyk) mają osobny widok w WBS tree.
     const filtered = useMemo(() => {
-        return requirements.filter(r => activeTypes.includes(r.type));
-    }, [requirements, activeTypes]);
+        const validIds = new Set(wbsNodes.map(n => n.id));
+        return requirements.filter(r => {
+            if (!activeTypes.includes(r.type)) return false;
+            const ids = parseWbsNodeIds(r);
+            let allocIds = [];
+            try {
+                const alloc = r.wbsNodeAllocations ? JSON.parse(r.wbsNodeAllocations) : {};
+                allocIds = Object.keys(alloc || {});
+            } catch {}
+            const linked = [...ids, ...allocIds, r.wbsNodeId].filter(Boolean);
+            return linked.some(id => validIds.has(id));
+        });
+    }, [requirements, activeTypes, wbsNodes]);
 
     // ─── Fetch ──────────────────────────────────────────────────────────────
 
@@ -185,7 +211,7 @@ const MaterialRequirementsPanel3 = forwardRef(function MaterialRequirementsPanel
         if (refreshKey > 0 && activeListId) {
             fetchRequirements(activeListId);
         }
-    }, [refreshKey]);
+    }, [refreshKey, activeListId, fetchRequirements]);
 
     // ─── Patch ──────────────────────────────────────────────────────────────
 
@@ -197,11 +223,13 @@ const MaterialRequirementsPanel3 = forwardRef(function MaterialRequirementsPanel
             if (res.ok) {
                 const updated = await res.json();
                 setRequirements(prev => prev.map(r => r.id === id ? { ...r, ...updated } : r));
+                if ('status' in data) onMaterialStatusChange?.(id, data.status);
+                if ('priceNetto' in data || 'status' in data || 'quantity' in data || 'unit' in data) onWbsUpdate?.();
             }
         } catch (err) {
             console.error('[Mat3] patch error:', err);
         }
-    }, []);
+    }, [onWbsUpdate, onMaterialStatusChange]);
 
     const deleteItem = useCallback(async (id) => {
         try {
@@ -371,7 +399,18 @@ function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMa
 
             {/* Ilość */}
             <td className="px-3 py-1">
-                <span className="text-sm text-gray-300 font-mono">{r.quantity} {r.unit || 'szt'}</span>
+                <div className="flex items-center gap-1">
+                    <span className="text-sm text-gray-300 font-mono">{r.quantity}</span>
+                    {isLocked ? (
+                        <span className="text-xs text-gray-400 font-mono">{r.unit || 'sztuki'}</span>
+                    ) : (
+                        <select value={r.unit || ''} onChange={e => onPatch(r.id, { unit: e.target.value || null })}
+                            className="bg-transparent border-none text-xs text-gray-400 font-mono focus:outline-none cursor-pointer hover:text-white">
+                            <option value="" className="bg-gray-900">—</option>
+                            {UNIT_OPTIONS.map(u => <option key={u} value={u} className="bg-gray-900">{u}</option>)}
+                        </select>
+                    )}
+                </div>
             </td>
 
             {/* Cena */}
@@ -443,6 +482,18 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
         technicalSpec: r.technicalSpec || '',
         priceNetto: r.priceNetto ?? '',
     });
+
+    // Sync z zewnętrzną zmianą r (np. edyt z budżetu)
+    useEffect(() => {
+        setFields({
+            manufacturer: r.manufacturer || '',
+            model: r.model || '',
+            productName: r.productName || '',
+            availability: r.availability || '',
+            technicalSpec: r.technicalSpec || '',
+            priceNetto: r.priceNetto ?? '',
+        });
+    }, [r.id, r.manufacturer, r.model, r.productName, r.availability, r.technicalSpec, r.priceNetto]);
     const [comboOpen, setComboOpen] = useState(null);
     const [selectedOfferId, setSelectedOfferId] = useState(null);
     const [selectedPositionIdx, setSelectedPositionIdx] = useState(null);
@@ -694,7 +745,7 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
                                             <span className="text-gray-600 w-5 text-right font-mono">{pos.lp || idx + 1}.</span>
                                             <span className="text-white flex-1 truncate">{pos.description}</span>
                                             {pos.manufacturer && <span className="text-gray-500 text-[10px]">{pos.manufacturer}</span>}
-                                            <span className="text-gray-400 font-mono w-14 text-right">{pos.quantity} {pos.unit || 'szt'}</span>
+                                            <span className="text-gray-400 font-mono w-14 text-right">{pos.quantity} {pos.unit || 'sztuki'}</span>
                                             <span className="text-green-400 font-mono w-20 text-right">{pos.priceNetto ? `${Number(pos.priceNetto).toFixed(2)} zł` : '—'}</span>
                                             {isSelected && <Star size={10} className="text-green-400 fill-green-400 shrink-0" />}
                                         </button>
@@ -704,6 +755,11 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
                         ))}
                     </div>
                 </div>
+            )}
+
+            {/* Row 3b: Propozycje AI */}
+            {!readOnly && (
+                <ProposalsSection req={r} token={token} onRefresh={onRefresh} onPatch={onPatch} />
             )}
 
             {/* Row 4: Wymagania techniczne */}
@@ -748,6 +804,128 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
                     </>
                 )}
             </div>
+        </div>
+    );
+}
+
+// ─── ProposalsSection (AI + ręcznie) ──────────────────────────────────────────
+
+function ProposalsSection({ req, token, onRefresh, onPatch }) {
+    const authHeaders = { Authorization: `Bearer ${token}` };
+    const jsonHeaders = { ...authHeaders, 'Content-Type': 'application/json' };
+    const [searching, setSearching] = useState(false);
+    const [showAddForm, setShowAddForm] = useState(false);
+    const [newProp, setNewProp] = useState({ productName: '', manufacturer: '', model: '', sourceUrl: '' });
+
+    const proposals = req.proposals || [];
+
+    const handleSearch = async () => {
+        setSearching(true);
+        try {
+            await fetch(`${API_URL}/material-requirements/${req.id}/search-products`, { method: 'POST', headers: authHeaders });
+            await onRefresh?.();
+        } finally { setSearching(false); }
+    };
+
+    const handleAdd = async () => {
+        if (!newProp.productName || !newProp.manufacturer) return;
+        await fetch(`${API_URL}/material-requirements/${req.id}/proposals`, {
+            method: 'POST', headers: jsonHeaders, body: JSON.stringify(newProp),
+        });
+        setNewProp({ productName: '', manufacturer: '', model: '', sourceUrl: '' });
+        setShowAddForm(false);
+        await onRefresh?.();
+    };
+
+    const handleSelect = async (p) => {
+        await fetch(`${API_URL}/material-requirements/proposals/${p.id}/select`, { method: 'PATCH', headers: authHeaders });
+        // Kopiuj dane propozycji do headera wymagania (priceNetto → sync z budżetem)
+        const patch = p.isSelected
+            ? { manufacturer: null, model: null, priceNetto: null, seller: null, offerNumber: null, availability: null, status: 'PENDING' }
+            : { manufacturer: p.manufacturer || null, model: p.model || null, priceNetto: p.priceNetto ?? null, seller: p.seller || null, offerNumber: p.offerNumber || null, availability: p.availability || null, status: 'CONFIRMED' };
+        await onPatch?.(req.id, patch);
+        await onRefresh?.();
+    };
+
+    const handleDelete = async (p, e) => {
+        e.stopPropagation();
+        await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, { method: 'DELETE', headers: authHeaders });
+        if (p.isSelected) {
+            await onPatch?.(req.id, { manufacturer: null, model: null, priceNetto: null, seller: null, offerNumber: null, availability: null, status: 'PENDING' });
+        }
+        await onRefresh?.();
+    };
+
+    const ic = 'w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-blue-500';
+
+    return (
+        <div>
+            <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] uppercase tracking-widest text-gray-500">
+                    <Sparkles size={10} className="inline mr-1 text-purple-400" />
+                    Propozycje AI {proposals.length > 0 && <span className="text-gray-600 ml-1">({proposals.length})</span>}
+                </label>
+                <div className="flex items-center gap-1.5">
+                    <button onClick={handleSearch} disabled={searching}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 text-[10px] font-semibold disabled:opacity-40">
+                        {searching ? <div className="w-3 h-3 border border-purple-400/30 border-t-purple-400 rounded-full animate-spin" /> : <Search size={9} />}
+                        Szukaj AI
+                    </button>
+                    <button onClick={() => setShowAddForm(p => !p)}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 text-[10px] font-semibold">
+                        <Plus size={9} /> Dodaj ręcznie
+                    </button>
+                </div>
+            </div>
+
+            {showAddForm && (
+                <div className="mb-2 p-2 rounded border border-blue-500/20 bg-blue-500/5 flex flex-col gap-1.5">
+                    <div className="grid grid-cols-2 gap-1.5">
+                        <input value={newProp.productName} onChange={e => setNewProp(p => ({ ...p, productName: e.target.value }))}
+                            placeholder="Nazwa produktu *" autoFocus className={ic} />
+                        <input value={newProp.manufacturer} onChange={e => setNewProp(p => ({ ...p, manufacturer: e.target.value }))}
+                            placeholder="Producent *" className={ic} />
+                        <input value={newProp.model} onChange={e => setNewProp(p => ({ ...p, model: e.target.value }))}
+                            placeholder="Model / Symbol" className={ic} />
+                        <input value={newProp.sourceUrl} onChange={e => setNewProp(p => ({ ...p, sourceUrl: e.target.value }))}
+                            placeholder="URL (https://...)" className={ic} />
+                    </div>
+                    <div className="flex justify-end gap-1.5">
+                        <button onClick={() => setShowAddForm(false)} className="px-2 py-1 text-[10px] text-gray-500 hover:text-white">Anuluj</button>
+                        <button onClick={handleAdd} disabled={!newProp.productName || !newProp.manufacturer}
+                            className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-semibold disabled:opacity-40">
+                            Dodaj
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {proposals.length === 0 ? (
+                <p className="text-xs text-gray-600 italic">Brak propozycji — użyj "Szukaj AI" lub "Dodaj ręcznie"</p>
+            ) : (
+                <div className="flex flex-col gap-1 max-h-44 overflow-y-auto pr-1">
+                    {proposals.map(p => (
+                        <div key={p.id} onClick={() => handleSelect(p)}
+                            className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-all hover:bg-white/5 ${p.isSelected ? 'border-green-500/40 bg-green-500/10' : 'border-white/5 bg-white/[0.02]'}`}>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-xs text-white font-medium truncate">{p.productName}</p>
+                                <p className="text-[10px] text-gray-400">
+                                    {p.manufacturer}{p.model ? ` · ${p.model}` : ''}
+                                    {p.priceNetto != null && <span className="text-green-400 ml-2 font-mono">{Number(p.priceNetto).toFixed(2)} zł</span>}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                                {p.matchScore != null && <span className="text-[9px] text-gray-500">{Math.round(p.matchScore * 100)}%</span>}
+                                {p.sourceUrl && (
+                                    <a href={p.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-400 hover:text-blue-300"><LinkIcon size={9} /></a>
+                                )}
+                                {p.isSelected && <Star size={9} className="text-green-400 fill-green-400" />}
+                                <button onClick={e => handleDelete(p, e)} className="text-gray-600 hover:text-red-400 ml-1"><X size={9} /></button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
