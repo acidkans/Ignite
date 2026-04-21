@@ -453,10 +453,69 @@ export class WbsNodesService {
 
     /**
      * Usuwa węzeł WBS i rekurencyjnie wszystkie dzieci.
+     * Czyści powiązane WbsNodeMaterial i aktualizuje MaterialRequirement.
      */
     async deleteNode(id: string) {
-        // Zbierz wszystkie ID do usunięcia (węzeł + potomkowie)
         const allIds = await this.collectDescendantIds(id);
+
+        // 1. Znajdź alokacje powiązane z usuwanym węzłami
+        const allocs = await this.prisma.wbsNodeMaterial.findMany({
+            where: { wbsNodeId: { in: allIds } },
+            select: { materialId: true, wbsNodeId: true },
+        });
+
+        // 2. Usuń WbsNodeMaterial dla tych węzłów
+        if (allocs.length > 0) {
+            await this.prisma.wbsNodeMaterial.deleteMany({ where: { wbsNodeId: { in: allIds } } });
+
+            // 3. Dla każdego dotkniętego materiału — przelicz alokacje
+            const affectedIds = [...new Set(allocs.map(a => a.materialId))];
+            for (const materialId of affectedIds) {
+                const remaining = await this.prisma.wbsNodeMaterial.findMany({ where: { materialId } });
+                if (remaining.length === 0) {
+                    await this.prisma.materialRequirement.update({
+                        where: { id: materialId },
+                        data: { wbsNodeId: null, wbsNodeIds: null, wbsNodeAllocations: null, quantity: 0 },
+                    }).catch(() => {});
+                } else {
+                    const total = remaining.reduce((s, a) => s + (a.quantity || 0), 0);
+                    await this.prisma.materialRequirement.update({
+                        where: { id: materialId },
+                        data: {
+                            quantity: total,
+                            wbsNodeAllocations: JSON.stringify(Object.fromEntries(remaining.map(a => [a.wbsNodeId, a.quantity]))),
+                            wbsNodeIds: JSON.stringify(remaining.map(a => a.wbsNodeId)),
+                            wbsNodeId: remaining[0].wbsNodeId,
+                        },
+                    }).catch(() => {});
+                }
+            }
+        }
+
+        // 4. Wyczyść legacy pola JSON na materiałach (wbsNodeId bez relacyjnej alokacji)
+        const allIdsSet = new Set(allIds);
+        const legacyMats = await this.prisma.materialRequirement.findMany({
+            where: { wbsNodeId: { in: allIds } },
+            select: { id: true, wbsNodeIds: true, wbsNodeAllocations: true },
+        });
+        for (const mat of legacyMats) {
+            let ids: string[] = [];
+            try { ids = JSON.parse(mat.wbsNodeIds || '[]'); } catch {}
+            const nextIds = ids.filter(i => !allIdsSet.has(i));
+            let nextAlloc: Record<string, number> = {};
+            try { const a = JSON.parse(mat.wbsNodeAllocations || '{}'); for (const k of Object.keys(a)) { if (!allIdsSet.has(k)) nextAlloc[k] = a[k]; } } catch {}
+            await this.prisma.materialRequirement.update({
+                where: { id: mat.id },
+                data: {
+                    wbsNodeId: nextIds[0] || null,
+                    wbsNodeIds: nextIds.length ? JSON.stringify(nextIds) : null,
+                    wbsNodeAllocations: Object.keys(nextAlloc).length ? JSON.stringify(nextAlloc) : null,
+                    ...(nextIds.length === 0 ? { quantity: 0 } : {}),
+                },
+            }).catch(() => {});
+        }
+
+        // 5. Usuń węzły WBS
         await this.prisma.wbsNode.deleteMany({ where: { id: { in: allIds } } });
         return { deleted: allIds.length };
     }
