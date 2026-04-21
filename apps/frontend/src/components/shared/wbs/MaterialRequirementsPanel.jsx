@@ -103,12 +103,11 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     }, [wbsNodes]);
 
     // ─── Filtered requirements ──────────────────────────────────────────────
-    const filtered = useMemo(() => {
+    // Etap 1: tylko filtr WBS (podstawa liczników w przyciskach)
+    const wbsFiltered = useMemo(() => {
         const source = externalRequirements || requirements;
         const validIds = new Set((externalWbsNodes || wbsNodes).map(n => n.id));
         return source.filter(r => {
-            if (!activeTypes.includes(r.type)) return false;
-            // Brak węzłów — pokaż tylko pozycje z jakąkolwiek alokacją (fallback)
             if (validIds.size === 0) {
                 let allocIds = [];
                 try { allocIds = Object.keys(JSON.parse(r.wbsNodeAllocations || '{}')).filter(k => parseFloat(JSON.parse(r.wbsNodeAllocations)[k]) > 0); } catch {}
@@ -123,7 +122,12 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
             const linked = [...ids, ...allocIds, r.wbsNodeId].filter(Boolean);
             return linked.some(id => validIds.has(id));
         });
-    }, [externalRequirements, externalWbsNodes, requirements, activeTypes, wbsNodes]);
+    }, [externalRequirements, externalWbsNodes, requirements, wbsNodes]);
+
+    // Etap 2: dodatkowo filtr typów (to co widać w tabeli)
+    const filtered = useMemo(() =>
+        wbsFiltered.filter(r => activeTypes.includes(r.type)),
+    [wbsFiltered, activeTypes]);
 
     // ─── Fetch ──────────────────────────────────────────────────────────────
 
@@ -283,7 +287,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
             <div className="flex items-center gap-2 px-3 py-1.5 border-b border-white/5 flex-shrink-0">
                 <Filter size={12} className="text-gray-500" />
                 {Object.entries(TYPE_META).map(([key, meta]) => {
-                    const count = requirements.filter(r => r.type === key).length;
+                    const count = wbsFiltered.filter(r => r.type === key).length;
                     const active = activeTypes.includes(key);
                     return (
                         <button key={key} onClick={() => setActiveTypes(prev =>
@@ -297,7 +301,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                     );
                 })}
                 <span className="ml-auto text-[10px] text-gray-600">
-                    {filtered.length}/{requirements.length}
+                    {filtered.length}/{wbsFiltered.length}
                 </span>
             </div>
 
