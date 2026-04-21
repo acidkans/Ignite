@@ -2293,6 +2293,23 @@ ${materialsHtml}
         };
     }, [budgetSummary, budgetDiscountAmount, budgetDiscountPercent]);
 
+    // Memoizowane — stała referencja, AG Grid nie resetuje szerokości przy każdym renderze.
+    // Delete callback używa refa żeby nie tworzyć nowej tablicy przy zmianie wbsData.
+    const budgetColumnDefs = useMemo(() => [
+        { field: 'subjectName', headerName: 'Przedmiot', width: 90, minWidth: 70, sortable: true, editable: true, wrapText: true, autoHeight: true, cellStyle: { whiteSpace: 'normal', lineHeight: '1.4' }, headerComponent: BudgetHeaderRenderer },
+        { field: 'name', headerName: 'Nazwa', width: 140, minWidth: 100, sortable: true, editable: true, wrapText: true, autoHeight: true, cellStyle: { whiteSpace: 'normal', lineHeight: '1.4' }, headerComponent: BudgetHeaderRenderer },
+        { field: 'type', headerName: 'Typ', width: 90, minWidth: 70, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: TYPE_OPTIONS }, valueFormatter: p => TYPE_LABELS[p.value] || p.value, editable: true, sortable: true, headerComponent: BudgetHeaderRenderer },
+        { field: 'unitCost', headerName: 'Koszt jednostkowy', width: 100, minWidth: 90, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPLN(p.value), cellClass: p => p.data?.inheritedFromMaterials ? 'text-amber-300' : '', tooltipValueGetter: p => p.data?.inheritedFromMaterials ? 'Edycja synchronizuje cenę w zakładce Materiały' : '', headerComponent: BudgetHeaderRenderer },
+        { field: 'quantity', headerName: 'Ilość', width: 70, minWidth: 60, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtQty(p.value), headerComponent: BudgetHeaderRenderer },
+        { field: 'unit', headerName: 'Jednostki', width: 85, minWidth: 75, editable: true, sortable: true, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: UNIT_OPTIONS }, headerComponent: BudgetHeaderRenderer },
+        { field: 'totalCost', headerName: 'Koszt całościowy', width: 100, minWidth: 90, editable: false, sortable: true, valueFormatter: p => fmtPLN(p.value), headerComponent: BudgetHeaderRenderer },
+        { field: 'margin', headerName: 'Marża (%)', width: 80, minWidth: 70, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-green-300', headerComponent: BudgetHeaderRenderer },
+        { field: 'discount', headerName: 'Rabat (%)', width: 80, minWidth: 70, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-orange-300', headerComponent: BudgetHeaderRenderer },
+        { field: 'offerPrice', headerName: 'Cena ofertowa', width: 100, minWidth: 90, sortable: true, valueFormatter: p => fmtPLN(p.value), headerComponent: BudgetHeaderRenderer },
+        { field: 'comment', headerName: 'Komentarz', flex: 1, minWidth: 220, editable: true, sortable: true, wrapText: true, autoHeight: true, cellStyle: { whiteSpace: 'normal', lineHeight: '1.4' }, headerComponent: BudgetHeaderRenderer },
+        { headerName: '', width: 40, minWidth: 40, maxWidth: 40, suppressSizeToFit: true, pinned: 'right', sortable: false, filter: false, editable: false, cellRenderer: RowActionsRenderer, cellRendererParams: { onDeleteRow: (...a) => deleteNodeByIdRef.current?.(...a) } },
+    ], []); // eslint-disable-line react-hooks/exhaustive-deps
+
     const getColumnDefs = (view) => {
         const nameCol = {
             field: 'name',
@@ -2331,44 +2348,7 @@ ${materialsHtml}
             cellClass: STRUCTURE_COMMON_CELL_CLASS,
         };
 
-        if (view === VIEWS.BUDGET) return [
-            { field: 'subjectName', headerName: 'Przedmiot', width: 90, minWidth: 70, sortable: true, editable: true, wrapText: true, autoHeight: true, cellStyle: { whiteSpace: 'normal', lineHeight: '1.4' }, headerComponent: BudgetHeaderRenderer },
-            { field: 'name', headerName: 'Nazwa', width: 140, minWidth: 100, sortable: true, editable: true, wrapText: true, autoHeight: true, cellStyle: { whiteSpace: 'normal', lineHeight: '1.4' }, headerComponent: BudgetHeaderRenderer },
-            { field: 'type', headerName: 'Typ', width: 90, minWidth: 70, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: TYPE_OPTIONS }, valueFormatter: p => TYPE_LABELS[p.value] || p.value, editable: true, sortable: true, headerComponent: BudgetHeaderRenderer },
-            {
-                field: 'unitCost',
-                headerName: 'Koszt jednostkowy',
-                width: 100,
-                minWidth: 90,
-                cellEditor: 'agTextCellEditor',
-                editable: true,
-                sortable: true,
-                valueFormatter: p => fmtPLN(p.value),
-                cellClass: (params) => params.data?.inheritedFromMaterials ? 'text-amber-300' : '',
-                tooltipValueGetter: (params) => params.data?.inheritedFromMaterials ? 'Edycja synchronizuje cenę w zakładce Materiały' : '',
-                headerComponent: BudgetHeaderRenderer
-            },
-            { field: 'quantity', headerName: 'Ilość', width: 70, minWidth: 60, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtQty(p.value), headerComponent: BudgetHeaderRenderer },
-            { field: 'unit', headerName: 'Jednostki', width: 85, minWidth: 75, editable: true, sortable: true, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: UNIT_OPTIONS }, headerComponent: BudgetHeaderRenderer },
-            { field: 'totalCost', headerName: 'Koszt całościowy', width: 100, minWidth: 90, editable: false, sortable: true, valueFormatter: p => fmtPLN(p.value), headerComponent: BudgetHeaderRenderer },
-            { field: 'margin', headerName: 'Marża (%)', width: 80, minWidth: 70, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-green-300', headerComponent: BudgetHeaderRenderer },
-            { field: 'discount', headerName: 'Rabat (%)', width: 80, minWidth: 70, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-orange-300', headerComponent: BudgetHeaderRenderer },
-            { field: 'offerPrice', headerName: 'Cena ofertowa', width: 100, minWidth: 90, sortable: true, valueFormatter: p => fmtPLN(p.value), headerComponent: BudgetHeaderRenderer },
-            { field: 'comment', headerName: 'Komentarz', flex: 1, minWidth: 220, editable: true, sortable: true, wrapText: true, autoHeight: true, cellStyle: { whiteSpace: 'normal', lineHeight: '1.4' }, headerComponent: BudgetHeaderRenderer },
-            {
-                headerName: '',
-                width: 40,
-                minWidth: 40,
-                maxWidth: 40,
-                suppressSizeToFit: true,
-                pinned: 'right',
-                sortable: false,
-                filter: false,
-                editable: false,
-                cellRenderer: RowActionsRenderer,
-                cellRendererParams: { onDeleteRow: deleteNodeById },
-            }
-        ];
+        if (view === VIEWS.BUDGET) return budgetColumnDefs;
 
         return [nameCol, { field: 'status', width: 100 }];
     };
