@@ -7,7 +7,6 @@ import { API_URL } from '../../config';
 
 // Set up worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
-pdfjs.verbosity = pdfjs.VerbosityLevel?.ERRORS ?? 0;
 
 const pdfOptions = {
     cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
