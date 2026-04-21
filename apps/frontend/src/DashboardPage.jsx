@@ -1,12 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import PropertyPreview from './components/shared/PropertyPreview';
-import SubtasksTab from './components/shared/SubtasksTab';
 import RequirementsTab from './components/shared/RequirementsTab';
 import SiteInfoTab from './components/shared/SiteInfoTab';
 import NodeInfoTab from './components/shared/NodeInfoTab';
 import SchematTab from './components/shared/SchematTab';
-import MaterialRequirementsPanel from './components/shared/wbs/MaterialRequirementsPanel';
 import LogistykaMaterialListsTab from './components/shared/LogistykaMaterialListsTab';
 import MaterialDatabaseTab from './components/shared/MaterialDatabaseTab';
 import OffersTab from './components/shared/OffersTab';
@@ -67,14 +65,14 @@ export default function DashboardPage() {
     const [activeTab, _setActiveTab] = useState(() => {
         const saved = sessionStorage.getItem('erp_activeTab');
         if (saved) return saved;
-        return isWorker ? 'tasks' : 'files';
+        return isWorker ? 'unified' : 'files';
     });
     const setActiveTab = (tab) => {
         sessionStorage.setItem('erp_activeTab', tab);
         _setActiveTab(tab);
     };
     const [tabOrder, setTabOrder] = useState(() => {
-        const ALL_TABS = ['files', 'financialFiles', 'tasks', 'unified', 'schematics'];
+        const ALL_TABS = ['files', 'financialFiles', 'unified', 'schematics'];
         try {
             const saved = JSON.parse(localStorage.getItem('tabOrder') || 'null');
             if (!saved) return ALL_TABS;
@@ -232,7 +230,7 @@ export default function DashboardPage() {
 
     const handleNavigateToOrderPlanning = (orderId) => {
         if (!orderId || !setActiveAreaId) return;
-        pendingTabRef.current = 'tasks';
+        pendingTabRef.current = 'unified';
         setActiveAreaId(String(orderId));
     };
 
@@ -260,9 +258,7 @@ export default function DashboardPage() {
     const currentVersion = versions.find(v => v.id === selectedVersionId);
 
     const showSearch = activeTab !== 'requirements';
-    const searchPlaceholder = activeTab === 'tasks'
-        ? 'Szukaj po nazwie, statusie, osobie, dacie…'
-        : activeTab === 'unified'
+    const searchPlaceholder = activeTab === 'unified'
         ? 'Szukaj w strukturze, budżecie, materiałach…'
         : activeTab === 'materialDatabase'
         ? 'Szukaj w materiałach i kartach katalogowych…'
@@ -454,7 +450,6 @@ export default function DashboardPage() {
                     const TAB_META = {
                         files:         { label: 'Dokumentacja',    color: 'blue',    activeColor: 'text-blue-400',    bar: 'bg-blue-500',    shadow: '59,130,246',    cond: !isLogistykaArea },
                         financialFiles:{ label: 'Pliki finansowe', color: 'amber',   activeColor: 'text-amber-400',   bar: 'bg-amber-500',   shadow: '245,158,11',    cond: isOrder && isManagerOrAdmin && !currentRoles.includes('LOGISTYK') },
-                        tasks:         { label: 'Zadania', color: 'blue', activeColor: 'text-blue-400', bar: 'bg-blue-500', shadow: '59,130,246', cond: true },
                         unified:       { label: 'planowanie',    color: 'cyan',    activeColor: 'text-cyan-400',    bar: 'bg-cyan-500',    shadow: '6,182,212',     cond: isOrder },
                         schematics:    { label: 'Schemat',         color: 'orange',  activeColor: 'text-orange-400',  bar: 'bg-orange-500',  shadow: '249,115,22',    cond: isOrder },
                     };
@@ -527,19 +522,6 @@ export default function DashboardPage() {
                                 nodeId={activeAreaId}
                                 searchQuery={searchQuery}
                                 isFinancialTab={true}
-                            />
-                        )}
-                        {activeTab === 'tasks' && (
-                            <SubtasksTab
-                                key={`tasks-${activeAreaId}-${selectedVersionId}`}
-                                nodeId={activeAreaId}
-                                versionId={selectedVersionId}
-                                searchQuery={searchQuery}
-                                workerView={isWorker}
-                                filterUserId={isWorker ? currentUserId : null}
-                                workerRoles={currentRoles}
-                                nodeName={activeNode?.name}
-                                onWbsUpdate={() => setWbsUpdateCount(c => c + 1)}
                             />
                         )}
                         {activeTab === 'unified' && isOrder && (
