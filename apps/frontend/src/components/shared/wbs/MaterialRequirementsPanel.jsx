@@ -66,6 +66,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     refreshKey = 0,
     onWbsUpdate = null,
     onMaterialStatusChange = null,
+    externalRequirements = null,
 }, ref) {
     const token = sessionStorage.getItem('token');
     const headers = { Authorization: `Bearer ${token}` };
@@ -100,8 +101,12 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     }, [wbsNodes]);
 
     // ─── Filtered requirements ──────────────────────────────────────────────
-    // Pokazuj tylko materiały przypisane do istniejących węzłów WBS.
     const filtered = useMemo(() => {
+        // Gdy dane przychodzą z zewnątrz (WBS) — filtruj tylko po typie
+        if (externalRequirements) {
+            return externalRequirements.filter(r => activeTypes.includes(r.type));
+        }
+        // Standalone: pokazuj tylko przypisane do istniejących węzłów WBS
         const validIds = new Set(wbsNodes.map(n => n.id));
         return requirements.filter(r => {
             if (!activeTypes.includes(r.type)) return false;
@@ -114,7 +119,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
             const linked = [...ids, ...allocIds, r.wbsNodeId].filter(Boolean);
             return linked.some(id => validIds.has(id));
         });
-    }, [requirements, activeTypes, wbsNodes]);
+    }, [externalRequirements, requirements, activeTypes, wbsNodes]);
 
     // ─── Fetch ──────────────────────────────────────────────────────────────
 

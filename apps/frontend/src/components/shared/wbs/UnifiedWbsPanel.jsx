@@ -467,6 +467,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             const materialsRes = await fetch(`${API_URL}/material-requirements/node/${nodeId}${materialsQuery ? `?${materialsQuery}` : ''}`, { headers: { Authorization: `Bearer ${token()}` } });
             if (materialsRes.ok) {
                 const requirements = await materialsRes.json();
+                setAllRequirements(Array.isArray(requirements) ? requirements : []);
                 const nextCosts = {};
                 const nextLookupMeta = {};
                 let projectItemNamesById = {};
@@ -591,6 +592,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             const res = await fetch(`${API_URL}/material-requirements/node/${nodeId}${qs ? `?${qs}` : ''}`, { headers: { Authorization: `Bearer ${token()}` } });
             if (!res.ok) return;
             const requirements = await res.json();
+            setAllRequirements(Array.isArray(requirements) ? requirements : []);
             const nextCosts = {};
             const nextLookupMeta = {};
 
@@ -708,7 +710,11 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                     isAiAssigned: false,
                 }),
             });
-            if (patchRes.ok) setReqRefreshKey(k => k + 1);
+            if (patchRes.ok) {
+                // Optimistic local update — nie wywołuj fetchData() bo nadpisałby edytowany wbsData
+                const updated = { ...targetReq, quantity: totalQty, wbsNodeAllocations: JSON.stringify(nextAlloc) };
+                setAllRequirements(prev => prev.map(r => r.id === targetReq.id ? updated : r));
+            }
             // Don't call fetchData() here — it overwrites local wbsData and reverts user edits
         } catch (e) {
             console.error('Sync material requirements from WBS quantity error:', e);
@@ -2720,10 +2726,11 @@ ${materialsHtml}
                     nodeId={nodeId}
                     versionId={versionId}
                     readOnly={!isManagerOrAdmin}
-                    onWbsUpdate={async () => { await refreshMaterialCosts(); setReqRefreshKey(k => k + 1); }}
+                    onWbsUpdate={async () => { await refreshMaterialCosts(); }}
                     onMaterialStatusChange={handleMaterialStatusChange}
                     refreshKey={reqRefreshKey}
                     isEmbedded={true}
+                    externalRequirements={allRequirements}
                 />
             ), () => handleExportPDF('materials'))}
 
