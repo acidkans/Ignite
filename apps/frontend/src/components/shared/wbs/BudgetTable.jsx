@@ -10,11 +10,12 @@ const SELECT = 'bg-[#0b0f17] text-white text-xs w-full outline-none rounded px-1
 function calcDerived(r) {
     const q = Math.max(0, parseLocaleNumber(String(r.quantity ?? '')) ?? 1);
     const uc = Math.max(0, parseLocaleNumber(String(r.unitCost ?? '')) ?? 0);
-    const m = Math.max(0, parseFloat(r.margin) || 0);
-    const d = Math.max(0, parseFloat(r.discount) || 0);
+    const marginRaw = r.margin != null && r.margin !== '' ? parseLocaleNumber(String(r.margin)) : null;
+    const d = Math.max(0, parseLocaleNumber(String(r.discount ?? '')) ?? 0);
     const totalCost = uc * q;
-    let offerPrice = m !== 0 ? totalCost * (1 + m / 100) : 0;
-    if (d > 0) offerPrice = offerPrice * (1 - d / 100);
+    // cena ofertowa tylko gdy marża jest wpisana i różna od zera
+    let offerPrice = (marginRaw !== null && marginRaw !== 0) ? totalCost * (1 + marginRaw / 100) : 0;
+    if (offerPrice > 0 && d > 0) offerPrice = Math.max(0, offerPrice * (1 - d / 100));
     return { ...r, totalCost, offerPrice };
 }
 
@@ -53,7 +54,7 @@ export default function BudgetTable({
         const discFromAmt = Number.isFinite(parsedAmt) ? Math.max(0, parsedAmt) : 0;
         const totalRevenue = Math.max(0, rawRevenue - discFromPct - discFromAmt);
         const profit = totalRevenue - totalCost;
-        const marginPct = totalCost > 0 ? (profit / totalCost) * 100 : 0;
+        const marginPct = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
         return { totalCost, totalRevenue, rawRevenue, profit, marginPct, rows: localRows.length };
     }, [localRows, discountPercent, discountAmount]);
 
@@ -126,13 +127,13 @@ export default function BudgetTable({
                             <th className={`${TH} min-w-[100px]`}>Przedmiot</th>
                             <th className={`${TH} min-w-[150px]`}>Nazwa</th>
                             <th className={`${TH} w-24`}>Typ</th>
-                            <th className={`${TH} w-28 text-right`}>Koszt jedn.</th>
-                            <th className={`${TH} w-20 text-right`}>Ilość</th>
-                            <th className={`${TH} w-24`}>Jednostki</th>
-                            <th className={`${TH} w-28 text-right`}>Koszt całk.</th>
-                            <th className={`${TH} w-20 text-right`}>Marża %</th>
-                            <th className={`${TH} w-20 text-right`}>Rabat %</th>
-                            <th className={`${TH} w-28 text-right`}>Cena ofert.</th>
+                            <th className={`${TH} w-28 text-center`}>Koszt jedn.</th>
+                            <th className={`${TH} w-20 text-center`}>Ilość</th>
+                            <th className={`${TH} w-24 text-center`}>Jednostki</th>
+                            <th className={`${TH} w-28 text-center`}>Koszt całk.</th>
+                            <th className={`${TH} w-20 text-center`}>Marża %</th>
+                            <th className={`${TH} w-20 text-center`}>Rabat %</th>
+                            <th className={`${TH} w-28 text-center`}>Cena ofert.</th>
                             <th className={`${TH} min-w-[180px]`}>Komentarz</th>
                             <th className="w-8" />
                         </tr>
@@ -174,23 +175,28 @@ export default function BudgetTable({
                                 <td className={TD}>
                                     <input
                                         key={`${row.id}-unitCost`}
-                                        defaultValue={row.unitCost != null && row.unitCost !== 0 ? String(row.unitCost).replace('.', ',') : ''}
+                                        defaultValue={row.unitCost != null && row.unitCost !== 0 ? Number(row.unitCost).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
                                         onChange={e => handleChange(row.id, 'unitCost', e.target.value)}
-                                        onBlur={e => onFieldChange(row, 'unitCost', e.target.value)}
-                                        className={`${INPUT} text-right tabular-nums ${row.inheritedFromMaterials ? 'text-amber-300' : ''}`}
+                                        onBlur={e => {
+                                            const n = parseLocaleNumber(e.target.value);
+                                            if (n != null) e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                            onFieldChange(row, 'unitCost', e.target.value);
+                                        }}
+                                        className={`${INPUT} text-center tabular-nums ${row.inheritedFromMaterials ? 'text-amber-300' : ''}`}
                                     />
-                                    {row.inheritedFromMaterials && (
-                                        <div className="text-[9px] text-amber-600/70 px-1 leading-none mt-0.5">z Materiałów</div>
-                                    )}
                                 </td>
 
                                 <td className={TD}>
                                     <input
                                         key={`${row.id}-quantity`}
-                                        defaultValue={row.quantity != null ? String(row.quantity).replace('.', ',') : ''}
+                                        defaultValue={row.quantity != null && row.quantity !== 0 ? Number(row.quantity).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
                                         onChange={e => handleChange(row.id, 'quantity', e.target.value)}
-                                        onBlur={e => onFieldChange(row, 'quantity', e.target.value)}
-                                        className={`${INPUT} text-right tabular-nums`}
+                                        onBlur={e => {
+                                            const n = parseLocaleNumber(e.target.value);
+                                            if (n != null) e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                            onFieldChange(row, 'quantity', e.target.value);
+                                        }}
+                                        className={`${INPUT} text-center tabular-nums`}
                                     />
                                 </td>
 
@@ -205,8 +211,8 @@ export default function BudgetTable({
                                     </select>
                                 </td>
 
-                                <td className={`${TD} text-right text-xs text-gray-300 tabular-nums font-mono`}>
-                                    {fmtPLN(row.totalCost)}
+                                <td className={`${TD} text-center text-xs tabular-nums font-mono rounded bg-white/[0.03] ${row.totalCost > 0 ? 'text-gray-200' : 'text-gray-600'}`}>
+                                    {row.totalCost > 0 ? fmtPLN(row.totalCost) : '—'}
                                 </td>
 
                                 <td className={TD}>
@@ -215,7 +221,7 @@ export default function BudgetTable({
                                         defaultValue={row.margin != null && row.margin !== 0 ? String(row.margin).replace('.', ',') : ''}
                                         onChange={e => handleChange(row.id, 'margin', e.target.value)}
                                         onBlur={e => onFieldChange(row, 'margin', e.target.value)}
-                                        className={`${INPUT} text-right tabular-nums text-green-300`}
+                                        className={`${INPUT} text-center tabular-nums text-green-300`}
                                     />
                                 </td>
 
@@ -225,17 +231,17 @@ export default function BudgetTable({
                                         defaultValue={row.discount != null && row.discount !== 0 ? String(row.discount).replace('.', ',') : ''}
                                         onChange={e => handleChange(row.id, 'discount', e.target.value)}
                                         onBlur={e => onFieldChange(row, 'discount', e.target.value)}
-                                        className={`${INPUT} text-right tabular-nums text-orange-300`}
+                                        className={`${INPUT} text-center tabular-nums text-orange-300`}
                                     />
                                 </td>
 
-                                <td className={`${TD} text-right text-xs text-white tabular-nums font-mono font-semibold`}>
-                                    {fmtPLN(row.offerPrice)}
+                                <td className={`${TD} text-center text-xs tabular-nums font-mono font-semibold rounded bg-white/[0.03] ${row.offerPrice > 0 ? 'text-green-300' : 'text-gray-600'}`}>
+                                    {row.offerPrice > 0 ? fmtPLN(row.offerPrice) : '—'}
                                 </td>
 
                                 <td className={TD}>
                                     <input
-                                        key={`${row.id}-comment`}
+                                        key={`${row.id}-comment-${row.comment ?? ''}`}
                                         defaultValue={row.comment || ''}
                                         onBlur={e => { if (e.target.value !== (row.comment || '')) onFieldChange(row, 'comment', e.target.value); }}
                                         className={`${INPUT} text-gray-400`}
