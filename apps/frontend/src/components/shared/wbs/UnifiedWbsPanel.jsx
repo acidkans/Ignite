@@ -2793,6 +2793,8 @@ ${materialsHtml}
                     nodeId={nodeId}
                     versionId={versionId}
                     readOnly={!isManagerOrAdmin}
+                    externalWbsNodes={wbsData}
+                    onPatchNode={(id, data) => setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))}
                     onWbsUpdate={async () => { await refreshMaterialCosts(); }}
                     refreshKey={reqRefreshKey}
                 />
