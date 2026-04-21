@@ -338,6 +338,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                                         onDelete={deleteItem}
                                         isLocked={isLocked}
                                         wbsMap={wbsMap}
+                                        requirementsQtyByNode={requirementsQtyByNode}
                                     />
                                     {expandedId === r.id && (
                                         <tr><td colSpan={isLocked ? 8 : 9} className="p-0 bg-black/20 border-b border-white/5">
@@ -356,7 +357,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
 
 // ─── Row ─────────────────────────────────────────────────────────────────────
 
-function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMap }) {
+function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMap, requirementsQtyByNode }) {
     const TypeIcon = TYPE_META[r.type]?.icon || Package;
     const StatusIcon = STATUS_META[r.status]?.icon || Clock;
 
