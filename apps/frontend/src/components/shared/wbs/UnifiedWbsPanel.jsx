@@ -2251,18 +2251,21 @@ ${materialsHtml}
         setBudgetSummary(summarizeBudgetRows(buildRows(VIEWS.BUDGET)));
     }, [wbsData, expandedIds, materialCostsByNode, materialMetaByLookupKey, summarizeBudgetRows, refreshBudgetSummaryFromApi]);
 
-    // Re-apply saved column widths gdy sekcja budget staje się widoczna
-    // (applyColumnState na display:none nie działa — grid nie ma wymiarów)
+    // Re-apply saved column widths gdy sekcja budget staje się widoczna.
+    // applyColumnState na display:none nie działa — grid nie ma wymiarów.
+    // Potrzebny requestAnimationFrame × 2 żeby przeglądarka zdążyła zrobić layout.
     useEffect(() => {
         if (expandedSection !== 'budget') return;
         const api = budgetGridApiRef.current;
         if (!api) return;
-        try {
-            const saved = localStorage.getItem('wbs-budget-col-state');
-            if (saved) {
-                api.applyColumnState({ state: JSON.parse(saved), applyOrder: true });
-            }
-        } catch {}
+        const apply = () => {
+            try {
+                const saved = localStorage.getItem('wbs-budget-col-state');
+                if (saved) api.applyColumnState({ state: JSON.parse(saved), applyOrder: true });
+            } catch {}
+        };
+        // Podwójny rAF — pierwszy czeka na commit DOM, drugi na paint
+        requestAnimationFrame(() => requestAnimationFrame(apply));
     }, [expandedSection]);
 
     const displayedBudgetSummary = useMemo(() => {
