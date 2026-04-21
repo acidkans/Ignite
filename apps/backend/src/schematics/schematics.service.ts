@@ -50,15 +50,47 @@ export class SchematicsService {
     }
 
     async getSchematicsByNode(nodeId: string) {
-        return this.prisma.schematicDocument.findMany({
+        const docs = await this.prisma.schematicDocument.findMany({
             where: { nodeId, subtaskId: null },
             include: {
                 markers: {
-                    include: { attachments: true, subtask: { select: { id: true, name: true } } }
+                    include: {
+                        attachments: true,
+                        subtask: { select: { id: true, name: true } },
+                        wbsLinks: { select: { id: true, wbsNodeId: true } },
+                    }
                 }
             },
             orderBy: { createdAt: 'desc' }
         });
+
+        // Wzbogać wbsLinks o nazwy węzłów WBS
+        const wbsNodeIds = [...new Set(
+            docs.flatMap(d => d.markers.flatMap(m => m.wbsLinks.map(l => l.wbsNodeId)))
+        )];
+        const wbsNodes = wbsNodeIds.length > 0
+            ? await this.prisma.wbsNode.findMany({ where: { id: { in: wbsNodeIds } }, select: { id: true, name: true, parentId: true } })
+            : [];
+        const wbsNodeMap = Object.fromEntries(wbsNodes.map(n => [n.id, n]));
+
+        // Pobierz nazwy węzłów nadrzędnych
+        const parentIds = [...new Set(wbsNodes.map(n => n.parentId).filter(Boolean))];
+        const parentNodes = parentIds.length > 0
+            ? await this.prisma.wbsNode.findMany({ where: { id: { in: parentIds } }, select: { id: true, name: true } })
+            : [];
+        const parentNodeMap = Object.fromEntries(parentNodes.map(n => [n.id, n.name]));
+
+        return docs.map(d => ({
+            ...d,
+            markers: d.markers.map(m => ({
+                ...m,
+                wbsLinks: m.wbsLinks.map(l => {
+                    const node = wbsNodeMap[l.wbsNodeId];
+                    const parentName = node?.parentId ? (parentNodeMap[node.parentId] ?? null) : null;
+                    return { ...l, wbsNodeName: node?.name ?? null, wbsParentName: parentName };
+                }),
+            })),
+        }));
     }
 
     async getSchematicsBySubtask(subtaskId: string) {
