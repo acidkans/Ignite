@@ -210,8 +210,9 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     useEffect(() => {
         if (refreshKey > 0 && activeListId) {
             fetchRequirements(activeListId);
+            fetchWbsNodes();
         }
-    }, [refreshKey, activeListId, fetchRequirements]);
+    }, [refreshKey, activeListId, fetchRequirements, fetchWbsNodes]);
 
     // ─── Patch ──────────────────────────────────────────────────────────────
 
