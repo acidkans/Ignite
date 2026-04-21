@@ -686,27 +686,43 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 return req.wbsNodeId === wbsNodeId || ids.includes(wbsNodeId) || Object.prototype.hasOwnProperty.call(alloc || {}, wbsNodeId);
             });
 
-            if (!linked.length) return;
+            // Fallback: szukaj po nazwie gdy brak dopasowania po ID
+            let targetReq = null;
+            if (linked.length) {
+                const exactByName = linked.find(req => normalizedNodeName && normKey(req.name) === normalizedNodeName);
+                targetReq = exactByName || linked[0];
+            } else if (normalizedNodeName) {
+                targetReq = requirements.find(req =>
+                    ['MATERIAL', 'DEVICE'].includes(String(req.type || '').toUpperCase()) &&
+                    normKey(req.name) === normalizedNodeName
+                ) || null;
+            }
 
-            const exactByName = linked.find((req) => {
-                if (!normalizedNodeName) return false;
-                return normKey(req.name) === normalizedNodeName;
-            });
-            const targetReq = exactByName || linked[0];
+            if (!targetReq) return;
 
-            let currentAlloc = {};
-            try { currentAlloc = targetReq.wbsNodeAllocations ? JSON.parse(targetReq.wbsNodeAllocations) : {}; } catch { currentAlloc = {}; }
-            const nextAlloc = { ...(currentAlloc || {}), [wbsNodeId]: nextQuantity };
-            const totalQty = Object.values(nextAlloc).reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
+            // Gdy znaleziony po nazwie (nie po ID) — re-linkuj do własnego wbsNodeId i ustaw qty wprost
+            const foundById = linked.includes(targetReq);
+            let nextAlloc;
+            let totalQty;
+            if (foundById) {
+                let currentAlloc = {};
+                try { currentAlloc = targetReq.wbsNodeAllocations ? JSON.parse(targetReq.wbsNodeAllocations) : {}; } catch { currentAlloc = {}; }
+                nextAlloc = { ...(currentAlloc || {}), [wbsNodeId]: nextQuantity };
+                totalQty = Object.values(nextAlloc).reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
+            } else {
+                // Re-linkuj: zastąp alokacje własnym wbs_node id
+                nextAlloc = { [wbsNodeId]: nextQuantity };
+                totalQty = nextQuantity;
+            }
 
             const patchRes = await fetch(`${API_URL}/material-requirements/${targetReq.id}`, {
                 method: 'PATCH',
                 headers: authHeaders(),
                 body: JSON.stringify({
                     quantity: totalQty,
-                    wbsNodeId: targetReq.wbsNodeId || wbsNodeId,
-                    wbsNodeIds: targetReq.wbsNodeIds || JSON.stringify([wbsNodeId]),
-                    wbsNodeAllocations: Object.keys(nextAlloc).length > 0 ? JSON.stringify(nextAlloc) : null,
+                    wbsNodeId: wbsNodeId,
+                    wbsNodeIds: JSON.stringify([wbsNodeId]),
+                    wbsNodeAllocations: JSON.stringify(nextAlloc),
                     isAiAssigned: false,
                 }),
             });
@@ -2732,6 +2748,25 @@ ${materialsHtml}
                     readOnly={!isManagerOrAdmin}
                     onWbsUpdate={async () => { await refreshMaterialCosts(); }}
                     onMaterialStatusChange={handleMaterialStatusChange}
+                    onMaterialQtyChange={async (updatedReq) => {
+                        // Sync ilości: Materials → WBS (szukaj wbs_node po ID lub nazwie)
+                        const qty = parseFloat(updatedReq.quantity);
+                        if (!Number.isFinite(qty) || qty < 0) return;
+                        // Znajdź wbs_node: najpierw po wbsNodeId, potem po nazwie
+                        let target = wbsData.find(n => n.id === updatedReq.wbsNodeId);
+                        if (!target && updatedReq.name) {
+                            const nm = (updatedReq.name || '').trim().toLowerCase();
+                            target = wbsData.find(n => (n.name || '').trim().toLowerCase() === nm && ['material', 'equipment', 'MATERIAL', 'DEVICE'].includes(n.type));
+                        }
+                        if (!target) return;
+                        await fetch(`${API_URL}/wbs-nodes/${target.id}`, {
+                            method: 'PATCH',
+                            headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ quantity: qty }),
+                        });
+                        setWbsData(prev => prev.map(n => n.id === target.id ? { ...n, quantity: qty } : n));
+                        await refreshMaterialCosts();
+                    }}
                     refreshKey={reqRefreshKey}
                     isEmbedded={true}
                     externalRequirements={allRequirements}
