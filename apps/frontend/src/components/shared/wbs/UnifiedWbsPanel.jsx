@@ -15,7 +15,7 @@ import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, F
 import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
-import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, STRUCTURE_STATUS_META, STRUCTURE_COMMON_CELL_CLASS, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, BUDGET_TYPE_LABELS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS } from './wbsConstants';
+import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, STRUCTURE_STATUS_META, STRUCTURE_COMMON_CELL_CLASS, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, BUDGET_TYPE_LABELS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType } from './wbsConstants';
 import { exportProjectPdf } from '../../../utils/projectPdfExport';
 import WBSHybridTable from './WBSHybridTable';
 
@@ -164,13 +164,13 @@ function BudgetHeaderRenderer(params) {
     const SortIcon = sort === 'asc' ? ArrowUp : sort === 'desc' ? ArrowDown : ArrowUpDown;
     return (
         <div
-            className="flex items-center gap-1 w-full cursor-pointer select-none"
+            className="flex items-start gap-1 w-full cursor-pointer select-none py-1"
             onClick={() => params.progressSort?.()}
         >
-            <span className="truncate text-gray-400 text-[11px] uppercase tracking-wider font-bold">
+            <span className="text-gray-400 text-[11px] uppercase tracking-wider font-bold leading-tight whitespace-normal break-words">
                 {params.displayName}
             </span>
-            <SortIcon size={11} className={sort ? 'text-cyan-400' : 'text-gray-600'} />
+            <SortIcon size={11} className={`mt-0.5 flex-shrink-0 ${sort ? 'text-cyan-400' : 'text-gray-600'}`} />
         </div>
     );
 }
@@ -1053,7 +1053,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 const budgetCols = includeBudget ? `
                     <td class="num">${fmtPLN(n.unitCost)}</td>
                     <td class="num">${fmtQty(n.quantity)}</td>
-                    <td>${esc(n.unit || 'sztuki')}</td>
+                    <td>${esc(n.unit || defaultUnitForType(n.type))}</td>
                     <td class="num">${fmtPct(n.margin)}</td>
                     <td class="num">${fmtPLN(n.totalCost)}</td>
                     <td class="num">${fmtPLN(n.totalPrice)}</td>` : `
@@ -1515,12 +1515,14 @@ ${materialsHtml}
         setWbsData(prev => prev.map(item => item.id === wbsNodeId ? { ...item, ...patch } : item));
     }, []);
 
-    const handleHybridRequirementsQtyChange = useCallback((id, qty, name) => {
+    const handleHybridRequirementsQtyChange = useCallback(async (id, qty, name) => {
         setRequirementsQtyByNode(prev => ({ ...prev, [id]: qty }));
         updateLocalWbsBudgetRow(id, { quantity: qty });
         saveBudgetField(id, { quantity: qty });
-        syncMaterialRequirementsFromWbsQuantity(id, qty, name || '');
-    }, [updateLocalWbsBudgetRow, saveBudgetField, syncMaterialRequirementsFromWbsQuantity]);
+        await syncMaterialRequirementsFromWbsQuantity(id, qty, name || '');
+        // Rebuild materialMetaByLookupKey so Budget row (inheritedQuantity) reflects new qty
+        await refreshMaterialCosts();
+    }, [updateLocalWbsBudgetRow, saveBudgetField, syncMaterialRequirementsFromWbsQuantity, refreshMaterialCosts]);
 
     const handleHybridNodeStatusChange = useCallback(async (_wbsNodeId, status, reqId) => {
         try {
@@ -1832,9 +1834,12 @@ ${materialsHtml}
                 const margin = parseFloat(row.margin) || 0;
                 row.inheritedFromMaterials = inheritedFromMaterials;
                 row.quantity = resolvedQuantity;
+                const typeDefault = defaultUnitForType(row.type);
+                const otherDefault = typeDefault === 'sztuki' ? 'dni' : 'sztuki';
+                const isOldDefault = !row.unit || row.unit === otherDefault;
                 row.unit = inheritedFromMaterials
-                    ? (materialMetaByLookupKey[lookupKey]?.unit || row.unit || 'sztuki')
-                    : (row.unit || 'sztuki');
+                    ? (materialMetaByLookupKey[lookupKey]?.unit || (isOldDefault ? typeDefault : row.unit))
+                    : (isOldDefault ? typeDefault : row.unit);
                 row.unitCost = inheritedFromMaterials
                     ? resolvedUnitCost
                     : (resolvedQuantity > 0 ? totalCost / resolvedQuantity : totalCost);
@@ -1910,7 +1915,7 @@ ${materialsHtml}
             if (uc > 0 && m !== 0) up = uc * (1 + m / 100);
             if (d > 0) up = up * (1 - d / 100);
 
-            row.unit = row.unit || 'sztuki';
+            row.unit = row.unit || defaultUnitForType(row.type);
             row.unitCost = uc;
             row.totalCost = totalCost;
             row.cost = totalCost;
@@ -1938,12 +1943,24 @@ ${materialsHtml}
                 unitPrice: up,
                 comment: row.comment ?? '',
             });
-            // Sync budget quantity → WBS for work-type nodes
+            // Sync budget quantity → WBS/MR
             if (field === 'quantity') {
                 const normalizedType = String(row.type || row.budgetType || '').toLowerCase();
                 if (normalizedType === 'work' || normalizedType === 'praca') {
                     setRequirementsQtyByNode((prev) => ({ ...prev, [row.id]: q }));
                     syncMaterialRequirementsFromWbsQuantity(row.id, q, row.name);
+                } else if (normalizedType === 'material' || normalizedType === 'equipment') {
+                    // Variant B: WBS is source of truth; update local material meta so inheritedQuantity reflects edit
+                    const lookupKey = makeMaterialLookupKey(row.subjectName || row.name, row.name);
+                    setRequirementsQtyByNode((prev) => ({ ...prev, [row.id]: q }));
+                    setMaterialMetaByLookupKey(prev => ({
+                        ...prev,
+                        [lookupKey]: { ...(prev[lookupKey] || {}), quantity: q },
+                    }));
+                    (async () => {
+                        await syncMaterialRequirementsFromWbsQuantity(row.id, q, row.name);
+                        await refreshMaterialCosts();
+                    })();
                 }
             }
             // Sync unitCost → priceNetto in material-requirements for material/equipment rows
@@ -2099,7 +2116,7 @@ ${materialsHtml}
                         statusLabel: inheritedStatus.label,
                         unit: inheritedFromMaterials
                             ? (materialMetaByLookupKey[lookupKey]?.unit || item.unit || 'sztuki')
-                            : (item.unit || 'sztuki'),
+                            : (item.unit || defaultUnitForType(item.type)),
                         materialTabCost: inheritedCost,
                         unitCost,
                         totalCost,
@@ -2297,13 +2314,14 @@ ${materialsHtml}
         };
 
         if (view === VIEWS.BUDGET) return [
-            { field: 'subjectName', headerName: 'Przedmiot', minWidth: 80, sortable: true, editable: true, headerComponent: BudgetHeaderRenderer },
-            { field: 'name', headerName: 'Nazwa', minWidth: 80, sortable: true, editable: true, headerComponent: BudgetHeaderRenderer },
-            { field: 'type', headerName: 'Typ', width: 130, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: TYPE_OPTIONS }, valueFormatter: p => TYPE_LABELS[p.value] || p.value, editable: true, sortable: true, headerComponent: BudgetHeaderRenderer },
+            { field: 'subjectName', headerName: 'Przedmiot', width: 90, minWidth: 70, sortable: true, editable: true, headerComponent: BudgetHeaderRenderer },
+            { field: 'name', headerName: 'Nazwa', width: 140, minWidth: 100, sortable: true, editable: true, headerComponent: BudgetHeaderRenderer },
+            { field: 'type', headerName: 'Typ', width: 90, minWidth: 70, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: TYPE_OPTIONS }, valueFormatter: p => TYPE_LABELS[p.value] || p.value, editable: true, sortable: true, headerComponent: BudgetHeaderRenderer },
             {
                 field: 'unitCost',
                 headerName: 'Koszt jednostkowy',
-                width: 170,
+                width: 100,
+                minWidth: 90,
                 cellEditor: 'agTextCellEditor',
                 editable: true,
                 sortable: true,
@@ -2312,16 +2330,19 @@ ${materialsHtml}
                 tooltipValueGetter: (params) => params.data?.inheritedFromMaterials ? 'Edycja synchronizuje cenę w zakładce Materiały' : '',
                 headerComponent: BudgetHeaderRenderer
             },
-            { field: 'quantity', headerName: 'Ilość', width: 110, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtQty(p.value), headerComponent: BudgetHeaderRenderer },
-            { field: 'unit', headerName: 'Jednostki', width: 140, editable: true, sortable: true, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: UNIT_OPTIONS }, headerComponent: BudgetHeaderRenderer },
-            { field: 'totalCost', headerName: 'Koszt całościowy', width: 170, editable: false, sortable: true, valueFormatter: p => fmtPLN(p.value), headerComponent: BudgetHeaderRenderer },
-            { field: 'margin', headerName: 'Marża (%)', width: 110, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-green-300', headerComponent: BudgetHeaderRenderer },
-            { field: 'discount', headerName: 'Rabat (%)', width: 110, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-orange-300', headerComponent: BudgetHeaderRenderer },
-            { field: 'offerPrice', headerName: 'Cena ofertowa', width: 150, sortable: true, valueFormatter: p => fmtPLN(p.value), headerComponent: BudgetHeaderRenderer },
-            { field: 'comment', headerName: 'Komentarz', minWidth: 80, editable: true, sortable: true, wrapText: true, autoHeight: true, cellStyle: { whiteSpace: 'normal', lineHeight: '1.4' }, headerComponent: BudgetHeaderRenderer },
+            { field: 'quantity', headerName: 'Ilość', width: 70, minWidth: 60, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtQty(p.value), headerComponent: BudgetHeaderRenderer },
+            { field: 'unit', headerName: 'Jednostki', width: 85, minWidth: 75, editable: true, sortable: true, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: UNIT_OPTIONS }, headerComponent: BudgetHeaderRenderer },
+            { field: 'totalCost', headerName: 'Koszt całościowy', width: 100, minWidth: 90, editable: false, sortable: true, valueFormatter: p => fmtPLN(p.value), headerComponent: BudgetHeaderRenderer },
+            { field: 'margin', headerName: 'Marża (%)', width: 80, minWidth: 70, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-green-300', headerComponent: BudgetHeaderRenderer },
+            { field: 'discount', headerName: 'Rabat (%)', width: 80, minWidth: 70, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-orange-300', headerComponent: BudgetHeaderRenderer },
+            { field: 'offerPrice', headerName: 'Cena ofertowa', width: 100, minWidth: 90, sortable: true, valueFormatter: p => fmtPLN(p.value), headerComponent: BudgetHeaderRenderer },
+            { field: 'comment', headerName: 'Komentarz', flex: 1, minWidth: 220, editable: true, sortable: true, wrapText: true, autoHeight: true, cellStyle: { whiteSpace: 'normal', lineHeight: '1.4' }, headerComponent: BudgetHeaderRenderer },
             {
                 headerName: '',
-                width: 64,
+                width: 40,
+                minWidth: 40,
+                maxWidth: 40,
+                suppressSizeToFit: true,
                 pinned: 'right',
                 sortable: false,
                 filter: false,
@@ -2444,9 +2465,9 @@ ${materialsHtml}
                         onCellClicked={onGridCellClicked}
                         onCellKeyDown={onGridCellKeyDown}
                         defaultColDef={v === VIEWS.BUDGET
-                            ? { resizable: true, sortable: true, filter: true, floatingFilter: false, wrapHeaderText: true }
+                            ? { resizable: true, sortable: true, filter: true, floatingFilter: false, wrapHeaderText: true, autoHeaderHeight: true }
                             : { resizable: true, sortable: false }}
-                        {...(v === VIEWS.BUDGET ? { autoSizeStrategy: { type: 'fitCellContents' }, autoHeaderHeight: true } : {})}
+                        {...(v === VIEWS.BUDGET ? { autoSizeStrategy: { type: 'fitGridWidth' }, autoHeaderHeight: true } : {})}
                         singleClickEdit={v === VIEWS.BUDGET}
                         animateRows={true}
                     />
@@ -2525,6 +2546,20 @@ ${materialsHtml}
         </div>
     );
 
+    const commitPendingEdits = useCallback(() => {
+        try { budgetGridApiRef.current?.stopEditing?.(); } catch {}
+        try { gridRef.current?.api?.stopEditing?.(); } catch {}
+        const active = document.activeElement;
+        if (active && active !== document.body && typeof active.blur === 'function') {
+            active.blur();
+        }
+    }, []);
+
+    const toggleSection = useCallback((key) => {
+        commitPendingEdits();
+        setExpandedSection(prev => prev === key ? null : key);
+    }, [commitPendingEdits]);
+
     const renderSection = (key, title, Icon, colorClass, content, onExport, extraButtons = null) => {
         const isActive = expandedSection === key;
         const isHidden = expandedSection !== null && !isActive;
@@ -2537,7 +2572,7 @@ ${materialsHtml}
             >
                 <div
                     className={`flex items-center gap-2 px-5 py-2 transition-colors text-left flex-shrink-0 border-b border-white/10 sticky top-0 z-20 ${isActive ? 'bg-[#0b0f17]' : 'bg-white/[0.04]'}`}
-                    onClick={() => setExpandedSection(isActive ? null : key)}
+                    onClick={() => toggleSection(key)}
                 >
                     <Icon size={16} className={`text-${colorClass}-400 flex-shrink-0`} />
                     <h3 className="text-xs font-bold uppercase tracking-widest text-gray-300 font-inter">{title}</h3>
@@ -2765,6 +2800,7 @@ ${materialsHtml}
                             body: JSON.stringify({ quantity: qty }),
                         });
                         setWbsData(prev => prev.map(n => n.id === target.id ? { ...n, quantity: qty } : n));
+                        setRequirementsQtyByNode(prev => ({ ...prev, [target.id]: qty }));
                         await refreshMaterialCosts();
                     }}
                     refreshKey={reqRefreshKey}

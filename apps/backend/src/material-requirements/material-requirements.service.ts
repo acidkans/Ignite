@@ -330,11 +330,37 @@ export class MaterialRequirementsService {
         await this.findOne(id);
         const data = { ...dto };
         if (data.productName === null || data.productName === undefined) delete data.productName;
+
+        // Jedno źródło prawdy dla quantity: WbsNode.
+        // - 1 alokacja → update WbsNode.quantity (cascade: WbsNodeMaterial + MR.quantity + JSON)
+        // - 0 alokacji → direct update (legacy/standalone wymaganie bez WBS)
+        // - >1 alokacji → ignoruj quantity (edycja per gałąź w ExpandedDetail)
+        if (dto.quantity !== undefined) {
+            const qty = parseFloat(String(dto.quantity));
+            if (Number.isFinite(qty) && qty >= 0) {
+                const allocs = await this.prisma.wbsNodeMaterial.findMany({ where: { materialId: id } });
+                if (allocs.length === 1) {
+                    await this.prisma.wbsNode.update({
+                        where: { id: allocs[0].wbsNodeId },
+                        data: { quantity: qty },
+                    }).catch(() => {});
+                    await this.prisma.wbsNodeMaterial.update({
+                        where: { id: allocs[0].id },
+                        data: { quantity: qty },
+                    }).catch(() => {});
+                    data.quantity = qty;
+                    data.wbsNodeAllocations = JSON.stringify({ [allocs[0].wbsNodeId]: qty });
+                } else if (allocs.length > 1) {
+                    delete data.quantity;
+                }
+            }
+        }
+
         const updated = await this.prisma.materialRequirement.update({ where: { id }, data });
 
         // Dual-write: synchronizuj alokacje do tabeli relacyjnej WbsNodeMaterial
-        if (dto.wbsNodeAllocations !== undefined) {
-            await this.syncAllocationsToRelational(id, dto.wbsNodeAllocations).catch(() => {});
+        if (data.wbsNodeAllocations !== undefined) {
+            await this.syncAllocationsToRelational(id, data.wbsNodeAllocations).catch(() => {});
         }
 
         return updated;
