@@ -437,9 +437,17 @@ export default function SchematTab({ nodeId }) {
         setExporting(true);
         try {
             const token = sessionStorage.getItem('token');
-            const allMarkers = schematics.flatMap(sch =>
+
+            // Pobierz świeże schematy (backend dołącza wbsNodeName do każdego linku)
+            const freshRes = await fetch(`${API_URL}/schematics/node/${nodeId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const freshSchematics = freshRes.ok ? await freshRes.json() : schematics;
+
+            const allMarkers = freshSchematics.flatMap(sch =>
                 sch.markers.map(m => ({ ...m, schematicName: sch.fileName }))
             );
+
             const toBase64 = async (fileUrl) => {
                 try {
                     const res = await fetch(`${API_URL}/schematics/file/${fileUrl}`, {
@@ -461,58 +469,176 @@ export default function SchematTab({ nodeId }) {
                     }
                 }
             }
+
+            const drawMarkers = (ctx, w, h, markers) => {
+                markers.forEach((m, idx) => {
+                    const x = (m.x / 100) * w;
+                    const y = (m.y / 100) * h;
+                    ctx.save();
+                    if (m.type === 'LINE' && m.x2 != null && m.y2 != null) {
+                        const x2 = (m.x2 / 100) * w;
+                        const y2 = (m.y2 / 100) * h;
+                        ctx.strokeStyle = '#ef4444';
+                        ctx.lineWidth = 2.5;
+                        ctx.beginPath();
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(x2, y2);
+                        ctx.stroke();
+                    } else if (m.type === 'TEXT') {
+                        ctx.fillStyle = '#1d4ed8';
+                        ctx.font = `bold ${Math.max(12, w * 0.012)}px Arial`;
+                        ctx.fillText(m.name || '', x, y);
+                    } else {
+                        // POINT
+                        const r = Math.max(10, w * 0.012);
+                        ctx.fillStyle = '#ef4444';
+                        ctx.strokeStyle = '#fff';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.arc(x, y, r, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.stroke();
+                        // numer
+                        ctx.fillStyle = '#fff';
+                        ctx.font = `bold ${Math.round(r * 1.1)}px Arial`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(String(idx + 1), x, y);
+                        // etykieta
+                        if (m.name) {
+                            ctx.textAlign = 'left';
+                            ctx.textBaseline = 'alphabetic';
+                            ctx.fillStyle = '#1d4ed8';
+                            ctx.font = `bold ${Math.max(11, w * 0.011)}px Arial`;
+                            ctx.fillText(m.name, x + r + 3, y + 4);
+                        }
+                    }
+                    ctx.restore();
+                });
+            };
+
+            // Renderuj wszystkie schematy (PDF → canvas per strona, obrazy bezpośrednio)
+            const schematicSections = [];
+            for (const sch of freshSchematics) {
+                const ext = sch.fileName.split('.').pop().toLowerCase();
+                try {
+                    const res = await fetch(`${API_URL}/schematics/file/${sch.fileUrl}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (!res.ok) continue;
+                    const blob = await res.blob();
+                    if (ext === 'pdf') {
+                        const arrayBuffer = await blob.arrayBuffer();
+                        const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+                        const pages = [];
+                        for (let p = 1; p <= pdf.numPages; p++) {
+                            const page = await pdf.getPage(p);
+                            const viewport = page.getViewport({ scale: 1.5 });
+                            const canvas = document.createElement('canvas');
+                            canvas.width = viewport.width;
+                            canvas.height = viewport.height;
+                            const ctx = canvas.getContext('2d');
+                            await page.render({ canvasContext: ctx, viewport }).promise;
+                            const pageMarkers = (sch.markers || []).filter(m => m.pageNumber === p);
+                            drawMarkers(ctx, canvas.width, canvas.height, pageMarkers);
+                            pages.push(canvas.toDataURL('image/jpeg', 0.9));
+                        }
+                        schematicSections.push({ name: sch.fileName, pages });
+                    } else {
+                        const b64 = await new Promise(resolve => {
+                            const img = new Image();
+                            img.onload = () => {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = img.naturalWidth;
+                                canvas.height = img.naturalHeight;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 0, 0);
+                                const pageMarkers = (sch.markers || []).filter(m => m.pageNumber === 1);
+                                drawMarkers(ctx, canvas.width, canvas.height, pageMarkers);
+                                resolve(canvas.toDataURL('image/jpeg', 0.9));
+                            };
+                            img.src = URL.createObjectURL(blob);
+                        });
+                        schematicSections.push({ name: sch.fileName, pages: [b64] });
+                    }
+                } catch { /* pomiń uszkodzony plik */ }
+            }
+
             const date = new Date().toLocaleDateString('pl-PL', { year: 'numeric', month: 'long', day: 'numeric' });
             let rowNum = 0;
             const rows = allMarkers.flatMap((m) => {
-                const wbsName = m.subtask?.name || '—';
+                const links = m.wbsLinks || [];
+                const childLink = links.find(l => l.wbsParentName && l.wbsNodeName);
+                const rootLink = links.find(l => !l.wbsParentName && l.wbsNodeName);
+                const przedmiot = childLink?.wbsParentName || rootLink?.wbsNodeName || (m.subtask?.name || '—');
+                const wymaganie = childLink?.wbsNodeName || '—';
                 const images = (m.attachments || []).filter(a => a.fileType === 'IMAGE' && a._b64);
-                if (images.length === 0) {
-                    rowNum++;
-                    return [`<tr>
-                        <td>${rowNum}</td>
-                        <td>${wbsName}</td>
-                        <td>${m.name || '—'}</td>
-                        <td>${m.note || '—'}</td>
-                        <td>—</td>
-                        <td>—</td>
-                    </tr>`];
-                }
-                return images.map(a => {
-                    rowNum++;
-                    return `<tr>
-                        <td>${rowNum}</td>
-                        <td>${wbsName}</td>
-                        <td>${m.name || '—'}</td>
-                        <td>${m.note || '—'}</td>
-                        <td><img src="${a._b64}" style="max-width:140px;max-height:140px;border-radius:4px;border:1px solid #e5e7eb;" /></td>
-                        <td>${a.note || '—'}</td>
-                    </tr>`;
-                });
+                rowNum++;
+                const textRow = `<tr class="text-row">
+                    <td>${rowNum}</td>
+                    <td>${przedmiot}</td>
+                    <td>${wymaganie}</td>
+                    <td>${m.name || '—'}</td>
+                </tr>`;
+                const imageRows = images.map(a => `<tr class="img-row">
+                    <td></td>
+                    <td style="width:180px;vertical-align:top;padding:6px 8px;">
+                        <img src="${a._b64}" style="max-width:170px;max-height:150px;border-radius:4px;border:1px solid #e5e7eb;display:block;" />
+                        ${a.note ? `<div style="font-size:9px;color:#6b7280;margin-top:4px;white-space:pre-wrap;">${a.note}</div>` : ''}
+                    </td>
+                    <td colspan="2" style="vertical-align:top;padding:6px 8px;white-space:pre-wrap;word-break:break-word;">${m.note || '—'}</td>
+                </tr>`);
+                const noImageRow = images.length === 0 ? [`<tr class="note-row">
+                    <td></td>
+                    <td colspan="3" style="color:#374151;padding:4px 8px;">${m.note || ''}</td>
+                </tr>`] : [];
+                return [textRow, ...imageRows, ...noImageRow];
             }).join('');
+
+            const schematicHtml = schematicSections.map((s, si) => `
+                <div class="sch-section">
+                    ${s.pages.map((pg, i) => `
+                        <div class="sch-page">
+                            ${si === 0 && i === 0 ? `<div class="sch-section-header">Schematy</div>` : ''}
+                            <div class="sch-name">${s.name}${s.pages.length > 1 ? ` — strona ${i + 1} / ${s.pages.length}` : ''}</div>
+                            <img src="${pg}" style="width:100%;height:auto;display:block;border:1px solid #e5e7eb;" />
+                        </div>`).join('')}
+                </div>`).join('');
+
             const html = `<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8">
             <title>Raport z wizji lokalnej</title>
             <style>
-                body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 20px; }
+                body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 8px; }
                 h1 { font-size: 16px; margin-bottom: 4px; }
+                h2 { font-size: 13px; margin: 24px 0 8px; color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 4px; }
                 .meta { font-size: 10px; color: #666; margin-bottom: 16px; }
                 table { width: 100%; border-collapse: collapse; }
                 th { background: #1e40af; color: white; padding: 6px 8px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
                 td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
                 tr:nth-child(even) td { background: #f9fafb; }
-                td:nth-child(2) { min-width: 120px; font-weight: bold; color: #1e40af; }
-                td:nth-child(3) { min-width: 100px; }
-                td:nth-child(4) { max-width: 220px; white-space: pre-wrap; word-break: break-word; }
-                td:nth-child(6) { max-width: 180px; white-space: pre-wrap; word-break: break-word; }
-                @media print { body { margin: 10mm; } }
+                td { padding: 4px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+                tr.text-row td:nth-child(1) { width: 24px; color: #6b7280; }
+                tr.text-row td:nth-child(2) { width: 22%; font-weight: bold; color: #1e40af; }
+                tr.text-row td:nth-child(3) { width: 28%; }
+                tr.text-row td:nth-child(4) { }
+                tr.img-row td, tr.note-row td { background: #f8faff; }
+                tr.note-row td { font-style: italic; color: #555; font-size: 10px; }
+                .sch-section { }
+                .sch-section-header { font-size: 13px; font-weight: bold; color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 4px; margin-bottom: 8px; }
+                .sch-name { font-size: 9px; color: #6b7280; margin-bottom: 4px; }
+                .sch-page { page-break-before: always; padding-top: 8px; display: flex; flex-direction: column; min-height: 95vh; }
+                .sch-page img { flex: 1; object-fit: contain; width: 100%; height: auto; }
+                @media print { body { margin: 5mm; } .sch-page { min-height: 0; page-break-before: always; } }
             </style></head><body>
             <h1>Raport z wizji lokalnej</h1>
-            <div class="meta">Wygenerowano: ${date} &nbsp;|&nbsp; Łączna liczba punktów: ${allMarkers.length}</div>
+            <div class="meta">Wygenerowano: ${date} &nbsp;|&nbsp; Łączna liczba punktów: ${allMarkers.length} &nbsp;|&nbsp; Pliki: ${schematics.length}</div>
             <table>
                 <thead><tr>
-                    <th>#</th><th>Przedmiot WBS</th><th>Nazwa</th><th>Notatka do Punktu</th><th>Zdjęcie</th><th>Notatka do zdjęcia</th>
+                    <th style="width:24px">#</th><th>Przedmiot WBS</th><th>Wymaganie</th><th>Nazwa</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>
+            ${schematicSections.length > 0 ? schematicHtml : ''}
             <script>window.onload = () => { window.print(); }<\/script>
             </body></html>`;
             const w = window.open('', '_blank');
