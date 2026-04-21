@@ -551,8 +551,9 @@ export default function WbsMaterialsPanel({
             const map = {};
             for (const r of reqs) { if (r.wbsNodeId) map[r.wbsNodeId] = r; }
             setCards(map);
+            onWbsUpdate?.();
         }
-    }, [nodeId, versionId, token]);
+    }, [nodeId, versionId, token, onWbsUpdate]);
 
     if (loading) {
         return (

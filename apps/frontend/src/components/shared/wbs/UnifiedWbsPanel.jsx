@@ -889,7 +889,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                     <td>${esc(n.owner || '')}</td>
                     <td>${markerSummary(n.id)}</td>`;
                 return `<tr>
-                    <td style="padding-left:${8 + indent}px;${nameStyle}">${depth > 0 ? '└ ' : ''}${(n.name || '').replace(/</g, '&lt;')}</td>
+                    <td style="padding-left:${8 + indent}px;${nameStyle};text-align:left">${depth > 0 ? '└ ' : ''}${(n.name || '').replace(/</g, '&lt;')}</td>
                     ${budgetCols}
                 </tr>${buildTreeRows(n.id, depth + 1, includeBudget)}`;
             }).join('');
@@ -910,12 +910,99 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 </table>
             </div>` : '';
 
+        const _bItems = wbsData.filter(n => n.parentId != null);
+        const _bTotalCost = _bItems.reduce((s, n) => s + (parseFloat(n.totalCost) || 0), 0);
+        const _bTotalPrice = _bItems.reduce((s, n) => s + (parseFloat(n.totalPrice) || 0), 0);
+
+        // Per-subject (top-level branch) breakdown
+        const _idToParent = Object.fromEntries(wbsData.map(n => [n.id, n.parentId]));
+        const _getRootId = (id) => { let c = id, s = 20; while (_idToParent[c] && s-- > 0) c = _idToParent[c]; return c; };
+        const _rootNames = Object.fromEntries(wbsData.filter(n => !n.parentId).map(n => [n.id, n.name]));
+        const _subjectMap = {};
+        const _typeMap = {};
+        for (const item of _bItems) {
+            const rid = _getRootId(item.id);
+            const rn = _rootNames[rid] || '(inne)';
+            if (!_subjectMap[rid]) _subjectMap[rid] = { name: rn, cost: 0, price: 0 };
+            _subjectMap[rid].cost += parseFloat(item.totalCost) || 0;
+            _subjectMap[rid].price += parseFloat(item.totalPrice) || 0;
+            const t = item.type || '—';
+            if (!_typeMap[t]) _typeMap[t] = { label: TYPE_LABELS[t] || t, cost: 0, price: 0 };
+            _typeMap[t].cost += parseFloat(item.totalCost) || 0;
+            _typeMap[t].price += parseFloat(item.totalPrice) || 0;
+        }
+        const _parsedPct = parseFloat(String(budgetDiscountPercent || '').replace(',', '.')) || 0;
+        const _parsedAmt = parseFloat(String(budgetDiscountAmount || '').replace(',', '.')) || 0;
+        const _discFromPct = _parsedPct > 0 ? _bTotalPrice * _parsedPct / 100 : 0;
+        const _revAfterDisc = Math.max(0, _bTotalPrice - _discFromPct - (_parsedAmt > 0 ? _parsedAmt : 0));
+        const _profit = _revAfterDisc - _bTotalCost;
+        const _marginPct = _revAfterDisc > 0 ? (_profit / _revAfterDisc) * 100 : 0;
+
+        const _summaryRow = (label, cost, price, bold = false, dark = false) => {
+            const p = price - cost;
+            const m = price > 0 ? (p / price) * 100 : 0;
+            const style = dark ? 'background:#e5e7eb;font-size:15px;font-weight:bold;color:#111' : bold ? 'font-weight:bold' : '';
+            const nc = '';
+            const pc = dark ? (p >= 0 ? '#86efac' : '#fca5a5') : (p >= 0 ? '#16a34a' : '#dc2626');
+            return `<tr style="${style}">
+                <td style="text-align:left${dark ? ';color:#fff' : ''}">${esc(label)}</td>
+                <td class="num" ${nc}>${fmtPLN(cost)}</td>
+                <td class="num" ${nc}>${fmtPLN(price)}</td>
+                <td class="num" style="color:${pc}">${fmtPLN(p)}</td>
+                <td class="num" style="color:${pc}">${m.toLocaleString('pl-PL', { minimumFractionDigits: 1 })}%</td>
+            </tr>`;
+        };
+
+        const _budgetSummaryHtml = sectionKey === 'budget' && isManagerOrAdmin ? `
+            <div class="section summary-section">
+                <div class="section-header">Podsumowanie budżetu</div>
+                <div class="summary-block">
+                    <div class="table-title">Podział wg typu pozycji</div>
+                    <table>
+                        <thead><tr><th style="text-align:left">Typ</th><th>Koszt</th><th>Przychód</th><th>Zysk</th><th>Marża%</th></tr></thead>
+                        <tbody>
+                            ${Object.values(_typeMap).map(t => _summaryRow(t.label, t.cost, t.price)).join('')}
+                            ${_summaryRow('Razem', _bTotalCost, _bTotalPrice, true, true)}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="summary-block">
+                    <div class="table-title">Podział wg przedmiotu projektu</div>
+                    <table>
+                        <thead><tr><th style="text-align:left">Przedmiot</th><th>Koszt</th><th>Przychód</th><th>Zysk</th><th>Marża%</th></tr></thead>
+                        <tbody>
+                            ${Object.values(_subjectMap).map(s => _summaryRow(s.name, s.cost, s.price)).join('')}
+                            ${_summaryRow('Razem', _bTotalCost, _bTotalPrice, true, true)}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="summary-block">
+                    <div class="table-title">Wyniki finansowe</div>
+                    <table class="kv">
+                        <tbody>
+                            <tr><th>Koszt całkowity</th><td class="num">${fmtPLN(_bTotalCost)} PLN</td></tr>
+                            <tr><th>Przychód przed rabatami</th><td class="num">${fmtPLN(_bTotalPrice)} PLN</td></tr>
+                            ${_parsedPct > 0 ? `<tr><th>Rabat procentowy</th><td class="num">${_parsedPct.toLocaleString('pl-PL', { minimumFractionDigits: 2 })}%</td></tr>` : ''}
+                            ${_parsedAmt > 0 ? `<tr><th>Rabat kwotowy</th><td class="num">${fmtPLN(_parsedAmt)} PLN</td></tr>` : ''}
+                            <tr style="font-weight:bold"><th>Przychód po rabatach</th><td class="num">${fmtPLN(_revAfterDisc)} PLN</td></tr>
+                            <tr><th>Zysk</th><td class="num" style="color:${_profit >= 0 ? '#16a34a' : '#dc2626'}">${fmtPLN(_profit)} PLN</td></tr>
+                            <tr><th>Marża</th><td class="num" style="color:${_profit >= 0 ? '#16a34a' : '#dc2626'}">${_marginPct.toLocaleString('pl-PL', { minimumFractionDigits: 2 })}%</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>` : '';
+
         const budgetHtml = show('budget') && isManagerOrAdmin ? `
             <div class="section">
-                <div class="section-header">Plan i harmonogram (Budżet)</div>
-                <table>
-                    <thead><tr><th>Nazwa</th><th>Koszt jednostkowy</th><th>Ilość</th><th>Jednostki</th><th>Marża%</th><th>Koszt całościowy</th><th>Suma netto</th></tr></thead>
+                <div class="section-header">Budżet</div>
+                <table class="budget-table">
+                    <thead><tr><th style="width:38%;text-align:left">Pozycja</th><th>Koszt jednostkowy</th><th>Ilość</th><th>Jednostki</th><th>Marża%</th><th>Koszt całościowy</th><th>Suma netto</th></tr></thead>
                     <tbody>${wbsData.length ? buildTreeRows(null, 0, true) : '<tr><td colspan="7">Brak danych budżetowych</td></tr>'}</tbody>
+                    <tfoot><tr style="background:#f3f4f6;font-weight:bold;font-size:15px;color:#111">
+                        <td colspan="5" style="text-align:right;text-transform:uppercase;letter-spacing:0.05em;padding:7px 8px">Razem:</td>
+                        <td class="num" style="color:#111">${fmtPLN(_bTotalCost)} PLN</td>
+                        <td class="num" style="color:#111">${fmtPLN(_bTotalPrice)} PLN</td>
+                    </tr></tfoot>
                 </table>
             </div>` : '';
 
@@ -938,7 +1025,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 const status = esc(matStatusLabel(r.status));
                 const spec = esc(String(r.technicalSpec || '').slice(0, 120));
                 const price = r.priceNetto != null ? fmtPLN(r.priceNetto) : '—';
-                return `<tr><td>${name}</td><td>${type}</td><td class="num">${qty}</td><td>${unit}</td><td>${status}</td><td class="num">${price}</td><td style="font-size:9px;color:#6b7280">${spec}</td></tr>`;
+                return `<tr><td style="text-align:left">${name}</td><td>${type}</td><td class="num">${qty}</td><td>${unit}</td><td>${status}</td><td class="num">${price}</td><td style="font-size:9px;color:#6b7280;text-align:left">${spec}</td></tr>`;
             }).join('');
             return `
             <div class="section">
@@ -954,11 +1041,11 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
-<title>Unified WBS — ${date}</title>
+<title>${esc(projectName || 'Projekt')} — ${date}</title>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 0 32px 28px 32px; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 0 12px 28px 12px; }
   .doc-header { border-bottom: 3px solid #1a1a2e; padding: 18px 0 10px 0; margin: 0 0 18px 0; break-after: avoid; page-break-after: avoid; }
   .doc-header h1 { font-size: 20px; margin: 0 0 2px 0; }
   .doc-header .sub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: #6b7280; }
@@ -971,24 +1058,39 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
   .strategy-text h4 { font-size: 11px; margin: 10px 0 3px 0; color: #374151; }
   .md-h2 { font-size: 13px; margin: 16px 0 5px 0; }
   table { border-collapse: collapse; width: 100%; }
-  th { background: #f3f4f6; color: #374151; padding: 6px 8px; text-align: left; font-size: 10px; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
-  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
-  td.num { text-align: right; font-family: monospace; font-size: 10px; }
+  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; text-align: center; }
+  td.num { text-align: center; font-family: monospace; font-size: 10px; }
   tr:nth-child(even) td { background: #f9fafb; }
+  .budget-table td { font-size: 12px; }
+  .budget-table td.num { font-size: 11px; }
+  table.kv th { width: 50%; background: #f9fafb; text-transform: none; font-size: 10px; color: #4b5563; text-align: left; border-bottom: 1px solid #e5e7eb; }
+  table.kv td { font-size: 11px; color: #111; }
+  .summary-grid { display: grid; grid-template-columns: 1fr 1.6fr; gap: 16px; padding: 12px 0 0 0; }
+  .summary-block { margin-bottom: 24px; }
+  .table-title { font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; color: #111; margin-bottom: 6px; padding: 5px 0; border-bottom: 2px solid #1a1a2e; }
+  th { background: #f3f4f6; color: #374151; padding: 7px 8px; text-align: center; font-size: 12px; font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
   thead { display: table-header-group; }
   tr { page-break-inside: avoid; break-inside: avoid; }
-  @page { margin: 12mm 12mm 14mm 12mm; }
-  @media print { body { padding: 0 12mm; } .doc-header { padding-top: 8px; } }
+  @page { margin: 10mm 8mm 12mm 8mm; }
+  @media print {
+    body { padding: 0 6mm; }
+    .doc-header { padding-top: 8px; }
+    .summary-grid { display: block; }
+    .summary-block { margin-bottom: 16px; }
+    .summary-section { page-break-before: always; }
+  }
 </style>
 </head>
 <body>
 <div class="doc-header">
-  <h1>ERP | Unified WBS</h1>
-  <div class="sub">Zarządzanie zasobami i planowaniem</div>
-  <div class="meta">Wygenerowano: ${date}</div>
+  <h1>${esc(projectName || 'Projekt')}</h1>
+  <div class="sub">${sectionKey === 'budget' ? 'Budżet' : 'Informacje o projekcie i planowanie'}</div>
+  <div class="meta">Przygotowano: ${date}</div>
 </div>
 ${strategyHtml}
 ${wbsHtml}
+${budgetHtml}
+${_budgetSummaryHtml}
 ${materialsHtml}
 </body>
 </html>`;
@@ -1751,7 +1853,17 @@ ${materialsHtml}
                 discount: d,
                 comment: row.comment ?? '',
             });
-            params.api.applyTransaction({ update: [row] });
+            // Sync WBS-visible fields to wbsTree (WBSHybridTable reads from wbsTree, not wbsData)
+            if (field === 'comment' || field === 'unit') {
+                setWbsTree(prev => {
+                    const upd = items => items.map(n =>
+                        n.id === row.id
+                            ? { ...n, [field]: row[field] }
+                            : { ...n, children: n.children?.length ? upd(n.children) : n.children }
+                    );
+                    return { ...prev, items: upd(prev.items || []) };
+                });
+            }
             saveBudgetField(row.id, {
                 unit: row.unit,
                 unitCost: uc,

@@ -313,9 +313,9 @@ export default function CommentsSlideOver({ orderId, orderName, requirements = [
                     </select>
                     {requirements.length > 0 && (
                         <select value={requirementId} onChange={e => setRequirementId(e.target.value)}
-                            className="flex-1 bg-black/30 border border-white/10 rounded-lg px-2 py-1 text-[10px] text-gray-300 focus:outline-none focus:border-teal-500 cursor-pointer">
+                            className="flex-1 bg-[#0b0f17] border border-white/20 rounded-lg px-2 py-1 text-[10px] text-gray-200 focus:outline-none focus:border-teal-500 cursor-pointer">
                             <option value="">Bez powiązania</option>
-                            {requirements.map(r => <option key={r.id} value={r.id}>#{r.productName}</option>)}
+                            {requirements.map(r => <option key={r.id} value={r.id}>{r.name || r.productName || r.id}</option>)}
                         </select>
                     )}
                 </div>

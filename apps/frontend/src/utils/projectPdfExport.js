@@ -36,7 +36,10 @@ const renderStrategyHtml = (text) => (text || '')
     .replace(/\n\n/g, '</p><p>')
     .replace(/\n/g, '<br>');
 
-const buildTreeRows = (nodes, parentId, depth) => {
+const fmtN = (v, d = 2) => Number.isFinite(parseFloat(v)) ? parseFloat(v).toLocaleString('pl-PL', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—';
+const fmtPct = (v) => v ? `${fmtN(v, 1)}%` : '—';
+
+const buildBudgetRows = (nodes, parentId, depth) => {
     const children = nodes
         .filter((n) => (n.parentId || null) === (parentId || null))
         .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
@@ -44,11 +47,32 @@ const buildTreeRows = (nodes, parentId, depth) => {
         const indent = depth * 18;
         const nameStyle = depth === 0 ? 'font-weight:bold' : 'color:#374151';
         return `<tr>
-            <td style="padding-left:${8 + indent}px;${nameStyle}">${depth > 0 ? '└ ' : ''}${esc(n.name || '')}</td>
+            <td style="padding-left:${8 + indent}px;${nameStyle};text-align:left">${depth > 0 ? '└ ' : ''}${esc(n.name || '')}</td>
+            <td class="num">${fmtN(n.unitCost)}</td>
+            <td class="num">${fmtN(n.quantity, 0)}</td>
+            <td>${esc(n.unit || '')}</td>
+            <td class="num">${fmtPct(n.margin)}</td>
+            <td class="num">${fmtN(n.totalCost)}</td>
+            <td class="num">${fmtN(n.totalPrice)}</td>
+        </tr>${buildBudgetRows(nodes, n.id, depth + 1)}`;
+    }).join('');
+};
+
+const buildTreeRows = (nodes, parentId, depth, markerSummaryFn) => {
+    const children = nodes
+        .filter((n) => (n.parentId || null) === (parentId || null))
+        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    return children.map((n) => {
+        const indent = depth * 18;
+        const nameStyle = depth === 0 ? 'font-weight:bold' : 'color:#374151';
+        const markerCell = markerSummaryFn ? `<td>${markerSummaryFn(n.id)}</td>` : '';
+        return `<tr>
+            <td style="padding-left:${8 + indent}px;${nameStyle};text-align:left">${depth > 0 ? '└ ' : ''}${esc(n.name || '')}</td>
             <td>${esc(TYPE_LABELS[n.type] || n.type || '')}</td>
             <td>${esc(n.status || '')}</td>
             <td>${esc(n.owner || '')}</td>
-        </tr>${buildTreeRows(nodes, n.id, depth + 1)}`;
+            ${markerCell}
+        </tr>${buildTreeRows(nodes, n.id, depth + 1, markerSummaryFn)}`;
     }).join('');
 };
 
@@ -86,6 +110,33 @@ export async function exportProjectPdf({ nodeId, versionId, projectName }) {
 
     const wbsNodes = Array.isArray(wbsResp?.items) ? wbsResp.items : [];
     const materials = Array.isArray(matsResp) ? matsResp : (Array.isArray(matsResp?.items) ? matsResp.items : []);
+
+    // Fetch marker links for all WBS nodes in parallel
+    const markerEntries = await Promise.all(
+        wbsNodes.map(async (n) => {
+            const data = await fetchJson(`${API_URL}/schematics/wbs-node-markers/${n.id}`, token);
+            return [n.id, Array.isArray(data) ? data : []];
+        })
+    );
+    const markerCache = Object.fromEntries(markerEntries);
+
+    const markerSummary = (nodeId) => {
+        const links = markerCache[nodeId] || [];
+        const allAtts = links.flatMap((l) => (l.marker?.attachments || []));
+        if (allAtts.length === 0) return '';
+        const itemsHtml = allAtts.map((a) => {
+            const url = `${API_URL}/schematics/file/${a.fileUrl || ''}`;
+            const name = esc(a.fileName || 'plik');
+            if (a.fileType === 'IMAGE' && a.fileUrl) {
+                return `<div style="margin:4px 0 8px 0;text-align:left">
+                    <div style="font-size:10px;color:#4b5563;margin-bottom:3px;">${name}</div>
+                    <img src="${esc(url)}" alt="${name}" style="max-width:260px;width:100%;height:auto;object-fit:contain;border:1px solid #d1d5db;border-radius:4px;" />
+                </div>`;
+            }
+            return `<div style="font-size:10px;color:#374151;margin:2px 0;text-align:left">📎 ${name}</div>`;
+        }).join('');
+        return `<div><div style="font-size:10px;color:#111827;font-weight:bold;margin-bottom:4px;">📎 ${allAtts.length}</div>${itemsHtml}</div>`;
+    };
 
     // === Section: Informacje o zamówieniu (RequirementsTab) ===
     const reqData = orderReq || {};
@@ -154,9 +205,28 @@ export async function exportProjectPdf({ nodeId, versionId, projectName }) {
         <div class="section">
             <div class="section-header">Struktura zadań projektu (WBS)</div>
             <table>
-                <thead><tr><th>Nazwa</th><th>Typ</th><th>Status</th><th>Osoba</th></tr></thead>
-                <tbody>${wbsNodes.length ? buildTreeRows(wbsNodes, null, 0) : '<tr><td colspan="4">Brak danych WBS</td></tr>'}</tbody>
+                <thead><tr><th>Nazwa</th><th>Typ</th><th>Status</th><th>Osoba</th><th>Załączniki</th></tr></thead>
+                <tbody>${wbsNodes.length ? buildTreeRows(wbsNodes, null, 0, markerSummary) : '<tr><td colspan="5">Brak danych WBS</td></tr>'}</tbody>
             </table>
+        </div>`;
+
+    // === Section: Budżet ===
+    const budgetItems = wbsNodes.filter((n) => n.parentId != null);
+    const budgetTotalCost = budgetItems.reduce((s, n) => s + (parseFloat(n.totalCost) || 0), 0);
+    const budgetTotalPrice = budgetItems.reduce((s, n) => s + (parseFloat(n.totalPrice) || 0), 0);
+    const budgetHtml = `
+        <div class="section">
+            <div class="section-header">Budżet</div>
+            ${wbsNodes.length ? `
+            <table class="budget-table">
+                <thead><tr><th>Nazwa</th><th>Koszt jedn.</th><th>Ilość</th><th>Jedn.</th><th>Marża%</th><th>Koszt całk.</th><th>Suma netto</th></tr></thead>
+                <tbody>${buildBudgetRows(wbsNodes, null, 0)}</tbody>
+                <tfoot><tr style="background:#1a1a2e;color:#fff;font-weight:bold">
+                    <td colspan="5" style="text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;padding:6px 8px">Razem:</td>
+                    <td class="num" style="color:#fff">${fmtN(budgetTotalCost)} PLN</td>
+                    <td class="num" style="color:#fff">${fmtN(budgetTotalPrice)} PLN</td>
+                </tr></tfoot>
+            </table>` : '<div class="empty">Brak danych budżetowych.</div>'}
         </div>`;
 
     // === Section: Materiały ===
@@ -174,7 +244,7 @@ export async function exportProjectPdf({ nodeId, versionId, projectName }) {
                         <td class="num">${esc(r.quantity != null ? r.quantity : '—')}</td>
                         <td>${esc(r.unit || '')}</td>
                         <td>${esc(MAT_STATUS[r.status] || r.status || '—')}</td>
-                        <td style="font-size:9px;color:#6b7280">${esc(String(r.technicalSpec || '').slice(0, 140))}</td>
+                        <td style="font-size:9px;color:#6b7280;text-align:left">${esc(String(r.technicalSpec || '').slice(0, 140))}</td>
                     </tr>`).join('')}
                 </tbody>
             </table>` : '<div class="empty">Brak materiałów.</div>'}
@@ -202,10 +272,12 @@ export async function exportProjectPdf({ nodeId, versionId, projectName }) {
   .strategy-text h4 { font-size: 11px; margin: 10px 0 3px 0; color: #374151; }
   .md-h2 { font-size: 13px; margin: 16px 0 5px 0; }
   table { border-collapse: collapse; width: 100%; }
-  th { background: #f3f4f6; color: #374151; padding: 6px 8px; text-align: left; font-size: 10px; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
-  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
-  td.num { text-align: right; font-family: monospace; font-size: 10px; }
+  th { background: #f3f4f6; color: #374151; padding: 6px 8px; text-align: center; font-size: 10px; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
+  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; text-align: center; }
+  td.num { text-align: center; font-family: monospace; font-size: 10px; }
   tr:nth-child(even) td { background: #f9fafb; }
+  .budget-table td { font-size: 12px; }
+  .budget-table td.num { font-size: 11px; }
   table.kv th { width: 28%; background: #f9fafb; text-transform: none; font-size: 10px; color: #4b5563; }
   table.kv td { font-size: 11px; color: #111; }
   .empty { padding: 10px 12px; font-size: 10px; color: #6b7280; background: #f9fafb; border: 1px solid #e5e7eb; }
@@ -228,6 +300,7 @@ ${requirementsHtml}
 ${infoHtml}
 ${strategyHtml}
 ${wbsHtml}
+${budgetHtml}
 ${materialsHtml}
 </body>
 </html>`;
