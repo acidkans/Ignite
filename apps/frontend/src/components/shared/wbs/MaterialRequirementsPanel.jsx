@@ -79,6 +79,8 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     const [lists, setLists] = useState([]);
     const [activeListId, setActiveListId] = useState(null);
     const [requirements, setRequirements] = useState([]);
+    const [localOverrides, setLocalOverrides] = useState({});
+    const [localDeleted, setLocalDeleted] = useState(new Set());
     const [loading, setLoading] = useState(true);
     const [expandedId, setExpandedId] = useState(null);
     const [wbsNodes, setWbsNodes] = useState([]);
@@ -106,7 +108,13 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     // ─── Filtered requirements ──────────────────────────────────────────────
     // Etap 1: tylko filtr WBS (podstawa liczników w przyciskach)
     const wbsFiltered = useMemo(() => {
-        const source = externalRequirements || requirements;
+        const base = externalRequirements || requirements;
+        const withOverrides = Object.keys(localOverrides).length > 0
+            ? base.map(r => localOverrides[r.id] ? { ...r, ...localOverrides[r.id] } : r)
+            : base;
+        const source = localDeleted.size > 0
+            ? withOverrides.filter(r => !localDeleted.has(r.id))
+            : withOverrides;
         const validIds = new Set((externalWbsNodes || wbsNodes).map(n => n.id));
         return source.filter(r => {
             if (validIds.size === 0) {
@@ -237,6 +245,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
             if (res.ok) {
                 const updated = await res.json();
                 setRequirements(prev => prev.map(r => r.id === id ? { ...r, ...updated } : r));
+                setLocalOverrides(prev => ({ ...prev, [id]: { ...(prev[id] || {}), ...updated } }));
                 if ('status' in data) onMaterialStatusChange?.(id, data.status);
                 if ('quantity' in data) onMaterialQtyChange?.(updated);
                 if ('priceNetto' in data || 'status' in data || 'quantity' in data || 'unit' in data) onWbsUpdate?.();
@@ -248,9 +257,12 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
 
     const deleteItem = useCallback(async (id) => {
         try {
-            await fetch(`${API_URL}/material-requirements/${id}`, { method: 'DELETE', headers });
-            setRequirements(prev => prev.filter(r => r.id !== id));
-            setExpandedId(prev => prev === id ? null : prev);
+            const res = await fetch(`${API_URL}/material-requirements/${id}`, { method: 'DELETE', headers });
+            if (res.ok) {
+                setRequirements(prev => prev.filter(r => r.id !== id));
+                setLocalDeleted(prev => new Set([...prev, id]));
+                setExpandedId(prev => prev === id ? null : prev);
+            }
         } catch (err) {
             console.error('[Mat3] delete error:', err);
         }
