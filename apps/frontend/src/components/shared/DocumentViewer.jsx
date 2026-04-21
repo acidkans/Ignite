@@ -324,7 +324,7 @@ function OfferParsePanel({ documentId, token, onApprove }) {
                                     <input value={pos.quantity ?? ''} onChange={e => updatePos(i, 'quantity', e.target.value)}
                                         placeholder="Ilość" type="number" min="0"
                                         className="bg-black/40 border border-white/10 rounded px-1.5 py-1 text-[10px] text-gray-300 font-mono focus:outline-none focus:border-teal-500" />
-                                    <input value={pos.unit || 'szt'} onChange={e => updatePos(i, 'unit', e.target.value)}
+                                    <input value={pos.unit || 'sztuki'} onChange={e => updatePos(i, 'unit', e.target.value)}
                                         placeholder="Jedn."
                                         className="bg-black/40 border border-white/10 rounded px-1.5 py-1 text-[10px] text-gray-300 focus:outline-none focus:border-teal-500" />
                                     <input value={pos.priceNetto ?? ''} onChange={e => updatePos(i, 'priceNetto', e.target.value)}
