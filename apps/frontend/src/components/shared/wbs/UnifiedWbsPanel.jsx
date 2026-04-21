@@ -14,6 +14,7 @@ import { themeQuartz } from 'ag-grid-community';
 import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, LayoutList, Zap, Sparkles, ArrowUpDown, ArrowUp, ArrowDown, ListTree, CalendarDays } from 'lucide-react';
 import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
+import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, STRUCTURE_STATUS_META, STRUCTURE_COMMON_CELL_CLASS, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, BUDGET_TYPE_LABELS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType } from './wbsConstants';
 import { exportProjectPdf } from '../../../utils/projectPdfExport';
@@ -1827,27 +1828,10 @@ ${materialsHtml}
                 return;
             }
             if (field === 'status') {
-                const normalizedType = String(row.type || '').toLowerCase();
-                const wbsNode = wbsData.find(n => n.id === row.id);
-                const reqTag = (wbsNode?.tags || []).find(t => String(t).startsWith('req:'));
-                // Dla material/equipment bez tagu req: — status dziedziczony, blokuj edycję
-                if (['material', 'equipment'].includes(normalizedType) && !reqTag) return;
                 row.statusLabel = getStatusLabel(row[field], row[field]);
                 updateNodeField(row.id, field, row[field]);
                 setWbsData(prev => prev.map(item => item.id === row.id ? { ...item, [field]: row[field], statusLabel: row.statusLabel } : item));
-                // Synchronizuj status do powiązanego wymagania materialnego
-                if (reqTag) {
-                    const reqId = reqTag.slice(4);
-                    fetch(`${API_URL}/material-requirements/${reqId}`, {
-                        method: 'PATCH',
-                        headers: authHeaders(),
-                        body: JSON.stringify({ status: row[field] }),
-                    }).then(async () => {
-                        setReqRefreshKey(k => k + 1);
-                        await refreshUnified();
-                    }).catch(() => {});
-                }
-            } else {
+            } else if (field !== 'type') {
                 updateNodeField(row.id, field, row[field]);
                 setWbsData(prev => prev.map(item => item.id === row.id ? { ...item, [field]: row[field] } : item));
             }
@@ -1887,6 +1871,19 @@ ${materialsHtml}
                 row.totalCost = totalCost;
                 row.offerPrice = margin !== 0 ? totalCost * (1 + margin / 100) : 0;
                 row.totalPrice = row.offerPrice;
+                updateNodeField(row.id, 'type', row.type);
+                setWbsData(prev => prev.map(item => item.id === row.id ? {
+                    ...item,
+                    type: row.type,
+                    inheritedFromMaterials: row.inheritedFromMaterials,
+                    quantity: row.quantity,
+                    unit: row.unit,
+                    unitCost: row.unitCost,
+                    cost: row.cost,
+                    totalCost: row.totalCost,
+                    offerPrice: row.offerPrice,
+                    totalPrice: row.totalPrice,
+                } : item));
                 updateLocalWbsBudgetRow(row.id, {
                     type: row.type,
                     quantity: row.quantity,
@@ -1906,44 +1903,8 @@ ${materialsHtml}
                     comment: row.comment ?? '',
                 });
 
-                // Auto-create MaterialRequirement when type set to material/equipment and no req: tag yet
-                if (inheritedFromMaterials) {
-                    const wbsNode = wbsData.find(n => n.id === row.id);
-                    const hasReqTag = Array.isArray(wbsNode?.tags) && wbsNode.tags.some(t => String(t).startsWith('req:'));
-                    if (!hasReqTag) {
-                        const reqType = normalizedType === 'equipment' ? 'DEVICE' : 'MATERIAL';
-                        fetch(`${API_URL}/material-requirements`, {
-                            method: 'POST',
-                            headers: authHeaders(),
-                            body: JSON.stringify({
-                                nodeId,
-                                versionId: versionId || null,
-                                name: row.name || 'Nowy element',
-                                type: reqType,
-                                quantity: resolvedQuantity,
-                                unit: row.unit || 'sztuki',
-                                wbsNodeId: row.id,
-                                wbsNodeIds: JSON.stringify([row.id]),
-                                wbsNodeAllocations: JSON.stringify({ [row.id]: resolvedQuantity }),
-                            }),
-                        }).then(async (res) => {
-                            if (!res.ok) return;
-                            const created = await res.json().catch(() => null);
-                            if (created?.id) {
-                                // Tag the WBS node with req:<id> for bidirectional sync
-                                const currentTags = Array.isArray(wbsNode?.tags) ? [...wbsNode.tags] : [];
-                                currentTags.push(`req:${created.id}`);
-                                await fetch(`${API_URL}/wbs-nodes/${row.id}`, {
-                                    method: 'PATCH',
-                                    headers: authHeaders(),
-                                    body: JSON.stringify({ tags: currentTags }),
-                                }).catch(() => {});
-                                setReqRefreshKey(k => k + 1);
-                                await refreshUnified();
-                            }
-                        }).catch(() => {});
-                    }
-                }
+                // Karta produktowa tworzona jest przez użytkownika z panelu WbsMaterialsPanel
+                // (przycisk "Utwórz kartę" przy węźle) — nie auto-tworzymy tutaj
             }
         } else {
             const q = parseLocaleNumber(row.quantity) ?? 1;
@@ -2828,37 +2789,12 @@ ${materialsHtml}
         )}
 
             {renderSection('materials', 'Materiały', Zap, 'yellow', (
-                <MaterialRequirementsPanel
+                <WbsMaterialsPanel
                     nodeId={nodeId}
                     versionId={versionId}
                     readOnly={!isManagerOrAdmin}
                     onWbsUpdate={async () => { await refreshMaterialCosts(); }}
-                    onMaterialStatusChange={handleMaterialStatusChange}
-                    onMaterialQtyChange={async (updatedReq) => {
-                        // Sync ilości: Materials → WBS (szukaj wbs_node po ID lub nazwie)
-                        const qty = parseFloat(updatedReq.quantity);
-                        if (!Number.isFinite(qty) || qty < 0) return;
-                        // Znajdź wbs_node: najpierw po wbsNodeId, potem po nazwie
-                        let target = wbsData.find(n => n.id === updatedReq.wbsNodeId);
-                        if (!target && updatedReq.name) {
-                            const nm = (updatedReq.name || '').trim().toLowerCase();
-                            target = wbsData.find(n => (n.name || '').trim().toLowerCase() === nm && ['material', 'equipment', 'MATERIAL', 'DEVICE'].includes(n.type));
-                        }
-                        if (!target) return;
-                        await fetch(`${API_URL}/wbs-nodes/${target.id}`, {
-                            method: 'PATCH',
-                            headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ quantity: qty }),
-                        });
-                        setWbsData(prev => prev.map(n => n.id === target.id ? { ...n, quantity: qty } : n));
-                        setRequirementsQtyByNode(prev => ({ ...prev, [target.id]: qty }));
-                        await refreshMaterialCosts();
-                    }}
                     refreshKey={reqRefreshKey}
-                    isEmbedded={true}
-                    externalRequirements={allRequirements}
-                    externalWbsNodes={wbsData}
-                    requirementsQtyByNode={requirementsQtyByNode}
                 />
             ), () => handleExportPDF('materials'))}
 

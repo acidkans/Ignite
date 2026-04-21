@@ -534,9 +534,9 @@ model MaterialRequirement {
 
   // Przypisanie do WBS
   assignedSubtaskId  String?
-  wbsNodeId          String? // UUID węzła WBS (JSON tree, nie FK) — legacy single
-  wbsNodeIds         String? // JSON array UUID węzłów WBS (wielowybór)
-  wbsNodeAllocations String? // JSON: {nodeId: quantity} — alokacja materiałów do poszczególnych gałęzi
+  wbsNodeId          String? @unique // FK do wbs_nodes — karta produktowa przypisana do węzła WBS (1:1)
+  wbsNodeIds         String? // @deprecated JSON array UUID węzłów WBS (wielowybór) — zastąpione przez WbsNodeMaterial
+  wbsNodeAllocations String? // @deprecated JSON: {nodeId: quantity} — zastąpione przez WbsNodeMaterial.quantity
   isAiAssigned       Boolean @default(false) // true = przypisane przez AI, false = ręcznie
   aiConfidence       Float? // pewność AI 0.0–1.0
 
@@ -561,6 +561,7 @@ model MaterialRequirement {
   version         ProjectVersion?           @relation(fields: [versionId], references: [id], onDelete: Cascade)
   list            MaterialRequirementsList? @relation(fields: [listId], references: [id], onDelete: SetNull)
   assignedSubtask Subtask?                  @relation(fields: [assignedSubtaskId], references: [id], onDelete: SetNull)
+  wbsNode         WbsNode?                  @relation("WbsNodeMaterialCard", fields: [wbsNodeId], references: [id], onDelete: SetNull)
   proposals       ProductProposal[]
   wbsAllocations  WbsNodeMaterial[]
 
@@ -652,6 +653,7 @@ model WbsNode {
   node                ProcessNode       @relation(fields: [nodeId], references: [id], onDelete: Cascade)
   version             ProjectVersion?   @relation(fields: [versionId], references: [id], onDelete: Cascade)
   materialAllocations WbsNodeMaterial[]
+  materialCard        MaterialRequirement? @relation("WbsNodeMaterialCard")
 
   @@index([nodeId, versionId])
   @@map("wbs_nodes")

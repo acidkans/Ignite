@@ -493,6 +493,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [reqDragOverNode, setReqDragOverNode] = useState(null);
     const [selectedNodeId, setSelectedNodeId] = useState(null);
 
+    // materialStatuses kept for InheritedStatusBadge display only (no longer syncs to wbsTree)
     useEffect(() => {
         if (!processNodeId) return;
         const fetchMat = async () => {
@@ -504,47 +505,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 if (res.ok) {
                     const data = await res.json();
                     const map = {};
-                    const typeMap = {};
-                    const reqIdStatusMap = {};
-                    const reqIdUnitMap = {};
-                    const typeMapValue = { DEVICE: 'equipment', MATERIAL: 'material' };
-                    data.forEach(r => {
-                        if (r.name) {
-                            map[r.name.toLowerCase()] = r.status;
-                            typeMap[r.name.toLowerCase()] = typeMapValue[r.type] || '';
-                        }
-                        if (r.id) {
-                            reqIdStatusMap[String(r.id)] = r.status;
-                            if (r.unit) reqIdUnitMap[String(r.id)] = r.unit;
-                        }
-                    });
+                    data.forEach(r => { if (r.name) map[r.name.toLowerCase()] = r.status; });
                     setMaterialStatuses(map);
-
-                    // Update tree: set types and sync status/unit from linked requirements
-                    setWbsTree(prev => {
-                        let changed = false;
-                        const updateTypes = (nodes) => nodes.map(n => {
-                            const reqType = typeMap[(n.name || '').toLowerCase()];
-                            const reqTag = (n.tags || []).find(t => String(t).startsWith('req:'));
-                            const reqId = reqTag ? reqTag.slice(4) : null;
-                            const reqStatus = reqId ? reqIdStatusMap[reqId] : undefined;
-                            const reqUnit = reqId ? reqIdUnitMap[reqId] : undefined;
-                            const children = updateTypes(n.children || []);
-                            const updates = {};
-                            if (reqType && !n.type) { updates.type = reqType; changed = true; }
-                            if (reqStatus !== undefined && reqStatus !== n.status) { updates.status = reqStatus; changed = true; }
-                            if (reqUnit !== undefined && reqUnit !== n.unit) { updates.unit = reqUnit; changed = true; }
-                            if (Object.keys(updates).length) return { ...n, ...updates, children };
-                            return children !== n.children ? { ...n, children } : n;
-                        });
-                        const newItems = updateTypes(prev.items || []);
-                        return changed ? { ...prev, items: newItems } : prev;
-                    });
                 }
             } catch (e) {}
         };
         fetchMat();
-    }, [processNodeId, setWbsTree, materialRefreshKey]);
+    }, [processNodeId, materialRefreshKey]);
 
     const items = wbsTree?.items || [];
 
