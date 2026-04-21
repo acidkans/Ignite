@@ -2736,6 +2736,7 @@ ${materialsHtml}
                     isEmbedded={true}
                     externalRequirements={allRequirements}
                     externalWbsNodes={wbsData}
+                    requirementsQtyByNode={requirementsQtyByNode}
                 />
             ), () => handleExportPDF('materials'))}
 
