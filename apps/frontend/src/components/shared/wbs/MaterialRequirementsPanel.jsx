@@ -68,6 +68,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     onMaterialStatusChange = null,
     externalRequirements = null,
     externalWbsNodes = null,
+    requirementsQtyByNode = null,
 }, ref) {
     const token = sessionStorage.getItem('token');
     const headers = { Authorization: `Bearer ${token}` };
@@ -408,7 +409,17 @@ function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMa
             {/* Ilość */}
             <td className="px-3 py-1">
                 <div className="flex items-center gap-1">
-                    <span className="text-sm text-gray-300 font-mono">{r.quantity}</span>
+                    <span className="text-sm text-gray-300 font-mono">{(() => {
+                        if (requirementsQtyByNode) {
+                            try {
+                                const alloc = JSON.parse(r.wbsNodeAllocations || '{}');
+                                const sum = Object.keys(alloc).reduce((acc, id) =>
+                                    acc + (requirementsQtyByNode[id] ?? parseFloat(alloc[id]) ?? 0), 0);
+                                if (sum > 0) return sum;
+                            } catch {}
+                        }
+                        return r.quantity;
+                    })()}</span>
                     {isLocked ? (
                         <span className="text-xs text-gray-400 font-mono">{r.unit || 'sztuki'}</span>
                     ) : (
