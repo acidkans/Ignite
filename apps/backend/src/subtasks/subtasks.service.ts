@@ -100,7 +100,7 @@ export class SubtasksService {
 
         const where: any = {
             nodeId,
-            versionId: vId,
+            versionId: vId ? { in: [vId, null] } : null,
         };
 
         if (!isManager) {
