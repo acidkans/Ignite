@@ -2251,26 +2251,6 @@ ${materialsHtml}
         setBudgetSummary(summarizeBudgetRows(buildRows(VIEWS.BUDGET)));
     }, [wbsData, expandedIds, materialCostsByNode, materialMetaByLookupKey, summarizeBudgetRows, refreshBudgetSummaryFromApi]);
 
-    // Re-apply saved column widths gdy sekcja budget staje się widoczna.
-    // applyColumnState zwraca false gdy kontener jeszcze nie ma wymiarów — retry co 50ms.
-    useEffect(() => {
-        if (expandedSection !== 'budget') return;
-        const api = budgetGridApiRef.current;
-        if (!api) return;
-        const saved = localStorage.getItem('wbs-budget-col-state');
-        if (!saved) return;
-        let state;
-        try { state = JSON.parse(saved); } catch { return; }
-        let attempts = 0;
-        const tryApply = () => {
-            const ok = api.applyColumnState({ state, applyOrder: true });
-            if (!ok && attempts < 10) {
-                attempts++;
-                setTimeout(tryApply, 60);
-            }
-        };
-        requestAnimationFrame(() => requestAnimationFrame(tryApply));
-    }, [expandedSection]);
 
     const displayedBudgetSummary = useMemo(() => {
         const baseRevenue = budgetSummary.totalRevenue;
@@ -2470,11 +2450,6 @@ ${materialsHtml}
                         onGridReady={v === VIEWS.BUDGET ? (params) => {
                             budgetGridApiRef.current = params.api;
                             refreshBudgetSummaryFromApi(params.api);
-                            const saved = localStorage.getItem('wbs-budget-col-state');
-                            console.log('[budget-grid] onGridReady, saved=', saved ? 'TAK ('+saved.length+'b)' : 'BRAK');
-                            try {
-                                if (saved) params.api.applyColumnState({ state: JSON.parse(saved), applyOrder: true });
-                            } catch (e) { console.error('[budget-grid] applyColumnState error:', e); }
                         } : undefined}
                         onColumnResized={v === VIEWS.BUDGET ? (params) => {
                             if (!params.finished) return;
