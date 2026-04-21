@@ -67,6 +67,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     onWbsUpdate = null,
     onMaterialStatusChange = null,
     externalRequirements = null,
+    externalWbsNodes = null,
 }, ref) {
     const token = sessionStorage.getItem('token');
     const headers = { Authorization: `Bearer ${token}` };
@@ -102,14 +103,16 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
 
     // ─── Filtered requirements ──────────────────────────────────────────────
     const filtered = useMemo(() => {
-        // Gdy dane przychodzą z zewnątrz (WBS) — filtruj tylko po typie
-        if (externalRequirements) {
-            return externalRequirements.filter(r => activeTypes.includes(r.type));
-        }
-        // Standalone: pokazuj tylko przypisane do istniejących węzłów WBS
-        const validIds = new Set(wbsNodes.map(n => n.id));
-        return requirements.filter(r => {
+        const source = externalRequirements || requirements;
+        const validIds = new Set((externalWbsNodes || wbsNodes).map(n => n.id));
+        return source.filter(r => {
             if (!activeTypes.includes(r.type)) return false;
+            // Brak węzłów — pokaż tylko pozycje z jakąkolwiek alokacją (fallback)
+            if (validIds.size === 0) {
+                let allocIds = [];
+                try { allocIds = Object.keys(JSON.parse(r.wbsNodeAllocations || '{}')).filter(k => parseFloat(JSON.parse(r.wbsNodeAllocations)[k]) > 0); } catch {}
+                return allocIds.length > 0 || !!r.wbsNodeId;
+            }
             const ids = parseWbsNodeIds(r);
             let allocIds = [];
             try {
@@ -119,7 +122,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
             const linked = [...ids, ...allocIds, r.wbsNodeId].filter(Boolean);
             return linked.some(id => validIds.has(id));
         });
-    }, [externalRequirements, requirements, activeTypes, wbsNodes]);
+    }, [externalRequirements, externalWbsNodes, requirements, activeTypes, wbsNodes]);
 
     // ─── Fetch ──────────────────────────────────────────────────────────────
 
