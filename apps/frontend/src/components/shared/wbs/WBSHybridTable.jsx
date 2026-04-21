@@ -774,8 +774,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 onClick={e => { setSelectedNodeId(node.id); hasChildren && toggle(rowId, e); }}
             >
                 {/* WBS ID */}
-                <td className="px-3 py-2.5">
-                    <div className={`flex items-center gap-1.5 ${d.pl}`}>
+                <td className="px-1 py-2.5">
+                    <div className="flex items-center gap-1.5">
                         <GripVertical
                             size={11}
                             className="text-gray-700 group-hover/node:text-gray-500 cursor-grab flex-shrink-0"
@@ -918,7 +918,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 </td>
 
                 {/* Znaczniki */}
-                <td className="px-3 py-2.5 min-w-[180px]" onClick={e => e.stopPropagation()}>
+                <td className="px-3 py-2.5 min-w-[100px]" onClick={e => e.stopPropagation()}>
                     <div className="flex flex-col gap-1">
                         <TagChips
                             tags={node.tags || []}
@@ -957,7 +957,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 </td>
 
                 {/* Załączniki znaczników */}
-                <td className="px-3 py-2.5 min-w-[120px]" onClick={e => e.stopPropagation()}>
+                <td className="px-3 py-2.5 min-w-[100px]" onClick={e => e.stopPropagation()}>
                     {processNodeId ? (
                         <AttachmentCell
                             wbsNodeId={node.id}
@@ -1102,8 +1102,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 <table className="w-full text-sm border-collapse">
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
                         <tr className="border-b border-white/10">
-                            <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-10"></th>
-                            <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 min-w-[220px]">Nazwa</th>
+                            <th className="text-left px-1 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-8"></th>
+                            <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 min-w-[320px]">Nazwa</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-28">Typ</th>
                             <th className="text-right px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-28">Ilość wymagań</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-20">Jednostka</th>
@@ -1111,8 +1111,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-32">Właściciel</th>
                             <th className="text-right px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-24">Zasoby (h)</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-48">Komentarz</th>
-                            <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-48">Znaczniki</th>
-                            <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-36">Załączniki</th>
+                            <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-28">Znaczniki</th>
+                            <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-28">Załączniki</th>
                             <th className="w-12" />
                         </tr>
                     </thead>
