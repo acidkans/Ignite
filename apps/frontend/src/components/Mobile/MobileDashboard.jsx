@@ -1,17 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Clock, CheckCircle, AlertCircle, ChevronRight,
     LogOut, Briefcase, ChevronLeft, Info, Map as MapIcon,
-    Calendar, User, FileText, ExternalLink, MapPin
+    Calendar, User, FileText, ExternalLink, MapPin, ChevronDown
 } from 'lucide-react';
 import { API_URL } from '../../config';
 import SchematicViewer from '../shared/SchematicViewer';
+
+const toDateStr = (d) => d.toISOString().slice(0, 10);
 
 export default function MobileDashboard({ onLogout }) {
     const [subtasks, setSubtasks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedSubtask, setSelectedSubtask] = useState(null);
-    const [activeTab, setActiveTab] = useState('details'); // 'details' | 'schematics'
+    const [activeTab, setActiveTab] = useState('details');
+    const [selectedDate, setSelectedDate] = useState(toDateStr(new Date()));
 
     useEffect(() => {
         const fetchSubtasks = async () => {
@@ -33,6 +36,25 @@ export default function MobileDashboard({ onLogout }) {
 
         fetchSubtasks();
     }, []);
+
+    const filteredSubtasks = useMemo(() => {
+        if (!selectedDate) return subtasks;
+        return subtasks.filter(t => {
+            const start = t.plannedStart ? toDateStr(new Date(t.plannedStart)) : null;
+            const end = t.plannedEnd ? toDateStr(new Date(t.plannedEnd)) : null;
+            if (!start) return false;
+            return selectedDate >= start && selectedDate <= (end || start);
+        });
+    }, [subtasks, selectedDate]);
+
+    const shiftDate = (days) => {
+        const d = new Date(selectedDate);
+        d.setDate(d.getDate() + days);
+        setSelectedDate(toDateStr(d));
+    };
+
+    const isToday = selectedDate === toDateStr(new Date());
+    const displayDate = new Date(selectedDate + 'T12:00:00').toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'short' });
 
     const getStatusIcon = (status) => {
         switch (status) {
@@ -182,35 +204,45 @@ export default function MobileDashboard({ onLogout }) {
     return (
         <div className="flex flex-col h-screen bg-gray-950 text-white overflow-hidden">
             {/* Header */}
-            <header className="px-6 py-4 flex items-center gap-3 border-b border-white/5 bg-gray-900/50 backdrop-blur-xl sticky top-0 z-10 shadow-lg">
-                <button
-                    onClick={onLogout}
-                    className="p-2.5 rounded-full bg-white/5 hover:bg-red-500/10 text-gray-400 hover:text-red-400 transition-all active:scale-90 flex-shrink-0"
-                    title="Wyloguj"
-                >
-                    <LogOut size={20} className="scale-x-[-1]" />
-                </button>
-                <div className="flex items-center gap-3 flex-1">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center font-black shadow-lg shadow-blue-500/20">
-                        <span className="text-xs">ERP</span>
+            <header className="px-4 py-3 border-b border-white/5 bg-gray-900/50 backdrop-blur-xl sticky top-0 z-10 shadow-lg">
+                <div className="flex items-center gap-3 mb-3">
+                    <button onClick={onLogout} className="p-2 rounded-full bg-white/5 text-gray-400 hover:text-red-400 active:scale-90 transition-all flex-shrink-0">
+                        <LogOut size={18} className="scale-x-[-1]" />
+                    </button>
+                    <div className="flex items-center gap-2 flex-1">
+                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center font-black shadow-lg shadow-blue-500/20">
+                            <span className="text-[10px]">ERP</span>
+                        </div>
+                        <span className="font-bold text-sm">Moje Zadania</span>
                     </div>
-                    <div className="flex flex-col">
-                        <span className="font-bold text-base leading-none">Moje Zadania</span>
-                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mt-1 animate-pulse">Na żywo</span>
-                    </div>
+                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{filteredSubtasks.length} / {subtasks.length}</span>
+                </div>
+                {/* Date navigation */}
+                <div className="flex items-center gap-2">
+                    <button onClick={() => shiftDate(-1)} className="p-2 rounded-xl bg-white/5 active:scale-90 transition-transform">
+                        <ChevronLeft size={16} className="text-gray-400" />
+                    </button>
+                    <button onClick={() => setSelectedDate(toDateStr(new Date()))} className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-white/5 active:bg-white/10 transition-colors">
+                        <Calendar size={14} className={isToday ? 'text-blue-400' : 'text-gray-400'} />
+                        <span className={`text-sm font-bold ${isToday ? 'text-blue-400' : 'text-gray-200'}`}>{isToday ? 'Dziś' : displayDate}</span>
+                        {!isToday && <span className="text-[10px] text-gray-600">{displayDate}</span>}
+                    </button>
+                    <button onClick={() => shiftDate(1)} className="p-2 rounded-xl bg-white/5 active:scale-90 transition-transform">
+                        <ChevronRight size={16} className="text-gray-400" />
+                    </button>
                 </div>
             </header>
 
             <main className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-                {subtasks.length === 0 ? (
+                {filteredSubtasks.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-64 text-gray-500 space-y-4">
                         <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
                             <Briefcase size={32} className="opacity-20 text-blue-400" />
                         </div>
-                        <p className="font-medium text-sm">Brak przypisanych zadań</p>
+                        <p className="font-medium text-sm">{subtasks.length === 0 ? 'Brak przypisanych zadań' : 'Brak zadań na ten dzień'}</p>
                     </div>
                 ) : (
-                    subtasks.map((task, idx) => (
+                    filteredSubtasks.map((task, idx) => (
                         <div
                             key={task.id}
                             style={{ animationDelay: `${idx * 50}ms` }}
