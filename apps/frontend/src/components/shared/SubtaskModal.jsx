@@ -63,7 +63,8 @@ export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSu
             const payload = { ...formData, nodeId, versionId };
             if (!payload.assignedUserId) payload.assignedUserId = null;
             if (isEdit) {
-                delete payload.saveAsTemplate; // Backend update doesn't handle this
+                delete payload.saveAsTemplate;
+                delete payload.versionId;
             }
 
             const res = await fetch(url, {
@@ -212,7 +213,14 @@ export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSu
                                 <input
                                     type="date"
                                     value={formData.plannedStart}
-                                    onChange={e => setFormData({ ...formData, plannedStart: e.target.value })}
+                                    onChange={e => {
+                                        const newStart = e.target.value;
+                                        setFormData(prev => ({
+                                            ...prev,
+                                            plannedStart: newStart,
+                                            plannedEnd: prev.plannedEnd && newStart > prev.plannedEnd ? newStart : prev.plannedEnd,
+                                        }));
+                                    }}
                                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-all font-mono text-sm"
                                 />
                             </div>
