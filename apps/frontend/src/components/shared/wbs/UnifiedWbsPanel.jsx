@@ -1,47 +1,15 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ExcelJS from 'exceljs';
-import { AgGridReact } from 'ag-grid-react';
-import {
-    ClientSideRowModelModule,
-    TextEditorModule,
-    NumberEditorModule,
-    SelectEditorModule,
-    TextFilterModule,
-    NumberFilterModule,
-    ValidationModule,
-} from 'ag-grid-community';
-import { themeQuartz } from 'ag-grid-community';
-import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, LayoutList, Zap, Sparkles, ArrowUpDown, ArrowUp, ArrowDown, ListTree, CalendarDays } from 'lucide-react';
+import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, LayoutList, Zap, Sparkles, ListTree, CalendarDays } from 'lucide-react';
 import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
+import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
-import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, STRUCTURE_STATUS_META, STRUCTURE_COMMON_CELL_CLASS, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, BUDGET_TYPE_LABELS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType } from './wbsConstants';
+import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType } from './wbsConstants';
 import { exportProjectPdf } from '../../../utils/projectPdfExport';
 import WBSHybridTable from './WBSHybridTable';
+import BudgetTable from './BudgetTable';
 
-const darkTheme = themeQuartz.withParams({
-    backgroundColor: '#0a0a0f',
-    foregroundColor: '#e5e7eb',
-    headerBackgroundColor: '#111118',
-    headerTextColor: '#9ca3af',
-    rowHoverColor: 'rgba(255,255,255,0.03)',
-    borderColor: 'rgba(255,255,255,0.12)',
-    cellHorizontalPaddingScale: 0.6,
-    fontSize: 13,
-    headerFontSize: 12,
-    rowHeight: 32,
-    headerHeight: 34,
-});
-
-const MODULES = [
-    ClientSideRowModelModule,
-    TextEditorModule,
-    NumberEditorModule,
-    SelectEditorModule,
-    TextFilterModule,
-    NumberFilterModule,
-    ValidationModule,
-];
 
 const VIEWS = {
     STRUCTURE: 'structure',
@@ -92,138 +60,6 @@ const excelCellToText = (cellValue) => {
     return String(cellValue);
 };
 
-function TreeNameRenderer({ data, context, api, rowIndex, column }) {
-    const depth = data._depth || 0;
-    const hasChildren = data._hasChildren;
-    const expanded = context?.expandedIds?.has(data.id);
-    const toggleExpand = context?.toggleExpand;
-    const isSelected = context?.selectedId === data.id;
-    const onAddChild = context?.onAddChild;
-    const onSelectRow = context?.onSelectRow;
-    const isRequirementLeaf = data?._isRequirementLeaf;
-
-    return (
-        <div
-            className={`flex items-center gap-1 cursor-pointer ${isSelected ? 'ring-1 ring-cyan-500/40 rounded px-1 -mx-1' : ''}`}
-            style={{ paddingLeft: depth * 20 }}
-            onClick={() => onSelectRow?.(data.id)}
-        >
-            {hasChildren ? (
-                <button
-                    onClick={(e) => { e.stopPropagation(); toggleExpand?.(data.id); }}
-                    className="text-gray-500 hover:text-white"
-                >
-                    {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                </button>
-            ) : <span className="w-4" />}
-            {isRequirementLeaf && <Package size={12} className="text-blue-400/70 flex-shrink-0" />}
-            <span
-                className={`truncate ${depth === 0 ? 'font-semibold text-white' : isRequirementLeaf ? 'text-blue-200' : 'text-gray-300'}`}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    if (!isRequirementLeaf && api) {
-                        api.startEditingCell({ rowIndex, colKey: column.getColId() });
-                    }
-                }}
-            >
-                {data.name}
-            </span>
-            {!isRequirementLeaf && (
-                <button
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onAddChild?.(data.id);
-                    }}
-                    className="ml-1 text-gray-500 hover:text-emerald-400"
-                    title="Dodaj podgałąź"
-                >
-                    <Plus size={12} />
-                </button>
-            )}
-            {!isRequirementLeaf && data.materialsCount > 0 && (
-                <span className="text-[10px] text-blue-400/60 ml-1">({data.materialsCount})</span>
-            )}
-        </div>
-    );
-}
-
-function StructureStatusRenderer({ value, data }) {
-    const code = normalizeStatusCode(value);
-    const meta = STRUCTURE_STATUS_META[code] || { label: data?.statusLabel || getStatusLabel(code), color: 'text-gray-300' };
-    const label = data?.statusLabel || meta.label;
-    return (
-        <span className={`inline-flex items-center text-xs font-semibold ${meta.color}`}>
-            {label}
-        </span>
-    );
-}
-
-function BudgetHeaderRenderer(params) {
-    const sort = params.column?.getSort?.() || null;
-    const SortIcon = sort === 'asc' ? ArrowUp : sort === 'desc' ? ArrowDown : ArrowUpDown;
-    return (
-        <div
-            className="flex items-start gap-1 w-full cursor-pointer select-none py-1"
-            onClick={() => params.progressSort?.()}
-        >
-            <span className="text-gray-400 text-[11px] uppercase tracking-wider font-bold leading-tight whitespace-normal break-words">
-                {params.displayName}
-            </span>
-            <SortIcon size={11} className={`mt-0.5 flex-shrink-0 ${sort ? 'text-cyan-400' : 'text-gray-600'}`} />
-        </div>
-    );
-}
-
-function RowActionsRenderer(params) {
-    const data = params.data;
-    if (data?._isRequirementLeaf) return null;
-
-    return (
-        <div className="h-full flex items-center justify-end pr-1">
-            <button
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    // Zawsze pobieraj najświeższą referencję z context (AG Grid aktualizuje context dynamicznie)
-                    const freshDelete = params.api?.getGridOption?.('context')?.onDeleteRow
-                        || params.context?.onDeleteRow
-                        || params.onDeleteRow;
-                    if (freshDelete) freshDelete(data?.id);
-                }}
-                className="text-gray-500 hover:text-red-400"
-                title="Usuń węzeł"
-            >
-                <Trash2 size={13} />
-            </button>
-        </div>
-    );
-}
-
-function MarkerIconsRenderer({ data, context }) {
-    if (!data) return null;
-
-    const links = context?.markerLinksCache?.[data.id] || [];
-    const allAtts = links.flatMap((l) => (l.marker?.attachments || []));
-    if (allAtts.length === 0) return <span className="text-[10px] text-gray-600">-</span>;
-
-    const openAttachment = context?.onOpenAttachment;
-
-    const iconFor = (fileType) => {
-        if (fileType === 'IMAGE') return '🖼';
-        if (fileType === 'AUDIO') return '🎵';
-        return '📎';
-    };
-
-    return (
-        <div className="flex items-center gap-1" title={allAtts.map((a) => a.fileName).join('\n')}>
-            {allAtts.slice(0, 4).map((att) => (
-                <span key={att.id}>{iconFor(att.fileType)}</span>
-            ))}
-        </div>
-    );
-}
-
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
@@ -248,13 +84,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const [requirementByNodeId, setRequirementByNodeId] = useState({});
     const [budgetDiscountAmount, setBudgetDiscountAmount] = useState('');
     const [budgetDiscountPercent, setBudgetDiscountPercent] = useState('');
-    const [budgetSummary, setBudgetSummary] = useState({
-        rows: 0,
-        totalCost: 0,
-        totalRevenue: 0,
-        profit: 0,
-        marginPct: 0,
-    });
     const [markerLinksCache, setMarkerLinksCache] = useState({});
     const [previewAttachment, setPreviewAttachment] = useState(null);
     const [budgetImportOpen, setBudgetImportOpen] = useState(false);
@@ -272,8 +101,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const wbsTreeRef = useRef(wbsTree);
     useEffect(() => { wbsTreeRef.current = wbsTree; }, [wbsTree]);
 
-    const gridRef = useRef();
-    const budgetGridApiRef = useRef(null);
     const materialRef = useRef();
     const strategyRef = useRef();
     const strategyLoadedRef = useRef(false);
@@ -1062,7 +889,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                     <td>${esc(n.owner || '')}</td>
                     <td>${markerSummary(n.id)}</td>`;
                 return `<tr>
-                    <td style="padding-left:${8 + indent}px;${nameStyle}">${depth > 0 ? '└ ' : ''}${(n.name || '').replace(/</g, '&lt;')}</td>
+                    <td style="padding-left:${8 + indent}px;${nameStyle};text-align:left">${depth > 0 ? '└ ' : ''}${(n.name || '').replace(/</g, '&lt;')}</td>
                     ${budgetCols}
                 </tr>${buildTreeRows(n.id, depth + 1, includeBudget)}`;
             }).join('');
@@ -1083,12 +910,99 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 </table>
             </div>` : '';
 
+        const _bItems = wbsData.filter(n => n.parentId != null);
+        const _bTotalCost = _bItems.reduce((s, n) => s + (parseFloat(n.totalCost) || 0), 0);
+        const _bTotalPrice = _bItems.reduce((s, n) => s + (parseFloat(n.totalPrice) || 0), 0);
+
+        // Per-subject (top-level branch) breakdown
+        const _idToParent = Object.fromEntries(wbsData.map(n => [n.id, n.parentId]));
+        const _getRootId = (id) => { let c = id, s = 20; while (_idToParent[c] && s-- > 0) c = _idToParent[c]; return c; };
+        const _rootNames = Object.fromEntries(wbsData.filter(n => !n.parentId).map(n => [n.id, n.name]));
+        const _subjectMap = {};
+        const _typeMap = {};
+        for (const item of _bItems) {
+            const rid = _getRootId(item.id);
+            const rn = _rootNames[rid] || '(inne)';
+            if (!_subjectMap[rid]) _subjectMap[rid] = { name: rn, cost: 0, price: 0 };
+            _subjectMap[rid].cost += parseFloat(item.totalCost) || 0;
+            _subjectMap[rid].price += parseFloat(item.totalPrice) || 0;
+            const t = item.type || '—';
+            if (!_typeMap[t]) _typeMap[t] = { label: TYPE_LABELS[t] || t, cost: 0, price: 0 };
+            _typeMap[t].cost += parseFloat(item.totalCost) || 0;
+            _typeMap[t].price += parseFloat(item.totalPrice) || 0;
+        }
+        const _parsedPct = parseFloat(String(budgetDiscountPercent || '').replace(',', '.')) || 0;
+        const _parsedAmt = parseFloat(String(budgetDiscountAmount || '').replace(',', '.')) || 0;
+        const _discFromPct = _parsedPct > 0 ? _bTotalPrice * _parsedPct / 100 : 0;
+        const _revAfterDisc = Math.max(0, _bTotalPrice - _discFromPct - (_parsedAmt > 0 ? _parsedAmt : 0));
+        const _profit = _revAfterDisc - _bTotalCost;
+        const _marginPct = _revAfterDisc > 0 ? (_profit / _revAfterDisc) * 100 : 0;
+
+        const _summaryRow = (label, cost, price, bold = false, dark = false) => {
+            const p = price - cost;
+            const m = price > 0 ? (p / price) * 100 : 0;
+            const style = dark ? 'background:#e5e7eb;font-size:15px;font-weight:bold;color:#111' : bold ? 'font-weight:bold' : '';
+            const nc = '';
+            const pc = dark ? (p >= 0 ? '#86efac' : '#fca5a5') : (p >= 0 ? '#16a34a' : '#dc2626');
+            return `<tr style="${style}">
+                <td style="text-align:left${dark ? ';color:#fff' : ''}">${esc(label)}</td>
+                <td class="num" ${nc}>${fmtPLN(cost)}</td>
+                <td class="num" ${nc}>${fmtPLN(price)}</td>
+                <td class="num" style="color:${pc}">${fmtPLN(p)}</td>
+                <td class="num" style="color:${pc}">${m.toLocaleString('pl-PL', { minimumFractionDigits: 1 })}%</td>
+            </tr>`;
+        };
+
+        const _budgetSummaryHtml = sectionKey === 'budget' && isManagerOrAdmin ? `
+            <div class="section summary-section">
+                <div class="section-header">Podsumowanie budżetu</div>
+                <div class="summary-block">
+                    <div class="table-title">Podział wg typu pozycji</div>
+                    <table>
+                        <thead><tr><th style="text-align:left">Typ</th><th>Koszt</th><th>Przychód</th><th>Zysk</th><th>Marża%</th></tr></thead>
+                        <tbody>
+                            ${Object.values(_typeMap).map(t => _summaryRow(t.label, t.cost, t.price)).join('')}
+                            ${_summaryRow('Razem', _bTotalCost, _bTotalPrice, true, true)}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="summary-block">
+                    <div class="table-title">Podział wg przedmiotu projektu</div>
+                    <table>
+                        <thead><tr><th style="text-align:left">Przedmiot</th><th>Koszt</th><th>Przychód</th><th>Zysk</th><th>Marża%</th></tr></thead>
+                        <tbody>
+                            ${Object.values(_subjectMap).map(s => _summaryRow(s.name, s.cost, s.price)).join('')}
+                            ${_summaryRow('Razem', _bTotalCost, _bTotalPrice, true, true)}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="summary-block">
+                    <div class="table-title">Wyniki finansowe</div>
+                    <table class="kv">
+                        <tbody>
+                            <tr><th>Koszt całkowity</th><td class="num">${fmtPLN(_bTotalCost)} PLN</td></tr>
+                            <tr><th>Przychód przed rabatami</th><td class="num">${fmtPLN(_bTotalPrice)} PLN</td></tr>
+                            ${_parsedPct > 0 ? `<tr><th>Rabat procentowy</th><td class="num">${_parsedPct.toLocaleString('pl-PL', { minimumFractionDigits: 2 })}%</td></tr>` : ''}
+                            ${_parsedAmt > 0 ? `<tr><th>Rabat kwotowy</th><td class="num">${fmtPLN(_parsedAmt)} PLN</td></tr>` : ''}
+                            <tr style="font-weight:bold"><th>Przychód po rabatach</th><td class="num">${fmtPLN(_revAfterDisc)} PLN</td></tr>
+                            <tr><th>Zysk</th><td class="num" style="color:${_profit >= 0 ? '#16a34a' : '#dc2626'}">${fmtPLN(_profit)} PLN</td></tr>
+                            <tr><th>Marża</th><td class="num" style="color:${_profit >= 0 ? '#16a34a' : '#dc2626'}">${_marginPct.toLocaleString('pl-PL', { minimumFractionDigits: 2 })}%</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>` : '';
+
         const budgetHtml = show('budget') && isManagerOrAdmin ? `
             <div class="section">
-                <div class="section-header">Plan i harmonogram (Budżet)</div>
-                <table>
-                    <thead><tr><th>Nazwa</th><th>Koszt jednostkowy</th><th>Ilość</th><th>Jednostki</th><th>Marża%</th><th>Koszt całościowy</th><th>Suma netto</th></tr></thead>
+                <div class="section-header">Budżet</div>
+                <table class="budget-table">
+                    <thead><tr><th style="width:38%;text-align:left">Pozycja</th><th>Koszt jednostkowy</th><th>Ilość</th><th>Jednostki</th><th>Marża%</th><th>Koszt całościowy</th><th>Suma netto</th></tr></thead>
                     <tbody>${wbsData.length ? buildTreeRows(null, 0, true) : '<tr><td colspan="7">Brak danych budżetowych</td></tr>'}</tbody>
+                    <tfoot><tr style="background:#f3f4f6;font-weight:bold;font-size:15px;color:#111">
+                        <td colspan="5" style="text-align:right;text-transform:uppercase;letter-spacing:0.05em;padding:7px 8px">Razem:</td>
+                        <td class="num" style="color:#111">${fmtPLN(_bTotalCost)} PLN</td>
+                        <td class="num" style="color:#111">${fmtPLN(_bTotalPrice)} PLN</td>
+                    </tr></tfoot>
                 </table>
             </div>` : '';
 
@@ -1111,7 +1025,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 const status = esc(matStatusLabel(r.status));
                 const spec = esc(String(r.technicalSpec || '').slice(0, 120));
                 const price = r.priceNetto != null ? fmtPLN(r.priceNetto) : '—';
-                return `<tr><td>${name}</td><td>${type}</td><td class="num">${qty}</td><td>${unit}</td><td>${status}</td><td class="num">${price}</td><td style="font-size:9px;color:#6b7280">${spec}</td></tr>`;
+                return `<tr><td style="text-align:left">${name}</td><td>${type}</td><td class="num">${qty}</td><td>${unit}</td><td>${status}</td><td class="num">${price}</td><td style="font-size:9px;color:#6b7280;text-align:left">${spec}</td></tr>`;
             }).join('');
             return `
             <div class="section">
@@ -1127,11 +1041,11 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
-<title>Unified WBS — ${date}</title>
+<title>${esc(projectName || 'Projekt')} — ${date}</title>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 0 32px 28px 32px; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 0 12px 28px 12px; }
   .doc-header { border-bottom: 3px solid #1a1a2e; padding: 18px 0 10px 0; margin: 0 0 18px 0; break-after: avoid; page-break-after: avoid; }
   .doc-header h1 { font-size: 20px; margin: 0 0 2px 0; }
   .doc-header .sub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: #6b7280; }
@@ -1144,24 +1058,39 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
   .strategy-text h4 { font-size: 11px; margin: 10px 0 3px 0; color: #374151; }
   .md-h2 { font-size: 13px; margin: 16px 0 5px 0; }
   table { border-collapse: collapse; width: 100%; }
-  th { background: #f3f4f6; color: #374151; padding: 6px 8px; text-align: left; font-size: 10px; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
-  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
-  td.num { text-align: right; font-family: monospace; font-size: 10px; }
+  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; text-align: center; }
+  td.num { text-align: center; font-family: monospace; font-size: 10px; }
   tr:nth-child(even) td { background: #f9fafb; }
+  .budget-table td { font-size: 12px; }
+  .budget-table td.num { font-size: 11px; }
+  table.kv th { width: 50%; background: #f9fafb; text-transform: none; font-size: 10px; color: #4b5563; text-align: left; border-bottom: 1px solid #e5e7eb; }
+  table.kv td { font-size: 11px; color: #111; }
+  .summary-grid { display: grid; grid-template-columns: 1fr 1.6fr; gap: 16px; padding: 12px 0 0 0; }
+  .summary-block { margin-bottom: 24px; }
+  .table-title { font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; color: #111; margin-bottom: 6px; padding: 5px 0; border-bottom: 2px solid #1a1a2e; }
+  th { background: #f3f4f6; color: #374151; padding: 7px 8px; text-align: center; font-size: 12px; font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
   thead { display: table-header-group; }
   tr { page-break-inside: avoid; break-inside: avoid; }
-  @page { margin: 12mm 12mm 14mm 12mm; }
-  @media print { body { padding: 0 12mm; } .doc-header { padding-top: 8px; } }
+  @page { margin: 10mm 8mm 12mm 8mm; }
+  @media print {
+    body { padding: 0 6mm; }
+    .doc-header { padding-top: 8px; }
+    .summary-grid { display: block; }
+    .summary-block { margin-bottom: 16px; }
+    .summary-section { page-break-before: always; }
+  }
 </style>
 </head>
 <body>
 <div class="doc-header">
-  <h1>ERP | Unified WBS</h1>
-  <div class="sub">Zarządzanie zasobami i planowaniem</div>
-  <div class="meta">Wygenerowano: ${date}</div>
+  <h1>${esc(projectName || 'Projekt')}</h1>
+  <div class="sub">${sectionKey === 'budget' ? 'Budżet' : 'Informacje o projekcie i planowanie'}</div>
+  <div class="meta">Przygotowano: ${date}</div>
 </div>
 ${strategyHtml}
 ${wbsHtml}
+${budgetHtml}
+${_budgetSummaryHtml}
 ${materialsHtml}
 </body>
 </html>`;
@@ -1175,14 +1104,7 @@ ${materialsHtml}
     };
 
     const handleExportBudgetExcel = async () => {
-        const rows = [];
-        if (budgetGridApiRef.current) {
-            budgetGridApiRef.current.forEachNodeAfterFilterAndSort((node) => {
-                if (node?.data) rows.push(node.data);
-            });
-        } else {
-            rows.push(...buildRows(VIEWS.BUDGET));
-        }
+        const rows = buildRows(VIEWS.BUDGET);
 
         if (!rows.length) {
             alert('Brak danych budżetowych do eksportu.');
@@ -1804,10 +1726,9 @@ ${materialsHtml}
     ]);
 
 
-    const onCellValueChanged = useCallback((params) => {
-        const row = params.data;
+    const onBudgetFieldChange = useCallback((rowOrig, field, rawValue) => {
+        const row = { ...rowOrig, [field]: rawValue };
         if (!row) return;
-        const field = params.colDef.field;
         if (['subjectName', 'name', 'type', 'status', 'owner', 'requirementsQty'].includes(field)) {
             if (field === 'subjectName') {
                 if (row.subjectId && row.subjectName) {
@@ -1827,27 +1748,10 @@ ${materialsHtml}
                 return;
             }
             if (field === 'status') {
-                const normalizedType = String(row.type || '').toLowerCase();
-                const wbsNode = wbsData.find(n => n.id === row.id);
-                const reqTag = (wbsNode?.tags || []).find(t => String(t).startsWith('req:'));
-                // Dla material/equipment bez tagu req: — status dziedziczony, blokuj edycję
-                if (['material', 'equipment'].includes(normalizedType) && !reqTag) return;
                 row.statusLabel = getStatusLabel(row[field], row[field]);
                 updateNodeField(row.id, field, row[field]);
                 setWbsData(prev => prev.map(item => item.id === row.id ? { ...item, [field]: row[field], statusLabel: row.statusLabel } : item));
-                // Synchronizuj status do powiązanego wymagania materialnego
-                if (reqTag) {
-                    const reqId = reqTag.slice(4);
-                    fetch(`${API_URL}/material-requirements/${reqId}`, {
-                        method: 'PATCH',
-                        headers: authHeaders(),
-                        body: JSON.stringify({ status: row[field] }),
-                    }).then(async () => {
-                        setReqRefreshKey(k => k + 1);
-                        await refreshUnified();
-                    }).catch(() => {});
-                }
-            } else {
+            } else if (field !== 'type') {
                 updateNodeField(row.id, field, row[field]);
                 setWbsData(prev => prev.map(item => item.id === row.id ? { ...item, [field]: row[field] } : item));
             }
@@ -1887,6 +1791,19 @@ ${materialsHtml}
                 row.totalCost = totalCost;
                 row.offerPrice = margin !== 0 ? totalCost * (1 + margin / 100) : 0;
                 row.totalPrice = row.offerPrice;
+                updateNodeField(row.id, 'type', row.type);
+                setWbsData(prev => prev.map(item => item.id === row.id ? {
+                    ...item,
+                    type: row.type,
+                    inheritedFromMaterials: row.inheritedFromMaterials,
+                    quantity: row.quantity,
+                    unit: row.unit,
+                    unitCost: row.unitCost,
+                    cost: row.cost,
+                    totalCost: row.totalCost,
+                    offerPrice: row.offerPrice,
+                    totalPrice: row.totalPrice,
+                } : item));
                 updateLocalWbsBudgetRow(row.id, {
                     type: row.type,
                     quantity: row.quantity,
@@ -1896,7 +1813,6 @@ ${materialsHtml}
                     totalPrice: row.totalPrice,
                     margin: row.margin,
                 });
-                params.api.applyTransaction({ update: [row] });
                 saveBudgetField(row.id, {
                     unit: row.unit,
                     unitCost: row.unitCost,
@@ -1906,44 +1822,8 @@ ${materialsHtml}
                     comment: row.comment ?? '',
                 });
 
-                // Auto-create MaterialRequirement when type set to material/equipment and no req: tag yet
-                if (inheritedFromMaterials) {
-                    const wbsNode = wbsData.find(n => n.id === row.id);
-                    const hasReqTag = Array.isArray(wbsNode?.tags) && wbsNode.tags.some(t => String(t).startsWith('req:'));
-                    if (!hasReqTag) {
-                        const reqType = normalizedType === 'equipment' ? 'DEVICE' : 'MATERIAL';
-                        fetch(`${API_URL}/material-requirements`, {
-                            method: 'POST',
-                            headers: authHeaders(),
-                            body: JSON.stringify({
-                                nodeId,
-                                versionId: versionId || null,
-                                name: row.name || 'Nowy element',
-                                type: reqType,
-                                quantity: resolvedQuantity,
-                                unit: row.unit || 'sztuki',
-                                wbsNodeId: row.id,
-                                wbsNodeIds: JSON.stringify([row.id]),
-                                wbsNodeAllocations: JSON.stringify({ [row.id]: resolvedQuantity }),
-                            }),
-                        }).then(async (res) => {
-                            if (!res.ok) return;
-                            const created = await res.json().catch(() => null);
-                            if (created?.id) {
-                                // Tag the WBS node with req:<id> for bidirectional sync
-                                const currentTags = Array.isArray(wbsNode?.tags) ? [...wbsNode.tags] : [];
-                                currentTags.push(`req:${created.id}`);
-                                await fetch(`${API_URL}/wbs-nodes/${row.id}`, {
-                                    method: 'PATCH',
-                                    headers: authHeaders(),
-                                    body: JSON.stringify({ tags: currentTags }),
-                                }).catch(() => {});
-                                setReqRefreshKey(k => k + 1);
-                                await refreshUnified();
-                            }
-                        }).catch(() => {});
-                    }
-                }
+                // Karta produktowa tworzona jest przez użytkownika z panelu WbsMaterialsPanel
+                // (przycisk "Utwórz kartę" przy węźle) — nie auto-tworzymy tutaj
             }
         } else {
             const q = parseLocaleNumber(row.quantity) ?? 1;
@@ -1973,7 +1853,17 @@ ${materialsHtml}
                 discount: d,
                 comment: row.comment ?? '',
             });
-            params.api.applyTransaction({ update: [row] });
+            // Sync WBS-visible fields to wbsTree (WBSHybridTable reads from wbsTree, not wbsData)
+            if (field === 'comment' || field === 'unit') {
+                setWbsTree(prev => {
+                    const upd = items => items.map(n =>
+                        n.id === row.id
+                            ? { ...n, [field]: row[field] }
+                            : { ...n, children: n.children?.length ? upd(n.children) : n.children }
+                    );
+                    return { ...prev, items: upd(prev.items || []) };
+                });
+            }
             saveBudgetField(row.id, {
                 unit: row.unit,
                 unitCost: uc,
@@ -2263,343 +2153,7 @@ ${materialsHtml}
         };
     }, []);
 
-    const refreshBudgetSummaryFromApi = useCallback((api) => {
-        if (!api) return;
-        const rows = [];
-        api.forEachNodeAfterFilterAndSort((node) => {
-            if (node?.data) rows.push(node.data);
-        });
-        const next = summarizeBudgetRows(rows);
-        setBudgetSummary((prev) => {
-            if (
-                prev.rows === next.rows
-                && prev.totalCost === next.totalCost
-                && prev.totalRevenue === next.totalRevenue
-                && prev.profit === next.profit
-                && prev.marginPct === next.marginPct
-            ) return prev;
-            return next;
-        });
-    }, [summarizeBudgetRows]);
-
-    useEffect(() => {
-        if (budgetGridApiRef.current) {
-            refreshBudgetSummaryFromApi(budgetGridApiRef.current);
-            return;
-        }
-        setBudgetSummary(summarizeBudgetRows(buildRows(VIEWS.BUDGET)));
-    }, [wbsData, expandedIds, materialCostsByNode, materialMetaByLookupKey, summarizeBudgetRows, refreshBudgetSummaryFromApi]);
-
-    const displayedBudgetSummary = useMemo(() => {
-        const baseRevenue = budgetSummary.totalRevenue;
-        const parsedPercentDiscount = Number(String(budgetDiscountPercent).replace(',', '.'));
-        const parsedAmountDiscount = Number(String(budgetDiscountAmount).replace(',', '.'));
-        const discountAmountFromPercent = Number.isFinite(parsedPercentDiscount)
-            ? Math.max(0, parsedPercentDiscount) / 100 * baseRevenue
-            : 0;
-        const discountAmountFromValue = Number.isFinite(parsedAmountDiscount) ? Math.max(0, parsedAmountDiscount) : 0;
-        const totalDiscount = discountAmountFromPercent + discountAmountFromValue;
-
-        if (totalDiscount <= 0) {
-            return budgetSummary;
-        }
-
-        const totalRevenue = Math.max(0, baseRevenue - totalDiscount);
-        const profit = totalRevenue - budgetSummary.totalCost;
-        const marginPct = budgetSummary.totalCost > 0 ? (profit / budgetSummary.totalCost) * 100 : 0;
-        return {
-            ...budgetSummary,
-            totalRevenue,
-            profit,
-            marginPct,
-        };
-    }, [budgetSummary, budgetDiscountAmount, budgetDiscountPercent]);
-
-    const getColumnDefs = (view) => {
-        const nameCol = {
-            field: 'name',
-            headerName: 'Nazwa',
-            flex: 1,
-            minWidth: 250,
-            cellRenderer: TreeNameRenderer,
-            cellRendererParams: {
-                context: {
-                    expandedIds,
-                    toggleExpand: (id) => setExpandedIds(prev => {
-                        const n = new Set(prev);
-                        if (n.has(id)) n.delete(id); else n.add(id);
-                        return n;
-                    }),
-                    selectedId,
-                    onSelectRow: setSelectedId,
-                    onAddChild: (id) => addNode(id),
-                },
-            },
-            cellEditor: 'agTextCellEditor',
-            cellEditorParams: {
-                maxLength: 255,
-            },
-            editable: (params) => !params.data?._isRequirementLeaf,
-        };
-        
-        const ownerCol = {
-            field: 'owner', headerName: 'Osoba', width: 140,
-            cellEditor: 'agSelectCellEditor',
-            cellEditorParams: {
-                values: assignableOwnerValues
-            },
-            editable: (params) => !params.data?._isRequirementLeaf,
-            valueFormatter: (p) => p.value || 'Brak',
-            cellClass: STRUCTURE_COMMON_CELL_CLASS,
-        };
-
-        if (view === VIEWS.BUDGET) return [
-            { field: 'subjectName', headerName: 'Przedmiot', width: 90, minWidth: 70, sortable: true, editable: true, wrapText: true, autoHeight: true, cellStyle: { whiteSpace: 'normal', lineHeight: '1.4' }, headerComponent: BudgetHeaderRenderer },
-            { field: 'name', headerName: 'Nazwa', width: 140, minWidth: 100, sortable: true, editable: true, wrapText: true, autoHeight: true, cellStyle: { whiteSpace: 'normal', lineHeight: '1.4' }, headerComponent: BudgetHeaderRenderer },
-            { field: 'type', headerName: 'Typ', width: 90, minWidth: 70, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: TYPE_OPTIONS }, valueFormatter: p => TYPE_LABELS[p.value] || p.value, editable: true, sortable: true, headerComponent: BudgetHeaderRenderer },
-            {
-                field: 'unitCost',
-                headerName: 'Koszt jednostkowy',
-                width: 100,
-                minWidth: 90,
-                cellEditor: 'agTextCellEditor',
-                editable: true,
-                sortable: true,
-                valueFormatter: p => fmtPLN(p.value),
-                cellClass: (params) => params.data?.inheritedFromMaterials ? 'text-amber-300' : '',
-                tooltipValueGetter: (params) => params.data?.inheritedFromMaterials ? 'Edycja synchronizuje cenę w zakładce Materiały' : '',
-                headerComponent: BudgetHeaderRenderer
-            },
-            { field: 'quantity', headerName: 'Ilość', width: 70, minWidth: 60, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtQty(p.value), headerComponent: BudgetHeaderRenderer },
-            { field: 'unit', headerName: 'Jednostki', width: 85, minWidth: 75, editable: true, sortable: true, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: UNIT_OPTIONS }, headerComponent: BudgetHeaderRenderer },
-            { field: 'totalCost', headerName: 'Koszt całościowy', width: 100, minWidth: 90, editable: false, sortable: true, valueFormatter: p => fmtPLN(p.value), headerComponent: BudgetHeaderRenderer },
-            { field: 'margin', headerName: 'Marża (%)', width: 80, minWidth: 70, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-green-300', headerComponent: BudgetHeaderRenderer },
-            { field: 'discount', headerName: 'Rabat (%)', width: 80, minWidth: 70, cellEditor: 'agTextCellEditor', editable: true, sortable: true, valueFormatter: p => fmtPct(p.value), cellClass: 'text-orange-300', headerComponent: BudgetHeaderRenderer },
-            { field: 'offerPrice', headerName: 'Cena ofertowa', width: 100, minWidth: 90, sortable: true, valueFormatter: p => fmtPLN(p.value), headerComponent: BudgetHeaderRenderer },
-            { field: 'comment', headerName: 'Komentarz', flex: 1, minWidth: 220, editable: true, sortable: true, wrapText: true, autoHeight: true, cellStyle: { whiteSpace: 'normal', lineHeight: '1.4' }, headerComponent: BudgetHeaderRenderer },
-            {
-                headerName: '',
-                width: 40,
-                minWidth: 40,
-                maxWidth: 40,
-                suppressSizeToFit: true,
-                pinned: 'right',
-                sortable: false,
-                filter: false,
-                editable: false,
-                cellRenderer: RowActionsRenderer,
-                cellRendererParams: { onDeleteRow: deleteNodeById },
-            }
-        ];
-
-        return [nameCol, { field: 'status', width: 100 }];
-    };
-
-    const onGridCellKeyDown = useCallback((params) => {
-        const key = params?.event?.key;
-        if (!key) return;
-
-        const rowIndex = params?.node?.rowIndex;
-        const currentColumn = params?.column;
-        if (rowIndex == null || !currentColumn) return;
-
-        const api = params.api;
-        const allCols = api.getAllDisplayedColumns?.() || [];
-        const currentColId = currentColumn.getColId();
-        const isEditable = (column, nextRowIndex) => {
-            const rowNode = api.getDisplayedRowAtIndex(nextRowIndex);
-            if (!rowNode) return false;
-            const colDef = column.getColDef();
-            const editable = colDef.editable;
-            if (typeof editable === 'function') {
-                return !!editable({
-                    ...params,
-                    colDef,
-                    column,
-                    data: rowNode.data,
-                    node: rowNode,
-                    rowIndex: nextRowIndex,
-                });
-            }
-            return !!editable;
-        };
-
-        if (key === 'Enter' && !params.event.shiftKey) {
-            params.event.preventDefault();
-            params.event.stopPropagation();
-            const currentIdx = allCols.findIndex((c) => c.getColId() === currentColId);
-            if (currentIdx < 0) return;
-            for (let i = currentIdx + 1; i < allCols.length; i++) {
-                const nextCol = allCols[i];
-                if (!isEditable(nextCol, rowIndex)) continue;
-                api.stopEditing();
-                api.setFocusedCell(rowIndex, nextCol.getColId());
-                api.startEditingCell({ rowIndex, colKey: nextCol.getColId() });
-                return;
-            }
-            return;
-        }
-
-        if (key === 'ArrowUp' || key === 'ArrowDown') {
-            params.event.preventDefault();
-            params.event.stopPropagation();
-            const delta = key === 'ArrowUp' ? -1 : 1;
-            const targetRow = rowIndex + delta;
-            const rowCount = api.getDisplayedRowCount();
-            if (targetRow < 0 || targetRow >= rowCount) return;
-
-            api.stopEditing();
-            api.setFocusedCell(targetRow, currentColId);
-            if (isEditable(currentColumn, targetRow)) {
-                api.startEditingCell({ rowIndex: targetRow, colKey: currentColId });
-            }
-        }
-    }, []);
-
-    const onGridCellClicked = useCallback((params) => {
-        if (params?.colDef?.field !== 'type') return;
-        if (!params?.column || params?.node?.rowIndex == null) return;
-
-        const editable = params.colDef?.editable;
-        const canEdit = typeof editable === 'function' ? !!editable(params) : !!editable;
-        if (!canEdit) return;
-
-        const editingCells = params.api.getEditingCells?.() || [];
-        const isSameCellAlreadyEditing = editingCells.some((cell) => {
-            const editingRow = cell?.rowIndex;
-            const editingColId = cell?.column?.getColId?.() || cell?.colId;
-            return editingRow === params.node.rowIndex && editingColId === params.column.getColId();
-        });
-        if (isSameCellAlreadyEditing) return;
-
-        params.api.startEditingCell({
-            rowIndex: params.node.rowIndex,
-            colKey: params.column.getColId(),
-        });
-    }, []);
-
-    const renderGrid = (v) => {
-        const isBudgetView = v === VIEWS.BUDGET;
-
-        return (
-            <div
-                className={isBudgetView ? 'flex-1 min-h-[200px] overflow-hidden pb-2' : 'flex-1 min-h-[400px]'}
-                onDoubleClick={(e) => e.stopPropagation()}
-            >
-                <div className="h-full">
-                    <AgGridReact
-                        ref={gridRef}
-                        theme={darkTheme}
-                        modules={MODULES}
-                        rowData={buildRows(v)}
-                        columnDefs={getColumnDefs(v)}
-                        getRowId={p => p.data.id}
-                        context={{ onDeleteRow: (...a) => deleteNodeByIdRef.current?.(...a) }}
-                        onCellValueChanged={onCellValueChanged}
-                        onGridReady={v === VIEWS.BUDGET ? (params) => {
-                            budgetGridApiRef.current = params.api;
-                            refreshBudgetSummaryFromApi(params.api);
-                            try {
-                                const saved = localStorage.getItem('wbs-budget-col-state');
-                                if (saved) params.api.applyColumnState({ state: JSON.parse(saved), applyOrder: true });
-                            } catch {}
-                        } : undefined}
-                        onColumnResized={v === VIEWS.BUDGET ? (params) => {
-                            if (!params.finished) return;
-                            try { localStorage.setItem('wbs-budget-col-state', JSON.stringify(params.api.getColumnState())); } catch {}
-                        } : undefined}
-                        onColumnMoved={v === VIEWS.BUDGET ? (params) => {
-                            try { localStorage.setItem('wbs-budget-col-state', JSON.stringify(params.api.getColumnState())); } catch {}
-                        } : undefined}
-                        onFilterChanged={v === VIEWS.BUDGET ? (params) => refreshBudgetSummaryFromApi(params.api) : undefined}
-                        onModelUpdated={v === VIEWS.BUDGET ? (params) => refreshBudgetSummaryFromApi(params.api) : undefined}
-                        onCellClicked={onGridCellClicked}
-                        onCellKeyDown={onGridCellKeyDown}
-                        defaultColDef={v === VIEWS.BUDGET
-                            ? { resizable: true, sortable: true, filter: true, floatingFilter: false, wrapHeaderText: true, autoHeaderHeight: true }
-                            : { resizable: true, sortable: false }}
-                        {...(v === VIEWS.BUDGET && !localStorage.getItem('wbs-budget-col-state') ? { autoSizeStrategy: { type: 'fitGridWidth' } } : {})}
-                        singleClickEdit={v === VIEWS.BUDGET}
-                        animateRows={true}
-                    />
-                </div>
-            </div>
-        );
-    };
-
-    const budgetSummaryCards = (
-        <div className="grid grid-cols-2 xl:grid-cols-6 gap-2">
-            <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2">
-                <div className="text-[10px] uppercase tracking-widest text-red-300/90 font-bold">Koszt</div>
-                <div className="text-sm font-black text-red-200">{fmtPLNFull(displayedBudgetSummary.totalCost)} PLN</div>
-            </div>
-            <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2">
-                <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Przychód</div>
-                <div className="text-sm font-black text-green-200">{fmtPLNFull(displayedBudgetSummary.totalRevenue)} PLN</div>
-            </div>
-            <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2">
-                <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Zysk</div>
-                <div className="text-sm font-black text-green-200">{fmtPLNFull(displayedBudgetSummary.profit)} PLN</div>
-            </div>
-            <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2">
-                <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Marża</div>
-                <div className="text-sm font-black text-green-200">{fmtPctFull(displayedBudgetSummary.marginPct)}</div>
-                <div className="text-[10px] text-green-200/70 mt-0.5">Po filtrze: {displayedBudgetSummary.rows} wierszy</div>
-            </div>
-            <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 px-3 py-2">
-                <div className="text-[10px] uppercase tracking-widest text-orange-300/90 font-bold">Rabat - wartość procentowa</div>
-                <div className="relative mt-1">
-                    <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        value={budgetDiscountPercent}
-                        onChange={(e) => setBudgetDiscountPercent(e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-full rounded-lg border border-orange-400/25 bg-black/30 px-2 py-1.5 pr-8 text-sm font-black text-orange-100 focus:outline-none focus:border-orange-400"
-                        placeholder="0,00"
-                    />
-                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-black text-orange-200/80">%</span>
-                </div>
-                {budgetDiscountPercent !== '' && (
-                    <div className="text-[10px] text-orange-200/70 mt-0.5">
-                        {(() => {
-                            const pct = Number(String(budgetDiscountPercent).replace(',', '.'));
-                            const amount = Number.isFinite(pct) ? budgetSummary.totalRevenue * Math.max(0, pct) / 100 : 0;
-                            return `Przeliczenie tego pola: ${fmtPLNFull(amount)} PLN`;
-                        })()}
-                    </div>
-                )}
-            </div>
-            <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 px-3 py-2">
-                <div className="text-[10px] uppercase tracking-widest text-orange-300/90 font-bold">Rabat - wartość kwotowa</div>
-                <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={budgetDiscountAmount}
-                    onChange={(e) => setBudgetDiscountAmount(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="mt-1 w-full rounded-lg border border-orange-400/25 bg-black/30 px-2 py-1.5 text-sm font-black text-orange-100 focus:outline-none focus:border-orange-400"
-                    placeholder="0,0"
-                />
-                {budgetDiscountAmount !== '' && (
-                    <div className="text-[10px] text-orange-200/70 mt-0.5">
-                        {(() => {
-                            const amount = Number(String(budgetDiscountAmount).replace(',', '.'));
-                            const pct = budgetSummary.totalRevenue > 0 && Number.isFinite(amount) ? (Math.max(0, amount) / budgetSummary.totalRevenue) * 100 : 0;
-                            return `Przeliczenie tego pola: ${fmtPctFull(pct)}`;
-                        })()}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-
     const commitPendingEdits = useCallback(() => {
-        try { budgetGridApiRef.current?.stopEditing?.(); } catch {}
-        try { gridRef.current?.api?.stopEditing?.(); } catch {}
         const active = document.activeElement;
         if (active && active !== document.body && typeof active.blur === 'function') {
             active.blur();
@@ -2786,13 +2340,16 @@ ${materialsHtml}
                 </button>
             ) : null)}
 
-            {isManagerOrAdmin && renderSection('budget', 'Plan i harmonogram (Budżet)', DollarSign, 'green', (
-                <div className="flex flex-col gap-3 h-full">
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-2.5">
-                        {budgetSummaryCards}
-                    </div>
-                    {renderGrid(VIEWS.BUDGET)}
-                </div>
+            {isManagerOrAdmin && renderSection('budget', 'Budżet', DollarSign, 'green', (
+                <BudgetTable
+                    rows={buildRows(VIEWS.BUDGET)}
+                    onFieldChange={onBudgetFieldChange}
+                    onDeleteRow={(id) => deleteNodeByIdRef.current?.(id)}
+                    discountPercent={budgetDiscountPercent}
+                    discountAmount={budgetDiscountAmount}
+                    onDiscountPercentChange={setBudgetDiscountPercent}
+                    onDiscountAmountChange={setBudgetDiscountAmount}
+                />
             ), () => handleExportPDF('budget'), (
                 <div className="flex items-center gap-2">
                     <button
@@ -2828,37 +2385,14 @@ ${materialsHtml}
         )}
 
             {renderSection('materials', 'Materiały', Zap, 'yellow', (
-                <MaterialRequirementsPanel
+                <WbsMaterialsPanel
                     nodeId={nodeId}
                     versionId={versionId}
                     readOnly={!isManagerOrAdmin}
-                    onWbsUpdate={async () => { await refreshMaterialCosts(); }}
-                    onMaterialStatusChange={handleMaterialStatusChange}
-                    onMaterialQtyChange={async (updatedReq) => {
-                        // Sync ilości: Materials → WBS (szukaj wbs_node po ID lub nazwie)
-                        const qty = parseFloat(updatedReq.quantity);
-                        if (!Number.isFinite(qty) || qty < 0) return;
-                        // Znajdź wbs_node: najpierw po wbsNodeId, potem po nazwie
-                        let target = wbsData.find(n => n.id === updatedReq.wbsNodeId);
-                        if (!target && updatedReq.name) {
-                            const nm = (updatedReq.name || '').trim().toLowerCase();
-                            target = wbsData.find(n => (n.name || '').trim().toLowerCase() === nm && ['material', 'equipment', 'MATERIAL', 'DEVICE'].includes(n.type));
-                        }
-                        if (!target) return;
-                        await fetch(`${API_URL}/wbs-nodes/${target.id}`, {
-                            method: 'PATCH',
-                            headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ quantity: qty }),
-                        });
-                        setWbsData(prev => prev.map(n => n.id === target.id ? { ...n, quantity: qty } : n));
-                        setRequirementsQtyByNode(prev => ({ ...prev, [target.id]: qty }));
-                        await refreshMaterialCosts();
-                    }}
-                    refreshKey={reqRefreshKey}
-                    isEmbedded={true}
-                    externalRequirements={allRequirements}
                     externalWbsNodes={wbsData}
-                    requirementsQtyByNode={requirementsQtyByNode}
+                    onPatchNode={(id, data) => setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))}
+                    onWbsUpdate={async () => { await refreshMaterialCosts(); }}
+                    refreshKey={reqRefreshKey}
                 />
             ), () => handleExportPDF('materials'))}
 
