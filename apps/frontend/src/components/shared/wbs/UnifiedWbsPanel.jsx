@@ -1370,7 +1370,11 @@ ${materialsHtml}
                     body: JSON.stringify({ tags: currentTags }),
                 }).catch(() => {});
                 // Aktualizuj lokalny stan bez pełnego fetchData
-                setWbsData(prev => prev.map(n => n.id === wbsNodeId ? { ...n, tags: currentTags } : n));
+                setWbsData(prev => {
+                    const exists = prev.some(n => n.id === wbsNodeId);
+                    if (exists) return prev.map(n => n.id === wbsNodeId ? { ...n, tags: currentTags } : n);
+                    return [...prev, { id: wbsNodeId, name, type: normalizedType, nodeId, tags: currentTags }];
+                });
                 setWbsTree(prev => {
                     const upd = items => items.map(n => n.id === wbsNodeId ? { ...n, tags: currentTags } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
                     return { ...prev, items: upd(prev.items || []) };
@@ -2731,6 +2735,7 @@ ${materialsHtml}
                     refreshKey={reqRefreshKey}
                     isEmbedded={true}
                     externalRequirements={allRequirements}
+                    externalWbsNodes={wbsData}
                 />
             ), () => handleExportPDF('materials'))}
 
