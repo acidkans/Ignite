@@ -408,36 +408,49 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
 
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
-export default function WbsMaterialsPanel({ nodeId, versionId, readOnly = false, onWbsUpdate, refreshKey = 0 }) {
+export default function WbsMaterialsPanel({
+    nodeId,
+    versionId,
+    readOnly = false,
+    onWbsUpdate,
+    onPatchNode,       // (id, data) => void — optymistyczna aktualizacja w rodzicu
+    externalWbsNodes,  // flat array z wbsData rodzica — jeśli podany, panel nie fetchuje własnych
+    refreshKey = 0,
+}) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
 
-    const [wbsNodes, setWbsNodes] = useState([]);
+    // Gdy rodzic przekazuje wbsNodes — używamy ich bez własnego fetcha
+    const [internalWbsNodes, setInternalWbsNodes] = useState([]);
+    const wbsNodes = externalWbsNodes ?? internalWbsNodes;
+
     const [cards, setCards] = useState({}); // Map<wbsNodeId, MaterialRequirement>
     const [materialDb, setMaterialDb] = useState([]);
     const [offers, setOffers] = useState([]);
     const [expandedId, setExpandedId] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(!externalWbsNodes);
 
     const matNodes = useMemo(() =>
         wbsNodes.filter(n => n.type === 'material' || n.type === 'equipment'),
         [wbsNodes]
     );
 
-    const fetchAll = useCallback(async () => {
+    const fetchCards = useCallback(async () => {
         if (!nodeId) return;
-        setLoading(true);
+        if (!externalWbsNodes) setLoading(true);
         try {
             const headers = { Authorization: `Bearer ${token}` };
-            // WBS nodes
-            const wbsRes = await fetch(
-                `${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`,
-                { headers }
-            );
-            if (wbsRes.ok) {
-                const data = await wbsRes.json();
-                setWbsNodes(flattenWbsNodes(data.items || []));
+            // WBS nodes — tylko gdy nie przekazano z zewnątrz
+            if (!externalWbsNodes) {
+                const wbsRes = await fetch(
+                    `${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`,
+                    { headers }
+                );
+                if (wbsRes.ok) {
+                    const data = await wbsRes.json();
+                    setInternalWbsNodes(flattenWbsNodes(data.items || []));
+                }
             }
-            // Material cards
+            // Karty produktowe
             const reqRes = await fetch(
                 `${API_URL}/material-requirements/node/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`,
                 { headers }
@@ -445,17 +458,15 @@ export default function WbsMaterialsPanel({ nodeId, versionId, readOnly = false,
             if (reqRes.ok) {
                 const reqs = await reqRes.json();
                 const map = {};
-                for (const r of reqs) {
-                    if (r.wbsNodeId) map[r.wbsNodeId] = r;
-                }
+                for (const r of reqs) { if (r.wbsNodeId) map[r.wbsNodeId] = r; }
                 setCards(map);
             }
         } catch (e) {
-            console.error('[WbsMaterialsPanel] fetchAll error:', e);
+            console.error('[WbsMaterialsPanel] fetchCards error:', e);
         } finally {
             setLoading(false);
         }
-    }, [nodeId, versionId, token]);
+    }, [nodeId, versionId, token, externalWbsNodes]);
 
     const fetchMaterialDb = useCallback(async () => {
         try {
@@ -479,10 +490,20 @@ export default function WbsMaterialsPanel({ nodeId, versionId, readOnly = false,
     }, [nodeId, token]);
 
     useEffect(() => {
-        fetchAll();
+        fetchCards();
         fetchMaterialDb();
         fetchOffers();
-    }, [fetchAll, fetchMaterialDb, fetchOffers, refreshKey]);
+    }, [fetchCards, fetchMaterialDb, fetchOffers, refreshKey]);
+
+    // Gdy externalWbsNodes zmienia się (rodzic zaktualizował wbsData) — odśwież karty
+    const prevExternalRef = useRef(null);
+    useEffect(() => {
+        if (!externalWbsNodes) return;
+        if (externalWbsNodes !== prevExternalRef.current) {
+            prevExternalRef.current = externalWbsNodes;
+            fetchCards();
+        }
+    }, [externalWbsNodes, fetchCards]);
 
     const patchWbsNode = useCallback(async (wbsNodeId, data) => {
         await fetch(`${API_URL}/wbs-nodes/${wbsNodeId}`, {
@@ -490,9 +511,13 @@ export default function WbsMaterialsPanel({ nodeId, versionId, readOnly = false,
             headers: authHeaders(),
             body: JSON.stringify(data),
         });
-        setWbsNodes(prev => prev.map(n => n.id === wbsNodeId ? { ...n, ...data } : n));
+        // Optimistyczna aktualizacja lokalnych (gdy bez rodzica)
+        if (!externalWbsNodes) {
+            setInternalWbsNodes(prev => prev.map(n => n.id === wbsNodeId ? { ...n, ...data } : n));
+        }
+        onPatchNode?.(wbsNodeId, data); // informuj rodzica
         onWbsUpdate?.();
-    }, [onWbsUpdate]);
+    }, [onWbsUpdate, onPatchNode, externalWbsNodes]);
 
     const createCard = useCallback(async (node) => {
         const reqType = WBS_TYPE_TO_REQ[node.type] || 'MATERIAL';
