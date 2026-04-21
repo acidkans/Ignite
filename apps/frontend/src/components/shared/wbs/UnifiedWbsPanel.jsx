@@ -1578,6 +1578,7 @@ ${materialsHtml}
             let updated = 0;
             let created = 0;
             let skipped = 0;
+            const qtyChanges = []; // { wbsNodeId, quantity, name }
 
             for (let rowNo = startDataRow; rowNo <= lastDataRow && rowNo <= budgetImportRows.length; rowNo++) {
                 const rowValues = budgetImportRows[rowNo - 1] || [];
@@ -1735,9 +1736,48 @@ ${materialsHtml}
 
                 if (Object.keys(budgetPatch).length > 0) {
                     await saveBudgetField(target.id, budgetPatch);
+                    if (budgetPatch.quantity != null) {
+                        qtyChanges.push({ wbsNodeId: target.id, quantity: budgetPatch.quantity, name: importedRow.name || target.name || '' });
+                    }
                 }
 
                 updated += 1;
+            }
+
+            // Sync ilości do material requirements (jeden fetch + N PATCHy)
+            if (qtyChanges.length > 0) {
+                try {
+                    const qs = versionId ? `?versionId=${versionId}` : '';
+                    const reqRes = await fetch(`${API_URL}/material-requirements/node/${nodeId}${qs}`, { headers: { Authorization: `Bearer ${token()}` } });
+                    if (reqRes.ok) {
+                        const allReqs = await reqRes.json();
+                        if (Array.isArray(allReqs)) {
+                            for (const { wbsNodeId, quantity: nextQty, name: wbsNodeName } of qtyChanges) {
+                                const normName = normKey(wbsNodeName);
+                                const linked = allReqs.filter(req => {
+                                    if (!['MATERIAL', 'DEVICE'].includes(String(req.type || '').toUpperCase())) return false;
+                                    let alloc = {};
+                                    try { alloc = JSON.parse(req.wbsNodeAllocations || '{}'); } catch {}
+                                    let ids = [];
+                                    try { const p = JSON.parse(req.wbsNodeIds || '[]'); ids = Array.isArray(p) ? p : []; } catch {}
+                                    return req.wbsNodeId === wbsNodeId || ids.includes(wbsNodeId) || Object.prototype.hasOwnProperty.call(alloc, wbsNodeId);
+                                });
+                                let targetReq = linked.find(r => normName && normKey(r.name) === normName) || linked[0]
+                                    || (normName ? allReqs.find(r => ['MATERIAL', 'DEVICE'].includes(String(r.type || '').toUpperCase()) && normKey(r.name) === normName) : null);
+                                if (!targetReq) continue;
+                                let curAlloc = {};
+                                try { curAlloc = JSON.parse(targetReq.wbsNodeAllocations || '{}'); } catch {}
+                                const nextAlloc = { ...curAlloc, [wbsNodeId]: nextQty };
+                                const totalQty = Object.values(nextAlloc).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+                                await fetch(`${API_URL}/material-requirements/${targetReq.id}`, {
+                                    method: 'PATCH',
+                                    headers: authHeaders(),
+                                    body: JSON.stringify({ quantity: totalQty, wbsNodeAllocations: JSON.stringify(nextAlloc) }),
+                                }).catch(() => {});
+                            }
+                        }
+                    }
+                } catch (e) { console.error('Batch qty sync error:', e); }
             }
 
             await refreshUnified();
@@ -2314,8 +2354,8 @@ ${materialsHtml}
         };
 
         if (view === VIEWS.BUDGET) return [
-            { field: 'subjectName', headerName: 'Przedmiot', width: 90, minWidth: 70, sortable: true, editable: true, headerComponent: BudgetHeaderRenderer },
-            { field: 'name', headerName: 'Nazwa', width: 140, minWidth: 100, sortable: true, editable: true, headerComponent: BudgetHeaderRenderer },
+            { field: 'subjectName', headerName: 'Przedmiot', width: 90, minWidth: 70, sortable: true, editable: true, wrapText: true, autoHeight: true, cellStyle: { whiteSpace: 'normal', lineHeight: '1.4' }, headerComponent: BudgetHeaderRenderer },
+            { field: 'name', headerName: 'Nazwa', width: 140, minWidth: 100, sortable: true, editable: true, wrapText: true, autoHeight: true, cellStyle: { whiteSpace: 'normal', lineHeight: '1.4' }, headerComponent: BudgetHeaderRenderer },
             { field: 'type', headerName: 'Typ', width: 90, minWidth: 70, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: TYPE_OPTIONS }, valueFormatter: p => TYPE_LABELS[p.value] || p.value, editable: true, sortable: true, headerComponent: BudgetHeaderRenderer },
             {
                 field: 'unitCost',
@@ -2459,6 +2499,17 @@ ${materialsHtml}
                         onGridReady={v === VIEWS.BUDGET ? (params) => {
                             budgetGridApiRef.current = params.api;
                             refreshBudgetSummaryFromApi(params.api);
+                            try {
+                                const saved = localStorage.getItem('wbs-budget-col-state');
+                                if (saved) params.api.applyColumnState({ state: JSON.parse(saved), applyOrder: true });
+                            } catch {}
+                        } : undefined}
+                        onColumnResized={v === VIEWS.BUDGET ? (params) => {
+                            if (!params.finished) return;
+                            try { localStorage.setItem('wbs-budget-col-state', JSON.stringify(params.api.getColumnState())); } catch {}
+                        } : undefined}
+                        onColumnMoved={v === VIEWS.BUDGET ? (params) => {
+                            try { localStorage.setItem('wbs-budget-col-state', JSON.stringify(params.api.getColumnState())); } catch {}
                         } : undefined}
                         onFilterChanged={v === VIEWS.BUDGET ? (params) => refreshBudgetSummaryFromApi(params.api) : undefined}
                         onModelUpdated={v === VIEWS.BUDGET ? (params) => refreshBudgetSummaryFromApi(params.api) : undefined}
@@ -2467,7 +2518,7 @@ ${materialsHtml}
                         defaultColDef={v === VIEWS.BUDGET
                             ? { resizable: true, sortable: true, filter: true, floatingFilter: false, wrapHeaderText: true, autoHeaderHeight: true }
                             : { resizable: true, sortable: false }}
-                        {...(v === VIEWS.BUDGET ? { autoSizeStrategy: { type: 'fitGridWidth' }, autoHeaderHeight: true } : {})}
+                        {...(v === VIEWS.BUDGET && !localStorage.getItem('wbs-budget-col-state') ? { autoSizeStrategy: { type: 'fitGridWidth' } } : {})}
                         singleClickEdit={v === VIEWS.BUDGET}
                         animateRows={true}
                     />
