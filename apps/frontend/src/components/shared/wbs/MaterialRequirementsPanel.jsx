@@ -369,10 +369,19 @@ function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMa
     // Resolve WBS branch names
     const nodeIds = parseWbsNodeIds(r);
     const branchNames = nodeIds.map(id => {
-        const node = wbsMap[id];
-        const parent = node?.parentId ? wbsMap[node.parentId] : null;
+        const node = wbsMap?.[id];
+        const parent = node?.parentId ? wbsMap?.[node.parentId] : null;
         return parent?.name || node?.name;
     }).filter(Boolean);
+
+    // Policz aktywne alokacje (wbsNodeAllocations z quantity > 0).
+    // Gdy > 1 — pole "Ilość" w głównym wierszu jest zablokowane (edycja per gałąź w ExpandedDetail).
+    let allocCount = 0;
+    try {
+        const alloc = r.wbsNodeAllocations ? JSON.parse(r.wbsNodeAllocations) : {};
+        allocCount = Object.values(alloc).filter(v => parseFloat(v) > 0).length;
+    } catch {}
+    const qtyLocked = isLocked || allocCount > 1;
 
     return (
         <tr className={`border-b border-white/[0.03] transition-colors ${isExpanded ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
@@ -415,8 +424,14 @@ function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMa
             {/* Ilość */}
             <td className="px-3 py-1">
                 <div className="flex items-center gap-1">
-                    {isLocked ? (
-                        <span className="text-sm text-gray-300 font-mono">{r.quantity}</span>
+                    {qtyLocked ? (
+                        <span
+                            className="text-sm text-gray-300 font-mono"
+                            title={allocCount > 1 ? `Suma z ${allocCount} gałęzi WBS — edytuj per gałąź w rozwinięciu` : undefined}
+                        >
+                            {r.quantity}
+                            {allocCount > 1 && <Lock size={9} className="inline ml-1 text-gray-500 -mt-0.5" />}
+                        </span>
                     ) : (
                         <input
                             type="number"

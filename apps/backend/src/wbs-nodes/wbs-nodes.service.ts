@@ -390,19 +390,65 @@ export class WbsNodesService {
     }
 
     /**
-     * Aktualizuje pola węzła WBS (nazwa, typ, status, owner).
+     * Aktualizuje pola węzła WBS (nazwa, typ, status, owner, quantity).
+     * Gdy quantity się zmienia, synchronizuje powiązane MaterialRequirement
+     * (jedno źródło prawdy: WbsNode.quantity → WbsNodeMaterial → MaterialRequirement).
      */
     async updateNode(id: string, data: any) {
         const allowed: Record<string, any> = {};
         for (const key of ['name', 'type', 'status', 'owner', 'resources', 'cost', 'parentId', 'sortOrder', 'comment', 'unit']) {
             if (data[key] !== undefined) allowed[key] = data[key];
         }
+        let quantityChanged = false;
+        if (data.quantity !== undefined) {
+            const q = parseFloat(data.quantity);
+            if (Number.isFinite(q) && q >= 0) {
+                allowed.quantity = q;
+                quantityChanged = true;
+            }
+        }
         if (data.tags !== undefined) {
             allowed.tags = Array.isArray(data.tags) && data.tags.length > 0
                 ? JSON.stringify(data.tags)
                 : null;
         }
-        return this.prisma.wbsNode.update({ where: { id }, data: allowed });
+        const updated = await this.prisma.wbsNode.update({ where: { id }, data: allowed });
+
+        if (quantityChanged) {
+            await this.syncMaterialsFromWbsNode(id, allowed.quantity).catch(() => {});
+        }
+
+        return updated;
+    }
+
+    /**
+     * Synchronizuje MaterialRequirement.quantity z WbsNode.quantity.
+     * Po zmianie quantity na WbsNode:
+     *   1) zaktualizuj WbsNodeMaterial.quantity dla tego węzła (każda alokacja na ten node = nowe quantity)
+     *   2) dla każdego dotkniętego MaterialRequirement: przelicz quantity jako sumę wszystkich alokacji
+     *      i zaktualizuj wbsNodeAllocations JSON
+     */
+    private async syncMaterialsFromWbsNode(wbsNodeId: string, newQuantity: number) {
+        const allocs = await this.prisma.wbsNodeMaterial.findMany({ where: { wbsNodeId } });
+        if (allocs.length === 0) return;
+
+        await this.prisma.wbsNodeMaterial.updateMany({
+            where: { wbsNodeId },
+            data: { quantity: newQuantity },
+        });
+
+        const materialIds = Array.from(new Set(allocs.map(a => a.materialId)));
+        for (const materialId of materialIds) {
+            const allForMat = await this.prisma.wbsNodeMaterial.findMany({ where: { materialId } });
+            const total = allForMat.reduce((sum, a) => sum + (a.quantity || 0), 0);
+            const allocJson = JSON.stringify(
+                Object.fromEntries(allForMat.map(a => [a.wbsNodeId, a.quantity])),
+            );
+            await this.prisma.materialRequirement.update({
+                where: { id: materialId },
+                data: { quantity: total, wbsNodeAllocations: allocJson },
+            }).catch(() => {});
+        }
     }
 
     /**
@@ -455,7 +501,7 @@ export class WbsNodesService {
 
         const totalPrice = unitPrice * quantity;
 
-        return this.prisma.wbsNode.update({
+        const updated = await this.prisma.wbsNode.update({
             where: { id },
             data: {
                 budgetType: data.budgetType || data.type || null,
@@ -471,5 +517,10 @@ export class WbsNodesService {
                 phase: data.phase ?? null,
             },
         });
+
+        // Sync: WbsNode.quantity → WbsNodeMaterial → MaterialRequirement
+        await this.syncMaterialsFromWbsNode(id, quantity).catch(() => {});
+
+        return updated;
     }
 }
