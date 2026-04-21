@@ -100,9 +100,9 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     }, [wbsNodes]);
 
     // ─── Filtered requirements ──────────────────────────────────────────────
-    // Pokazuj materiały które mają jakiekolwiek przypisanie do węzła WBS.
-    // Nieprzypisane (puste alloc + brak wbsNodeId) trafiają do koszyka w WBS tree.
+    // Pokazuj tylko materiały przypisane do istniejących węzłów WBS.
     const filtered = useMemo(() => {
+        const validIds = new Set(wbsNodes.map(n => n.id));
         return requirements.filter(r => {
             if (!activeTypes.includes(r.type)) return false;
             const ids = parseWbsNodeIds(r);
@@ -112,9 +112,9 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                 allocIds = Object.keys(alloc || {}).filter(k => parseFloat(alloc[k]) > 0);
             } catch {}
             const linked = [...ids, ...allocIds, r.wbsNodeId].filter(Boolean);
-            return linked.length > 0;
+            return linked.some(id => validIds.has(id));
         });
-    }, [requirements, activeTypes]);
+    }, [requirements, activeTypes, wbsNodes]);
 
     // ─── Fetch ──────────────────────────────────────────────────────────────
 
