@@ -751,17 +751,31 @@ export default function SchematTab({ nodeId }) {
                             </button>
                         )
                     )}
-                    <label className="flex items-center justify-center gap-2 p-3 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg cursor-pointer transition-colors text-sm font-medium">
-                        <Upload size={16} />
-                        {uploading ? 'Wgrywanie...' : 'Wgraj PDF / JPG'}
+                    <div
+                        onDragEnter={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDragOver={handleDragOver}
+                        onDrop={handleDrop}
+                        onClick={() => !uploading && document.getElementById('schemat-file-input')?.click()}
+                        className={`relative border border-dashed rounded-xl py-6 px-3 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer
+                            ${isDragging ? 'border-blue-400 bg-blue-500/20' : 'border-white/5 bg-white/[0.02] hover:border-blue-500/30 hover:bg-white/[0.04]'}`}
+                    >
+                        {uploading && (
+                            <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-10 rounded-xl">
+                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+                            </div>
+                        )}
+                        <Upload size={24} className="text-gray-500 shrink-0" />
+                        <span className="text-[10px] font-bold text-gray-400 uppercase text-center">Kliknij lub upuść pliki</span>
                         <input
+                            id="schemat-file-input"
                             type="file"
                             accept=".pdf,.jpg,.jpeg,.png"
                             onChange={handleUpload}
                             className="hidden"
                             disabled={uploading}
                         />
-                    </label>
+                    </div>
 
                     {/* Narzędzia edycji — tylko mobile */}
                     {!isDesktop && selectedSchematic && (

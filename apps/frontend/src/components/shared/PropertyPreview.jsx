@@ -243,17 +243,14 @@ export default function PropertyPreview({ nodeId, searchQuery = '', isFinancialT
                                     <div
                                         key={file.id}
                                         onClick={() => setSelectedFile(file)}
-                                        className={`flex items-center gap-3 p-2.5 rounded-lg border transition-all cursor-pointer group
+                                        className={`flex items-start gap-2 p-2.5 rounded-lg border transition-all cursor-pointer group
                                             ${selectedFile?.id === file.id
                                                 ? 'bg-blue-500/10 border-blue-500/30 text-white'
                                                 : 'bg-white/[0.02] border-white/5 text-gray-400 hover:bg-white/[0.05] hover:border-white/10'
                                             }`}
                                     >
-                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${selectedFile?.id === file.id ? 'bg-blue-500/20' : 'bg-white/5'}`}>
-                                            <FileIcon size={16} className={selectedFile?.id === file.id ? 'text-blue-400' : 'text-gray-500'} />
-                                        </div>
                                         <div className="flex-1 min-w-0">
-                                            <div className="truncate text-[11px] font-bold tracking-tight uppercase">{file.fileName}</div>
+                                            <div className="break-words text-[11px] font-bold tracking-tight uppercase">{file.fileName}</div>
                                             <div className="flex items-center gap-2 mt-0.5 opacity-60">
                                                 <Clock size={10} />
                                                 <span className="text-[9px]">{new Date(file.uploadedAt).toLocaleDateString()}</span>
