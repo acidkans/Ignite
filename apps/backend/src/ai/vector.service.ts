@@ -249,6 +249,8 @@ export class VectorService implements OnModuleInit {
     }>) {
         if (items.length === 0) return;
 
+        await this.ensureCollectionExists();
+
         // Generate embeddings in parallel
         const points = await Promise.all(items.map(async (item) => {
             const vector = await this.generateEmbedding(item.text);
