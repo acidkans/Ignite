@@ -319,7 +319,6 @@ ${requirementsHtml}
 ${infoHtml}
 ${strategyHtml}
 ${wbsHtml}
-${budgetHtml}
 ${materialsHtml}
 </body>
 </html>`;
