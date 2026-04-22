@@ -57,7 +57,7 @@ export default function DashboardPage() {
     const contextPendingTabRef = context?.pendingTabRef;
     const contextPendingRequirementIdRef = context?.pendingRequirementIdRef;
 
-    const { userId: currentUserId, roles: currentRoles = [] } = decodeToken() || {};
+    const { userId: currentUserId, roles: currentRoles = [] } = useMemo(() => decodeToken() || {}, []); // eslint-disable-line react-hooks/exhaustive-deps
     const isWorker = currentRoles.includes('USER') && !currentRoles.some(r => ['ADMIN', 'MANAGER', 'LOGISTYK'].includes(r));
     const isLogistyk = currentRoles.includes('LOGISTYK');
     const isManagerOrAdmin = currentRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));

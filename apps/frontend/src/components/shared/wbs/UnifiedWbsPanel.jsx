@@ -99,7 +99,14 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     // ── WBS Hybrid Tree state ──
     const [wbsTree, setWbsTree] = useState({ items: [] });
     const wbsTreeRef = useRef(wbsTree);
-    useEffect(() => { wbsTreeRef.current = wbsTree; }, [wbsTree]);
+    // Synchronicznie aktualizuj ref przez wrapper — nie polegaj na useEffect (może nie zdążyć przed save debounce)
+    const setWbsTreeAndRef = useCallback((updater) => {
+        setWbsTree(prev => {
+            const next = typeof updater === 'function' ? updater(prev) : updater;
+            wbsTreeRef.current = next;
+            return next;
+        });
+    }, []);
 
     const materialRef = useRef();
     const strategyRef = useRef();
@@ -315,8 +322,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                                 return merged.children?.length ? { ...merged, children: mergeRelational(merged.children) } : merged;
                             });
                             const mergedTree = { ...normalizedTree, items: mergeRelational(normalizedTree.items || []) };
-                            setWbsTree(mergedTree);
-                            wbsTreeRef.current = mergedTree;
+                            setWbsTreeAndRef(mergedTree);
                             projectItemNamesById = Object.fromEntries(
                                 (tree.items || [])
                                     .filter(item => !item.type || item.type === 'product')
@@ -679,12 +685,17 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 
     // ── Hybrid WBS save ──
     const hybridSaveRef = useRef(false);
+    const hybridSavePending = useRef(false);
     const hybridSaveTimeout = useRef(null);
     const handleSaveHybridWBS = useCallback(async () => {
         if (hybridSaveTimeout.current) clearTimeout(hybridSaveTimeout.current);
         hybridSaveTimeout.current = setTimeout(async () => {
-            if (hybridSaveRef.current) return;
+            if (hybridSaveRef.current) {
+                hybridSavePending.current = true; // kolejkuj — wyślij po zakończeniu bieżącego
+                return;
+            }
             hybridSaveRef.current = true;
+            hybridSavePending.current = false;
             try {
                 await fetch(`${API_URL}/order-requirements`, {
                     method: 'POST',
@@ -700,9 +711,25 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 console.error('[HybridWBS save]', err);
             } finally {
                 hybridSaveRef.current = false;
+                if (hybridSavePending.current) {
+                    hybridSavePending.current = false;
+                    // retry z najnowszymi danymi
+                    setTimeout(async () => {
+                        hybridSaveRef.current = true;
+                        try {
+                            await fetch(`${API_URL}/order-requirements`, {
+                                method: 'POST',
+                                headers: authHeaders(),
+                                body: JSON.stringify({ nodeId, versionId, wbsTree: JSON.stringify(wbsTreeRef.current) }),
+                            });
+                            onWbsUpdate?.();
+                        } catch (e) { console.error('[HybridWBS retry]', e); }
+                        finally { hybridSaveRef.current = false; }
+                    }, 0);
+                }
             }
         }, 400);
-    }, [nodeId, versionId, authHeaders, fetchData, onWbsUpdate]);
+    }, [nodeId, versionId, authHeaders, onWbsUpdate]);
 
     const assignedUsers = useMemo(() => {
         if (!Array.isArray(projectUsers) || !projectUsers.length) return [];
@@ -1332,7 +1359,7 @@ ${materialsHtml}
                     if (exists) return prev.map(n => n.id === wbsNodeId ? { ...n, tags: currentTags } : n);
                     return [...prev, { id: wbsNodeId, name, type: normalizedType, nodeId, tags: currentTags }];
                 });
-                setWbsTree(prev => {
+                setWbsTreeAndRef(prev => {
                     const upd = items => items.map(n => n.id === wbsNodeId ? { ...n, tags: currentTags } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
                     return { ...prev, items: upd(prev.items || []) };
                 });
@@ -1381,7 +1408,7 @@ ${materialsHtml}
                 body: JSON.stringify({ status: newStatus }),
             }).catch(() => {});
             setWbsData(prev => prev.map(n => n.id === node.id ? { ...n, status: newStatus } : n));
-            setWbsTree(prev => {
+            setWbsTreeAndRef(prev => {
                 const upd = items => items.map(n => n.id === node.id ? { ...n, status: newStatus } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
                 return { ...prev, items: upd(prev.items || []) };
             });
@@ -1398,7 +1425,7 @@ ${materialsHtml}
                 body: JSON.stringify({ [field]: value }),
             });
             setWbsData(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
-            setWbsTree(prev => {
+            setWbsTreeAndRef(prev => {
                 const upd = items => items.map(n => n.id === id ? { ...n, [field]: value } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
                 return { ...prev, items: upd(prev.items || []) };
             });
@@ -1874,7 +1901,7 @@ ${materialsHtml}
             });
             // Sync WBS-visible fields to wbsTree (WBSHybridTable reads from wbsTree, not wbsData)
             if (field === 'comment' || field === 'unit') {
-                setWbsTree(prev => {
+                setWbsTreeAndRef(prev => {
                     const upd = items => items.map(n =>
                         n.id === row.id
                             ? { ...n, [field]: row[field] }
@@ -2331,7 +2358,7 @@ ${materialsHtml}
                 <div className="flex flex-col flex-1 min-h-0">
                     <WBSHybridTable
                         wbsTree={wbsTree}
-                        setWbsTree={setWbsTree}
+                        setWbsTree={setWbsTreeAndRef}
                         nodeName={projectName || 'Projekt'}
                         processNodeId={nodeId}
                         onSave={handleSaveHybridWBS}
