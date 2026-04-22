@@ -534,7 +534,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     useEffect(() => {
         fetchMarkerLinks();
         const iv = setInterval(fetchMarkerLinks, 30000);
-        return () => clearInterval(iv);
+        window.addEventListener('wbs-link-changed', fetchMarkerLinks);
+        return () => { clearInterval(iv); window.removeEventListener('wbs-link-changed', fetchMarkerLinks); };
     }, [fetchMarkerLinks]);
 
     const toggle = (id, e) => {
