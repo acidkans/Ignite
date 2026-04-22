@@ -846,7 +846,22 @@ export class VectorService implements OnModuleInit {
             hour: '2-digit', minute: '2-digit',
         });
 
-        if (context.length > 0) {
+        // Truncate context to ~60k chars to stay within 30k TPM OpenAI limit
+        const MAX_CONTEXT_CHARS = 60000;
+        let truncatedContext = context;
+        let totalChars = context.reduce((sum, c) => sum + c.length, 0);
+        if (totalChars > MAX_CONTEXT_CHARS) {
+            truncatedContext = [];
+            let used = 0;
+            for (const chunk of context) {
+                if (used + chunk.length > MAX_CONTEXT_CHARS) break;
+                truncatedContext.push(chunk);
+                used += chunk.length;
+            }
+            this.logger.warn(`[Ask] Context truncated: ${context.length} → ${truncatedContext.length} chunks (${totalChars} → ${used} chars)`);
+        }
+
+        if (truncatedContext.length > 0) {
             prompt = `Jesteś inteligentnym asystentem ERP systemu GIGATEL.
 Aktualna data i godzina (strefa Warsaw): ${nowWarsaw}
 
@@ -874,18 +889,18 @@ INSTRUKCJE:
 7. Jeśli informacji nie ma w całej sekcji DANE, powiedz to wyraźnie.
 
 DANE:
-${context.join('\n\n---\n\n')}`;
+${truncatedContext.join('\n\n---\n\n')}`;
             // Debug: log first chunk to verify content
-            this.logger.log(`[Ask] Context chunks: ${context.length}`);
-            if (context.length > 0) {
-                this.logger.log(`[Ask] First chunk preview: ${context[0].substring(0, 200)}`);
+            this.logger.log(`[Ask] Context chunks: ${truncatedContext.length}`);
+            if (truncatedContext.length > 0) {
+                this.logger.log(`[Ask] First chunk preview: ${truncatedContext[0].substring(0, 200)}`);
                 // Check if any chunk contains the query
-                const matchingChunks = context.filter(c => c.toLowerCase().includes(question.toLowerCase()));
+                const matchingChunks = truncatedContext.filter(c => c.toLowerCase().includes(question.toLowerCase()));
                 this.logger.log(`[Ask] Chunks containing query "${question}": ${matchingChunks.length}`);
                 if (matchingChunks.length > 0) {
-                    const matchIndex = context.findIndex(c => c.toLowerCase().includes(question.toLowerCase()));
+                    const matchIndex = truncatedContext.findIndex(c => c.toLowerCase().includes(question.toLowerCase()));
                     this.logger.log(`[Ask] First match at index: ${matchIndex}`);
-                    this.logger.log(`[Ask] Match preview: ${context[matchIndex].substring(0, 300)}`);
+                    this.logger.log(`[Ask] Match preview: ${truncatedContext[matchIndex].substring(0, 300)}`);
                 }
             }
         } else {
