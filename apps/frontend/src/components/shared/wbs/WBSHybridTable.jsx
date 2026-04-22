@@ -957,6 +957,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         placeholder="0" className={`bg-transparent border-none focus:outline-none text-xs w-full text-right placeholder-gray-700 ${d.fieldClass}`} />
                 </td>
 
+                {/* Koszt */}
+                <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                    <input type="text" value={node.cost || ''} onChange={e => handleField(node.id, 'cost', e.target.value)} onBlur={onSave}
+                        placeholder="0" className={`bg-transparent border-none focus:outline-none text-xs w-full text-right placeholder-gray-700 ${d.fieldClass}`} />
+                </td>
+
                 {/* Komentarz */}
                 <td className="px-3 py-2.5 min-w-[180px]" onClick={e => e.stopPropagation()}>
                     <AutoResizeTextarea
@@ -1132,11 +1138,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 ${cell(r.path, 'white-space:nowrap;font-family:monospace')}
                 ${cell(r.name)}
                 ${cell(r.type)}
-                ${cell(r.reqQty !== '' ? r.reqQty : '', 'text-align:right')}
+                ${cell(r.reqQty !== '' && r.reqQty != null ? r.reqQty : '', 'text-align:right')}
                 ${cell(r.unit)}
                 ${cell(r.status)}
-                ${cell(r.owner)}
-                ${cell(r.resources !== '' ? r.resources : '', 'text-align:right')}
                 ${cell(r.cost !== '' ? r.cost : '', 'text-align:right')}
                 ${cell(r.comment)}
                 ${cell(tagsHtml)}
@@ -1164,14 +1168,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         <h1>WBS — ${nodeName}</h1>
         <table>
             <colgroup>
-                <col class="c-wbs"/><col class="c-name"/><col class="c-sm"/><col class="c-xs"/>
-                <col class="c-xs"/><col class="c-md"/><col class="c-md"/><col class="c-sm"/>
-                <col class="c-sm"/><col class="c-lg"/><col class="c-lg"/><col class="c-att"/>
+                <col class="c-wbs"/><col class="c-name"/><col class="c-sm"/>
+                <col class="c-xs"/><col class="c-xs"/><col class="c-md"/>
+                <col class="c-sm"/><col class="c-xl"/><col class="c-lg"/><col class="c-att"/>
             </colgroup>
             <thead><tr>
-                <th>WBS</th><th>Nazwa</th><th>Typ</th><th style="text-align:right">Ilość wymagań</th>
-                <th>Jednostka</th><th>Status</th><th>Właściciel</th>
-                <th style="text-align:right">Zasoby (h)</th><th style="text-align:right">Koszt</th>
+                <th>WBS</th><th>Nazwa</th><th>Typ</th>
+                <th style="text-align:right">Ilość</th><th>Jednostka</th><th>Status</th>
+                <th style="text-align:right">Koszt</th>
                 <th>Komentarz</th><th>Znaczniki</th><th>Załączniki</th>
             </tr></thead>
             <tbody>${tableRows}</tbody>
@@ -1206,6 +1210,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-32">Status</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-32">Właściciel</th>
                             <th className="text-right px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-24">Zasoby (h)</th>
+                            <th className="text-right px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-24">Koszt</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-48">Komentarz</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-28">Znaczniki</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-28">Załączniki</th>
