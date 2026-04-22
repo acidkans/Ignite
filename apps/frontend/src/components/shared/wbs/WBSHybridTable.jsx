@@ -1,4 +1,30 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+
+function AutoResizeTextarea({ value, onChange, onBlur, placeholder, className }) {
+    const ref = useRef(null);
+    const adjust = useCallback(() => {
+        const el = ref.current;
+        if (!el) return;
+        el.style.height = '0px';
+        el.style.height = el.scrollHeight + 'px';
+    }, []);
+    useEffect(() => {
+        const t = setTimeout(adjust, 0);
+        return () => clearTimeout(t);
+    }, [value, adjust]);
+    return (
+        <textarea
+            ref={ref}
+            rows={1}
+            value={value}
+            onChange={e => { onChange(e); adjust(); }}
+            onBlur={onBlur}
+            placeholder={placeholder}
+            className={className}
+            style={{ overflow: 'hidden', minHeight: '1.4em' }}
+        />
+    );
+}
 import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package } from 'lucide-react';
 import { UNIT_OPTIONS } from './wbsConstants';
 
@@ -62,12 +88,13 @@ const mkNode = (withDefaults = false) => {
     return {
         id,
         name: '',
-        status: '',
+        status: 'PENDING',
+        unit: 'sztuki',
         owner: '',
         resources: '',
         cost: '',
         tags: [],
-        type: '', // 'product', 'material', 'work', 'service' - empty for root
+        type: '',
         comment: '',
         children: [],
     };
@@ -199,7 +226,7 @@ function TagChips({ tags = [], tagColor, onRemove, onTagClick }) {
     const visible = tags.map((t, i) => ({ tag: t, idx: i })).filter(({ tag }) =>
         !UUID_RE.test(tag) && !String(tag).startsWith('req:') && tag !== 'auto-requirement');
     return (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-nowrap gap-1 overflow-hidden max-w-full">
             {visible.map(({ tag, idx }) => (
                 <span key={idx} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium border ${tagColor}`}>
                     <Tag size={8} className="flex-shrink-0" />
@@ -440,7 +467,7 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal, on
     const open = (e) => { e?.stopPropagation?.(); onOpenModal({ wbsNodeId, wbsNodeName: nodeName }); };
 
     return (
-        <div className="flex items-center gap-1 flex-wrap">
+        <div className="flex items-center gap-1 flex-nowrap overflow-hidden">
             {imgAtts.slice(0, 3).map(att => (
                 <AttachmentThumb key={att.id} att={att} onClick={(a) => onPreview?.(a)} />
             ))}
@@ -707,7 +734,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             </td>
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
+            <td className="px-3 py-3" />
+            <td className="px-3 py-3" />
             <td className="px-3 py-3 text-right"><span className="text-xs text-gray-300 font-mono">{fmt(totalRes)}</span></td>
+            <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
@@ -766,15 +796,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 {/* Nazwa */}
                 <td className="px-3 py-1.5 select-text" style={{ paddingLeft: `calc(0.75rem + ${depth * 14}px)` }} onClick={e => e.stopPropagation()}>
                     <div className="flex items-start gap-1.5">
-                        <textarea
-                            rows={1}
+                        <AutoResizeTextarea
                             value={node.name || ''}
-                            onChange={e => {
-                                handleField(node.id, 'name', e.target.value);
-                                e.target.style.height = 'auto';
-                                e.target.style.height = e.target.scrollHeight + 'px';
-                            }}
-                            onFocus={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+                            onChange={e => handleField(node.id, 'name', e.target.value)}
                             onBlur={() => {
                                 onSave?.();
                                 if ((node.type === 'equipment' || node.type === 'material') && node.name) {
@@ -782,8 +806,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 }
                             }}
                             placeholder={depth === 0 ? 'Nazwa przedmiotu projektu…' : 'Nazwa elementu…'}
-                            className={`bg-transparent border-none resize-none overflow-hidden focus:outline-none placeholder-gray-700 w-full min-w-0 select-text leading-snug ${d.nameClass}`}
-                            style={{ height: 'auto', minHeight: '1.4em' }}
+                            className={`bg-transparent border-none resize-none focus:outline-none placeholder-gray-700 w-full min-w-0 select-text leading-snug ${d.nameClass}`}
                         />
                         {depth < MAX_DEPTH && (
                             <button
@@ -850,8 +873,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                     {(() => {
                         const reqTag = (node.tags || []).find(t => String(t).startsWith('req:'));
-                        const inherited = !reqTag && node.name ? materialStatuses[node.name.toLowerCase()] : null;
-                        if (inherited) return <InheritedStatusBadge status={inherited} />;
                         return (
                             <StatusSelect
                                 value={node.status}
@@ -1079,8 +1100,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
     return (
         <div className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 min-h-0 overflow-auto custom-scrollbar">
-            <div className="w-full overflow-x-auto">
+            <div className="flex-1 min-h-0 overflow-auto overflow-x-auto custom-scrollbar">
+            <div className="w-full">
                 <table className="w-full text-sm border-collapse">
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
                         <tr className="border-b border-white/10">

@@ -311,7 +311,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                             // Merge relational fields (comment, status, owner) from wbsData into tree nodes
                             const mergeRelational = nodes => nodes.map(n => {
                                 const rel = wbsItemsById.get(n.id);
-                                const merged = rel ? { ...n, comment: rel.comment ?? n.comment, status: rel.status ?? n.status, owner: rel.owner ?? n.owner, unit: rel.unit ?? n.unit, quantity: rel.quantity ?? n.quantity } : n;
+                                const merged = rel ? { ...n, comment: rel.comment || n.comment, status: rel.status || n.status, owner: rel.owner || n.owner, unit: rel.unit || n.unit, quantity: rel.quantity ?? n.quantity } : n;
                                 return merged.children?.length ? { ...merged, children: mergeRelational(merged.children) } : merged;
                             });
                             const mergedTree = { ...normalizedTree, items: mergeRelational(normalizedTree.items || []) };

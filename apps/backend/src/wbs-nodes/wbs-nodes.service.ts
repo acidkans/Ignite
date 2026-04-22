@@ -6,9 +6,11 @@ interface WbsTreeItem {
     name: string;
     type: string;
     status: string;
+    unit: string;
     owner: string;
     resources: string;
     cost: string;
+    comment: string;
     tags: string[];
     children: WbsTreeItem[];
 }
@@ -78,9 +80,11 @@ export class WbsNodesService {
                             name: row.name,
                             type: row.type,
                             status: row.status,
+                            unit: row.unit,
                             owner: row.owner,
                             resources: row.resources,
                             cost: row.cost,
+                            comment: row.comment,
                             tags: row.tags,
                             sortOrder: row.sortOrder,
                         },
@@ -141,9 +145,11 @@ export class WbsNodesService {
                 name: n.name,
                 type: n.type || '',
                 status: n.status || '',
+                unit: n.unit || '',
                 owner: n.owner || '',
                 resources: n.resources || '',
                 cost: n.cost || '',
+                comment: n.comment || '',
                 tags: this.parseTags(n.tags),
                 children: this.buildTree(nodes, n.id),
             }));
@@ -166,9 +172,11 @@ export class WbsNodesService {
                 name: item.name || '',
                 type: item.type || '',
                 status: item.status || '',
+                unit: item.unit || '',
                 owner: item.owner || '',
                 resources: item.resources || '',
                 cost: item.cost || '',
+                comment: item.comment || '',
                 tags: Array.isArray(item.tags) && item.tags.length > 0 ? JSON.stringify(item.tags) : null,
                 sortOrder: i,
             });
