@@ -5,12 +5,18 @@ const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').
 
 const renderGoalHtml = (text) => (text || '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^\*\*(.+?)\*\*$/gm, '<h3 class="md-bold">$1</h3>')
     .replace(/^### (.+)$/gm, '<h4>$1</h4>')
     .replace(/^## (.+)$/gm, '<h3>$1</h3>')
     .replace(/^# (.+)$/gm, '<h2 class="md-h2">$1</h2>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(<h[2-4][^>]*>[^<]*<\/h[2-4]>)/g, '\n\n$1\n\n')
+    .replace(/\n{3,}/g, '\n\n')
     .replace(/\n\n/g, '</p><p>')
-    .replace(/\n/g, '<br>');
+    .replace(/\n/g, '<br>')
+    .replace(/<p>(<h[2-4][^>]*>)/g, '$1')
+    .replace(/(<\/h[2-4]>)<\/p>/g, '$1')
+    .replace(/<p><\/p>/g, '');
 
 export function exportRequirementsPdf({ form, countdown, workingDays }) {
     if (!form) { alert('Brak danych formularza.'); return; }
@@ -93,11 +99,10 @@ export function exportRequirementsPdf({ form, countdown, workingDays }) {
   .doc-header .meta { font-size: 10px; color: #9ca3af; margin-top: 4px; }
   .section { margin-bottom: 22px; }
   .section-header { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; background: #1a1a2e; color: #fff; padding: 7px 12px; }
-  .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.7; }
-  .strategy-text p { margin: 0 0 10px 0; }
-  .strategy-text h3 { font-size: 12px; margin: 14px 0 4px 0; }
-  .strategy-text h4 { font-size: 11px; margin: 10px 0 3px 0; color: #374151; }
-  .md-h2 { font-size: 13px; margin: 16px 0 5px 0; }
+  .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.6; }
+  .strategy-text p { margin: 0 0 4px 0; }
+  .strategy-text h2, .strategy-text h3, .strategy-text h4, .strategy-text .md-bold { font-size: 11px; font-weight: bold; margin: 16px 0 2px 0; }
+  .strategy-text h3:first-child, .strategy-text h2:first-child, .strategy-text .md-bold:first-child { margin-top: 0; }
   table { border-collapse: collapse; width: 100%; }
   th { background: #f3f4f6; color: #374151; padding: 6px 8px; text-align: left; font-size: 10px; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
   td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }

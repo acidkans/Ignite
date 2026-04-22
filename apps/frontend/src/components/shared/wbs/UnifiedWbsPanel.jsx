@@ -837,17 +837,32 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const renderStrategyHtml = useCallback((text) => {
         return (text || '')
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/^\*\*(.+?)\*\*$/gm, '<h3 class="md-bold">$1</h3>')
             .replace(/^### (.+)$/gm, '<h4>$1</h4>')
             .replace(/^## (.+)$/gm, '<h3>$1</h3>')
             .replace(/^# (.+)$/gm, '<h2 class="md-h2">$1</h2>')
             .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/(<h[2-4][^>]*>[^<]*<\/h[2-4]>)/g, '\n\n$1\n\n')
+            .replace(/\n{3,}/g, '\n\n')
             .replace(/\n\n/g, '</p><p>')
-            .replace(/\n/g, '<br>');
+            .replace(/\n/g, '<br>')
+            .replace(/<p>(<h[2-4][^>]*>)/g, '$1')
+            .replace(/(<\/h[2-4]>)<\/p>/g, '$1')
+            .replace(/<p><\/p>/g, '');
     }, []);
 
     const handleExportPDF = async (sectionKey = 'all') => {
         const date = new Date().toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' });
         const show = (key) => sectionKey === key || sectionKey === 'all';
+
+        let logoDataUrl = '';
+        try {
+            const logoRes = await fetch(`${window.location.origin}/airtel-logo-services.png`);
+            if (logoRes.ok) {
+                const blob = await logoRes.blob();
+                logoDataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+            }
+        } catch (_) {}
         const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
         const markerSummary = (nodeId) => {
@@ -1046,17 +1061,18 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 0 12px 28px 12px; }
-  .doc-header { border-bottom: 3px solid #1a1a2e; padding: 18px 0 10px 0; margin: 0 0 18px 0; break-after: avoid; page-break-after: avoid; }
+  .doc-header { border-bottom: 3px solid #1a1a2e; padding: 18px 0 10px 0; margin: 0 0 18px 0; break-after: avoid; page-break-after: avoid; display: flex; align-items: flex-start; gap: 16px; }
+  .doc-header-logo { height: 48px; width: auto; object-fit: contain; flex-shrink: 0; }
+  .doc-header-text { flex: 1; }
   .doc-header h1 { font-size: 20px; margin: 0 0 2px 0; }
   .doc-header .sub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: #6b7280; }
   .doc-header .meta { font-size: 10px; color: #9ca3af; margin-top: 4px; }
   .section { margin-bottom: 22px; }
   .section-header { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; background: #1a1a2e; color: #fff; padding: 7px 12px; break-after: avoid; page-break-after: avoid; }
-  .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.7; }
-  .strategy-text p { margin: 0 0 10px 0; }
-  .strategy-text h3 { font-size: 14px; margin: 14px 0 4px 0; }
-  .strategy-text h4 { font-size: 11px; margin: 10px 0 3px 0; color: #374151; }
-  .md-h2 { font-size: 13px; margin: 16px 0 5px 0; }
+  .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.6; }
+  .strategy-text p { margin: 0 0 4px 0; }
+  .strategy-text h2, .strategy-text h3, .strategy-text h4, .strategy-text .md-bold { font-size: 11px; font-weight: bold; margin: 16px 0 2px 0; }
+  .strategy-text h3:first-child, .strategy-text h2:first-child, .strategy-text .md-bold:first-child { margin-top: 0; }
   table { border-collapse: collapse; width: 100%; }
   td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; text-align: center; }
   td.num { text-align: center; font-family: monospace; font-size: 10px; }
@@ -1071,10 +1087,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
   th { background: #f3f4f6; color: #374151; padding: 7px 8px; text-align: center; font-size: 12px; font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
   thead { display: table-header-group; }
   tr { page-break-inside: avoid; break-inside: avoid; }
-  @page { margin: 10mm 8mm 12mm 8mm; }
+  @page { margin: 0; size: A4; }
   @media print {
-    body { padding: 0 6mm; }
-    .doc-header { padding-top: 8px; }
+    body { padding: 14mm 14mm 14mm 14mm; }
     .summary-grid { display: block; }
     .summary-block { margin-bottom: 16px; }
     .summary-section { page-break-before: always; }
@@ -1083,9 +1098,12 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 </head>
 <body>
 <div class="doc-header">
-  <h1>${esc(projectName || 'Projekt')}</h1>
-  <div class="sub">${sectionKey === 'budget' ? 'Budżet' : 'Informacje o projekcie i planowanie'}</div>
-  <div class="meta">Przygotowano: ${date}</div>
+  ${logoDataUrl ? `<img class="doc-header-logo" src="${logoDataUrl}" alt="Logo" />` : ''}
+  <div class="doc-header-text">
+    <h1>${esc(projectName || 'Projekt')}</h1>
+    <div class="sub">${sectionKey === 'budget' ? 'Budżet' : 'Informacje o projekcie i planowanie'}</div>
+    <div class="meta">Przygotowano: ${date}</div>
+  </div>
 </div>
 ${strategyHtml}
 ${wbsHtml}
