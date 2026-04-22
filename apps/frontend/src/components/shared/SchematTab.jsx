@@ -4,7 +4,7 @@ import { enqueueUpload, removeFromQueue, flushPendingUploads } from '../../utils
 import {
     Upload, X, MapPin, Image as ImageIcon, Mic, Trash2,
     MousePointer2, Minus, Type, ZoomIn, ZoomOut, Maximize, Minimize2, Hand, Camera, Download, FileText, Save, FileDown,
-    RefreshCw, HardDrive, FolderOpen, List, CheckSquare, Square, Layers
+    RefreshCw, HardDrive, FolderOpen, List, CheckSquare, Square, Layers, ChevronDown, Plus, Check
 } from 'lucide-react';
 
 function flattenWbsNodes(nodes, prefix = '') {
@@ -56,6 +56,7 @@ export default function SchematTab({ nodeId }) {
     const [showTable, setShowTable] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    const [showFileDropdown, setShowFileDropdown] = useState(false);
 
     const pageRef = useRef(null);
     const containerRef = useRef(null);
@@ -66,6 +67,13 @@ export default function SchematTab({ nodeId }) {
 
     useEffect(() => { scaleRef.current = scale; }, [scale]);
     useEffect(() => { isAddingMarkerRef.current = isAddingMarker; }, [isAddingMarker]);
+
+    useEffect(() => {
+        if (!showFileDropdown) return;
+        const handler = (e) => { if (!e.target.closest('[data-file-dropdown]')) setShowFileDropdown(false); };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showFileDropdown]);
 
     // Reset aspect ratio gdy zmienia się schemat
     useEffect(() => { setContentAspect(null); }, [selectedSchematic?.id]);
@@ -654,211 +662,128 @@ export default function SchematTab({ nodeId }) {
     }
 
     return (
-        <div className="flex flex-col md:flex-row h-full bg-gray-900/50 rounded-xl overflow-hidden border border-white/5 relative">
-            {/* Lewy panel - narzędzia i lista schematów */}
+        <div className={`flex flex-col h-full bg-gray-900/50 rounded-xl overflow-hidden border border-white/5 relative ${!isDesktop && isFullscreen ? 'fixed inset-0 z-[200]' : ''}`}>
+
+            {/* Górna belka — pełna szerokość */}
             <div
-                className={`w-full md:w-64 h-48 md:h-auto bg-black/40 border-b md:border-b-0 md:border-r border-white/5 flex flex-col p-4 flex-shrink-0 transition-colors ${isDragging ? 'bg-blue-500/10 border-blue-500/40' : ''}`}
+                className="h-12 border-b border-white/5 flex items-center px-3 gap-2 bg-black/20 flex-shrink-0"
                 onDragOver={handleDragOver}
                 onDragEnter={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
             >
-                <h3 className="text-white font-bold mb-4 uppercase tracking-wider text-xs flex items-center gap-2">
-                    <MapPin size={14} className="text-orange-400" /> Schematy
-                </h3>
-                
-                <div className="flex-1 overflow-y-auto pr-2 space-y-2 mb-4">
-                    {schematics.map(sch => (
-                        <div 
-                            key={sch.id}
-                            className={`p-3 rounded-lg border cursor-pointer transition-all group relative ${
-                                selectedSchematic?.id === sch.id 
-                                ? 'bg-orange-500/20 border-orange-500/50 text-orange-200' 
-                                : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-gray-200'
-                            }`}
-                            onClick={() => selectSchematic(sch)}
-                        >
-                            <div className="text-xs truncate pr-6" title={sch.fileName}>{sch.fileName}</div>
-                            <div className="text-[10px] opacity-60 mt-1">Znaczników: {sch.markers.length}</div>
-                            
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); handleDeleteSchematic(sch.id); }}
-                                className="absolute right-2 top-2 p-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                                title="Usuń schemat"
-                            >
-                                <Trash2 size={12} />
-                            </button>
-                        </div>
-                    ))}
-                    {schematics.length === 0 && (
-                        <div className="text-xs text-gray-500 text-center mt-10">
-                            {isDragging ? 'Upuść plik PDF / JPG' : 'Brak wgranych schematów.'}
-                        </div>
-                    )}
-                </div>
-
-                <div className="pt-4 border-t border-white/5 space-y-2">
-                    {isSupported && (
-                        dirHandle ? (
-                            <div className="space-y-1">
-                                <div className="relative group">
-                                    <button
-                                        onClick={() => {
-                                            const token = sessionStorage.getItem('token');
-                                            syncFiles(schematics, token);
-                                        }}
-                                        disabled={syncStatus === 'syncing'}
-                                        className="w-full flex items-center justify-center gap-2 p-2.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 rounded-lg transition-colors text-xs font-medium disabled:opacity-50 disabled:cursor-wait"
-                                    >
-                                        <RefreshCw size={13} className={syncStatus === 'syncing' ? 'animate-spin' : ''} />
-                                        {syncStatus === 'syncing' ? 'Sprawdzanie...' : 'Synchronizuj'}
-                                    </button>
-                                    <div className="absolute bottom-full left-0 mb-2 w-72 bg-gray-900 border border-white/10 rounded-xl p-3 shadow-2xl text-[11px] text-gray-300 leading-relaxed opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
-                                        <p className="font-bold text-cyan-400 mb-1">Jak działa synchronizacja?</p>
-                                        <p>Porównuje rozmiar każdego pliku na serwerze z lokalną kopią. Pobiera tylko pliki które się różnią — <span className="text-white">serwer zawsze wygrywa</span>.</p>
-                                        <p className="mt-1.5 text-gray-500">Kierunek: <span className="text-cyan-400">serwer → folder lokalny</span></p>
-                                        <p className="mt-1 text-gray-500">Uruchamia się automatycznie przy otwarciu zakładki.</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-1 text-[10px] px-1">
-                                    <FolderOpen size={9} className="text-gray-600 shrink-0" />
-                                    <span className="truncate flex-1 text-gray-600" title={dirName}>{dirName}</span>
-                                    {syncStats && syncStatus === 'done' && (
-                                        <span className="shrink-0 text-cyan-500/70">
-                                            {syncStats.downloaded > 0
-                                                ? `↓ ${syncStats.downloaded} pobrano, ${syncStats.skipped} aktualne`
-                                                : `✓ ${syncStats.skipped} aktualnych`}
-                                        </span>
-                                    )}
-                                    {syncStatus === 'error' && (
-                                        <span className="shrink-0 text-red-400">błąd sync</span>
-                                    )}
-                                    {lastSync && syncStatus !== 'error' && !syncStats && (
-                                        <span className="shrink-0 text-gray-600">
-                                            {lastSync.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                        ) : (
-                            <button
-                                onClick={chooseFolder}
-                                className="w-full flex items-center justify-center gap-2 p-2.5 bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 rounded-lg transition-colors text-xs font-medium"
-                                title="Wybierz folder lokalny do synchronizacji schematów"
-                            >
-                                <HardDrive size={13} />
-                                Ustaw folder lokalny
-                            </button>
-                        )
-                    )}
-                    <div
-                        onDragEnter={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDragOver={handleDragOver}
-                        onDrop={handleDrop}
-                        onClick={() => !uploading && document.getElementById('schemat-file-input')?.click()}
-                        className={`relative border border-dashed rounded-xl py-6 px-3 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer
-                            ${isDragging ? 'border-blue-400 bg-blue-500/20' : 'border-white/5 bg-white/[0.02] hover:border-blue-500/30 hover:bg-white/[0.04]'}`}
+                {/* Dropdown listy plików */}
+                <div className="relative" data-file-dropdown>
+                    <button
+                        onClick={() => setShowFileDropdown(v => !v)}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                            showFileDropdown ? 'bg-white/10 border-white/20 text-white' : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white'
+                        }`}
                     >
-                        {uploading && (
-                            <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-10 rounded-xl">
-                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
-                            </div>
+                        <MapPin size={13} className="text-orange-400 shrink-0" />
+                        <span className="max-w-[180px] truncate">
+                            {selectedSchematic ? selectedSchematic.fileName : 'Wybierz schemat'}
+                        </span>
+                        {selectedSchematic && (
+                            <span className="text-[10px] text-gray-500 shrink-0">({selectedSchematic.markers.length})</span>
                         )}
-                        <Upload size={24} className="text-gray-500 shrink-0" />
-                        <span className="text-[10px] font-bold text-gray-400 uppercase text-center">Kliknij lub upuść pliki</span>
-                        <input
-                            id="schemat-file-input"
-                            type="file"
-                            accept=".pdf,.jpg,.jpeg,.png"
-                            onChange={handleUpload}
-                            className="hidden"
-                            disabled={uploading}
-                        />
-                    </div>
+                        <ChevronDown size={12} className={`shrink-0 transition-transform ${showFileDropdown ? 'rotate-180' : ''}`} />
+                    </button>
 
-                    {/* Narzędzia edycji — tylko mobile */}
-                    {!isDesktop && selectedSchematic && (
-                        <div className="mt-2 pt-2 border-t border-white/5 flex flex-wrap items-center gap-2">
-                            <div className="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-white/10">
-                                <button onClick={() => { setActiveTool('MOVE'); setIsAddingMarker(false); }} className={`p-1.5 rounded transition-colors ${activeTool === 'MOVE' ? 'bg-orange-500 text-white' : 'text-gray-400'}`} title="Przesuń"><Hand size={14}/></button>
-                                <button onClick={() => setActiveTool('POINT')} className={`p-1.5 rounded transition-colors ${activeTool === 'POINT' ? 'bg-orange-500 text-white' : 'text-gray-400'}`} title="Punkt"><MapPin size={14}/></button>
-                                <button onClick={() => setActiveTool('LINE')} className={`p-1.5 rounded transition-colors ${activeTool === 'LINE' ? 'bg-orange-500 text-white' : 'text-gray-400'}`} title="Linia"><Minus size={14}/></button>
-                                <button onClick={() => setActiveTool('TEXT')} className={`p-1.5 rounded transition-colors ${activeTool === 'TEXT' ? 'bg-orange-500 text-white' : 'text-gray-400'}`} title="Tekst"><Type size={14}/></button>
+                    {showFileDropdown && (
+                        <div className="absolute top-full left-0 mt-1 w-72 bg-gray-900 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+                            <div className="max-h-64 overflow-y-auto p-1.5 space-y-1">
+                                {schematics.map(sch => (
+                                    <div
+                                        key={sch.id}
+                                        className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-all group ${
+                                            selectedSchematic?.id === sch.id
+                                            ? 'bg-orange-500/20 text-orange-200'
+                                            : 'text-gray-400 hover:bg-white/10 hover:text-gray-200'
+                                        }`}
+                                        onClick={() => { selectSchematic(sch); setShowFileDropdown(false); }}
+                                    >
+                                        <div>
+                                            <div className="text-xs truncate max-w-[220px]" title={sch.fileName}>{sch.fileName}</div>
+                                            <div className="text-[10px] opacity-60">Znaczników: {sch.markers.length}</div>
+                                        </div>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteSchematic(sch.id); }}
+                                            className="p-1 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                                            title="Usuń schemat"
+                                        >
+                                            <Trash2 size={12} />
+                                        </button>
+                                    </div>
+                                ))}
+                                {schematics.length === 0 && (
+                                    <div className="text-xs text-gray-500 text-center py-4">Brak schematów.</div>
+                                )}
                             </div>
-                            <button
-                                onClick={() => { setIsAddingMarker(!isAddingMarker); setLineStart(null); }}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${isAddingMarker ? 'bg-orange-500/20 text-orange-400 border-orange-500/50' : 'bg-white/5 text-gray-300 border-white/10'}`}
-                            >
-                                <MapPin size={13}/>
-                                {isAddingMarker ? 'Anuluj' : 'Dodaj'}
-                            </button>
                         </div>
                     )}
                 </div>
-            </div>
 
-            {/* Główny obszar - podgląd PDF */}
-            <div className={`flex-1 flex flex-col bg-gray-800/20 overflow-hidden ${!isDesktop && isFullscreen ? 'fixed inset-0 z-[200]' : ''}`}>
-                {/* Wiersz: PDF viewer + panel znacznika */}
-                <div className="flex-1 flex overflow-hidden min-h-0 relative">
-                <div className="flex-1 overflow-hidden flex flex-col min-w-0">
-                {selectedSchematic ? (
-                    <div className="flex flex-col flex-1 min-h-0">
-                        {/* Pasek narzędzi PDF */}
-                        <div className="h-12 border-b border-white/5 flex items-center px-4 justify-between bg-black/20 flex-shrink-0">
-                            <div className="flex items-center gap-4">
-                                {!isImageFile(selectedSchematic.fileUrl) && (<>
-                                <button
-                                    disabled={pageNumber <= 1}
-                                    onClick={() => setPageNumber(p => p - 1)}
-                                    className="px-2 py-1 bg-white/5 hover:bg-white/10 text-xs rounded disabled:opacity-30 text-white"
-                                >
-                                    Poprzednia
-                                </button>
-                                <span className="text-xs text-gray-400">
-                                    Strona {pageNumber} z {numPages || '?'}
-                                </span>
-                                <button
-                                    disabled={pageNumber >= numPages}
-                                    onClick={() => setPageNumber(p => p + 1)}
-                                    className="px-2 py-1 bg-white/5 hover:bg-white/10 text-xs rounded disabled:opacity-30 text-white"
-                                >
-                                    Następna
-                                </button>
-                                </>)}
-                            </div>
+                {/* Wgraj PDF */}
+                <label
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg border cursor-pointer transition-all text-sm font-semibold flex-shrink-0 ${
+                        isDragging
+                        ? 'bg-blue-500/30 border-blue-400 text-blue-300 scale-105'
+                        : 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border-blue-500/30 hover:border-blue-400'
+                    }`}
+                    title="Wgraj PDF / JPG lub przeciągnij plik"
+                    onDragOver={handleDragOver}
+                    onDragEnter={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                >
+                    <Upload size={15} />
+                    {uploading ? 'Wgrywanie...' : isDragging ? 'Upuść plik' : 'Wgraj'}
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleUpload} className="hidden" disabled={uploading} />
+                </label>
 
+                {/* Sync / folder lokalny */}
+                {isSupported && (
+                    dirHandle ? (
+                        <button
+                            onClick={() => { const token = sessionStorage.getItem('token'); syncFiles(schematics, token); }}
+                            disabled={syncStatus === 'syncing'}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50"
+                            title={dirName ? `Folder: ${dirName}` : 'Synchronizuj'}
+                        >
+                            <RefreshCw size={13} className={syncStatus === 'syncing' ? 'animate-spin' : ''} />
+                            {syncStatus === 'syncing' ? 'Sync...' : 'Sync'}
+                        </button>
+                    ) : (
+                        <button
+                            onClick={chooseFolder}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 transition-colors text-xs font-medium flex-shrink-0"
+                            title="Ustaw folder lokalny do synchronizacji"
+                        >
+                            <HardDrive size={13} />
+                            Folder
+                        </button>
+                    )
+                )}
 
-                            {isDesktop && (<>
-                            <div className="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-white/10 mr-4">
-                                <button
-                                    onClick={() => { setActiveTool('MOVE'); setIsAddingMarker(false); }}
-                                    className={`p-1.5 rounded transition-colors ${activeTool === 'MOVE' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'}`}
-                                    title="Przesuń (Rączka)"
-                                >
-                                    <Hand size={14} />
-                                </button>
-                                <button
-                                    onClick={() => setActiveTool('POINT')}
-                                    className={`p-1.5 rounded transition-colors ${activeTool === 'POINT' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'}`}
-                                    title="Punkt/Znacznik"
-                                >
-                                    <MapPin size={14} />
-                                </button>
-                                <button
-                                    onClick={() => setActiveTool('LINE')}
-                                    className={`p-1.5 rounded transition-colors ${activeTool === 'LINE' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'}`}
-                                    title="Linia"
-                                >
-                                    <Minus size={14} />
-                                </button>
-                                <button
-                                    onClick={() => setActiveTool('TEXT')}
-                                    className={`p-1.5 rounded transition-colors ${activeTool === 'TEXT' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'}`}
-                                    title="Tekst"
-                                >
-                                    <Type size={14} />
+                {/* Nawigacja stron PDF */}
+                {selectedSchematic && !isImageFile(selectedSchematic.fileUrl) && (
+                    <div className="flex items-center gap-2">
+                        <button disabled={pageNumber <= 1} onClick={() => setPageNumber(p => p - 1)} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-xs rounded disabled:opacity-30 text-white">Poprzednia</button>
+                        <span className="text-xs text-gray-400">Strona {pageNumber} z {numPages || '?'}</span>
+                        <button disabled={pageNumber >= numPages} onClick={() => setPageNumber(p => p + 1)} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-xs rounded disabled:opacity-30 text-white">Następna</button>
+                    </div>
+                )}
+
+                <div className="flex-1" />
+
+                {/* Narzędzia rysowania */}
+                {selectedSchematic && isDesktop && (<>
+                    <div className="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-white/10">
+                        <button onClick={() => { setActiveTool('MOVE'); setIsAddingMarker(false); }} className={`p-1.5 rounded transition-colors ${activeTool === 'MOVE' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'}`} title="Przesuń (Rączka)"><Hand size={14} /></button>
+                        <button onClick={() => setActiveTool('POINT')} className={`p-1.5 rounded transition-colors ${activeTool === 'POINT' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'}`} title="Punkt/Znacznik"><MapPin size={14} /></button>
+                        <button onClick={() => setActiveTool('LINE')} className={`p-1.5 rounded transition-colors ${activeTool === 'LINE' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'}`} title="Linia"><Minus size={14} /></button>
+                        <button onClick={() => setActiveTool('TEXT')} className={`p-1.5 rounded transition-colors ${activeTool === 'TEXT' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'}`} title="Tekst"><Type size={14} />
                                 </button>
                             </div>
 
@@ -910,6 +835,12 @@ export default function SchematTab({ nodeId }) {
                             })()}
                             </>)}
                         </div>
+
+            {/* Obszar roboczy - PDF viewer + panel znacznika */}
+            <div className="flex-1 flex overflow-hidden min-h-0 relative">
+            <div className="flex-1 overflow-hidden flex flex-col min-w-0">
+            {selectedSchematic ? (
+                <div className="flex flex-col flex-1 min-h-0">
 
                         {/* Overlay — przyciski zoom + fullscreen */}
                         <div className="fixed bottom-4 right-3 z-[100] flex flex-col gap-2 pointer-events-none">
@@ -1099,7 +1030,7 @@ export default function SchematTab({ nodeId }) {
                         ) : (
                             <>
                                 <span>Wybierz z listy lub wgraj nowy schemat PDF.</span>
-                                <span className="text-xs text-gray-600">Możesz też przeciągnąć plik tutaj lub na panel listy.</span>
+                                <span className="text-xs text-gray-600">Możesz też przeciągnąć plik tutaj.</span>
                             </>
                         )}
                     </div>
@@ -1127,7 +1058,7 @@ export default function SchematTab({ nodeId }) {
                 )}
                 </div>
 
-            {(isDesktop || (showTable && !isFullscreen)) && selectedSchematic && (() => {
+            {selectedSchematic && (() => {
                 const rows = selectedSchematic.markers.flatMap(m =>
                     (m.attachments || []).map(a => ({
                         ...a,
@@ -1153,23 +1084,30 @@ export default function SchematTab({ nodeId }) {
                 };
 
                 return (
-                    <div className="border-t border-white/5 bg-black/30 px-4 py-3 max-h-72 overflow-y-auto flex-shrink-0">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em]">
-                                Załączniki ({rows.length})
-                            </span>
-                            <div className="flex items-center gap-3">
-                                <button
-                                    onClick={() => rows.forEach(a => downloadFile(a))}
-                                    className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
-                                >
-                                    <Download size={12} /> Pobierz wszystko
-                                </button>
-                                <button onClick={() => setShowTable(false)} className="p-1 text-gray-500 hover:text-white rounded" title="Ukryj tabelę">
-                                    <X size={13}/>
-                                </button>
+                    <div className="border-t border-white/5 flex-shrink-0">
+                        <button
+                            onClick={() => setShowTable(v => !v)}
+                            className="w-full flex items-center justify-between px-4 py-2.5 bg-black/30 hover:bg-white/5 transition-colors group"
+                        >
+                            <div className="flex items-center gap-2">
+                                <List size={13} className="text-blue-400" />
+                                <span className="text-[10px] text-gray-400 uppercase font-black tracking-[0.15em]">
+                                    Znaczniki i załączniki ({rows.length})
+                                </span>
                             </div>
-                        </div>
+                            <div className="flex items-center gap-3">
+                                {showTable && (
+                                    <button
+                                        onClick={e => { e.stopPropagation(); rows.forEach(a => downloadFile(a)); }}
+                                        className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
+                                    >
+                                        <Download size={12} /> Pobierz wszystko
+                                    </button>
+                                )}
+                                <ChevronDown size={14} className={`text-gray-500 transition-transform ${showTable ? 'rotate-180' : ''}`} />
+                            </div>
+                        </button>
+                        {showTable && <div className="bg-black/30 px-4 py-3 max-h-72 overflow-y-auto">
                         <table className="w-full text-xs">
                             <thead>
                                 <tr className="text-gray-600 text-[10px] uppercase border-b border-white/5">
@@ -1228,10 +1166,10 @@ export default function SchematTab({ nodeId }) {
                                 ))}
                             </tbody>
                         </table>
+                    </div>}
                     </div>
                 );
             })()}
-            </div>
 
             {lightboxUrl && (
                 <div
@@ -1269,6 +1207,11 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
     const [wbsNodes, setWbsNodes] = useState([]);
     const [wbsLinks, setWbsLinks] = useState([]);
     const [wbsToggling, setWbsToggling] = useState(null);
+    const [addWbsMode, setAddWbsMode] = useState(null); // null | 'item' | 'requirement'
+    const [addWbsParentId, setAddWbsParentId] = useState('');
+    const [addWbsName, setAddWbsName] = useState('');
+    const [addWbsSaving, setAddWbsSaving] = useState(false);
+    const addWbsInputRef = useRef(null);
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
 
@@ -1334,6 +1277,58 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
             body: JSON.stringify({ name: editName })
         }).catch(() => {});
         onMarkerUpdated?.({ id: marker.id, name: editName });
+    };
+
+    const openAddWbs = (mode) => {
+        setAddWbsMode(mode);
+        setAddWbsName('');
+        if (mode === 'requirement') {
+            const rootNodes = wbsNodes.filter(n => n.path.split('.').length === 1);
+            setAddWbsParentId(rootNodes[0]?.id || '');
+        } else {
+            setAddWbsParentId('');
+        }
+        setTimeout(() => addWbsInputRef.current?.focus(), 80);
+    };
+
+    const createWbsNode = async () => {
+        if (!addWbsName.trim() || !nodeId) return;
+        setAddWbsSaving(true);
+        try {
+            const token = sessionStorage.getItem('token');
+            const body = { nodeId, name: addWbsName.trim() };
+            if (addWbsMode === 'requirement' && addWbsParentId) body.parentId = addWbsParentId;
+            const res = await fetch(`${API_URL}/wbs-nodes`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (!res.ok) throw new Error('Błąd tworzenia');
+            const newNode = await res.json();
+            // Odśwież listę węzłów
+            const treeRes = await fetch(`${API_URL}/order-requirements/${nodeId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (treeRes.ok) {
+                const data = await treeRes.json();
+                const tree = typeof data.wbsTree === 'string' ? JSON.parse(data.wbsTree) : (data.wbsTree || []);
+                setWbsNodes(flattenWbsNodes(tree));
+            }
+            // Auto-linkuj nowy węzeł do znacznika
+            const linkRes = await fetch(`${API_URL}/schematics/wbs-node-markers`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ wbsNodeId: newNode.id, markerId: marker.id })
+            });
+            if (linkRes.ok) {
+                const link = await linkRes.json();
+                setWbsLinks(prev => [...prev, link]);
+                window.dispatchEvent(new CustomEvent('wbs-link-changed'));
+            }
+            setAddWbsMode(null);
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setAddWbsSaving(false);
+        }
     };
 
     const handleSubtaskChange = async (e) => {
@@ -1553,7 +1548,7 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                     />
                 </div>
 
-                {nodeId && wbsNodes.length > 0 && (
+                {nodeId && (
                     <div>
                         <div className="flex items-center gap-1.5 mb-2">
                             <Layers size={11} className="text-gray-500" />
@@ -1588,6 +1583,65 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                                 );
                             })}
                         </div>
+
+                        {/* Formularz dodawania */}
+                        {addWbsMode ? (
+                            <div className="mt-2 p-3 bg-black/40 border border-white/10 rounded-xl space-y-2">
+                                <p className="text-[10px] text-gray-400 uppercase font-bold">
+                                    {addWbsMode === 'item' ? '+ Nowy przedmiot' : '+ Nowe wymaganie'}
+                                </p>
+                                {addWbsMode === 'requirement' && wbsNodes.filter(n => n.path.split('.').length === 1).length > 0 && (
+                                    <select
+                                        value={addWbsParentId}
+                                        onChange={e => setAddWbsParentId(e.target.value)}
+                                        className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-blue-500/50"
+                                    >
+                                        {wbsNodes.filter(n => n.path.split('.').length === 1).map(n => (
+                                            <option key={n.id} value={n.id}>{n.path} {n.name}</option>
+                                        ))}
+                                    </select>
+                                )}
+                                <input
+                                    ref={addWbsInputRef}
+                                    value={addWbsName}
+                                    onChange={e => setAddWbsName(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') createWbsNode(); if (e.key === 'Escape') setAddWbsMode(null); }}
+                                    placeholder="Nazwa..."
+                                    className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500/50 placeholder-gray-600"
+                                />
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={createWbsNode}
+                                        disabled={!addWbsName.trim() || addWbsSaving}
+                                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40"
+                                    >
+                                        <Check size={14} />
+                                        {addWbsSaving ? 'Zapisuję...' : 'Dodaj i przypisz'}
+                                    </button>
+                                    <button
+                                        onClick={() => setAddWbsMode(null)}
+                                        className="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 rounded-lg text-sm transition-colors"
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="mt-2 flex gap-2">
+                                <button
+                                    onClick={() => openAddWbs('item')}
+                                    className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-gray-200 border border-white/10 rounded-lg text-xs transition-colors"
+                                >
+                                    <Plus size={12} /> Przedmiot
+                                </button>
+                                <button
+                                    onClick={() => openAddWbs('requirement')}
+                                    className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-gray-200 border border-white/10 rounded-lg text-xs transition-colors"
+                                >
+                                    <Plus size={12} /> Wymaganie
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
 
