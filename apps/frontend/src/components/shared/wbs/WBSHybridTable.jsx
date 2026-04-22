@@ -185,45 +185,61 @@ const nodeTotal = node => {
 const fmt = v => v ? new Intl.NumberFormat('pl-PL').format(Math.round(v)) : '';
 
 // ── Depth visual config ───────────────────────────────────────────────────────
-const DEPTH = [
-    {
-        pl: 'pl-5',
-        rowBg: 'bg-blue-950/30 hover:bg-blue-900/30',
-        leftBorder: 'border-l-[3px] border-blue-500',
-        badge: 'bg-blue-600 text-white shadow shadow-blue-900/60',
-        nameClass: 'text-base font-bold uppercase text-white',
-        fieldClass: 'text-blue-200',
-        tagColor: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
-    },
-    {
-        pl: 'pl-10',
-        rowBg: 'bg-violet-950/20 hover:bg-violet-900/25',
-        leftBorder: 'border-l-[3px] border-violet-500/70',
-        badge: 'bg-violet-600/70 text-violet-100',
-        nameClass: 'text-base text-violet-200',
-        fieldClass: 'text-violet-300',
-        tagColor: 'bg-violet-500/20 text-violet-300 border-violet-500/40',
-    },
-    {
-        pl: 'pl-16',
-        rowBg: 'bg-teal-950/15 hover:bg-teal-900/20',
-        leftBorder: 'border-l-[3px] border-teal-500/50',
-        badge: 'bg-teal-700/50 text-teal-200',
-        nameClass: 'text-base text-teal-300',
-        fieldClass: 'text-teal-400',
-        tagColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
-    },
-    {
-        pl: 'pl-24',
-        rowBg: 'bg-amber-950/10 hover:bg-amber-900/15',
-        leftBorder: 'border-l-[3px] border-amber-500/40',
-        badge: 'bg-amber-800/30 text-amber-400',
-        nameClass: 'text-sm text-amber-400',
-        fieldClass: 'text-amber-500',
-        tagColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-    },
+// Depth-only: font size/weight, no color
+const DEPTH_SIZE = [
+    'text-sm font-bold uppercase text-white',
+    'text-sm',
+    'text-sm',
+    'text-xs',
 ];
-const MAX_DEPTH = DEPTH.length - 1;
+const MAX_DEPTH = DEPTH_SIZE.length - 1;
+
+// Per-branch palette: 6 hues × 4 depth variants
+// Each entry: [depth0, depth1, depth2, depth3]
+const BRANCH_PALETTE = [
+    // blue
+    [
+        { rowBg: 'bg-blue-950/30 hover:bg-blue-900/30',   leftBorder: 'border-l-[3px] border-blue-500',     nameColor: 'text-white',      fieldClass: 'text-blue-200', tagColor: 'bg-blue-500/20 text-blue-300 border-blue-500/40' },
+        { rowBg: 'bg-blue-950/20 hover:bg-blue-900/25',   leftBorder: 'border-l-[2px] border-blue-500/60',  nameColor: 'text-blue-100',   fieldClass: 'text-blue-300', tagColor: 'bg-blue-500/15 text-blue-300 border-blue-500/30' },
+        { rowBg: 'bg-blue-950/12 hover:bg-blue-900/18',   leftBorder: 'border-l-[2px] border-blue-500/40',  nameColor: 'text-blue-200',   fieldClass: 'text-blue-400', tagColor: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+        { rowBg: 'bg-blue-950/6 hover:bg-blue-900/10',    leftBorder: 'border-l-[1px] border-blue-500/25',  nameColor: 'text-blue-300',   fieldClass: 'text-blue-500', tagColor: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+    ],
+    // violet
+    [
+        { rowBg: 'bg-violet-950/30 hover:bg-violet-900/30', leftBorder: 'border-l-[3px] border-violet-500',    nameColor: 'text-white',       fieldClass: 'text-violet-200', tagColor: 'bg-violet-500/20 text-violet-300 border-violet-500/40' },
+        { rowBg: 'bg-violet-950/20 hover:bg-violet-900/25', leftBorder: 'border-l-[2px] border-violet-500/60', nameColor: 'text-violet-100',  fieldClass: 'text-violet-300', tagColor: 'bg-violet-500/15 text-violet-300 border-violet-500/30' },
+        { rowBg: 'bg-violet-950/12 hover:bg-violet-900/18', leftBorder: 'border-l-[2px] border-violet-500/40', nameColor: 'text-violet-200',  fieldClass: 'text-violet-400', tagColor: 'bg-violet-500/10 text-violet-400 border-violet-500/20' },
+        { rowBg: 'bg-violet-950/6 hover:bg-violet-900/10',  leftBorder: 'border-l-[1px] border-violet-500/25', nameColor: 'text-violet-300',  fieldClass: 'text-violet-500', tagColor: 'bg-violet-500/10 text-violet-400 border-violet-500/20' },
+    ],
+    // teal
+    [
+        { rowBg: 'bg-teal-950/30 hover:bg-teal-900/30',   leftBorder: 'border-l-[3px] border-teal-500',     nameColor: 'text-white',      fieldClass: 'text-teal-200', tagColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40' },
+        { rowBg: 'bg-teal-950/20 hover:bg-teal-900/25',   leftBorder: 'border-l-[2px] border-teal-500/60',  nameColor: 'text-teal-100',   fieldClass: 'text-teal-300', tagColor: 'bg-teal-500/15 text-teal-300 border-teal-500/30' },
+        { rowBg: 'bg-teal-950/12 hover:bg-teal-900/18',   leftBorder: 'border-l-[2px] border-teal-500/40',  nameColor: 'text-teal-200',   fieldClass: 'text-teal-400', tagColor: 'bg-teal-500/10 text-teal-400 border-teal-500/20' },
+        { rowBg: 'bg-teal-950/6 hover:bg-teal-900/10',    leftBorder: 'border-l-[1px] border-teal-500/25',  nameColor: 'text-teal-300',   fieldClass: 'text-teal-500', tagColor: 'bg-teal-500/10 text-teal-400 border-teal-500/20' },
+    ],
+    // amber
+    [
+        { rowBg: 'bg-amber-950/30 hover:bg-amber-900/30', leftBorder: 'border-l-[3px] border-amber-500',    nameColor: 'text-white',       fieldClass: 'text-amber-200', tagColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40' },
+        { rowBg: 'bg-amber-950/20 hover:bg-amber-900/25', leftBorder: 'border-l-[2px] border-amber-500/60', nameColor: 'text-amber-100',   fieldClass: 'text-amber-300', tagColor: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+        { rowBg: 'bg-amber-950/12 hover:bg-amber-900/18', leftBorder: 'border-l-[2px] border-amber-500/40', nameColor: 'text-amber-200',   fieldClass: 'text-amber-400', tagColor: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+        { rowBg: 'bg-amber-950/6 hover:bg-amber-900/10',  leftBorder: 'border-l-[1px] border-amber-500/25', nameColor: 'text-amber-300',   fieldClass: 'text-amber-500', tagColor: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+    ],
+    // rose
+    [
+        { rowBg: 'bg-rose-950/30 hover:bg-rose-900/30',   leftBorder: 'border-l-[3px] border-rose-500',     nameColor: 'text-white',      fieldClass: 'text-rose-200', tagColor: 'bg-rose-500/20 text-rose-300 border-rose-500/40' },
+        { rowBg: 'bg-rose-950/20 hover:bg-rose-900/25',   leftBorder: 'border-l-[2px] border-rose-500/60',  nameColor: 'text-rose-100',   fieldClass: 'text-rose-300', tagColor: 'bg-rose-500/15 text-rose-300 border-rose-500/30' },
+        { rowBg: 'bg-rose-950/12 hover:bg-rose-900/18',   leftBorder: 'border-l-[2px] border-rose-500/40',  nameColor: 'text-rose-200',   fieldClass: 'text-rose-400', tagColor: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
+        { rowBg: 'bg-rose-950/6 hover:bg-rose-900/10',    leftBorder: 'border-l-[1px] border-rose-500/25',  nameColor: 'text-rose-300',   fieldClass: 'text-rose-500', tagColor: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
+    ],
+    // emerald
+    [
+        { rowBg: 'bg-emerald-950/30 hover:bg-emerald-900/30', leftBorder: 'border-l-[3px] border-emerald-500',    nameColor: 'text-white',         fieldClass: 'text-emerald-200', tagColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' },
+        { rowBg: 'bg-emerald-950/20 hover:bg-emerald-900/25', leftBorder: 'border-l-[2px] border-emerald-500/60', nameColor: 'text-emerald-100',   fieldClass: 'text-emerald-300', tagColor: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+        { rowBg: 'bg-emerald-950/12 hover:bg-emerald-900/18', leftBorder: 'border-l-[2px] border-emerald-500/40', nameColor: 'text-emerald-200',   fieldClass: 'text-emerald-400', tagColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+        { rowBg: 'bg-emerald-950/6 hover:bg-emerald-900/10',  leftBorder: 'border-l-[1px] border-emerald-500/25', nameColor: 'text-emerald-300',   fieldClass: 'text-emerald-500', tagColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+    ],
+];
 
 // ── Tag chips ─────────────────────────────────────────────────────────────────
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -757,14 +773,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     );
 
     // ── Recursive renderer ────────────────────────────────────────────────────
-    const renderNode = (node, depth, wbsPath, parentId = null) => {
+    const renderNode = (node, depth, wbsPath, parentId = null, rootIndex = 0) => {
         if (searchVisibleIds && !searchVisibleIds.has(node.id)) {
-            // Recurse children even when parent is hidden (ancestors are included, but keep going for matching descendants)
-            (node.children || []).forEach((child, ci) => renderNode(child, depth + 1, `${wbsPath}.${ci + 1}`, node.id));
+            (node.children || []).forEach((child, ci) => renderNode(child, depth + 1, `${wbsPath}.${ci + 1}`, node.id, rootIndex));
             return;
         }
         const rowId = `node_${node.id}`;
-        const d = DEPTH[Math.min(depth, MAX_DEPTH)];
+        const bc = BRANCH_PALETTE[rootIndex % BRANCH_PALETTE.length][Math.min(depth, MAX_DEPTH)];
+        const d = { ...bc, nameClass: `${DEPTH_SIZE[Math.min(depth, MAX_DEPTH)]} ${bc.nameColor}` };
         const hasChildren = (node.children || []).length > 0;
         const isDragging = dragId === node.id;
         const overPos = dragOver?.nodeId === node.id ? dragOver.position : null;
@@ -1015,7 +1031,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
         if (searchVisibleIds || isOpen(rowId)) {
             (node.children || []).forEach((child, ci) => {
-                renderNode(child, depth + 1, `${wbsPath}.${ci + 1}`, node.id);
+                renderNode(child, depth + 1, `${wbsPath}.${ci + 1}`, node.id, rootIndex);
             });
         }
     };
@@ -1030,7 +1046,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 </tr>
             );
         }
-        items.forEach((item, i) => renderNode(item, 0, `${i + 1}`));
+        items.forEach((item, i) => renderNode(item, 0, `${i + 1}`, null, i));
     }
 
     const closeAttachmentModal = async () => {
