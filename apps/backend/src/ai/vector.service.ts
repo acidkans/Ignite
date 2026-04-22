@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, OnModuleInit, Logger, Inject, forwardRef } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -7,6 +7,7 @@ import { HfInference } from '@huggingface/inference';
 import Groq from 'groq-sdk';
 import OpenAI from 'openai';
 import { PrismaService } from '../prisma/prisma.service';
+import { DocumentsService } from '../documents/documents.service';
 import { randomUUID, createHash } from 'crypto';
 
 // Generuje deterministyczny UUID v4-format z prefiksu i ID
@@ -29,6 +30,8 @@ export class VectorService implements OnModuleInit {
     constructor(
         private configService: ConfigService,
         private prisma: PrismaService,
+        @Inject(forwardRef(() => DocumentsService))
+        private documentsService: DocumentsService,
     ) {
         const apiKey = this.configService.get<string>('GEMINI_API_KEY');
         const hfKey = this.configService.get<string>('HUGGING_FACE_API_KEY');
@@ -52,7 +55,15 @@ export class VectorService implements OnModuleInit {
     }
 
     async onModuleInit() {
-        await this.ensureCollectionExists();
+        const isNew = await this.ensureCollectionExists();
+        if (isNew) {
+            this.logger.log('[Init] Nowa kolekcja — uruchamiam reindex-all dokumentów...');
+            this.documentsService.reindexAll().then(r =>
+                this.logger.log(`[Init] Reindex zakończony: ${r.reindexed}/${r.total}`)
+            ).catch(e =>
+                this.logger.error(`[Init] Reindex błąd: ${e.message}`)
+            );
+        }
     }
 
     /**
@@ -65,21 +76,16 @@ export class VectorService implements OnModuleInit {
         };
     }
 
-    private async ensureCollectionExists() {
+    private async ensureCollectionExists(): Promise<boolean> {
         try {
             const collections = await this.qdrant.getCollections();
             const exists = collections.collections.some(c => c.name === this.collectionName);
 
-            // Determine dimensions based on model
-            // Google 'gemini-embedding-001' -> 3072
-            // Google 'text-embedding-004' -> 768 (deprecated, renamed to gemini-embedding-001)
-            // OpenAI 'text-embedding-3-small' -> 1536
-            // HF 'all-MiniLM-L6-v2' -> 384
             const isGeminiNew = this.embeddingModel.includes('gemini-embedding');
             const isGoogleLegacy = this.embeddingModel.includes('text-embedding-004');
             const isOpenAI = this.embeddingModel.includes('text-embedding-3') || this.embeddingModel.includes('ada-002');
 
-            let dim = 384; // Default HF
+            let dim = 384;
             if (isGeminiNew) dim = 3072;
             if (isGoogleLegacy) dim = 768;
             if (isOpenAI) dim = 1536;
@@ -87,33 +93,17 @@ export class VectorService implements OnModuleInit {
             if (!exists) {
                 this.logger.log(`Creating Qdrant collection: ${this.collectionName} (dim: ${dim})`);
                 await this.qdrant.createCollection(this.collectionName, {
-                    vectors: {
-                        size: dim,
-                        distance: 'Cosine',
-                    },
+                    vectors: { size: dim, distance: 'Cosine' },
                 });
-
-                // Create payload index for fast keyword search
                 this.logger.log(`Creating payload index for 'text' field...`);
-                await this.qdrant.createPayloadIndex(this.collectionName, {
-                    field_name: 'text',
-                    field_schema: 'keyword',  // Keyword index for exact/partial matches
-                });
-
+                await this.qdrant.createPayloadIndex(this.collectionName, { field_name: 'text', field_schema: 'keyword' });
                 this.logger.log(`Creating payload index for 'nodeId' field...`);
-                await this.qdrant.createPayloadIndex(this.collectionName, {
-                    field_name: 'nodeId',
-                    field_schema: 'keyword',
-                });
-
+                await this.qdrant.createPayloadIndex(this.collectionName, { field_name: 'nodeId', field_schema: 'keyword' });
                 this.logger.log(`Creating payload index for 'parentId' field...`);
-                await this.qdrant.createPayloadIndex(this.collectionName, {
-                    field_name: 'parentId',
-                    field_schema: 'keyword',
-                });
+                await this.qdrant.createPayloadIndex(this.collectionName, { field_name: 'parentId', field_schema: 'keyword' });
                 this.logger.log(`Payload indexes created successfully`);
+                return true;
             } else {
-                // Check if dimensions match
                 const collectionInfo = await this.qdrant.getCollection(this.collectionName);
                 // @ts-ignore
                 const existingDim = collectionInfo.config?.params?.vectors?.size || collectionInfo.config?.params?.vectors?.default?.size;
@@ -121,40 +111,27 @@ export class VectorService implements OnModuleInit {
                 if (existingDim && existingDim !== dim) {
                     this.logger.warn(`Collection ${this.collectionName} exists but dimension mismatch (Existing: ${existingDim}, Required: ${dim}). Recreating...`);
                     await this.qdrant.deleteCollection(this.collectionName);
-
                     await this.qdrant.createCollection(this.collectionName, {
-                        vectors: {
-                            size: dim,
-                            distance: 'Cosine',
-                        },
+                        vectors: { size: dim, distance: 'Cosine' },
                     });
-                    await this.qdrant.createPayloadIndex(this.collectionName, {
-                        field_name: 'text',
-                        field_schema: 'keyword',
-                    });
+                    await this.qdrant.createPayloadIndex(this.collectionName, { field_name: 'text', field_schema: 'keyword' });
                     this.logger.log(`Collection recreated with correct dimensions.`);
+                    return true;
                 } else {
                     this.logger.log(`Collection ${this.collectionName} verified (dim: ${dim}).`);
                     try {
-                        await this.qdrant.createPayloadIndex(this.collectionName, {
-                            field_name: 'text',
-                            field_schema: 'keyword',
-                        });
-                        await this.qdrant.createPayloadIndex(this.collectionName, {
-                            field_name: 'nodeId',
-                            field_schema: 'keyword',
-                        });
-                        await this.qdrant.createPayloadIndex(this.collectionName, {
-                            field_name: 'parentId',
-                            field_schema: 'keyword',
-                        });
+                        await this.qdrant.createPayloadIndex(this.collectionName, { field_name: 'text', field_schema: 'keyword' });
+                        await this.qdrant.createPayloadIndex(this.collectionName, { field_name: 'nodeId', field_schema: 'keyword' });
+                        await this.qdrant.createPayloadIndex(this.collectionName, { field_name: 'parentId', field_schema: 'keyword' });
                     } catch (err) {
                         // Index might already exist
                     }
+                    return false;
                 }
             }
         } catch (error) {
             this.logger.error('Failed to connect to Qdrant or create collection', error.stack);
+            return false;
         }
     }
 
