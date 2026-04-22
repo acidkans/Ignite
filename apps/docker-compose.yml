@@ -47,6 +47,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      vector-db:
+        condition: service_started
     networks:
       - internal
       - traefik-public
