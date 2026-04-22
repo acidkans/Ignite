@@ -25,7 +25,7 @@ function AutoResizeTextarea({ value, onChange, onBlur, placeholder, className })
         />
     );
 }
-import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package } from 'lucide-react';
+import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard } from 'lucide-react';
 import { UNIT_OPTIONS } from './wbsConstants';
 
 const API_URL = '/api';
@@ -150,6 +150,12 @@ const extractNode = (nodes, id) => {
     }, []);
     return [found, clean(nodes)];
 };
+
+const deepCloneNode = node => ({
+    ...node,
+    id: crypto.randomUUID(),
+    children: (node.children || []).map(deepCloneNode),
+});
 
 const insertNode = (nodes, targetId, node, position) => {
     if (position === 'into') {
@@ -509,6 +515,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         }
     }, [wbsTree, getAllIds]);
     const [dragId, setDragId] = useState(null);
+    const dragIdRef = useRef(null);
     const [dragOver, setDragOver] = useState(null);
     const [editingTagsFor, setEditingTagsFor] = useState(null);
     const [tagInput, setTagInput] = useState('');
@@ -520,6 +527,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [reqDragOverNode, setReqDragOverNode] = useState(null);
     const [selectedNodeId, setSelectedNodeId] = useState(null);
     const [showBasket, setShowBasket] = useState(false);
+    const [copyBuffer, setCopyBuffer] = useState(null); // { node, sourceName }
 
     // materialStatuses kept for InheritedStatusBadge display only (no longer syncs to wbsTree)
     useEffect(() => {
@@ -630,6 +638,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // ── Drag & Drop ───────────────────────────────────────────────────────────
     const onDragStart = (e, nodeId) => {
         e.stopPropagation();
+        dragIdRef.current = nodeId;
         setDragId(nodeId);
         e.dataTransfer.effectAllowed = 'move';
     };
@@ -643,8 +652,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             e.dataTransfer.dropEffect = 'copy';
             return;
         }
-        if (!dragId || dragId === nodeId) return;
-        const dragNode = findNode(items, dragId);
+        const currentDragId = dragIdRef.current;
+        if (!currentDragId || currentDragId === nodeId) return;
+        const dragNode = findNode(items, currentDragId);
         if (dragNode && subtreeContains(dragNode, nodeId)) return;
         const rect = e.currentTarget.getBoundingClientRect();
         const relY = (e.clientY - rect.top) / rect.height;
@@ -674,17 +684,18 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 return;
             }
         }
-        if (!dragId || !dragOver || dragOver.nodeId !== nodeId || dragId === nodeId) {
-            setDragId(null); setDragOver(null); return;
+        const currentDragId = dragIdRef.current;
+        if (!currentDragId || !dragOver || dragOver.nodeId !== nodeId || currentDragId === nodeId) {
+            dragIdRef.current = null; setDragId(null); setDragOver(null); return;
         }
-        const [extracted, withoutDrag] = extractNode(items, dragId);
-        if (!extracted) { setDragId(null); setDragOver(null); return; }
+        const [extracted, withoutDrag] = extractNode(items, currentDragId);
+        if (!extracted) { dragIdRef.current = null; setDragId(null); setDragOver(null); return; }
         const newItems = insertNode(withoutDrag, nodeId, extracted, dragOver.position);
         save({ ...wbsTree, items: newItems });
-        setDragId(null); setDragOver(null);
+        dragIdRef.current = null; setDragId(null); setDragOver(null);
     };
 
-    const onDragEnd = () => { setDragId(null); setDragOver(null); setReqDragOverNode(null); };
+    const onDragEnd = () => { dragIdRef.current = null; setDragId(null); setDragOver(null); setReqDragOverNode(null); };
 
     // ── Totals ────────────────────────────────────────────────────────────────
     const totalRes  = items.reduce((a, n) => a + nodeTotal(n).res,  0);
@@ -781,7 +792,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     onDragStart={e => onDragStart(e, node.id)}
                     onDragEnd={onDragEnd}
                 >
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                         <GripVertical
                             size={11}
                             className="text-gray-700 group-hover/node:text-gray-500 flex-shrink-0"
@@ -790,6 +801,24 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             ? <ChevronRight size={12} className={`text-gray-400 transition-transform flex-shrink-0 ${isOpen(rowId) ? 'rotate-90' : ''}`} />
                             : <span className="w-[12px] flex-shrink-0" />
                         }
+                        <div className="flex flex-col gap-0.5 opacity-0 group-hover/node:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                            <button
+                                title="Kopiuj pozycję"
+                                onClick={e => { e.stopPropagation(); setCopyBuffer({ node: findNode(items, node.id), sourceName: node.name }); }}
+                                className="p-0.5 rounded hover:bg-blue-500/20 text-gray-600 hover:text-blue-400 transition-all"
+                            >
+                                <Copy size={9} />
+                            </button>
+                            {copyBuffer && !subtreeContains(copyBuffer.node, node.id) && copyBuffer.node.id !== node.id && (
+                                <button
+                                    title={`Wklej „${copyBuffer.sourceName}" jako dziecko`}
+                                    onClick={e => { e.stopPropagation(); const cloned = deepCloneNode(copyBuffer.node); save({ ...wbsTree, items: addChildTo(items, node.id, cloned) }); setCopyBuffer(null); }}
+                                    className="p-0.5 rounded hover:bg-emerald-500/20 text-gray-600 hover:text-emerald-400 transition-all"
+                                >
+                                    <Clipboard size={9} />
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </td>
 
@@ -914,9 +943,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
                 {/* Komentarz */}
                 <td className="px-3 py-2.5 min-w-[180px]" onClick={e => e.stopPropagation()}>
-                    <input type="text" value={node.comment || ''} onChange={e => handleField(node.id, 'comment', e.target.value)}
+                    <AutoResizeTextarea
+                        value={node.comment || ''}
+                        onChange={e => handleField(node.id, 'comment', e.target.value)}
                         onBlur={e => { onNodeFieldSave?.(node.id, 'comment', e.target.value); onSave?.(); }}
-                        placeholder="—" className={`bg-transparent border-none focus:outline-none text-xs w-full placeholder-gray-700 ${d.fieldClass}`} />
+                        placeholder="—"
+                        className={`bg-transparent border-none resize-none focus:outline-none text-xs w-full placeholder-gray-700 leading-snug ${d.fieldClass}`}
+                    />
                 </td>
 
                 {/* Znaczniki */}
@@ -1100,6 +1133,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
     return (
         <div className="flex flex-col flex-1 min-h-0">
+            {copyBuffer && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-900/30 border-b border-blue-500/20 text-[11px] text-blue-300">
+                    <Clipboard size={12} className="flex-shrink-0" />
+                    <span>Kopiujesz: <strong>{copyBuffer.sourceName || '—'}</strong> — najedź na wiersz i kliknij <Clipboard size={10} className="inline" /> by wkleić jako dziecko</span>
+                    <button onClick={() => setCopyBuffer(null)} className="ml-auto p-0.5 rounded hover:bg-white/10 text-gray-500 hover:text-white"><X size={12} /></button>
+                </div>
+            )}
             <div className="flex-1 min-h-0 overflow-auto overflow-x-auto custom-scrollbar">
             <div className="w-full">
                 <table className="w-full text-sm border-collapse">
