@@ -89,6 +89,7 @@ const mkNode = (withDefaults = false) => {
         id,
         name: '',
         status: 'PENDING',
+        quantity: '',
         unit: 'sztuki',
         owner: '',
         resources: '',
@@ -902,6 +903,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     )}
                 </td>
 
+                {/* Ilość */}
+                <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                    {depth >= 1 && (
+                        <input type="text" value={node.quantity || ''} onChange={e => handleField(node.id, 'quantity', e.target.value)} onBlur={onSave}
+                            placeholder="0" className={`bg-transparent border-none focus:outline-none text-xs w-full text-right placeholder-gray-700 ${d.fieldClass}`} />
+                    )}
+                </td>
+
                 {/* Jednostka */}
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                     {depth >= 1 && (
@@ -1099,12 +1108,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     name: n.name || '(bez nazwy)',
                     type: n.type || '',
                     status: n.status || '',
-                    owner: n.owner || '',
+                    quantity: n.quantity || '',
                     unit: n.unit || '',
-                    resources: n.resources || '',
                     cost: n.cost || '',
                     comment: n.comment || '',
-                    reqQty: requirementsQtyByNode[n.id] ?? '',
                     tags: n.tags || [],
                     atts,
                 });
@@ -1138,10 +1145,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 ${cell(r.path, 'white-space:nowrap;font-family:monospace')}
                 ${cell(r.name)}
                 ${cell(r.type)}
-                ${cell(r.reqQty !== '' && r.reqQty != null ? r.reqQty : '', 'text-align:right')}
+                ${cell(r.quantity, 'text-align:right')}
                 ${cell(r.unit)}
                 ${cell(r.status)}
-                ${cell(r.cost !== '' ? r.cost : '', 'text-align:right')}
+                ${cell(r.cost, 'text-align:right')}
                 ${cell(r.comment)}
                 ${cell(tagsHtml)}
                 ${cell(imagesHtml + filesHtml)}
@@ -1205,8 +1212,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             <th className="text-left px-1 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-8"></th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 min-w-[320px]">Nazwa</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-28">Typ</th>
-                            <th className="text-right px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-28">Ilość wymagań</th>
+                            <th className="text-right px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-20">Ilość</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-20">Jednostka</th>
+                            <th className="text-right px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-28">Ilość wymagań</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-32">Status</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-32">Właściciel</th>
                             <th className="text-right px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-24">Zasoby (h)</th>
