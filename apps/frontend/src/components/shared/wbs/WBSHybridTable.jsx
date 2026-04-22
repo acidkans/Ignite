@@ -1088,7 +1088,20 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 const path = prefix ? `${prefix}.${i + 1}` : `${i + 1}`;
                 const links = markerLinksCache[n.id] || [];
                 const atts = links.flatMap(l => (l.marker?.attachments || []));
-                nodeRows.push({ path, name: n.name || '(bez nazwy)', type: n.type || '', status: n.status || '', owner: n.owner || '', tags: n.tags || [], atts });
+                nodeRows.push({
+                    path,
+                    name: n.name || '(bez nazwy)',
+                    type: n.type || '',
+                    status: n.status || '',
+                    owner: n.owner || '',
+                    unit: n.unit || '',
+                    resources: n.resources || '',
+                    cost: n.cost || '',
+                    comment: n.comment || '',
+                    reqQty: requirementsQtyByNode[n.id] ?? '',
+                    tags: n.tags || [],
+                    atts,
+                });
                 collectNodes(n.children || [], path);
             });
         };
@@ -1101,11 +1114,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             b64Map[att.fileUrl] = await toBase64(att.fileUrl);
         }));
 
+        const cell = (content, extra = '') =>
+            `<td style="padding:5px 7px;border:1px solid #ddd;font-size:11px;vertical-align:top${extra ? ';' + extra : ''}">${content}</td>`;
+
         // Build HTML
         const tableRows = nodeRows.map(r => {
             const imagesHtml = r.atts.filter(a => a.fileType === 'IMAGE').map(a => {
                 const src = b64Map[a.fileUrl];
-                return src ? `<div style="page-break-inside:avoid;margin:8px 0"><img src="${src}" style="max-width:100%;height:auto;border-radius:4px" />${a.note ? `<p style="font-size:10px;color:#666;margin:2px 0">${a.note}</p>` : ''}</div>` : '';
+                return src ? `<div style="page-break-inside:avoid;margin:6px 0"><img src="${src}" style="max-width:100%;height:auto;border-radius:4px" />${a.note ? `<p style="font-size:10px;color:#666;margin:2px 0">${a.note}</p>` : ''}</div>` : '';
             }).join('');
             const filesHtml = r.atts.filter(a => a.fileType !== 'IMAGE').map(a =>
                 `<span style="display:inline-block;padding:2px 6px;background:#f0f0f0;border-radius:4px;font-size:10px;margin:2px">${a.fileName}</span>`
@@ -1113,13 +1129,18 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             const tagsHtml = r.tags.map(t => `<span style="display:inline-block;padding:1px 6px;background:#e0e7ff;border-radius:8px;font-size:10px;margin:1px">${t}</span>`).join(' ');
 
             return `<tr>
-                <td style="padding:6px 8px;border:1px solid #ddd;white-space:nowrap;font-family:monospace;font-size:11px;vertical-align:top">${r.path}</td>
-                <td style="padding:6px 8px;border:1px solid #ddd;vertical-align:top">${r.name}</td>
-                <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;vertical-align:top">${r.type}</td>
-                <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;vertical-align:top">${r.status}</td>
-                <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;vertical-align:top">${r.owner}</td>
-                <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;vertical-align:top">${tagsHtml}</td>
-                <td style="padding:6px 8px;border:1px solid #ddd;vertical-align:top">${imagesHtml}${filesHtml}</td>
+                ${cell(r.path, 'white-space:nowrap;font-family:monospace')}
+                ${cell(r.name)}
+                ${cell(r.type)}
+                ${cell(r.reqQty !== '' ? r.reqQty : '', 'text-align:right')}
+                ${cell(r.unit)}
+                ${cell(r.status)}
+                ${cell(r.owner)}
+                ${cell(r.resources !== '' ? r.resources : '', 'text-align:right')}
+                ${cell(r.cost !== '' ? r.cost : '', 'text-align:right')}
+                ${cell(r.comment)}
+                ${cell(tagsHtml)}
+                ${cell(imagesHtml + filesHtml)}
             </tr>`;
         }).join('');
 
@@ -1127,15 +1148,31 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         <style>
             body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; margin: 20px; color: #1a1a1a; }
             h1 { font-size: 18px; margin-bottom: 16px; }
-            table { width: 100%; border-collapse: collapse; }
-            th { background: #f3f4f6; padding: 8px; border: 1px solid #ddd; font-size: 10px; text-transform: uppercase; text-align: left; }
+            table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+            col.c-wbs  { width: 60px; }
+            col.c-name { width: 200px; }
+            col.c-sm   { width: 60px; }
+            col.c-xs   { width: 50px; }
+            col.c-md   { width: 90px; }
+            col.c-lg   { width: 130px; }
+            col.c-xl   { width: 160px; }
+            col.c-att  { width: 140px; }
+            th { background: #f3f4f6; padding: 6px 7px; border: 1px solid #ddd; font-size: 10px; text-transform: uppercase; text-align: left; }
             img { max-width: 100%; }
-            @media print { body { margin: 10mm; } }
+            @media print { body { margin: 8mm; } @page { size: A3 landscape; } }
         </style></head><body>
         <h1>WBS — ${nodeName}</h1>
         <table>
+            <colgroup>
+                <col class="c-wbs"/><col class="c-name"/><col class="c-sm"/><col class="c-xs"/>
+                <col class="c-xs"/><col class="c-md"/><col class="c-md"/><col class="c-sm"/>
+                <col class="c-sm"/><col class="c-lg"/><col class="c-lg"/><col class="c-att"/>
+            </colgroup>
             <thead><tr>
-                <th>WBS</th><th>Nazwa</th><th>Typ</th><th>Status</th><th>Właściciel</th><th>Znaczniki</th><th>Załączniki</th>
+                <th>WBS</th><th>Nazwa</th><th>Typ</th><th style="text-align:right">Ilość wymagań</th>
+                <th>Jednostka</th><th>Status</th><th>Właściciel</th>
+                <th style="text-align:right">Zasoby (h)</th><th style="text-align:right">Koszt</th>
+                <th>Komentarz</th><th>Znaczniki</th><th>Załączniki</th>
             </tr></thead>
             <tbody>${tableRows}</tbody>
         </table>
