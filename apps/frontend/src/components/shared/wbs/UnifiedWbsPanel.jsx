@@ -2187,11 +2187,11 @@ ${materialsHtml}
     const renderSection = (key, title, Icon, colorClass, content, onExport, extraButtons = null) => {
         const isActive = expandedSection === key;
         const isHidden = expandedSection !== null && !isActive;
-        const isCompactSection = key === 'budget' || key === 'materials' || key === 'wbs-hybrid';
+        const isCompactSection = key === 'budget' || key === 'materials' || key === 'wbs-hybrid' || key === 'strategy';
 
         return (
             <div
-                className={`flex flex-col glass-panel border border-white/5 transition-all duration-300 shadow-2xl overflow-hidden ${isCompactSection && isActive ? 'rounded-none h-full' : 'rounded-2xl'} ${isActive ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
+                className={`flex flex-col glass-panel border border-white/5 transition-all duration-300 shadow-2xl overflow-hidden ${isCompactSection && isActive ? 'rounded-none flex-1 min-h-0' : 'rounded-2xl'} ${isActive ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
                 style={isActive && !isCompactSection ? { minHeight: 'calc(100vh - 200px)' } : isHidden ? { display: 'none' } : {}}
             >
                 <div
@@ -2240,7 +2240,7 @@ ${materialsHtml}
         );
     };
 
-    const isCompactActive = (expandedSection === 'budget' || expandedSection === 'materials' || expandedSection === 'wbs-hybrid');
+    const isCompactActive = (expandedSection === 'budget' || expandedSection === 'materials' || expandedSection === 'wbs-hybrid' || expandedSection === 'strategy');
 
     return (
         <div className={`flex flex-col w-full h-full relative bg-[#0a0c10]/50 border border-white/[0.03] gap-1 pt-0 ${isCompactActive ? 'overflow-hidden p-0' : 'overflow-y-auto pr-2 custom-scrollbar rounded-[40px] p-2'}`}>
@@ -2252,22 +2252,23 @@ ${materialsHtml}
                 onChange={handleBudgetImportFileChange}
             />
             {renderSection('strategy', 'Jak to chcemy zrobić', HelpCircle, 'blue', (
-                <div className="flex flex-col gap-4 h-full min-h-[calc(100vh-320px)]">
-                    <div className="flex justify-end items-center gap-3 p-1">
-                        <span className={`text-[10px] font-bold uppercase tracking-widest ${strategySaved ? 'text-emerald-400' : 'text-gray-500'}`}>
-                            {strategySaving ? 'Zapisywanie...' : strategySaved ? 'Zapisano' : ''}
-                        </span>
-                        <button onClick={() => handleStrategySave(true)} disabled={strategySaving} className={`flex items-center gap-1.5 px-3 py-1 bg-blue-600/80 hover:bg-blue-500 text-white text-[11px] font-bold rounded-lg transition-colors ${strategySaving ? 'opacity-50 pointer-events-none' : ''}`}>
-                            {strategySaving ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save size={12} />}
-                            <span>Zapisz</span>
-                        </button>
-                    </div>
+                <div className="flex flex-col flex-1 min-h-0 p-4 gap-2">
+                    {strategySaving && (
+                        <div className="flex justify-end">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Zapisywanie...</span>
+                        </div>
+                    )}
+                    {strategySaved && !strategySaving && (
+                        <div className="flex justify-end">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">Zapisano</span>
+                        </div>
+                    )}
                     <textarea
                         ref={strategyRef}
                         value={wbsDescription}
                         onChange={(e) => { setWbsDescription(e.target.value); handleStrategySave(); }}
                         onBlur={() => handleStrategySave(true)}
-                        className="flex-1 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed"
+                        className="flex-1 min-h-0 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed"
                         placeholder="Zdefiniuj plan i strategię realizacji projektu..."
                     />
                 </div>
@@ -2327,7 +2328,7 @@ ${materialsHtml}
             ))}
 
             {renderSection('wbs-hybrid', `Struktura projektu: ${projectName || '—'}`, ListTree, 'violet', (
-                <div className="flex flex-col h-full">
+                <div className="flex flex-col flex-1 min-h-0">
                     <WBSHybridTable
                         wbsTree={wbsTree}
                         setWbsTree={setWbsTree}

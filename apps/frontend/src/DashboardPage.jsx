@@ -525,7 +525,7 @@ export default function DashboardPage() {
                             />
                         )}
                         {activeTab === 'unified' && isOrder && (
-                            <div className="h-[calc(100vh-180px)]">
+                            <div className="absolute inset-0 overflow-hidden">
                                 <UnifiedWbsPanel
                                     nodeId={activeAreaId}
                                     versionId={selectedVersionId}

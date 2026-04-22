@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Plus, Trash2, ChevronRight, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package } from 'lucide-react';
+import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package } from 'lucide-react';
 import { UNIT_OPTIONS } from './wbsConstants';
 
 const API_URL = '/api';
@@ -492,6 +492,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [materialStatuses, setMaterialStatuses] = useState({});
     const [reqDragOverNode, setReqDragOverNode] = useState(null);
     const [selectedNodeId, setSelectedNodeId] = useState(null);
+    const [showBasket, setShowBasket] = useState(false);
 
     // materialStatuses kept for InheritedStatusBadge display only (no longer syncs to wbsTree)
     useEffect(() => {
@@ -1077,7 +1078,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     }, [items, markerLinksCache, nodeName]);
 
     return (
-        <>
+        <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 min-h-0 overflow-auto custom-scrollbar">
             <div className="w-full overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
@@ -1099,38 +1101,52 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     <tbody>{rows}</tbody>
                 </table>
             </div>
+            </div>{/* end flex-1 scroll */}
 
             {/* Koszyk nieprzypisanych wymagań */}
             {isManager && unassignedRequirements.length > 0 && (
-                <div className="mt-3 px-3 py-3 border border-white/5 rounded-xl bg-black/10">
-                    <p className="text-[10px] uppercase tracking-widest text-amber-500/70 font-bold mb-2 flex items-center gap-1.5">
-                        <Package size={10} />
-                        Koszyk — nieprzypisane ({unassignedRequirements.length})
-                        {selectedNodeId && <span className="ml-2 text-gray-600 normal-case tracking-normal font-normal">przeciągnij na wiersz lub kliknij → Przypisz</span>}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                        {unassignedRequirements.map(req => (
-                            <div
-                                key={req.id}
-                                draggable
-                                onDragStart={e => {
-                                    e.dataTransfer.setData('application/requirement-id', req.id);
-                                    e.dataTransfer.effectAllowed = 'copy';
-                                }}
-                                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-900/30 border border-emerald-500/20 rounded-lg text-emerald-300 text-[11px] cursor-grab select-none"
-                            >
-                                <span>{req.name || req.productName || '—'}</span>
-                                {req.quantity > 0 && <span className="text-emerald-500/60 text-[10px]">×{req.quantity}{req.unit ? ` ${req.unit}` : ''}</span>}
-                                {selectedNodeId && (
-                                    <button
-                                        onClick={e => { e.stopPropagation(); onRequirementAssign?.(selectedNodeId, req.id); }}
-                                        className="ml-1 px-1.5 py-0.5 bg-emerald-600/40 hover:bg-emerald-600/70 rounded text-[9px] font-bold text-emerald-200 cursor-pointer"
-                                        title="Przypisz do zaznaczonej gałęzi"
-                                    >→ Przypisz</button>
-                                )}
+                <div className="flex-shrink-0 border-t border-white/5 bg-[#0b0f17]">
+                    <button
+                        onClick={() => setShowBasket(v => !v)}
+                        className="w-full flex items-center justify-between px-4 py-2 hover:bg-white/5 transition-colors"
+                    >
+                        <span className="text-[10px] uppercase tracking-widest text-amber-500/70 font-bold flex items-center gap-1.5">
+                            <Package size={10} />
+                            Koszyk — nieprzypisane ({unassignedRequirements.length})
+                            {selectedNodeId && !showBasket && <span className="ml-2 text-gray-600 normal-case tracking-normal font-normal text-[9px]">rozwiń, by przypisać</span>}
+                        </span>
+                        <ChevronDown size={13} className={`text-amber-500/50 transition-transform ${showBasket ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showBasket && (
+                        <div className="px-4 pb-3 max-h-48 overflow-y-auto custom-scrollbar">
+                            {selectedNodeId && (
+                                <p className="text-[10px] text-gray-600 mb-2">przeciągnij na wiersz lub kliknij → Przypisz</p>
+                            )}
+                            <div className="flex flex-wrap gap-2">
+                                {unassignedRequirements.map(req => (
+                                    <div
+                                        key={req.id}
+                                        draggable
+                                        onDragStart={e => {
+                                            e.dataTransfer.setData('application/requirement-id', req.id);
+                                            e.dataTransfer.effectAllowed = 'copy';
+                                        }}
+                                        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-900/30 border border-emerald-500/20 rounded-lg text-emerald-300 text-[11px] cursor-grab select-none"
+                                    >
+                                        <span>{req.name || req.productName || '—'}</span>
+                                        {req.quantity > 0 && <span className="text-emerald-500/60 text-[10px]">×{req.quantity}{req.unit ? ` ${req.unit}` : ''}</span>}
+                                        {selectedNodeId && (
+                                            <button
+                                                onClick={e => { e.stopPropagation(); onRequirementAssign?.(selectedNodeId, req.id); }}
+                                                className="ml-1 px-1.5 py-0.5 bg-emerald-600/40 hover:bg-emerald-600/70 rounded text-[9px] font-bold text-emerald-200 cursor-pointer"
+                                                title="Przypisz do zaznaczonej gałęzi"
+                                            >→ Przypisz</button>
+                                        )}
+                                    </div>
+                                ))}
                             </div>
-                        ))}
-                    </div>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -1171,6 +1187,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     onClose={closeAttachmentModal}
                 />
             )}
-        </>
+        </div>
     );
 }
