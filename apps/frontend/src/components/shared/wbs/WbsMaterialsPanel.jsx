@@ -581,102 +581,55 @@ export default function WbsMaterialsPanel({
         );
     }
 
-    const exportToExcel = useCallback(async () => {
-        const ExcelJS_ = await import('exceljs/dist/exceljs.bare.min.js');
-        const wb = new ExcelJS_.default.Workbook();
-        const ws = wb.addWorksheet('Materiały WBS');
-
+    const exportToExcel = useCallback(() => {
         const STATUS_LABELS_XLS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
         const TYPE_LABELS_XLS = { material: 'Materiał', equipment: 'Sprzęt' };
+        const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
-        const cols = [
-            { header: 'Typ',                  key: 'typ',         width: 12 },
-            { header: 'Przedmiot projektu',   key: 'przedmiot',   width: 28 },
-            { header: 'Pełna ścieżka WBS',    key: 'sciezka',     width: 40 },
-            { header: 'Nazwa',                key: 'nazwa',       width: 30 },
-            { header: 'Ilość',                key: 'ilosc',       width: 8  },
-            { header: 'Jednostka',            key: 'jednostka',   width: 10 },
-            { header: 'Producent',            key: 'producent',   width: 20 },
-            { header: 'Model',                key: 'model',       width: 18 },
-            { header: 'Nazwa handlowa',       key: 'handlowa',    width: 28 },
-            { header: 'Cena netto',           key: 'cena',        width: 12 },
-            { header: 'Status',               key: 'status',      width: 14 },
-            { header: 'Wymagania techniczne', key: 'wymagania',   width: 40 },
-            { header: 'Dostępność',           key: 'dostepnosc',  width: 16 },
-            { header: 'Propozycja — producent', key: 'p_prod',    width: 20 },
-            { header: 'Propozycja — model',   key: 'p_model',     width: 18 },
-            { header: 'Propozycja — nazwa',   key: 'p_nazwa',     width: 28 },
-            { header: 'Propozycja — cena',    key: 'p_cena',      width: 12 },
-            { header: 'Propozycja — wybrana', key: 'p_wybrana',   width: 12 },
-        ];
-        ws.columns = cols.map(c => ({ header: c.header, key: c.key, width: c.width }));
-
-        // Styl nagłówka
-        const headerRow = ws.getRow(1);
-        headerRow.eachCell(cell => {
-            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            cell.border = { bottom: { style: 'thin', color: { argb: 'FF4472C4' } } };
-        });
-        headerRow.height = 32;
+        const headers = ['Typ','Przedmiot projektu','Pełna ścieżka WBS','Nazwa','Ilość','Jednostka','Producent','Model','Nazwa handlowa','Cena netto','Status','Wymagania techniczne','Dostępność','Prop. producent','Prop. model','Prop. nazwa handlowa','Prop. cena','Prop. wybrana'];
+        const rows = [headers.map(esc).join(';')];
 
         for (const node of matNodes) {
             const card = cards[node.id] || null;
             const segs = node.path ? node.path.split(' › ') : [];
             const parent = segs.length >= 2 ? segs[segs.length - 2] : (segs[0] || '');
             const selectedProposal = (card?.proposals || []).find(p => p.isSelected);
-            const proposals = card?.proposals || [];
+            const allProposals = card?.proposals || [];
 
-            const mainRow = ws.addRow({
-                typ:        TYPE_LABELS_XLS[node.type] || node.type,
-                przedmiot:  parent,
-                sciezka:    node.path || '',
-                nazwa:      node.name || '',
-                ilosc:      node.quantity ?? 1,
-                jednostka:  node.unit || 'szt',
-                producent:  card?.manufacturer || '',
-                model:      card?.model || '',
-                handlowa:   card?.productName || '',
-                cena:       card?.priceNetto != null ? Number(card.priceNetto) : '',
-                status:     STATUS_LABELS_XLS[card?.status] || (card ? card.status : ''),
-                wymagania:  card?.technicalSpec || '',
-                dostepnosc: card?.availability || '',
-                p_prod:     selectedProposal?.manufacturer || '',
-                p_model:    selectedProposal?.model || '',
-                p_nazwa:    selectedProposal?.productName || '',
-                p_cena:     selectedProposal?.priceNetto != null ? Number(selectedProposal.priceNetto) : '',
-                p_wybrana:  selectedProposal ? 'TAK' : '',
-            });
-            mainRow.eachCell(cell => {
-                cell.alignment = { vertical: 'top', wrapText: true };
-            });
-            mainRow.getCell('cena').numFmt = '#,##0.00 "zł"';
-            mainRow.getCell('p_cena').numFmt = '#,##0.00 "zł"';
-            mainRow.height = Math.min(120, 16 + Math.ceil((card?.technicalSpec || '').length / 45) * 14);
+            const mainCols = [
+                TYPE_LABELS_XLS[node.type] || node.type,
+                parent,
+                node.path || '',
+                node.name || '',
+                node.quantity ?? 1,
+                node.unit || 'szt',
+                card?.manufacturer || '',
+                card?.model || '',
+                card?.productName || '',
+                card?.priceNetto != null ? Number(card.priceNetto).toFixed(2) : '',
+                STATUS_LABELS_XLS[card?.status] || (card ? (card.status || '') : ''),
+                card?.technicalSpec || '',
+                card?.availability || '',
+                selectedProposal?.manufacturer || '',
+                selectedProposal?.model || '',
+                selectedProposal?.productName || '',
+                selectedProposal?.priceNetto != null ? Number(selectedProposal.priceNetto).toFixed(2) : '',
+                selectedProposal ? 'TAK' : '',
+            ];
+            rows.push(mainCols.map(esc).join(';'));
 
-            // Dodatkowe wiersze dla pozostałych propozycji (niewybranych)
-            for (const p of proposals.filter(pp => !pp.isSelected)) {
-                const pRow = ws.addRow({
-                    typ: '', przedmiot: '', sciezka: '', nazwa: '', ilosc: '', jednostka: '',
-                    producent: '', model: '', handlowa: '', cena: '', status: '', wymagania: '', dostepnosc: '',
-                    p_prod: p.manufacturer || '', p_model: p.model || '', p_nazwa: p.productName || '',
-                    p_cena: p.priceNetto != null ? Number(p.priceNetto) : '', p_wybrana: 'NIE',
-                });
-                pRow.eachCell(cell => { cell.font = { color: { argb: 'FF888888' }, italic: true }; cell.alignment = { vertical: 'top', wrapText: true }; });
-                pRow.getCell('p_cena').numFmt = '#,##0.00 "zł"';
+            for (const p of allProposals.filter(pp => !pp.isSelected)) {
+                const emptyCols = new Array(13).fill('');
+                const pCols = [...emptyCols, p.manufacturer || '', p.model || '', p.productName || '', p.priceNetto != null ? Number(p.priceNetto).toFixed(2) : '', 'NIE'];
+                rows.push(pCols.map(esc).join(';'));
             }
         }
 
-        // Freeze header + autofilter
-        ws.views = [{ state: 'frozen', ySplit: 1 }];
-        ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
-
-        const buffer = await wb.xlsx.writeBuffer();
-        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const csv = '\uFEFF' + rows.join('\r\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = `materialy-wbs-${Date.now()}.xlsx`; a.click();
+        a.href = url; a.download = `materialy-wbs-${Date.now()}.csv`; a.click();
         URL.revokeObjectURL(url);
     }, [matNodes, cards]);
 
