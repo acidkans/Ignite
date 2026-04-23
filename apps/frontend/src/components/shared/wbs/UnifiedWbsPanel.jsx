@@ -124,6 +124,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const [allRequirements, setAllRequirements] = useState([]);
     const [reqRefreshKey, setReqRefreshKey] = useState(0);
     const materialsExportFn = useRef(null);
+    const materialsPdfExportFn = useRef(null);
 
     const assignableProjectUsers = useMemo(() => {
         if (!Array.isArray(projectUsers) || projectUsers.length === 0) return [];
@@ -2475,14 +2476,23 @@ ${materialsHtml}
                     onWbsUpdate={async () => { await refreshMaterialCosts(); }}
                     refreshKey={reqRefreshKey}
                     onExportReady={fn => { materialsExportFn.current = fn; }}
+                    onExportPdfReady={fn => { materialsPdfExportFn.current = fn; }}
                 />
-            ), () => handleExportPDF('materials'), (
-                <button
-                    onClick={e => { e.stopPropagation(); materialsExportFn.current?.(); }}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0"
-                >
-                    <FileDown size={11} /> Export Excel
-                </button>
+            ), null, (
+                <>
+                    <button
+                        onClick={e => { e.stopPropagation(); materialsPdfExportFn.current?.(); }}
+                        className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0"
+                    >
+                        <FileDown size={11} /> PDF
+                    </button>
+                    <button
+                        onClick={e => { e.stopPropagation(); materialsExportFn.current?.(); }}
+                        className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0"
+                    >
+                        <FileDown size={11} /> Excel
+                    </button>
+                </>
             ))}
 
             {strategyPreviewOpen && (
