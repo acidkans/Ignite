@@ -373,6 +373,22 @@ export class MaterialRequirementsService {
             await this.syncAllocationsToRelational(id, data.wbsNodeAllocations).catch(() => {});
         }
 
+        // Auto-propagacja technicalSpec do innych wymagań o tej samej nazwie w tym projekcie,
+        // które mają puste pole — nie nadpisuje świadomie różnych wymagań.
+        if (dto.technicalSpec && updated.name) {
+            const existing = await this.findOne(id);
+            await this.prisma.materialRequirement.updateMany({
+                where: {
+                    id: { not: id },
+                    nodeId: existing.nodeId,
+                    ...(existing.versionId ? { versionId: existing.versionId } : {}),
+                    name: { equals: updated.name, mode: 'insensitive' },
+                    OR: [{ technicalSpec: null }, { technicalSpec: '' }],
+                },
+                data: { technicalSpec: dto.technicalSpec },
+            }).catch(() => {});
+        }
+
         return updated;
     }
 
