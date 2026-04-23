@@ -23,7 +23,7 @@ const Placeholder = ({ title }) => (
   </div>
 );
 
-const INACTIVITY_TIMEOUT_MS = 4 * 60 * 60 * 1000; // 4 godziny
+const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 minut braku aktywności
 
 function isTokenExpired(token) {
   try {

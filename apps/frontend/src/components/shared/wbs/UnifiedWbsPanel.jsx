@@ -2314,16 +2314,10 @@ ${materialsHtml}
             />
             {renderSection('strategy', 'Jak to chcemy zrobić', HelpCircle, 'blue', (
                 <div className="flex flex-col flex-1 min-h-0 p-4 gap-2">
-                    {strategySaving && (
-                        <div className="flex justify-end">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Zapisywanie...</span>
-                        </div>
-                    )}
-                    {strategySaved && !strategySaving && (
-                        <div className="flex justify-end">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">Zapisano</span>
-                        </div>
-                    )}
+                    <div className="flex justify-end h-4">
+                        {strategySaving && <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Zapisywanie...</span>}
+                        {strategySaved && !strategySaving && <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">Zapisano</span>}
+                    </div>
                     <textarea
                         ref={strategyRef}
                         value={wbsDescription}
