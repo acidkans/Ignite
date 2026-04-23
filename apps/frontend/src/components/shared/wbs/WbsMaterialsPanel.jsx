@@ -169,6 +169,7 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
     const [comboOpen, setComboOpen] = useState(null);
     const [imageKey, setImageKey] = useState(0);
     const [pasteHover, setPasteHover] = useState(false);
+    const pasteZoneRef = useRef(null);
 
     useEffect(() => {
         setFields({
@@ -355,7 +356,8 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
             <div
                 tabIndex={0}
                 onPaste={handleImagePaste}
-                onMouseEnter={() => setPasteHover(true)}
+                ref={pasteZoneRef}
+                onMouseEnter={() => { setPasteHover(true); pasteZoneRef.current?.focus(); }}
                 onMouseLeave={() => setPasteHover(false)}
                 className={`relative w-44 flex-shrink-0 border-l outline-none transition-colors cursor-pointer ${pasteHover ? 'border-blue-500/30 bg-blue-500/5' : 'border-white/5 bg-black/10'}`}
                 title="Najedź i wklej zdjęcie (Ctrl+V)"
