@@ -54,6 +54,7 @@ export default function SchematTab({ nodeId }) {
     const [exporting, setExporting] = useState(false);
     const [inlineEdits, setInlineEdits] = useState({});
     const [showTable, setShowTable] = useState(false);
+    const [tableFilters, setTableFilters] = useState({ markerName: '', pozycja: '', markerNote: '', note: '' });
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const [showFileDropdown, setShowFileDropdown] = useState(false);
@@ -1115,15 +1116,26 @@ export default function SchematTab({ nodeId }) {
 
 
             {selectedSchematic && (() => {
-                const rows = selectedSchematic.markers.flatMap(m =>
-                    (m.attachments || []).map(a => ({
+                const rows = selectedSchematic.markers.flatMap(m => {
+                    const links = m.wbsLinks || [];
+                    const childLink = links.find(l => l.wbsParentName && l.wbsNodeName);
+                    const rootLink = links.find(l => !l.wbsParentName && l.wbsNodeName);
+                    const pozycja = childLink?.wbsParentName || rootLink?.wbsNodeName || '—';
+                    return (m.attachments || []).map(a => ({
                         ...a,
                         markerId: m.id,
                         markerName: m.name || '—',
                         markerNote: m.note || '',
-                    }))
-                );
+                        pozycja,
+                    }));
+                });
                 if (rows.length === 0) return null;
+                const filteredRows = rows.filter(att =>
+                    (!tableFilters.markerName || att.markerName.toLowerCase().includes(tableFilters.markerName.toLowerCase())) &&
+                    (!tableFilters.pozycja || (att.pozycja || '').toLowerCase().includes(tableFilters.pozycja.toLowerCase())) &&
+                    (!tableFilters.markerNote || (att.markerNote || '').toLowerCase().includes(tableFilters.markerNote.toLowerCase())) &&
+                    (!tableFilters.note || (att.note || '').toLowerCase().includes(tableFilters.note.toLowerCase()))
+                );
 
                 const getFileUrl = (fileName) => `${API_URL}/schematics/file/${fileName}`;
                 const downloadFile = async (att) => {
@@ -1167,17 +1179,39 @@ export default function SchematTab({ nodeId }) {
                         <table className="w-full text-xs">
                             <thead>
                                 <tr className="text-gray-600 text-[10px] uppercase border-b border-white/5">
-                                    <th className="text-left py-1.5 pr-4 font-black w-32">Znacznik</th>
+                                    <th className="text-left py-1.5 pr-4 font-black w-28">Znacznik</th>
+                                    <th className="text-left py-1.5 pr-4 font-black w-36">Pozycja przedmiotu projektu</th>
                                     <th className="text-left py-1.5 pr-4 font-black w-40">Notatka znacznika</th>
                                     <th className="text-left py-1.5 pr-4 font-black">Załącznik</th>
                                     <th className="text-left py-1.5 pr-4 font-black w-40">Notatka załącznika</th>
                                     <th className="py-1.5 w-8"></th>
                                 </tr>
+                                <tr className="border-b border-white/5">
+                                    {[
+                                        ['markerName', 'w-28'],
+                                        ['pozycja', 'w-36'],
+                                        ['markerNote', 'w-40'],
+                                        [null, ''],
+                                        ['note', 'w-40'],
+                                        [null, 'w-8'],
+                                    ].map(([key, w], i) => (
+                                        <td key={i} className={`pb-1.5 pr-4 ${w}`}>
+                                            {key && <input
+                                                type="text"
+                                                value={tableFilters[key]}
+                                                onChange={e => setTableFilters(f => ({ ...f, [key]: e.target.value }))}
+                                                placeholder="filtruj…"
+                                                className="w-full text-[10px] bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-gray-400 placeholder-gray-700 focus:outline-none focus:border-orange-500/50"
+                                            />}
+                                        </td>
+                                    ))}
+                                </tr>
                             </thead>
                             <tbody>
-                                {rows.map(att => (
+                                {filteredRows.map(att => (
                                     <tr key={att.id} className="border-b border-white/5 hover:bg-white/5 transition-colors align-middle">
-                                        <td className="py-2 pr-4 text-gray-300 font-medium truncate max-w-[128px]">{att.markerName}</td>
+                                        <td className="py-2 pr-4 text-gray-300 font-medium truncate max-w-[112px]">{att.markerName}</td>
+                                        <td className="py-2 pr-4 text-gray-400 text-[11px] truncate max-w-[144px]">{att.pozycja || '—'}</td>
                                         <td className="py-2 pr-4 max-w-[160px]">
                                             <input
                                                 type="text"
