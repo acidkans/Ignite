@@ -32,7 +32,7 @@ const API_URL = '/api';
 
 // ─── MaterialReqExpandPanel ───────────────────────────────────────────────────
 
-function MaterialReqExpandPanel({ node, req, processNodeId, onSaved }) {
+function MaterialReqExpandPanel({ node, req, processNodeId, onSaved, onDeleteNode }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
@@ -64,11 +64,25 @@ function MaterialReqExpandPanel({ node, req, processNodeId, onSaved }) {
         }
     };
 
+    const handleDelete = async () => {
+        if (!window.confirm(`Usunąć pozycję „${node.name}" z WBS i wymagania materiałowe?`)) return;
+        if (req?.id) {
+            await fetch(`${API_URL}/material-requirements/${req.id}`, { method: 'DELETE', headers });
+        }
+        onDeleteNode?.();
+    };
+
     return (
         <div className="px-6 py-3 flex flex-col gap-2 border-l-2 border-amber-500/30 ml-8">
             <div className="flex items-center gap-3">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400/80">Wymagania materiałowe</span>
                 <span className="text-[10px] text-gray-600">Logistyk dopasowuje produkty w zakładce Materiały</span>
+                <button
+                    onClick={handleDelete}
+                    className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-red-400 hover:bg-red-500/10 border border-red-500/20 transition-colors"
+                >
+                    <Trash2 size={10} /> Usuń z WBS
+                </button>
             </div>
             <textarea
                 value={techSpec}
@@ -1113,6 +1127,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             req={matReqByWbsId[node.id] || null}
                             processNodeId={processNodeId}
                             onSaved={updated => setMatReqByWbsId(prev => ({ ...prev, [node.id]: updated }))}
+                            onDeleteNode={() => {
+                                const deletedIds = collectIds(items, node.id);
+                                save({ ...wbsTree, items: deleteNode(items, node.id) });
+                                if (deletedIds.length) onNodesDeleted?.(deletedIds);
+                                setExpandedMaterialIds(prev => { const n = new Set(prev); n.delete(node.id); return n; });
+                            }}
                         />
                     </td>
                 </tr>
