@@ -1737,11 +1737,10 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                 )}
 
                 <div>
-                    <label className="text-xs text-gray-500 uppercase font-bold block mb-2">Załączniki</label>
-                    <div className="flex gap-1 mb-3">
+                    <div className="flex gap-1 mb-2">
                         <button
                             onClick={isRecording ? stopRecording : startRecording}
-                            className={`text-[10px] px-2 py-1 rounded transition-colors flex items-center gap-1 ${
+                            className={`flex-1 text-[11px] py-1.5 rounded transition-colors flex items-center justify-center gap-1 ${
                                 isRecording ? 'bg-red-500 animate-pulse text-white' : 'bg-orange-500/10 hover:bg-orange-500/20 text-orange-400'
                             }`}
                         >
@@ -1750,21 +1749,22 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                         </button>
                         <button
                             onClick={isCameraActive ? stopCamera : startCamera}
-                            className="text-[10px] bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 px-2 py-1 rounded transition-colors flex items-center gap-1"
+                            className="flex-1 text-[11px] bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 py-1.5 rounded transition-colors flex items-center justify-center gap-1"
                         >
                             <Camera size={12} />
                             {isCameraActive ? 'Anuluj' : 'Foto'}
                         </button>
-                        <label className="text-[10px] bg-green-500/10 hover:bg-green-500/20 text-green-400 px-2 py-1 rounded cursor-pointer transition-colors flex items-center gap-1">
+                        <label className="flex-1 text-[11px] bg-green-500/10 hover:bg-green-500/20 text-green-400 py-1.5 rounded cursor-pointer transition-colors flex items-center justify-center gap-1">
                             <ImageIcon size={11} />
                             Galeria
                             <input type="file" accept="image/*" multiple onChange={handleUploadAttachment} className="hidden" disabled={uploading}/>
                         </label>
-                        <label className="text-[10px] bg-white/5 hover:bg-white/10 text-white px-2 py-1 rounded cursor-pointer transition-colors">
+                        <label className="flex-1 text-[11px] bg-white/5 hover:bg-white/10 text-white py-1.5 rounded cursor-pointer transition-colors flex items-center justify-center">
                             {uploading ? '...' : '+ Plik'}
                             <input type="file" multiple onChange={handleUploadAttachment} className="hidden" disabled={uploading}/>
                         </label>
                     </div>
+                    <label className="text-xs text-gray-500 uppercase font-bold block mb-2">Załączniki</label>
 
                     {isCameraActive && (
                         <div className="relative bg-black rounded-lg overflow-hidden border border-orange-500/30 mb-3">
