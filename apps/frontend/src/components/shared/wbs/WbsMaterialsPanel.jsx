@@ -164,8 +164,11 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
         availability: card?.availability || '',
         technicalSpec: card?.technicalSpec || '',
         priceNetto: card?.priceNetto ?? '',
+        productUrl: card?.productUrl || '',
     });
     const [comboOpen, setComboOpen] = useState(null);
+    const [imageKey, setImageKey] = useState(0);
+    const [pasteHover, setPasteHover] = useState(false);
 
     useEffect(() => {
         setFields({
@@ -175,8 +178,30 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
             availability: card?.availability || '',
             technicalSpec: card?.technicalSpec || '',
             priceNetto: card?.priceNetto ?? '',
+            productUrl: card?.productUrl || '',
         });
-    }, [card?.id, card?.manufacturer, card?.model, card?.productName]);
+    }, [card?.id, card?.manufacturer, card?.model, card?.productName, card?.productUrl]);
+
+    const handleImagePaste = useCallback(async (e) => {
+        if (readOnly || !card?.id) return;
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of Array.from(items)) {
+            if (item.type.startsWith('image/')) {
+                e.preventDefault();
+                const blob = item.getAsFile();
+                const formData = new FormData();
+                formData.append('file', blob, 'screenshot.png');
+                const res = await fetch(`${API_URL}/material-requirements/${card.id}/upload-image`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                    body: formData,
+                });
+                if (res.ok) { setImageKey(k => k + 1); onRefresh(); }
+                break;
+            }
+        }
+    }, [card?.id, token, readOnly, onRefresh]);
 
     const setF = (k, v) => setFields(prev => ({ ...prev, [k]: v }));
 
@@ -305,6 +330,63 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
                     disabled={readOnly} rows={3}
                     className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50 resize-none"
                     placeholder="Wymagania techniczne (jedno per linia)..." />
+            </div>
+
+            {/* Adres www + zdjęcie — ten sam wiersz */}
+            <div className="flex gap-3 items-stretch">
+                {/* URL */}
+                <div className="flex flex-col gap-1 flex-1 min-w-0">
+                    <label className="block text-[10px] uppercase tracking-widest text-gray-500">Adres www</label>
+                    <div className="flex items-center gap-1">
+                        <input
+                            value={fields.productUrl}
+                            onChange={e => setF('productUrl', e.target.value)}
+                            onBlur={() => patchCard({ productUrl: fields.productUrl })}
+                            disabled={readOnly}
+                            placeholder="https://..."
+                            className="flex-1 bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50 min-w-0"
+                        />
+                        {fields.productUrl && (
+                            <a href={fields.productUrl} target="_blank" rel="noopener noreferrer"
+                                className="flex-shrink-0 px-2 py-1.5 rounded bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 text-[10px] transition-colors flex items-center gap-1">
+                                <LinkIcon size={10} /> Otwórz
+                            </a>
+                        )}
+                    </div>
+                </div>
+
+                {/* Strefa wklejenia zdjęcia */}
+                <div className="flex flex-col gap-1 w-48 flex-shrink-0">
+                    <label className="block text-[10px] uppercase tracking-widest text-gray-500">Zdjęcie (Ctrl+V)</label>
+                    <div
+                        tabIndex={0}
+                        onPaste={handleImagePaste}
+                        onMouseEnter={() => setPasteHover(true)}
+                        onMouseLeave={() => setPasteHover(false)}
+                        className={`relative flex-1 rounded border-2 border-dashed overflow-hidden cursor-pointer outline-none transition-colors ${pasteHover ? 'border-blue-500/50 bg-blue-500/5' : 'border-white/10 bg-black/20'}`}
+                        style={{ minHeight: 72 }}
+                        title="Najedź i wklej zdjęcie (Ctrl+V)"
+                    >
+                        {card.imageUrl ? (
+                            <img
+                                key={imageKey}
+                                src={`${API_URL}/material-requirements/${card.id}/image?t=${imageKey}`}
+                                alt="podgląd"
+                                className="w-full h-full object-contain"
+                            />
+                        ) : (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-gray-600 pointer-events-none">
+                                <Search size={16} />
+                                <span className="text-[10px]">Wklej zdjęcie</span>
+                            </div>
+                        )}
+                        {pasteHover && !readOnly && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-[10px] text-blue-300 font-semibold pointer-events-none">
+                                Ctrl+V
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
 
             {/* Propozycje */}
