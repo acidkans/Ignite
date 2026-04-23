@@ -298,8 +298,16 @@ export class MaterialRequirementsService {
         name?: string;
         materialId?: string;
         stockStatus?: number;
+        wbsNodeId?: string;
     }) {
-        return this.prisma.materialRequirement.create({ data: dto });
+        const created = await this.prisma.materialRequirement.create({ data: dto });
+        // Gdy tworzony jest karta dla węzła WBS, utwórz wpis relacyjny WbsNodeMaterial
+        if (dto.wbsNodeId) {
+            await this.prisma.wbsNodeMaterial.create({
+                data: { wbsNodeId: dto.wbsNodeId, materialId: created.id, quantity: dto.quantity || 1 },
+            }).catch(() => {});
+        }
+        return created;
     }
 
     async update(id: string, dto: Partial<{
