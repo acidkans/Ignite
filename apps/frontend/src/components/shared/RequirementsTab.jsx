@@ -67,7 +67,7 @@ function parseItems(raw) {
     return {};
 }
 
-export default function RequirementsTab({ nodeId, versionId }) {
+export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -399,14 +399,14 @@ export default function RequirementsTab({ nodeId, versionId }) {
             {/* Top action bar */}
             <div className="flex justify-end items-center gap-3">
                 <button
-                    onClick={() => exportRequirementsPdf({ form, countdown, workingDays })}
+                    onClick={() => exportRequirementsPdf({ form, countdown, workingDays, orderName })}
                     className="flex items-center gap-1.5 px-3 py-1 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/25 rounded-lg text-purple-300 text-[10px] font-bold uppercase tracking-widest transition-all"
                     title="Eksportuj informacje o zamówieniu do PDF"
                 >
                     <FileDown size={11} /> PDF tej zakładki
                 </button>
                 <button
-                    onClick={() => exportProjectPdf({ nodeId, versionId })}
+                    onClick={() => exportProjectPdf({ nodeId, versionId, orderName })}
                     className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all"
                     title="Eksportuj informacje o projekcie i planowanie do PDF"
                 >

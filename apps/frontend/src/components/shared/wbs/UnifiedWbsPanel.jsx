@@ -1236,8 +1236,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 <div class="doc-header">
   ${logoDataUrl ? `<img class="doc-header-logo" src="${logoDataUrl}" alt="Logo" />` : ''}
   <div class="doc-header-text">
-    <h1>${esc(projectName || 'Projekt')}</h1>
-    <div class="sub">${sectionKey === 'budget' ? 'Budżet' : 'Informacje o projekcie i planowanie'}</div>
+    <h1>${esc(orderName || projectName || 'Zamówienie')}</h1>
+    <div class="sub">${{ strategy: 'Jak to chcemy zrobić', budget: 'Budżet', 'wbs-hybrid': 'Struktura projektu', wbs: 'Struktura projektu', materials: 'Materiały' }[sectionKey] || 'Planowanie'}</div>
     <div class="meta">Przygotowano: ${date}</div>
   </div>
 </div>
@@ -2365,7 +2365,7 @@ ${materialsHtml}
                         {onExport && (
                             <>
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); exportProjectPdf({ nodeId, versionId, projectName }); }}
+                                    onClick={(e) => { e.stopPropagation(); exportProjectPdf({ nodeId, versionId, projectName, orderName }); }}
                                     className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                                 >
                                     <FileDown size={11} /> PDF wszystkie sekcje

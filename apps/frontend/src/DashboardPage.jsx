@@ -571,6 +571,7 @@ export default function DashboardPage() {
                                     key={`requirements-${activeAreaId}-${selectedVersionId}`}
                                     nodeId={activeAreaId}
                                     versionId={selectedVersionId}
+                                    orderName={activeNode?.name || ''}
                                 />
                             ) : (
                                 <NodeInfoTab

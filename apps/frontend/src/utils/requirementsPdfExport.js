@@ -18,7 +18,7 @@ const renderGoalHtml = (text) => (text || '')
     .replace(/(<\/h[2-4]>)<\/p>/g, '$1')
     .replace(/<p><\/p>/g, '');
 
-export function exportRequirementsPdf({ form, countdown, workingDays }) {
+export function exportRequirementsPdf({ form, countdown, workingDays, orderName }) {
     if (!form) { alert('Brak danych formularza.'); return; }
 
     const win = window.open('', '_blank');
@@ -115,8 +115,8 @@ export function exportRequirementsPdf({ form, countdown, workingDays }) {
 </head>
 <body>
 <div class="doc-header">
-  <h1>Informacje o zamowieniu</h1>
-  <div class="sub">Eksport danych zakładki</div>
+  <h1>${esc(orderName || 'Zamówienie')}</h1>
+  <div class="sub">Informacje o zamówieniu</div>
   <div class="meta">Wygenerowano: ${date}</div>
 </div>
 ${kvSection('Termin zlozenia oferty', dlRows)}

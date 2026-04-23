@@ -94,7 +94,7 @@ const fetchJson = async (url, token) => {
     }
 };
 
-export async function exportProjectPdf({ nodeId, versionId, projectName }) {
+export async function exportProjectPdf({ nodeId, versionId, projectName, orderName }) {
     if (!nodeId) { alert('Brak nodeId — nie można wygenerować PDF.'); return; }
     const token = sessionStorage.getItem('token');
     if (!token) { alert('Brak sesji — zaloguj się ponownie.'); return; }
@@ -310,7 +310,7 @@ export async function exportProjectPdf({ nodeId, versionId, projectName }) {
 <div class="doc-header">
   ${logoDataUrl ? `<img class="doc-header-logo" src="${logoDataUrl}" alt="Logo" />` : ''}
   <div class="doc-header-text">
-    <h1>${esc(projectName || info?.name || 'Projekt')}</h1>
+    <h1>${esc(orderName || info?.name || 'Zamówienie')}</h1>
     <div class="sub">Informacje o projekcie i planowanie</div>
     <div class="meta">Wygenerowano: ${date}</div>
   </div>
