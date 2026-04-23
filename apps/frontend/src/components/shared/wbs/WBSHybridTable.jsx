@@ -613,6 +613,23 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [selectedNodeId, setSelectedNodeId] = useState(null);
     const [showBasket, setShowBasket] = useState(false);
     const [copyBuffer, setCopyBuffer] = useState(null); // { node, sourceName }
+    const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, status: 128, wlasciciel: 128, komentarz: 200, znaczniki: 120, zalaczniki: 120 });
+    const resizeDrag = useRef(null);
+
+    const startColResize = (col, e) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startW = colWidths[col] ?? 120;
+        resizeDrag.current = { col, startX, startW };
+        const onMove = (ev) => {
+            if (!resizeDrag.current) return;
+            const w = Math.max(60, resizeDrag.current.startW + ev.clientX - resizeDrag.current.startX);
+            setColWidths(prev => ({ ...prev, [resizeDrag.current.col]: w }));
+        };
+        const onUp = () => { resizeDrag.current = null; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    };
 
     // materialStatuses kept for InheritedStatusBadge display only (no longer syncs to wbsTree)
     useEffect(() => {
@@ -838,7 +855,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
-            <td className="px-3 py-3 text-right"><span className="text-xs text-gray-300 font-mono">{fmt(totalRes)}</span></td>
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
@@ -1032,18 +1048,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         <input type="text" value={node.owner || ''} onChange={e => handleField(node.id, 'owner', e.target.value)} onBlur={onSave}
                             placeholder="—" className={`bg-transparent border-none focus:outline-none text-xs w-full placeholder-gray-700 ${d.fieldClass}`} />
                     )}
-                </td>
-
-                {/* Zasoby */}
-                <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                    <input type="text" value={node.resources || ''} onChange={e => handleField(node.id, 'resources', e.target.value)} onBlur={onSave}
-                        placeholder="0" className={`bg-transparent border-none focus:outline-none text-xs w-full text-right placeholder-gray-700 ${d.fieldClass}`} />
-                </td>
-
-                {/* Koszt */}
-                <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                    <input type="text" value={node.cost || ''} onChange={e => handleField(node.id, 'cost', e.target.value)} onBlur={onSave}
-                        placeholder="0" className={`bg-transparent border-none focus:outline-none text-xs w-full text-right placeholder-gray-700 ${d.fieldClass}`} />
                 </td>
 
                 {/* Komentarz */}
@@ -1301,21 +1305,29 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             )}
             <div className="flex-1 min-h-0 overflow-auto overflow-x-auto custom-scrollbar">
             <div className="w-full">
-                <table className="w-full text-sm border-collapse">
+                <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: '100%' }}>
+                    <colgroup>
+                        <col style={{ width: 32 }} />
+                        <col style={{ width: colWidths.nazwa }} />
+                        <col style={{ width: colWidths.typ }} />
+                        <col style={{ width: colWidths.ilosc }} />
+                        <col style={{ width: colWidths.jednostka }} />
+                        <col style={{ width: colWidths.status }} />
+                        <col style={{ width: colWidths.wlasciciel }} />
+                        <col style={{ width: colWidths.komentarz }} />
+                        <col style={{ width: colWidths.znaczniki }} />
+                        <col style={{ width: colWidths.zalaczniki }} />
+                        <col style={{ width: 48 }} />
+                    </colgroup>
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
                         <tr className="border-b border-white/10">
-                            <th className="text-left px-1 py-2.5 text-base font-bold uppercase tracking-widest text-white w-8"></th>
-                            <th className="text-left px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white min-w-[320px]">Nazwa</th>
-                            <th className="text-left px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white w-28">Typ</th>
-                            <th className="text-right px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white w-20">Ilość</th>
-                            <th className="text-left px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white w-20">Jednostka</th>
-                            <th className="text-left px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white w-32">Status</th>
-                            <th className="text-left px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white w-32">Właściciel</th>
-                            <th className="text-right px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white w-24">Zasoby (h)</th>
-                            <th className="text-right px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white w-24">Koszt</th>
-                            <th className="text-left px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white w-48">Komentarz</th>
-                            <th className="text-left px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white w-28">Znaczniki</th>
-                            <th className="text-left px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white w-28">Załączniki</th>
+                            <th className="px-1 py-2.5 text-base font-bold uppercase tracking-widest text-white" />
+                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jednostka','text-left'],['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['znaczniki','Znaczniki','text-left'],['zalaczniki','Załączniki','text-left']].map(([key, label, align]) => (
+                                <th key={key} className={`px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white ${align} relative select-none`}>
+                                    {label}
+                                    <div onMouseDown={e => startColResize(key, e)} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-500/40 transition-colors" />
+                                </th>
+                            ))}
                             <th className="w-12" />
                         </tr>
                     </thead>
