@@ -1029,7 +1029,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                     <td>${esc(n.unit || defaultUnitForType(n.type))}</td>
                     <td class="num">${fmtPct(n.margin)}</td>
                     <td class="num">${fmtPLN(n.totalCost)}</td>
-                    <td class="num">${fmtPLN(n.totalPrice)}</td>` : `
+                    <td class="num">${fmtPLN(n.totalPrice)}</td>
+                    <td style="text-align:left;word-wrap:break-word;white-space:normal;max-width:120px">${esc(n.comment || '')}</td>` : `
                     <td>${esc(TYPE_LABELS[n.type] || n.type || '')}</td>
                     <td>${esc(n.status || '')}</td>
                     <td>${esc(n.owner || '')}</td>
@@ -1142,12 +1143,13 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             <div class="section">
                 <div class="section-header">Budżet</div>
                 <table class="budget-table">
-                    <thead><tr><th style="width:38%;text-align:left">Pozycja</th><th>Koszt jednostkowy</th><th>Ilość</th><th>Jednostki</th><th>Marża%</th><th>Koszt całościowy</th><th>Suma netto</th></tr></thead>
-                    <tbody>${wbsData.length ? buildTreeRows(null, 0, true) : '<tr><td colspan="7">Brak danych budżetowych</td></tr>'}</tbody>
+                    <thead><tr><th style="width:26%;text-align:left">Pozycja</th><th>Koszt jednostkowy</th><th>Ilość</th><th>Jednostki</th><th>Marża%</th><th>Koszt całościowy</th><th>Suma netto</th><th style="width:18%;text-align:left">Komentarz</th></tr></thead>
+                    <tbody>${wbsData.length ? buildTreeRows(null, 0, true) : '<tr><td colspan="8">Brak danych budżetowych</td></tr>'}</tbody>
                     <tfoot><tr style="background:#f3f4f6;font-weight:bold;font-size:15px;color:#111">
                         <td colspan="5" style="text-align:right;text-transform:uppercase;letter-spacing:0.05em;padding:7px 8px">Razem:</td>
                         <td class="num" style="color:#111">${fmtPLN(_bTotalCost)} PLN</td>
                         <td class="num" style="color:#111">${fmtPLN(_bTotalPrice)} PLN</td>
+                        <td></td>
                     </tr></tfoot>
                 </table>
             </div>` : '';
@@ -1191,7 +1193,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 0 12px 28px 12px; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 0 6px 28px 6px; }
   .doc-header { border-bottom: 3px solid #1a1a2e; padding: 18px 0 10px 0; margin: 0 0 18px 0; break-after: avoid; page-break-after: avoid; display: flex; align-items: flex-start; gap: 16px; }
   .doc-header-logo { height: 48px; width: auto; object-fit: contain; flex-shrink: 0; }
   .doc-header-text { flex: 1; }
@@ -1221,8 +1223,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
   thead { display: table-header-group; }
   tr { page-break-inside: avoid; break-inside: avoid; }
   @page { margin: 0; size: A4; }
+  .budget-table { table-layout: fixed; word-wrap: break-word; }
   @media print {
-    body { padding: 14mm 14mm 14mm 14mm; }
+    body { padding: 14mm 7mm 14mm 7mm; }
     .summary-grid { display: block; }
     .summary-block { margin-bottom: 16px; }
     .summary-section { page-break-before: always; }
