@@ -30,6 +30,58 @@ import { UNIT_OPTIONS } from './wbsConstants';
 
 const API_URL = '/api';
 
+// ─── MaterialReqExpandPanel ───────────────────────────────────────────────────
+
+function MaterialReqExpandPanel({ node, req, processNodeId, onSaved }) {
+    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    const [techSpec, setTechSpec] = React.useState(req?.technicalSpec || '');
+
+    React.useEffect(() => { setTechSpec(req?.technicalSpec || ''); }, [req?.id, req?.technicalSpec]);
+
+    const handleBlur = async () => {
+        if (techSpec === (req?.technicalSpec || '')) return;
+        if (req?.id) {
+            const res = await fetch(`${API_URL}/material-requirements/${req.id}`, {
+                method: 'PATCH', headers, body: JSON.stringify({ technicalSpec: techSpec }),
+            });
+            if (res.ok) onSaved({ ...req, technicalSpec: techSpec });
+        } else {
+            const reqType = node.type === 'equipment' ? 'DEVICE' : 'MATERIAL';
+            const res = await fetch(`${API_URL}/material-requirements`, {
+                method: 'POST', headers, body: JSON.stringify({
+                    nodeId: processNodeId,
+                    name: node.name,
+                    type: reqType,
+                    quantity: node.quantity || 1,
+                    unit: node.unit || 'szt',
+                    wbsNodeId: node.id,
+                    technicalSpec: techSpec,
+                }),
+            });
+            if (res.ok) onSaved(await res.json());
+        }
+    };
+
+    return (
+        <div className="px-6 py-3 flex flex-col gap-2 border-l-2 border-amber-500/30 ml-8">
+            <div className="flex items-center gap-3">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400/80">Wymagania materiałowe</span>
+                <span className="text-[10px] text-gray-600">Logistyk dopasowuje produkty w zakładce Materiały</span>
+            </div>
+            <textarea
+                value={techSpec}
+                onChange={e => setTechSpec(e.target.value)}
+                onBlur={handleBlur}
+                rows={3}
+                placeholder="Określ wymagania techniczne dla tego materiału/sprzętu (jedno per linia)..."
+                className="w-full max-w-2xl bg-black/30 border border-amber-500/20 rounded px-3 py-2 text-xs text-white placeholder-gray-600 outline-none focus:border-amber-500/50 resize-none leading-relaxed"
+            />
+        </div>
+    );
+}
+
 const STRUCT_STATUS_META = {
     '':        { label: 'Brak',         style: 'bg-transparent text-gray-600 border-transparent' },
     PENDING:   { label: 'Oczekuje',     style: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
@@ -541,6 +593,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [lightboxAtt, setLightboxAtt] = useState(null); // attachment for fullscreen preview
     const tagInputRef = useRef(null);
     const [materialStatuses, setMaterialStatuses] = useState({});
+    const [matReqByWbsId, setMatReqByWbsId] = useState({});
+    const [expandedMaterialIds, setExpandedMaterialIds] = useState(new Set());
     const [reqDragOverNode, setReqDragOverNode] = useState(null);
     const [selectedNodeId, setSelectedNodeId] = useState(null);
     const [showBasket, setShowBasket] = useState(false);
@@ -558,8 +612,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 if (res.ok) {
                     const data = await res.json();
                     const map = {};
-                    data.forEach(r => { if (r.name) map[r.name.toLowerCase()] = r.status; });
+                    const reqMap = {};
+                    data.forEach(r => {
+                        if (r.name) map[r.name.toLowerCase()] = r.status;
+                        if (r.wbsNodeId) reqMap[r.wbsNodeId] = r;
+                    });
                     setMaterialStatuses(map);
+                    setMatReqByWbsId(reqMap);
                 }
             } catch (e) {}
         };
@@ -819,6 +878,15 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             ? <ChevronRight size={12} className={`text-gray-400 transition-transform flex-shrink-0 ${isOpen(rowId) ? 'rotate-90' : ''}`} />
                             : <span className="w-[12px] flex-shrink-0" />
                         }
+                        {(node.type === 'material' || node.type === 'equipment') && (
+                            <button
+                                title="Wymagania materiałowe"
+                                onClick={e => { e.stopPropagation(); setExpandedMaterialIds(prev => { const n = new Set(prev); n.has(node.id) ? n.delete(node.id) : n.add(node.id); return n; }); }}
+                                className={`p-0.5 rounded transition-all flex-shrink-0 ${expandedMaterialIds.has(node.id) ? 'text-amber-400 bg-amber-500/10' : 'text-gray-600 hover:text-amber-400'}`}
+                            >
+                                <FileText size={9} />
+                            </button>
+                        )}
                         <div className="flex flex-col gap-0.5 opacity-0 group-hover/node:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
                             <button
                                 title="Kopiuj pozycję"
@@ -1035,6 +1103,21 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 </td>
             </tr>
         );
+
+        if ((node.type === 'material' || node.type === 'equipment') && expandedMaterialIds.has(node.id)) {
+            rows.push(
+                <tr key={`mat-req-${node.id}`}>
+                    <td colSpan={13} className="p-0 border-b border-amber-500/10 bg-amber-500/[0.02]">
+                        <MaterialReqExpandPanel
+                            node={node}
+                            req={matReqByWbsId[node.id] || null}
+                            processNodeId={processNodeId}
+                            onSaved={updated => setMatReqByWbsId(prev => ({ ...prev, [node.id]: updated }))}
+                        />
+                    </td>
+                </tr>
+            );
+        }
 
         if (searchVisibleIds || isOpen(rowId)) {
             (node.children || []).forEach((child, ci) => {
