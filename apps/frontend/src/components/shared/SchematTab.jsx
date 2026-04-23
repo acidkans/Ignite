@@ -1356,6 +1356,7 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
             }
         } finally {
             setWbsToggling(null);
+            onRefresh?.();
         }
     };
 
