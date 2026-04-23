@@ -1385,19 +1385,6 @@ ${materialsHtml}
     const deleteNodeById = useCallback(async (id) => {
         if (!id || !window.confirm('Usunąć ten węzeł i wszystkie podgałęzie?')) return;
         try {
-            // Sprawdź czy usuwany węzeł ma tag req: — jeśli tak, odłącz wymaganie
-            const node = wbsData.find(n => n.id === id);
-            const reqTag = (node?.tags || []).find(t => String(t).startsWith('req:'));
-            if (reqTag) {
-                const reqId = reqTag.slice(4);
-                // Odłącz wymaganie od węzła WBS (wróci do koszyka nieprzypisanych)
-                await fetch(`${API_URL}/material-requirements/${reqId}`, {
-                    method: 'PATCH',
-                    headers: authHeaders(),
-                    body: JSON.stringify({ wbsNodeId: null, wbsNodeIds: '[]', wbsNodeAllocations: null, isAiAssigned: false }),
-                }).catch(() => {});
-            }
-
             const res = await fetch(`${API_URL}/wbs-nodes/${id}`, { method: 'DELETE', headers: authHeaders() });
             if (!res.ok) {
                 console.error('[WBS delete] Błąd serwera:', res.status, await res.text().catch(() => ''));
