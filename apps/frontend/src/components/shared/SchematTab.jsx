@@ -60,6 +60,7 @@ export default function SchematTab({ nodeId }) {
 
     const pageRef = useRef(null);
     const containerRef = useRef(null);
+    const rootRef = useRef(null);
     const [containerWidth, setContainerWidth] = useState(800);
     const [contentAspect, setContentAspect] = useState(null); // height/width ratio of current page
     const scaleRef = useRef(scale);
@@ -137,6 +138,10 @@ export default function SchematTab({ nodeId }) {
         };
         const onTouchEnd = (e) => {
             if (e.touches.length < 2) pinchState = null;
+            if (e.touches.length === 1) {
+                // przejście pinch→pan: inicjuj panState dla pozostałego palca
+                panState = { x: e.touches[0].clientX, y: e.touches[0].clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
+            }
             if (e.touches.length === 0) panState = null;
         };
         el.addEventListener('touchstart', onTouchStart, { passive: false });
@@ -148,6 +153,19 @@ export default function SchematTab({ nodeId }) {
             el.removeEventListener('touchend',   onTouchEnd);
         };
     }, [selectedSchematic]);
+
+    // Blokada browser viewport-zoom (pinch) na całym komponencie — JS backup dla CSS touch-action
+    useEffect(() => {
+        const el = rootRef.current;
+        if (!el) return;
+        const preventPinch = (e) => { if (e.touches.length > 1) e.preventDefault(); };
+        el.addEventListener('touchstart', preventPinch, { passive: false });
+        el.addEventListener('touchmove',  preventPinch, { passive: false });
+        return () => {
+            el.removeEventListener('touchstart', preventPinch);
+            el.removeEventListener('touchmove',  preventPinch);
+        };
+    }, []);
 
     useEffect(() => {
         if (nodeId) fetchSchematics();
@@ -662,7 +680,7 @@ export default function SchematTab({ nodeId }) {
     }
 
     return (
-        <div className={`flex flex-col h-full bg-gray-900/50 rounded-xl overflow-hidden border border-white/5 relative ${!isDesktop && isFullscreen ? 'fixed inset-0 z-[200]' : ''}`} style={{ touchAction: 'pan-x pan-y' }}>
+        <div ref={rootRef} className={`flex flex-col h-full bg-gray-900/50 rounded-xl overflow-hidden border border-white/5 relative ${!isDesktop && isFullscreen ? 'fixed inset-0 z-[200]' : ''}`} style={{ touchAction: 'pan-x pan-y' }}>
 
             {/* Górna belka — pełna szerokość */}
             <div
