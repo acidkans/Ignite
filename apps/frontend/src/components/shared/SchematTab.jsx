@@ -680,7 +680,7 @@ export default function SchematTab({ nodeId }) {
     }
 
     return (
-        <div ref={rootRef} className={`flex flex-col h-full bg-gray-900/50 rounded-xl overflow-hidden border border-white/5 relative ${!isDesktop && isFullscreen ? 'fixed inset-0 z-[200]' : ''}`} style={{ touchAction: 'pan-x pan-y' }}>
+        <div ref={rootRef} className={`flex flex-col h-full bg-gray-900/50 rounded-xl overflow-hidden border border-white/5 relative ${!isDesktop && isFullscreen ? 'fixed inset-0 z-[200]' : ''}`}>
 
             {/* Górna belka — pełna szerokość */}
             <div
@@ -896,6 +896,43 @@ export default function SchematTab({ nodeId }) {
                             </button>
                         </div>
 
+                        {/* Mobilna belka narzędzi — nad podglądem PDF */}
+                        {!isDesktop && (
+                            <div className="flex-shrink-0 border-b border-white/10 bg-black/40 flex items-center gap-2 px-3 py-2 z-10">
+                                <div className="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-white/10">
+                                    <button onClick={() => { setActiveTool('POINT'); setIsAddingMarker(false); }} className={`p-1.5 rounded transition-colors ${activeTool === 'POINT' ? 'bg-orange-500 text-white' : 'text-gray-400'}`} title="Punkt"><MapPin size={14} /></button>
+                                    <button onClick={() => { setActiveTool('LINE'); setIsAddingMarker(false); }} className={`p-1.5 rounded transition-colors ${activeTool === 'LINE' ? 'bg-orange-500 text-white' : 'text-gray-400'}`} title="Linia"><Minus size={14} /></button>
+                                    <button onClick={() => { setActiveTool('TEXT'); setIsAddingMarker(false); }} className={`p-1.5 rounded transition-colors ${activeTool === 'TEXT' ? 'bg-orange-500 text-white' : 'text-gray-400'}`} title="Tekst"><Type size={14} /></button>
+                                </div>
+                                <button
+                                    onClick={() => { setIsAddingMarker(v => !v); setLineStart(null); }}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                                        isAddingMarker
+                                        ? 'bg-orange-500/20 text-orange-400 border-orange-500/50'
+                                        : 'bg-white/5 text-gray-300 border-white/10'
+                                    }`}
+                                >
+                                    <MapPin size={14} />
+                                    {isAddingMarker
+                                        ? (activeTool === 'LINE'
+                                            ? (lineStart ? 'Zakończ linię' : 'Zacznij linię')
+                                            : 'Kliknij schemat')
+                                        : `Dodaj ${activeTool === 'LINE' ? 'linię' : activeTool === 'TEXT' ? 'tekst' : 'znacznik'}`
+                                    }
+                                </button>
+                                <div className="flex-1" />
+                                <button
+                                    onClick={exportMarkersToPdf}
+                                    disabled={exporting}
+                                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 disabled:opacity-50"
+                                    title="Eksportuj do PDF"
+                                >
+                                    <FileDown size={14} />
+                                    {exporting ? '...' : 'PDF'}
+                                </button>
+                            </div>
+                        )}
+
                         {/* Obszar roboczy PDF */}
                         <div
                             className={`flex-1 min-h-0 overflow-auto overscroll-contain p-4 [&_canvas]:touch-none ${activeTool === 'MOVE' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
@@ -1076,42 +1113,6 @@ export default function SchematTab({ nodeId }) {
                 )}
                 </div>
 
-            {/* Mobilna belka narzędzi — zawsze widoczna na dole, flex-shrink-0 */}
-            {!isDesktop && selectedSchematic && (
-                <div className="flex-shrink-0 border-t border-white/10 bg-black/40 flex items-center gap-2 px-3 py-2 z-10">
-                    <div className="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-white/10">
-                        <button onClick={() => { setActiveTool('POINT'); setIsAddingMarker(false); }} className={`p-1.5 rounded transition-colors ${activeTool === 'POINT' ? 'bg-orange-500 text-white' : 'text-gray-400'}`} title="Punkt"><MapPin size={14} /></button>
-                        <button onClick={() => { setActiveTool('LINE'); setIsAddingMarker(false); }} className={`p-1.5 rounded transition-colors ${activeTool === 'LINE' ? 'bg-orange-500 text-white' : 'text-gray-400'}`} title="Linia"><Minus size={14} /></button>
-                        <button onClick={() => { setActiveTool('TEXT'); setIsAddingMarker(false); }} className={`p-1.5 rounded transition-colors ${activeTool === 'TEXT' ? 'bg-orange-500 text-white' : 'text-gray-400'}`} title="Tekst"><Type size={14} /></button>
-                    </div>
-                    <button
-                        onClick={() => { setIsAddingMarker(v => !v); setLineStart(null); }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
-                            isAddingMarker
-                            ? 'bg-orange-500/20 text-orange-400 border-orange-500/50'
-                            : 'bg-white/5 text-gray-300 border-white/10'
-                        }`}
-                    >
-                        <MapPin size={14} />
-                        {isAddingMarker
-                            ? (activeTool === 'LINE'
-                                ? (lineStart ? 'Zakończ linię' : 'Zacznij linię')
-                                : activeTool === 'TEXT' ? 'Kliknij schemat' : 'Kliknij schemat')
-                            : `Dodaj ${activeTool === 'LINE' ? 'linię' : activeTool === 'TEXT' ? 'tekst' : 'znacznik'}`
-                        }
-                    </button>
-                    <div className="flex-1" />
-                    <button
-                        onClick={exportMarkersToPdf}
-                        disabled={exporting}
-                        className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 disabled:opacity-50"
-                        title="Eksportuj do PDF"
-                    >
-                        <FileDown size={14} />
-                        {exporting ? '...' : 'PDF'}
-                    </button>
-                </div>
-            )}
 
             {selectedSchematic && (() => {
                 const rows = selectedSchematic.markers.flatMap(m =>
