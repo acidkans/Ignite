@@ -263,134 +263,122 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
     if (!card) return null;
 
     return (
-        <div className="flex flex-col gap-4 p-4">
-            {/* Comboboxes */}
-            <div className="flex flex-wrap gap-3">
-                {comboFields.map(([key, label]) => {
-                    const suggestions = getFilteredSuggestions(key);
-                    return (
-                        <div key={key} className="relative flex-1 min-w-[160px]">
-                            <label className="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">{label}</label>
+        <div className="flex gap-0 p-0">
+            {/* Lewa kolumna — pola (zwężona) */}
+            <div className="flex flex-col gap-3 p-4 flex-1 min-w-0">
+                {/* Comboboxes */}
+                <div className="flex flex-wrap gap-2">
+                    {comboFields.map(([key, label]) => {
+                        const suggestions = getFilteredSuggestions(key);
+                        return (
+                            <div key={key} className="relative flex-1 min-w-[120px]">
+                                <label className="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">{label}</label>
+                                <input
+                                    value={fields[key]}
+                                    onChange={e => setF(key, e.target.value)}
+                                    onFocus={() => setComboOpen(key)}
+                                    onBlur={() => setTimeout(() => setComboOpen(null), 150)}
+                                    onKeyDown={e => { if (e.key === 'Enter') { setComboOpen(null); patchCard({ [key]: fields[key] }); } }}
+                                    disabled={readOnly}
+                                    className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
+                                    placeholder={`Wpisz ${label.toLowerCase()}...`}
+                                />
+                                {comboOpen === key && suggestions.length > 0 && (
+                                    <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-gray-900 border border-white/20 rounded shadow-xl max-h-48 overflow-auto custom-scrollbar">
+                                        {suggestions.map((m, i) => (
+                                            <button key={i} onMouseDown={() => selectMaterial(m, key)}
+                                                className="w-full text-left px-3 py-1.5 text-xs text-gray-200 hover:bg-white/10 truncate">
+                                                {m[key]}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {/* Dane ofertowe + URL */}
+                <div className="flex flex-wrap gap-2">
+                    <div className="flex-1 min-w-[90px]">
+                        <label className="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Cena netto</label>
+                        <input value={fields.priceNetto} onChange={e => setF('priceNetto', e.target.value)}
+                            onBlur={() => { const v = parseFloat(String(fields.priceNetto).replace(',', '.')); if (!isNaN(v)) patchCard({ priceNetto: v }); }}
+                            disabled={readOnly}
+                            className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
+                            placeholder="0.00" />
+                    </div>
+                    <div className="flex-1 min-w-[90px]">
+                        <label className="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Dostępność</label>
+                        <input value={fields.availability} onChange={e => setF('availability', e.target.value)}
+                            onBlur={() => patchCard({ availability: fields.availability })}
+                            disabled={readOnly}
+                            className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
+                            placeholder="np. 7 dni" />
+                    </div>
+                    <div className="flex-1 min-w-[140px]">
+                        <label className="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Adres www</label>
+                        <div className="flex items-center gap-1">
                             <input
-                                value={fields[key]}
-                                onChange={e => setF(key, e.target.value)}
-                                onFocus={() => setComboOpen(key)}
-                                onBlur={() => setTimeout(() => setComboOpen(null), 150)}
-                                onKeyDown={e => { if (e.key === 'Enter') { setComboOpen(null); patchCard({ [key]: fields[key] }); } }}
+                                value={fields.productUrl}
+                                onChange={e => setF('productUrl', e.target.value)}
+                                onBlur={() => patchCard({ productUrl: fields.productUrl })}
                                 disabled={readOnly}
-                                className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
-                                placeholder={`Wpisz ${label.toLowerCase()}...`}
+                                placeholder="https://..."
+                                className="flex-1 min-w-0 bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
                             />
-                            {comboOpen === key && suggestions.length > 0 && (
-                                <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-gray-900 border border-white/20 rounded shadow-xl max-h-48 overflow-auto custom-scrollbar">
-                                    {suggestions.map((m, i) => (
-                                        <button key={i} onMouseDown={() => selectMaterial(m, key)}
-                                            className="w-full text-left px-3 py-1.5 text-xs text-gray-200 hover:bg-white/10 truncate">
-                                            {m[key]}
-                                        </button>
-                                    ))}
-                                </div>
+                            {fields.productUrl && (
+                                <a href={fields.productUrl} target="_blank" rel="noopener noreferrer"
+                                    className="flex-shrink-0 p-1.5 rounded bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 transition-colors">
+                                    <LinkIcon size={11} />
+                                </a>
                             )}
                         </div>
-                    );
-                })}
+                    </div>
+                </div>
+
+                {/* Wymagania techniczne */}
+                <div className="flex-1">
+                    <label className="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Wymagania techniczne</label>
+                    <textarea value={fields.technicalSpec} onChange={e => setF('technicalSpec', e.target.value)}
+                        onBlur={() => patchCard({ technicalSpec: fields.technicalSpec })}
+                        disabled={readOnly} rows={3}
+                        className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50 resize-none"
+                        placeholder="Wymagania techniczne (jedno per linia)..." />
+                </div>
+
+                {/* Propozycje */}
+                {!readOnly && <ProposalsSection req={card} token={token} onRefresh={onRefresh} />}
             </div>
 
-            {/* Dane ofertowe */}
-            <div className="flex flex-wrap gap-3">
-                <div className="flex-1 min-w-[120px]">
-                    <label className="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Cena netto</label>
-                    <input value={fields.priceNetto} onChange={e => setF('priceNetto', e.target.value)}
-                        onBlur={() => { const v = parseFloat(String(fields.priceNetto).replace(',', '.')); if (!isNaN(v)) patchCard({ priceNetto: v }); }}
-                        disabled={readOnly}
-                        className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
-                        placeholder="0.00" />
-                </div>
-                <div className="flex-1 min-w-[120px]">
-                    <label className="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Dostępność</label>
-                    <input value={fields.availability} onChange={e => setF('availability', e.target.value)}
-                        onBlur={() => patchCard({ availability: fields.availability })}
-                        disabled={readOnly}
-                        className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
-                        placeholder="np. 7 dni" />
-                </div>
-                {card.seller && (
-                    <div className="flex-1 min-w-[120px]">
-                        <label className="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Sprzedawca</label>
-                        <div className="px-2 py-1.5 text-xs text-gray-300">{card.seller}</div>
+            {/* Prawa kolumna — zdjęcie na całą wysokość */}
+            <div
+                tabIndex={0}
+                onPaste={handleImagePaste}
+                onMouseEnter={() => setPasteHover(true)}
+                onMouseLeave={() => setPasteHover(false)}
+                className={`relative w-44 flex-shrink-0 border-l outline-none transition-colors cursor-pointer ${pasteHover ? 'border-blue-500/30 bg-blue-500/5' : 'border-white/5 bg-black/10'}`}
+                title="Najedź i wklej zdjęcie (Ctrl+V)"
+            >
+                {card.imageUrl ? (
+                    <img
+                        key={imageKey}
+                        src={`${API_URL}/material-requirements/${card.id}/image?t=${imageKey}`}
+                        alt="podgląd"
+                        className="absolute inset-0 w-full h-full object-contain p-2"
+                    />
+                ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-gray-700 pointer-events-none">
+                        <Search size={20} />
+                        <span className="text-[10px] text-center px-2">Wklej zdjęcie<br/>Ctrl+V</span>
+                    </div>
+                )}
+                {pasteHover && !readOnly && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-sm text-blue-300 font-bold pointer-events-none">
+                        Ctrl+V
                     </div>
                 )}
             </div>
-
-            {/* Wymagania techniczne */}
-            <div>
-                <label className="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Wymagania techniczne</label>
-                <textarea value={fields.technicalSpec} onChange={e => setF('technicalSpec', e.target.value)}
-                    onBlur={() => patchCard({ technicalSpec: fields.technicalSpec })}
-                    disabled={readOnly} rows={3}
-                    className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50 resize-none"
-                    placeholder="Wymagania techniczne (jedno per linia)..." />
-            </div>
-
-            {/* Adres www + zdjęcie — ten sam wiersz */}
-            <div className="flex gap-3 items-stretch">
-                {/* URL */}
-                <div className="flex flex-col gap-1 flex-1 min-w-0">
-                    <label className="block text-[10px] uppercase tracking-widest text-gray-500">Adres www</label>
-                    <div className="flex items-center gap-1">
-                        <input
-                            value={fields.productUrl}
-                            onChange={e => setF('productUrl', e.target.value)}
-                            onBlur={() => patchCard({ productUrl: fields.productUrl })}
-                            disabled={readOnly}
-                            placeholder="https://..."
-                            className="flex-1 bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50 min-w-0"
-                        />
-                        {fields.productUrl && (
-                            <a href={fields.productUrl} target="_blank" rel="noopener noreferrer"
-                                className="flex-shrink-0 px-2 py-1.5 rounded bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 text-[10px] transition-colors flex items-center gap-1">
-                                <LinkIcon size={10} /> Otwórz
-                            </a>
-                        )}
-                    </div>
-                </div>
-
-                {/* Strefa wklejenia zdjęcia */}
-                <div className="flex flex-col gap-1 w-48 flex-shrink-0">
-                    <label className="block text-[10px] uppercase tracking-widest text-gray-500">Zdjęcie (Ctrl+V)</label>
-                    <div
-                        tabIndex={0}
-                        onPaste={handleImagePaste}
-                        onMouseEnter={() => setPasteHover(true)}
-                        onMouseLeave={() => setPasteHover(false)}
-                        className={`relative flex-1 rounded border-2 border-dashed overflow-hidden cursor-pointer outline-none transition-colors ${pasteHover ? 'border-blue-500/50 bg-blue-500/5' : 'border-white/10 bg-black/20'}`}
-                        style={{ minHeight: 72 }}
-                        title="Najedź i wklej zdjęcie (Ctrl+V)"
-                    >
-                        {card.imageUrl ? (
-                            <img
-                                key={imageKey}
-                                src={`${API_URL}/material-requirements/${card.id}/image?t=${imageKey}`}
-                                alt="podgląd"
-                                className="w-full h-full object-contain"
-                            />
-                        ) : (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-gray-600 pointer-events-none">
-                                <Search size={16} />
-                                <span className="text-[10px]">Wklej zdjęcie</span>
-                            </div>
-                        )}
-                        {pasteHover && !readOnly && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-[10px] text-blue-300 font-semibold pointer-events-none">
-                                Ctrl+V
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {/* Propozycje */}
-            {!readOnly && <ProposalsSection req={card} token={token} onRefresh={onRefresh} />}
         </div>
     );
 }
