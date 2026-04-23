@@ -1737,39 +1737,37 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                 )}
 
                 <div>
-                    <div className="flex items-center justify-between mb-3">
-                        <label className="text-xs text-gray-500 uppercase font-bold">Załączniki</label>
-                        <div className="flex gap-1">
-                            <button 
-                                onClick={isRecording ? stopRecording : startRecording}
-                                className={`text-[10px] px-2 py-1 rounded transition-colors flex items-center gap-1 ${
-                                    isRecording ? 'bg-red-500 animate-pulse text-white' : 'bg-orange-500/10 hover:bg-orange-500/20 text-orange-400'
-                                }`}
-                            >
-                                <Mic size={12} />
-                                {isRecording ? 'Stop' : 'Głos'}
-                            </button>
-                            <button 
-                                onClick={isCameraActive ? stopCamera : startCamera}
-                                className="text-[10px] bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 px-2 py-1 rounded transition-colors flex items-center gap-1"
-                            >
-                                <Camera size={12} />
-                                {isCameraActive ? 'Anuluj' : 'Foto'}
-                            </button>
-                            <label className="text-[10px] bg-green-500/10 hover:bg-green-500/20 text-green-400 px-2 py-1 rounded cursor-pointer transition-colors flex items-center gap-1">
-                                <ImageIcon size={11} />
-                                Galeria
-                                <input type="file" accept="image/*" multiple onChange={handleUploadAttachment} className="hidden" disabled={uploading}/>
-                            </label>
-                            <label className="text-[10px] bg-white/5 hover:bg-white/10 text-white px-2 py-1 rounded cursor-pointer transition-colors">
-                                {uploading ? '...' : '+ Plik'}
-                                <input type="file" multiple onChange={handleUploadAttachment} className="hidden" disabled={uploading}/>
-                            </label>
-                        </div>
+                    <label className="text-xs text-gray-500 uppercase font-bold block mb-2">Załączniki</label>
+                    <div className="flex gap-1 mb-3">
+                        <button
+                            onClick={isRecording ? stopRecording : startRecording}
+                            className={`text-[10px] px-2 py-1 rounded transition-colors flex items-center gap-1 ${
+                                isRecording ? 'bg-red-500 animate-pulse text-white' : 'bg-orange-500/10 hover:bg-orange-500/20 text-orange-400'
+                            }`}
+                        >
+                            <Mic size={12} />
+                            {isRecording ? 'Stop' : 'Głos'}
+                        </button>
+                        <button
+                            onClick={isCameraActive ? stopCamera : startCamera}
+                            className="text-[10px] bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 px-2 py-1 rounded transition-colors flex items-center gap-1"
+                        >
+                            <Camera size={12} />
+                            {isCameraActive ? 'Anuluj' : 'Foto'}
+                        </button>
+                        <label className="text-[10px] bg-green-500/10 hover:bg-green-500/20 text-green-400 px-2 py-1 rounded cursor-pointer transition-colors flex items-center gap-1">
+                            <ImageIcon size={11} />
+                            Galeria
+                            <input type="file" accept="image/*" multiple onChange={handleUploadAttachment} className="hidden" disabled={uploading}/>
+                        </label>
+                        <label className="text-[10px] bg-white/5 hover:bg-white/10 text-white px-2 py-1 rounded cursor-pointer transition-colors">
+                            {uploading ? '...' : '+ Plik'}
+                            <input type="file" multiple onChange={handleUploadAttachment} className="hidden" disabled={uploading}/>
+                        </label>
                     </div>
 
                     {isCameraActive && (
-                        <div className="relative bg-black rounded-lg overflow-hidden border border-orange-500/30 mb-4">
+                        <div className="relative bg-black rounded-lg overflow-hidden border border-orange-500/30 mb-3">
                             <video ref={videoRef} autoPlay playsInline className="w-full h-auto bg-black" />
                             <div className="absolute bottom-4 left-0 right-0 flex justify-center px-4">
                                 <button onClick={capturePhoto} className="bg-orange-500 text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2">
@@ -1780,12 +1778,12 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                         </div>
                     )}
 
-                    <div className="space-y-3">
+                    <div className="flex flex-row flex-wrap gap-2">
                         {marker.attachments?.map(att => (
-                            <div key={att.id} className="bg-black/20 border border-white/5 rounded-lg p-2 group relative">
+                            <div key={att.id} className="bg-black/20 border border-white/5 rounded-lg p-2 group relative w-40 flex flex-col gap-1 shrink-0">
                                 {att.fileType === 'IMAGE' && (
-                                    <div className="flex flex-col gap-2">
-                                        <div className="flex items-center gap-2 text-xs text-blue-300"><ImageIcon size={14} /> Zdjęcie</div>
+                                    <div className="flex flex-col gap-1">
+                                        <div className="flex items-center gap-1 text-[10px] text-blue-300"><ImageIcon size={12} /> Zdjęcie</div>
                                         <img
                                             src={getFileUrl(att.fileUrl)}
                                             alt={att.fileName}
@@ -1795,10 +1793,13 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                                     </div>
                                 )}
                                 {att.fileType === 'AUDIO' && (
-                                    <div className="flex flex-col gap-2">
-                                        <div className="flex items-center gap-2 text-xs text-purple-300"><Mic size={14} /> Głos</div>
+                                    <div className="flex flex-col gap-1">
+                                        <div className="flex items-center gap-1 text-[10px] text-purple-300"><Mic size={12} /> Głos</div>
                                         <audio controls className="w-full h-8" src={getFileUrl(att.fileUrl)}/>
                                     </div>
+                                )}
+                                {att.fileType === 'FILE' && (
+                                    <div className="flex items-center gap-1 text-[10px] text-gray-400"><FileText size={12} />{att.fileName}</div>
                                 )}
                                 <input
                                     type="text"
@@ -1806,11 +1807,11 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                                     onChange={e => setEditingAttNotes(p => ({...p, [att.id]: e.target.value}))}
                                     onBlur={() => { if (editingAttNotes[att.id] !== undefined) { handleUpdateAttNote(att.id, editingAttNotes[att.id]); setEditingAttNotes(p => { const n={...p}; delete n[att.id]; return n; }); }}}
                                     onKeyDown={e => { if (e.key==='Enter') { handleUpdateAttNote(att.id, editingAttNotes[att.id] ?? att.note ?? ''); setEditingAttNotes(p => { const n={...p}; delete n[att.id]; return n; }); e.currentTarget.blur(); }}}
-                                    placeholder="Notatka do załącznika..."
-                                    className="w-full mt-1 text-[10px] bg-black/20 border border-white/10 rounded px-1.5 py-1 text-gray-400 placeholder-gray-600 focus:outline-none focus:border-orange-500/50 italic"
+                                    placeholder="Notatka..."
+                                    className="w-full text-[10px] bg-black/20 border border-white/10 rounded px-1.5 py-1 text-gray-400 placeholder-gray-600 focus:outline-none focus:border-orange-500/50 italic"
                                 />
-                                <button onClick={() => handleDeleteAttachment(att.id)} className="absolute top-2 right-2 p-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded">
-                                    <Trash2 size={12} />
+                                <button onClick={() => handleDeleteAttachment(att.id)} className="absolute top-1 right-1 p-0.5 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded">
+                                    <Trash2 size={11} />
                                 </button>
                             </div>
                         ))}
