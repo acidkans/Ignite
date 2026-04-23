@@ -1385,6 +1385,16 @@ ${materialsHtml}
     const deleteNodeById = useCallback(async (id) => {
         if (!id || !window.confirm('Usunąć ten węzeł i wszystkie podgałęzie?')) return;
         try {
+            // Zbierz wszystkie ID do usunięcia z lokalnego wbsData (do czyszczenia wbsTree)
+            const collectIds = (rootId) => {
+                const result = [rootId];
+                for (const n of wbsData) {
+                    if (n.parentId === rootId) result.push(...collectIds(n.id));
+                }
+                return result;
+            };
+            const deletedIds = new Set(collectIds(id));
+
             const res = await fetch(`${API_URL}/wbs-nodes/${id}`, { method: 'DELETE', headers: authHeaders() });
             if (!res.ok) {
                 console.error('[WBS delete] Błąd serwera:', res.status, await res.text().catch(() => ''));
@@ -1392,10 +1402,18 @@ ${materialsHtml}
             }
             if (selectedId === id) setSelectedId(null);
             setReqRefreshKey(k => k + 1);
+
+            // Wyczyść wbsTree ze stale nodes żeby nie odnawiały się po refreshu
+            const removeIds = (nodes) => (nodes || [])
+                .filter(n => !deletedIds.has(n.id))
+                .map(n => ({ ...n, children: removeIds(n.children) }));
+            setWbsTreeAndRef(prev => ({ ...prev, items: removeIds(prev.items || []) }));
+            await handleSaveHybridWBS();
+
             await refreshUnified();
             await fetchUnassignedRequirements();
         } catch (e) { console.error('Delete node error:', e); }
-    }, [authHeaders, refreshUnified, selectedId, wbsData, fetchUnassignedRequirements]);
+    }, [authHeaders, refreshUnified, selectedId, wbsData, fetchUnassignedRequirements, setWbsTreeAndRef, handleSaveHybridWBS]);
     deleteNodeByIdRef.current = deleteNodeById;
 
     const handleMaterialStatusChange = useCallback(async (reqId, newStatus) => {
