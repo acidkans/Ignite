@@ -582,7 +582,7 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal, on
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '' }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null }) {
     const getAllIds = useCallback((items) => {
         const ids = ['root'];
         const walk = (nodes) => nodes?.forEach(n => { ids.push(`node_${n.id}`); walk(n.children); });
@@ -1126,7 +1126,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             node={node}
                             req={matReqByWbsId[node.id] || null}
                             processNodeId={processNodeId}
-                            onSaved={updated => setMatReqByWbsId(prev => ({ ...prev, [node.id]: updated }))}
+                            onSaved={updated => { setMatReqByWbsId(prev => ({ ...prev, [node.id]: updated })); onMaterialReqUpdated?.(); }}
                             onDeleteNode={() => {
                                 const deletedIds = collectIds(items, node.id);
                                 save({ ...wbsTree, items: deleteNode(items, node.id) });

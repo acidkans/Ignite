@@ -2407,6 +2407,7 @@ ${materialsHtml}
                         onNodeFieldSave={updateNodeField}
                         materialRefreshKey={reqRefreshKey}
                         searchQuery={normalizedSearchQuery}
+                        onMaterialReqUpdated={() => setReqRefreshKey(k => k + 1)}
                     />
                 </div>
             ), () => handleExportPDF('wbs'), isManagerOrAdmin ? (
