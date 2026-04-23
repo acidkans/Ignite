@@ -5,7 +5,6 @@ import {
     ShoppingCart, Warehouse, LogOut, Plus, Search, Sparkles,
     FileText, Link as LinkIcon, Download,
 } from 'lucide-react';
-import ExcelJS from 'exceljs';
 import { API_URL } from '../../../config';
 import { UNIT_OPTIONS } from './wbsConstants';
 
@@ -583,8 +582,8 @@ export default function WbsMaterialsPanel({
     }
 
     const exportToExcel = useCallback(async () => {
-        const ExcelJS_ = ExcelJS;
-        const wb = new ExcelJS_.Workbook();
+        const ExcelJS_ = await import('exceljs/dist/exceljs.bare.min.js');
+        const wb = new ExcelJS_.default.Workbook();
         const ws = wb.addWorksheet('Materiały WBS');
 
         const STATUS_LABELS_XLS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
