@@ -422,16 +422,16 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
             </td>
             {/* Przedmiot projektu */}
             <td className="px-3 py-2.5">
-                <span className="text-[10px] text-gray-400 break-words" title={node.path}>{parent}</span>
+                <span className="text-sm text-gray-400 break-words" title={node.path}>{parent}</span>
             </td>
             {/* Nazwa */}
             <td className="px-3 py-2.5">
                 <div className="text-sm text-white break-words">{node.name}</div>
-                {node.phase && <div className="text-[10px] text-gray-500 mt-0.5">{node.phase}</div>}
+                {node.phase && <div className="text-xs text-gray-500 mt-0.5">{node.phase}</div>}
             </td>
             {/* Wymagania techniczne */}
             <td className="px-3 py-2.5">
-                <span className="text-[10px] text-gray-400 break-words whitespace-pre-wrap">{card?.technicalSpec || '—'}</span>
+                <span className="text-sm text-gray-300 break-words whitespace-pre-wrap">{card?.technicalSpec || '—'}</span>
             </td>
             {/* Ilość */}
             <td className="px-3 py-2.5">
@@ -440,31 +440,31 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                         onChange={e => setQtyVal(e.target.value)}
                         onBlur={handleQtyBlur}
                         onKeyDown={e => e.key === 'Enter' && handleQtyBlur()}
-                        className="w-16 bg-black/30 border border-blue-500/50 rounded px-2 py-0.5 text-xs text-white outline-none" />
+                        className="w-16 bg-black/30 border border-blue-500/50 rounded px-2 py-0.5 text-sm text-white outline-none" />
                 ) : (
                     <span onClick={() => !readOnly && setEditQty(true)}
                         className={`text-sm text-gray-200 whitespace-nowrap ${!readOnly ? 'cursor-pointer hover:text-white' : ''}`}>
-                        {node.quantity ?? 1} <span className="text-[10px] text-gray-500">{node.unit || 'szt'}</span>
+                        {node.quantity ?? 1} <span className="text-xs text-gray-500">{node.unit || 'szt'}</span>
                     </span>
                 )}
             </td>
             {/* Produkt */}
             <td className="px-3 py-2.5">
                 {card ? (
-                    <div className="text-xs">
-                        {card.manufacturer && <div className="text-gray-300 break-words">{card.manufacturer}</div>}
-                        {card.model && <div className="text-gray-500 break-words text-[10px]">{card.model}</div>}
-                        {!card.manufacturer && !card.model && <span className="text-gray-600 italic">Brak produktu</span>}
+                    <div>
+                        {card.manufacturer && <div className="text-sm text-gray-300 break-words">{card.manufacturer}</div>}
+                        {card.model && <div className="text-xs text-gray-500 break-words">{card.model}</div>}
+                        {!card.manufacturer && !card.model && <span className="text-sm text-gray-600 italic">Brak produktu</span>}
                     </div>
                 ) : (
                     <button onClick={handleCreateCard} disabled={creating || readOnly}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-white/5 hover:bg-white/10 text-gray-500 hover:text-gray-300 border border-white/10 transition-colors disabled:opacity-40">
-                        <Plus size={10} /> {creating ? '...' : 'Utwórz kartę'}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs bg-white/5 hover:bg-white/10 text-gray-500 hover:text-gray-300 border border-white/10 transition-colors disabled:opacity-40">
+                        <Plus size={11} /> {creating ? '...' : 'Utwórz kartę'}
                     </button>
                 )}
             </td>
             {/* Cena */}
-            <td className="px-3 py-2.5 text-xs text-gray-300 whitespace-nowrap">
+            <td className="px-3 py-2.5 text-sm text-gray-300 whitespace-nowrap">
                 {card?.priceNetto != null ? `${Number(card.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—'}
             </td>
             {/* Status — edytowalny dropdown */}
@@ -476,7 +476,7 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                             if (!readOnly && onPatchCard) await onPatchCard(card.id, { status: e.target.value });
                         }}
                         disabled={readOnly}
-                        className={`bg-transparent border border-white/10 rounded px-1.5 py-0.5 text-[10px] font-semibold outline-none cursor-pointer hover:bg-white/5 transition-colors ${StatusMeta?.color || 'text-gray-500'}`}
+                        className={`bg-transparent border border-white/10 rounded px-1.5 py-0.5 text-xs font-semibold outline-none cursor-pointer hover:bg-white/5 transition-colors ${StatusMeta?.color || 'text-gray-500'}`}
                         style={{ WebkitAppearance: 'auto' }}
                     >
                         {Object.entries(STATUS_META).map(([v, m]) => (
@@ -484,7 +484,7 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                         ))}
                     </select>
                 ) : (
-                    <span className="text-[10px] text-gray-600">—</span>
+                    <span className="text-sm text-gray-600">—</span>
                 )}
             </td>
         </tr>
@@ -513,6 +513,7 @@ export default function WbsMaterialsPanel({
     refreshKey = 0,
     searchQuery = '',
     onExportReady,
+    onExportPdfReady,
 }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
 
@@ -840,8 +841,48 @@ export default function WbsMaterialsPanel({
         URL.revokeObjectURL(url);
     }, [matNodes, cards]);
 
-    // Notify parent when export function updates
+    const exportToPdf = useCallback(() => {
+        const STATUS_LABELS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
+        const cols = ['Przedmiot projektu', 'Nazwa', 'Wymagania techniczne', 'Ilość', 'Produkt', 'Cena netto', 'Status'];
+        const bodyRows = sortedFilteredNodes.map(node => {
+            const card = cards[node.id] || null;
+            const segs = node.path ? node.path.split(' › ') : [];
+            const parent = segs.length >= 2 ? segs[segs.length - 2] : (segs[0] || '—');
+            const product = [card?.manufacturer, card?.model].filter(Boolean).join(' / ') || '—';
+            const price = card?.priceNetto != null ? `${Number(card.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—';
+            const status = STATUS_LABELS[card?.status] || '—';
+            const techSpec = (card?.technicalSpec || '—').replace(/\n/g, '<br>');
+            return [parent, node.name || '—', techSpec, `${node.quantity ?? 1} ${node.unit || 'szt'}`, product, price, status];
+        });
+
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Materiały WBS</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 20px; }
+  h2 { font-size: 16px; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #1a1a2e; color: #fff; text-align: left; padding: 6px 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+  tr:nth-child(even) td { background: #f9fafb; }
+  @media print { @page { size: A4 landscape; margin: 10mm; } }
+</style></head><body>
+<h2>Pozycje materiałowe z WBS</h2>
+<table>
+  <thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
+  <tbody>${bodyRows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
+</table>
+</body></html>`;
+
+        const win = window.open('', '_blank');
+        if (!win) return;
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => { win.print(); }, 400);
+    }, [sortedFilteredNodes, cards]);
+
+    // Notify parent when export functions update
     useEffect(() => { onExportReady?.(exportToExcel); }, [exportToExcel]);
+    useEffect(() => { onExportPdfReady?.(exportToPdf); }, [exportToPdf]);
 
     // ─ Render guards ─────────────────────────────────────────────────────────
 
