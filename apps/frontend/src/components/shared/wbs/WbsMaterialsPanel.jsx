@@ -170,6 +170,7 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
     const [imageKey, setImageKey] = useState(0);
     const [pasteHover, setPasteHover] = useState(false);
     const pasteZoneRef = useRef(null);
+    const pasteHoverRef = useRef(false);
 
     useEffect(() => {
         setFields({
@@ -203,6 +204,19 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
             }
         }
     }, [card?.id, token, readOnly, onRefresh]);
+
+    useEffect(() => {
+        pasteHoverRef.current = pasteHover;
+    }, [pasteHover]);
+
+    useEffect(() => {
+        const handler = (e) => {
+            if (!pasteHoverRef.current) return;
+            handleImagePaste(e);
+        };
+        window.addEventListener('paste', handler);
+        return () => window.removeEventListener('paste', handler);
+    }, [handleImagePaste]);
 
     const setF = (k, v) => setFields(prev => ({ ...prev, [k]: v }));
 
@@ -354,12 +368,10 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
 
             {/* Prawa kolumna — zdjęcie na całą wysokość */}
             <div
-                tabIndex={0}
-                onPaste={handleImagePaste}
                 ref={pasteZoneRef}
-                onMouseEnter={() => { setPasteHover(true); pasteZoneRef.current?.focus(); }}
+                onMouseEnter={() => setPasteHover(true)}
                 onMouseLeave={() => setPasteHover(false)}
-                className={`relative w-44 flex-shrink-0 border-l outline-none transition-colors cursor-pointer ${pasteHover ? 'border-blue-500/30 bg-blue-500/5' : 'border-white/5 bg-black/10'}`}
+                className={`relative w-44 flex-shrink-0 border-l transition-colors cursor-pointer ${pasteHover ? 'border-blue-500/30 bg-blue-500/5' : 'border-white/5 bg-black/10'}`}
                 title="Najedź i wklej zdjęcie (Ctrl+V)"
             >
                 {card.imageUrl ? (
