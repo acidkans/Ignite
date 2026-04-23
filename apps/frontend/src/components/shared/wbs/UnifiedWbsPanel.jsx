@@ -1316,10 +1316,21 @@ ${materialsHtml}
         const reqTag = Array.isArray(wbsNode?.tags) ? wbsNode.tags.find(t => String(t).startsWith('req:')) : null;
         if (reqTag) {
             const reqId = reqTag.slice(4);
-            // Zweryfikuj czy wymaganie istnieje w backendzie — jeśli tak, nie duplikuj
+            // Zweryfikuj czy wymaganie istnieje — jeśli tak, zaktualizuj nazwę i nie duplikuj
             try {
                 const checkRes = await fetch(`${API_URL}/material-requirements/${reqId}`, { headers: { Authorization: `Bearer ${token()}` } });
-                if (checkRes.ok) return;
+                if (checkRes.ok) {
+                    const existing = await checkRes.json().catch(() => null);
+                    if (existing && existing.name !== name) {
+                        await fetch(`${API_URL}/material-requirements/${reqId}`, {
+                            method: 'PATCH',
+                            headers: authHeaders(),
+                            body: JSON.stringify({ name }),
+                        }).catch(() => {});
+                        setReqRefreshKey(k => k + 1);
+                    }
+                    return;
+                }
             } catch {}
             // Wymaganie nie istnieje (zostało usunięte) — usuń nieważny tag i kontynuuj tworzenie nowego
             const cleanedTags = (wbsNode.tags || []).filter(t => t !== reqTag && t !== 'auto-requirement');
