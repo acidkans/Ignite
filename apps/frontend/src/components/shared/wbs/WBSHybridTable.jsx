@@ -893,16 +893,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     )}
                 </td>
 
-                {/* Ilość wymagań */}
-                <td className="px-3 py-2.5 text-right" onClick={e => e.stopPropagation()}>
-                    {depth >= 1 && (
-                        <QtyInput
-                            value={requirementsQtyByNode[node.id] ?? null}
-                            onChange={v => onRequirementsQtyChange?.(node.id, v, node.name)}
-                        />
-                    )}
-                </td>
-
                 {/* Ilość */}
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                     {depth >= 1 && (
@@ -920,6 +910,16 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             <option value="" className="bg-gray-900">—</option>
                             {UNIT_OPTIONS.map(u => <option key={u} value={u} className="bg-gray-900">{u}</option>)}
                         </select>
+                    )}
+                </td>
+
+                {/* Ilość wymagań */}
+                <td className="px-3 py-2.5 text-right" onClick={e => e.stopPropagation()}>
+                    {depth >= 1 && (
+                        <QtyInput
+                            value={requirementsQtyByNode[node.id] ?? null}
+                            onChange={v => onRequirementsQtyChange?.(node.id, v, node.name)}
+                        />
                     )}
                 </td>
 
