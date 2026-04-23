@@ -796,7 +796,7 @@ export default function WbsMaterialsPanel({
         const TYPE_LABELS_XLS = { material: 'Materiał', equipment: 'Sprzęt' };
         const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
-        const headers = ['Typ','Przedmiot projektu','Pełna ścieżka WBS','Nazwa','Ilość','Jednostka','Producent','Model','Nazwa handlowa','Cena netto','Status','Wymagania techniczne','Dostępność','Prop. producent','Prop. model','Prop. nazwa handlowa','Prop. cena','Prop. wybrana'];
+        const headers = ['Typ','Przedmiot projektu','Pełna ścieżka WBS','Pozycja przedmiotu','Ilość','Jednostka','Producent','Model','Nazwa handlowa','Cena netto','Status','Wymagania techniczne','Dostępność','Prop. producent','Prop. model','Prop. nazwa handlowa','Prop. cena','Prop. wybrana'];
         const rows = [headers.map(esc).join(';')];
 
         for (const node of matNodes) {
@@ -871,7 +871,7 @@ export default function WbsMaterialsPanel({
   tr:nth-child(even) td { background: #f9fafb; }
   @media print { @page { size: A4 landscape; margin: 10mm; } }
 </style></head><body>
-<h2>Pozycje materiałowe z WBS</h2>
+<h2>Pozycje materiałowe dla projektu_${safeOrderPdf}</h2>
 <table>
   <thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
   <tbody>${bodyRows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
