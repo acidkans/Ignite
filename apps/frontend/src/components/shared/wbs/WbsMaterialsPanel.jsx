@@ -512,6 +512,8 @@ export default function WbsMaterialsPanel({
     externalWbsNodes,
     refreshKey = 0,
     searchQuery = '',
+    projectName = '',
+    orderName = '',
     onExportReady,
     onExportPdfReady,
 }) {
@@ -837,7 +839,8 @@ export default function WbsMaterialsPanel({
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = `materialy-wbs-${Date.now()}.csv`; a.click();
+        const safeOrder = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'zamowienie';
+        a.href = url; a.download = `${safeOrder}_materialy.csv`; a.click();
         URL.revokeObjectURL(url);
     }, [matNodes, cards]);
 
@@ -855,7 +858,10 @@ export default function WbsMaterialsPanel({
             return [parent, node.name || '—', techSpec, `${node.quantity ?? 1} ${node.unit || 'szt'}`, product, price, status];
         });
 
-        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Materiały WBS</title>
+        const safeOrderPdf = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'zamowienie';
+        const safeProjectPdf = String(projectName || '').trim().replace(/[\\/:*?"<>|]+/g, '_');
+        const pdfTitle = safeProjectPdf ? `${safeProjectPdf}_${safeOrderPdf}_materialy` : `${safeOrderPdf}_materialy`;
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${pdfTitle}</title>
 <style>
   body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 20px; }
   h2 { font-size: 16px; margin-bottom: 12px; }

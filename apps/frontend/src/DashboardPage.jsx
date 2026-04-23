@@ -38,6 +38,17 @@ function findNodeById(nodes, id) {
     return null;
 }
 
+function findParentById(nodes, id, parent = null) {
+    for (const node of nodes) {
+        if (node.id === id) return parent;
+        if (node.children?.length) {
+            const found = findParentById(node.children, id, node);
+            if (found !== undefined) return found;
+        }
+    }
+    return undefined;
+}
+
 function decodeToken() {
     try {
         const token = sessionStorage.getItem('token');
@@ -96,6 +107,7 @@ export default function DashboardPage() {
 
     // Sprawdź typ aktywnego węzła
     const activeNode = useMemo(() => findNodeById(menuTree, activeAreaId), [menuTree, activeAreaId]);
+    const parentNode = useMemo(() => findParentById(menuTree, activeAreaId), [menuTree, activeAreaId]);
     const isOrder = activeNode?.type === 'order';
     const isField = activeNode?.type === 'field';
     const isLogistykaArea = activeNode?.type === 'area' && activeNode?.name === 'Logistyka' && (isLogistyk || isManagerOrAdmin);
@@ -529,7 +541,8 @@ export default function DashboardPage() {
                                 <UnifiedWbsPanel
                                     nodeId={activeAreaId}
                                     versionId={selectedVersionId}
-                                    projectName={activeNode?.name || ''}
+                                    projectName={parentNode?.name || ''}
+                                    orderName={activeNode?.name || ''}
                                     searchQuery={searchQuery}
                                     userRoles={currentRoles}
                                     onWbsUpdate={() => setWbsUpdateCount(c => c + 1)}

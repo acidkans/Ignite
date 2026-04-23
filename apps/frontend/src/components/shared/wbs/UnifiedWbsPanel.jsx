@@ -63,7 +63,7 @@ const excelCellToText = (cellValue) => {
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
-export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRoles = [], projectName = '', searchQuery = '', setLeftVisible, setAiVisible }) {
+export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible }) {
     const [wbsData, setWbsData] = useState([]);
     const wbsDataRef = useRef(wbsData);
     wbsDataRef.current = wbsData;
@@ -1104,7 +1104,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
-<title>${esc(projectName || 'Projekt')} — ${date}</title>
+<title>${esc(projectName || orderName || 'Projekt')}_${esc(orderName || 'zamowienie')}_projekt</title>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -1179,10 +1179,11 @@ ${materialsHtml}
         }
 
         const workbook = new ExcelJS.Workbook();
-        const summarySheet = workbook.addWorksheet('Podsumowanie');
-        const budgetSheet = workbook.addWorksheet('Budzet');
+        const safeOrderName = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'zamowienie';
+        const summarySheet = workbook.addWorksheet(`${safeOrderName}_podsumowanie`);
+        const budgetSheet = workbook.addWorksheet(`${safeOrderName}_budzet`);
         const exportDate = new Date().toLocaleDateString('pl-PL');
-        const fileProjectName = String(projectName || 'projekt').trim() || 'projekt';
+        const fileProjectName = String(orderName || projectName || 'projekt').trim() || 'projekt';
         const safeProjectName = fileProjectName.replace(/[\\/:*?"<>|]+/g, '_');
         const summary = summarizeBudgetRows(rows);
         const parsedPercentDiscount = Number(String(budgetDiscountPercent).replace(',', '.'));
@@ -1302,7 +1303,7 @@ ${materialsHtml}
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = url;
-        anchor.download = `budzet_${safeProjectName}_${exportDate.replace(/\./g, '-')}.xlsx`;
+        anchor.download = `${safeProjectName}_budzet.xlsx`;
         anchor.click();
         URL.revokeObjectURL(url);
     };
@@ -2475,6 +2476,8 @@ ${materialsHtml}
                     onPatchNode={(id, data) => setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))}
                     onWbsUpdate={async () => { await refreshMaterialCosts(); }}
                     refreshKey={reqRefreshKey}
+                    projectName={projectName}
+                    orderName={orderName}
                     onExportReady={fn => { materialsExportFn.current = fn; }}
                     onExportPdfReady={fn => { materialsPdfExportFn.current = fn; }}
                 />
