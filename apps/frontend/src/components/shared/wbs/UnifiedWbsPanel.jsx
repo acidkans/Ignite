@@ -728,6 +728,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                     }),
                 });
                 onWbsUpdate?.();
+                fetchData();
             } catch (err) {
                 console.error('[HybridWBS save]', err);
             } finally {
@@ -744,13 +745,14 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                                 body: JSON.stringify({ nodeId, versionId, wbsTree: JSON.stringify(wbsTreeRef.current) }),
                             });
                             onWbsUpdate?.();
+                            fetchData();
                         } catch (e) { console.error('[HybridWBS retry]', e); }
                         finally { hybridSaveRef.current = false; }
                     }, 0);
                 }
             }
         }, 400);
-    }, [nodeId, versionId, authHeaders, onWbsUpdate]);
+    }, [nodeId, versionId, authHeaders, onWbsUpdate, fetchData]);
 
     const assignedUsers = useMemo(() => {
         if (!Array.isArray(projectUsers) || !projectUsers.length) return [];
