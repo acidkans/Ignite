@@ -168,8 +168,7 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
     });
     const [comboOpen, setComboOpen] = useState(null);
     const [imageKey, setImageKey] = useState(0);
-    const [pasteHover, setPasteHover] = useState(false);
-    const pasteInputRef = useRef(null);
+    const fileInputRef = useRef(null);
 
     useEffect(() => {
         setFields({
@@ -183,26 +182,24 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
         });
     }, [card?.id, card?.manufacturer, card?.model, card?.productName, card?.productUrl]);
 
-    const handleImagePaste = useCallback(async (e) => {
+    const uploadImageBlob = useCallback(async (blob, filename = 'image.png') => {
         if (readOnly || !card?.id) return;
-        const items = e.clipboardData?.items;
-        if (!items) return;
-        for (const item of Array.from(items)) {
-            if (item.type.startsWith('image/')) {
-                e.preventDefault();
-                const blob = item.getAsFile();
-                const formData = new FormData();
-                formData.append('file', blob, 'screenshot.png');
-                const res = await fetch(`${API_URL}/material-requirements/${card.id}/upload-image`, {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${token}` },
-                    body: formData,
-                });
-                if (res.ok) { setImageKey(k => k + 1); onRefresh(); }
-                break;
-            }
-        }
+        const formData = new FormData();
+        formData.append('file', blob, filename);
+        const res = await fetch(`${API_URL}/material-requirements/${card.id}/upload-image`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+        });
+        if (res.ok) { setImageKey(k => k + 1); onRefresh(); }
     }, [card?.id, token, readOnly, onRefresh]);
+
+    const handleFileSelect = useCallback((e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        uploadImageBlob(file, file.name);
+        e.target.value = '';
+    }, [uploadImageBlob]);
 
     const setF = (k, v) => setFields(prev => ({ ...prev, [k]: v }));
 
@@ -352,20 +349,18 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
                 {!readOnly && <ProposalsSection req={card} token={token} onRefresh={onRefresh} />}
             </div>
 
-            {/* Prawa kolumna — zdjęcie na całą wysokość */}
+            {/* Prawa kolumna — zdjęcie, kliknięcie otwiera file picker */}
             <div
-                onMouseEnter={() => { setPasteHover(true); pasteInputRef.current?.focus(); }}
-                onMouseLeave={() => setPasteHover(false)}
-                className={`relative w-44 flex-shrink-0 border-l transition-colors cursor-pointer ${pasteHover ? 'border-blue-500/30 bg-blue-500/5' : 'border-white/5 bg-black/10'}`}
-                title="Najedź i wklej zdjęcie (Ctrl+V)"
+                onClick={() => !readOnly && fileInputRef.current?.click()}
+                className={`relative w-44 flex-shrink-0 border-l transition-colors ${readOnly ? 'cursor-default' : 'cursor-pointer hover:border-blue-500/30 hover:bg-blue-500/5'} border-white/5 bg-black/10`}
+                title="Kliknij aby wybrać zdjęcie"
             >
                 <input
-                    ref={pasteInputRef}
-                    type="text"
-                    onPaste={(e) => { e.preventDefault(); handleImagePaste(e); }}
-                    onChange={() => {}}
-                    value=""
-                    style={{ position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                    style={{ display: 'none' }}
                 />
                 {card.imageUrl ? (
                     <img
@@ -375,14 +370,9 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
                         className="absolute inset-0 w-full h-full object-contain p-2"
                     />
                 ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-gray-700 pointer-events-none">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-gray-600 pointer-events-none">
                         <Search size={20} />
-                        <span className="text-[10px] text-center px-2">Wklej zdjęcie<br/>Ctrl+V</span>
-                    </div>
-                )}
-                {pasteHover && !readOnly && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-sm text-blue-300 font-bold pointer-events-none">
-                        Ctrl+V
+                        <span className="text-[10px] text-center px-2">Kliknij aby<br/>wybrać zdjęcie</span>
                     </div>
                 )}
             </div>
