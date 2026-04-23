@@ -605,6 +605,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
     const handleDelete = (id, e) => {
         e?.stopPropagation();
+        if (!window.confirm('Usunąć ten węzeł i wszystkie podgałęzie?')) return;
         const deletedIds = collectIds(items, id);
         save({ ...wbsTree, items: deleteNode(items, id) });
         if (deletedIds.length) onNodesDeleted?.(deletedIds);

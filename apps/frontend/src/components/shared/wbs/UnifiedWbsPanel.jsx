@@ -1400,6 +1400,18 @@ ${materialsHtml}
         } catch (e) { console.error('Auto-create material requirement error:', e); }
     }, [nodeId, versionId, authHeaders, wbsData, refreshUnified]);
 
+    const handleHybridNodesDeleted = useCallback(async (deletedIds) => {
+        const rootId = deletedIds?.[0];
+        if (!rootId) return;
+        try {
+            const res = await fetch(`${API_URL}/wbs-nodes/${rootId}`, { method: 'DELETE', headers: authHeaders() });
+            if (!res.ok) { console.error('[WBS delete] Błąd serwera:', res.status); return; }
+            setReqRefreshKey(k => k + 1);
+            await refreshUnified();
+            await fetchUnassignedRequirements();
+        } catch (e) { console.error('Delete node error:', e); }
+    }, [authHeaders, refreshUnified, fetchUnassignedRequirements]);
+
     const deleteNodeByIdRef = useRef(null);
     const deleteNodeById = useCallback(async (id) => {
         if (!id || !window.confirm('Usunąć ten węzeł i wszystkie podgałęzie?')) return;
@@ -2385,6 +2397,7 @@ ${materialsHtml}
                         users={assignedUsers}
                         onRequirementDrop={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
                         isManager={isManagerOrAdmin}
+                        onNodesDeleted={handleHybridNodesDeleted}
                         onMaterialNodeCreated={handleMaterialNodeCreated}
                         requirementsQtyByNode={requirementsQtyByNode}
                         onRequirementsQtyChange={handleHybridRequirementsQtyChange}
