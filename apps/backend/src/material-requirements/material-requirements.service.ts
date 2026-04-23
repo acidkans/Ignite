@@ -864,12 +864,24 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
         const proposal = await this.prisma.productProposal.findUnique({ where: { id: proposalId } });
         if (!proposal) throw new NotFoundException(`Proposal ${proposalId} not found`);
         const willSelect = !proposal.isSelected;
-        // Odznacz wszystkie inne propozycje tego wymagania
         if (willSelect) {
             await this.prisma.productProposal.updateMany({
                 where: { materialRequirementId: proposal.materialRequirementId, id: { not: proposalId } },
                 data: { isSelected: false },
             });
+            // Przepisz dane produktu z propozycji do wymagania
+            const updateData: any = {};
+            if (proposal.productName) updateData.productName = proposal.productName;
+            if (proposal.manufacturer) updateData.manufacturer = proposal.manufacturer;
+            if (proposal.model) updateData.model = proposal.model;
+            if (proposal.priceNetto != null) updateData.priceNetto = proposal.priceNetto;
+            if (proposal.seller) updateData.seller = proposal.seller;
+            if (Object.keys(updateData).length > 0) {
+                await this.prisma.materialRequirement.update({
+                    where: { id: proposal.materialRequirementId },
+                    data: updateData,
+                }).catch(() => {});
+            }
         }
         return this.prisma.productProposal.update({
             where: { id: proposalId },
