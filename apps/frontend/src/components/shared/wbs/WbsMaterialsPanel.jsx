@@ -563,24 +563,6 @@ export default function WbsMaterialsPanel({
         }
     }, [nodeId, versionId, token, onWbsUpdate]);
 
-    if (loading) {
-        return (
-            <div className="flex justify-center py-12">
-                <div className="w-8 h-8 border-2 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
-            </div>
-        );
-    }
-
-    if (matNodes.length === 0) {
-        return (
-            <div className="flex flex-col items-center justify-center py-12 gap-3 text-gray-500">
-                <AlertCircle size={28} className="text-gray-600" />
-                <p className="text-sm">Brak węzłów WBS typu materiał lub sprzęt.</p>
-                <p className="text-xs text-gray-600">Ustaw typ wiersza na "materiał" lub "sprzęt" w Strukturze projektu.</p>
-            </div>
-        );
-    }
-
     const exportToExcel = useCallback(() => {
         const STATUS_LABELS_XLS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
         const TYPE_LABELS_XLS = { material: 'Materiał', equipment: 'Sprzęt' };
@@ -632,6 +614,24 @@ export default function WbsMaterialsPanel({
         a.href = url; a.download = `materialy-wbs-${Date.now()}.csv`; a.click();
         URL.revokeObjectURL(url);
     }, [matNodes, cards]);
+
+    if (loading) {
+        return (
+            <div className="flex justify-center py-12">
+                <div className="w-8 h-8 border-2 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
+            </div>
+        );
+    }
+
+    if (matNodes.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center py-12 gap-3 text-gray-500">
+                <AlertCircle size={28} className="text-gray-600" />
+                <p className="text-sm">Brak węzłów WBS typu materiał lub sprzęt.</p>
+                <p className="text-xs text-gray-600">Ustaw typ wiersza na "materiał" lub "sprzęt" w Strukturze projektu.</p>
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col h-full">
