@@ -896,7 +896,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 {/* Ilość */}
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                     {depth >= 1 && (
-                        <input type="text" value={node.quantity || ''} onChange={e => handleField(node.id, 'quantity', e.target.value)} onBlur={onSave}
+                        <input type="text" value={node.quantity || ''} onChange={e => handleField(node.id, 'quantity', e.target.value)}
+                            onBlur={e => { onSave?.(); onRequirementsQtyChange?.(node.id, e.target.value, node.name); }}
                             placeholder="0" className={`bg-transparent border-none focus:outline-none text-xs w-full text-right placeholder-gray-700 ${d.fieldClass}`} />
                     )}
                 </td>
@@ -910,16 +911,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             <option value="" className="bg-gray-900">—</option>
                             {UNIT_OPTIONS.map(u => <option key={u} value={u} className="bg-gray-900">{u}</option>)}
                         </select>
-                    )}
-                </td>
-
-                {/* Ilość wymagań */}
-                <td className="px-3 py-2.5 text-right" onClick={e => e.stopPropagation()}>
-                    {depth >= 1 && (
-                        <QtyInput
-                            value={requirementsQtyByNode[node.id] ?? null}
-                            onChange={v => onRequirementsQtyChange?.(node.id, v, node.name)}
-                        />
                     )}
                 </td>
 
@@ -1214,7 +1205,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-28">Typ</th>
                             <th className="text-right px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-20">Ilość</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-20">Jednostka</th>
-                            <th className="text-right px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-28">Ilość wymagań</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-32">Status</th>
                             <th className="text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-32">Właściciel</th>
                             <th className="text-right px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 w-24">Zasoby (h)</th>
