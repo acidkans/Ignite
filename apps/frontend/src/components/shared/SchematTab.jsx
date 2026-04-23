@@ -55,6 +55,7 @@ export default function SchematTab({ nodeId }) {
     const [inlineEdits, setInlineEdits] = useState({});
     const [showTable, setShowTable] = useState(false);
     const [tableFilters, setTableFilters] = useState({ markerName: '', pozycja: '', markerNote: '', note: '' });
+    const [markerFilter, setMarkerFilter] = useState('');
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const [showFileDropdown, setShowFileDropdown] = useState(false);
@@ -215,6 +216,13 @@ export default function SchematTab({ nodeId }) {
         setSelectedSchematic(sch);
         setPageNumber(1);
         if (lsKey && sch?.id) localStorage.setItem(lsKey, sch.id);
+    };
+
+    const getMarkerPozycja = (m) => {
+        const links = m.wbsLinks || [];
+        const childLink = links.find(l => l.wbsParentName && l.wbsNodeName);
+        const rootLink = links.find(l => !l.wbsParentName && l.wbsNodeName);
+        return childLink?.wbsParentName || rootLink?.wbsNodeName || null;
     };
 
     const fetchSchematics = async (silent = false) => {
@@ -794,6 +802,26 @@ export default function SchematTab({ nodeId }) {
                     </div>
                 )}
 
+                {selectedSchematic && (() => {
+                    const options = [...new Set(
+                        (selectedSchematic.markers || [])
+                            .map(m => getMarkerPozycja(m))
+                            .filter(Boolean)
+                    )].sort();
+                    if (options.length === 0) return null;
+                    return (
+                        <select
+                            value={markerFilter}
+                            onChange={e => setMarkerFilter(e.target.value)}
+                            className="text-[11px] bg-black/40 border border-white/10 rounded px-2 py-1 text-gray-300 focus:outline-none focus:border-orange-500/50 max-w-[180px] truncate"
+                            title="Filtruj znaczniki po przedmiocie projektu"
+                        >
+                            <option value="">Wszystkie przedmioty</option>
+                            {options.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                    );
+                })()}
+
                 <div className="flex-1" />
 
                 {/* Narzędzia rysowania */}
@@ -1046,7 +1074,7 @@ export default function SchematTab({ nodeId }) {
                                     </div>
                                 ))}
 
-                                {selectedSchematic.markers.filter(m => m.pageNumber === pageNumber && m.type === 'POINT').map(marker => (
+                                {selectedSchematic.markers.filter(m => m.pageNumber === pageNumber && m.type === 'POINT' && (!markerFilter || getMarkerPozycja(m) === markerFilter)).map(marker => (
                                     <div
                                         key={marker.id}
                                         className="absolute w-6 h-6 -ml-3 -mt-6 cursor-pointer text-orange-500 hover:text-orange-400 hover:scale-110 transition-transform group z-10"
