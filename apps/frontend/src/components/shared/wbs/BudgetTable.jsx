@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Trash2 } from 'lucide-react';
 import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, TYPE_OPTIONS, TYPE_LABELS, UNIT_OPTIONS, parseLocaleNumber } from './wbsConstants';
 
-const TH = 'text-left px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-500 whitespace-nowrap select-none';
+const TH = 'text-left px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white whitespace-nowrap select-none';
 const TD = 'px-2 py-1.5 align-middle';
 const INPUT = 'bg-transparent text-white text-xs w-full outline-none focus:bg-white/5 rounded px-1 py-0.5 min-w-0';
 const SELECT = 'bg-[#0b0f17] text-white text-xs w-full outline-none rounded px-1 py-0.5 cursor-pointer border border-white/5 hover:border-white/10 focus:border-blue-500/40 transition-colors';
@@ -141,7 +141,7 @@ export default function BudgetTable({
                     <tbody>
                         {localRows.map((row, idx) => (
                             <tr key={row.id} className="border-b border-white/5 group hover:bg-white/[0.02] transition-colors">
-                                <td className={`${TD} text-center text-[10px] text-gray-600 tabular-nums`}>{idx + 1}</td>
+                                <td className={`${TD} text-center text-sm text-white tabular-nums`}>{idx + 1}</td>
 
                                 <td className={TD}>
                                     <input
