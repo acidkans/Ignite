@@ -315,12 +315,11 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
 
 // ─── Row ──────────────────────────────────────────────────────────────────────
 
-function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreateCard, materialDb, offers, token, readOnly, onRefresh }) {
+function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreateCard, materialDb, offers, token, readOnly, onRefresh, onPatchCard }) {
     const meta = TYPE_META[node.type] || TYPE_META.material;
     const TypeIcon = meta.icon;
     const reqStatus = card?.status;
     const StatusMeta = STATUS_META[reqStatus];
-    const StatusIcon = StatusMeta?.icon || Clock;
 
     const [editQty, setEditQty] = useState(false);
     const [qtyVal, setQtyVal] = useState(String(node.quantity ?? 1));
@@ -338,6 +337,9 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
         try { await onCreateCard(node); } finally { setCreating(false); }
     };
 
+    const segs = node.path ? node.path.split(' › ') : [];
+    const parent = segs.length >= 2 ? segs[segs.length - 2] : segs[0] || '—';
+
     return (
         <tr className={`border-b border-white/[0.03] transition-colors ${isExpanded ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
             {/* Expand */}
@@ -347,26 +349,22 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                 </button>
             </td>
             {/* Typ */}
-            <td className="px-3 py-2.5 w-24">
-                <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${meta.color}`}>
+            <td className="px-3 py-2.5">
+                <span className={`inline-flex items-center gap-1 text-[10px] font-semibold whitespace-nowrap ${meta.color}`}>
                     <TypeIcon size={11} /> {meta.label}
                 </span>
             </td>
             {/* Przedmiot projektu */}
-            <td className="px-3 py-2.5 w-36">
-                {(() => {
-                    const segs = node.path ? node.path.split(' › ') : [];
-                    const parent = segs.length >= 2 ? segs[segs.length - 2] : segs[0] || '—';
-                    return <span className="text-[10px] text-gray-400 truncate block max-w-[140px]" title={node.path}>{parent}</span>;
-                })()}
+            <td className="px-3 py-2.5">
+                <span className="text-[10px] text-gray-400 break-words" title={node.path}>{parent}</span>
             </td>
             {/* Nazwa */}
             <td className="px-3 py-2.5">
-                <div className="text-sm text-white">{node.name}</div>
+                <div className="text-sm text-white break-words">{node.name}</div>
                 {node.phase && <div className="text-[10px] text-gray-500 mt-0.5">{node.phase}</div>}
             </td>
             {/* Ilość */}
-            <td className="px-3 py-2.5 w-24">
+            <td className="px-3 py-2.5">
                 {editQty && !readOnly ? (
                     <input autoFocus value={qtyVal}
                         onChange={e => setQtyVal(e.target.value)}
@@ -375,17 +373,17 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                         className="w-16 bg-black/30 border border-blue-500/50 rounded px-2 py-0.5 text-xs text-white outline-none" />
                 ) : (
                     <span onClick={() => !readOnly && setEditQty(true)}
-                        className={`text-sm text-gray-200 ${!readOnly ? 'cursor-pointer hover:text-white' : ''}`}>
+                        className={`text-sm text-gray-200 whitespace-nowrap ${!readOnly ? 'cursor-pointer hover:text-white' : ''}`}>
                         {node.quantity ?? 1} <span className="text-[10px] text-gray-500">{node.unit || 'szt'}</span>
                     </span>
                 )}
             </td>
             {/* Produkt */}
-            <td className="px-3 py-2.5 w-40">
+            <td className="px-3 py-2.5">
                 {card ? (
                     <div className="text-xs">
-                        {card.manufacturer && <div className="text-gray-300 truncate">{card.manufacturer}</div>}
-                        {card.model && <div className="text-gray-500 truncate text-[10px]">{card.model}</div>}
+                        {card.manufacturer && <div className="text-gray-300 break-words">{card.manufacturer}</div>}
+                        {card.model && <div className="text-gray-500 break-words text-[10px]">{card.model}</div>}
                         {!card.manufacturer && !card.model && <span className="text-gray-600 italic">Brak produktu</span>}
                     </div>
                 ) : (
@@ -396,16 +394,25 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                 )}
             </td>
             {/* Cena */}
-            <td className="px-3 py-2.5 w-28 text-xs text-gray-300">
+            <td className="px-3 py-2.5 text-xs text-gray-300 whitespace-nowrap">
                 {card?.priceNetto != null ? `${Number(card.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—'}
             </td>
-            {/* Status (z karty produktowej req) */}
-            <td className="px-3 py-2.5 w-36">
+            {/* Status — edytowalny dropdown */}
+            <td className="px-3 py-2.5">
                 {card ? (
-                    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${StatusMeta?.color || 'text-gray-500'}`}>
-                        <StatusIcon size={11} />
-                        {StatusMeta?.label || reqStatus || '—'}
-                    </span>
+                    <select
+                        value={card.status || 'PENDING'}
+                        onChange={async e => {
+                            if (!readOnly && onPatchCard) await onPatchCard(card.id, { status: e.target.value });
+                        }}
+                        disabled={readOnly}
+                        className={`bg-transparent border border-white/10 rounded px-1.5 py-0.5 text-[10px] font-semibold outline-none cursor-pointer hover:bg-white/5 transition-colors ${StatusMeta?.color || 'text-gray-500'}`}
+                        style={{ WebkitAppearance: 'auto' }}
+                    >
+                        {Object.entries(STATUS_META).map(([v, m]) => (
+                            <option key={v} value={v} className="bg-gray-900 text-white font-normal">{m.label}</option>
+                        ))}
+                    </select>
                 ) : (
                     <span className="text-[10px] text-gray-600">—</span>
                 )}
@@ -416,38 +423,128 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
 
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
+const COL_DEFS = [
+    { key: 'type',    label: 'Typ',               defaultW: 96  },
+    { key: 'parent',  label: 'Przedmiot projektu', defaultW: 144 },
+    { key: 'name',    label: 'Nazwa',              defaultW: 220 },
+    { key: 'qty',     label: 'Ilość',              defaultW: 88  },
+    { key: 'product', label: 'Produkt',            defaultW: 160 },
+    { key: 'price',   label: 'Cena netto',         defaultW: 112 },
+    { key: 'status',  label: 'Status oferty',      defaultW: 148 },
+];
+
 export default function WbsMaterialsPanel({
     nodeId,
     versionId,
     readOnly = false,
     onWbsUpdate,
-    onPatchNode,       // (id, data) => void — optymistyczna aktualizacja w rodzicu
-    externalWbsNodes,  // flat array z wbsData rodzica — jeśli podany, panel nie fetchuje własnych
+    onPatchNode,
+    externalWbsNodes,
     refreshKey = 0,
+    searchQuery = '',
 }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
 
-    // Gdy rodzic przekazuje wbsNodes — używamy ich bez własnego fetcha
     const [internalWbsNodes, setInternalWbsNodes] = useState([]);
     const wbsNodes = externalWbsNodes ?? internalWbsNodes;
 
-    const [cards, setCards] = useState({}); // Map<wbsNodeId, MaterialRequirement>
+    const [cards, setCards] = useState({});
     const [materialDb, setMaterialDb] = useState([]);
     const [offers, setOffers] = useState([]);
     const [expandedId, setExpandedId] = useState(null);
     const [loading, setLoading] = useState(!externalWbsNodes);
+
+    // ─ Sorting / filtering / column widths ──────────────────────────────────
+    const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
+    const [colFilters, setColFilters] = useState({});
+    const [colWidths, setColWidths] = useState(
+        () => Object.fromEntries(COL_DEFS.map(c => [c.key, c.defaultW]))
+    );
+    const resizeDrag = useRef(null);
 
     const matNodes = useMemo(() =>
         wbsNodes.filter(n => n.type === 'material' || n.type === 'equipment'),
         [wbsNodes]
     );
 
+    const sortedFilteredNodes = useMemo(() => {
+        let nodes = [...matNodes];
+
+        // Global search
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            nodes = nodes.filter(n => {
+                const c = cards[n.id];
+                const segs = n.path ? n.path.split(' › ') : [];
+                const parent = segs.length >= 2 ? segs[segs.length - 2] : (segs[0] || '');
+                return (n.name || '').toLowerCase().includes(q) ||
+                    (TYPE_META[n.type]?.label || '').toLowerCase().includes(q) ||
+                    parent.toLowerCase().includes(q) ||
+                    (c?.manufacturer || '').toLowerCase().includes(q) ||
+                    (c?.model || '').toLowerCase().includes(q) ||
+                    (STATUS_META[c?.status]?.label || '').toLowerCase().includes(q);
+            });
+        }
+
+        // Per-column filters
+        for (const [key, val] of Object.entries(colFilters)) {
+            if (!val) continue;
+            const q = val.toLowerCase();
+            nodes = nodes.filter(n => {
+                const c = cards[n.id];
+                const segs = n.path ? n.path.split(' › ') : [];
+                const parent = segs.length >= 2 ? segs[segs.length - 2] : (segs[0] || '');
+                if (key === 'type')    return (TYPE_META[n.type]?.label || n.type || '').toLowerCase().includes(q);
+                if (key === 'parent') return parent.toLowerCase().includes(q);
+                if (key === 'name')   return (n.name || '').toLowerCase().includes(q);
+                if (key === 'qty')    return String(n.quantity ?? '').includes(q);
+                if (key === 'product') return `${c?.manufacturer || ''} ${c?.model || ''}`.toLowerCase().includes(q);
+                if (key === 'price')  return String(c?.priceNetto ?? '').includes(q);
+                if (key === 'status') return (STATUS_META[c?.status]?.label || c?.status || '').toLowerCase().includes(q);
+                return true;
+            });
+        }
+
+        // Sort
+        nodes.sort((a, b) => {
+            const ca = cards[a.id];
+            const cb = cards[b.id];
+            let cmp = 0;
+            if (sortConfig.key === 'type') {
+                cmp = (TYPE_META[a.type]?.label || '').localeCompare(TYPE_META[b.type]?.label || '', 'pl');
+            } else if (sortConfig.key === 'parent') {
+                const sa = a.path ? a.path.split(' › ') : [];
+                const sb = b.path ? b.path.split(' › ') : [];
+                const pa = sa.length >= 2 ? sa[sa.length - 2] : (sa[0] || '');
+                const pb = sb.length >= 2 ? sb[sb.length - 2] : (sb[0] || '');
+                cmp = pa.localeCompare(pb, 'pl');
+            } else if (sortConfig.key === 'name') {
+                cmp = (a.name || '').localeCompare(b.name || '', 'pl');
+            } else if (sortConfig.key === 'qty') {
+                cmp = (a.quantity ?? 1) - (b.quantity ?? 1);
+            } else if (sortConfig.key === 'product') {
+                const pa = `${ca?.manufacturer || ''} ${ca?.model || ''}`.trim();
+                const pb = `${cb?.manufacturer || ''} ${cb?.model || ''}`.trim();
+                cmp = pa.localeCompare(pb, 'pl');
+            } else if (sortConfig.key === 'price') {
+                cmp = (ca?.priceNetto ?? Infinity) - (cb?.priceNetto ?? Infinity);
+            } else if (sortConfig.key === 'status') {
+                cmp = (STATUS_META[ca?.status]?.label || '').localeCompare(STATUS_META[cb?.status]?.label || '', 'pl');
+            }
+            return sortConfig.direction === 'asc' ? cmp : -cmp;
+        });
+
+        return nodes;
+    }, [matNodes, cards, sortConfig, colFilters, searchQuery]);
+
+    // ─ Data fetching ─────────────────────────────────────────────────────────
+
     const fetchCards = useCallback(async () => {
         if (!nodeId) return;
         if (!externalWbsNodes) setLoading(true);
         try {
             const headers = { Authorization: `Bearer ${token}` };
-            // WBS nodes — tylko gdy nie przekazano z zewnątrz
+            let flatNodes = externalWbsNodes || [];
             if (!externalWbsNodes) {
                 const wbsRes = await fetch(
                     `${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`,
@@ -455,10 +552,10 @@ export default function WbsMaterialsPanel({
                 );
                 if (wbsRes.ok) {
                     const data = await wbsRes.json();
-                    setInternalWbsNodes(flattenWbsNodes(data.items || []));
+                    flatNodes = flattenWbsNodes(data.items || []);
+                    setInternalWbsNodes(flatNodes);
                 }
             }
-            // Karty produktowe
             const reqRes = await fetch(
                 `${API_URL}/material-requirements/node/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`,
                 { headers }
@@ -467,6 +564,17 @@ export default function WbsMaterialsPanel({
                 const reqs = await reqRes.json();
                 const map = {};
                 for (const r of reqs) { if (r.wbsNodeId) map[r.wbsNodeId] = r; }
+                // Fallback: match requirements without wbsNodeId to WBS nodes by name
+                const matNodeList = flatNodes.filter(n => n.type === 'material' || n.type === 'equipment');
+                for (const r of reqs) {
+                    if (r.wbsNodeId) continue;
+                    const reqName = (r.name || r.productName || '').toLowerCase().trim();
+                    if (!reqName) continue;
+                    const match = matNodeList.find(n =>
+                        (n.name || '').toLowerCase().trim() === reqName && !map[n.id]
+                    );
+                    if (match) map[match.id] = r;
+                }
                 setCards(map);
             }
         } catch (e) {
@@ -503,7 +611,6 @@ export default function WbsMaterialsPanel({
         fetchOffers();
     }, [fetchCards, fetchMaterialDb, fetchOffers, refreshKey]);
 
-    // Gdy externalWbsNodes zmienia się (rodzic zaktualizował wbsData) — odśwież karty
     const prevExternalRef = useRef(null);
     useEffect(() => {
         if (!externalWbsNodes) return;
@@ -513,17 +620,18 @@ export default function WbsMaterialsPanel({
         }
     }, [externalWbsNodes, fetchCards]);
 
+    // ─ Mutations ─────────────────────────────────────────────────────────────
+
     const patchWbsNode = useCallback(async (wbsNodeId, data) => {
         await fetch(`${API_URL}/wbs-nodes/${wbsNodeId}`, {
             method: 'PATCH',
             headers: authHeaders(),
             body: JSON.stringify(data),
         });
-        // Optimistyczna aktualizacja lokalnych (gdy bez rodzica)
         if (!externalWbsNodes) {
             setInternalWbsNodes(prev => prev.map(n => n.id === wbsNodeId ? { ...n, ...data } : n));
         }
-        onPatchNode?.(wbsNodeId, data); // informuj rodzica
+        onPatchNode?.(wbsNodeId, data);
         onWbsUpdate?.();
     }, [onWbsUpdate, onPatchNode, externalWbsNodes]);
 
@@ -558,10 +666,56 @@ export default function WbsMaterialsPanel({
             const reqs = await res.json();
             const map = {};
             for (const r of reqs) { if (r.wbsNodeId) map[r.wbsNodeId] = r; }
+            // Fallback: match by name
+            const flatNodes = externalWbsNodes ?? internalWbsNodes;
+            const matNodeList = flatNodes.filter(n => n.type === 'material' || n.type === 'equipment');
+            for (const r of reqs) {
+                if (r.wbsNodeId) continue;
+                const reqName = (r.name || r.productName || '').toLowerCase().trim();
+                if (!reqName) continue;
+                const match = matNodeList.find(n =>
+                    (n.name || '').toLowerCase().trim() === reqName && !map[n.id]
+                );
+                if (match) map[match.id] = r;
+            }
             setCards(map);
             onWbsUpdate?.();
         }
-    }, [nodeId, versionId, token, onWbsUpdate]);
+    }, [nodeId, versionId, token, onWbsUpdate, externalWbsNodes, internalWbsNodes]);
+
+    const patchCard = useCallback(async (cardId, data) => {
+        await fetch(`${API_URL}/material-requirements/${cardId}`, {
+            method: 'PATCH',
+            headers: authHeaders(),
+            body: JSON.stringify(data),
+        });
+        await refreshCards();
+    }, [refreshCards]);
+
+    // ─ Column resize ─────────────────────────────────────────────────────────
+
+    const startResize = useCallback((colKey, e) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startW = colWidths[colKey] || 100;
+        resizeDrag.current = { colKey, startX, startW };
+
+        const onMove = (ev) => {
+            if (!resizeDrag.current) return;
+            const dx = ev.clientX - resizeDrag.current.startX;
+            const newW = Math.max(60, resizeDrag.current.startW + dx);
+            setColWidths(prev => ({ ...prev, [resizeDrag.current.colKey]: newW }));
+        };
+        const onUp = () => {
+            resizeDrag.current = null;
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    }, [colWidths]);
+
+    // ─ Export ────────────────────────────────────────────────────────────────
 
     const exportToExcel = useCallback(() => {
         const STATUS_LABELS_XLS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
@@ -615,6 +769,8 @@ export default function WbsMaterialsPanel({
         URL.revokeObjectURL(url);
     }, [matNodes, cards]);
 
+    // ─ Render guards ─────────────────────────────────────────────────────────
+
     if (loading) {
         return (
             <div className="flex justify-center py-12">
@@ -633,6 +789,10 @@ export default function WbsMaterialsPanel({
         );
     }
 
+    const toggleSort = (key) => setSortConfig(s =>
+        s.key === key ? { key, direction: s.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' }
+    );
+
     return (
         <div className="flex flex-col h-full">
             {/* Nagłówek z licznikami */}
@@ -643,6 +803,11 @@ export default function WbsMaterialsPanel({
                 <span className="text-[10px] text-gray-600">
                     {matNodes.filter(n => cards[n.id]).length}/{matNodes.length} z kartą produktową
                 </span>
+                {sortedFilteredNodes.length !== matNodes.length && (
+                    <span className="text-[10px] text-blue-400">
+                        filtr: {sortedFilteredNodes.length}
+                    </span>
+                )}
                 <button onClick={exportToExcel}
                     className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 transition-colors">
                     <Download size={11} /> Export Excel
@@ -651,21 +816,53 @@ export default function WbsMaterialsPanel({
 
             {/* Tabela */}
             <div className="flex-1 overflow-auto custom-scrollbar">
-                <table className="w-full">
+                <table className="table-fixed w-full">
+                    <colgroup>
+                        <col style={{ width: 36 }} />
+                        {COL_DEFS.map(c => (
+                            <col key={c.key} style={{ width: colWidths[c.key] }} />
+                        ))}
+                    </colgroup>
                     <thead className="sticky top-0 z-10">
+                        {/* Sort row */}
                         <tr className="border-b border-white/10 bg-gray-950">
-                            <th className="w-9 px-2 py-2" />
-                            <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-24">Typ</th>
-                            <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-36">Przedmiot projektu</th>
-                            <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold">Nazwa</th>
-                            <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-24">Ilość</th>
-                            <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-40">Produkt</th>
-                            <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-28">Cena netto</th>
-                            <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-36">Status oferty</th>
+                            <th className="w-9 bg-gray-950" />
+                            {COL_DEFS.map(c => (
+                                <th key={c.key} className="px-3 py-2 text-left bg-gray-950 select-none relative">
+                                    <button
+                                        onClick={() => toggleSort(c.key)}
+                                        className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-gray-500 font-semibold hover:text-gray-300 transition-colors w-full"
+                                    >
+                                        <span className="truncate">{c.label}</span>
+                                        <span className={sortConfig.key === c.key ? 'text-blue-400 flex-shrink-0' : 'text-gray-700 flex-shrink-0'}>
+                                            {sortConfig.key === c.key ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⬍'}
+                                        </span>
+                                    </button>
+                                    {/* Resize handle */}
+                                    <div
+                                        onMouseDown={e => startResize(c.key, e)}
+                                        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-500/40 transition-colors z-10"
+                                    />
+                                </th>
+                            ))}
+                        </tr>
+                        {/* Filter row */}
+                        <tr className="border-b border-white/5 bg-gray-950">
+                            <th className="bg-gray-950" />
+                            {COL_DEFS.map(c => (
+                                <th key={c.key} className="px-2 py-1 bg-gray-950">
+                                    <input
+                                        value={colFilters[c.key] || ''}
+                                        onChange={e => setColFilters(p => ({ ...p, [c.key]: e.target.value }))}
+                                        placeholder="filtruj..."
+                                        className="w-full bg-black/30 border border-white/10 rounded px-2 py-0.5 text-[10px] text-white placeholder-gray-700 outline-none focus:border-blue-500/40"
+                                    />
+                                </th>
+                            ))}
                         </tr>
                     </thead>
                     <tbody>
-                        {matNodes.map(node => {
+                        {sortedFilteredNodes.map(node => {
                             const card = cards[node.id] || null;
                             const isExpanded = expandedId === node.id;
                             return (
@@ -682,6 +879,7 @@ export default function WbsMaterialsPanel({
                                         token={token}
                                         readOnly={readOnly}
                                         onRefresh={refreshCards}
+                                        onPatchCard={patchCard}
                                     />
                                     {isExpanded && card && (
                                         <tr>

@@ -141,6 +141,7 @@ export class MaterialRequirementsController {
         name?: string;
         materialId?: string;
         stockStatus?: number;
+        wbsNodeId?: string;
     }) {
         if (!body.nodeId) throw new BadRequestException('nodeId jest wymagane');
         return this.service.create(body);
