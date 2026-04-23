@@ -660,7 +660,7 @@ export default function SchematTab({ nodeId }) {
             <div class="meta">Wygenerowano: ${date} &nbsp;|&nbsp; Łączna liczba punktów: ${allMarkers.length} &nbsp;|&nbsp; Pliki: ${schematics.length}</div>
             <table>
                 <thead><tr>
-                    <th style="width:24px">#</th><th>Przedmiot WBS</th><th>Wymaganie</th><th>Nazwa</th>
+                    <th style="width:24px">#</th><th>Przedmiot projektu</th><th>Pozycja przedmiotu</th><th>Nazwa znacznika na schemacie</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>
