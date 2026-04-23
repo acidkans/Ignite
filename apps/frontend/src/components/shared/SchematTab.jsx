@@ -55,7 +55,8 @@ export default function SchematTab({ nodeId }) {
     const [inlineEdits, setInlineEdits] = useState({});
     const [showTable, setShowTable] = useState(false);
     const [tableFilters, setTableFilters] = useState({ markerName: '', pozycja: '', markerNote: '', note: '' });
-    const [markerFilter, setMarkerFilter] = useState('');
+    const [markerFilter, setMarkerFilter] = useState(new Set());
+    const [markerFilterOpen, setMarkerFilterOpen] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const [showFileDropdown, setShowFileDropdown] = useState(false);
@@ -77,6 +78,13 @@ export default function SchematTab({ nodeId }) {
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, [showFileDropdown]);
+
+    useEffect(() => {
+        if (!markerFilterOpen) return;
+        const handler = (e) => { if (!e.target.closest('[data-marker-filter]')) setMarkerFilterOpen(false); };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [markerFilterOpen]);
 
     // Reset aspect ratio gdy zmienia się schemat
     useEffect(() => { setContentAspect(null); }, [selectedSchematic?.id]);
@@ -809,16 +817,48 @@ export default function SchematTab({ nodeId }) {
                             .filter(Boolean)
                     )].sort();
                     if (options.length === 0) return null;
+                    const toggle = (o) => setMarkerFilter(prev => {
+                        const next = new Set(prev);
+                        next.has(o) ? next.delete(o) : next.add(o);
+                        return next;
+                    });
+                    const label = markerFilter.size === 0
+                        ? 'Wszystkie przedmioty'
+                        : markerFilter.size === 1
+                            ? [...markerFilter][0]
+                            : `${markerFilter.size} wybrane`;
                     return (
-                        <select
-                            value={markerFilter}
-                            onChange={e => setMarkerFilter(e.target.value)}
-                            className="text-[11px] bg-black/40 border border-white/10 rounded px-2 py-1 text-gray-300 focus:outline-none focus:border-orange-500/50 max-w-[180px] truncate"
-                            title="Filtruj znaczniki po przedmiocie projektu"
-                        >
-                            <option value="">Wszystkie przedmioty</option>
-                            {options.map(o => <option key={o} value={o}>{o}</option>)}
-                        </select>
+                        <div className="relative" data-marker-filter>
+                            <button
+                                onClick={() => setMarkerFilterOpen(o => !o)}
+                                className={`text-[11px] px-2 py-1 rounded border flex items-center gap-1.5 max-w-[180px] truncate transition-colors ${markerFilter.size > 0 ? 'bg-orange-500/20 border-orange-500/40 text-orange-300' : 'bg-black/40 border-white/10 text-gray-300 hover:border-white/20'}`}
+                            >
+                                <span className="truncate">{label}</span>
+                                <svg className={`shrink-0 w-3 h-3 transition-transform ${markerFilterOpen ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                            </button>
+                            {markerFilterOpen && (
+                                <div className="absolute top-full mt-1 left-0 z-50 bg-[#0d1117] border border-white/10 rounded-lg shadow-2xl min-w-[180px] py-1 max-h-60 overflow-y-auto">
+                                    <button
+                                        onClick={() => { setMarkerFilter(new Set()); }}
+                                        className="w-full text-left px-3 py-1.5 text-[11px] text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
+                                    >
+                                        Wyczyść filtr
+                                    </button>
+                                    <div className="border-t border-white/5 my-1" />
+                                    {options.map(o => (
+                                        <label key={o} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-white/5 transition-colors">
+                                            <input
+                                                type="checkbox"
+                                                checked={markerFilter.has(o)}
+                                                onChange={() => toggle(o)}
+                                                className="accent-orange-500 shrink-0"
+                                            />
+                                            <span className="text-[11px] text-gray-300 truncate">{o}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     );
                 })()}
 
@@ -1074,7 +1114,7 @@ export default function SchematTab({ nodeId }) {
                                     </div>
                                 ))}
 
-                                {selectedSchematic.markers.filter(m => m.pageNumber === pageNumber && m.type === 'POINT' && (!markerFilter || getMarkerPozycja(m) === markerFilter)).map(marker => (
+                                {selectedSchematic.markers.filter(m => m.pageNumber === pageNumber && m.type === 'POINT' && (markerFilter.size === 0 || markerFilter.has(getMarkerPozycja(m)))).map(marker => (
                                     <div
                                         key={marker.id}
                                         className="absolute w-6 h-6 -ml-3 -mt-6 cursor-pointer text-orange-500 hover:text-orange-400 hover:scale-110 transition-transform group z-10"
