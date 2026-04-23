@@ -170,6 +170,7 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
     const [localImageUrl, setLocalImageUrl] = useState(null);
     const [imageKey, setImageKey] = useState(0);
     const fileInputRef = useRef(null);
+    const pasteInputRef = useRef(null);
     const localImageUrlRef = useRef(null);
 
     useEffect(() => {
@@ -189,6 +190,31 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
         if (localImageUrlRef.current) URL.revokeObjectURL(localImageUrlRef.current);
     }, []);
 
+    const uploadBlob = useCallback(async (blob, filename = 'image.png') => {
+        if (readOnly || !card?.id) return;
+        if (localImageUrlRef.current) URL.revokeObjectURL(localImageUrlRef.current);
+        const objUrl = URL.createObjectURL(blob);
+        localImageUrlRef.current = objUrl;
+        setLocalImageUrl(objUrl);
+        const formData = new FormData();
+        formData.append('file', blob, filename);
+        const res = await fetch(`${API_URL}/material-requirements/${card.id}/upload-image`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+        });
+        if (res.ok) { setImageKey(k => k + 1); onRefresh(); }
+    }, [card?.id, token, readOnly, onRefresh]);
+
+    const handlePaste = useCallback((e) => {
+        const items = Array.from(e.clipboardData?.items || []);
+        const imgItem = items.find(i => i.type.startsWith('image/'));
+        if (!imgItem) return;
+        e.preventDefault();
+        const blob = imgItem.getAsFile();
+        if (blob) uploadBlob(blob, 'screenshot.png');
+    }, [uploadBlob]);
+
     const handleFileSelect = useCallback(async (e) => {
         const file = e.target.files?.[0];
         if (!file || readOnly || !card?.id) return;
@@ -197,17 +223,9 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
         const objUrl = URL.createObjectURL(file);
         localImageUrlRef.current = objUrl;
         setLocalImageUrl(objUrl);
-        // Upload w tle
-        const formData = new FormData();
-        formData.append('file', file, file.name);
-        const res = await fetch(`${API_URL}/material-requirements/${card.id}/upload-image`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-            body: formData,
-        });
-        if (res.ok) { setImageKey(k => k + 1); onRefresh(); }
+        await uploadBlob(file, file.name);
         e.target.value = '';
-    }, [card?.id, token, readOnly, onRefresh]);
+    }, [uploadBlob, readOnly, card?.id]);
 
     const setF = (k, v) => setFields(prev => ({ ...prev, [k]: v }));
 
@@ -357,18 +375,23 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
                 {!readOnly && <ProposalsSection req={card} token={token} onRefresh={onRefresh} />}
             </div>
 
-            {/* Prawa kolumna — zdjęcie, kliknięcie otwiera file picker */}
+            {/* Prawa kolumna — kliknięcie = file picker, hover+Ctrl+V = schowek */}
             <div
+                onMouseEnter={() => !readOnly && pasteInputRef.current?.focus()}
                 onClick={() => !readOnly && fileInputRef.current?.click()}
                 className={`relative w-44 flex-shrink-0 border-l transition-colors ${readOnly ? 'cursor-default' : 'cursor-pointer hover:border-blue-500/30 hover:bg-blue-500/5'} border-white/5 bg-black/10`}
-                title="Kliknij aby wybrać zdjęcie"
+                title="Kliknij aby wybrać plik | Najedź i Ctrl+V aby wkleić ze schowka"
             >
+                {/* file picker */}
+                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} style={{ display: 'none' }} />
+                {/* paste trap — uncontrolled text input, dostaje focus na hover */}
                 <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileSelect}
-                    style={{ display: 'none' }}
+                    ref={pasteInputRef}
+                    type="text"
+                    onPaste={handlePaste}
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    style={{ position: 'absolute', opacity: 0, width: 0, height: 0, border: 'none', outline: 'none', padding: 0 }}
                 />
                 {(localImageUrl || card.imageUrl) ? (
                     <img
