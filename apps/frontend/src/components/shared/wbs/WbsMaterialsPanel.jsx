@@ -81,7 +81,7 @@ function ProposalsSection({ req, token, onRefresh }) {
     const deleteProposal = async (p) => {
         await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, { method: 'DELETE', headers });
         setProposals(prev => prev.filter(x => x.id !== p.id));
-        if (p.isSelected) onRefresh();
+        onRefresh();
     };
 
     const addManual = async () => {
@@ -89,7 +89,7 @@ function ProposalsSection({ req, token, onRefresh }) {
         const res = await fetch(`${API_URL}/material-requirements/${req.id}/proposals`, {
             method: 'POST', headers, body: JSON.stringify({ ...manualForm, isManual: true }),
         });
-        if (res.ok) { const p = await res.json(); setProposals(prev => [...prev, p]); setManualForm(null); }
+        if (res.ok) { const p = await res.json(); setProposals(prev => [...prev, p]); setManualForm(null); onRefresh(); }
     };
 
     return (
@@ -352,6 +352,12 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                     <TypeIcon size={11} /> {meta.label}
                 </span>
             </td>
+            {/* Przedmiot projektu */}
+            <td className="px-3 py-2.5 w-36">
+                <span className="text-[10px] text-gray-400 truncate block max-w-[140px]" title={node.path}>
+                    {node.path ? node.path.split(' › ')[0] : '—'}
+                </span>
+            </td>
             {/* Nazwa */}
             <td className="px-3 py-2.5">
                 <div className="text-sm text-white">{node.name}</div>
@@ -592,6 +598,7 @@ export default function WbsMaterialsPanel({
                         <tr className="border-b border-white/10 bg-gray-950">
                             <th className="w-9 px-2 py-2" />
                             <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-24">Typ</th>
+                            <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-36">Przedmiot projektu</th>
                             <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold">Nazwa</th>
                             <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-24">Ilość</th>
                             <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-40">Produkt</th>
@@ -620,7 +627,7 @@ export default function WbsMaterialsPanel({
                                     />
                                     {isExpanded && card && (
                                         <tr>
-                                            <td colSpan={7} className="p-0 bg-black/20 border-b border-white/5">
+                                            <td colSpan={8} className="p-0 bg-black/20 border-b border-white/5">
                                                 <ProductCard
                                                     card={card}
                                                     wbsNode={node}
@@ -635,7 +642,7 @@ export default function WbsMaterialsPanel({
                                     )}
                                     {isExpanded && !card && (
                                         <tr>
-                                            <td colSpan={7} className="px-6 py-3 bg-black/20 border-b border-white/5 text-xs text-gray-500 italic">
+                                            <td colSpan={8} className="px-6 py-3 bg-black/20 border-b border-white/5 text-xs text-gray-500 italic">
                                                 Kliknij „Utwórz kartę" aby dodać dane produktowe dla tego węzła.
                                             </td>
                                         </tr>
