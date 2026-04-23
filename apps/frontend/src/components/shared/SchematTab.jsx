@@ -89,6 +89,9 @@ export default function SchematTab({ nodeId }) {
     // Reset aspect ratio gdy zmienia się schemat
     useEffect(() => { setContentAspect(null); }, [selectedSchematic?.id]);
 
+    // Zamknij szczegóły znacznika przy zmianie filtra
+    useEffect(() => { setSelectedMarker(null); }, [markerFilter]);
+
     // Auto-sync przy pierwszym załadowaniu schematów (tylko sprawdza różnice)
     const hasSyncedOnMount = useRef(false);
     useEffect(() => {
