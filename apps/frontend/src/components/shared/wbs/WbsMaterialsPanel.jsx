@@ -3,8 +3,9 @@ import {
     ChevronRight, ChevronDown, Package, Wrench,
     CheckCircle, Clock, XCircle, Star, Trash2, AlertCircle,
     ShoppingCart, Warehouse, LogOut, Plus, Search, Sparkles,
-    FileText, Link as LinkIcon,
+    FileText, Link as LinkIcon, Download,
 } from 'lucide-react';
+import ExcelJS from 'exceljs';
 import { API_URL } from '../../../config';
 import { UNIT_OPTIONS } from './wbsConstants';
 
@@ -354,9 +355,11 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
             </td>
             {/* Przedmiot projektu */}
             <td className="px-3 py-2.5 w-36">
-                <span className="text-[10px] text-gray-400 truncate block max-w-[140px]" title={node.path}>
-                    {node.path ? node.path.split(' › ')[0] : '—'}
-                </span>
+                {(() => {
+                    const segs = node.path ? node.path.split(' › ') : [];
+                    const parent = segs.length >= 2 ? segs[segs.length - 2] : segs[0] || '—';
+                    return <span className="text-[10px] text-gray-400 truncate block max-w-[140px]" title={node.path}>{parent}</span>;
+                })()}
             </td>
             {/* Nazwa */}
             <td className="px-3 py-2.5">
@@ -579,6 +582,105 @@ export default function WbsMaterialsPanel({
         );
     }
 
+    const exportToExcel = useCallback(async () => {
+        const ExcelJS_ = ExcelJS;
+        const wb = new ExcelJS_.Workbook();
+        const ws = wb.addWorksheet('Materiały WBS');
+
+        const STATUS_LABELS_XLS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
+        const TYPE_LABELS_XLS = { material: 'Materiał', equipment: 'Sprzęt' };
+
+        const cols = [
+            { header: 'Typ',                  key: 'typ',         width: 12 },
+            { header: 'Przedmiot projektu',   key: 'przedmiot',   width: 28 },
+            { header: 'Pełna ścieżka WBS',    key: 'sciezka',     width: 40 },
+            { header: 'Nazwa',                key: 'nazwa',       width: 30 },
+            { header: 'Ilość',                key: 'ilosc',       width: 8  },
+            { header: 'Jednostka',            key: 'jednostka',   width: 10 },
+            { header: 'Producent',            key: 'producent',   width: 20 },
+            { header: 'Model',                key: 'model',       width: 18 },
+            { header: 'Nazwa handlowa',       key: 'handlowa',    width: 28 },
+            { header: 'Cena netto',           key: 'cena',        width: 12 },
+            { header: 'Status',               key: 'status',      width: 14 },
+            { header: 'Wymagania techniczne', key: 'wymagania',   width: 40 },
+            { header: 'Dostępność',           key: 'dostepnosc',  width: 16 },
+            { header: 'Propozycja — producent', key: 'p_prod',    width: 20 },
+            { header: 'Propozycja — model',   key: 'p_model',     width: 18 },
+            { header: 'Propozycja — nazwa',   key: 'p_nazwa',     width: 28 },
+            { header: 'Propozycja — cena',    key: 'p_cena',      width: 12 },
+            { header: 'Propozycja — wybrana', key: 'p_wybrana',   width: 12 },
+        ];
+        ws.columns = cols.map(c => ({ header: c.header, key: c.key, width: c.width }));
+
+        // Styl nagłówka
+        const headerRow = ws.getRow(1);
+        headerRow.eachCell(cell => {
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            cell.border = { bottom: { style: 'thin', color: { argb: 'FF4472C4' } } };
+        });
+        headerRow.height = 32;
+
+        for (const node of matNodes) {
+            const card = cards[node.id] || null;
+            const segs = node.path ? node.path.split(' › ') : [];
+            const parent = segs.length >= 2 ? segs[segs.length - 2] : (segs[0] || '');
+            const selectedProposal = (card?.proposals || []).find(p => p.isSelected);
+            const proposals = card?.proposals || [];
+
+            const mainRow = ws.addRow({
+                typ:        TYPE_LABELS_XLS[node.type] || node.type,
+                przedmiot:  parent,
+                sciezka:    node.path || '',
+                nazwa:      node.name || '',
+                ilosc:      node.quantity ?? 1,
+                jednostka:  node.unit || 'szt',
+                producent:  card?.manufacturer || '',
+                model:      card?.model || '',
+                handlowa:   card?.productName || '',
+                cena:       card?.priceNetto != null ? Number(card.priceNetto) : '',
+                status:     STATUS_LABELS_XLS[card?.status] || (card ? card.status : ''),
+                wymagania:  card?.technicalSpec || '',
+                dostepnosc: card?.availability || '',
+                p_prod:     selectedProposal?.manufacturer || '',
+                p_model:    selectedProposal?.model || '',
+                p_nazwa:    selectedProposal?.productName || '',
+                p_cena:     selectedProposal?.priceNetto != null ? Number(selectedProposal.priceNetto) : '',
+                p_wybrana:  selectedProposal ? 'TAK' : '',
+            });
+            mainRow.eachCell(cell => {
+                cell.alignment = { vertical: 'top', wrapText: true };
+            });
+            mainRow.getCell('cena').numFmt = '#,##0.00 "zł"';
+            mainRow.getCell('p_cena').numFmt = '#,##0.00 "zł"';
+            mainRow.height = Math.min(120, 16 + Math.ceil((card?.technicalSpec || '').length / 45) * 14);
+
+            // Dodatkowe wiersze dla pozostałych propozycji (niewybranych)
+            for (const p of proposals.filter(pp => !pp.isSelected)) {
+                const pRow = ws.addRow({
+                    typ: '', przedmiot: '', sciezka: '', nazwa: '', ilosc: '', jednostka: '',
+                    producent: '', model: '', handlowa: '', cena: '', status: '', wymagania: '', dostepnosc: '',
+                    p_prod: p.manufacturer || '', p_model: p.model || '', p_nazwa: p.productName || '',
+                    p_cena: p.priceNetto != null ? Number(p.priceNetto) : '', p_wybrana: 'NIE',
+                });
+                pRow.eachCell(cell => { cell.font = { color: { argb: 'FF888888' }, italic: true }; cell.alignment = { vertical: 'top', wrapText: true }; });
+                pRow.getCell('p_cena').numFmt = '#,##0.00 "zł"';
+            }
+        }
+
+        // Freeze header + autofilter
+        ws.views = [{ state: 'frozen', ySplit: 1 }];
+        ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
+
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `materialy-wbs-${Date.now()}.xlsx`; a.click();
+        URL.revokeObjectURL(url);
+    }, [matNodes, cards]);
+
     return (
         <div className="flex flex-col h-full">
             {/* Nagłówek z licznikami */}
@@ -589,6 +691,10 @@ export default function WbsMaterialsPanel({
                 <span className="text-[10px] text-gray-600">
                     {matNodes.filter(n => cards[n.id]).length}/{matNodes.length} z kartą produktową
                 </span>
+                <button onClick={exportToExcel}
+                    className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 transition-colors">
+                    <Download size={11} /> Export Excel
+                </button>
             </div>
 
             {/* Tabela */}
