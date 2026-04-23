@@ -562,17 +562,17 @@ export default function WbsMaterialsPanel({
             if (reqRes.ok) {
                 const reqs = await reqRes.json();
                 const map = {};
+                const reqById = Object.fromEntries(reqs.map(r => [r.id, r]));
                 for (const r of reqs) { if (r.wbsNodeId) map[r.wbsNodeId] = r; }
-                // Fallback: match requirements without wbsNodeId to WBS nodes by name
+                // Fallback: match via req: tag on WBS node (safer than name-matching)
                 const matNodeList = flatNodes.filter(n => n.type === 'material' || n.type === 'equipment');
-                for (const r of reqs) {
-                    if (r.wbsNodeId) continue;
-                    const reqName = (r.name || r.productName || '').toLowerCase().trim();
-                    if (!reqName) continue;
-                    const match = matNodeList.find(n =>
-                        (n.name || '').toLowerCase().trim() === reqName && !map[n.id]
-                    );
-                    if (match) map[match.id] = r;
+                for (const node of matNodeList) {
+                    if (map[node.id]) continue;
+                    const reqTag = (node.tags || []).find(t => typeof t === 'string' && t.startsWith('req:'));
+                    if (!reqTag) continue;
+                    const reqId = reqTag.slice(4);
+                    const req = reqById[reqId];
+                    if (req) map[node.id] = req;
                 }
                 setCards(map);
             }
