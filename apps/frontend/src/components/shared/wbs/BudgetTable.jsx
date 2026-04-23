@@ -29,10 +29,12 @@ export default function BudgetTable({
     onDiscountAmountChange,
 }) {
     const [localRows, setLocalRows] = useState(() => rows.map(calcDerived));
+    const [syncVersion, setSyncVersion] = useState(0);
 
     // Sync from parent when row IDs change (project switch / server push)
     useEffect(() => {
         setLocalRows(rows.map(calcDerived));
+        setSyncVersion(v => v + 1);
     }, [rows]);
 
     const handleChange = (rowId, field, rawValue) => {
@@ -145,7 +147,7 @@ export default function BudgetTable({
 
                                 <td className={TD}>
                                     <input
-                                        key={`${row.id}-subjectName-${row.subjectName ?? ''}`}
+                                        key={`${row.id}-subjectName-${syncVersion}`}
                                         defaultValue={row.subjectName || ''}
                                         onBlur={e => { if (e.target.value !== (row.subjectName || '')) onFieldChange(row, 'subjectName', e.target.value); }}
                                         className={INPUT}
@@ -154,7 +156,7 @@ export default function BudgetTable({
 
                                 <td className={TD}>
                                     <input
-                                        key={`${row.id}-name-${row.name ?? ''}`}
+                                        key={`${row.id}-name-${syncVersion}`}
                                         defaultValue={row.name || ''}
                                         onBlur={e => { if (e.target.value !== (row.name || '')) onFieldChange(row, 'name', e.target.value); }}
                                         className={INPUT}
@@ -174,7 +176,7 @@ export default function BudgetTable({
 
                                 <td className={TD}>
                                     <input
-                                        key={`${row.id}-unitCost-${row.unitCost ?? ''}`}
+                                        key={`${row.id}-unitCost-${syncVersion}`}
                                         defaultValue={row.unitCost != null && row.unitCost !== 0 ? Number(row.unitCost).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
                                         onChange={e => handleChange(row.id, 'unitCost', e.target.value)}
                                         onBlur={e => {
@@ -188,7 +190,7 @@ export default function BudgetTable({
 
                                 <td className={TD}>
                                     <input
-                                        key={`${row.id}-quantity-${row.quantity ?? ''}`}
+                                        key={`${row.id}-quantity-${syncVersion}`}
                                         defaultValue={row.quantity != null && row.quantity !== 0 ? Number(row.quantity).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
                                         onChange={e => handleChange(row.id, 'quantity', e.target.value)}
                                         onBlur={e => {
@@ -217,7 +219,7 @@ export default function BudgetTable({
 
                                 <td className={TD}>
                                     <input
-                                        key={`${row.id}-margin-${row.margin ?? ''}`}
+                                        key={`${row.id}-margin-${syncVersion}`}
                                         defaultValue={row.margin != null && row.margin !== 0 ? String(row.margin).replace('.', ',') : ''}
                                         onChange={e => handleChange(row.id, 'margin', e.target.value)}
                                         onBlur={e => onFieldChange(row, 'margin', e.target.value)}
@@ -227,7 +229,7 @@ export default function BudgetTable({
 
                                 <td className={TD}>
                                     <input
-                                        key={`${row.id}-discount-${row.discount ?? ''}`}
+                                        key={`${row.id}-discount-${syncVersion}`}
                                         defaultValue={row.discount != null && row.discount !== 0 ? String(row.discount).replace('.', ',') : ''}
                                         onChange={e => handleChange(row.id, 'discount', e.target.value)}
                                         onBlur={e => onFieldChange(row, 'discount', e.target.value)}
@@ -241,7 +243,7 @@ export default function BudgetTable({
 
                                 <td className={TD}>
                                     <input
-                                        key={`${row.id}-comment-${row.comment ?? ''}`}
+                                        key={`${row.id}-comment-${syncVersion}`}
                                         defaultValue={row.comment || ''}
                                         onBlur={e => { if (e.target.value !== (row.comment || '')) onFieldChange(row, 'comment', e.target.value); }}
                                         className={`${INPUT} text-gray-400`}
