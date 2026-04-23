@@ -882,21 +882,104 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         strategySaveTimeout.current = setTimeout(() => saveStrategy(next), 1500);
     }, [saveStrategy]);
 
+    const handleStrategyKeyDown = useCallback((e) => {
+        if (e.key !== 'Enter') return;
+        const ta = strategyRef.current;
+        if (!ta) return;
+        const text = ta.value;
+        const pos = ta.selectionStart;
+        const lineStart = text.lastIndexOf('\n', pos - 1) + 1;
+        const lineEnd = text.indexOf('\n', pos);
+        const fullLine = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd);
+
+        const ulMatch = fullLine.match(/^- (.*)/);
+        const olMatch = fullLine.match(/^(\d+)\. (.*)/);
+
+        if (ulMatch) {
+            e.preventDefault();
+            const content = ulMatch[1].trim();
+            let newText, np;
+            if (!content) {
+                newText = text.slice(0, lineStart) + text.slice(lineStart + 2);
+                np = lineStart;
+            } else {
+                const insert = '\n- ';
+                newText = text.slice(0, pos) + insert + text.slice(pos);
+                np = pos + insert.length;
+            }
+            setWbsDescription(newText);
+            setTimeout(() => { ta.setSelectionRange(np, np); ta.focus(); }, 0);
+            if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
+            strategySaveTimeout.current = setTimeout(() => saveStrategy(newText), 1500);
+            return;
+        }
+
+        if (olMatch) {
+            e.preventDefault();
+            const n = parseInt(olMatch[1], 10);
+            const content = olMatch[2].trim();
+            const prefixLen = String(n).length + 2;
+            let newText, np;
+            if (!content) {
+                newText = text.slice(0, lineStart) + text.slice(lineStart + prefixLen);
+                np = lineStart;
+            } else {
+                const insert = `\n${n + 1}. `;
+                newText = text.slice(0, pos) + insert + text.slice(pos);
+                np = pos + insert.length;
+            }
+            setWbsDescription(newText);
+            setTimeout(() => { ta.setSelectionRange(np, np); ta.focus(); }, 0);
+            if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
+            strategySaveTimeout.current = setTimeout(() => saveStrategy(newText), 1500);
+            return;
+        }
+    }, [saveStrategy, setWbsDescription]);
+
     const renderStrategyHtml = useCallback((text) => {
-        return (text || '')
-            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-            .replace(/^\*\*(.+?)\*\*$/gm, '<h3 class="md-bold">$1</h3>')
-            .replace(/^### (.+)$/gm, '<h4>$1</h4>')
-            .replace(/^## (.+)$/gm, '<h3>$1</h3>')
-            .replace(/^# (.+)$/gm, '<h2 class="md-h2">$1</h2>')
-            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-            .replace(/(<h[2-4][^>]*>[^<]*<\/h[2-4]>)/g, '\n\n$1\n\n')
-            .replace(/\n{3,}/g, '\n\n')
-            .replace(/\n\n/g, '</p><p>')
-            .replace(/\n/g, '<br>')
-            .replace(/<p>(<h[2-4][^>]*>)/g, '$1')
-            .replace(/(<\/h[2-4]>)<\/p>/g, '$1')
-            .replace(/<p><\/p>/g, '');
+        const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const bold = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        const lines = (text || '').split('\n');
+        let html = '';
+        let inUl = false;
+        let inOl = false;
+        const closeList = () => {
+            if (inUl) { html += '</ul>'; inUl = false; }
+            if (inOl) { html += '</ol>'; inOl = false; }
+        };
+        for (const raw of lines) {
+            const h3m = raw.match(/^### (.+)/);
+            const h2m = raw.match(/^## (.+)/);
+            const h1m = raw.match(/^# (.+)/);
+            const ulm = raw.match(/^- (.*)/);
+            const olm = raw.match(/^(\d+)\. (.*)/);
+            if (h3m) {
+                closeList();
+                html += `<h3 style="font-size:12px;font-weight:bold;margin:12px 0 2px 0;padding-left:4em">${bold(h3m[1])}</h3>`;
+            } else if (h2m) {
+                closeList();
+                html += `<h2 style="font-size:13px;font-weight:bold;margin:14px 0 3px 0;padding-left:2em">${bold(h2m[1])}</h2>`;
+            } else if (h1m) {
+                closeList();
+                html += `<h1 style="font-size:14px;font-weight:bold;margin:16px 0 4px 0;padding-left:0">${bold(h1m[1])}</h1>`;
+            } else if (ulm) {
+                if (inOl) { html += '</ol>'; inOl = false; }
+                if (!inUl) { html += '<ul style="margin:4px 0 8px 1.5em;padding-left:1em">'; inUl = true; }
+                html += `<li>${bold(ulm[1])}</li>`;
+            } else if (olm) {
+                if (inUl) { html += '</ul>'; inUl = false; }
+                if (!inOl) { html += '<ol style="margin:4px 0 8px 1.5em;padding-left:1.2em">'; inOl = true; }
+                html += `<li>${bold(olm[2])}</li>`;
+            } else if (raw.trim() === '') {
+                closeList();
+                html += '<br>';
+            } else {
+                closeList();
+                html += `<p style="margin:0 0 4px 0">${bold(raw)}</p>`;
+            }
+        }
+        closeList();
+        return html;
     }, []);
 
     const handleExportPDF = async (sectionKey = 'all') => {
@@ -961,7 +1044,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         const strategyHtml = show('strategy') ? `
             <div class="section">
                 <div class="section-header">Jak to chcemy zrobić</div>
-                <div class="strategy-text"><p>${renderStrategyHtml(getStrategyText() || 'Brak treści strategii')}</p></div>
+                <div class="strategy-text">${renderStrategyHtml(getStrategyText() || 'Brak treści strategii')}</div>
             </div>` : '';
 
         const wbsHtml = show('wbs') ? `
@@ -1120,8 +1203,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
   .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.6; }
   .strategy-text p { margin: 0 0 4px 0; }
   .strategy-text p:empty { display: none; margin: 0; }
-  .strategy-text h2, .strategy-text h3, .strategy-text h4, .strategy-text .md-bold { font-size: 11px; font-weight: bold; margin: 16px 0 2px 0; }
-  .strategy-text h3:first-child, .strategy-text h2:first-child, .strategy-text .md-bold:first-child { margin-top: 0; }
+  .strategy-text h1:first-child, .strategy-text h2:first-child, .strategy-text h3:first-child { margin-top: 0; }
+  .strategy-text ul, .strategy-text ol { margin: 4px 0 8px 1.5em; padding-left: 1em; }
+  .strategy-text li { margin: 2px 0; }
   table { border-collapse: collapse; width: 100%; }
   td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; text-align: center; }
   td.num { text-align: center; font-family: monospace; font-size: 10px; }
@@ -2322,6 +2406,7 @@ ${materialsHtml}
                         ref={strategyRef}
                         value={wbsDescription}
                         onChange={(e) => { setWbsDescription(e.target.value); handleStrategySave(); }}
+                        onKeyDown={handleStrategyKeyDown}
                         onBlur={() => handleStrategySave(true)}
                         className="flex-1 min-h-0 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed"
                         placeholder="Zdefiniuj plan i strategię realizacji projektu..."
@@ -2335,6 +2420,13 @@ ${materialsHtml}
                         title="Pogrubienie"
                     >
                         B
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('# '); }}
+                        className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
+                        title="Nagłówek H1"
+                    >
+                        H1
                     </button>
                     <button
                         onClick={(e) => { e.stopPropagation(); prefixSelectionLines('## '); }}
@@ -2519,7 +2611,7 @@ ${materialsHtml}
                         <div className="mx-auto max-w-5xl bg-black/40 border border-white/10 rounded-2xl p-8 min-h-full text-gray-200 leading-relaxed">
                             <div
                                 className="prose prose-invert max-w-none"
-                                dangerouslySetInnerHTML={{ __html: `<p>${renderStrategyHtml(getStrategyText() || 'Brak treści strategii')}</p>` }}
+                                dangerouslySetInnerHTML={{ __html: renderStrategyHtml(getStrategyText() || 'Brak treści strategii') }}
                             />
                         </div>
                     </div>
