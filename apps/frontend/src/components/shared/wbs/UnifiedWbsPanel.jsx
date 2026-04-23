@@ -2388,12 +2388,12 @@ ${materialsHtml}
                 />
             ))}
 
-            {renderSection('wbs-hybrid', `Struktura projektu: ${projectName || '—'}`, ListTree, 'violet', (
+            {renderSection('wbs-hybrid', `Struktura projektu: ${orderName || projectName || '—'}`, ListTree, 'violet', (
                 <div className="flex flex-col flex-1 min-h-0">
                     <WBSHybridTable
                         wbsTree={wbsTree}
                         setWbsTree={setWbsTreeAndRef}
-                        nodeName={projectName || 'Projekt'}
+                        nodeName={orderName || projectName || 'Projekt'}
                         processNodeId={nodeId}
                         onSave={handleSaveHybridWBS}
                         users={assignedUsers}
