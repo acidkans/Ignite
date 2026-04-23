@@ -123,6 +123,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const [unassignedRequirements, setUnassignedRequirements] = useState([]);
     const [allRequirements, setAllRequirements] = useState([]);
     const [reqRefreshKey, setReqRefreshKey] = useState(0);
+    const materialsExportFn = useRef(null);
 
     const assignableProjectUsers = useMemo(() => {
         if (!Array.isArray(projectUsers) || projectUsers.length === 0) return [];
@@ -2451,8 +2452,16 @@ ${materialsHtml}
                     onPatchNode={(id, data) => setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))}
                     onWbsUpdate={async () => { await refreshMaterialCosts(); }}
                     refreshKey={reqRefreshKey}
+                    onExportReady={fn => { materialsExportFn.current = fn; }}
                 />
-            ), () => handleExportPDF('materials'))}
+            ), () => handleExportPDF('materials'), (
+                <button
+                    onClick={e => { e.stopPropagation(); materialsExportFn.current?.(); }}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0"
+                >
+                    <FileDown size={11} /> Export Excel
+                </button>
+            ))}
 
             {strategyPreviewOpen && (
                 <div className="fixed inset-0 z-[120] bg-[#05070bcc] backdrop-blur-sm flex flex-col">

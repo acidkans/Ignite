@@ -442,6 +442,7 @@ export default function WbsMaterialsPanel({
     externalWbsNodes,
     refreshKey = 0,
     searchQuery = '',
+    onExportReady,
 }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
 
@@ -769,6 +770,9 @@ export default function WbsMaterialsPanel({
         URL.revokeObjectURL(url);
     }, [matNodes, cards]);
 
+    // Notify parent when export function updates
+    useEffect(() => { onExportReady?.(exportToExcel); }, [exportToExcel]);
+
     // ─ Render guards ─────────────────────────────────────────────────────────
 
     if (loading) {
@@ -808,10 +812,6 @@ export default function WbsMaterialsPanel({
                         filtr: {sortedFilteredNodes.length}
                     </span>
                 )}
-                <button onClick={exportToExcel}
-                    className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 transition-colors">
-                    <Download size={11} /> Export Excel
-                </button>
             </div>
 
             {/* Tabela */}
@@ -871,7 +871,15 @@ export default function WbsMaterialsPanel({
                                         node={node}
                                         card={card}
                                         isExpanded={isExpanded}
-                                        onToggle={() => setExpandedId(prev => prev === node.id ? null : node.id)}
+                                        onToggle={async () => {
+                                            if (isExpanded) {
+                                                setExpandedId(null);
+                                            } else if (!card) {
+                                                await createCard(node);
+                                            } else {
+                                                setExpandedId(node.id);
+                                            }
+                                        }}
                                         onPatchNode={patchWbsNode}
                                         onCreateCard={createCard}
                                         materialDb={materialDb}
@@ -893,13 +901,6 @@ export default function WbsMaterialsPanel({
                                                     onRefresh={refreshCards}
                                                     readOnly={readOnly}
                                                 />
-                                            </td>
-                                        </tr>
-                                    )}
-                                    {isExpanded && !card && (
-                                        <tr>
-                                            <td colSpan={8} className="px-6 py-3 bg-black/20 border-b border-white/5 text-xs text-gray-500 italic">
-                                                Kliknij „Utwórz kartę" aby dodać dane produktowe dla tego węzła.
                                             </td>
                                         </tr>
                                     )}
