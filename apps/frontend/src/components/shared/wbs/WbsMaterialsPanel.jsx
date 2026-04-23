@@ -167,8 +167,10 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
         productUrl: card?.productUrl || '',
     });
     const [comboOpen, setComboOpen] = useState(null);
+    const [localImageUrl, setLocalImageUrl] = useState(null);
     const [imageKey, setImageKey] = useState(0);
     const fileInputRef = useRef(null);
+    const localImageUrlRef = useRef(null);
 
     useEffect(() => {
         setFields({
@@ -182,24 +184,30 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
         });
     }, [card?.id, card?.manufacturer, card?.model, card?.productName, card?.productUrl]);
 
-    const uploadImageBlob = useCallback(async (blob, filename = 'image.png') => {
-        if (readOnly || !card?.id) return;
+    // Zwolnij objectURL przy odmontowaniu
+    useEffect(() => () => {
+        if (localImageUrlRef.current) URL.revokeObjectURL(localImageUrlRef.current);
+    }, []);
+
+    const handleFileSelect = useCallback(async (e) => {
+        const file = e.target.files?.[0];
+        if (!file || readOnly || !card?.id) return;
+        // Natychmiastowy podgląd
+        if (localImageUrlRef.current) URL.revokeObjectURL(localImageUrlRef.current);
+        const objUrl = URL.createObjectURL(file);
+        localImageUrlRef.current = objUrl;
+        setLocalImageUrl(objUrl);
+        // Upload w tle
         const formData = new FormData();
-        formData.append('file', blob, filename);
+        formData.append('file', file, file.name);
         const res = await fetch(`${API_URL}/material-requirements/${card.id}/upload-image`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
             body: formData,
         });
         if (res.ok) { setImageKey(k => k + 1); onRefresh(); }
-    }, [card?.id, token, readOnly, onRefresh]);
-
-    const handleFileSelect = useCallback((e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        uploadImageBlob(file, file.name);
         e.target.value = '';
-    }, [uploadImageBlob]);
+    }, [card?.id, token, readOnly, onRefresh]);
 
     const setF = (k, v) => setFields(prev => ({ ...prev, [k]: v }));
 
@@ -362,10 +370,10 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
                     onChange={handleFileSelect}
                     style={{ display: 'none' }}
                 />
-                {card.imageUrl ? (
+                {(localImageUrl || card.imageUrl) ? (
                     <img
                         key={imageKey}
-                        src={`${API_URL}/material-requirements/${card.id}/image?t=${imageKey}`}
+                        src={localImageUrl || `${API_URL}/material-requirements/${card.id}/image?t=${imageKey}`}
                         alt="podgląd"
                         className="absolute inset-0 w-full h-full object-contain p-2"
                     />
