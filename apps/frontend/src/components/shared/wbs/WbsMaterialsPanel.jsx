@@ -422,7 +422,7 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
             </td>
             {/* Przedmiot projektu */}
             <td className="px-3 py-2.5">
-                <span className="text-sm text-gray-400 break-words" title={node.path}>{parent}</span>
+                <span className="text-sm text-white break-words" title={node.path}>{parent}</span>
             </td>
             {/* Nazwa */}
             <td className="px-3 py-2.5">
@@ -431,7 +431,7 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
             </td>
             {/* Wymagania techniczne */}
             <td className="px-3 py-2.5">
-                <span className="text-sm text-gray-300 break-words whitespace-pre-wrap">{card?.technicalSpec || '—'}</span>
+                <span className="text-sm text-white break-words whitespace-pre-wrap">{card?.technicalSpec || '—'}</span>
             </td>
             {/* Ilość */}
             <td className="px-3 py-2.5">
@@ -452,9 +452,9 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
             <td className="px-3 py-2.5">
                 {card ? (
                     <div>
-                        {card.manufacturer && <div className="text-sm text-gray-300 break-words">{card.manufacturer}</div>}
-                        {card.model && <div className="text-xs text-gray-500 break-words">{card.model}</div>}
-                        {!card.manufacturer && !card.model && <span className="text-sm text-gray-600 italic">Brak produktu</span>}
+                        {card.manufacturer && <div className="text-sm text-white break-words">{card.manufacturer}</div>}
+                        {card.model && <div className="text-xs text-gray-400 break-words">{card.model}</div>}
+                        {!card.manufacturer && !card.model && <span className="text-sm text-white italic">Brak produktu</span>}
                     </div>
                 ) : (
                     <button onClick={handleCreateCard} disabled={creating || readOnly}
@@ -464,7 +464,7 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                 )}
             </td>
             {/* Cena */}
-            <td className="px-3 py-2.5 text-sm text-gray-300 whitespace-nowrap">
+            <td className="px-3 py-2.5 text-sm text-white whitespace-nowrap">
                 {card?.priceNetto != null ? `${Number(card.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—'}
             </td>
             {/* Status — edytowalny dropdown */}
@@ -910,21 +910,6 @@ export default function WbsMaterialsPanel({
 
     return (
         <div className="flex flex-col h-full">
-            {/* Nagłówek z licznikami */}
-            <div className="flex items-center gap-3 px-3 py-2 border-b border-white/5 flex-shrink-0">
-                <span className="text-[10px] uppercase tracking-widest text-gray-500 font-semibold">
-                    Pozycje materiałowe z WBS
-                </span>
-                <span className="text-[10px] text-gray-600">
-                    {matNodes.filter(n => cards[n.id]).length}/{matNodes.length} z kartą produktową
-                </span>
-                {sortedFilteredNodes.length !== matNodes.length && (
-                    <span className="text-[10px] text-blue-400">
-                        filtr: {sortedFilteredNodes.length}
-                    </span>
-                )}
-            </div>
-
             {/* Tabela */}
             <div className="flex-1 overflow-auto custom-scrollbar">
                 <table className="table-fixed w-full">
@@ -942,10 +927,10 @@ export default function WbsMaterialsPanel({
                                 <th key={c.key} className="px-3 py-2 text-left bg-gray-950 select-none relative">
                                     <button
                                         onClick={() => toggleSort(c.key)}
-                                        className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-gray-500 font-semibold hover:text-gray-300 transition-colors w-full"
+                                        className="inline-flex items-center gap-1 text-base font-bold uppercase tracking-widest text-white hover:text-gray-200 transition-colors w-full"
                                     >
                                         <span className="truncate">{c.label}</span>
-                                        <span className={sortConfig.key === c.key ? 'text-blue-400 flex-shrink-0' : 'text-gray-700 flex-shrink-0'}>
+                                        <span className={sortConfig.key === c.key ? 'text-blue-400 flex-shrink-0' : 'text-gray-600 flex-shrink-0'}>
                                             {sortConfig.key === c.key ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⬍'}
                                         </span>
                                     </button>
