@@ -159,8 +159,10 @@ export class MaterialRequirementsService {
                     allocMap[a.wbsNodeId] = a.quantity;
                     nodeIds.push(a.wbsNodeId);
                 }
+                const freshQuantity = allocs.reduce((sum: number, a: any) => sum + (a.quantity || 0), 0);
                 return {
                     ...normalizedItem,
+                    quantity: freshQuantity,
                     wbsNodeAllocations: JSON.stringify(allocMap),
                     wbsNodeIds: JSON.stringify(nodeIds),
                     wbsNodeId: nodeIds[0] || null,
