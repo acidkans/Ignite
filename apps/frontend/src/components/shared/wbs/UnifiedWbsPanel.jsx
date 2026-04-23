@@ -314,16 +314,35 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                         if (text) {
                             const reqData = JSON.parse(text);
                             const tree = JSON.parse(reqData.wbsTree || '{}');
-                            // Preserve wbsTree for HybridTable
                             const normalizedTree = Array.isArray(tree.items) ? tree : { items: [] };
+
+                            // Reconcile: remove nodes deleted from wbs_nodes so saveTree() won't re-insert them
+                            const reconcileNodes = (nodes) => (nodes || [])
+                                .filter(n => !n.id || !wbsItemsById.size || wbsItemsById.has(n.id))
+                                .map(n => ({ ...n, children: reconcileNodes(n.children) }));
+                            const countNodes = (nodes) => (nodes || []).reduce((sum, n) => sum + 1 + countNodes(n.children), 0);
+                            const originalCount = countNodes(normalizedTree.items);
+                            const reconciledItems = wbsItemsById.size > 0 ? reconcileNodes(normalizedTree.items) : normalizedTree.items;
+                            const wasStale = countNodes(reconciledItems) < originalCount;
+
                             // Merge relational fields (comment, status, owner) from wbsData into tree nodes
                             const mergeRelational = nodes => nodes.map(n => {
                                 const rel = wbsItemsById.get(n.id);
                                 const merged = rel ? { ...n, comment: rel.comment || n.comment, status: rel.status || n.status, owner: rel.owner || n.owner, unit: rel.unit || n.unit, quantity: rel.quantity ?? n.quantity } : n;
                                 return merged.children?.length ? { ...merged, children: mergeRelational(merged.children) } : merged;
                             });
-                            const mergedTree = { ...normalizedTree, items: mergeRelational(normalizedTree.items || []) };
-                            setWbsTreeAndRef(mergedTree);
+                            const cleanedTree = { ...normalizedTree, items: mergeRelational(reconciledItems) };
+                            setWbsTreeAndRef(cleanedTree);
+
+                            // If stale nodes were removed, immediately persist to prevent re-insertion by saveTree()
+                            if (wasStale) {
+                                fetch(`${API_URL}/order-requirements`, {
+                                    method: 'POST',
+                                    headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ nodeId, versionId, wbsTree: JSON.stringify(cleanedTree) }),
+                                }).catch(e => console.error('[WBS reconcile save]', e));
+                            }
+
                             projectItemNamesById = Object.fromEntries(
                                 (tree.items || [])
                                     .filter(item => !item.type || item.type === 'product')
@@ -1385,16 +1404,6 @@ ${materialsHtml}
     const deleteNodeById = useCallback(async (id) => {
         if (!id || !window.confirm('Usunąć ten węzeł i wszystkie podgałęzie?')) return;
         try {
-            // Zbierz wszystkie ID do usunięcia z lokalnego wbsData (do czyszczenia wbsTree)
-            const collectIds = (rootId) => {
-                const result = [rootId];
-                for (const n of wbsData) {
-                    if (n.parentId === rootId) result.push(...collectIds(n.id));
-                }
-                return result;
-            };
-            const deletedIds = new Set(collectIds(id));
-
             const res = await fetch(`${API_URL}/wbs-nodes/${id}`, { method: 'DELETE', headers: authHeaders() });
             if (!res.ok) {
                 console.error('[WBS delete] Błąd serwera:', res.status, await res.text().catch(() => ''));
@@ -1403,17 +1412,11 @@ ${materialsHtml}
             if (selectedId === id) setSelectedId(null);
             setReqRefreshKey(k => k + 1);
 
-            // Wyczyść wbsTree ze stale nodes żeby nie odnawiały się po refreshu
-            const removeIds = (nodes) => (nodes || [])
-                .filter(n => !deletedIds.has(n.id))
-                .map(n => ({ ...n, children: removeIds(n.children) }));
-            setWbsTreeAndRef(prev => ({ ...prev, items: removeIds(prev.items || []) }));
-            await handleSaveHybridWBS();
-
+            // fetchData() in refreshUnified will reconcile wbsTree and persist immediately
             await refreshUnified();
             await fetchUnassignedRequirements();
         } catch (e) { console.error('Delete node error:', e); }
-    }, [authHeaders, refreshUnified, selectedId, wbsData, fetchUnassignedRequirements, setWbsTreeAndRef, handleSaveHybridWBS]);
+    }, [authHeaders, refreshUnified, selectedId, wbsData, fetchUnassignedRequirements]);
     deleteNodeByIdRef.current = deleteNodeById;
 
     const handleMaterialStatusChange = useCallback(async (reqId, newStatus) => {
