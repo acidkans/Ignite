@@ -169,8 +169,7 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
     const [comboOpen, setComboOpen] = useState(null);
     const [imageKey, setImageKey] = useState(0);
     const [pasteHover, setPasteHover] = useState(false);
-    const pasteZoneRef = useRef(null);
-    const pasteHoverRef = useRef(false);
+    const pasteInputRef = useRef(null);
 
     useEffect(() => {
         setFields({
@@ -204,19 +203,6 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
             }
         }
     }, [card?.id, token, readOnly, onRefresh]);
-
-    useEffect(() => {
-        pasteHoverRef.current = pasteHover;
-    }, [pasteHover]);
-
-    useEffect(() => {
-        const handler = (e) => {
-            if (!pasteHoverRef.current) return;
-            handleImagePaste(e);
-        };
-        window.addEventListener('paste', handler);
-        return () => window.removeEventListener('paste', handler);
-    }, [handleImagePaste]);
 
     const setF = (k, v) => setFields(prev => ({ ...prev, [k]: v }));
 
@@ -368,12 +354,19 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
 
             {/* Prawa kolumna — zdjęcie na całą wysokość */}
             <div
-                ref={pasteZoneRef}
-                onMouseEnter={() => setPasteHover(true)}
+                onMouseEnter={() => { setPasteHover(true); pasteInputRef.current?.focus(); }}
                 onMouseLeave={() => setPasteHover(false)}
                 className={`relative w-44 flex-shrink-0 border-l transition-colors cursor-pointer ${pasteHover ? 'border-blue-500/30 bg-blue-500/5' : 'border-white/5 bg-black/10'}`}
                 title="Najedź i wklej zdjęcie (Ctrl+V)"
             >
+                <input
+                    ref={pasteInputRef}
+                    type="text"
+                    onPaste={(e) => { e.preventDefault(); handleImagePaste(e); }}
+                    onChange={() => {}}
+                    value=""
+                    style={{ position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
+                />
                 {card.imageUrl ? (
                     <img
                         key={imageKey}
