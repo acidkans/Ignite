@@ -348,12 +348,6 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                     {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </button>
             </td>
-            {/* Typ */}
-            <td className="px-3 py-2.5">
-                <span className={`inline-flex items-center gap-1 text-[10px] font-semibold whitespace-nowrap ${meta.color}`}>
-                    <TypeIcon size={11} /> {meta.label}
-                </span>
-            </td>
             {/* Przedmiot projektu */}
             <td className="px-3 py-2.5">
                 <span className="text-[10px] text-gray-400 break-words" title={node.path}>{parent}</span>
@@ -362,6 +356,10 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
             <td className="px-3 py-2.5">
                 <div className="text-sm text-white break-words">{node.name}</div>
                 {node.phase && <div className="text-[10px] text-gray-500 mt-0.5">{node.phase}</div>}
+            </td>
+            {/* Wymagania techniczne */}
+            <td className="px-3 py-2.5">
+                <span className="text-[10px] text-gray-400 break-words whitespace-pre-wrap">{card?.technicalSpec || '—'}</span>
             </td>
             {/* Ilość */}
             <td className="px-3 py-2.5">
@@ -424,13 +422,13 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
 const COL_DEFS = [
-    { key: 'type',    label: 'Typ',               defaultW: 96  },
-    { key: 'parent',  label: 'Przedmiot projektu', defaultW: 144 },
-    { key: 'name',    label: 'Nazwa',              defaultW: 220 },
-    { key: 'qty',     label: 'Ilość',              defaultW: 88  },
-    { key: 'product', label: 'Produkt',            defaultW: 160 },
-    { key: 'price',   label: 'Cena netto',         defaultW: 112 },
-    { key: 'status',  label: 'Status oferty',      defaultW: 148 },
+    { key: 'parent',   label: 'Przedmiot projektu',     defaultW: 144 },
+    { key: 'name',     label: 'Nazwa',                  defaultW: 220 },
+    { key: 'techSpec', label: 'Wymagania techniczne',   defaultW: 200 },
+    { key: 'qty',      label: 'Ilość',                  defaultW: 88  },
+    { key: 'product',  label: 'Produkt',                defaultW: 160 },
+    { key: 'price',    label: 'Cena netto',             defaultW: 112 },
+    { key: 'status',   label: 'Status oferty',          defaultW: 148 },
 ];
 
 export default function WbsMaterialsPanel({
@@ -495,12 +493,12 @@ export default function WbsMaterialsPanel({
                 const c = cards[n.id];
                 const segs = n.path ? n.path.split(' › ') : [];
                 const parent = segs.length >= 2 ? segs[segs.length - 2] : (segs[0] || '');
-                if (key === 'type')    return (TYPE_META[n.type]?.label || n.type || '').toLowerCase().includes(q);
                 if (key === 'parent') return parent.toLowerCase().includes(q);
                 if (key === 'name')   return (n.name || '').toLowerCase().includes(q);
                 if (key === 'qty')    return String(n.quantity ?? '').includes(q);
                 if (key === 'product') return `${c?.manufacturer || ''} ${c?.model || ''}`.toLowerCase().includes(q);
                 if (key === 'price')  return String(c?.priceNetto ?? '').includes(q);
+                if (key === 'techSpec') return (c?.technicalSpec || '').toLowerCase().includes(q);
                 if (key === 'status') return (STATUS_META[c?.status]?.label || c?.status || '').toLowerCase().includes(q);
                 return true;
             });
@@ -511,9 +509,7 @@ export default function WbsMaterialsPanel({
             const ca = cards[a.id];
             const cb = cards[b.id];
             let cmp = 0;
-            if (sortConfig.key === 'type') {
-                cmp = (TYPE_META[a.type]?.label || '').localeCompare(TYPE_META[b.type]?.label || '', 'pl');
-            } else if (sortConfig.key === 'parent') {
+            if (sortConfig.key === 'parent') {
                 const sa = a.path ? a.path.split(' › ') : [];
                 const sb = b.path ? b.path.split(' › ') : [];
                 const pa = sa.length >= 2 ? sa[sa.length - 2] : (sa[0] || '');
@@ -529,6 +525,8 @@ export default function WbsMaterialsPanel({
                 cmp = pa.localeCompare(pb, 'pl');
             } else if (sortConfig.key === 'price') {
                 cmp = (ca?.priceNetto ?? Infinity) - (cb?.priceNetto ?? Infinity);
+            } else if (sortConfig.key === 'techSpec') {
+                cmp = (ca?.technicalSpec || '').localeCompare(cb?.technicalSpec || '', 'pl');
             } else if (sortConfig.key === 'status') {
                 cmp = (STATUS_META[ca?.status]?.label || '').localeCompare(STATUS_META[cb?.status]?.label || '', 'pl');
             }
