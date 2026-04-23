@@ -145,7 +145,7 @@ export default function BudgetTable({
 
                                 <td className={TD}>
                                     <input
-                                        key={`${row.id}-subjectName`}
+                                        key={`${row.id}-subjectName-${row.subjectName ?? ''}`}
                                         defaultValue={row.subjectName || ''}
                                         onBlur={e => { if (e.target.value !== (row.subjectName || '')) onFieldChange(row, 'subjectName', e.target.value); }}
                                         className={INPUT}
@@ -154,7 +154,7 @@ export default function BudgetTable({
 
                                 <td className={TD}>
                                     <input
-                                        key={`${row.id}-name`}
+                                        key={`${row.id}-name-${row.name ?? ''}`}
                                         defaultValue={row.name || ''}
                                         onBlur={e => { if (e.target.value !== (row.name || '')) onFieldChange(row, 'name', e.target.value); }}
                                         className={INPUT}
@@ -174,7 +174,7 @@ export default function BudgetTable({
 
                                 <td className={TD}>
                                     <input
-                                        key={`${row.id}-unitCost`}
+                                        key={`${row.id}-unitCost-${row.unitCost ?? ''}`}
                                         defaultValue={row.unitCost != null && row.unitCost !== 0 ? Number(row.unitCost).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
                                         onChange={e => handleChange(row.id, 'unitCost', e.target.value)}
                                         onBlur={e => {
@@ -188,7 +188,7 @@ export default function BudgetTable({
 
                                 <td className={TD}>
                                     <input
-                                        key={`${row.id}-quantity`}
+                                        key={`${row.id}-quantity-${row.quantity ?? ''}`}
                                         defaultValue={row.quantity != null && row.quantity !== 0 ? Number(row.quantity).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
                                         onChange={e => handleChange(row.id, 'quantity', e.target.value)}
                                         onBlur={e => {
@@ -217,7 +217,7 @@ export default function BudgetTable({
 
                                 <td className={TD}>
                                     <input
-                                        key={`${row.id}-margin`}
+                                        key={`${row.id}-margin-${row.margin ?? ''}`}
                                         defaultValue={row.margin != null && row.margin !== 0 ? String(row.margin).replace('.', ',') : ''}
                                         onChange={e => handleChange(row.id, 'margin', e.target.value)}
                                         onBlur={e => onFieldChange(row, 'margin', e.target.value)}
@@ -227,7 +227,7 @@ export default function BudgetTable({
 
                                 <td className={TD}>
                                     <input
-                                        key={`${row.id}-discount`}
+                                        key={`${row.id}-discount-${row.discount ?? ''}`}
                                         defaultValue={row.discount != null && row.discount !== 0 ? String(row.discount).replace('.', ',') : ''}
                                         onChange={e => handleChange(row.id, 'discount', e.target.value)}
                                         onBlur={e => onFieldChange(row, 'discount', e.target.value)}
