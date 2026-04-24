@@ -281,7 +281,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
     return (
         <div className={`flex flex-col bg-[#020617] relative h-full min-h-0 ${isFullscreen ? 'fixed inset-0 z-[200]' : ''}`}>
             {/* Toolbar */}
-            <div ref={toolbarRef} className={`border-b md:border-b-0 md:border-t border-white/5 bg-slate-900/50 backdrop-blur-2xl z-40 flex-shrink-0 ${isMobile ? 'order-2 px-2 py-2' : 'p-4 flex flex-row gap-3 items-center justify-between'}`}>
+            <div ref={toolbarRef} className={`border-b border-white/5 bg-slate-900/50 backdrop-blur-2xl z-40 flex-shrink-0 ${isMobile ? 'order-1 px-2 py-2' : 'p-4 flex flex-row gap-3 items-center justify-between'}`}>
 
                 {/* Mobile: jeden kompaktowy rząd */}
                 {isMobile ? (
@@ -377,7 +377,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
             </div>
 
             {/* Content Area */}
-            <div className={`flex-1 min-h-0 relative bg-[#020617] ${isMobile ? 'order-1 overflow-hidden' : 'overflow-auto'}`} ref={containerRef}>
+            <div className={`flex-1 min-h-0 relative bg-[#020617] ${isMobile ? 'order-2 overflow-hidden' : 'overflow-auto'}`} ref={containerRef}>
                 {loading && (
                     <div className="absolute inset-x-0 top-0 h-1 bg-blue-500/20 overflow-hidden z-50">
                         <div className="h-full bg-blue-500 w-1/3 animate-progress" />
@@ -518,7 +518,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
             {selectedSchematic && (
                 <div
                     className="fixed right-3 z-[100] flex flex-col gap-2 pointer-events-none"
-                    style={{ bottom: isMobile ? toolbarHeight + 12 : 16 }}
+                    style={{ bottom: 16 }}
                 >
                     <button
                         onClick={() => setIsFullscreen(f => !f)}
