@@ -1008,7 +1008,7 @@ export default function SchematTab({ nodeId }) {
                         {/* Obszar roboczy PDF */}
                         <div
                             className={`flex-1 min-h-0 overflow-auto overscroll-contain p-4 [&_canvas]:touch-none ${activeTool === 'MOVE' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
-                            style={{ touchAction: 'none' }}
+                            style={{ touchAction: 'none', scrollbarGutter: 'stable' }}
                             ref={containerRef}
                             onMouseMove={handleMouseMove}
                             onMouseDown={handlePanStart}
