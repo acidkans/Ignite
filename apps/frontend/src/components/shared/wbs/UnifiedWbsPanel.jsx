@@ -287,13 +287,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                         .filter((n) => n?.id != null && Number.isFinite(Number(n.quantity)))
                         .map((n) => [n.id, Number(n.quantity)])
                 );
-                // Expand top-level and second-level nodes by default
-                const autoExpandIds = (data.items || []).filter(n => n.depth === 0 || n.depth === 1).map(n => n.id);
-                setExpandedIds(prev => {
-                    const next = new Set(prev);
-                    autoExpandIds.forEach(id => next.add(id));
-                    return next;
-                });
+                // Domyślnie wszystkie sekcje zwinięte — użytkownik rozwija ręcznie
             }
 
             const materialsParams = new URLSearchParams();
