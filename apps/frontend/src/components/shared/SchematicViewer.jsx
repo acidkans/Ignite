@@ -32,12 +32,13 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
 
     const [selectedMarker, setSelectedMarker] = useState(null);
     const [isAddingMarker, setIsAddingMarker] = useState(false);
-    const [activeTool, setActiveTool] = useState('POINT'); 
+    const [activeTool, setActiveTool] = useState('POINT');
     const [lineStart, setLineStart] = useState(null);
     const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
     const [scale, setScale] = useState(1.0);
+    const [pan, setPan] = useState({ x: 0, y: 0 });
     const isPanningRef = useRef(false);
-    const panStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
+    const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
     const pinchRef = useRef({ dist: null, scale: 1.0 });
 
     const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
@@ -81,6 +82,10 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
     useEffect(() => {
         if (nodeId || subtaskId) fetchSchematics();
     }, [nodeId, subtaskId]);
+
+    useEffect(() => {
+        setPan({ x: 0, y: 0 });
+    }, [selectedSchematic?.id, pageNumber]);
 
     // Aktualizuj selectedMarker gdy schematics się zmienią (np. po dodaniu załącznika)
     const viewerSyncRef = useRef(null);
@@ -165,15 +170,6 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
     };
 
     const handleMouseMove = (e) => {
-        if (isPanningRef.current && containerRef.current) {
-            const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-            const clientY = e.clientY || (e.touches && e.touches[0].clientY);
-            const dx = clientX - panStartRef.current.x;
-            const dy = clientY - panStartRef.current.y;
-            containerRef.current.scrollLeft = panStartRef.current.scrollLeft - dx;
-            containerRef.current.scrollTop = panStartRef.current.scrollTop - dy;
-            return;
-        }
         if ((!isAddingMarker || activeTool !== 'LINE' || !lineStart) && !pageRef.current) return;
         const rect = pageRef.current?.getBoundingClientRect();
         if (!rect) return;
@@ -196,8 +192,8 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
             panStartRef.current = {
                 x: touch.clientX,
                 y: touch.clientY,
-                scrollLeft: containerRef.current?.scrollLeft || 0,
-                scrollTop: containerRef.current?.scrollTop || 0
+                panX: pan.x,
+                panY: pan.y,
             };
             if (!isAddingMarker) isPanningRef.current = true;
         }
@@ -210,6 +206,13 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
             const newDist = Math.hypot(dx, dy);
             const newScale = Math.min(5.0, Math.max(0.25, pinchRef.current.scale * (newDist / pinchRef.current.dist)));
             setScale(newScale);
+            return;
+        }
+        if (isPanningRef.current && e.touches.length === 1) {
+            const touch = e.touches[0];
+            const dx = touch.clientX - panStartRef.current.x;
+            const dy = touch.clientY - panStartRef.current.y;
+            setPan({ x: panStartRef.current.panX + dx, y: panStartRef.current.panY + dy });
             return;
         }
         handleMouseMove(e);
@@ -374,7 +377,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
             </div>
 
             {/* Content Area */}
-            <div className={`flex-1 min-h-0 relative overflow-auto bg-[#020617] ${isMobile ? 'order-1' : ''}`} ref={containerRef}>
+            <div className={`flex-1 min-h-0 relative bg-[#020617] ${isMobile ? 'order-1 overflow-hidden' : 'overflow-auto'}`} ref={containerRef}>
                 {loading && (
                     <div className="absolute inset-x-0 top-0 h-1 bg-blue-500/20 overflow-hidden z-50">
                         <div className="h-full bg-blue-500 w-1/3 animate-progress" />
@@ -384,7 +387,16 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                 {selectedSchematic ? (
                     <div
                         className={`relative shadow-2xl ring-1 ring-white/5 bg-gray-900 overflow-hidden flex-shrink-0 ${isAddingMarker ? 'cursor-crosshair ring-4 ring-orange-500/30' : ''}`}
-                        style={{ width: containerWidth * scale, minWidth: containerWidth * scale, touchAction: 'none' }}
+                        style={{
+                            width: containerWidth * scale,
+                            minWidth: containerWidth * scale,
+                            touchAction: 'none',
+                            ...(isMobile ? {
+                                transform: `translate(${pan.x}px, ${pan.y}px)`,
+                                transformOrigin: '0 0',
+                                willChange: 'transform',
+                            } : {}),
+                        }}
                         onClick={handlePageClick}
                         onMouseMove={handleMouseMove}
                         onTouchStart={handleTouchStart}
@@ -516,7 +528,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                         {isFullscreen ? <Minimize2 size={18}/> : <Maximize size={18}/>}
                     </button>
                     <button
-                        onClick={() => setScale(1.0)}
+                        onClick={() => { setScale(1.0); setPan({ x: 0, y: 0 }); }}
                         className="pointer-events-auto w-8 h-8 flex items-center justify-center rounded-lg bg-black/25 border border-violet-500 text-violet-400 active:scale-95 transition-transform"
                         title="Dopasuj (100%)"
                     >
