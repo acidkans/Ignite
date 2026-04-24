@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import ExcelJS from 'exceljs';
 import {
     ChevronRight, ChevronDown, Package, Wrench,
     CheckCircle, Clock, XCircle, Star, Trash2, AlertCircle,
@@ -817,13 +818,38 @@ export default function WbsMaterialsPanel({
 
     // ─ Export ────────────────────────────────────────────────────────────────
 
-    const exportToExcel = useCallback(() => {
+    const exportToExcel = useCallback(async () => {
         const STATUS_LABELS_XLS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
         const TYPE_LABELS_XLS = { material: 'Materiał', equipment: 'Sprzęt' };
-        const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
-        const headers = ['Typ','Przedmiot projektu','Pełna ścieżka WBS','Pozycja przedmiotu','Ilość','Jednostka','Producent','Model','Nazwa handlowa','Cena netto','Status','Wymagania techniczne','Dostępność','Prop. producent','Prop. model','Prop. nazwa handlowa','Prop. cena','Prop. wybrana'];
-        const rows = [headers.map(esc).join(';')];
+        const workbook = new ExcelJS.Workbook();
+        const detailsSheet = workbook.addWorksheet('Materiały');
+        const aggregateSheet = workbook.addWorksheet('Zamówienie (agregacja)');
+
+        // ── Sheet 1: pełna lista (jak wcześniej) ─────────────────────────────
+        detailsSheet.columns = [
+            { header: 'Typ', key: 'type', width: 12 },
+            { header: 'Przedmiot projektu', key: 'parent', width: 24 },
+            { header: 'Pełna ścieżka WBS', key: 'path', width: 40 },
+            { header: 'Pozycja przedmiotu', key: 'name', width: 28 },
+            { header: 'Ilość', key: 'qty', width: 8 },
+            { header: 'Jednostka', key: 'unit', width: 10 },
+            { header: 'Producent', key: 'manufacturer', width: 18 },
+            { header: 'Model', key: 'model', width: 18 },
+            { header: 'Nazwa handlowa', key: 'productName', width: 22 },
+            { header: 'Cena netto', key: 'price', width: 12 },
+            { header: 'Status', key: 'status', width: 14 },
+            { header: 'Wymagania techniczne', key: 'tech', width: 40 },
+            { header: 'Dostępność', key: 'availability', width: 14 },
+            { header: 'Prop. producent', key: 'pManufacturer', width: 18 },
+            { header: 'Prop. model', key: 'pModel', width: 18 },
+            { header: 'Prop. nazwa handlowa', key: 'pProductName', width: 22 },
+            { header: 'Prop. cena', key: 'pPrice', width: 12 },
+            { header: 'Prop. wybrana', key: 'pSelected', width: 12 },
+        ];
+        const detHeader = detailsSheet.getRow(1);
+        detHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        detHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
 
         for (const node of matNodes) {
             const card = cards[node.id] || null;
@@ -832,43 +858,153 @@ export default function WbsMaterialsPanel({
             const selectedProposal = (card?.proposals || []).find(p => p.isSelected);
             const allProposals = card?.proposals || [];
 
-            const mainCols = [
-                TYPE_LABELS_XLS[node.type] || node.type,
+            detailsSheet.addRow({
+                type: TYPE_LABELS_XLS[node.type] || node.type,
                 parent,
-                node.path || '',
-                node.name || '',
-                node.quantity ?? 1,
-                node.unit || 'szt',
-                card?.manufacturer || '',
-                card?.model || '',
-                card?.productName || '',
-                card?.priceNetto != null ? Number(card.priceNetto).toFixed(2) : '',
-                STATUS_LABELS_XLS[card?.status] || (card ? (card.status || '') : ''),
-                card?.technicalSpec || '',
-                card?.availability || '',
-                selectedProposal?.manufacturer || '',
-                selectedProposal?.model || '',
-                selectedProposal?.productName || '',
-                selectedProposal?.priceNetto != null ? Number(selectedProposal.priceNetto).toFixed(2) : '',
-                selectedProposal ? 'TAK' : '',
-            ];
-            rows.push(mainCols.map(esc).join(';'));
+                path: node.path || '',
+                name: node.name || '',
+                qty: Number(node.quantity ?? 1),
+                unit: node.unit || 'szt',
+                manufacturer: card?.manufacturer || '',
+                model: card?.model || '',
+                productName: card?.productName || '',
+                price: card?.priceNetto != null ? Number(card.priceNetto) : null,
+                status: STATUS_LABELS_XLS[card?.status] || (card ? (card.status || '') : ''),
+                tech: card?.technicalSpec || '',
+                availability: card?.availability || '',
+                pManufacturer: selectedProposal?.manufacturer || '',
+                pModel: selectedProposal?.model || '',
+                pProductName: selectedProposal?.productName || '',
+                pPrice: selectedProposal?.priceNetto != null ? Number(selectedProposal.priceNetto) : null,
+                pSelected: selectedProposal ? 'TAK' : '',
+            });
 
             for (const p of allProposals.filter(pp => !pp.isSelected)) {
-                const emptyCols = new Array(13).fill('');
-                const pCols = [...emptyCols, p.manufacturer || '', p.model || '', p.productName || '', p.priceNetto != null ? Number(p.priceNetto).toFixed(2) : '', 'NIE'];
-                rows.push(pCols.map(esc).join(';'));
+                detailsSheet.addRow({
+                    pManufacturer: p.manufacturer || '',
+                    pModel: p.model || '',
+                    pProductName: p.productName || '',
+                    pPrice: p.priceNetto != null ? Number(p.priceNetto) : null,
+                    pSelected: 'NIE',
+                });
+            }
+        }
+        detailsSheet.getColumn('price').numFmt = '#,##0.00';
+        detailsSheet.getColumn('pPrice').numFmt = '#,##0.00';
+        detailsSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+        // ── Sheet 2: agregacja po nazwie + wymaganiach (dla logistyka) ───────
+        const agg = new Map();
+        for (const node of matNodes) {
+            const card = cards[node.id] || null;
+            const name = (node.name || '').trim();
+            const tech = (card?.technicalSpec || '').trim();
+            const unit = (node.unit || 'szt').trim();
+            const type = TYPE_LABELS_XLS[node.type] || node.type || '';
+            if (!name && !tech) continue;
+            const key = `${type}||${name.toLowerCase()}||${tech.toLowerCase()}||${unit.toLowerCase()}`;
+            const qty = Number(node.quantity) || 0;
+            const status = STATUS_LABELS_XLS[card?.status] || '';
+            const selectedProposal = (card?.proposals || []).find(p => p.isSelected);
+            const chosen = selectedProposal || card || null;
+            const product = [chosen?.manufacturer, chosen?.model].filter(Boolean).join(' / ');
+            const price = chosen?.priceNetto != null ? Number(chosen.priceNetto) : null;
+
+            if (!agg.has(key)) {
+                agg.set(key, {
+                    type,
+                    name,
+                    tech,
+                    unit,
+                    qty: 0,
+                    positions: 0,
+                    paths: [],
+                    statuses: new Set(),
+                    products: new Set(),
+                    priceSum: 0,
+                    priceCount: 0,
+                });
+            }
+            const row = agg.get(key);
+            row.qty += qty;
+            row.positions += 1;
+            if (node.path) row.paths.push(node.path);
+            if (status) row.statuses.add(status);
+            if (product) row.products.add(product);
+            if (price != null && Number.isFinite(price)) {
+                row.priceSum += price * qty;
+                row.priceCount += qty;
             }
         }
 
-        const csv = '\uFEFF' + rows.join('\r\n');
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        aggregateSheet.columns = [
+            { header: 'Lp.', key: 'idx', width: 5 },
+            { header: 'Typ', key: 'type', width: 12 },
+            { header: 'Nazwa', key: 'name', width: 32 },
+            { header: 'Wymagania techniczne', key: 'tech', width: 48 },
+            { header: 'Łączna ilość', key: 'qty', width: 14 },
+            { header: 'Jednostka', key: 'unit', width: 10 },
+            { header: 'Liczba pozycji WBS', key: 'positions', width: 14 },
+            { header: 'Proponowany produkt', key: 'product', width: 28 },
+            { header: 'Średnia cena netto', key: 'price', width: 16 },
+            { header: 'Szac. wartość netto', key: 'value', width: 16 },
+            { header: 'Statusy', key: 'statuses', width: 28 },
+            { header: 'Ścieżki WBS', key: 'paths', width: 60 },
+        ];
+        const aggHeader = aggregateSheet.getRow(1);
+        aggHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        aggHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
+
+        const aggRows = [...agg.values()].sort((a, b) => {
+            if (a.type !== b.type) return a.type.localeCompare(b.type, 'pl');
+            return a.name.localeCompare(b.name, 'pl');
+        });
+
+        aggRows.forEach((row, i) => {
+            const avgPrice = row.priceCount > 0 ? row.priceSum / row.priceCount : null;
+            const value = avgPrice != null ? avgPrice * row.qty : null;
+            const added = aggregateSheet.addRow({
+                idx: i + 1,
+                type: row.type,
+                name: row.name,
+                tech: row.tech,
+                qty: row.qty,
+                unit: row.unit,
+                positions: row.positions,
+                product: [...row.products].join('; '),
+                price: avgPrice,
+                value,
+                statuses: [...row.statuses].join(', '),
+                paths: row.paths.join(' | '),
+            });
+            added.alignment = { vertical: 'top', wrapText: true };
+        });
+
+        if (aggRows.length > 0) {
+            const totalRowNum = aggRows.length + 2;
+            const totalsRow = aggregateSheet.addRow({
+                name: 'Razem',
+                qty: { formula: `=SUM(E2:E${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + r.qty, 0) },
+                positions: { formula: `=SUM(G2:G${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + r.positions, 0) },
+                value: { formula: `=SUM(J2:J${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + (r.priceCount > 0 ? (r.priceSum / r.priceCount) * r.qty : 0), 0) },
+            });
+            totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
+        }
+
+        aggregateSheet.getColumn('qty').numFmt = '#,##0.##';
+        aggregateSheet.getColumn('price').numFmt = '#,##0.00';
+        aggregateSheet.getColumn('value').numFmt = '#,##0.00';
+        aggregateSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         const safeOrder = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'zamowienie';
-        a.href = url; a.download = `${safeOrder}_materialy.csv`; a.click();
+        a.href = url; a.download = `${safeOrder}_materialy.xlsx`; a.click();
         URL.revokeObjectURL(url);
-    }, [matNodes, cards]);
+    }, [matNodes, cards, orderName, projectName]);
 
     const exportToPdf = useCallback(() => {
         const STATUS_LABELS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
