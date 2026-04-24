@@ -276,9 +276,9 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
     const isImageFile = (fileName) => /\.(jpg|jpeg|png|webp)$/i.test(fileName || '');
 
     return (
-        <div className={`flex flex-col bg-[#020617] relative ${isFullscreen ? 'fixed inset-0 z-[200]' : 'min-h-[70vh] md:h-full md:min-h-0'}`}>
+        <div className={`flex flex-col bg-[#020617] relative h-full min-h-0 ${isFullscreen ? 'fixed inset-0 z-[200]' : ''}`}>
             {/* Toolbar */}
-            <div ref={toolbarRef} className={`border-b md:border-b-0 md:border-t border-white/5 bg-slate-900/50 backdrop-blur-2xl z-40 ${isMobile ? 'order-2 px-2 py-2' : 'p-4 flex flex-row gap-3 items-center justify-between'}`}>
+            <div ref={toolbarRef} className={`border-b md:border-b-0 md:border-t border-white/5 bg-slate-900/50 backdrop-blur-2xl z-40 flex-shrink-0 ${isMobile ? 'order-2 px-2 py-2' : 'p-4 flex flex-row gap-3 items-center justify-between'}`}>
 
                 {/* Mobile: jeden kompaktowy rząd */}
                 {isMobile ? (
