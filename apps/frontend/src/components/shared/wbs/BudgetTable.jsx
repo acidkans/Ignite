@@ -2,10 +2,11 @@ import { useState, useEffect, useMemo } from 'react';
 import { Trash2 } from 'lucide-react';
 import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, TYPE_OPTIONS, TYPE_LABELS, UNIT_OPTIONS, parseLocaleNumber } from './wbsConstants';
 
-const TH = 'text-left px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white whitespace-nowrap select-none';
+const TH = 'text-left px-3 py-2.5 text-lg font-bold uppercase tracking-widest text-white whitespace-nowrap select-none';
 const TD = 'px-2 py-1.5 align-middle';
-const INPUT = 'bg-transparent text-white text-xs w-full outline-none focus:bg-white/5 rounded px-1 py-0.5 min-w-0';
-const SELECT = 'bg-[#0b0f17] text-white text-xs w-full outline-none rounded px-1 py-0.5 cursor-pointer border border-white/5 hover:border-white/10 focus:border-blue-500/40 transition-colors';
+const INPUT = 'bg-transparent text-white text-sm w-full outline-none focus:bg-white/5 rounded px-1 py-0.5 min-w-0';
+const SELECT = 'bg-[#0b0f17] text-white text-sm w-full outline-none rounded px-1 py-0.5 cursor-pointer border border-white/5 hover:border-white/10 focus:border-blue-500/40 transition-colors';
+const FILTER = 'w-full bg-black/30 border border-white/10 rounded px-2 py-0.5 text-xs text-white placeholder-gray-700 outline-none focus:border-blue-500/40';
 
 function calcDerived(r) {
     const q = Math.max(0, parseLocaleNumber(String(r.quantity ?? '')) ?? 1);
@@ -30,6 +31,7 @@ export default function BudgetTable({
 }) {
     const [localRows, setLocalRows] = useState(() => rows.map(calcDerived));
     const [syncVersion, setSyncVersion] = useState(0);
+    const [colFilters, setColFilters] = useState({});
 
     // Sync from parent when row IDs change (project switch / server push)
     useEffect(() => {
@@ -43,6 +45,29 @@ export default function BudgetTable({
             return calcDerived({ ...r, [field]: rawValue });
         }));
     };
+
+    const displayedRows = useMemo(() => {
+        const keys = Object.keys(colFilters).filter(k => String(colFilters[k] ?? '').trim() !== '');
+        if (keys.length === 0) return localRows;
+        const match = (val, q) => String(val ?? '').toLowerCase().includes(q);
+        return localRows.filter(r => keys.every(k => {
+            const q = String(colFilters[k]).toLowerCase().trim();
+            switch (k) {
+                case 'subjectName': return match(r.subjectName, q);
+                case 'name':        return match(r.name, q);
+                case 'type':        return match(TYPE_LABELS[r.type] || r.type, q);
+                case 'unitCost':    return match(r.unitCost, q);
+                case 'quantity':    return match(r.quantity, q);
+                case 'unit':        return match(r.unit, q);
+                case 'totalCost':   return match(r.totalCost, q);
+                case 'margin':      return match(r.margin, q);
+                case 'discount':    return match(r.discount, q);
+                case 'offerPrice':  return match(r.offerPrice, q);
+                case 'comment':     return match(r.comment, q);
+                default: return true;
+            }
+        }));
+    }, [localRows, colFilters]);
 
     const summary = useMemo(() => {
         let totalCost = 0, rawRevenue = 0;
@@ -121,10 +146,10 @@ export default function BudgetTable({
             </div>
 
             {/* Tabela */}
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-auto bg-slate-800/30">
                 <table className="w-full text-sm border-collapse">
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
-                        <tr className="border-b border-white/10">
+                        <tr className="border-b border-white/15">
                             <th className={`${TH} w-8 text-center`}>#</th>
                             <th className={`${TH} min-w-[100px]`}>Przedmiot</th>
                             <th className={`${TH} min-w-[150px]`}>Nazwa</th>
@@ -133,16 +158,31 @@ export default function BudgetTable({
                             <th className={`${TH} w-20 text-center`}>Ilość</th>
                             <th className={`${TH} w-24 text-center`}>Jednostki</th>
                             <th className={`${TH} w-28 text-center`}>Koszt całk.</th>
-                            <th className={`${TH} w-20 text-center`}>Marża %</th>
+                            <th className={`${TH} w-20 text-center`}>Narzut %</th>
                             <th className={`${TH} w-20 text-center`}>Rabat %</th>
                             <th className={`${TH} w-28 text-center`}>Cena ofert.</th>
                             <th className={`${TH} min-w-[180px]`}>Komentarz</th>
                             <th className="w-8" />
                         </tr>
+                        {/* Filter row — jak w materials */}
+                        <tr className="border-b border-white/10 bg-[#0b0f17]">
+                            <th />
+                            {['subjectName','name','type','unitCost','quantity','unit','totalCost','margin','discount','offerPrice','comment'].map(k => (
+                                <th key={k} className="px-2 py-1">
+                                    <input
+                                        value={colFilters[k] || ''}
+                                        onChange={e => setColFilters(p => ({ ...p, [k]: e.target.value }))}
+                                        placeholder="filtruj..."
+                                        className={FILTER}
+                                    />
+                                </th>
+                            ))}
+                            <th />
+                        </tr>
                     </thead>
                     <tbody>
-                        {localRows.map((row, idx) => (
-                            <tr key={row.id} className="border-b border-white/5 group hover:bg-white/[0.02] transition-colors">
+                        {displayedRows.map((row, idx) => (
+                            <tr key={row.id} className="border-b border-white/10 group hover:bg-white/[0.03] transition-colors">
                                 <td className={`${TD} text-center text-sm text-white tabular-nums`}>{idx + 1}</td>
 
                                 <td className={TD}>
@@ -184,7 +224,7 @@ export default function BudgetTable({
                                             if (n != null) e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                             onFieldChange(row, 'unitCost', e.target.value);
                                         }}
-                                        className={`${INPUT} text-center tabular-nums ${row.inheritedFromMaterials ? 'text-amber-300' : ''}`}
+                                        className={`${INPUT} text-center tabular-nums font-mono ${row.inheritedFromMaterials ? 'text-amber-300' : 'text-red-400'}`}
                                     />
                                 </td>
 
@@ -213,8 +253,8 @@ export default function BudgetTable({
                                     </select>
                                 </td>
 
-                                <td className={`${TD} text-center text-xs tabular-nums font-mono rounded bg-white/[0.03] ${row.totalCost > 0 ? 'text-gray-200' : 'text-gray-600'}`}>
-                                    {row.totalCost > 0 ? fmtPLN(row.totalCost) : '—'}
+                                <td className={`${TD} text-center text-sm tabular-nums font-mono rounded bg-white/[0.03] ${row.totalCost > 0 ? 'text-red-400' : 'text-gray-600'}`}>
+                                    {row.totalCost > 0 ? `${fmtPLN(row.totalCost)} zł` : '—'}
                                 </td>
 
                                 <td className={TD}>
@@ -237,8 +277,8 @@ export default function BudgetTable({
                                     />
                                 </td>
 
-                                <td className={`${TD} text-center text-xs tabular-nums font-mono font-semibold rounded bg-white/[0.03] ${row.offerPrice > 0 ? 'text-green-300' : 'text-gray-600'}`}>
-                                    {row.offerPrice > 0 ? fmtPLN(row.offerPrice) : '—'}
+                                <td className={`${TD} text-center text-sm tabular-nums font-mono font-semibold rounded bg-white/[0.03] ${row.offerPrice > 0 ? 'text-green-400' : 'text-gray-600'}`}>
+                                    {row.offerPrice > 0 ? `${fmtPLN(row.offerPrice)} zł` : '—'}
                                 </td>
 
                                 <td className={TD}>
@@ -261,10 +301,10 @@ export default function BudgetTable({
                                 </td>
                             </tr>
                         ))}
-                        {localRows.length === 0 && (
+                        {displayedRows.length === 0 && (
                             <tr>
-                                <td colSpan={13} className="text-center py-10 text-gray-600 text-xs">
-                                    Brak pozycji budżetowych
+                                <td colSpan={13} className="text-center py-10 text-gray-600 text-sm">
+                                    {localRows.length === 0 ? 'Brak pozycji budżetowych' : 'Brak pozycji dla filtrów'}
                                 </td>
                             </tr>
                         )}
