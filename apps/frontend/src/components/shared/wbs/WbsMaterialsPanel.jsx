@@ -96,7 +96,7 @@ function ProposalsSection({ req, token, onRefresh }) {
     return (
         <div className="flex flex-col gap-2 mt-2">
             <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase tracking-widest text-gray-500 font-semibold">Propozycje produktów</span>
+                <span className="text-[10px] italic uppercase tracking-widest text-white font-semibold">Propozycje produktów</span>
                 <button onClick={searchAI} disabled={searching}
                     className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-colors disabled:opacity-40">
                     <Sparkles size={10} /> {searching ? 'Szukam...' : 'Szukaj AI'}
@@ -297,7 +297,7 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
                         const suggestions = getFilteredSuggestions(key);
                         return (
                             <div key={key} className="relative flex-1 min-w-[120px]">
-                                <label className="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">{label}</label>
+                                <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">{label}</label>
                                 <input
                                     value={fields[key]}
                                     onChange={e => setF(key, e.target.value)}
@@ -326,7 +326,7 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
                 {/* Dane ofertowe + URL */}
                 <div className="flex flex-wrap gap-2">
                     <div className="flex-1 min-w-[90px]">
-                        <label className="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Cena netto</label>
+                        <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Cena netto</label>
                         <input value={fields.priceNetto} onChange={e => setF('priceNetto', e.target.value)}
                             onBlur={() => { const v = parseFloat(String(fields.priceNetto).replace(',', '.')); if (!isNaN(v)) patchCard({ priceNetto: v }); }}
                             disabled={readOnly}
@@ -334,7 +334,7 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
                             placeholder="0.00" />
                     </div>
                     <div className="flex-1 min-w-[90px]">
-                        <label className="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Dostępność</label>
+                        <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Dostępność</label>
                         <input value={fields.availability} onChange={e => setF('availability', e.target.value)}
                             onBlur={() => patchCard({ availability: fields.availability })}
                             disabled={readOnly}
@@ -342,7 +342,7 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
                             placeholder="np. 7 dni" />
                     </div>
                     <div className="flex-1 min-w-[140px]">
-                        <label className="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Adres www</label>
+                        <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Adres www</label>
                         <div className="flex items-center gap-1">
                             <input
                                 value={fields.productUrl}
@@ -364,7 +364,7 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
 
                 {/* Wymagania techniczne */}
                 <div className="flex-1">
-                    <label className="block text-[10px] uppercase tracking-widest text-gray-500 mb-1">Wymagania techniczne</label>
+                    <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Wymagania techniczne</label>
                     <textarea value={fields.technicalSpec} onChange={e => setF('technicalSpec', e.target.value)}
                         onBlur={() => patchCard({ technicalSpec: fields.technicalSpec })}
                         disabled={readOnly} rows={3}
@@ -491,7 +491,7 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                 )}
             </td>
             {/* Cena */}
-            <td className="px-3 py-2.5 text-sm text-white whitespace-nowrap">
+            <td className="px-3 py-2.5 text-sm text-green-400 font-mono whitespace-nowrap">
                 {card?.priceNetto != null ? `${Number(card.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—'}
             </td>
             {/* Status — edytowalny dropdown */}
@@ -892,6 +892,10 @@ export default function WbsMaterialsPanel({
         detailsSheet.getColumn('price').numFmt = '#,##0.00';
         detailsSheet.getColumn('pPrice').numFmt = '#,##0.00';
         detailsSheet.views = [{ state: 'frozen', ySplit: 1 }];
+        detailsSheet.autoFilter = {
+            from: { row: 1, column: 1 },
+            to: { row: detailsSheet.rowCount, column: detailsSheet.columnCount },
+        };
 
         // ── Sheet 2: agregacja po nazwie + wymaganiach (dla logistyka) ───────
         const agg = new Map();
@@ -996,6 +1000,12 @@ export default function WbsMaterialsPanel({
         aggregateSheet.getColumn('price').numFmt = '#,##0.00';
         aggregateSheet.getColumn('value').numFmt = '#,##0.00';
         aggregateSheet.views = [{ state: 'frozen', ySplit: 1 }];
+        if (aggRows.length > 0) {
+            aggregateSheet.autoFilter = {
+                from: { row: 1, column: 1 },
+                to: { row: aggRows.length + 1, column: aggregateSheet.columnCount },
+            };
+        }
 
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -1077,7 +1087,7 @@ export default function WbsMaterialsPanel({
     );
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full bg-slate-800/30">
             {/* Tabela */}
             <div className="flex-1 overflow-auto custom-scrollbar">
                 <table className="table-fixed w-full">

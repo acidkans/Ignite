@@ -67,7 +67,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const [wbsData, setWbsData] = useState([]);
     const wbsDataRef = useRef(wbsData);
     wbsDataRef.current = wbsData;
-    const [expandedSection, setExpandedSection] = useState('wbs-hybrid');
+    const [expandedSection, setExpandedSection] = useState(null);
     const [fullscreenSection, setFullscreenSection] = useState(null);
     const [expandedIds, setExpandedIds] = useState(new Set());
     const [selectedId, setSelectedId] = useState(null);
