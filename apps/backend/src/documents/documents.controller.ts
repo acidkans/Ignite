@@ -80,6 +80,11 @@ export class DocumentsController {
         return this.documentsService.approveParsedPositions(id, positions);
     }
 
+    @Patch(':id')
+    async renameDocument(@Param('id') id: string, @Body('fileName') fileName: string) {
+        return this.documentsService.renameDocument(id, fileName);
+    }
+
     @Delete(':id')
     async deleteDocument(@Param('id') id: string) {
         if (id === 'reset') {

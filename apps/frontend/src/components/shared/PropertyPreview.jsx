@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Trash2, Upload, MapPin, Hash, User, FileText, Eye, Clock, Activity, Image, Film, FileCode } from 'lucide-react';
+import { Trash2, Upload, MapPin, Hash, User, FileText, Eye, Clock, Activity, Image, Film, FileCode, ChevronDown, Pencil } from 'lucide-react';
 import { API_URL } from '../../config';
 import DocumentViewer from './DocumentViewer';
 
@@ -11,6 +11,10 @@ export default function PropertyPreview({ nodeId, searchQuery = '', isFinancialT
     const [dragActive, setDragActive] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [selectedFile, setSelectedFile] = useState(null);
+    const [showFileDropdown, setShowFileDropdown] = useState(true);
+    const [renamingId, setRenamingId] = useState(null);
+    const [renameValue, setRenameValue] = useState('');
+    const [renameSaving, setRenameSaving] = useState(false);
     const fileInputRef = useRef(null);
     const [listWidth, setListWidth] = useState(() => parseInt(localStorage.getItem('fileListWidth') || '176', 10));
     const dragging = useRef(false);
@@ -29,6 +33,47 @@ export default function PropertyPreview({ nodeId, searchQuery = '', isFinancialT
         window.addEventListener('mouseup', onUp);
         return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
     }, []);
+
+    const startRename = (file) => {
+        setRenamingId(file.id);
+        setRenameValue(file.fileName || '');
+    };
+
+    const cancelRename = () => {
+        setRenamingId(null);
+        setRenameValue('');
+    };
+
+    const commitRename = async () => {
+        if (!renamingId) return;
+        const newName = String(renameValue || '').trim();
+        const current = files.find(f => f.id === renamingId);
+        if (!newName || !current || newName === current.fileName) {
+            cancelRename();
+            return;
+        }
+        setRenameSaving(true);
+        try {
+            const token = sessionStorage.getItem('token');
+            const res = await fetch(`${API_URL}/documents/${renamingId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ fileName: newName }),
+            });
+            if (res.ok) {
+                setFiles(prev => prev.map(f => f.id === renamingId ? { ...f, fileName: newName } : f));
+                if (selectedFile?.id === renamingId) setSelectedFile(prev => prev ? { ...prev, fileName: newName } : prev);
+                cancelRename();
+            } else {
+                alert('Nie udało się zmienić nazwy pliku');
+            }
+        } catch (err) {
+            console.error('Error renaming file:', err);
+            alert('Błąd podczas zmiany nazwy pliku');
+        } finally {
+            setRenameSaving(false);
+        }
+    };
 
     const handleDeleteFile = async (fileId, fileName) => {
         if (!confirm(`Czy na pewno usunąć plik "${fileName}"?`)) return;
@@ -215,17 +260,31 @@ export default function PropertyPreview({ nodeId, searchQuery = '', isFinancialT
                 className="flex flex-col gap-3 min-h-0 overflow-hidden shrink-0"
                 style={{ width: isDatasheetTab ? listWidth : undefined, ...(isDatasheetTab ? {} : { minWidth: 220, maxWidth: 260, flex: '0 0 25%' }) }}
             >
-                <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                        <FileText size={16} className={isFinancialTab ? 'text-amber-400' : 'text-blue-400'} />
-                        {isFinancialTab ? 'Pliki finansowe' : 'Dokumentacja i pliki'}
-                    </h3>
-                    <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded-full border border-blue-500/20">
-                        {files.length} PLIKÓW
+                {/* Dropdown header — jak w Schemat */}
+                <button
+                    type="button"
+                    onClick={() => setShowFileDropdown(v => !v)}
+                    className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                        showFileDropdown ? 'bg-white/10 border-white/20 text-white' : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white'
+                    }`}
+                    title="Pokaż/ukryj listę plików"
+                >
+                    <span className="flex items-center gap-2 min-w-0">
+                        <FileText size={13} className={isFinancialTab ? 'text-amber-400 shrink-0' : 'text-blue-400 shrink-0'} />
+                        <span className="truncate">
+                            {selectedFile ? selectedFile.fileName : (isFinancialTab ? 'Pliki finansowe' : 'Wybierz dokument')}
+                        </span>
                     </span>
-                </div>
+                    <span className="flex items-center gap-2 shrink-0">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded-full border border-blue-500/20">
+                            {files.length}
+                        </span>
+                        <ChevronDown size={12} className={`transition-transform ${showFileDropdown ? 'rotate-180' : ''}`} />
+                    </span>
+                </button>
 
-                {/* File List */}
+                {/* File List (pod dropdown) */}
+                {showFileDropdown && (
                 <div className="flex-1 bg-black/20 rounded-xl border border-white/5 overflow-hidden flex flex-col min-h-0">
                     <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
                         {filteredFiles.length === 0 ? (
@@ -239,10 +298,11 @@ export default function PropertyPreview({ nodeId, searchQuery = '', isFinancialT
                                 const isVid = file.mimeType?.startsWith('video/') || /\.(mp4|webm|ogg)$/i.test(file.fileName);
                                 const isCode = file.mimeType === 'text/plain' || /\.(txt|json|js|ts|jsx|tsx|html|css|md|log)$/i.test(file.fileName);
                                 const FileIcon = isImg ? Image : isVid ? Film : isCode ? FileCode : FileText;
+                                const isRenaming = renamingId === file.id;
                                 return (
                                     <div
                                         key={file.id}
-                                        onClick={() => setSelectedFile(file)}
+                                        onClick={() => { if (!isRenaming) setSelectedFile(file); }}
                                         className={`flex items-start gap-2 p-2.5 rounded-lg border transition-all cursor-pointer group
                                             ${selectedFile?.id === file.id
                                                 ? 'bg-blue-500/10 border-blue-500/30 text-white'
@@ -250,7 +310,29 @@ export default function PropertyPreview({ nodeId, searchQuery = '', isFinancialT
                                             }`}
                                     >
                                         <div className="flex-1 min-w-0">
-                                            <div className="break-words text-[11px] font-bold tracking-tight uppercase">{file.fileName}</div>
+                                            {isRenaming ? (
+                                                <input
+                                                    autoFocus
+                                                    value={renameValue}
+                                                    disabled={renameSaving}
+                                                    onChange={(e) => setRenameValue(e.target.value)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+                                                        else if (e.key === 'Escape') { e.preventDefault(); cancelRename(); }
+                                                    }}
+                                                    onBlur={commitRename}
+                                                    className="w-full bg-black/40 border border-blue-500/40 rounded px-2 py-1 text-[11px] text-white outline-none focus:border-blue-400"
+                                                />
+                                            ) : (
+                                                <div
+                                                    onDoubleClick={(e) => { e.stopPropagation(); startRename(file); }}
+                                                    className="break-words text-[11px] font-bold tracking-tight uppercase select-none"
+                                                    title="Dwuklik aby zmienić nazwę"
+                                                >
+                                                    {file.fileName}
+                                                </div>
+                                            )}
                                             <div className="flex items-center gap-2 mt-0.5 opacity-60">
                                                 <Clock size={10} />
                                                 <span className="text-[9px]">{new Date(file.uploadedAt).toLocaleDateString()}</span>
@@ -263,18 +345,29 @@ export default function PropertyPreview({ nodeId, searchQuery = '', isFinancialT
                                                 </div>
                                             )}
                                         </div>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); handleDeleteFile(file.id, file.fileName); }}
-                                            className="p-1.5 opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all"
-                                        >
-                                            <Trash2 size={12} />
-                                        </button>
+                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); startRename(file); }}
+                                                className="p-1.5 hover:text-blue-400"
+                                                title="Zmień nazwę"
+                                            >
+                                                <Pencil size={12} />
+                                            </button>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleDeleteFile(file.id, file.fileName); }}
+                                                className="p-1.5 hover:text-red-400"
+                                                title="Usuń"
+                                            >
+                                                <Trash2 size={12} />
+                                            </button>
+                                        </div>
                                     </div>
                                 );
                             })
                         )}
                     </div>
                 </div>
+                )}
 
                 {/* AI Activity Log — ukryty w trybie datasheet */}
                 {!isDatasheetTab && <div className="shrink-0 bg-white/[0.01] border border-white/5 rounded-xl p-3">
@@ -338,8 +431,8 @@ export default function PropertyPreview({ nodeId, searchQuery = '', isFinancialT
             )}
             {!isDatasheetTab && <div className="w-4 shrink-0" />}
 
-            {/* Right Column: Preview */}
-            <div className="flex-1 bg-black/40 rounded-2xl border border-white/10 overflow-hidden relative flex flex-col min-h-0">
+            {/* Right Column: Preview — styl jak w Schemat */}
+            <div className="flex-1 bg-gray-900/50 rounded-xl border border-white/5 overflow-hidden relative flex flex-col min-h-0 shadow-2xl">
                 {selectedFile ? (
                     <DocumentViewer
                         fileUrl={`${API_URL}/documents/download/${selectedFile.id}`}

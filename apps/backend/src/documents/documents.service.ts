@@ -434,6 +434,24 @@ export class DocumentsService {
         };
     }
 
+    async renameDocument(documentId: string, fileName: string) {
+        const name = String(fileName || '').trim();
+        if (!name) throw new BadRequestException('Nazwa pliku nie może być pusta');
+        const existing = await this.prisma.processNode.findUnique({ where: { id: documentId }, select: { id: true } });
+        if (!existing) throw new BadRequestException('Dokument nie istnieje');
+
+        await this.prisma.processNode.update({ where: { id: documentId }, data: { name } });
+
+        // Zsynchronizuj nazwę w indeksie wektorowym, aby agent AI nadal widział poprawne źródło
+        try {
+            await this.vectorService.updateDocumentFileName(documentId, name);
+        } catch (err) {
+            console.warn(`[DOCS] Nie udało się zaktualizować nazwy w Qdrant dla ${documentId}:`, err?.message || err);
+        }
+
+        return { success: true, id: documentId, fileName: name };
+    }
+
     async deleteDocument(documentId: string) {
         try {
             // 1. Delete from Qdrant (all chunks)

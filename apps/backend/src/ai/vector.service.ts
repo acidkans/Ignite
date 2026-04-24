@@ -248,6 +248,26 @@ export class VectorService implements OnModuleInit {
     }
 
     /**
+     * Aktualizuje nazwę pliku w payloadzie wszystkich chunków dokumentu (po rename).
+     * Dzięki temu agent AI nadal widzi właściwą nazwę bez pełnej reindeksacji.
+     */
+    async updateDocumentFileName(documentId: string, fileName: string) {
+        try {
+            await this.qdrant.setPayload(this.collectionName, {
+                wait: true,
+                payload: { fileName },
+                filter: {
+                    must: [{ key: 'nodeId', match: { value: documentId } }],
+                },
+            });
+            this.logger.log(`[Qdrant] Updated fileName for document ${documentId} → ${fileName}`);
+        } catch (error) {
+            this.logger.error(`[Qdrant] Failed to update fileName for ${documentId}`, error.stack);
+            throw error;
+        }
+    }
+
+    /**
      * Usuwa wszystkie chunki dokumentu z bazy wektorowej
      */
     async deleteDocumentChunks(documentId: string) {
