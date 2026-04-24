@@ -74,7 +74,7 @@ export default function MobileDashboard({ onLogout }) {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-screen bg-gray-950">
+            <div className="flex items-center justify-center h-[100dvh] bg-gray-950">
                 <div className="w-8 h-8 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
             </div>
         );
@@ -83,42 +83,37 @@ export default function MobileDashboard({ onLogout }) {
     // --- Detail View Rendering ---
     if (selectedSubtask) {
         return (
-            <div className="flex flex-col h-screen bg-gray-950 text-white animate-in fade-in slide-in-from-right-4 duration-300">
-                {/* Header with Back Button */}
-                <header className="px-4 py-3 flex items-center gap-3 border-b border-white/5 bg-gray-900/80 backdrop-blur-xl sticky top-0 z-30">
+            <div className="flex flex-col h-[100dvh] bg-gray-950 text-white animate-in fade-in slide-in-from-right-4 duration-300">
+                {/* Header with Back Button + inline tabs */}
+                <header className="px-2 py-1.5 flex items-center gap-2 border-b border-white/5 bg-gray-900/80 backdrop-blur-xl sticky top-0 z-30 flex-shrink-0">
                     <button
                         onClick={() => {
                             setSelectedSubtask(null);
                             setActiveTab('details');
                         }}
-                        className="p-2 -ml-2 rounded-full hover:bg-white/5 text-gray-400 active:scale-90 transition-transform"
+                        className="p-1.5 rounded-full hover:bg-white/5 text-gray-400 active:scale-90 transition-transform flex-shrink-0"
                     >
-                        <ChevronLeft size={24} />
+                        <ChevronLeft size={22} />
                     </button>
-                    <div className="flex-1 min-w-0">
-                        <h1 className="font-bold text-sm truncate text-gray-100">{selectedSubtask.name}</h1>
-                        <span className="text-[10px] text-gray-500 uppercase tracking-widest block font-bold">Szczegóły Zadania</span>
+                    <h1 className="flex-1 min-w-0 font-bold text-sm truncate text-gray-100">{selectedSubtask.name}</h1>
+                    <div className="flex p-0.5 bg-white/5 rounded-lg border border-white/5 flex-shrink-0 gap-0.5">
+                        <button
+                            onClick={() => setActiveTab('details')}
+                            className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all ${activeTab === 'details' ? 'bg-blue-600 text-white shadow' : 'text-gray-500'}`}
+                        >
+                            <Info size={11} /> Szczegóły
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('schematics')}
+                            className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-all ${activeTab === 'schematics' ? 'bg-blue-600 text-white shadow' : 'text-gray-500'}`}
+                        >
+                            <MapIcon size={11} /> Schemat
+                        </button>
                     </div>
                 </header>
 
-                {/* Tab Switcher */}
-                <div className="flex p-1 bg-white/5 mx-4 mt-4 rounded-xl border border-white/5 flex-shrink-0">
-                    <button
-                        onClick={() => setActiveTab('details')}
-                        className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-[11px] font-bold transition-all ${activeTab === 'details' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-500'}`}
-                    >
-                        <Info size={12} /> Szczegóły
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('schematics')}
-                        className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-[11px] font-bold transition-all ${activeTab === 'schematics' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-500'}`}
-                    >
-                        <MapIcon size={12} /> Schemat
-                    </button>
-                </div>
-
                 {/* Content Area */}
-                <main className="flex-1 overflow-hidden p-4 min-h-0 flex flex-col">
+                <main className="flex-1 overflow-hidden p-2 min-h-0 flex flex-col">
                     {activeTab === 'details' ? (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300 overflow-y-auto flex-1 min-h-0">
                             {/* Status Card */}
@@ -202,7 +197,7 @@ export default function MobileDashboard({ onLogout }) {
 
     // --- List View Rendering ---
     return (
-        <div className="flex flex-col h-screen bg-gray-950 text-white overflow-hidden">
+        <div className="flex flex-col h-[100dvh] bg-gray-950 text-white overflow-hidden">
             {/* Header */}
             <header className="px-4 py-3 border-b border-white/5 bg-gray-900/50 backdrop-blur-xl sticky top-0 z-10 shadow-lg">
                 <div className="flex items-center gap-3 mb-3">
