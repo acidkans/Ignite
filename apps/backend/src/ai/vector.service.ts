@@ -481,24 +481,33 @@ export class VectorService implements OnModuleInit {
         }
 
         try {
-            // Qdrant scroll z filtrem tekstowym
+            // Filtr MUSI AND-ować: (branch constraint) AND (co najmniej jeden keyword w tekście)
+            // Poprzednio wszystko było w `should`, co powodowało logikę OR: scroll zwracał dowolne
+            // chunki z gałęzi, niezależnie od keywords — co faktycznie wyłączało wyszukiwanie po słowach.
+            const mustClauses: any[] = [...(filter?.must || [])];
+
+            // Jeśli filter zewnętrzny używa `should` (np. nodeId/parentId z AI Chat),
+            // zapakuj je w nested should aby wymusić logikę "któreś z nich musi być true".
+            if (filter?.should && filter.should.length > 0) {
+                mustClauses.push({ should: filter.should });
+            }
+
+            // Wymagamy co najmniej jednego keyword match
+            mustClauses.push({
+                should: keywords.map(keyword => ({
+                    key: 'text',
+                    match: { text: keyword },
+                })),
+            });
+
             const result = await this.qdrant.scroll(this.collectionName, {
                 filter: {
-                    must: filter?.must || [],
-                    should: [
-                        ...(filter?.should || []),
-                        {
-                            should: keywords.map(keyword => ({
-                                key: "text",
-                                match: { text: keyword }
-                            }))
-                        }
-                    ],
-                    must_not: filter?.must_not || []
+                    must: mustClauses,
+                    must_not: filter?.must_not || [],
                 },
                 limit: limit,
                 with_payload: true,
-                with_vector: false
+                with_vector: false,
             });
 
             return result.points || [];
