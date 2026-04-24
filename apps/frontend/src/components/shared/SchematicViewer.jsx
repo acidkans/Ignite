@@ -388,11 +388,11 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                     <div
                         className={`relative shadow-2xl ring-1 ring-white/5 bg-gray-900 overflow-hidden flex-shrink-0 ${isAddingMarker ? 'cursor-crosshair ring-4 ring-orange-500/30' : ''}`}
                         style={{
-                            width: containerWidth * scale,
-                            minWidth: containerWidth * scale,
+                            width: isMobile ? containerWidth : containerWidth * scale,
+                            minWidth: isMobile ? containerWidth : containerWidth * scale,
                             touchAction: 'none',
                             ...(isMobile ? {
-                                transform: `translate(${pan.x}px, ${pan.y}px)`,
+                                transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
                                 transformOrigin: '0 0',
                                 willChange: 'transform',
                             } : {}),
@@ -418,7 +418,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                                 onLoadSuccess={({ numPages }) => setNumPages(numPages)}
                                 loading={<div className="h-96 flex flex-col items-center justify-center gap-3"><div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" /></div>}
                             >
-                                <Page pageNumber={pageNumber} renderTextLayer={true} renderAnnotationLayer={true} width={containerWidth * scale} className="origin-top-left" />
+                                <Page pageNumber={pageNumber} renderTextLayer={true} renderAnnotationLayer={true} width={isMobile ? containerWidth : containerWidth * scale} className="origin-top-left" />
                             </Document>
                         )}
 
