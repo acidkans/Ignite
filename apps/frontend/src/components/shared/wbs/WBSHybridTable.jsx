@@ -608,7 +608,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [expanded, setExpanded] = useState(() => new Set());
     const [dragId, setDragId] = useState(null);
     const dragIdRef = useRef(null);
-    const [dragOver, setDragOver] = useState(null);
+    const [dragOver, setDragOverState] = useState(null);
+    const dragOverRef = useRef(null);
+    const setDragOver = (val) => { dragOverRef.current = val; setDragOverState(val); };
     const [editingTagsFor, setEditingTagsFor] = useState(null);
     const [tagInput, setTagInput] = useState('');
     const [markerLinksCache, setMarkerLinksCache] = useState({});
@@ -758,6 +760,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         dragIdRef.current = nodeId;
         setDragId(nodeId);
         e.dataTransfer.effectAllowed = 'move';
+        // Firefox wymaga setData żeby drag w ogóle wystartował
+        try { e.dataTransfer.setData('application/wbs-node-id', nodeId); } catch {}
     };
 
     const onDragOver = (e, nodeId, depth) => {
@@ -802,12 +806,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             }
         }
         const currentDragId = dragIdRef.current;
-        if (!currentDragId || !dragOver || dragOver.nodeId !== nodeId || currentDragId === nodeId) {
+        const currentDragOver = dragOverRef.current;
+        if (!currentDragId || !currentDragOver || currentDragOver.nodeId !== nodeId || currentDragId === nodeId) {
             dragIdRef.current = null; setDragId(null); setDragOver(null); return;
         }
         const [extracted, withoutDrag] = extractNode(items, currentDragId);
         if (!extracted) { dragIdRef.current = null; setDragId(null); setDragOver(null); return; }
-        const newItems = insertNode(withoutDrag, nodeId, extracted, dragOver.position);
+        const newItems = insertNode(withoutDrag, nodeId, extracted, currentDragOver.position);
         save({ ...wbsTree, items: newItems });
         dragIdRef.current = null; setDragId(null); setDragOver(null);
     };
