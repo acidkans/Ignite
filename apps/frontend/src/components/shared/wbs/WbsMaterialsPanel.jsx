@@ -834,12 +834,12 @@ export default function WbsMaterialsPanel({
             { header: 'Pozycja przedmiotu', key: 'name', width: 28 },
             { header: 'Ilość', key: 'qty', width: 8 },
             { header: 'Jednostka', key: 'unit', width: 10 },
+            { header: 'Wymagania techniczne', key: 'tech', width: 40 },
             { header: 'Producent', key: 'manufacturer', width: 18 },
             { header: 'Model', key: 'model', width: 18 },
             { header: 'Nazwa handlowa', key: 'productName', width: 22 },
             { header: 'Cena netto', key: 'price', width: 12 },
             { header: 'Status', key: 'status', width: 14 },
-            { header: 'Wymagania techniczne', key: 'tech', width: 40 },
             { header: 'Dostępność', key: 'availability', width: 14 },
             { header: 'Prop. producent', key: 'pManufacturer', width: 18 },
             { header: 'Prop. model', key: 'pModel', width: 18 },
@@ -851,7 +851,8 @@ export default function WbsMaterialsPanel({
         detHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         detHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
 
-        for (const node of matNodes) {
+        const detailsNodes = [...matNodes].sort((a, b) => (a.path || '').localeCompare(b.path || '', 'pl'));
+        for (const node of detailsNodes) {
             const card = cards[node.id] || null;
             const segs = node.path ? node.path.split(' › ') : [];
             const parent = segs.length >= 2 ? segs[segs.length - 2] : (segs[0] || '');
@@ -945,9 +946,9 @@ export default function WbsMaterialsPanel({
             { header: 'Lp.', key: 'idx', width: 5 },
             { header: 'Gdzie wykorzystywany', key: 'paths', width: 60 },
             { header: 'Nazwa', key: 'name', width: 32 },
-            { header: 'Wymagania techniczne', key: 'tech', width: 48 },
             { header: 'Łączna ilość', key: 'qty', width: 14 },
             { header: 'Jednostka', key: 'unit', width: 10 },
+            { header: 'Wymagania techniczne', key: 'tech', width: 48 },
             { header: 'Liczba pozycji WBS', key: 'positions', width: 14 },
             { header: 'Proponowany produkt', key: 'product', width: 28 },
             { header: 'Średnia cena netto', key: 'price', width: 16 },
@@ -983,7 +984,7 @@ export default function WbsMaterialsPanel({
             const totalRowNum = aggRows.length + 2;
             const totalsRow = aggregateSheet.addRow({
                 name: 'Razem',
-                qty: { formula: `=SUM(E2:E${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + r.qty, 0) },
+                qty: { formula: `=SUM(D2:D${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + r.qty, 0) },
                 positions: { formula: `=SUM(G2:G${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + r.positions, 0) },
                 value: { formula: `=SUM(J2:J${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + (r.priceCount > 0 ? (r.priceSum / r.priceCount) * r.qty : 0), 0) },
             });
