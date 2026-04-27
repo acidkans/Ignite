@@ -83,6 +83,11 @@ export class SchematicsController {
       return this.schematicsService.deleteMarkerAttachment(attachmentId);
   }
 
+  @Patch(':id')
+  async renameSchematic(@Param('id') id: string, @Body('fileName') fileName: string) {
+    return this.schematicsService.renameSchematic(id, fileName);
+  }
+
   @Delete(':id')
   async deleteSchematic(@Param('id') id: string) {
     return this.schematicsService.deleteSchematic(id);

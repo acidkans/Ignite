@@ -4,7 +4,7 @@ import { enqueueUpload, removeFromQueue, flushPendingUploads } from '../../utils
 import {
     Upload, X, MapPin, Image as ImageIcon, Mic, Trash2,
     MousePointer2, Minus, Type, ZoomIn, ZoomOut, Maximize, Minimize2, Hand, Camera, Download, FileText, Save, FileDown,
-    RefreshCw, HardDrive, FolderOpen, List, CheckSquare, Square, Layers, ChevronDown, Plus, Check
+    RefreshCw, HardDrive, FolderOpen, List, CheckSquare, Square, Layers, ChevronDown, Plus, Check, Pencil
 } from 'lucide-react';
 
 function flattenWbsNodes(nodes, prefix = '') {
@@ -60,6 +60,9 @@ export default function SchematTab({ nodeId }) {
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const [showFileDropdown, setShowFileDropdown] = useState(false);
+    const [renamingId, setRenamingId] = useState(null);
+    const [renameValue, setRenameValue] = useState('');
+    const [renameSaving, setRenameSaving] = useState(false);
 
     const pageRef = useRef(null);
     const containerRef = useRef(null);
@@ -296,6 +299,49 @@ export default function SchematTab({ nodeId }) {
         setIsDragging(false);
         const file = e.dataTransfer.files?.[0];
         if (file) uploadFile(file);
+    };
+
+    const startRename = (sch) => {
+        setRenamingId(sch.id);
+        setRenameValue(sch.fileName || '');
+    };
+
+    const cancelRename = () => {
+        setRenamingId(null);
+        setRenameValue('');
+    };
+
+    const commitRename = async () => {
+        if (!renamingId) return;
+        const newName = String(renameValue || '').trim();
+        const current = schematics.find(s => s.id === renamingId);
+        if (!newName || !current || newName === current.fileName) {
+            cancelRename();
+            return;
+        }
+        setRenameSaving(true);
+        try {
+            const token = sessionStorage.getItem('token');
+            const res = await fetch(`${API_URL}/schematics/${renamingId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ fileName: newName }),
+            });
+            if (res.ok) {
+                setSchematics(prev => prev.map(s => s.id === renamingId ? { ...s, fileName: newName } : s));
+                if (selectedSchematic?.id === renamingId) {
+                    setSelectedSchematic(prev => prev ? { ...prev, fileName: newName } : prev);
+                }
+                cancelRename();
+            } else {
+                alert('Nie udało się zmienić nazwy schematu');
+            }
+        } catch (err) {
+            console.error('Error renaming schematic:', err);
+            alert('Błąd podczas zmiany nazwy schematu');
+        } finally {
+            setRenameSaving(false);
+        }
     };
 
     const handleDeleteSchematic = async (id) => {
@@ -731,29 +777,63 @@ export default function SchematTab({ nodeId }) {
                     {showFileDropdown && (
                         <div className="absolute top-full left-0 mt-1 w-72 bg-gray-900 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
                             <div className="max-h-64 overflow-y-auto p-1.5 space-y-1">
-                                {schematics.map(sch => (
-                                    <div
-                                        key={sch.id}
-                                        className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-all group ${
-                                            selectedSchematic?.id === sch.id
-                                            ? 'bg-orange-500/20 text-orange-200'
-                                            : 'text-gray-400 hover:bg-white/10 hover:text-gray-200'
-                                        }`}
-                                        onClick={() => { selectSchematic(sch); setShowFileDropdown(false); }}
-                                    >
-                                        <div>
-                                            <div className="text-xs truncate max-w-[220px]" title={sch.fileName}>{sch.fileName}</div>
-                                            <div className="text-[10px] opacity-60">Znaczników: {sch.markers.length}</div>
-                                        </div>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); handleDeleteSchematic(sch.id); }}
-                                            className="p-1 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                                            title="Usuń schemat"
+                                {schematics.map(sch => {
+                                    const isRenaming = renamingId === sch.id;
+                                    return (
+                                        <div
+                                            key={sch.id}
+                                            className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-all group ${
+                                                selectedSchematic?.id === sch.id
+                                                ? 'bg-orange-500/20 text-orange-200'
+                                                : 'text-gray-400 hover:bg-white/10 hover:text-gray-200'
+                                            }`}
+                                            onClick={() => { if (!isRenaming) { selectSchematic(sch); setShowFileDropdown(false); } }}
                                         >
-                                            <Trash2 size={12} />
-                                        </button>
-                                    </div>
-                                ))}
+                                            <div className="flex-1 min-w-0">
+                                                {isRenaming ? (
+                                                    <input
+                                                        autoFocus
+                                                        value={renameValue}
+                                                        disabled={renameSaving}
+                                                        onChange={(e) => setRenameValue(e.target.value)}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+                                                            else if (e.key === 'Escape') { e.preventDefault(); cancelRename(); }
+                                                        }}
+                                                        onBlur={commitRename}
+                                                        className="w-full bg-black/40 border border-orange-500/40 rounded px-2 py-1 text-[11px] text-white outline-none focus:border-orange-400"
+                                                    />
+                                                ) : (
+                                                    <div
+                                                        onDoubleClick={(e) => { e.stopPropagation(); startRename(sch); }}
+                                                        className="text-xs truncate max-w-[220px] select-none"
+                                                        title="Dwuklik aby zmienić nazwę"
+                                                    >
+                                                        {sch.fileName}
+                                                    </div>
+                                                )}
+                                                <div className="text-[10px] opacity-60">Znaczników: {sch.markers.length}</div>
+                                            </div>
+                                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); startRename(sch); }}
+                                                    className="p-1 text-gray-500 hover:text-orange-400"
+                                                    title="Zmień nazwę"
+                                                >
+                                                    <Pencil size={12} />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteSchematic(sch.id); }}
+                                                    className="p-1 text-gray-600 hover:text-red-400"
+                                                    title="Usuń schemat"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                                 {schematics.length === 0 && (
                                     <div className="text-xs text-gray-500 text-center py-4">Brak schematów.</div>
                                 )}

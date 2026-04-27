@@ -748,6 +748,35 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         }, 400);
     }, [nodeId, versionId, authHeaders, onWbsUpdate, fetchData]);
 
+    // Po wklejeniu skopiowanej pozycji w WBS — natychmiast zapisz drzewo (omijamy debounce, żeby
+    // nowe wbs_nodes powstały w bazie), a następnie sklonuj powiązane wymagania techniczne
+    // (productName, technicalSpec, manufacturer, model, dataSheet, status, …).
+    const handlePasteCloned = useCallback(async (mappings) => {
+        if (!Array.isArray(mappings) || mappings.length === 0) return;
+        if (hybridSaveTimeout.current) clearTimeout(hybridSaveTimeout.current);
+        try {
+            await fetch(`${API_URL}/order-requirements`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({
+                    nodeId,
+                    versionId,
+                    wbsTree: JSON.stringify(wbsTreeRef.current),
+                }),
+            });
+            await fetch(`${API_URL}/material-requirements/clone-for-wbs`, {
+                method: 'POST',
+                headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mappings }),
+            });
+            onWbsUpdate?.();
+            fetchData();
+            setReqRefreshKey(k => k + 1);
+        } catch (err) {
+            console.error('[Paste cloned WBS]', err);
+        }
+    }, [nodeId, versionId, authHeaders, onWbsUpdate, fetchData]);
+
     const assignedUsers = useMemo(() => {
         if (!Array.isArray(projectUsers) || !projectUsers.length) return [];
         if (!Array.isArray(nodeTeamIds) || !nodeTeamIds.length) return projectUsers;
@@ -2495,6 +2524,7 @@ ${materialsHtml}
                         materialRefreshKey={reqRefreshKey}
                         searchQuery={normalizedSearchQuery}
                         onMaterialReqUpdated={() => setReqRefreshKey(k => k + 1)}
+                        onPasteCloned={handlePasteCloned}
                     />
                 </div>
             ), () => handleExportPDF('wbs'), isManagerOrAdmin ? (

@@ -108,6 +108,11 @@ export default function PropertyPreview({ nodeId, searchQuery = '', isFinancialT
         }
     };
 
+    // Reset wybranego pliku przy zmianie węzła, żeby auto-otwierał się ostatni dokument nowego węzła
+    useEffect(() => {
+        setSelectedFile(null);
+    }, [nodeId]);
+
     useEffect(() => {
         if (!nodeId) return;
 
@@ -139,9 +144,9 @@ export default function PropertyPreview({ nodeId, searchQuery = '', isFinancialT
                 if (res.ok) {
                     const data = await res.json();
                     setFiles(data);
-                    if (data.length > 0 && !selectedFile) {
-                        // Optional: auto-select first file
-                        // setSelectedFile(data[0]);
+                    // Auto-otwieranie ostatnio wgranego dokumentu (lista zwracana DESC po dacie)
+                    if (data.length > 0) {
+                        setSelectedFile(prev => prev || data[0]);
                     }
                 }
             } catch (err) {

@@ -310,6 +310,44 @@ export class MaterialRequirementsService {
         return created;
     }
 
+    async cloneForWbsNodes(mappings: Array<{ sourceWbsNodeId: string; targetWbsNodeId: string }>) {
+        if (!Array.isArray(mappings) || mappings.length === 0) return [];
+        const sourceIds = mappings.map(m => m.sourceWbsNodeId).filter(Boolean);
+        if (sourceIds.length === 0) return [];
+
+        const sources = await this.prisma.materialRequirement.findMany({
+            where: { wbsNodeId: { in: sourceIds } }
+        });
+        if (sources.length === 0) return [];
+
+        const targetIds = mappings.map(m => m.targetWbsNodeId).filter(Boolean);
+        const existingTargets = await this.prisma.wbsNode.findMany({
+            where: { id: { in: targetIds } }, select: { id: true }
+        });
+        const validTargetSet = new Set(existingTargets.map(n => n.id));
+
+        const created: any[] = [];
+        for (const src of sources) {
+            const mapping = mappings.find(m => m.sourceWbsNodeId === src.wbsNodeId);
+            if (!mapping || !validTargetSet.has(mapping.targetWbsNodeId)) continue;
+            const { id, wbsNodeId, wbsNodeIds, wbsNodeAllocations, createdAt, updatedAt, ...rest } = src as any;
+            const clone = await this.prisma.materialRequirement.create({
+                data: { ...rest, wbsNodeId: mapping.targetWbsNodeId },
+            });
+            try {
+                await this.prisma.wbsNodeMaterial.create({
+                    data: {
+                        wbsNodeId: mapping.targetWbsNodeId,
+                        materialId: clone.id,
+                        quantity: clone.quantity || 1,
+                    }
+                });
+            } catch { /* unikalność (wbsNodeId, materialId) — ignoruj */ }
+            created.push(clone);
+        }
+        return created;
+    }
+
     async update(id: string, dto: Partial<{
         productName: string;
         type: string;

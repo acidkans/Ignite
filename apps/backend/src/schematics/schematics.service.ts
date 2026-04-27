@@ -1,5 +1,6 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { VectorService } from '../ai/vector.service';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -7,7 +8,11 @@ import { Response } from 'express';
 
 @Injectable()
 export class SchematicsService {
-    constructor(private prisma: PrismaService) {}
+    constructor(
+        private prisma: PrismaService,
+        @Inject(forwardRef(() => VectorService))
+        private vectorService: VectorService,
+    ) {}
 
     private readonly UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 
@@ -122,6 +127,32 @@ export class SchematicsService {
             throw new NotFoundException('Plik nie istnieje na serwerze');
         }
         res.sendFile(filePath);
+    }
+
+    async renameSchematic(id: string, fileName: string) {
+        const name = String(fileName || '').trim();
+        if (!name) throw new BadRequestException('Nazwa pliku nie może być pusta');
+        const existing = await this.prisma.schematicDocument.findUnique({ where: { id }, select: { id: true } });
+        if (!existing) throw new NotFoundException('Schemat nie istnieje');
+
+        const updated = await this.prisma.schematicDocument.update({
+            where: { id },
+            data: { fileName: name },
+            include: {
+                markers: {
+                    include: { attachments: true, subtask: { select: { id: true, name: true } } }
+                }
+            }
+        });
+
+        // Zsynchronizuj nazwę w indeksie wektorowym, aby agent AI nadal widział poprawne źródło
+        try {
+            await this.vectorService.updateDocumentFileName(id, name);
+        } catch (err: any) {
+            console.warn(`[SCHEMATICS] Nie udało się zaktualizować nazwy w Qdrant dla ${id}:`, err?.message || err);
+        }
+
+        return updated;
     }
 
     async deleteSchematic(id: string) {
