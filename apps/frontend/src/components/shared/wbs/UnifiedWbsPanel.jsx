@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ExcelJS from 'exceljs';
-import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, LayoutList, Zap, Sparkles, ListTree, CalendarDays } from 'lucide-react';
+import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, LayoutList, Zap, Sparkles, ListTree, CalendarDays, ChevronsRight, ChevronsLeft } from 'lucide-react';
 import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
@@ -878,6 +878,54 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         strategySaveTimeout.current = setTimeout(() => saveStrategy(next), 1500);
     }, [saveStrategy]);
 
+    // Wcięcie / cofnięcie wcięcia zaznaczonych linii (2 spacje = 1 poziom).
+    // Bez zaznaczenia operuje na bieżącej linii. Numeracja w renderze wylicza 1.1, 1.2 …
+    const indentSelectionLines = useCallback((unit = '  ') => {
+        const ta = strategyRef.current;
+        if (!ta) return;
+        const text = ta.value;
+        const start = ta.selectionStart ?? 0;
+        const end = ta.selectionEnd ?? 0;
+        const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+        const lineEnd = end > start ? end : (text.indexOf('\n', start) === -1 ? text.length : text.indexOf('\n', start));
+        const block = text.slice(lineStart, lineEnd);
+        const transformed = block.split('\n').map(l => `${unit}${l}`).join('\n');
+        const next = `${text.slice(0, lineStart)}${transformed}${text.slice(lineEnd)}`;
+        const newStart = start + unit.length;
+        const newEnd = end + unit.length * (block.split('\n').length);
+        setWbsDescription(next);
+        setTimeout(() => { ta.focus(); ta.setSelectionRange(newStart, newEnd); }, 0);
+        if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
+        strategySaveTimeout.current = setTimeout(() => saveStrategy(next), 1500);
+    }, [saveStrategy]);
+
+    const outdentSelectionLines = useCallback((unit = '  ') => {
+        const ta = strategyRef.current;
+        if (!ta) return;
+        const text = ta.value;
+        const start = ta.selectionStart ?? 0;
+        const end = ta.selectionEnd ?? 0;
+        const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+        const lineEnd = end > start ? end : (text.indexOf('\n', start) === -1 ? text.length : text.indexOf('\n', start));
+        const block = text.slice(lineStart, lineEnd);
+        let removedFirst = 0, removedTotal = 0;
+        const transformed = block.split('\n').map((l, i) => {
+            if (l.startsWith(unit)) {
+                if (i === 0) removedFirst = unit.length;
+                removedTotal += unit.length;
+                return l.slice(unit.length);
+            }
+            return l;
+        }).join('\n');
+        const next = `${text.slice(0, lineStart)}${transformed}${text.slice(lineEnd)}`;
+        setWbsDescription(next);
+        const newStart = Math.max(lineStart, start - removedFirst);
+        const newEnd = Math.max(newStart, end - removedTotal);
+        setTimeout(() => { ta.focus(); ta.setSelectionRange(newStart, newEnd); }, 0);
+        if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
+        strategySaveTimeout.current = setTimeout(() => saveStrategy(next), 1500);
+    }, [saveStrategy]);
+
     const prefixSelectionLines = useCallback((prefix) => {
         const ta = strategyRef.current;
         if (!ta) return;
@@ -908,6 +956,13 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     }, [saveStrategy]);
 
     const handleStrategyKeyDown = useCallback((e) => {
+        // Tab / Shift+Tab — wcięcie / cofnięcie wcięcia
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            if (e.shiftKey) outdentSelectionLines();
+            else indentSelectionLines();
+            return;
+        }
         if (e.key !== 'Enter') return;
         const ta = strategyRef.current;
         if (!ta) return;
@@ -917,18 +972,20 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         const lineEnd = text.indexOf('\n', pos);
         const fullLine = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd);
 
-        const ulMatch = fullLine.match(/^- (.*)/);
-        const olMatch = fullLine.match(/^(\d+)\. (.*)/);
+        const ulMatch = fullLine.match(/^(\s*)- (.*)/);
+        const olMatch = fullLine.match(/^(\s*)(\d+)\. (.*)/);
 
         if (ulMatch) {
             e.preventDefault();
-            const content = ulMatch[1].trim();
+            const indent = ulMatch[1];
+            const content = ulMatch[2].trim();
+            const prefixLen = indent.length + 2;
             let newText, np;
             if (!content) {
-                newText = text.slice(0, lineStart) + text.slice(lineStart + 2);
+                newText = text.slice(0, lineStart) + text.slice(lineStart + prefixLen);
                 np = lineStart;
             } else {
-                const insert = '\n- ';
+                const insert = `\n${indent}- `;
                 newText = text.slice(0, pos) + insert + text.slice(pos);
                 np = pos + insert.length;
             }
@@ -941,15 +998,16 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 
         if (olMatch) {
             e.preventDefault();
-            const n = parseInt(olMatch[1], 10);
-            const content = olMatch[2].trim();
-            const prefixLen = String(n).length + 2;
+            const indent = olMatch[1];
+            const n = parseInt(olMatch[2], 10);
+            const content = olMatch[3].trim();
+            const prefixLen = indent.length + String(n).length + 2;
             let newText, np;
             if (!content) {
                 newText = text.slice(0, lineStart) + text.slice(lineStart + prefixLen);
                 np = lineStart;
             } else {
-                const insert = `\n${n + 1}. `;
+                const insert = `\n${indent}${n + 1}. `;
                 newText = text.slice(0, pos) + insert + text.slice(pos);
                 np = pos + insert.length;
             }
@@ -959,51 +1017,55 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             strategySaveTimeout.current = setTimeout(() => saveStrategy(newText), 1500);
             return;
         }
-    }, [saveStrategy, setWbsDescription]);
+    }, [saveStrategy, setWbsDescription, indentSelectionLines, outdentSelectionLines]);
 
+    // Wielopoziomowa numeracja: wcięcie 2 spacje = 1 poziom; wynik to 1, 1.1, 1.1.1, 1.2, 2, 2.1 …
+    // Listy punktowane (-) zachowują wcięcie wizualnie. Bloki nie-listowe resetują liczniki.
     const renderStrategyHtml = useCallback((text) => {
         const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const bold = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
         const lines = (text || '').split('\n');
+        const indentLevel = (ws) => Math.floor((ws || '').replace(/\t/g, '  ').length / 2);
         let html = '';
-        let inUl = false;
-        let inOl = false;
-        const closeList = () => {
-            if (inUl) { html += '</ul>'; inUl = false; }
-            if (inOl) { html += '</ol>'; inOl = false; }
-        };
+        let olCounters = []; // pozycje na każdym poziomie zagnieżdżenia
+        const resetOl = () => { olCounters = []; };
         for (const raw of lines) {
             const h3m = raw.match(/^### (.+)/);
             const h2m = raw.match(/^## (.+)/);
             const h1m = raw.match(/^# (.+)/);
-            const ulm = raw.match(/^- (.*)/);
-            const olm = raw.match(/^(\d+)\. (.*)/);
+            const ulm = raw.match(/^(\s*)- (.*)/);
+            const olm = raw.match(/^(\s*)(\d+)\. (.*)/);
             if (h3m) {
-                closeList();
+                resetOl();
                 html += `<h3 style="font-size:12px;font-weight:bold;margin:12px 0 2px 0;padding-left:4em">${bold(h3m[1])}</h3>`;
             } else if (h2m) {
-                closeList();
+                resetOl();
                 html += `<h2 style="font-size:13px;font-weight:bold;margin:14px 0 3px 0;padding-left:2em">${bold(h2m[1])}</h2>`;
             } else if (h1m) {
-                closeList();
+                resetOl();
                 html += `<h1 style="font-size:14px;font-weight:bold;margin:16px 0 4px 0;padding-left:0">${bold(h1m[1])}</h1>`;
             } else if (ulm) {
-                if (inOl) { html += '</ol>'; inOl = false; }
-                if (!inUl) { html += '<ul style="margin:4px 0 8px 1.5em;padding-left:1em">'; inUl = true; }
-                html += `<li>${bold(ulm[1])}</li>`;
+                resetOl();
+                const L = indentLevel(ulm[1]);
+                html += `<div style="margin:2px 0;padding-left:${L * 1.5 + 1.5}em;text-indent:-1em">• ${bold(ulm[2])}</div>`;
             } else if (olm) {
-                if (inUl) { html += '</ul>'; inUl = false; }
-                if (!inOl) { html += '<ol style="margin:4px 0 8px 1.5em;padding-left:1.2em">'; inOl = true; }
-                html += `<li>${bold(olm[2])}</li>`;
+                const L = indentLevel(olm[1]);
+                const N = parseInt(olm[2], 10);
+                while (olCounters.length > L + 1) olCounters.pop();
+                if (olCounters.length === L + 1) olCounters[L] = N;
+                else { while (olCounters.length < L) olCounters.push(1); olCounters.push(N); }
+                const num = olCounters.join('.') + '.';
+                const padEm = L * 1.5 + 1.5;
+                const indentEm = Math.max(2, num.length * 0.6 + 0.5);
+                html += `<div style="margin:2px 0;padding-left:${padEm}em;text-indent:-${indentEm}em"><strong style="display:inline-block;min-width:${indentEm}em">${num}</strong> ${bold(olm[3])}</div>`;
             } else if (raw.trim() === '') {
-                closeList();
+                resetOl();
                 html += '<br>';
             } else {
-                closeList();
+                resetOl();
                 html += `<p style="margin:0 0 4px 0">${bold(raw)}</p>`;
             }
         }
-        closeList();
         return html;
     }, []);
 
@@ -2480,9 +2542,23 @@ ${materialsHtml}
                     <button
                         onClick={(e) => { e.stopPropagation(); prefixSelectionLines('1. '); }}
                         className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
-                        title="Lista numerowana"
+                        title="Lista numerowana (1, 1.1, 1.2…) — użyj wcięcia, aby zagnieździć"
                     >
                         1.
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); outdentSelectionLines(); }}
+                        className="p-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 transition-all"
+                        title="Cofnij wcięcie (Shift+Tab)"
+                    >
+                        <ChevronsLeft size={12} />
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); indentSelectionLines(); }}
+                        className="p-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 transition-all"
+                        title="Wcięcie akapitu (Tab)"
+                    >
+                        <ChevronsRight size={12} />
                     </button>
                     <button
                         onClick={(e) => { e.stopPropagation(); setStrategyPreviewOpen(true); }}
