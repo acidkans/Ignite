@@ -545,17 +545,18 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
     const [textContent, setTextContent] = useState('');
     const [textLoading, setTextLoading] = useState(false);
     const [pdfContainerWidth, setPdfContainerWidth] = useState(800);
-    const pdfContainerRef = useRef(null);
+    const pdfScrollRef = useRef(null);
 
     const showOfferPanel = isOffer && documentId && token;
     const showDatasheetPanel = isDatasheet && documentId && token;
 
+    // Mierzymy widoczną szerokość scroll-parenta (stała, nie rośnie z zoomem) — to chroni przed feedback-loopem
     useEffect(() => {
         const obs = new ResizeObserver(entries => {
             const w = entries[0]?.contentRect?.width;
             if (w) setPdfContainerWidth(Math.floor(w - 32));
         });
-        if (pdfContainerRef.current) obs.observe(pdfContainerRef.current);
+        if (pdfScrollRef.current) obs.observe(pdfScrollRef.current);
         return () => obs.disconnect();
     }, []);
 
@@ -651,9 +652,11 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
             {/* Main area: PDF viewer + optional offer panel */}
             <div className="flex-1 flex overflow-hidden">
                 {/* Viewer Content */}
-                <div className="flex-1 overflow-auto bg-white/5 flex justify-center custom-scrollbar">
+                <div ref={pdfScrollRef} className="flex-1 overflow-auto bg-white/5 custom-scrollbar">
                     {isPdf ? (
-                        <div ref={pdfContainerRef} className="p-4 flex flex-col items-center w-full">
+                        // Wrapper rośnie z contentem (w-fit + min-w-full): mały PDF jest wyśrodkowany,
+                        // duży (po zoomie) rozciąga area scrolla — można przewijać w lewo/prawo bez gubienia krawędzi.
+                        <div className="p-4 w-fit min-w-full mx-auto">
                             <Document file={fileUrl} options={pdfOptions} onLoadSuccess={onDocumentLoadSuccess}
                                 loading={
                                     <div className="flex flex-col items-center justify-center p-10 text-gray-400">
@@ -663,9 +666,9 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
                                 }
                                 error={<div className="p-10 text-red-400 text-center text-xs">Błąd podczas ładowania pliku PDF.<br/>Sprawdź czy plik nie jest uszkodzony.</div>}>
                                 {Array.from(new Array(numPages), (el, index) => (
-                                    <div key={`page_${index + 1}`} className="mb-4 shadow-xl border border-white/10 mx-auto bg-white">
+                                    <div key={`page_${index + 1}`} className="mb-4 shadow-xl border border-white/10 mx-auto bg-white w-fit">
                                         <Page pageNumber={index + 1} renderTextLayer={true} renderAnnotationLayer={true}
-                                            width={Math.floor(pdfContainerWidth * scale)} className="max-w-full relative" />
+                                            width={Math.floor(pdfContainerWidth * scale)} className="relative" />
                                     </div>
                                 ))}
                             </Document>

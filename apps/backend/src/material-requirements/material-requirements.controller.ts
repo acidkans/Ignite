@@ -120,6 +120,13 @@ export class MaterialRequirementsController {
         return this.service.clearAssignments(body.nodeId, body.deletedWbsNodeIds);
     }
 
+    /** Klonuje karty produktowe (wymagania techniczne) z węzłów źródłowych do nowych węzłów WBS.
+     *  Używane przy kopiowaniu pozycji w drzewie WBS — nowe wbs_nodes muszą już istnieć w bazie. */
+    @Post('clone-for-wbs')
+    cloneForWbs(@Body() body: { mappings: Array<{ sourceWbsNodeId: string; targetWbsNodeId: string }> }) {
+        return this.service.cloneForWbsNodes(body?.mappings || []);
+    }
+
     /** Szczegóły jednego wymagania */
     @Get(':id')
     findOne(@Param('id') id: string) {

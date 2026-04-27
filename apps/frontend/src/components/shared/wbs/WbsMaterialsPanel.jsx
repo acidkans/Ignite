@@ -943,7 +943,7 @@ export default function WbsMaterialsPanel({
 
         aggregateSheet.columns = [
             { header: 'Lp.', key: 'idx', width: 5 },
-            { header: 'Typ', key: 'type', width: 12 },
+            { header: 'Gdzie wykorzystywany', key: 'paths', width: 60 },
             { header: 'Nazwa', key: 'name', width: 32 },
             { header: 'Wymagania techniczne', key: 'tech', width: 48 },
             { header: 'Łączna ilość', key: 'qty', width: 14 },
@@ -953,23 +953,19 @@ export default function WbsMaterialsPanel({
             { header: 'Średnia cena netto', key: 'price', width: 16 },
             { header: 'Szac. wartość netto', key: 'value', width: 16 },
             { header: 'Statusy', key: 'statuses', width: 28 },
-            { header: 'Ścieżki WBS', key: 'paths', width: 60 },
         ];
         const aggHeader = aggregateSheet.getRow(1);
         aggHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         aggHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
 
-        const aggRows = [...agg.values()].sort((a, b) => {
-            if (a.type !== b.type) return a.type.localeCompare(b.type, 'pl');
-            return a.name.localeCompare(b.name, 'pl');
-        });
+        const aggRows = [...agg.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'));
 
         aggRows.forEach((row, i) => {
             const avgPrice = row.priceCount > 0 ? row.priceSum / row.priceCount : null;
             const value = avgPrice != null ? avgPrice * row.qty : null;
             const added = aggregateSheet.addRow({
                 idx: i + 1,
-                type: row.type,
+                paths: row.paths.join('\n'),
                 name: row.name,
                 tech: row.tech,
                 qty: row.qty,
@@ -979,7 +975,6 @@ export default function WbsMaterialsPanel({
                 price: avgPrice,
                 value,
                 statuses: [...row.statuses].join(', '),
-                paths: row.paths.join(' | '),
             });
             added.alignment = { vertical: 'top', wrapText: true };
         });

@@ -224,6 +224,22 @@ const deepCloneNode = node => ({
     children: (node.children || []).map(deepCloneNode),
 });
 
+// Wariant zwracający również mapping (oldId → newId) całego poddrzewa,
+// potrzebny do skopiowania powiązanych wymagań technicznych po stronie backendu.
+const deepCloneNodeWithMappings = (node) => {
+    const mappings = [];
+    const cloneRec = (n) => {
+        const newId = crypto.randomUUID();
+        mappings.push({ sourceWbsNodeId: n.id, targetWbsNodeId: newId });
+        return {
+            ...n,
+            id: newId,
+            children: (n.children || []).map(cloneRec),
+        };
+    };
+    return { clone: cloneRec(node), mappings };
+};
+
 const insertNode = (nodes, targetId, node, position) => {
     if (position === 'into') {
         return nodes.map(n => n.id === targetId
@@ -582,7 +598,7 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal, on
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null }) {
     const getAllIds = useCallback((items) => {
         const ids = ['root'];
         const walk = (nodes) => nodes?.forEach(n => { ids.push(`node_${n.id}`); walk(n.children); });
@@ -920,8 +936,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             </button>
                             {copyBuffer && !subtreeContains(copyBuffer.node, node.id) && copyBuffer.node.id !== node.id && (
                                 <button
-                                    title={`Wklej „${copyBuffer.sourceName}" jako dziecko`}
-                                    onClick={e => { e.stopPropagation(); const cloned = deepCloneNode(copyBuffer.node); save({ ...wbsTree, items: addChildTo(items, node.id, cloned) }); setCopyBuffer(null); }}
+                                    title={`Wklej „${copyBuffer.sourceName}" jako dziecko (z wymaganiami technicznymi, typem i statusem)`}
+                                    onClick={e => {
+                                        e.stopPropagation();
+                                        const { clone, mappings } = deepCloneNodeWithMappings(copyBuffer.node);
+                                        save({ ...wbsTree, items: addChildTo(items, node.id, clone) });
+                                        setCopyBuffer(null);
+                                        if (mappings.length > 0) onPasteCloned?.(mappings);
+                                    }}
                                     className="p-0.5 rounded hover:bg-emerald-500/20 text-gray-600 hover:text-emerald-400 transition-all"
                                 >
                                     <Clipboard size={9} />
