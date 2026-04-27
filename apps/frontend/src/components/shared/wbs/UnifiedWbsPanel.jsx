@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ExcelJS from 'exceljs';
-import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, LayoutList, Zap, Sparkles, ListTree, CalendarDays, ChevronsRight, ChevronsLeft } from 'lucide-react';
+import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays } from 'lucide-react';
+import MarkdownEditor from '../MarkdownEditor';
 import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
@@ -72,7 +73,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const [expandedIds, setExpandedIds] = useState(new Set());
     const [selectedId, setSelectedId] = useState(null);
     const [wbsDescription, setWbsDescription] = useState('');
-    const [strategyPreviewOpen, setStrategyPreviewOpen] = useState(false);
     const [strategySaving, setStrategySaving] = useState(false);
     const [strategySaved, setStrategySaved] = useState(false);
     const [projectUsers, setProjectUsers] = useState([]);
@@ -109,7 +109,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     }, []);
 
     const materialRef = useRef();
-    const strategyRef = useRef();
     const strategyLoadedRef = useRef(false);
     const strategySaveTimeout = useRef(null);
     const budgetImportFileInputRef = useRef(null);
@@ -663,8 +662,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         }
     }, [nodeId, userRoles]);
 
-    const getStrategyText = useCallback(() => strategyRef.current ? strategyRef.current.value : wbsDescription, [wbsDescription]);
-    const setStrategyText = useCallback((val) => { if (strategyRef.current) strategyRef.current.value = val; }, []);
+    const getStrategyText = useCallback(() => wbsDescription, [wbsDescription]);
 
     // Reset strategy state when switching nodes/versions so the new record loads fresh.
     // Pending autosave timeouts are left intact — they capture the old saveStrategy closure
@@ -852,175 +850,16 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         finally { setStrategySaving(false); }
     }, [nodeId, versionId, authHeaders]);
 
+    // Zachowane dla zewnętrznych wywołań (np. fetchData). MarkdownEditor zapisuje przez własny onSave.
     const handleStrategySave = useCallback((immediate = false) => {
         if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
-        const text = strategyRef.current ? strategyRef.current.value : wbsDescription;
-        if (immediate) { saveStrategy(text); return; }
-        strategySaveTimeout.current = setTimeout(() => saveStrategy(text), 1500);
+        if (immediate) { saveStrategy(wbsDescription); return; }
+        strategySaveTimeout.current = setTimeout(() => saveStrategy(wbsDescription), 1500);
     }, [wbsDescription, saveStrategy]);
-
-    const wrapSelection = useCallback((before, after = before, placeholder = 'tekst') => {
-        const ta = strategyRef.current;
-        if (!ta) return;
-        const text = ta.value;
-        const start = ta.selectionStart ?? 0;
-        const end = ta.selectionEnd ?? 0;
-        const selected = text.slice(start, end);
-        const insert = `${before}${selected || placeholder}${after}`;
-        const next = `${text.slice(0, start)}${insert}${text.slice(end)}`;
-        setWbsDescription(next);
-        setTimeout(() => {
-            ta.focus();
-            const cursor = selected ? start + insert.length : start + before.length + placeholder.length;
-            ta.setSelectionRange(cursor, cursor);
-        }, 0);
-        if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
-        strategySaveTimeout.current = setTimeout(() => saveStrategy(next), 1500);
-    }, [saveStrategy]);
-
-    // Wcięcie / cofnięcie wcięcia zaznaczonych linii (2 spacje = 1 poziom).
-    // Bez zaznaczenia operuje na bieżącej linii. Numeracja w renderze wylicza 1.1, 1.2 …
-    const indentSelectionLines = useCallback((unit = '  ') => {
-        const ta = strategyRef.current;
-        if (!ta) return;
-        const text = ta.value;
-        const start = ta.selectionStart ?? 0;
-        const end = ta.selectionEnd ?? 0;
-        const lineStart = text.lastIndexOf('\n', start - 1) + 1;
-        const lineEnd = end > start ? end : (text.indexOf('\n', start) === -1 ? text.length : text.indexOf('\n', start));
-        const block = text.slice(lineStart, lineEnd);
-        const transformed = block.split('\n').map(l => `${unit}${l}`).join('\n');
-        const next = `${text.slice(0, lineStart)}${transformed}${text.slice(lineEnd)}`;
-        const newStart = start + unit.length;
-        const newEnd = end + unit.length * (block.split('\n').length);
-        setWbsDescription(next);
-        setTimeout(() => { ta.focus(); ta.setSelectionRange(newStart, newEnd); }, 0);
-        if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
-        strategySaveTimeout.current = setTimeout(() => saveStrategy(next), 1500);
-    }, [saveStrategy]);
-
-    const outdentSelectionLines = useCallback((unit = '  ') => {
-        const ta = strategyRef.current;
-        if (!ta) return;
-        const text = ta.value;
-        const start = ta.selectionStart ?? 0;
-        const end = ta.selectionEnd ?? 0;
-        const lineStart = text.lastIndexOf('\n', start - 1) + 1;
-        const lineEnd = end > start ? end : (text.indexOf('\n', start) === -1 ? text.length : text.indexOf('\n', start));
-        const block = text.slice(lineStart, lineEnd);
-        let removedFirst = 0, removedTotal = 0;
-        const transformed = block.split('\n').map((l, i) => {
-            if (l.startsWith(unit)) {
-                if (i === 0) removedFirst = unit.length;
-                removedTotal += unit.length;
-                return l.slice(unit.length);
-            }
-            return l;
-        }).join('\n');
-        const next = `${text.slice(0, lineStart)}${transformed}${text.slice(lineEnd)}`;
-        setWbsDescription(next);
-        const newStart = Math.max(lineStart, start - removedFirst);
-        const newEnd = Math.max(newStart, end - removedTotal);
-        setTimeout(() => { ta.focus(); ta.setSelectionRange(newStart, newEnd); }, 0);
-        if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
-        strategySaveTimeout.current = setTimeout(() => saveStrategy(next), 1500);
-    }, [saveStrategy]);
-
-    const prefixSelectionLines = useCallback((prefix) => {
-        const ta = strategyRef.current;
-        if (!ta) return;
-        const text = ta.value;
-        const start = ta.selectionStart ?? 0;
-        const end = ta.selectionEnd ?? 0;
-        const selected = text.slice(start, end);
-
-        let next, cursorPos;
-        if (selected) {
-            const transformed = selected.split('\n').map(line => `${prefix}${line}`).join('\n');
-            next = `${text.slice(0, start)}${transformed}${text.slice(end)}`;
-            cursorPos = start + transformed.length;
-        } else {
-            // Znajdź początek bieżącej linii
-            const lineStart = text.lastIndexOf('\n', start - 1) + 1;
-            next = `${text.slice(0, lineStart)}${prefix}${text.slice(lineStart)}`;
-            cursorPos = lineStart + prefix.length + (start - lineStart);
-        }
-
-        setWbsDescription(next);
-        setTimeout(() => {
-            ta.focus();
-            ta.setSelectionRange(cursorPos, cursorPos);
-        }, 0);
-        if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
-        strategySaveTimeout.current = setTimeout(() => saveStrategy(next), 1500);
-    }, [saveStrategy]);
-
-    const handleStrategyKeyDown = useCallback((e) => {
-        // Tab / Shift+Tab — wcięcie / cofnięcie wcięcia
-        if (e.key === 'Tab') {
-            e.preventDefault();
-            if (e.shiftKey) outdentSelectionLines();
-            else indentSelectionLines();
-            return;
-        }
-        if (e.key !== 'Enter') return;
-        const ta = strategyRef.current;
-        if (!ta) return;
-        const text = ta.value;
-        const pos = ta.selectionStart;
-        const lineStart = text.lastIndexOf('\n', pos - 1) + 1;
-        const lineEnd = text.indexOf('\n', pos);
-        const fullLine = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd);
-
-        const ulMatch = fullLine.match(/^(\s*)- (.*)/);
-        const olMatch = fullLine.match(/^(\s*)(\d+)\. (.*)/);
-
-        if (ulMatch) {
-            e.preventDefault();
-            const indent = ulMatch[1];
-            const content = ulMatch[2].trim();
-            const prefixLen = indent.length + 2;
-            let newText, np;
-            if (!content) {
-                newText = text.slice(0, lineStart) + text.slice(lineStart + prefixLen);
-                np = lineStart;
-            } else {
-                const insert = `\n${indent}- `;
-                newText = text.slice(0, pos) + insert + text.slice(pos);
-                np = pos + insert.length;
-            }
-            setWbsDescription(newText);
-            setTimeout(() => { ta.setSelectionRange(np, np); ta.focus(); }, 0);
-            if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
-            strategySaveTimeout.current = setTimeout(() => saveStrategy(newText), 1500);
-            return;
-        }
-
-        if (olMatch) {
-            e.preventDefault();
-            const indent = olMatch[1];
-            const n = parseInt(olMatch[2], 10);
-            const content = olMatch[3].trim();
-            const prefixLen = indent.length + String(n).length + 2;
-            let newText, np;
-            if (!content) {
-                newText = text.slice(0, lineStart) + text.slice(lineStart + prefixLen);
-                np = lineStart;
-            } else {
-                const insert = `\n${indent}${n + 1}. `;
-                newText = text.slice(0, pos) + insert + text.slice(pos);
-                np = pos + insert.length;
-            }
-            setWbsDescription(newText);
-            setTimeout(() => { ta.setSelectionRange(np, np); ta.focus(); }, 0);
-            if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
-            strategySaveTimeout.current = setTimeout(() => saveStrategy(newText), 1500);
-            return;
-        }
-    }, [saveStrategy, setWbsDescription, indentSelectionLines, outdentSelectionLines]);
 
     // Wielopoziomowa numeracja: wcięcie 2 spacje = 1 poziom; wynik to 1, 1.1, 1.1.1, 1.2, 2, 2.1 …
     // Listy punktowane (-) zachowują wcięcie wizualnie. Bloki nie-listowe resetują liczniki.
+    // Używane przez handleExportPDF — edytor inline ma własny render w MarkdownEditor.
     const renderStrategyHtml = useCallback((text) => {
         const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const bold = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
@@ -2487,87 +2326,20 @@ ${materialsHtml}
                 onChange={handleBudgetImportFileChange}
             />
             {renderSection('strategy', 'Jak to chcemy zrobić', HelpCircle, 'blue', (
-                <div className="flex flex-col flex-1 min-h-0 p-4 gap-2">
-                    <div className="flex justify-end h-4">
-                        {strategySaving && <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Zapisywanie...</span>}
-                        {strategySaved && !strategySaving && <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">Zapisano</span>}
-                    </div>
-                    <textarea
-                        ref={strategyRef}
+                <div className="flex flex-col flex-1 min-h-0 p-4">
+                    <MarkdownEditor
                         value={wbsDescription}
-                        onChange={(e) => { setWbsDescription(e.target.value); handleStrategySave(); }}
-                        onKeyDown={handleStrategyKeyDown}
-                        onBlur={() => handleStrategySave(true)}
-                        className="flex-1 min-h-0 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed"
+                        onChange={setWbsDescription}
+                        onSave={(v) => saveStrategy(v)}
+                        previewTitle="Jak to chcemy zrobić"
+                        onExportPDF={() => handleExportPDF('strategy')}
                         placeholder="Zdefiniuj plan i strategię realizacji projektu..."
+                        containerClassName="flex-1 min-h-0"
+                        className="flex-1 min-h-0 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed resize-none"
+                        saveIndicator={true}
                     />
                 </div>
-            ), () => handleExportPDF('strategy'), (
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); wrapSelection('**', '**', 'pogrubienie'); }}
-                        className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
-                        title="Pogrubienie"
-                    >
-                        B
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('# '); }}
-                        className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
-                        title="Nagłówek H1"
-                    >
-                        H1
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('## '); }}
-                        className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
-                        title="Nagłówek H2"
-                    >
-                        H2
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('### '); }}
-                        className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
-                        title="Nagłówek H3"
-                    >
-                        H3
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('- '); }}
-                        className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
-                        title="Lista punktowana"
-                    >
-                        Lista
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); prefixSelectionLines('1. '); }}
-                        className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
-                        title="Lista numerowana (1, 1.1, 1.2…) — użyj wcięcia, aby zagnieździć"
-                    >
-                        1.
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); outdentSelectionLines(); }}
-                        className="p-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 transition-all"
-                        title="Cofnij wcięcie (Shift+Tab)"
-                    >
-                        <ChevronsLeft size={12} />
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); indentSelectionLines(); }}
-                        className="p-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 transition-all"
-                        title="Wcięcie akapitu (Tab)"
-                    >
-                        <ChevronsRight size={12} />
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); setStrategyPreviewOpen(true); }}
-                        className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
-                    >
-                        <LayoutList size={11} /> Podgląd
-                    </button>
-                </div>
-            ))}
+            ), () => handleExportPDF('strategy'))}
 
             {renderSection('tasks', 'Zadania', CalendarDays, 'blue', (
                 <TasksCalendarSection
@@ -2688,40 +2460,6 @@ ${materialsHtml}
                     </button>
                 </>
             ))}
-
-            {strategyPreviewOpen && (
-                <div className="fixed inset-0 z-[120] bg-[#05070bcc] backdrop-blur-sm flex flex-col">
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-[#0b0f17]">
-                        <div>
-                            <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-white">Podgląd: Jak to chcemy zrobić</h3>
-                            <p className="text-[10px] text-gray-500 uppercase tracking-widest">Pełny viewport</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => handleExportPDF('strategy')}
-                                className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all"
-                            >
-                                <FileDown size={11} /> PDF
-                            </button>
-                            <button
-                                onClick={() => setStrategyPreviewOpen(false)}
-                                className="p-2 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 transition-all"
-                                aria-label="Zamknij podgląd"
-                            >
-                                <X size={14} />
-                            </button>
-                        </div>
-                    </div>
-                    <div className="flex-1 overflow-auto px-8 py-6 custom-scrollbar">
-                        <div className="mx-auto max-w-5xl bg-black/40 border border-white/10 rounded-2xl p-8 min-h-full text-gray-200 leading-relaxed">
-                            <div
-                                className="prose prose-invert max-w-none"
-                                dangerouslySetInnerHTML={{ __html: renderStrategyHtml(getStrategyText() || 'Brak treści strategii') }}
-                            />
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {budgetImportOpen && (
                 <div className="fixed inset-0 z-[125] bg-[#05070bcc] backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !budgetImportLoading && setBudgetImportOpen(false)}>

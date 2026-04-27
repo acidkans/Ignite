@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Save, Clock, Calendar, Target, Package, AlertTriangle, CheckCircle2, Plus, Trash2, GripVertical, Wrench, ClipboardList, ShieldCheck, User, Users, Mail, Phone, PhoneCall, Bold, Italic, List, Heading, Minus, FileDown } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Save, Clock, Calendar, Target, Package, AlertTriangle, CheckCircle2, Plus, Trash2, GripVertical, Wrench, ClipboardList, ShieldCheck, User, Users, Mail, Phone, PhoneCall, FileDown } from 'lucide-react';
 import { API_URL } from '../../config';
 import { exportProjectPdf } from '../../utils/projectPdfExport';
 import { exportRequirementsPdf } from '../../utils/requirementsPdfExport';
+import MarkdownEditor from './MarkdownEditor';
 
 function countWorkingDays(startStr, endStr) {
     if (!startStr || !endStr) return null;
@@ -72,7 +73,6 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
 
-    const goalRef = useRef(null);
     const [form, setForm] = useState({
         offerDeadlineDate: '',
         offerDeadlineTime: '',
@@ -572,40 +572,17 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                     }
 
                     if (panelId === 'goal') {
-                        const insertFormat = (prefix, suffix = '') => {
-                            const ta = goalRef.current;
-                            if (!ta) return;
-                            const start = ta.selectionStart;
-                            const end = ta.selectionEnd;
-                            const text = form.projectGoal || '';
-                            const selected = text.substring(start, end);
-                            const before = text.substring(0, start);
-                            const after = text.substring(end);
-                            const newText = before + prefix + selected + suffix + after;
-                            setForm(prev => ({ ...prev, projectGoal: newText }));
-                            setTimeout(() => {
-                                ta.focus();
-                                ta.selectionStart = start + prefix.length;
-                                ta.selectionEnd = start + prefix.length + selected.length;
-                            }, 0);
-                        };
                         return (
                             <section key={panelId} {...panelProps}>
                                 {panelHeader(<Target size={15} className="text-purple-400" />, "Cel projektu")}
-                                <div className="flex items-center gap-1 mb-2 px-1">
-                                    <button type="button" onClick={() => insertFormat('**', '**')} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Pogrubienie"><Bold size={14} /></button>
-                                    <button type="button" onClick={() => insertFormat('_', '_')} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Kursywa"><Italic size={14} /></button>
-                                    <button type="button" onClick={() => insertFormat('## ')} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Nagłówek"><Heading size={14} /></button>
-                                    <button type="button" onClick={() => insertFormat('- ')} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Lista"><List size={14} /></button>
-                                    <button type="button" onClick={() => insertFormat('\n---\n')} className="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Separator"><Minus size={14} /></button>
-                                </div>
-                                <textarea
-                                    ref={goalRef}
-                                    value={form.projectGoal}
-                                    onChange={set('projectGoal')}
-                                    onBlur={() => handleSave()}
+                                <MarkdownEditor
+                                    value={form.projectGoal || ''}
+                                    onChange={(v) => setForm(prev => ({ ...prev, projectGoal: v }))}
+                                    onSave={() => handleSave()}
                                     placeholder="Opisz cel i zakres zamówienia…"
-                                    className={`${inputCls} flex-1 min-h-[60px] resize-none`}
+                                    previewTitle="Cel projektu"
+                                    containerClassName="flex-1 min-h-0"
+                                    className={`${inputCls} flex-1 min-h-[60px] resize-none custom-scrollbar`}
                                 />
                                 {resizeHandle}
                             </section>
