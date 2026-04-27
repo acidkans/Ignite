@@ -1047,7 +1047,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             } else if (ulm) {
                 resetOl();
                 const L = indentLevel(ulm[1]);
-                html += `<div style="margin:2px 0;padding-left:${L * 1.5 + 1.5}em;text-indent:-1em">• ${bold(ulm[2])}</div>`;
+                html += `<div style="display:flex;margin:2px 0;padding-left:${L * 1.5}em"><span style="display:inline-block;width:1.2em;flex-shrink:0">•</span><span style="flex:1;min-width:0">${bold(ulm[2])}</span></div>`;
             } else if (olm) {
                 const L = indentLevel(olm[1]);
                 const N = parseInt(olm[2], 10);
@@ -1055,9 +1055,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 if (olCounters.length === L + 1) olCounters[L] = N;
                 else { while (olCounters.length < L) olCounters.push(1); olCounters.push(N); }
                 const num = olCounters.join('.') + '.';
-                const padEm = L * 1.5 + 1.5;
-                const indentEm = Math.max(2, num.length * 0.6 + 0.5);
-                html += `<div style="margin:2px 0;padding-left:${padEm}em;text-indent:-${indentEm}em"><strong style="display:inline-block;min-width:${indentEm}em">${num}</strong> ${bold(olm[3])}</div>`;
+                // Kolumna numeru rośnie z głębokością (1. → 1.1. → 1.1.1.); flex zapewnia hanging indent bez wyjścia poza kontener.
+                const numColEm = Math.max(2, num.length * 0.55 + 0.4);
+                html += `<div style="display:flex;margin:2px 0;padding-left:${L * 1.5}em"><strong style="display:inline-block;width:${numColEm}em;flex-shrink:0">${num}</strong><span style="flex:1;min-width:0">${bold(olm[3])}</span></div>`;
             } else if (raw.trim() === '') {
                 resetOl();
                 html += '<br>';
