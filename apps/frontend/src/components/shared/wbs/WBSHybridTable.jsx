@@ -215,7 +215,8 @@ const extractNode = (nodes, id) => {
         if (n.id === id) { found = n; return acc; }
         return [...acc, { ...n, children: clean(n.children || []) }];
     }, []);
-    return [found, clean(nodes)];
+    const cleaned = clean(nodes); // musi być przed odczytem `found` — literał tablicy [found, clean(nodes)] czyta found PRZED wywołaniem clean
+    return [found, cleaned];
 };
 
 const deepCloneNode = node => ({
