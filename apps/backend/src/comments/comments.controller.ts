@@ -66,6 +66,11 @@ export class CommentsController {
         return comment;
     }
 
+    @Post('order/:orderId/mark-read')
+    async markAllRead(@Param('orderId') orderId: string, @Request() req) {
+        return this.comments.markAllReadByOrder(orderId, req.user.userId);
+    }
+
     @Patch(':id/type')
     updateType(@Param('id') id: string, @Body() body: { type: string }) {
         return this.comments.updateType(id, body.type);

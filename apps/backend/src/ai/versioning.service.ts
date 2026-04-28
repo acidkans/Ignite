@@ -18,21 +18,30 @@ export class VersioningService {
 
             if (!node) throw new NotFoundException('Node not found');
 
-            // 2. Determine source versions to clone from
-            let sourceFilter: any;
-            let sourceNotes = null;
+            // 2. Determine source version to clone from
+            let sourceVId: string | null = null;
+            let sourceNotes: string | null = null;
             if (sourceVersionId && sourceVersionId !== 'null') {
-                sourceFilter = { versionId: sourceVersionId };
+                sourceVId = sourceVersionId;
                 const sourceVersion = await tx.projectVersion.findUnique({ where: { id: sourceVersionId }, select: { notes: true } });
-                sourceNotes = sourceVersion?.notes;
+                sourceNotes = sourceVersion?.notes ?? null;
             } else {
-                // Legacy/Fallback: find current active or use baseline
-                const activeVersion = await tx.projectVersion.findFirst({
-                    where: { nodeId, isActive: true }
-                });
-                sourceFilter = activeVersion ? { versionId: activeVersion.id } : { versionId: null };
-                sourceNotes = activeVersion?.notes;
+                const activeVersion = await tx.projectVersion.findFirst({ where: { nodeId, isActive: true } });
+                sourceVId = activeVersion?.id ?? null;
+                sourceNotes = activeVersion?.notes ?? null;
             }
+
+            // Snapshot to pełny freeze: jeśli źródło to wersja i ma własne wiersze,
+            // klonujemy WYŁĄCZNIE jej wiersze (nie scalamy z baseline). Pusta wersja → baseline.
+            // Spójne z `getUnifiedTree`.
+            const loadSourceRows = async <T extends { id: string }>(
+                findMany: (where: any) => Promise<T[]>,
+            ): Promise<T[]> => {
+                if (sourceVId == null) return findMany({ versionId: null });
+                const versioned = await findMany({ versionId: sourceVId });
+                if (versioned.length > 0) return versioned;
+                return findMany({ versionId: null });
+            };
 
             // 3. Create ProjectVersion
             const newVersion = await tx.projectVersion.create({
@@ -45,9 +54,9 @@ export class VersioningService {
             });
 
             // 4. Clone Subtasks (WBS) with ID mapping
-            const subtasks = await tx.subtask.findMany({
-                where: { nodeId, ...sourceFilter }
-            });
+            const subtasks = await loadSourceRows((extra) => tx.subtask.findMany({
+                where: { nodeId, ...extra }
+            }));
 
             const subtaskIdMap = new Map<string, string>();
 
@@ -66,41 +75,20 @@ export class VersioningService {
                         category: subtask.category,
                         phase: subtask.phase,
                         requirementItemId: subtask.requirementItemId,
+                        isAiGenerated: subtask.isAiGenerated,
+                        isApproved: subtask.isApproved,
                     }
                 });
                 subtaskIdMap.set(subtask.id, newSubtask.id);
             }
 
-            // 5. Clone Budget Line Items
-            const budgetItems = await tx.budgetLineItem.findMany({
-                where: { nodeId, ...sourceFilter }
-            });
-
-            for (const item of budgetItems) {
-                await tx.budgetLineItem.create({
-                    data: {
-                        nodeId,
-                        versionId: newVersion.id,
-                        subtaskId: item.subtaskId ? subtaskIdMap.get(item.subtaskId) || null : null,
-                        type: item.type,
-                        description: item.description,
-                        unit: item.unit,
-                        unitCost: item.unitCost,
-                        quantity: item.quantity,
-                        totalCost: item.totalCost,
-                        margin: item.margin,
-                        unitPrice: item.unitPrice,
-                        totalPrice: item.totalPrice,
-                        comment: item.comment,
-                    }
-                });
-            }
-
-            // 6. Clone WBS Nodes with ID mapping
-            const wbsNodes = await tx.wbsNode.findMany({
-                where: { nodeId, ...sourceFilter },
+            // 5. Clone WBS Nodes with ID mapping (must happen before BudgetLineItem
+            //    so wbsNodeId can be remapped to the new tree)
+            const wbsRaw = await loadSourceRows((extra) => tx.wbsNode.findMany({
+                where: { nodeId, ...extra },
                 orderBy: { sortOrder: 'asc' },
-            });
+            }));
+            const wbsNodes = wbsRaw.sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
             const wbsIdMap = new Map<string, string>();
 
@@ -121,6 +109,7 @@ export class VersioningService {
                         resources: wn.resources,
                         cost: wn.cost,
                         tags: wn.tags,
+                        qa: wn.qa,
                         sortOrder: wn.sortOrder,
                         budgetType: wn.budgetType,
                         unit: wn.unit,
@@ -147,6 +136,33 @@ export class VersioningService {
                 }
             }
 
+            // 6. Clone Budget Line Items (with subtaskId + wbsNodeId remap)
+            const budgetItems = await loadSourceRows((extra) => tx.budgetLineItem.findMany({
+                where: { nodeId, ...extra }
+            }));
+
+            for (const item of budgetItems) {
+                await tx.budgetLineItem.create({
+                    data: {
+                        nodeId,
+                        versionId: newVersion.id,
+                        subtaskId: item.subtaskId ? subtaskIdMap.get(item.subtaskId) || null : null,
+                        wbsNodeId: item.wbsNodeId ? wbsIdMap.get(item.wbsNodeId) || null : null,
+                        type: item.type,
+                        description: item.description,
+                        unit: item.unit,
+                        unitCost: item.unitCost,
+                        quantity: item.quantity,
+                        totalCost: item.totalCost,
+                        margin: item.margin,
+                        discount: item.discount,
+                        unitPrice: item.unitPrice,
+                        totalPrice: item.totalPrice,
+                        comment: item.comment,
+                    }
+                });
+            }
+
             // 7. Clone WBS Node Material allocations
             const wbsMaterials = await tx.wbsNodeMaterial.findMany({
                 where: { wbsNodeId: { in: wbsNodes.map(n => n.id) } },
@@ -165,7 +181,27 @@ export class VersioningService {
                 }
             }
 
-            // 8. Deactivate other versions
+            // 8. Clone WbsMarkerLink (powiązania węzłów WBS ze schematicznymi markerami/załącznikami)
+            const wbsLinks = await tx.wbsMarkerLink.findMany({
+                where: { wbsNodeId: { in: wbsNodes.map(n => n.id) } },
+            });
+
+            for (const link of wbsLinks) {
+                const newWbsId = wbsIdMap.get(link.wbsNodeId);
+                if (!newWbsId) continue;
+                try {
+                    await tx.wbsMarkerLink.create({
+                        data: {
+                            wbsNodeId: newWbsId,
+                            markerId: link.markerId,
+                        },
+                    });
+                } catch {
+                    // Unique (wbsNodeId, markerId) — ignoruj duplikaty
+                }
+            }
+
+            // 9. Deactivate other versions
             await tx.projectVersion.updateMany({
                 where: {
                     nodeId,
@@ -174,27 +210,34 @@ export class VersioningService {
                 data: { isActive: false }
             });
 
-            // 9. Clone Order Requirements (including wbsDescription and budgetNotes)
-            const sourceReqs = await tx.orderRequirements.findMany({
-                where: { nodeId, versionId: sourceFilter.versionId }
-            });
+            // 10. Clone Order Requirements (full carry-over — w tym status oferty).
+            // OrderRequirements ma unique (nodeId, versionId), więc bierzemy dokładnie
+            // jeden wiersz źródłowy — preferowana wersja, fallback baseline.
+            let sourceReq = sourceVId
+                ? await tx.orderRequirements.findFirst({ where: { nodeId, versionId: sourceVId } })
+                : null;
+            if (!sourceReq) {
+                sourceReq = await tx.orderRequirements.findFirst({ where: { nodeId, versionId: null } });
+            }
 
-            for (const req of sourceReqs) {
+            if (sourceReq) {
                 await tx.orderRequirements.create({
                     data: {
                         nodeId,
                         versionId: newVersion.id,
-                        offerDeadline: req.offerDeadline,
-                        projectStart: req.projectStart,
-                        projectEnd: req.projectEnd,
-                        projectGoal: req.projectGoal,
-                        projectItems: req.projectItems,
-                        wbsDescription: req.wbsDescription,
-                        budgetNotes: req.budgetNotes,
-                        clientContacts: req.clientContacts,
-                        clientProjectManager: req.clientProjectManager,
-                        clientProjectManagerEmail: req.clientProjectManagerEmail,
-                        clientProjectManagerPhone: req.clientProjectManagerPhone,
+                        offerDeadline: sourceReq.offerDeadline,
+                        projectStart: sourceReq.projectStart,
+                        projectEnd: sourceReq.projectEnd,
+                        projectGoal: sourceReq.projectGoal,
+                        projectItems: sourceReq.projectItems,
+                        wbsDescription: sourceReq.wbsDescription,
+                        budgetNotes: sourceReq.budgetNotes,
+                        clientContacts: sourceReq.clientContacts,
+                        clientProjectManager: sourceReq.clientProjectManager,
+                        clientProjectManagerEmail: sourceReq.clientProjectManagerEmail,
+                        clientProjectManagerPhone: sourceReq.clientProjectManagerPhone,
+                        offerStatus: sourceReq.offerStatus,
+                        offerStatusComment: sourceReq.offerStatusComment,
                     }
                 });
             }

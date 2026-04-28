@@ -23,13 +23,14 @@ function formatTime(iso) {
     return new Date(iso).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' });
 }
 
-export default function NotificationBell({ onNavigateToOrder }) {
+export default function NotificationBell({ onNavigateToOrder, onNewUnread }) {
     const token = sessionStorage.getItem('token');
     const authHeaders = { Authorization: `Bearer ${token}` };
 
     const [notifications, setNotifications] = useState([]);
     const [unread, setUnread] = useState(0);
     const [open, setOpen] = useState(false);
+    const prevUnreadRef = useRef(null);
     const [pushPermission, setPushPermission] = useState(() =>
         'Notification' in window ? Notification.permission : 'unsupported'
     );
@@ -44,8 +45,14 @@ export default function NotificationBell({ onNavigateToOrder }) {
 
     const loadCount = useCallback(async () => {
         const res = await fetch(`${API_URL}/notifications/unread-count`, { headers: authHeaders });
-        if (res.ok) setUnread(await res.json());
-    }, []);
+        if (res.ok) {
+            const next = await res.json();
+            setUnread(next);
+            const prev = prevUnreadRef.current;
+            if (prev !== null && next > prev) onNewUnread?.();
+            prevUnreadRef.current = next;
+        }
+    }, [onNewUnread]);
 
     const loadAll = useCallback(async () => {
         const res = await fetch(`${API_URL}/notifications`, { headers: authHeaders });

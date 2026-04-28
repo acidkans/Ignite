@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { API_URL } from '../../config';
 import DynamicSidebar from './DynamicSidebar';
@@ -16,6 +16,34 @@ export default function MainLayout({ onLogout }) {
     const [leftVisible, setLeftVisible] = useState(true);
     const [rightWidth, setRightWidth] = useState(320);
     const [aiVisible, setAiVisible] = useState(false);
+    const [flashTick, setFlashTick] = useState(0);
+
+    const triggerFlash = useCallback(() => {
+        console.log('[Sidebar] triggerFlash() called');
+        setFlashTick(t => t + 1);
+    }, []);
+
+    // Słuchaj wiadomości z service workera o nowym powiadomieniu push — natychmiast odpalamy miganie.
+    useEffect(() => {
+        if (!('serviceWorker' in navigator)) return;
+        const handler = (event) => {
+            if (event.data?.type === 'NEW_NOTIFICATION') triggerFlash();
+        };
+        navigator.serviceWorker.addEventListener('message', handler);
+        // Debug helper: pozwala odpalić miganie z konsoli (window.__flashSidebar()).
+        window.__flashSidebar = triggerFlash;
+        return () => {
+            navigator.serviceWorker.removeEventListener('message', handler);
+            delete window.__flashSidebar;
+        };
+    }, [triggerFlash]);
+
+    // Auto-czyszczenie stanu migania po 5 sekundach (5 cykli × 1s).
+    useEffect(() => {
+        if (flashTick === 0) return;
+        const id = setTimeout(() => setFlashTick(0), 5200);
+        return () => clearTimeout(id);
+    }, [flashTick]);
 
     // Data State
     const [menuTree, setMenuTree] = useState([]);
@@ -160,7 +188,10 @@ export default function MainLayout({ onLogout }) {
                 {/* User Footer */}
                 <div className="p-2 border-t border-white/5 bg-black/20 backdrop-blur-sm">
                     <div className="flex items-center gap-2">
-                        <NotificationBell onNavigateToOrder={(orderId, requirementId) => { pendingTabRef.current = requirementId ? 'materials' : 'comments'; pendingRequirementIdRef.current = requirementId || null; handleNodeChange(orderId); }} />
+                        <NotificationBell
+                            onNavigateToOrder={(orderId, requirementId) => { pendingTabRef.current = requirementId ? 'materials' : 'comments'; pendingRequirementIdRef.current = requirementId || null; handleNodeChange(orderId); }}
+                            onNewUnread={triggerFlash}
+                        />
                         <button
                             onClick={onLogout}
                             className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors flex-shrink-0"
@@ -185,7 +216,10 @@ export default function MainLayout({ onLogout }) {
             </nav>
 
             {/* SIDEBAR TOGGLE STRIP */}
-            <div className="flex-shrink-0 hidden md:flex items-center bg-black/20 border-r border-white/5">
+            <div
+                key={!leftVisible && flashTick > 0 ? `flash-${flashTick}` : 'idle'}
+                className={`flex-shrink-0 hidden md:flex items-center border-r border-white/5 ${!leftVisible && flashTick > 0 ? 'animate-sidebar-flash-red' : 'bg-black/20'}`}
+            >
                 <button
                     onClick={() => setLeftVisible(v => !v)}
                     title={leftVisible ? 'Ukryj panel boczny' : 'Pokaż panel boczny'}

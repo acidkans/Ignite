@@ -64,6 +64,23 @@ const buildBudgetRows = (nodes, parentId, depth) => {
     }).join('');
 };
 
+const renderQaCell = (qa) => {
+    const list = Array.isArray(qa) ? qa.filter((p) => (p?.question || '').trim() || (p?.answer || '').trim()) : [];
+    if (list.length === 0) return '';
+    const rows = list.map((p) => `
+        <tr>
+            <td style="padding:2px 4px;border:1px solid #e5e7eb;font-size:9px;text-align:left;vertical-align:top;color:#1f2937;background:#fff">${esc(p.question || '')}</td>
+            <td style="padding:2px 4px;border:1px solid #e5e7eb;font-size:9px;text-align:left;vertical-align:top;color:#374151;background:#fff">${esc(p.answer || '')}</td>
+        </tr>`).join('');
+    return `<table style="width:100%;border-collapse:collapse;margin:0">
+        <thead><tr>
+            <th style="padding:2px 4px;border:1px solid #d1d5db;font-size:8px;text-transform:uppercase;letter-spacing:0.05em;background:#f3f4f6;color:#4b5563;text-align:left;width:50%">Pytanie</th>
+            <th style="padding:2px 4px;border:1px solid #d1d5db;font-size:8px;text-transform:uppercase;letter-spacing:0.05em;background:#f3f4f6;color:#4b5563;text-align:left;width:50%">Odpowiedź</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+    </table>`;
+};
+
 const buildTreeRows = (nodes, parentId, depth, markerSummaryFn) => {
     const children = nodes
         .filter((n) => (n.parentId || null) === (parentId || null))
@@ -74,9 +91,8 @@ const buildTreeRows = (nodes, parentId, depth, markerSummaryFn) => {
         const markerCell = markerSummaryFn ? `<td>${markerSummaryFn(n.id)}</td>` : '';
         return `<tr>
             <td style="padding-left:${8 + indent}px;${nameStyle};text-align:left">${depth > 0 ? '└ ' : ''}${esc(n.name || '')}</td>
-            <td>${esc(TYPE_LABELS[n.type] || n.type || '')}</td>
             <td>${esc(n.status || '')}</td>
-            <td>${esc(n.owner || '')}</td>
+            <td style="text-align:left;padding:4px">${renderQaCell(n.qa)}</td>
             ${markerCell}
         </tr>${buildTreeRows(nodes, n.id, depth + 1, markerSummaryFn)}`;
     }).join('');
@@ -220,8 +236,8 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
         <div class="section">
             <div class="section-header">Struktura zadań projektu (WBS)</div>
             <table>
-                <thead><tr><th>Nazwa</th><th>Typ</th><th>Status</th><th>Osoba</th><th>Załączniki</th></tr></thead>
-                <tbody>${wbsNodes.length ? buildTreeRows(wbsNodes, null, 0, markerSummary) : '<tr><td colspan="5">Brak danych WBS</td></tr>'}</tbody>
+                <thead><tr><th style="width:24%">Nazwa</th><th style="width:14%">Status</th><th style="width:42%">Q&amp;A</th><th style="width:20%">Załączniki</th></tr></thead>
+                <tbody>${wbsNodes.length ? buildTreeRows(wbsNodes, null, 0, markerSummary) : '<tr><td colspan="4">Brak danych WBS</td></tr>'}</tbody>
             </table>
         </div>`;
 
@@ -300,7 +316,7 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
   .empty { padding: 10px 12px; font-size: 10px; color: #6b7280; background: #f9fafb; border: 1px solid #e5e7eb; }
   thead { display: table-header-group; }
   tr { page-break-inside: avoid; break-inside: avoid; }
-  @page { margin: 0; size: A4; }
+  @page { margin: 0; size: A4 landscape; }
   @media print {
     body { padding: 14mm 14mm 14mm 14mm; }
   }

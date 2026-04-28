@@ -16,7 +16,13 @@ self.addEventListener('push', (event) => {
         data: { orderId: data.orderId || null, url: '/' },
     };
 
-    event.waitUntil(self.registration.showNotification(title, options));
+    event.waitUntil(Promise.all([
+        self.registration.showNotification(title, options),
+        // Poinformuj otwarte taby aplikacji o nowej wiadomości — używane do migania paska navbara.
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+            for (const c of list) c.postMessage({ type: 'NEW_NOTIFICATION', orderId: data.orderId || null });
+        }),
+    ]));
 });
 
 self.addEventListener('notificationclick', (event) => {

@@ -2,14 +2,61 @@ import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { API_URL } from '../../config';
 
+// Bezpieczny dekoder JWT — wyciąga subject (userId) z tokena.
+const getUserIdFromToken = () => {
+    try {
+        const token = sessionStorage.getItem('token');
+        if (!token) return 'anon';
+        return JSON.parse(atob(token.split('.')[1])).sub || 'anon';
+    } catch { return 'anon'; }
+};
+
+const DEFAULT_GREETING = { role: 'assistant', content: 'Cześć! Jestem Twoim asystentem ERP. O czym chcesz dzisiaj porozmawiać?' };
+const STORAGE_PREFIX = 'ai_chat_history';
+const MAX_PERSISTED_MESSAGES = 100; // chroni przed przekroczeniem limitu localStorage (~5MB)
+
+const buildStorageKey = (nodeId) => `${STORAGE_PREFIX}_${getUserIdFromToken()}_${nodeId || 'global'}`;
+
+const loadPersistedMessages = (nodeId) => {
+    try {
+        const raw = localStorage.getItem(buildStorageKey(nodeId));
+        if (!raw) return [DEFAULT_GREETING];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) && parsed.length > 0 ? parsed : [DEFAULT_GREETING];
+    } catch { return [DEFAULT_GREETING]; }
+};
+
 export default function AIChatSidebar({ nodeId, nodes, onClose }) {
-    const [messages, setMessages] = useState([
-        { role: 'assistant', content: 'Cześć! Jestem Twoim asystentem ERP. O czym chcesz dzisiaj porozmawiać?' }
-    ]);
+    // Lazy initial state — wczytuje historię z localStorage przy pierwszym renderze
+    const [messages, setMessages] = useState(() => loadPersistedMessages(nodeId));
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const chatEndRef = useRef(null);
+
+    // Po zmianie nodeId — wczytaj historię dla nowego kontekstu
+    useEffect(() => {
+        setMessages(loadPersistedMessages(nodeId));
+    }, [nodeId]);
+
+    // Persistuj po każdej zmianie wiadomości; cap na ostatnie MAX_PERSISTED_MESSAGES.
+    useEffect(() => {
+        try {
+            const trimmed = messages.length > MAX_PERSISTED_MESSAGES
+                ? messages.slice(-MAX_PERSISTED_MESSAGES)
+                : messages;
+            localStorage.setItem(buildStorageKey(nodeId), JSON.stringify(trimmed));
+        } catch (err) {
+            // QuotaExceededError — wyczyść historię żeby nie blokować pisania
+            console.warn('[AI Chat] Nie udało się zapisać historii do localStorage:', err?.message);
+        }
+    }, [messages, nodeId]);
+
+    const handleClearHistory = () => {
+        if (!window.confirm('Wyczyścić historię rozmowy w tym kontekście?')) return;
+        localStorage.removeItem(buildStorageKey(nodeId));
+        setMessages([DEFAULT_GREETING]);
+    };
 
     const [aiConfig, setAiConfig] = useState({ aiModel: '...', embeddingModel: '...' });
 
@@ -143,6 +190,16 @@ export default function AIChatSidebar({ nodeId, nodes, onClose }) {
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
                             </svg>
                             {syncing ? 'Sync...' : 'Sync'}
+                        </button>
+                        <button
+                            onClick={handleClearHistory}
+                            title="Wyczyść historię rozmowy w tym kontekście"
+                            className="flex items-center gap-1 px-2 py-1 text-[10px] text-gray-400 hover:text-red-300 hover:bg-red-500/10 border border-white/10 hover:border-red-500/30 rounded-md transition-all"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                            Wyczyść
                         </button>
                         {onClose && (
                             <button

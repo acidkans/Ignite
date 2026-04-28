@@ -28,6 +28,7 @@ model User {
   subordinates      User[]             @relation("UserSupervisor")
   teams             Team[]             @relation("TeamToUser")
   comments          Comment[]
+  commentReads      CommentRead[]
   pushSubscriptions PushSubscription[]
   notifications     Notification[]
 
@@ -49,8 +50,23 @@ model Comment {
   user    User      @relation(fields: [userId], references: [id])
   replyTo Comment?  @relation("CommentReplies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies Comment[] @relation("CommentReplies")
+  reads   CommentRead[]
 
   @@map("comments")
+}
+
+model CommentRead {
+  id        String   @id @default(uuid())
+  commentId String
+  userId    String
+  readAt    DateTime @default(now())
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([userId])
+  @@map("comment_reads")
 }
 
 model PushSubscription {
@@ -631,6 +647,7 @@ model WbsNode {
   resources String   @default("")
   cost      String   @default("")
   tags      String? // JSON array
+  qa        String? // JSON array: [{ question, answer }]
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

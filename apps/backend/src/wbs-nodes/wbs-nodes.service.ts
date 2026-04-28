@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
-interface WbsTreeItem {
+export interface QaPair {
+    question: string;
+    answer: string;
+}
+
+export interface WbsTreeItem {
     id: string;
     name: string;
     type: string;
@@ -12,6 +17,7 @@ interface WbsTreeItem {
     cost: string;
     comment: string;
     tags: string[];
+    qa: QaPair[];
     children: WbsTreeItem[];
 }
 
@@ -86,6 +92,7 @@ export class WbsNodesService {
                             cost: row.cost,
                             comment: row.comment,
                             tags: row.tags,
+                            qa: row.qa,
                             sortOrder: row.sortOrder,
                         },
                     });
@@ -151,6 +158,7 @@ export class WbsNodesService {
                 cost: n.cost || '',
                 comment: n.comment || '',
                 tags: this.parseTags(n.tags),
+                qa: this.parseQa(n.qa),
                 children: this.buildTree(nodes, n.id),
             }));
     }
@@ -178,6 +186,7 @@ export class WbsNodesService {
                 cost: item.cost || '',
                 comment: item.comment || '',
                 tags: Array.isArray(item.tags) && item.tags.length > 0 ? JSON.stringify(item.tags) : null,
+                qa: Array.isArray(item.qa) && item.qa.length > 0 ? JSON.stringify(item.qa) : null,
                 sortOrder: i,
             });
             if (item.children?.length) {
@@ -202,6 +211,18 @@ export class WbsNodesService {
         try { return JSON.parse(raw); } catch { return []; }
     }
 
+    private parseQa(raw: string | null): QaPair[] {
+        if (!raw) return [];
+        try {
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) return [];
+            return parsed.map((p) => ({
+                question: String(p?.question ?? ''),
+                answer: String(p?.answer ?? ''),
+            }));
+        } catch { return []; }
+    }
+
     // ─── Unified tree (Phase 4) ─────────────────────────────────────────
 
     /**
@@ -220,24 +241,14 @@ export class WbsNodesService {
         try {
             const fetchNodesForCandidate = async (candidateNodeId: string) => {
                 if (vId) {
-                    const [versionRows, baseRows] = await Promise.all([
-                        this.prisma.wbsNode.findMany({
-                            where: { nodeId: candidateNodeId, versionId: vId },
-                            orderBy: { sortOrder: 'asc' },
-                        }),
-                        this.prisma.wbsNode.findMany({
-                            where: { nodeId: candidateNodeId, versionId: null },
-                            orderBy: { sortOrder: 'asc' },
-                        }),
-                    ]);
-
-                    if (versionRows.length === 0) return baseRows;
-                    if (baseRows.length === 0) return versionRows;
-
-                    // Merge base + version by ID: version rows override base if same UUID.
-                    const byId = new Map(baseRows.map((row) => [row.id, row]));
-                    for (const row of versionRows) byId.set(row.id, row);
-                    return Array.from(byId.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+                    // Snapshot ma własne UUID-y, nie da się scalić z baseline po `id`.
+                    // Jeżeli wersja ma własne wiersze → zwróć tylko je (pełny freeze).
+                    // Jeżeli wersja jest pusta → fallback do baseline.
+                    const versionRows = await this.prisma.wbsNode.findMany({
+                        where: { nodeId: candidateNodeId, versionId: vId },
+                        orderBy: { sortOrder: 'asc' },
+                    });
+                    if (versionRows.length > 0) return versionRows;
                 }
 
                 return this.prisma.wbsNode.findMany({
@@ -361,6 +372,7 @@ export class WbsNodesService {
                 materialsTotalCost,
                 materialsCount: materials.length,
                 tags: this.parseTags(node.tags),
+                qa: this.parseQa(node.qa),
             };
         });
 
@@ -419,6 +431,15 @@ export class WbsNodesService {
             allowed.tags = Array.isArray(data.tags) && data.tags.length > 0
                 ? JSON.stringify(data.tags)
                 : null;
+        }
+        if (data.qa !== undefined) {
+            const cleaned = Array.isArray(data.qa)
+                ? data.qa.map((p: any) => ({
+                    question: String(p?.question ?? ''),
+                    answer: String(p?.answer ?? ''),
+                }))
+                : [];
+            allowed.qa = cleaned.length > 0 ? JSON.stringify(cleaned) : null;
         }
         const updated = await this.prisma.wbsNode.update({ where: { id }, data: allowed });
 
