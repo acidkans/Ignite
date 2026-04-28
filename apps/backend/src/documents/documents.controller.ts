@@ -1,8 +1,9 @@
-import { Controller, Post, Get, Delete, Patch, UseInterceptors, UploadedFile, Body, Param, Query, UseGuards, Res } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Patch, UseInterceptors, UploadedFile, Body, Param, Query, UseGuards, Res, Request } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { DocumentsService } from './documents.service';
 import { Multer } from 'multer';
 import { Response } from 'express';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('documents')
 export class DocumentsController {
@@ -73,6 +74,37 @@ export class DocumentsController {
     @Get(':id/parsed-positions')
     async getParsedPositions(@Param('id') id: string) {
         return this.documentsService.getParsedPositions(id);
+    }
+
+    // ── Highlights ────────────────────────────────────────────────────────────
+    @Get(':id/highlights')
+    async listHighlights(@Param('id') id: string) {
+        return this.documentsService.listHighlights(id);
+    }
+
+    @Post(':id/highlights')
+    @UseGuards(JwtAuthGuard)
+    async createHighlight(
+        @Param('id') id: string,
+        @Body() body: { page: number; rects: any; color?: string; comment?: string | null },
+        @Request() req: any,
+    ) {
+        return this.documentsService.createHighlight(id, req?.user?.userId ?? null, body);
+    }
+
+    @Patch(':id/highlights/:hid')
+    @UseGuards(JwtAuthGuard)
+    async updateHighlight(
+        @Param('hid') hid: string,
+        @Body() body: { color?: string; comment?: string | null },
+    ) {
+        return this.documentsService.updateHighlight(hid, body);
+    }
+
+    @Delete(':id/highlights/:hid')
+    @UseGuards(JwtAuthGuard)
+    async deleteHighlight(@Param('hid') hid: string) {
+        return this.documentsService.deleteHighlight(hid);
     }
 
     @Patch(':id/parsed-positions')
