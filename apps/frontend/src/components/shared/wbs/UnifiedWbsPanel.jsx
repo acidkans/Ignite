@@ -1240,6 +1240,10 @@ ${materialsHtml}
         summarySheet.columns = [
             { width: 28 },
             { width: 22 },
+            { width: 18 },
+            { width: 18 },
+            { width: 18 },
+            { width: 14 },
         ];
         summarySheet.addRow([`Budżet projektu`, fileProjectName]);
         summarySheet.addRow(['Data eksportu', exportDate]);
@@ -1253,10 +1257,57 @@ ${materialsHtml}
         summarySheet.addRow(['Zysk po rabatach', exportedProfitAfterDiscount]);
         summarySheet.addRow(['Marża po rabatach', exportedMarginAfterDiscount / 100]);
 
-        summarySheet.getColumn(2).numFmt = '#,##0.00';
+        summarySheet.getCell('B4').numFmt = '#,##0.00';
+        summarySheet.getCell('B5').numFmt = '#,##0.00';
         summarySheet.getCell('B6').numFmt = '0.00%';
+        summarySheet.getCell('B7').numFmt = '#,##0.00';
+        summarySheet.getCell('B8').numFmt = '#,##0.00';
+        summarySheet.getCell('B9').numFmt = '#,##0.00';
+        summarySheet.getCell('B10').numFmt = '#,##0.00';
         summarySheet.getCell('B11').numFmt = '0.00%';
         summarySheet.getRow(1).font = { bold: true, size: 14 };
+
+        // Per-type aggregation table
+        const typeAgg = {};
+        for (const row of rows) {
+            const typeKey = row.type || '';
+            const typeLabel = TYPE_LABELS[typeKey] || typeKey || '—';
+            if (!typeAgg[typeLabel]) typeAgg[typeLabel] = { count: 0, cost: 0, revenue: 0 };
+            typeAgg[typeLabel].count += 1;
+            typeAgg[typeLabel].cost += Number(row.totalCost) || 0;
+            typeAgg[typeLabel].revenue += Number(row.offerPrice) || 0;
+        }
+
+        summarySheet.addRow([]);
+        const perTypeTitleRow = summarySheet.addRow(['Podsumowanie per typ']);
+        perTypeTitleRow.font = { bold: true, size: 12 };
+        const perTypeHeaderRow = summarySheet.addRow(['Typ', 'Liczba', 'Koszt', 'Przychód', 'Zysk', 'Marża %']);
+        perTypeHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        perTypeHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+
+        const perTypeFirstRow = perTypeHeaderRow.number + 1;
+        const typeEntries = Object.entries(typeAgg).sort((a, b) => b[1].cost - a[1].cost);
+        for (const [label, agg] of typeEntries) {
+            const profit = agg.revenue - agg.cost;
+            const margin = agg.revenue > 0 ? profit / agg.revenue : 0;
+            summarySheet.addRow([label, agg.count, agg.cost, agg.revenue, profit, margin]);
+        }
+        const perTypeTotalCount = typeEntries.reduce((s, [, a]) => s + a.count, 0);
+        const perTypeTotalCost = typeEntries.reduce((s, [, a]) => s + a.cost, 0);
+        const perTypeTotalRevenue = typeEntries.reduce((s, [, a]) => s + a.revenue, 0);
+        const perTypeTotalProfit = perTypeTotalRevenue - perTypeTotalCost;
+        const perTypeTotalMargin = perTypeTotalRevenue > 0 ? perTypeTotalProfit / perTypeTotalRevenue : 0;
+        const perTypeTotalsRow = summarySheet.addRow(['Razem', perTypeTotalCount, perTypeTotalCost, perTypeTotalRevenue, perTypeTotalProfit, perTypeTotalMargin]);
+        perTypeTotalsRow.font = { bold: true };
+        perTypeTotalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
+
+        for (let r = perTypeFirstRow; r <= perTypeTotalsRow.number; r++) {
+            summarySheet.getCell(`B${r}`).numFmt = '#,##0';
+            summarySheet.getCell(`C${r}`).numFmt = '#,##0.00';
+            summarySheet.getCell(`D${r}`).numFmt = '#,##0.00';
+            summarySheet.getCell(`E${r}`).numFmt = '#,##0.00';
+            summarySheet.getCell(`F${r}`).numFmt = '0.00%';
+        }
 
         // Mapa WBS nodeId → nazwa wymagania
         const reqNameByNodeId = {};
