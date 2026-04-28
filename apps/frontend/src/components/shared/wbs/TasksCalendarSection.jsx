@@ -141,7 +141,7 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
             <td style="padding:4px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280">${s.status || '—'}</td>
         </tr>`).join('');
         const html = `<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Harmonogram – ${title}</title>
-<style>body{font-family:Arial,sans-serif;max-width:1000px;margin:40px auto;color:#1a1a1a;font-size:13px}h1{font-size:20px;border-bottom:2px solid #7c3aed;padding-bottom:8px;color:#1e3a5f}table{width:100%;border-collapse:collapse}th{background:#f3f4f6;padding:6px 8px;text-align:left;font-size:11px;text-transform:uppercase;color:#374151}@media print{@page{margin:1.5cm}}</style>
+<style>body{font-family:Arial,sans-serif;max-width:1000px;margin:40px auto;color:#1a1a1a;font-size:13px}h1{font-size:20px;border-bottom:2px solid #7c3aed;padding-bottom:8px;color:#1e3a5f;break-after:avoid;page-break-after:avoid;break-inside:avoid;page-break-inside:avoid}h2,h3,h4,h5,h6{break-after:avoid;page-break-after:avoid;break-inside:avoid;page-break-inside:avoid}p{orphans:3;widows:3}table{width:100%;border-collapse:collapse}th{background:#f3f4f6;padding:6px 8px;text-align:left;font-size:11px;text-transform:uppercase;color:#374151}tr{break-inside:avoid;page-break-inside:avoid}thead{display:table-header-group}@page{margin:20mm 14mm}@media print{body{max-width:none;margin:0}}</style>
 </head><body><h1>Harmonogram: ${title}</h1>
 <table><thead><tr><th>Zadanie</th><th>Kategoria</th><th>Start</th><th>Koniec</th><th>Status</th></tr></thead><tbody>
 ${rows}

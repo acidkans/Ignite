@@ -716,11 +716,16 @@ export default function SchematTab({ nodeId }) {
                 tr.img-row td, tr.note-row td { background: #f8faff; }
                 tr.note-row td { font-style: italic; color: #555; font-size: 10px; }
                 .sch-section { }
-                .sch-section-header { font-size: 13px; font-weight: bold; color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 4px; margin-bottom: 8px; }
+                .sch-section-header { font-size: 13px; font-weight: bold; color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 4px; margin-bottom: 8px; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
+                h1, h2, h3, h4, h5, h6 { break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
+                p { orphans: 3; widows: 3; }
+                tr { break-inside: avoid; page-break-inside: avoid; }
+                thead { display: table-header-group; }
                 .sch-name { font-size: 9px; color: #6b7280; margin-bottom: 4px; }
                 .sch-page { page-break-before: always; padding-top: 8px; display: flex; flex-direction: column; min-height: 95vh; }
                 .sch-page img { flex: 1; object-fit: contain; width: 100%; height: auto; }
-                @media print { body { margin: 5mm; } .sch-page { min-height: 0; page-break-before: always; } }
+                @page { margin: 20mm 14mm; }
+                @media print { body { margin: 0; } .sch-page { min-height: 0; page-break-before: always; } }
             </style></head><body>
             <h1>Raport z wizji lokalnej</h1>
             <div class="meta">Wygenerowano: ${date} &nbsp;|&nbsp; Łączna liczba punktów: ${allMarkers.length} &nbsp;|&nbsp; Pliki: ${schematics.length}</div>

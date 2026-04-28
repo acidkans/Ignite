@@ -1031,13 +1031,16 @@ export default function WbsMaterialsPanel({
         const pdfTitle = safeProjectPdf ? `${safeProjectPdf}_${safeOrderPdf}_materialy` : `${safeOrderPdf}_materialy`;
         const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${pdfTitle}</title>
 <style>
-  body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 20px; }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 0; }
+  h1, h2, h3, h4, h5, h6 { break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
   h2 { font-size: 16px; margin-bottom: 12px; }
   table { width: 100%; border-collapse: collapse; }
   th { background: #1a1a2e; color: #fff; text-align: left; padding: 6px 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
   td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
   tr:nth-child(even) td { background: #f9fafb; }
-  @media print { @page { size: A4 landscape; margin: 10mm; } }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  thead { display: table-header-group; }
+  @page { size: A4 landscape; margin: 20mm 14mm; }
 </style></head><body>
 <h2>Pozycje materiałowe dla projektu_${safeOrderPdf}</h2>
 <table>
