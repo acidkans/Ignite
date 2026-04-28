@@ -156,11 +156,15 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
 
     useEffect(() => { fetchFiles(); }, [fetchFiles]);
 
-    // Mierzy szerokość wewnętrznego obszaru scrolla — fit-to-width PDF
+    // Mierzy szerokość wewnętrznego obszaru scrolla — fit-to-width PDF.
+    // Tolerancja ±3px chroni przed feedback-loopem gdy pasek scrolla mryga
+    // (renderuje się wertykalny scroll → kurczy szerokość → PDF mniejszy → znika scroll → szerokość rośnie → loop).
     useEffect(() => {
         const obs = new ResizeObserver(entries => {
             const w = entries[0]?.contentRect?.width;
-            if (w) setContainerWidth(Math.floor(w - 24));
+            if (!w) return;
+            const next = Math.floor(w - 24);
+            setContainerWidth(prev => Math.abs(prev - next) < 4 ? prev : next);
         });
         if (pdfScrollRef.current) obs.observe(pdfScrollRef.current);
         return () => obs.disconnect();
@@ -276,8 +280,8 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
                 </div>
             )}
 
-            {/* Viewer area */}
-            <div ref={pdfScrollRef} className="flex-1 overflow-auto bg-white/[0.02] custom-scrollbar">
+            {/* Viewer area — overflow-y:scroll stabilizuje szerokość (zawsze rezerwuje miejsce na pionowy scroll) */}
+            <div ref={pdfScrollRef} className="flex-1 overflow-x-auto overflow-y-scroll bg-white/[0.02] custom-scrollbar">
                 {!selectedFile ? (
                     <div className="h-full flex flex-col items-center justify-center text-gray-500 p-6 text-center">
                         <FileQuestion size={32} className="mb-3 opacity-30" />

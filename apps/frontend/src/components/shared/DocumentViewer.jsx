@@ -556,11 +556,14 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
     const showOfferPanel = isOffer && documentId && token;
     const showDatasheetPanel = isDatasheet && documentId && token;
 
-    // Mierzymy widoczną szerokość scroll-parenta (stała, nie rośnie z zoomem) — to chroni przed feedback-loopem
+    // Mierzymy widoczną szerokość scroll-parenta (stała, nie rośnie z zoomem) — to chroni przed feedback-loopem.
+    // Tolerancja ±4px chroni przed mryganiem scrollbara przy granicznych szerokościach.
     useEffect(() => {
         const obs = new ResizeObserver(entries => {
             const w = entries[0]?.contentRect?.width;
-            if (w) setPdfContainerWidth(Math.floor(w - 32));
+            if (!w) return;
+            const next = Math.floor(w - 32);
+            setPdfContainerWidth(prev => Math.abs(prev - next) < 4 ? prev : next);
         });
         if (pdfScrollRef.current) obs.observe(pdfScrollRef.current);
         return () => obs.disconnect();
@@ -734,7 +737,7 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
             {/* Main area: PDF viewer + optional offer panel */}
             <div className="flex-1 flex overflow-hidden">
                 {/* Viewer Content */}
-                <div ref={pdfScrollRef} className="flex-1 overflow-auto bg-white/5 custom-scrollbar">
+                <div ref={pdfScrollRef} className="flex-1 overflow-x-auto overflow-y-scroll bg-white/5 custom-scrollbar">
                     {isPdf ? (
                         // Wrapper rośnie z contentem (w-fit + min-w-full): mały PDF jest wyśrodkowany,
                         // duży (po zoomie) rozciąga area scrolla — można przewijać w lewo/prawo bez gubienia krawędzi.
