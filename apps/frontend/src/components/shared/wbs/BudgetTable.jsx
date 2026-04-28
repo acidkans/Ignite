@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, TYPE_OPTIONS, TYPE_LABELS, UNIT_OPTIONS, parseLocaleNumber } from './wbsConstants';
 
@@ -75,30 +75,22 @@ export default function BudgetTable({
     const [colFilters, setColFilters] = useState({});
     const [sort, setSort] = useState({ key: null, dir: null }); // dir: 'asc' | 'desc' | null
 
-    const STORAGE_KEY = 'budget-table-col-widths';
-    const [colWidths, setColWidths] = useState(() => {
-        try {
-            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-            return COLS.reduce((acc, c) => ({ ...acc, [c.key]: saved[c.key] ?? c.defW }), {});
-        } catch {
-            return COLS.reduce((acc, c) => ({ ...acc, [c.key]: c.defW }), {});
-        }
-    });
-    useEffect(() => {
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(colWidths)); } catch {}
-    }, [colWidths]);
-
+    const [colWidths, setColWidths] = useState(
+        () => Object.fromEntries(COLS.map(c => [c.key, c.defW]))
+    );
     const resizeDrag = useRef(null);
-    const startColResize = (col, e) => {
+
+    const startResize = useCallback((colKey, e) => {
         e.preventDefault();
-        e.stopPropagation();
         const startX = e.clientX;
-        const startW = colWidths[col] ?? 120;
-        resizeDrag.current = { col, startX, startW };
+        const startW = colWidths[colKey] || 100;
+        resizeDrag.current = { colKey, startX, startW };
+
         const onMove = (ev) => {
             if (!resizeDrag.current) return;
-            const w = Math.max(60, resizeDrag.current.startW + ev.clientX - resizeDrag.current.startX);
-            setColWidths(prev => ({ ...prev, [resizeDrag.current.col]: w }));
+            const dx = ev.clientX - resizeDrag.current.startX;
+            const newW = Math.max(60, resizeDrag.current.startW + dx);
+            setColWidths(prev => ({ ...prev, [resizeDrag.current.colKey]: newW }));
         };
         const onUp = () => {
             resizeDrag.current = null;
@@ -107,7 +99,7 @@ export default function BudgetTable({
         };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
-    };
+    }, [colWidths]);
 
     useEffect(() => {
         setLocalRows(rows.map(calcDerived));
@@ -253,14 +245,23 @@ export default function BudgetTable({
                             {COLS.map(c => (
                                 <th
                                     key={c.key}
-                                    className={`${TH_BASE} ${c.align === 'center' ? 'text-center' : 'text-left'} ${c.sortable ? 'cursor-pointer hover:bg-white/[0.03]' : ''}`}
-                                    onClick={c.sortable ? () => toggleSort(c.key) : undefined}
-                                    title={c.sortable ? 'Kliknij aby sortować' : undefined}
+                                    className={`${TH_BASE} ${c.align === 'center' ? 'text-center' : 'text-left'}`}
                                 >
-                                    <span className="pr-3">{c.label}<SortIcon k={c.key} /></span>
+                                    {c.sortable ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleSort(c.key)}
+                                            className="inline-flex items-center gap-1 w-full text-inherit font-inherit uppercase tracking-widest hover:text-gray-200 transition-colors"
+                                            title="Kliknij aby sortować"
+                                        >
+                                            <span className="truncate">{c.label}</span>
+                                            <SortIcon k={c.key} />
+                                        </button>
+                                    ) : (
+                                        <span>{c.label}</span>
+                                    )}
                                     <div
-                                        onMouseDown={e => startColResize(c.key, e)}
-                                        onClick={e => e.stopPropagation()}
+                                        onMouseDown={e => startResize(c.key, e)}
                                         className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-500/40 transition-colors z-10"
                                     />
                                 </th>
