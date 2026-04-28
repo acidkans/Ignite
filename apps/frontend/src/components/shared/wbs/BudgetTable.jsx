@@ -57,8 +57,6 @@ const COLS = [
     { key: 'comment',     label: 'Komentarz', defW: 220, sortable: true },
 ];
 
-const STORAGE_KEY = 'budget-table-col-widths';
-
 export default function BudgetTable({
     rows,
     onFieldChange,
@@ -72,40 +70,6 @@ export default function BudgetTable({
     const [syncVersion, setSyncVersion] = useState(0);
     const [colFilters, setColFilters] = useState({});
     const [sort, setSort] = useState({ key: null, dir: null }); // dir: 'asc' | 'desc' | null
-
-    const [colWidths, setColWidths] = useState(() => {
-        try {
-            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-            return COLS.reduce((acc, c) => ({ ...acc, [c.key]: saved[c.key] ?? c.defW }), {});
-        } catch {
-            return COLS.reduce((acc, c) => ({ ...acc, [c.key]: c.defW }), {});
-        }
-    });
-
-    useEffect(() => {
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(colWidths)); } catch {}
-    }, [colWidths]);
-
-    const resizeDrag = useRef(null);
-    const startColResize = (col, e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const startX = e.clientX;
-        const startW = colWidths[col] ?? 120;
-        resizeDrag.current = { col, startX, startW };
-        const onMove = (ev) => {
-            if (!resizeDrag.current) return;
-            const w = Math.max(60, resizeDrag.current.startW + ev.clientX - resizeDrag.current.startX);
-            setColWidths(prev => ({ ...prev, [resizeDrag.current.col]: w }));
-        };
-        const onUp = () => {
-            resizeDrag.current = null;
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-        };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-    };
 
     useEffect(() => {
         setLocalRows(rows.map(calcDerived));
@@ -239,10 +203,10 @@ export default function BudgetTable({
 
             {/* Tabela */}
             <div className="flex-1 overflow-auto bg-slate-800/30">
-                <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: 'max-content', minWidth: '100%' }}>
+                <table className="w-full text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
                     <colgroup>
                         <col style={{ width: 36 }} />
-                        {COLS.map(c => <col key={c.key} style={{ width: colWidths[c.key] }} />)}
+                        {COLS.map(c => <col key={c.key} style={{ width: c.defW }} />)}
                         <col style={{ width: 36 }} />
                     </colgroup>
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
@@ -255,15 +219,10 @@ export default function BudgetTable({
                                     onClick={c.sortable ? () => toggleSort(c.key) : undefined}
                                     title={c.sortable ? 'Kliknij aby sortować' : undefined}
                                 >
-                                    <span className="pr-3">{c.label}<SortIcon k={c.key} /></span>
-                                    <div
-                                        onMouseDown={e => startColResize(c.key, e)}
-                                        onClick={e => e.stopPropagation()}
-                                        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-500/40 transition-colors"
-                                    />
+                                    {c.label}<SortIcon k={c.key} />
                                 </th>
                             ))}
-                            <th className="" />
+                            <th />
                         </tr>
                         <tr className="border-b border-white/10 bg-[#0b0f17]">
                             <th />

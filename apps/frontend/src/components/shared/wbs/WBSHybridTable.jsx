@@ -679,15 +679,17 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     }, []);
     const [expanded, setExpanded] = useState(() => new Set());
     const initialExpandDoneRef = useRef(false);
-    // Domyślnie rozwiń całe drzewo przy pierwszym załadowaniu — niezależnie od późniejszych
-    // collapse'ów użytkownika (ref pilnuje, żeby nie nadpisać jego ręcznej zmiany).
+    // Domyślnie rozwiń tylko do 2. poziomu (root + węzły top-level) przy pierwszym
+    // załadowaniu — kolejne fetch'e nie nadpiszą ręcznych collapse'ów (ref pilnuje).
     useEffect(() => {
         if (initialExpandDoneRef.current) return;
         const items = wbsTree?.items || [];
         if (items.length === 0) return;
-        setExpanded(getAllIds(items));
+        const ids = new Set(['root']);
+        for (const n of items) ids.add(`node_${n.id}`);
+        setExpanded(ids);
         initialExpandDoneRef.current = true;
-    }, [wbsTree, getAllIds]);
+    }, [wbsTree]);
     const [dragId, setDragId] = useState(null);
     const dragIdRef = useRef(null);
     const [dragOver, setDragOverState] = useState(null);
