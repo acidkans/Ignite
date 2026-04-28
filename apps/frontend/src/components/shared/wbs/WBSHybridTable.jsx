@@ -1,17 +1,14 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 
-function AutoResizeTextarea({ value, onChange, onBlur, placeholder, className }) {
+function AutoResizeTextarea({ value, onChange, onBlur, placeholder, className, style }) {
     const ref = useRef(null);
     const adjust = useCallback(() => {
         const el = ref.current;
         if (!el) return;
-        el.style.height = '0px';
+        el.style.height = 'auto';
         el.style.height = el.scrollHeight + 'px';
     }, []);
-    useEffect(() => {
-        const t = setTimeout(adjust, 0);
-        return () => clearTimeout(t);
-    }, [value, adjust]);
+    useLayoutEffect(() => { adjust(); }, [value, adjust]);
     return (
         <textarea
             ref={ref}
@@ -21,7 +18,7 @@ function AutoResizeTextarea({ value, onChange, onBlur, placeholder, className })
             onBlur={onBlur}
             placeholder={placeholder}
             className={className}
-            style={{ overflow: 'hidden', minHeight: '1.4em' }}
+            style={{ overflow: 'hidden', minHeight: '1.4em', resize: 'none', ...(style || {}) }}
         />
     );
 }
@@ -53,23 +50,21 @@ function QaCell({ pairs, fieldClass, onChange, onPersist }) {
                         {list.map((p, idx) => (
                             <tr key={idx} className="align-top">
                                 <td className="pr-1 py-0.5 border-t border-white/5">
-                                    <textarea
-                                        rows={1}
+                                    <AutoResizeTextarea
                                         value={p.question || ''}
                                         onChange={e => update(idx, 'question', e.target.value)}
                                         onBlur={() => onPersist?.()}
                                         placeholder="Pytanie…"
-                                        className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[10px] w-full resize-none focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
+                                        className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[10px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
                                     />
                                 </td>
                                 <td className="pr-1 py-0.5 border-t border-white/5">
-                                    <textarea
-                                        rows={1}
+                                    <AutoResizeTextarea
                                         value={p.answer || ''}
                                         onChange={e => update(idx, 'answer', e.target.value)}
                                         onBlur={() => onPersist?.()}
                                         placeholder="Odpowiedź…"
-                                        className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[10px] w-full resize-none focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
+                                        className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[10px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
                                     />
                                 </td>
                                 <td className="py-0.5 border-t border-white/5">
@@ -1330,7 +1325,11 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             col.c-att  { width: 140px; }
             th { background: #f3f4f6; padding: 6px 7px; border: 1px solid #ddd; font-size: 10px; text-transform: uppercase; text-align: left; }
             img { max-width: 100%; }
-            @media print { body { margin: 8mm; } @page { size: A3 landscape; } }
+            h1, h2, h3, h4, h5, h6 { break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
+            tr { break-inside: avoid; page-break-inside: avoid; }
+            thead { display: table-header-group; }
+            @page { size: A3 landscape; margin: 20mm 14mm; }
+            @media print { body { margin: 0; } }
         </style></head><body>
         <h1>WBS — ${nodeName}</h1>
         <table>

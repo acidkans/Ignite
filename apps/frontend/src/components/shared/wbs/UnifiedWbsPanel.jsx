@@ -1134,17 +1134,23 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 0 6px 28px 6px; }
-  .doc-header { border-bottom: 3px solid #1a1a2e; padding: 18px 0 10px 0; margin: 0 0 18px 0; break-after: avoid; page-break-after: avoid; display: flex; align-items: flex-start; gap: 16px; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 0; }
+  .doc-header { border-bottom: 3px solid #1a1a2e; padding: 18px 0 10px 0; margin: 0 0 18px 0; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; display: flex; align-items: flex-start; gap: 16px; }
   .doc-header-logo { height: 48px; width: auto; object-fit: contain; flex-shrink: 0; }
   .doc-header-text { flex: 1; }
   .doc-header h1 { font-size: 20px; margin: 0 0 2px 0; }
   .doc-header .sub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: #6b7280; }
   .doc-header .meta { font-size: 10px; color: #9ca3af; margin-top: 4px; }
   .section { margin-bottom: 22px; }
-  .section-header { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; background: #1a1a2e; color: #fff; padding: 7px 12px; break-after: avoid; page-break-after: avoid; }
+  .section-header { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; background: #1a1a2e; color: #fff; padding: 7px 12px; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
+  h1, h2, h3, h4, h5, h6, .section-header, .table-title, .md-bold,
+  .strategy-text h1, .strategy-text h2, .strategy-text h3, .strategy-text h4 {
+    break-after: avoid; page-break-after: avoid;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  p { orphans: 3; widows: 3; }
   .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.6; }
-  .strategy-text p { margin: 0 0 4px 0; }
+  .strategy-text p { margin: 0 0 4px 0; orphans: 3; widows: 3; }
   .strategy-text p:empty { display: none; margin: 0; }
   .strategy-text h1:first-child, .strategy-text h2:first-child, .strategy-text h3:first-child { margin-top: 0; }
   .strategy-text ul, .strategy-text ol { margin: 4px 0 8px 1.5em; padding-left: 1em; }
@@ -1158,15 +1164,14 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
   table.kv th { width: 50%; background: #f9fafb; text-transform: none; font-size: 10px; color: #4b5563; text-align: left; border-bottom: 1px solid #e5e7eb; }
   table.kv td { font-size: 11px; color: #111; }
   .summary-grid { display: grid; grid-template-columns: 1fr 1.6fr; gap: 16px; padding: 12px 0 0 0; }
-  .summary-block { margin-bottom: 24px; }
+  .summary-block { margin-bottom: 24px; break-inside: avoid; page-break-inside: avoid; }
   .table-title { font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; color: #111; margin-bottom: 6px; padding: 5px 0; border-bottom: 2px solid #1a1a2e; }
   th { background: #f3f4f6; color: #374151; padding: 7px 8px; text-align: center; font-size: 12px; font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
   thead { display: table-header-group; }
   tr { page-break-inside: avoid; break-inside: avoid; }
-  @page { margin: 0; size: A4 landscape; }
+  @page { margin: 20mm 14mm; size: A4 landscape; }
   .budget-table { table-layout: fixed; word-wrap: break-word; }
   @media print {
-    body { padding: 14mm 7mm 14mm 7mm; }
     .summary-grid { display: block; }
     .summary-block { margin-bottom: 16px; }
     .summary-section { page-break-before: always; }

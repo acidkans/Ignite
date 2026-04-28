@@ -289,8 +289,8 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 0 32px 28px 32px; }
-  .doc-header { border-bottom: 3px solid #1a1a2e; padding: 18px 0 10px 0; margin: 0 0 18px 0; break-after: avoid; page-break-after: avoid; display: flex; align-items: flex-start; gap: 16px; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 0; }
+  .doc-header { border-bottom: 3px solid #1a1a2e; padding: 18px 0 10px 0; margin: 0 0 18px 0; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; display: flex; align-items: flex-start; gap: 16px; }
   .doc-header-logo { height: 48px; width: auto; object-fit: contain; flex-shrink: 0; }
   .doc-header-text { flex: 1; }
   .doc-header h1 { font-size: 20px; margin: 0 0 2px 0; }
@@ -298,9 +298,15 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
   .doc-header .meta { font-size: 10px; color: #9ca3af; margin-top: 4px; }
   .section { margin-bottom: 32px; }
   .section + .section { margin-top: 0; }
-  .section-header { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; background: #1a1a2e; color: #fff; padding: 7px 12px; break-after: avoid; page-break-after: avoid; }
+  .section-header { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; background: #1a1a2e; color: #fff; padding: 7px 12px; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
+  h1, h2, h3, h4, h5, h6, .section-header, .table-title, .md-bold,
+  .strategy-text h2, .strategy-text h3, .strategy-text h4 {
+    break-after: avoid; page-break-after: avoid;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  p { orphans: 3; widows: 3; }
   .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.6; text-align: justify; }
-  .strategy-text p { margin: 0 0 4px 0; text-align: justify; }
+  .strategy-text p { margin: 0 0 4px 0; text-align: justify; orphans: 3; widows: 3; }
   .strategy-text p:empty { display: none; margin: 0; }
   .strategy-text h2, .strategy-text h3, .strategy-text h4, .strategy-text .md-bold { font-size: 11px; font-weight: bold; margin: 16px 0 2px 0; text-align: left; }
   .strategy-text h3:first-child, .strategy-text h2:first-child, .strategy-text .md-bold:first-child { margin-top: 0; }
@@ -316,10 +322,7 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
   .empty { padding: 10px 12px; font-size: 10px; color: #6b7280; background: #f9fafb; border: 1px solid #e5e7eb; }
   thead { display: table-header-group; }
   tr { page-break-inside: avoid; break-inside: avoid; }
-  @page { margin: 0; size: A4 landscape; }
-  @media print {
-    body { padding: 14mm 14mm 14mm 14mm; }
-  }
+  @page { margin: 20mm 14mm; size: A4 landscape; }
 </style>
 </head>
 <body>
