@@ -2271,6 +2271,12 @@ ${materialsHtml}
         return rows;
     };
 
+    const budgetRows = useMemo(
+        () => buildRows(VIEWS.BUDGET),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [wbsData, materialMetaByLookupKey, materialCostsByNode, requirementsQtyByNode, normalizedSearchQuery]
+    );
+
     const summarizeBudgetRows = useCallback((rows) => {
         let totalCost = 0;
         let totalRevenue = 0;
@@ -2436,7 +2442,7 @@ ${materialsHtml}
 
             {isManagerOrAdmin && renderSection('budget', 'Budżet', DollarSign, 'green', (
                 <BudgetTable
-                    rows={buildRows(VIEWS.BUDGET)}
+                    rows={budgetRows}
                     onFieldChange={onBudgetFieldChange}
                     onDeleteRow={(id) => deleteNodeByIdRef.current?.(id)}
                     discountPercent={budgetDiscountPercent}
