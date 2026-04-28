@@ -20,6 +20,42 @@ export class DocumentsService {
         private configService: ConfigService
     ) { }
 
+    // ── Highlights ────────────────────────────────────────────────────────────
+    async listHighlights(documentId: string) {
+        return this.prisma.documentHighlight.findMany({
+            where: { documentId },
+            orderBy: [{ page: 'asc' }, { createdAt: 'asc' }],
+        });
+    }
+
+    async createHighlight(documentId: string, authorId: string | null, data: { page: number; rects: any; color?: string; comment?: string | null }) {
+        if (typeof data.page !== 'number' || !data.rects) {
+            throw new BadRequestException('page and rects are required');
+        }
+        return this.prisma.documentHighlight.create({
+            data: {
+                documentId,
+                authorId,
+                page: data.page,
+                rects: data.rects,
+                color: data.color || 'yellow',
+                comment: data.comment ?? null,
+            },
+        });
+    }
+
+    async updateHighlight(id: string, data: { color?: string; comment?: string | null }) {
+        const patch: any = {};
+        if (data.color !== undefined) patch.color = data.color;
+        if (data.comment !== undefined) patch.comment = data.comment;
+        return this.prisma.documentHighlight.update({ where: { id }, data: patch });
+    }
+
+    async deleteHighlight(id: string) {
+        await this.prisma.documentHighlight.delete({ where: { id } });
+        return { ok: true };
+    }
+
     async processDocument(file: Express.Multer.File, nodeId: string, category?: string) {
         if (!file) throw new BadRequestException('No file provided');
         if (!nodeId) throw new BadRequestException('No nodeId provided');

@@ -193,8 +193,26 @@ model ProcessNode {
   materialRequirements      MaterialRequirement[]
   wbsNodes                  WbsNode[]
   materialRequirementsLists MaterialRequirementsList[]
+  documentHighlights        DocumentHighlight[]
 
   @@map("process_nodes")
+}
+
+model DocumentHighlight {
+  id         String   @id @default(uuid())
+  documentId String
+  authorId   String?
+  page       Int
+  rects      Json
+  color      String   @default("yellow")
+  comment    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  document   ProcessNode @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, page])
+  @@map("document_highlights")
 }
 
 model ProjectVersion {

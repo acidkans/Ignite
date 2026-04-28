@@ -5,10 +5,21 @@ function AutoResizeTextarea({ value, onChange, onBlur, placeholder, className, s
     const adjust = useCallback(() => {
         const el = ref.current;
         if (!el) return;
+        // Element niewidoczny (parent collapsed/display:none) → scrollHeight=0;
+        // nie ustawiaj 0px, bo po rozwinięciu textarea ma height:0 i tekst wygląda jak „przekreślony".
+        if (el.offsetParent === null && el.getClientRects().length === 0) return;
         el.style.height = 'auto';
         el.style.height = el.scrollHeight + 'px';
     }, []);
     useLayoutEffect(() => { adjust(); }, [value, adjust]);
+    useEffect(() => {
+        const el = ref.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        // Gdy parent się rozwinie i textarea staje się widoczny, RO odpala się i wymusza przeliczenie.
+        const ro = new ResizeObserver(() => adjust());
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [adjust]);
     return (
         <textarea
             ref={ref}
@@ -16,6 +27,7 @@ function AutoResizeTextarea({ value, onChange, onBlur, placeholder, className, s
             value={value}
             onChange={e => { onChange(e); adjust(); }}
             onBlur={onBlur}
+            onFocus={adjust}
             placeholder={placeholder}
             className={className}
             style={{ overflow: 'hidden', minHeight: '1.4em', resize: 'none', ...(style || {}) }}
