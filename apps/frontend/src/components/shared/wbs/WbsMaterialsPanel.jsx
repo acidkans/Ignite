@@ -851,7 +851,7 @@ export default function WbsMaterialsPanel({
         detHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         detHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
 
-        const detailsNodes = [...matNodes].sort((a, b) => (a.path || '').localeCompare(b.path || '', 'pl'));
+        const detailsNodes = [...matNodes].sort((a, b) => (a.path || '').localeCompare(b.path || '', 'pl', { numeric: true, sensitivity: 'base' }));
         for (const node of detailsNodes) {
             const card = cards[node.id] || null;
             const segs = node.path ? node.path.split(' › ') : [];
@@ -959,7 +959,7 @@ export default function WbsMaterialsPanel({
         aggHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         aggHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
 
-        const aggRows = [...agg.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'));
+        const aggRows = [...agg.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl', { numeric: true, sensitivity: 'base' }));
 
         aggRows.forEach((row, i) => {
             const avgPrice = row.priceCount > 0 ? row.priceSum / row.priceCount : null;
