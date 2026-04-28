@@ -822,6 +822,15 @@ export default function WbsMaterialsPanel({
         const STATUS_LABELS_XLS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
         const TYPE_LABELS_XLS = { material: 'Materiał', equipment: 'Sprzęt' };
 
+        // depth-0 (gałąź WBS) jest w UI uppercase'owane przez CSS (text-transform);
+        // ujednolicamy w eksporcie — pierwszy segment ścieżki idzie wielkimi literami.
+        const upperFirstSegment = (path) => {
+            if (!path) return '';
+            const idx = path.indexOf(' › ');
+            if (idx < 0) return path.toUpperCase();
+            return path.slice(0, idx).toUpperCase() + path.slice(idx);
+        };
+
         const workbook = new ExcelJS.Workbook();
         const detailsSheet = workbook.addWorksheet('Materiały');
         const aggregateSheet = workbook.addWorksheet('Zamówienie (agregacja)');
@@ -855,14 +864,16 @@ export default function WbsMaterialsPanel({
         for (const node of detailsNodes) {
             const card = cards[node.id] || null;
             const segs = node.path ? node.path.split(' › ') : [];
-            const parent = segs.length >= 2 ? segs[segs.length - 2] : (segs[0] || '');
+            const rawParent = segs.length >= 2 ? segs[segs.length - 2] : (segs[0] || '');
+            // Jeśli parent to depth-0 (ścieżka ma 2 segmenty albo brak), uppercase'uj.
+            const parent = segs.length <= 2 ? rawParent.toUpperCase() : rawParent;
             const selectedProposal = (card?.proposals || []).find(p => p.isSelected);
             const allProposals = card?.proposals || [];
 
             detailsSheet.addRow({
                 type: TYPE_LABELS_XLS[node.type] || node.type,
                 parent,
-                path: node.path || '',
+                path: upperFirstSegment(node.path || ''),
                 name: node.name || '',
                 qty: Number(node.quantity ?? 1),
                 unit: node.unit || 'szt',
@@ -933,7 +944,7 @@ export default function WbsMaterialsPanel({
             const row = agg.get(key);
             row.qty += qty;
             row.positions += 1;
-            if (node.path) row.paths.push(node.path);
+            if (node.path) row.paths.push(upperFirstSegment(node.path));
             if (status) row.statuses.add(status);
             if (product) row.products.add(product);
             if (price != null && Number.isFinite(price)) {
