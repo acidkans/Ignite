@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, TYPE_OPTIONS, TYPE_LABELS, UNIT_OPTIONS, parseLocaleNumber } from './wbsConstants';
 
 const TH_BASE = 'text-left px-3 py-2.5 text-[17px] font-bold uppercase tracking-widest text-white whitespace-normal break-words select-none relative align-bottom';
-const TD = 'px-2 py-1.5 align-top';
+const TD = 'px-2 py-1.5 align-top break-words';
 const INPUT = 'bg-transparent text-white text-sm w-full outline-none focus:bg-white/5 rounded px-1 py-0.5 min-w-0';
-const TEXTAREA = 'bg-transparent text-white text-sm w-full outline-none focus:bg-white/5 rounded px-1 py-0.5 min-w-0 resize-none leading-snug whitespace-pre-wrap break-words';
+const TEXTAREA = 'bg-transparent text-white text-sm w-full outline-none focus:bg-white/5 rounded px-1 py-0.5 min-w-0 resize-none leading-snug whitespace-pre-wrap break-all';
 const SELECT = 'bg-[#0b0f17] text-white text-sm w-full outline-none rounded px-1 py-0.5 cursor-pointer border border-white/5 hover:border-white/10 focus:border-blue-500/40 transition-colors';
 const FILTER = 'w-full bg-black/30 border border-white/10 rounded px-2 py-0.5 text-xs text-white placeholder-gray-700 outline-none focus:border-blue-500/40';
 
@@ -27,13 +27,10 @@ function AutoTextarea({ defaultValue, onBlur, className }) {
     const resize = () => {
         const el = ref.current;
         if (!el) return;
-        el.style.height = '0px';
+        el.style.height = 'auto';
         el.style.height = `${el.scrollHeight}px`;
     };
-    useEffect(() => {
-        const t = setTimeout(resize, 0);
-        return () => clearTimeout(t);
-    }, [defaultValue]);
+    useLayoutEffect(() => { resize(); }, [defaultValue]);
     return (
         <textarea
             ref={ref}
@@ -102,8 +99,20 @@ export default function BudgetTable({
     }, [colWidths]);
 
     useEffect(() => {
-        setLocalRows(rows.map(calcDerived));
-        setSyncVersion(v => v + 1);
+        const newRows = rows.map(calcDerived);
+        const editableFields = ['subjectName', 'name', 'unitCost', 'quantity', 'margin', 'discount', 'comment', 'unit', 'type'];
+        let externalChange = newRows.length !== localRows.length;
+        if (!externalChange) {
+            outer: for (let i = 0; i < newRows.length; i++) {
+                const a = localRows[i], b = newRows[i];
+                if (!a || a.id !== b.id) { externalChange = true; break; }
+                for (const f of editableFields) {
+                    if (String(a[f] ?? '') !== String(b[f] ?? '')) { externalChange = true; break outer; }
+                }
+            }
+        }
+        setLocalRows(newRows);
+        if (externalChange) setSyncVersion(v => v + 1);
     }, [rows]);
 
     const handleChange = (rowId, field, rawValue) => {
@@ -167,8 +176,8 @@ export default function BudgetTable({
     const SortIcon = ({ k }) => {
         if (sort.key !== k) return null;
         return sort.dir === 'asc'
-            ? <ArrowUp size={11} className="inline ml-1" />
-            : <ArrowDown size={11} className="inline ml-1" />;
+            ? <ArrowUp size={11} className="flex-shrink-0 mt-0.5" />
+            : <ArrowDown size={11} className="flex-shrink-0 mt-0.5" />;
     };
 
     return (
@@ -251,14 +260,14 @@ export default function BudgetTable({
                                         <button
                                             type="button"
                                             onClick={() => toggleSort(c.key)}
-                                            className="inline-flex items-center gap-1 w-full text-inherit font-inherit uppercase tracking-widest hover:text-gray-200 transition-colors"
+                                            className="flex items-start gap-1 w-full text-inherit font-inherit uppercase tracking-widest hover:text-gray-200 transition-colors"
                                             title="Kliknij aby sortować"
                                         >
-                                            <span className="truncate">{c.label}</span>
+                                            <span className="min-w-0 flex-1 whitespace-normal break-words text-left">{c.label}</span>
                                             <SortIcon k={c.key} />
                                         </button>
                                     ) : (
-                                        <span>{c.label}</span>
+                                        <span className="block whitespace-normal break-words">{c.label}</span>
                                     )}
                                     <div
                                         onMouseDown={e => startResize(c.key, e)}
