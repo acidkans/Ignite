@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, TYPE_OPTIONS, TYPE_LABELS, UNIT_OPTIONS, parseLocaleNumber } from './wbsConstants';
 
-const TH_BASE = 'text-left px-3 py-2.5 text-[17px] font-bold uppercase tracking-widest text-white whitespace-nowrap select-none relative';
+const TH_BASE = 'text-left px-3 py-2.5 text-[17px] font-bold uppercase tracking-widest text-white whitespace-normal break-words select-none relative align-bottom';
 const TD = 'px-2 py-1.5 align-top';
 const INPUT = 'bg-transparent text-white text-sm w-full outline-none focus:bg-white/5 rounded px-1 py-0.5 min-w-0';
 const TEXTAREA = 'bg-transparent text-white text-sm w-full outline-none focus:bg-white/5 rounded px-1 py-0.5 min-w-0 resize-none leading-snug whitespace-pre-wrap break-words';
@@ -74,6 +74,40 @@ export default function BudgetTable({
     const [syncVersion, setSyncVersion] = useState(0);
     const [colFilters, setColFilters] = useState({});
     const [sort, setSort] = useState({ key: null, dir: null }); // dir: 'asc' | 'desc' | null
+
+    const STORAGE_KEY = 'budget-table-col-widths';
+    const [colWidths, setColWidths] = useState(() => {
+        try {
+            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            return COLS.reduce((acc, c) => ({ ...acc, [c.key]: saved[c.key] ?? c.defW }), {});
+        } catch {
+            return COLS.reduce((acc, c) => ({ ...acc, [c.key]: c.defW }), {});
+        }
+    });
+    useEffect(() => {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(colWidths)); } catch {}
+    }, [colWidths]);
+
+    const resizeDrag = useRef(null);
+    const startColResize = (col, e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX;
+        const startW = colWidths[col] ?? 120;
+        resizeDrag.current = { col, startX, startW };
+        const onMove = (ev) => {
+            if (!resizeDrag.current) return;
+            const w = Math.max(60, resizeDrag.current.startW + ev.clientX - resizeDrag.current.startX);
+            setColWidths(prev => ({ ...prev, [resizeDrag.current.col]: w }));
+        };
+        const onUp = () => {
+            resizeDrag.current = null;
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    };
 
     useEffect(() => {
         setLocalRows(rows.map(calcDerived));
@@ -210,7 +244,7 @@ export default function BudgetTable({
                 <table className="w-full text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
                     <colgroup>
                         <col style={{ width: 36 }} />
-                        {COLS.map(c => <col key={c.key} style={{ width: c.defW }} />)}
+                        {COLS.map(c => <col key={c.key} style={{ width: colWidths[c.key] }} />)}
                         <col style={{ width: 36 }} />
                     </colgroup>
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
@@ -223,7 +257,12 @@ export default function BudgetTable({
                                     onClick={c.sortable ? () => toggleSort(c.key) : undefined}
                                     title={c.sortable ? 'Kliknij aby sortować' : undefined}
                                 >
-                                    {c.label}<SortIcon k={c.key} />
+                                    <span className="pr-3">{c.label}<SortIcon k={c.key} /></span>
+                                    <div
+                                        onMouseDown={e => startColResize(c.key, e)}
+                                        onClick={e => e.stopPropagation()}
+                                        className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-500/40 transition-colors z-10"
+                                    />
                                 </th>
                             ))}
                             <th />
