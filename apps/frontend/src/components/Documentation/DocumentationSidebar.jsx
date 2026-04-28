@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Document, Page, pdfjs } from 'react-pdf';
-import { FileText, ZoomIn, ZoomOut, ChevronUp, ChevronDown, Download, X, Maximize2, RefreshCw, Image as ImageIcon, FileQuestion, Highlighter, Trash2 } from 'lucide-react';
+import { Document, pdfjs } from 'react-pdf';
+import { FileText, ZoomIn, ZoomOut, Download, X, Maximize2, RefreshCw, FileQuestion } from 'lucide-react';
 import { API_URL } from '../../config';
+import PdfPageWithHighlights from '../shared/PdfPageWithHighlights';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
@@ -10,15 +11,6 @@ const pdfOptions = {
     cMapPacked: true,
     standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/standard_fonts/`,
     disableXFA: true,
-};
-
-// Paleta highlightów — kolor → (bg pełny, bg w toolbarze)
-const HL_COLORS = {
-    yellow: '#fef08a',
-    green:  '#bbf7d0',
-    blue:   '#bfdbfe',
-    pink:   '#fbcfe8',
-    orange: '#fed7aa',
 };
 
 const formatBytes = (b) => {
@@ -42,15 +34,12 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
     const [loadingFiles, setLoadingFiles] = useState(false);
     const [selectedFile, setSelectedFile] = useState(null);
     const [numPages, setNumPages] = useState(null);
-    const [pageNum, setPageNum] = useState(1);
     const [scale, setScale] = useState(1.0);
     const [containerWidth, setContainerWidth] = useState(420);
     const pdfScrollRef = useRef(null);
-    const pageWrapperRef = useRef(null);
 
     // Highlights
     const [highlights, setHighlights] = useState([]);
-    const [selToolbar, setSelToolbar] = useState(null); // { x, y, rects:[{x,y,w,h}] } w fractions 0..1
     const [activeHighlightId, setActiveHighlightId] = useState(null);
 
     const token = useMemo(() => sessionStorage.getItem('token') || localStorage.getItem('token'), []);
@@ -59,16 +48,13 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
     useEffect(() => {
         setSelectedFile(null);
         setNumPages(null);
-        setPageNum(1);
         setHighlights([]);
-        setSelToolbar(null);
         setActiveHighlightId(null);
     }, [nodeId]);
 
     // Pobierz highlighty po zmianie pliku
     useEffect(() => {
         setHighlights([]);
-        setSelToolbar(null);
         setActiveHighlightId(null);
         if (!selectedFile?.id) return;
         const isPdfFile = selectedFile.mimeType === 'application/pdf'
@@ -88,59 +74,28 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
         return () => { cancelled = true; };
     }, [selectedFile?.id, token]);
 
-    // Reset overlay UI przy zmianie strony / skali
-    useEffect(() => {
-        setSelToolbar(null);
-        setActiveHighlightId(null);
-        window.getSelection()?.removeAllRanges();
-    }, [pageNum, scale]);
-
-    // Capture zaznaczenia tekstu — mouseup w obrębie strony PDF
-    const handlePageMouseUp = useCallback(() => {
-        const wrapper = pageWrapperRef.current;
-        if (!wrapper) return;
-        const sel = window.getSelection();
-        if (!sel || sel.isCollapsed || sel.rangeCount === 0) { setSelToolbar(null); return; }
-        const range = sel.getRangeAt(0);
-        // Sprawdź, czy zaznaczenie leży w obrębie wrappera
-        if (!wrapper.contains(range.commonAncestorContainer)) { setSelToolbar(null); return; }
-        const wrapRect = wrapper.getBoundingClientRect();
-        if (wrapRect.width === 0 || wrapRect.height === 0) return;
-        const clientRects = Array.from(range.getClientRects()).filter(r => r.width > 1 && r.height > 1);
-        if (clientRects.length === 0) { setSelToolbar(null); return; }
-        const rects = clientRects.map(r => ({
-            x: (r.left - wrapRect.left) / wrapRect.width,
-            y: (r.top - wrapRect.top) / wrapRect.height,
-            w: r.width / wrapRect.width,
-            h: r.height / wrapRect.height,
-        }));
-        // Toolbar nad pierwszym rectem
-        const first = clientRects[0];
-        setSelToolbar({
-            x: first.left - wrapRect.left + first.width / 2,
-            y: first.top - wrapRect.top - 4,
-            rects,
-        });
-    }, []);
-
-    const createHighlight = useCallback(async (color) => {
-        if (!selectedFile?.id || !selToolbar) return;
+    const createHighlight = useCallback(async ({ page, rects, color }) => {
+        if (!selectedFile?.id) return;
+        const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const optimistic = { id: tempId, documentId: selectedFile.id, page, rects, color, comment: null, _optimistic: true };
+        setHighlights(prev => [...prev, optimistic]);
         try {
             const res = await fetch(`${API_URL}/documents/${selectedFile.id}/highlights`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ page: pageNum, rects: selToolbar.rects, color }),
+                body: JSON.stringify({ page, rects, color }),
             });
             if (res.ok) {
-                const created = await res.json();
-                setHighlights(prev => [...prev, created]);
+                const saved = await res.json();
+                setHighlights(prev => prev.map(h => h.id === tempId ? saved : h));
+            } else {
+                setHighlights(prev => prev.map(h => h.id === tempId ? { ...h, _failed: true } : h));
             }
         } catch (err) {
             console.error('[DocsSidebar] Błąd zapisu highlightu:', err);
+            setHighlights(prev => prev.map(h => h.id === tempId ? { ...h, _failed: true } : h));
         }
-        window.getSelection()?.removeAllRanges();
-        setSelToolbar(null);
-    }, [selectedFile?.id, selToolbar, pageNum, token]);
+    }, [selectedFile?.id, token]);
 
     const deleteHighlight = useCallback(async (hid) => {
         if (!selectedFile?.id) return;
@@ -266,7 +221,7 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
                             return (
                                 <li key={f.id}>
                                     <button
-                                        onClick={() => { setSelectedFile(f); setPageNum(1); setScale(1.0); }}
+                                        onClick={() => { setSelectedFile(f); setScale(1.0); }}
                                         className={`w-full text-left px-3 py-1.5 flex items-center gap-2 text-[11px] transition-colors ${active ? 'bg-amber-500/15 text-amber-100 border-l-2 border-amber-400' : 'text-gray-300 hover:bg-white/5 border-l-2 border-transparent'}`}
                                         title={f.fileName}
                                     >
@@ -288,19 +243,7 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
                         {selectedFile.fileName}
                     </div>
                     {isPdf && numPages && (
-                        <div className="flex items-center gap-0.5 flex-shrink-0">
-                            <button onClick={() => setPageNum(p => Math.max(1, p - 1))}
-                                disabled={pageNum <= 1}
-                                className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded disabled:opacity-30 disabled:hover:bg-transparent">
-                                <ChevronUp size={12} />
-                            </button>
-                            <span className="text-[10px] text-gray-400 px-1 tabular-nums">{pageNum}/{numPages}</span>
-                            <button onClick={() => setPageNum(p => Math.min(numPages, p + 1))}
-                                disabled={pageNum >= numPages}
-                                className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded disabled:opacity-30 disabled:hover:bg-transparent">
-                                <ChevronDown size={12} />
-                            </button>
-                        </div>
+                        <span className="text-[10px] text-gray-500 px-1 tabular-nums flex-shrink-0">{numPages} {numPages === 1 ? 'strona' : 'stron'}</span>
                     )}
                     {(isPdf || isImage) && (
                         <div className="flex items-center gap-0.5 flex-shrink-0 border-l border-white/10 pl-1 ml-1">
@@ -354,116 +297,22 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
                             }
                             error={<div className="p-6 text-red-400 text-center text-[10px]">Błąd ładowania pliku PDF.</div>}
                         >
-                            <div
-                                ref={pageWrapperRef}
-                                className="shadow-xl border border-white/10 mx-auto bg-white w-fit relative"
-                                onMouseUp={handlePageMouseUp}
-                            >
-                                <Page
-                                    pageNumber={pageNum}
-                                    renderTextLayer={true}
-                                    renderAnnotationLayer={true}
-                                    width={Math.floor(containerWidth * scale)}
-                                />
-
-                                {/* Highlight overlay (per current page) */}
-                                <div className="absolute inset-0 pointer-events-none" style={{ mixBlendMode: 'multiply' }}>
-                                    {highlights.filter(h => h.page === pageNum).flatMap(h =>
-                                        (Array.isArray(h.rects) ? h.rects : []).map((r, i) => (
-                                            <div
-                                                key={`${h.id}-${i}`}
-                                                onClick={(e) => { e.stopPropagation(); setActiveHighlightId(prev => prev === h.id ? null : h.id); }}
-                                                className="absolute cursor-pointer"
-                                                style={{
-                                                    left:   `${r.x * 100}%`,
-                                                    top:    `${r.y * 100}%`,
-                                                    width:  `${r.w * 100}%`,
-                                                    height: `${r.h * 100}%`,
-                                                    backgroundColor: HL_COLORS[h.color] || HL_COLORS.yellow,
-                                                    pointerEvents: 'auto',
-                                                    outline: activeHighlightId === h.id ? '1px solid rgba(0,0,0,0.4)' : 'none',
-                                                }}
-                                                title={h.comment || 'Kliknij aby zarządzać'}
-                                            />
-                                        ))
-                                    )}
-                                </div>
-
-                                {/* Pop-over dla aktywnego highlightu — paleta + delete */}
-                                {activeHighlightId && (() => {
-                                    const h = highlights.find(x => x.id === activeHighlightId);
-                                    if (!h || h.page !== pageNum) return null;
-                                    const r0 = (Array.isArray(h.rects) ? h.rects : [])[0];
-                                    if (!r0) return null;
-                                    return (
-                                        <div
-                                            className="absolute z-20 flex items-center gap-1 bg-gray-900 border border-white/15 rounded-lg shadow-xl px-1.5 py-1"
-                                            style={{
-                                                left: `${(r0.x + r0.w) * 100}%`,
-                                                top:  `${r0.y * 100}%`,
-                                                transform: 'translate(4px, -100%)',
-                                            }}
-                                            onClick={(e) => e.stopPropagation()}
-                                        >
-                                            {Object.entries(HL_COLORS).map(([k, v]) => (
-                                                <button
-                                                    key={k}
-                                                    onClick={() => updateHighlightColor(h.id, k)}
-                                                    className="w-4 h-4 rounded-full border border-white/30"
-                                                    style={{ backgroundColor: v, outline: h.color === k ? '2px solid #fff' : 'none' }}
-                                                    title={k}
-                                                />
-                                            ))}
-                                            <span className="w-px h-4 bg-white/20 mx-0.5" />
-                                            <button
-                                                onClick={() => deleteHighlight(h.id)}
-                                                className="p-1 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded"
-                                                title="Usuń"
-                                            >
-                                                <Trash2 size={11} />
-                                            </button>
-                                            <button
-                                                onClick={() => setActiveHighlightId(null)}
-                                                className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded"
-                                                title="Zamknij"
-                                            >
-                                                <X size={11} />
-                                            </button>
-                                        </div>
-                                    );
-                                })()}
-
-                                {/* Toolbar zaznaczenia — paleta kolorów */}
-                                {selToolbar && (
-                                    <div
-                                        className="absolute z-30 flex items-center gap-1 bg-gray-900 border border-amber-400/40 rounded-lg shadow-xl px-1.5 py-1"
-                                        style={{
-                                            left: selToolbar.x,
-                                            top:  selToolbar.y,
-                                            transform: 'translate(-50%, -100%)',
-                                        }}
-                                        onMouseDown={(e) => e.preventDefault()}
-                                    >
-                                        <Highlighter size={11} className="text-amber-300" />
-                                        {Object.entries(HL_COLORS).map(([k, v]) => (
-                                            <button
-                                                key={k}
-                                                onClick={() => createHighlight(k)}
-                                                className="w-4 h-4 rounded-full border border-white/30 hover:scale-110 transition-transform"
-                                                style={{ backgroundColor: v }}
-                                                title={`Zaznacz ${k}`}
-                                            />
-                                        ))}
-                                        <button
-                                            onClick={() => { window.getSelection()?.removeAllRanges(); setSelToolbar(null); }}
-                                            className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded"
-                                            title="Anuluj"
-                                        >
-                                            <X size={10} />
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
+                            {Array.from(new Array(numPages || 0), (_, idx) => {
+                                const pn = idx + 1;
+                                return (
+                                    <PdfPageWithHighlights
+                                        key={`page_${pn}`}
+                                        pageNumber={pn}
+                                        width={Math.floor(containerWidth * scale)}
+                                        pageHighlights={highlights.filter(h => h.page === pn)}
+                                        activeHighlightId={activeHighlightId}
+                                        onSetActive={setActiveHighlightId}
+                                        onCreate={createHighlight}
+                                        onDelete={deleteHighlight}
+                                        onUpdateColor={updateHighlightColor}
+                                    />
+                                );
+                            })}
                         </Document>
                     </div>
                 ) : isImage ? (
