@@ -678,6 +678,16 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         return new Set(ids);
     }, []);
     const [expanded, setExpanded] = useState(() => new Set());
+    const initialExpandDoneRef = useRef(false);
+    // Domyślnie rozwiń całe drzewo przy pierwszym załadowaniu — niezależnie od późniejszych
+    // collapse'ów użytkownika (ref pilnuje, żeby nie nadpisać jego ręcznej zmiany).
+    useEffect(() => {
+        if (initialExpandDoneRef.current) return;
+        const items = wbsTree?.items || [];
+        if (items.length === 0) return;
+        setExpanded(getAllIds(items));
+        initialExpandDoneRef.current = true;
+    }, [wbsTree, getAllIds]);
     const [dragId, setDragId] = useState(null);
     const dragIdRef = useRef(null);
     const [dragOver, setDragOverState] = useState(null);
