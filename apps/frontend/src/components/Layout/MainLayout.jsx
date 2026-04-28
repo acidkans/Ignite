@@ -3,6 +3,8 @@ import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { API_URL } from '../../config';
 import DynamicSidebar from './DynamicSidebar';
 import AIChatSidebar from '../AI/AIChatSidebar';
+import DocumentationSidebar from '../Documentation/DocumentationSidebar';
+import DocumentViewer from '../shared/DocumentViewer';
 import AddNodeModal from '../shared/AddNodeModal';
 import NodePermissionsModal from '../shared/NodePermissionsModal';
 import NotificationBell from '../shared/NotificationBell';
@@ -16,6 +18,12 @@ export default function MainLayout({ onLogout }) {
     const [leftVisible, setLeftVisible] = useState(true);
     const [rightWidth, setRightWidth] = useState(320);
     const [aiVisible, setAiVisible] = useState(false);
+    const [docsVisible, setDocsVisible] = useState(false);
+    const [docsWidth, setDocsWidth] = useState(() => {
+        const saved = parseInt(localStorage.getItem('docsSidebarWidth') || '480', 10);
+        return Number.isFinite(saved) ? Math.min(Math.max(saved, 320), Math.floor(window.innerWidth * 0.6)) : 480;
+    });
+    const [docsFullscreenFile, setDocsFullscreenFile] = useState(null);
     const [flashTick, setFlashTick] = useState(0);
 
     const triggerFlash = useCallback(() => {
@@ -144,20 +152,51 @@ export default function MainLayout({ onLogout }) {
 
     // --- Resizing Logic (Opcjonalne, uproszczone) ---
     const isResizingLeft = useRef(false);
+    const isResizingDocs = useRef(false);
     useEffect(() => {
         const handleMove = (e) => {
             if (isResizingLeft.current) {
                 if (e.clientX > 150 && e.clientX < 500) setLeftWidth(e.clientX);
             }
+            if (isResizingDocs.current) {
+                // Sidebar po prawej, więc szerokość = (szerokość okna - X kursora) - szerokość AI sidebara (jeśli widoczny)
+                const aiOffset = aiVisible ? rightWidth : 0;
+                const newW = window.innerWidth - e.clientX - aiOffset;
+                const clamped = Math.min(Math.max(newW, 320), Math.floor(window.innerWidth * 0.6));
+                setDocsWidth(clamped);
+            }
         };
-        const handleUp = () => { isResizingLeft.current = false; };
+        const handleUp = () => {
+            if (isResizingDocs.current) {
+                isResizingDocs.current = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+            isResizingLeft.current = false;
+        };
         window.addEventListener('mousemove', handleMove);
         window.addEventListener('mouseup', handleUp);
         return () => {
             window.removeEventListener('mousemove', handleMove);
             window.removeEventListener('mouseup', handleUp);
         };
-    }, []);
+    }, [aiVisible, rightWidth]);
+
+    // Persist szerokości DocsSidebara w localStorage (debounce ~300ms)
+    useEffect(() => {
+        const id = setTimeout(() => {
+            try { localStorage.setItem('docsSidebarWidth', String(docsWidth)); } catch { /* quota */ }
+        }, 300);
+        return () => clearTimeout(id);
+    }, [docsWidth]);
+
+    // ESC zamyka fullscreen Docs
+    useEffect(() => {
+        if (!docsFullscreenFile) return;
+        const onKey = (e) => { if (e.key === 'Escape') setDocsFullscreenFile(null); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [docsFullscreenFile]);
 
     return (
         <div className="flex h-screen w-full bg-gray-900 text-white overflow-hidden font-sans selection:bg-blue-500/30">
@@ -238,8 +277,47 @@ export default function MainLayout({ onLogout }) {
                     Outlet działa tutaj jako placeholder dla komponentów zdefiniowanych w App.jsx 
                     Przekazujemy setActiveAreaId itp. przez context, aby DashboardPage mógł z tego korzystać.
                 */}
-                <Outlet context={{ activeAreaId, setActiveAreaId: handleNodeChange, refreshTree: fetchTree, menuTree, setLeftVisible, setAiVisible, pendingTabRef, pendingRequirementIdRef }} />
+                <Outlet context={{ activeAreaId, setActiveAreaId: handleNodeChange, refreshTree: fetchTree, menuTree, setLeftVisible, setAiVisible, setDocsVisible, pendingTabRef, pendingRequirementIdRef }} />
             </main>
+
+            {/* TOGGLE DOCS BUTTON (amber) */}
+            <div className="flex-shrink-0 hidden md:flex items-center bg-black/20 border-l border-white/5">
+                <button
+                    onClick={() => setDocsVisible(v => !v)}
+                    title={docsVisible ? 'Ukryj panel dokumentacji' : 'Pokaż panel dokumentacji'}
+                    className={`w-4 h-24 flex items-center justify-center text-gray-500 hover:text-white hover:bg-amber-500/40 transition-colors border-y border-white/5 rounded-l-md ${docsVisible ? 'bg-amber-500/20 text-amber-200' : ''}`}
+                >
+                    {docsVisible
+                        ? <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+                        : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                    }
+                </button>
+            </div>
+
+            {/* DOCS SIDEBAR */}
+            {docsVisible && (
+                <aside style={{ width: docsWidth }} className="flex-shrink-0 hidden lg:flex bg-black/30 border-l border-amber-500/20 backdrop-blur-sm relative">
+                    {/* Drag handle (lewa krawędź) */}
+                    <div
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            isResizingDocs.current = true;
+                            document.body.style.cursor = 'col-resize';
+                            document.body.style.userSelect = 'none';
+                        }}
+                        onDoubleClick={() => setDocsWidth(480)}
+                        title="Przeciągnij, aby zmienić szerokość (dbl-klik = reset)"
+                        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-amber-500/60 transition-colors z-50 group"
+                    >
+                        <div className="absolute inset-y-0 left-0 w-px bg-amber-500/30 group-hover:bg-amber-400 transition-colors"></div>
+                    </div>
+                    <DocumentationSidebar
+                        nodeId={activeAreaId}
+                        onClose={() => setDocsVisible(false)}
+                        onOpenFullscreen={(file) => setDocsFullscreenFile(file)}
+                    />
+                </aside>
+            )}
 
             {/* TOGGLE AI BUTTON */}
             <div className="flex-shrink-0 hidden md:flex items-center bg-black/20 border-l border-white/5">
@@ -264,6 +342,25 @@ export default function MainLayout({ onLogout }) {
                         onClose={() => setAiVisible(false)}
                     />
                 </aside>
+            )}
+
+            {/* DOCS FULLSCREEN MODAL — z-9990 (poniżej wewnętrznego portalu DocumentViewer = 9999), Esc zamyka */}
+            {docsFullscreenFile && (
+                <div
+                    className="fixed inset-0 z-[9990] bg-black/60 flex items-center justify-center p-4"
+                    onClick={(e) => { if (e.target === e.currentTarget) setDocsFullscreenFile(null); }}
+                >
+                    <div className="w-full h-full max-w-[1600px]">
+                        <DocumentViewer
+                            fileUrl={`${API_URL}/documents/download/${docsFullscreenFile.id}`}
+                            fileName={docsFullscreenFile.fileName}
+                            mimeType={docsFullscreenFile.mimeType}
+                            documentId={docsFullscreenFile.id}
+                            token={sessionStorage.getItem('token')}
+                            onClose={() => setDocsFullscreenFile(null)}
+                        />
+                    </div>
+                </div>
             )}
             {/* MODALS */}
             {showAddModal && (
