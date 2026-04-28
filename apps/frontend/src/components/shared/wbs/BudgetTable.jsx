@@ -27,10 +27,13 @@ function AutoTextarea({ defaultValue, onBlur, className }) {
     const resize = () => {
         const el = ref.current;
         if (!el) return;
-        el.style.height = 'auto';
+        el.style.height = '0px';
         el.style.height = `${el.scrollHeight}px`;
     };
-    useEffect(() => { resize(); }, [defaultValue]);
+    useEffect(() => {
+        const t = setTimeout(resize, 0);
+        return () => clearTimeout(t);
+    }, [defaultValue]);
     return (
         <textarea
             ref={ref}
@@ -39,6 +42,7 @@ function AutoTextarea({ defaultValue, onBlur, className }) {
             onInput={resize}
             onBlur={onBlur}
             className={className}
+            style={{ overflow: 'hidden', minHeight: '1.4em' }}
         />
     );
 }
