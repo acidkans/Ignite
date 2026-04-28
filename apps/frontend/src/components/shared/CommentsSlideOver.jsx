@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Send, MessageCircle, AlertCircle, CheckCircle, Zap, Hash, ChevronDown, AtSign, CornerUpLeft } from 'lucide-react';
+import { X, Send, MessageCircle, AlertCircle, CheckCircle, Zap, Hash, ChevronDown, AtSign, CornerUpLeft, Check, CheckCheck } from 'lucide-react';
 import { API_URL } from '../../config';
 
 const TYPE_CONFIG = {
@@ -70,14 +70,26 @@ export default function CommentsSlideOver({ orderId, orderName, requirements = [
         if (res.ok) setComments(await res.json());
     }, [orderId]);
 
+    // Oznacz cudze komentarze w tym zamówieniu jako przeczytane (idempotentne).
+    // Wywoływane przy otwarciu i po każdym poll-fetchu, gdy slide-over jest otwarty.
+    const markRead = useCallback(async () => {
+        if (!orderId) return;
+        try {
+            await fetch(`${API_URL}/comments/order/${orderId}/mark-read`, { method: 'POST', headers: authHeaders });
+        } catch { /* ignore */ }
+    }, [orderId]);
+
     const loadUsers = useCallback(async () => {
         const res = await fetch(`${API_URL}/comments/users`, { headers: authHeaders });
         if (res.ok) setUsers(await res.json());
     }, []);
 
-    useEffect(() => { load(); loadUsers(); }, [load, loadUsers]);
+    useEffect(() => { (async () => { await load(); await markRead(); await load(); })(); loadUsers(); }, [load, loadUsers, markRead]);
     useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [comments]);
-    useEffect(() => { const id = setInterval(load, 15000); return () => clearInterval(id); }, [load]);
+    useEffect(() => {
+        const id = setInterval(async () => { await load(); await markRead(); }, 15000);
+        return () => clearInterval(id);
+    }, [load, markRead]);
 
     const filteredMentions = mentionQuery !== null
         ? users.filter(u => userName(u).toLowerCase().includes(mentionQuery.toLowerCase()) && !mentionedUsers.find(m => m.id === u.id))
@@ -295,6 +307,26 @@ export default function CommentsSlideOver({ orderId, orderName, requirements = [
 
                             {/* Treść */}
                             <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap">{renderText(c.text)}</p>
+
+                            {/* Wskaźnik przeczytania — tylko dla własnych wiadomości */}
+                            {c.user?.id === currentUserId && (() => {
+                                const reads = (c.reads || []).filter(r => r.userId !== currentUserId);
+                                const readByNames = reads.map(r => userName(r.user)).join(', ');
+                                const tooltip = reads.length === 0
+                                    ? 'Dostarczone — nikt jeszcze nie odczytał'
+                                    : `Odczytane przez: ${readByNames}`;
+                                return (
+                                    <div className="flex items-center justify-end gap-1 mt-1.5 text-[9px]" title={tooltip}>
+                                        {reads.length === 0
+                                            ? <Check size={11} className="text-gray-500" />
+                                            : <CheckCheck size={11} className="text-teal-400" />
+                                        }
+                                        {reads.length > 0 && (
+                                            <span className="text-teal-400/80 truncate max-w-[200px]">{readByNames}</span>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                         </div>
                     );
                 })}

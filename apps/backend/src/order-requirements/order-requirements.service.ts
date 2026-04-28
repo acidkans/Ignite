@@ -175,7 +175,7 @@ export class OrderRequirementsService {
         if (data.wbsTree !== undefined) {
             try {
                 const tree = JSON.parse(data.wbsTree || '{"items":[]}');
-                await this.wbsNodes.saveTree(effectiveNodeId, undefined, tree);
+                await this.wbsNodes.saveTree(effectiveNodeId, vId ?? undefined, tree);
             } catch (e) {
                 console.error('WbsNode dual-write failed (non-blocking):', e?.message);
             }

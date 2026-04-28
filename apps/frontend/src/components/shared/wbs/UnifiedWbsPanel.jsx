@@ -942,6 +942,23 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             return `<div><div style="font-size:10px;color:#111827;font-weight:bold;margin-bottom:4px;">📎 ${allAtts.length}</div>${itemsHtml}</div>`;
         };
 
+        const renderQaCell = (qa) => {
+            const list = Array.isArray(qa) ? qa.filter(p => (p?.question || '').trim() || (p?.answer || '').trim()) : [];
+            if (list.length === 0) return '';
+            const rows = list.map(p => `
+                <tr>
+                    <td style="padding:2px 4px;border:1px solid #e5e7eb;font-size:9px;text-align:left;vertical-align:top;color:#1f2937;background:#fff">${esc(p.question || '')}</td>
+                    <td style="padding:2px 4px;border:1px solid #e5e7eb;font-size:9px;text-align:left;vertical-align:top;color:#374151;background:#fff">${esc(p.answer || '')}</td>
+                </tr>`).join('');
+            return `<table style="width:100%;border-collapse:collapse;margin:0">
+                <thead><tr>
+                    <th style="padding:2px 4px;border:1px solid #d1d5db;font-size:8px;text-transform:uppercase;letter-spacing:0.05em;background:#f3f4f6;color:#4b5563;text-align:left;width:50%">Pytanie</th>
+                    <th style="padding:2px 4px;border:1px solid #d1d5db;font-size:8px;text-transform:uppercase;letter-spacing:0.05em;background:#f3f4f6;color:#4b5563;text-align:left;width:50%">Odpowiedź</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+        };
+
         const buildTreeRows = (parentId, depth, includeBudget) => {
             const children = wbsData
                 .filter(n => (n.parentId || null) === (parentId || null))
@@ -957,10 +974,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                     <td class="num">${fmtPLN(n.totalCost)}</td>
                     <td class="num">${fmtPLN(n.totalPrice)}</td>
                     <td style="text-align:left;word-wrap:break-word;white-space:normal;max-width:120px">${esc(n.comment || '')}</td>` : `
-                    <td>${esc(TYPE_LABELS[n.type] || n.type || '')}</td>
                     <td>${esc(n.status || '')}</td>
-                    <td>${esc(n.owner || '')}</td>
-                    <td>${markerSummary(n.id)}</td>`;
+                    <td style="text-align:left;padding:4px">${renderQaCell(n.qa)}</td>`;
                 return `<tr>
                     <td style="padding-left:${8 + indent}px;${nameStyle};text-align:left">${depth > 0 ? '└ ' : ''}${(n.name || '').replace(/</g, '&lt;')}</td>
                     ${budgetCols}
@@ -978,8 +993,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             <div class="section">
                 <div class="section-header">Struktura zadań projektu</div>
                 <table>
-                    <thead><tr><th>Nazwa</th><th>Typ</th><th>Status</th><th>Osoba</th><th>Znaczniki</th></tr></thead>
-                    <tbody>${wbsData.length ? buildTreeRows(null, 0, false) : '<tr><td colspan="5">Brak danych WBS</td></tr>'}</tbody>
+                    <thead><tr><th style="width:30%">Nazwa</th><th style="width:14%">Status</th><th style="width:56%">Q&amp;A</th></tr></thead>
+                    <tbody>${wbsData.length ? buildTreeRows(null, 0, false) : '<tr><td colspan="3">Brak danych WBS</td></tr>'}</tbody>
                 </table>
             </div>` : '';
 
@@ -1148,7 +1163,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
   th { background: #f3f4f6; color: #374151; padding: 7px 8px; text-align: center; font-size: 12px; font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
   thead { display: table-header-group; }
   tr { page-break-inside: avoid; break-inside: avoid; }
-  @page { margin: 0; size: A4; }
+  @page { margin: 0; size: A4 landscape; }
   .budget-table { table-layout: fixed; word-wrap: break-word; }
   @media print {
     body { padding: 14mm 7mm 14mm 7mm; }
@@ -1266,14 +1281,19 @@ ${materialsHtml}
             { header: 'Cena ofertowa', key: 'offerPrice', width: 18 },
             { header: 'Komentarz', key: 'comment', width: 32 },
             { header: 'Status', key: 'status', width: 18 },
+            { header: 'Q&A (liczba)', key: 'qaCount', width: 14 },
         ];
 
         const headerRow = budgetSheet.getRow(1);
         headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
 
+        const qaSheetRows = [];
         rows.forEach((row, index) => {
             const excelRow = index + 2; // row 1 = header
+            const qaList = Array.isArray(row.qa)
+                ? row.qa.filter(p => String(p?.question || '').trim() || String(p?.answer || '').trim())
+                : [];
             const addedRow = budgetSheet.addRow({
                 index: index + 1,
                 subjectName: row.subjectName || '',
@@ -1290,8 +1310,18 @@ ${materialsHtml}
                 offerPrice: { formula: `=J${excelRow}*(1+K${excelRow})*(1-L${excelRow})`, result: Number(row.offerPrice) || 0 },
                 comment: row.comment || '',
                 status: row.status || '',
+                qaCount: qaList.length,
             });
             void addedRow;
+            qaList.forEach((p) => {
+                qaSheetRows.push({
+                    subjectName: row.subjectName || '',
+                    parentName: row.parentName || '',
+                    name: row.name || '',
+                    question: String(p.question || ''),
+                    answer: String(p.answer || ''),
+                });
+            });
         });
 
         const totalsRowNum = rows.length + 2;
@@ -1310,6 +1340,24 @@ ${materialsHtml}
         budgetSheet.getColumn('K').numFmt = '0.00%';
         budgetSheet.getColumn('L').numFmt = '0.00%';
         budgetSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+        // Q&A sheet — zagnieżdżona tabela: Pozycja WBS / Pytanie / Odpowiedź
+        const qaSheet = workbook.addWorksheet(`${safeOrderName}_qa`);
+        qaSheet.columns = [
+            { header: 'Przedmiot', key: 'subjectName', width: 28 },
+            { header: 'Podgałąź', key: 'parentName', width: 24 },
+            { header: 'Pozycja WBS', key: 'name', width: 34 },
+            { header: 'Pytanie', key: 'question', width: 50 },
+            { header: 'Odpowiedź', key: 'answer', width: 50 },
+        ];
+        const qaHeaderRow = qaSheet.getRow(1);
+        qaHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        qaHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+        qaSheetRows.forEach((qaRow) => {
+            const added = qaSheet.addRow(qaRow);
+            added.alignment = { wrapText: true, vertical: 'top' };
+        });
+        qaSheet.views = [{ state: 'frozen', ySplit: 1 }];
 
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });

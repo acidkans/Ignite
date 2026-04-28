@@ -23,8 +23,30 @@ export class CommentsService {
                         user: { select: this.userSelect },
                     },
                 },
+                reads: {
+                    select: {
+                        userId: true,
+                        readAt: true,
+                        user: { select: { id: true, firstName: true, lastName: true } },
+                    },
+                },
             },
         });
+    }
+
+    /**
+     * Oznacz wszystkie komentarze w zamówieniu jako przeczytane przez danego użytkownika
+     * (poza komentarzami autorstwa tego użytkownika). Idempotentne dzięki @@unique([commentId, userId]).
+     */
+    async markAllReadByOrder(orderId: string, userId: string) {
+        const comments = await this.prisma.comment.findMany({
+            where: { orderId, userId: { not: userId } },
+            select: { id: true },
+        });
+        if (comments.length === 0) return { marked: 0 };
+        const data = comments.map(c => ({ commentId: c.id, userId }));
+        const result = await this.prisma.commentRead.createMany({ data, skipDuplicates: true });
+        return { marked: result.count };
     }
 
     async create(orderId: string, userId: string, dto: { text: string; requirementId?: string; type?: string; mentionedUserIds?: string[]; replyToId?: string }) {

@@ -25,7 +25,77 @@ function AutoResizeTextarea({ value, onChange, onBlur, placeholder, className })
         />
     );
 }
-import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard } from 'lucide-react';
+import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle } from 'lucide-react';
+
+// ── Q&A cell — zagnieżdżona tabela Pytanie / Odpowiedź per WBS node ───────────
+function QaCell({ pairs, fieldClass, onChange, onPersist }) {
+    const list = Array.isArray(pairs) ? pairs : [];
+    const update = (idx, field, value) => {
+        onChange(list.map((p, i) => i === idx ? { ...p, [field]: value } : p));
+    };
+    const remove = (idx) => { onChange(list.filter((_, i) => i !== idx)); onPersist?.(); };
+    // Nie zapisujemy zaraz po `add` — pusta para zostałaby odfiltrowana na backendzie
+    // (parseQa drop'uje pary bez treści). Save leci dopiero na blur, gdy user coś wpisał.
+    const add = () => { onChange([...list, { question: '', answer: '' }]); };
+
+    return (
+        <div className="flex flex-col gap-1">
+            {list.length > 0 && (
+                <table className="w-full text-[10px] border-collapse">
+                    <thead>
+                        <tr>
+                            <th className="text-left font-semibold uppercase tracking-wider text-gray-500 pb-0.5 w-1/2">Pytanie</th>
+                            <th className="text-left font-semibold uppercase tracking-wider text-gray-500 pb-0.5 w-1/2">Odpowiedź</th>
+                            <th className="w-4" />
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {list.map((p, idx) => (
+                            <tr key={idx} className="align-top">
+                                <td className="pr-1 py-0.5 border-t border-white/5">
+                                    <textarea
+                                        rows={1}
+                                        value={p.question || ''}
+                                        onChange={e => update(idx, 'question', e.target.value)}
+                                        onBlur={() => onPersist?.()}
+                                        placeholder="Pytanie…"
+                                        className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[10px] w-full resize-none focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
+                                    />
+                                </td>
+                                <td className="pr-1 py-0.5 border-t border-white/5">
+                                    <textarea
+                                        rows={1}
+                                        value={p.answer || ''}
+                                        onChange={e => update(idx, 'answer', e.target.value)}
+                                        onBlur={() => onPersist?.()}
+                                        placeholder="Odpowiedź…"
+                                        className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[10px] w-full resize-none focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
+                                    />
+                                </td>
+                                <td className="py-0.5 border-t border-white/5">
+                                    <button
+                                        onClick={() => remove(idx)}
+                                        className="p-0.5 rounded text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                                        title="Usuń pytanie"
+                                    >
+                                        <X size={9} />
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
+            <button
+                onClick={add}
+                className="self-start flex items-center gap-1 text-[10px] text-gray-600 hover:text-blue-400 transition-all"
+            >
+                <HelpCircle size={9} />
+                <span>+ pytanie</span>
+            </button>
+        </div>
+    );
+}
 import { UNIT_OPTIONS } from './wbsConstants';
 
 const API_URL = '/api';
@@ -161,6 +231,7 @@ const mkNode = (withDefaults = false) => {
         resources: '',
         cost: '',
         tags: [],
+        qa: [],
         type: '',
         comment: '',
         children: [],
@@ -625,7 +696,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [selectedNodeId, setSelectedNodeId] = useState(null);
     const [showBasket, setShowBasket] = useState(false);
     const [copyBuffer, setCopyBuffer] = useState(null); // { node, sourceName }
-    const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, status: 128, wlasciciel: 128, komentarz: 200, znaczniki: 120, zalaczniki: 120 });
+    const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, status: 128, wlasciciel: 128, komentarz: 200, qa: 260 });
     const resizeDrag = useRef(null);
 
     const startColResize = (col, e) => {
@@ -874,7 +945,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
-            <td className="px-3 py-3" />
         </tr>
     );
 
@@ -1082,56 +1152,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     />
                 </td>
 
-                {/* Znaczniki */}
-                <td className="px-3 py-2.5 min-w-[100px]" onClick={e => e.stopPropagation()}>
-                    <div className="flex flex-col gap-1">
-                        <TagChips
-                            tags={node.tags || []}
-                            tagColor={d.tagColor}
-                            onRemove={isEditingTags ? (i) => removeTag(node.id, i) : null}
-                            onTagClick={onTagClick}
-                        />
-                        {isEditingTags ? (
-                            <div className="flex items-center gap-1 mt-0.5">
-                                <input
-                                    ref={tagInputRef}
-                                    type="text"
-                                    value={tagInput}
-                                    onChange={e => setTagInput(e.target.value)}
-                                    onKeyDown={e => {
-                                        if (e.key === 'Enter') { e.preventDefault(); addTag(node.id); }
-                                        if (e.key === 'Escape') { setEditingTagsFor(null); setTagInput(''); }
-                                    }}
-                                    placeholder="Znacznik…"
-                                    autoFocus
-                                    className="bg-black/40 border border-white/10 rounded px-2 py-0.5 text-[10px] text-white w-24 focus:outline-none focus:border-blue-500/50"
-                                />
-                                <button onClick={() => addTag(node.id)} className="p-0.5 hover:bg-white/10 rounded text-gray-500 hover:text-blue-400 transition-all"><Plus size={10} /></button>
-                                <button onClick={() => { setEditingTagsFor(null); setTagInput(''); }} className="p-0.5 hover:bg-white/10 rounded text-gray-500 hover:text-red-400 transition-all"><X size={10} /></button>
-                            </div>
-                        ) : (
-                            <button
-                                onClick={e => { e.stopPropagation(); setEditingTagsFor(node.id); setTagInput(''); setTimeout(() => tagInputRef.current?.focus(), 50); }}
-                                className="opacity-0 group-hover/node:opacity-100 flex items-center gap-1 text-[10px] text-gray-600 hover:text-blue-400 transition-all"
-                            >
-                                <Tag size={9} />
-                                <span>+ znacznik</span>
-                            </button>
-                        )}
-                    </div>
-                </td>
-
-                {/* Załączniki znaczników */}
-                <td className="px-3 py-2.5 min-w-[100px]" onClick={e => e.stopPropagation()}>
-                    {processNodeId ? (
-                        <AttachmentCell
-                            wbsNodeId={node.id}
-                            nodeName={node.name}
-                            markerLinksCache={markerLinksCache}
-                            onOpenModal={setAttachmentModal}
-                            onPreview={setLightboxAtt}
-                        />
-                    ) : null}
+                {/* Q&A — zagnieżdżona tabela Pytanie / Odpowiedź */}
+                <td className="px-3 py-2.5 min-w-[200px]" onClick={e => e.stopPropagation()}>
+                    <QaCell
+                        pairs={Array.isArray(node.qa) ? node.qa : []}
+                        fieldClass={d.fieldClass}
+                        onChange={(next) => handleField(node.id, 'qa', next)}
+                        onPersist={() => onSave?.()}
+                    />
                 </td>
 
                 {/* Usuń */}
@@ -1146,7 +1174,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         if ((node.type === 'material' || node.type === 'equipment') && expandedMaterialIds.has(node.id)) {
             rows.push(
                 <tr key={`mat-req-${node.id}`}>
-                    <td colSpan={13} className="p-0 border-b border-amber-500/10 bg-amber-500/[0.02]">
+                    <td colSpan={10} className="p-0 border-b border-amber-500/10 bg-amber-500/[0.02]">
                         <MaterialReqExpandPanel
                             node={node}
                             req={matReqByWbsId[node.id] || null}
@@ -1175,7 +1203,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         if (items.length === 0) {
             rows.push(
                 <tr key="empty">
-                    <td colSpan={11} className="px-3 py-3 pl-16 text-[10px] text-gray-700 italic">
+                    <td colSpan={10} className="px-3 py-3 pl-16 text-[10px] text-gray-700 italic">
                         Brak przedmiotów — kliknij <span className="text-gray-500">+</span> przy projekcie, aby dodać
                     </td>
                 </tr>
@@ -1336,14 +1364,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         <col style={{ width: colWidths.status }} />
                         <col style={{ width: colWidths.wlasciciel }} />
                         <col style={{ width: colWidths.komentarz }} />
-                        <col style={{ width: colWidths.znaczniki }} />
-                        <col style={{ width: colWidths.zalaczniki }} />
+                        <col style={{ width: colWidths.qa }} />
                         <col style={{ width: 48 }} />
                     </colgroup>
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
                         <tr className="border-b border-white/10">
                             <th className="px-1 py-2.5 text-base font-bold uppercase tracking-widest text-white" />
-                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jednostka','text-left'],['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['znaczniki','Znaczniki','text-left'],['zalaczniki','Załączniki','text-left']].map(([key, label, align]) => (
+                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jednostka','text-left'],['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['qa','Q&A','text-left']].map(([key, label, align]) => (
                                 <th key={key} className={`px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white ${align} relative select-none`}>
                                     {label}
                                     <div onMouseDown={e => startColResize(key, e)} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-500/40 transition-colors" />
