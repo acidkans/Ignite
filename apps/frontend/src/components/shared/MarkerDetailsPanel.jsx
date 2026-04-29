@@ -363,7 +363,9 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
         }
     };
 
-    const panelClasses = isMobile 
+    const isTemp = marker.id?.toString().startsWith('temp_');
+
+    const panelClasses = isMobile
         ? "fixed inset-x-0 bottom-0 bg-[#0f172a] border-t border-white/10 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] flex flex-col z-[100] rounded-t-[32px] animate-in slide-in-from-bottom duration-300 max-h-[85vh]"
         : "absolute top-4 bottom-4 right-4 w-96 bg-[#0f172a] border border-white/10 shadow-2xl flex flex-col z-[60] rounded-[32px] animate-in slide-in-from-right duration-300";
 
@@ -391,6 +393,16 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
                 </div>
 
                 <div className="px-6 flex-1 overflow-y-auto space-y-8 pb-8 no-scrollbar">
+                    {/* Baner oczekiwania na sync dla temp markerów */}
+                    {isTemp && (
+                        <div className="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl">
+                            <span className="text-amber-400 text-lg shrink-0">⏳</span>
+                            <div>
+                                <p className="text-amber-300 text-xs font-black uppercase tracking-wide">Oczekuje na synchronizację</p>
+                                <p className="text-amber-400/70 text-[11px] mt-0.5">Znacznik zostanie zapisany po przywróceniu połączenia. Do tego czasu edycja i załączniki są niedostępne.</p>
+                            </div>
+                        </div>
+                    )}
                     {/* Nazwa (tooltip) */}
                     <div className="space-y-3">
                         <label className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em] px-1">NAZWA (tooltip)</label>
@@ -398,7 +410,8 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
                             value={editName}
                             onChange={e => setEditName(e.target.value)}
                             onBlur={handleUpdateName}
-                            className="w-full bg-[#1e293b]/50 border border-white/5 rounded-2xl px-4 py-3 text-sm text-gray-100 focus:outline-none focus:border-orange-500/50 transition-all shadow-inner placeholder:text-gray-600"
+                            disabled={isTemp}
+                            className="w-full bg-[#1e293b]/50 border border-white/5 rounded-2xl px-4 py-3 text-sm text-gray-100 focus:outline-none focus:border-orange-500/50 transition-all shadow-inner placeholder:text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed"
                             placeholder="Nazwa widoczna na mapie..."
                         />
                     </div>
@@ -430,7 +443,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
                             </div>
                         )}
 
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className={`grid grid-cols-2 gap-2 ${isTemp ? 'opacity-30 pointer-events-none' : ''}`}>
                             <button
                                 onClick={isRecording ? stopRecording : startRecording}
                                 className={`flex items-center justify-center gap-2 px-4 py-3 w-full rounded-xl text-xs font-bold transition-all shadow-lg active:scale-95 ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-[#1e293b] text-gray-300 border border-white/5'}`}
@@ -505,7 +518,8 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
                             value={editNote}
                             onChange={e => setEditNote(e.target.value)}
                             onBlur={handleUpdateNote}
-                            className="w-full bg-[#1e293b]/50 border border-white/5 rounded-2xl p-4 text-sm text-gray-100 resize-none h-32 focus:outline-none focus:border-blue-500/50 transition-all shadow-inner placeholder:text-gray-600"
+                            disabled={isTemp}
+                            className="w-full bg-[#1e293b]/50 border border-white/5 rounded-2xl p-4 text-sm text-gray-100 resize-none h-32 focus:outline-none focus:border-blue-500/50 transition-all shadow-inner placeholder:text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed"
                             placeholder="Wpisz tutaj swoje uwagi..."
                         />
                     </div>
@@ -683,9 +697,10 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
                 </div>
 
                 <div className="p-6 border-t border-white/5 bg-black/10">
-                    <button 
+                    <button
                         onClick={handleDeleteMarker}
-                        className="w-full py-4 text-xs font-black uppercase tracking-widest text-red-500/80 hover:text-red-500 bg-red-500/5 rounded-2xl border border-red-500/10 active:scale-[0.98] transition-all"
+                        disabled={isTemp}
+                        className="w-full py-4 text-xs font-black uppercase tracking-widest text-red-500/80 hover:text-red-500 bg-red-500/5 rounded-2xl border border-red-500/10 active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                         Usuń znacznik
                     </button>
