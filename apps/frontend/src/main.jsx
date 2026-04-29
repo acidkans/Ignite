@@ -11,6 +11,12 @@ ModuleRegistry.registerModules([AllCommunityModule]);
 // Rejestracja Service Workera (PWA shell + push). Idempotentne; usePushSubscription
 // po loginie tylko subskrybuje pushManager na istniejącej rejestracji.
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
+    // Przeładuj stronę gdy nowy SW przejmie kontrolę (skipWaiting → controllerchange).
+    // Bez tego użytkownik widzi stare JS mimo że SW już zaktualizowany.
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        window.location.reload();
+    });
+
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((err) => {
             console.warn('[SW] Rejestracja nieudana:', err);
