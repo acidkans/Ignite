@@ -50,7 +50,9 @@ export default function PdfPageWithHighlights({
             y: first.top - wrapRect.top - 4,
             rects,
         });
-    }, []);
+        // Nowe zaznaczenie wygrywa - chowamy toolbar aktywnego highlightu, by nie dublowały się oba paski
+        onSetActive(null);
+    }, [onSetActive]);
 
     const create = (color) => {
         if (!selToolbar) return;
@@ -68,8 +70,8 @@ export default function PdfPageWithHighlights({
         >
             <Page pageNumber={pageNumber} renderTextLayer renderAnnotationLayer width={width} />
 
-            {/* Highlight overlay */}
-            <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 50 }}>
+            {/* Highlight overlay - zIndex 10 by toolbary (z-40/z-50) były zawsze nad nim, inaczej kliknięcia w toolbar trafiają w highlight pod spodem */}
+            <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 10 }}>
                 {pageHighlights.flatMap(h => (Array.isArray(h.rects) ? h.rects : []).map((r, i) => (
                     <div
                         key={`${h.id}-${i}`}
@@ -92,19 +94,21 @@ export default function PdfPageWithHighlights({
                 )))}
             </div>
 
-            {/* Pop-over aktywnego highlightu */}
-            {activeHighlightId && (() => {
+            {/* Pop-over aktywnego highlightu - chowany gdy jest toolbar nowego zaznaczenia, by się nie dublowały */}
+            {activeHighlightId && !selToolbar && (() => {
                 const h = pageHighlights.find(x => x.id === activeHighlightId);
                 if (!h) return null;
                 const r0 = (Array.isArray(h.rects) ? h.rects : [])[0];
                 if (!r0) return null;
                 return (
                     <div
-                        className="absolute z-20 flex items-center gap-1 bg-gray-900 border border-white/15 rounded-lg shadow-xl px-1.5 py-1"
+                        className="absolute flex items-center gap-1 bg-gray-900 border border-white/15 rounded-lg shadow-xl px-1.5 py-1"
                         style={{
                             left: `${(r0.x + r0.w) * 100}%`,
                             top:  `${r0.y * 100}%`,
                             transform: 'translate(4px, -100%)',
+                            zIndex: 40,
+                            pointerEvents: 'auto',
                         }}
                         onClick={(e) => e.stopPropagation()}
                     >
@@ -131,8 +135,8 @@ export default function PdfPageWithHighlights({
             {/* Toolbar zaznaczenia */}
             {selToolbar && (
                 <div
-                    className="absolute z-30 flex items-center gap-1 bg-gray-900 border border-amber-400/40 rounded-lg shadow-xl px-1.5 py-1"
-                    style={{ left: selToolbar.x, top: selToolbar.y, transform: 'translate(-50%, -100%)' }}
+                    className="absolute flex items-center gap-1 bg-gray-900 border border-amber-400/40 rounded-lg shadow-xl px-1.5 py-1"
+                    style={{ left: selToolbar.x, top: selToolbar.y, transform: 'translate(-50%, -100%)', zIndex: 50, pointerEvents: 'auto' }}
                     onMouseDown={(e) => e.preventDefault()}
                 >
                     <Highlighter size={11} className="text-amber-300" />
