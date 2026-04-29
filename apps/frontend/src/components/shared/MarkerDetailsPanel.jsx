@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, MapPin, Mic, Camera, FilePlus, Trash2, Save, ChevronDown, Download, Image as ImageIcon, CheckSquare, Square, Layers, Plus, Check } from 'lucide-react';
 import { API_URL } from '../../config';
 import { useNetwork } from '../../hooks/useNetwork';
-import { enqueue } from '../../services/repos/outboxRepo';
+import { enqueue, updateTempMarkerPayload } from '../../services/repos/outboxRepo';
 import { db } from '../../services/db';
 
 // Flatten all WBS nodes recursively with path label
@@ -254,7 +254,16 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
         }
     };
 
+    const dispatchTempUpdate = (updates) => {
+        window.dispatchEvent(new CustomEvent('temp-marker-updated', { detail: { tempId: marker.id, updates } }));
+    };
+
     const handleUpdateName = async () => {
+        if (isTemp) {
+            await updateTempMarkerPayload(marker.id, { name: editName });
+            dispatchTempUpdate({ name: editName });
+            return;
+        }
         try {
             const token = sessionStorage.getItem('token');
             await fetch(`${API_URL}/schematics/markers/${marker.id}`, {
@@ -267,6 +276,11 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
     };
 
     const handleUpdateNote = async () => {
+        if (isTemp) {
+            await updateTempMarkerPayload(marker.id, { note: editNote });
+            dispatchTempUpdate({ note: editNote });
+            return;
+        }
         try {
             const token = sessionStorage.getItem('token');
             await fetch(`${API_URL}/schematics/markers/${marker.id}`, {
@@ -443,8 +457,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
                             value={editName}
                             onChange={e => setEditName(e.target.value)}
                             onBlur={handleUpdateName}
-                            disabled={isTemp}
-                            className="w-full bg-[#1e293b]/50 border border-white/5 rounded-2xl px-4 py-3 text-sm text-gray-100 focus:outline-none focus:border-orange-500/50 transition-all shadow-inner placeholder:text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="w-full bg-[#1e293b]/50 border border-white/5 rounded-2xl px-4 py-3 text-sm text-gray-100 focus:outline-none focus:border-orange-500/50 transition-all shadow-inner placeholder:text-gray-600"
                             placeholder="Nazwa widoczna na mapie..."
                         />
                     </div>
@@ -551,8 +564,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
                             value={editNote}
                             onChange={e => setEditNote(e.target.value)}
                             onBlur={handleUpdateNote}
-                            disabled={isTemp}
-                            className="w-full bg-[#1e293b]/50 border border-white/5 rounded-2xl p-4 text-sm text-gray-100 resize-none h-32 focus:outline-none focus:border-blue-500/50 transition-all shadow-inner placeholder:text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="w-full bg-[#1e293b]/50 border border-white/5 rounded-2xl p-4 text-sm text-gray-100 resize-none h-32 focus:outline-none focus:border-blue-500/50 transition-all shadow-inner placeholder:text-gray-600"
                             placeholder="Wpisz tutaj swoje uwagi..."
                         />
                     </div>
