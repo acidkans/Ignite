@@ -109,6 +109,19 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
         setPan({ x: 0, y: 0 });
     }, [selectedSchematic?.id, pageNumber]);
 
+    // Po syncu ADD_ATTACHMENT — odśwież panel (schemat ma nowe załączniki)
+    useEffect(() => {
+        const handler = (e) => {
+            const { markerId } = e.detail || {};
+            if (!markerId) return;
+            // Sprawdź czy ten marker należy do któregoś z naszych schematów
+            const owns = schematics.some(s => (s.markers || []).some(m => m.id === markerId));
+            if (owns) fetchSchematics(true).catch(() => {});
+        };
+        window.addEventListener('attachment-synced', handler);
+        return () => window.removeEventListener('attachment-synced', handler);
+    }, [schematics]);
+
     // Edycja nazwy/notatki temp markera offline — aktualizuje in-memory bez API
     useEffect(() => {
         const handler = (e) => {
@@ -676,6 +689,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                     onClose={() => setSelectedMarker(null)}
                     onRefresh={fetchSchematics}
                     nodeId={nodeId}
+                    subtaskId={subtaskId}
                 />
             )}
         </div>
