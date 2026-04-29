@@ -2,11 +2,14 @@ import React, { useState, useMemo } from 'react';
 import {
     Clock, CheckCircle, AlertCircle, ChevronRight,
     LogOut, Briefcase, ChevronLeft, Info, Map as MapIcon,
-    Calendar, User, FileText, ExternalLink, MapPin, ChevronDown
+    Calendar, User, FileText, ExternalLink, MapPin, Play, Flag, PauseCircle
 } from 'lucide-react';
 import SchematicViewer from '../shared/SchematicViewer';
 import { useCachedSubtasks } from '../../hooks/useCachedSubtasks';
 import { useNetwork } from '../../hooks/useNetwork';
+import { enqueue } from '../../services/repos/outboxRepo';
+import { db } from '../../services/db';
+import { API_URL } from '../../config';
 
 const toDateStr = (d) => d.toISOString().slice(0, 10);
 
@@ -20,6 +23,35 @@ export default function MobileDashboard({ onLogout }) {
         : null;
     const { subtasks, loading } = useCachedSubtasks(token);
     const { isOnline } = useNetwork();
+
+    const handleStatusChange = async (subtask, newStatus) => {
+        const updatedAt = new Date().toISOString();
+        // Optimistic update — IDB liveQuery auto-refreshes list
+        await db.subtasks.update(subtask.id, { status: newStatus, updatedAt });
+        setSelectedSubtask(prev => prev?.id === subtask.id ? { ...prev, status: newStatus, updatedAt } : prev);
+
+        if (isOnline) {
+            try {
+                const t = localStorage.getItem('token');
+                const res = await fetch(`${API_URL}/subtasks/${subtask.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
+                    body: JSON.stringify({ status: newStatus }),
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    await db.subtasks.put({ ...data, updatedAt: data.updatedAt ?? updatedAt });
+                    setSelectedSubtask(prev => prev?.id === subtask.id ? { ...prev, ...data } : prev);
+                } else {
+                    await enqueue('SUBTASK_STATUS', { subtaskId: subtask.id, status: newStatus });
+                }
+            } catch {
+                await enqueue('SUBTASK_STATUS', { subtaskId: subtask.id, status: newStatus });
+            }
+        } else {
+            await enqueue('SUBTASK_STATUS', { subtaskId: subtask.id, status: newStatus });
+        }
+    };
 
     const handleLogoutClick = () => {
         // Logout offline by zostawiał pracownika bez dostępu do appki — wymagamy online.
@@ -51,18 +83,27 @@ export default function MobileDashboard({ onLogout }) {
 
     const getStatusIcon = (status) => {
         switch (status) {
-            case 'DONE': return <CheckCircle size={18} className="text-emerald-400" />;
-            case 'IN_PROGRESS': return <Clock size={18} className="text-blue-400" />;
+            case 'FINISHED': case 'DONE': return <CheckCircle size={18} className="text-emerald-400" />;
+            case 'STARTED': case 'IN_PROGRESS': return <Clock size={18} className="text-blue-400" />;
+            case 'ON_HOLD': return <PauseCircle size={18} className="text-amber-400" />;
             default: return <AlertCircle size={18} className="text-gray-400" />;
         }
     };
 
     const getStatusColor = (status) => {
         switch (status) {
-            case 'DONE': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-            case 'IN_PROGRESS': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+            case 'FINISHED': case 'DONE': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+            case 'STARTED': case 'IN_PROGRESS': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+            case 'ON_HOLD': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+            case 'CANCELLED': return 'bg-red-500/10 text-red-400 border-red-500/20';
             default: return 'bg-gray-500/10 text-gray-400 border-gray-500/20';
         }
+    };
+
+    const STATUS_LABEL = {
+        NEW: 'Nowe', PLANNED: 'Planowane', STARTED: 'W realizacji',
+        FINISHED: 'Zakończone', ON_HOLD: 'Wstrzymane', CANCELLED: 'Anulowane',
+        DONE: 'Zakończone', IN_PROGRESS: 'W realizacji',
     };
 
     if (loading) {
@@ -110,15 +151,53 @@ export default function MobileDashboard({ onLogout }) {
                     {activeTab === 'details' ? (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300 overflow-y-auto flex-1 min-h-0">
                             {/* Status Card */}
-                            <div className="bg-gray-900/50 border border-white/5 rounded-2xl p-4 flex items-center justify-between shadow-xl">
-                                <div className="flex items-center gap-3">
-                                    <div className={`p-2 rounded-xl ${getStatusColor(selectedSubtask.status)} font-bold`}>
-                                        {getStatusIcon(selectedSubtask.status)}
+                            <div className="bg-gray-900/50 border border-white/5 rounded-2xl p-4 shadow-xl space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-2 rounded-xl ${getStatusColor(selectedSubtask.status)} font-bold`}>
+                                            {getStatusIcon(selectedSubtask.status)}
+                                        </div>
+                                        <div>
+                                            <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Status</div>
+                                            <div className="text-sm font-bold">{STATUS_LABEL[selectedSubtask.status] ?? selectedSubtask.status}</div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Status</div>
-                                        <div className="text-sm font-bold">{selectedSubtask.status}</div>
-                                    </div>
+                                    {!isOnline && (
+                                        <span className="text-[9px] text-amber-500 font-black uppercase tracking-widest">offline</span>
+                                    )}
+                                </div>
+                                {/* Status action buttons */}
+                                <div className="flex gap-2">
+                                    {['NEW', 'PLANNED', 'ON_HOLD'].includes(selectedSubtask.status) && (
+                                        <button
+                                            onClick={() => handleStatusChange(selectedSubtask, 'STARTED')}
+                                            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600/80 text-white text-xs font-black uppercase tracking-widest active:scale-95 transition-transform"
+                                        >
+                                            <Play size={13} /> Rozpocznij
+                                        </button>
+                                    )}
+                                    {selectedSubtask.status === 'STARTED' && (<>
+                                        <button
+                                            onClick={() => handleStatusChange(selectedSubtask, 'FINISHED')}
+                                            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600/80 text-white text-xs font-black uppercase tracking-widest active:scale-95 transition-transform"
+                                        >
+                                            <Flag size={13} /> Zakończ
+                                        </button>
+                                        <button
+                                            onClick={() => handleStatusChange(selectedSubtask, 'ON_HOLD')}
+                                            className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-amber-600/20 text-amber-400 border border-amber-500/30 text-xs font-black uppercase tracking-widest active:scale-95 transition-transform"
+                                        >
+                                            <PauseCircle size={13} /> Wstrzymaj
+                                        </button>
+                                    </>)}
+                                    {selectedSubtask.status === 'FINISHED' && (
+                                        <button
+                                            onClick={() => handleStatusChange(selectedSubtask, 'STARTED')}
+                                            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 text-xs font-black uppercase tracking-widest active:scale-95 transition-transform"
+                                        >
+                                            <Play size={13} /> Wznów
+                                        </button>
+                                    )}
                                 </div>
                                 {selectedSubtask.geoCoords && (
                                     <a
