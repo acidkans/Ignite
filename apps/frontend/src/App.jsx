@@ -11,6 +11,7 @@ import { useDevice } from './hooks/useDevice';
 import { useNetwork } from './hooks/useNetwork';
 import { usePushSubscription, unregisterPushSubscription } from './hooks/usePushSubscription';
 import { prefetchMobileData } from './services/sync/prefetch';
+import { useSyncOutbox } from './hooks/useSyncOutbox';
 
 const NotFound = () => (
   <div className="h-full flex flex-col items-center justify-center text-white p-10">
@@ -69,6 +70,7 @@ function App() {
   const { isOnline } = useNetwork();
   const inactivityTimer = useRef(null);
   usePushSubscription(token);
+  useSyncOutbox(token);
 
   const doLogout = useCallback(async () => {
     const t = localStorage.getItem('token') || sessionStorage.getItem('token');

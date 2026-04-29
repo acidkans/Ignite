@@ -13,6 +13,8 @@ import {
     getSchematicsByNode,
     upsertSchematics,
 } from '../../services/repos/schematicsRepo';
+import { useNetwork } from '../../hooks/useNetwork';
+import { enqueue } from '../../services/repos/outboxRepo';
 
 // Configure worker for react-pdf
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -27,6 +29,7 @@ const pdfOptions = {
 };
 
 export default function SchematicViewer({ nodeId, subtaskId, initialSchematics = [] }) {
+    const { isOnline } = useNetwork();
     const [schematics, setSchematics] = useState(initialSchematics);
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -271,8 +274,32 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
 
         setIsAddingMarker(false);
         setLineStart(null);
-        setLoading(true);
 
+        if (!isOnline) {
+            // Offline — optimistic temp marker + outbox
+            const tempId = `temp_${crypto.randomUUID()}`;
+            const tempMarker = { id: tempId, isTemp: true, createdAt: new Date().toISOString(), attachments: [], ...newMarkerData };
+            setSchematics(prev => prev.map(s =>
+                s.id === selectedSchematic.id
+                    ? { ...s, markers: [...(s.markers || []), tempMarker] }
+                    : s
+            ));
+            setSelectedSchematic(prev =>
+                prev?.id === selectedSchematic.id
+                    ? { ...prev, markers: [...(prev.markers || []), tempMarker] }
+                    : prev
+            );
+            await enqueue('ADD_MARKER', {
+                schematicId: selectedSchematic.id,
+                marker: newMarkerData,
+                subtaskId,
+                nodeId,
+                tempId,
+            });
+            return;
+        }
+
+        setLoading(true);
         try {
             const token = sessionStorage.getItem('token');
             const res = await fetch(`${API_URL}/schematics/${selectedSchematic.id}/markers`, {
@@ -281,9 +308,9 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                 body: JSON.stringify(newMarkerData)
             });
             if (!res.ok) throw new Error('Błąd zapisu');
-            
+
             const freshData = await fetchSchematics();
-            
+
             const updatedSchematic = freshData.find(s => s.id === selectedSchematic.id);
             if (updatedSchematic) {
                 const markers = updatedSchematic.markers;
@@ -518,10 +545,11 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                                         <div className="absolute inset-0 bg-blue-500 rounded-full blur-xl scale-150 animate-pulse opacity-20" />
                                         <MapPin
                                             size={isMobile ? 36 : 28}
-                                            className="text-orange-500 drop-shadow-[0_0_10px_rgba(249,115,22,0.5)] transition-transform"
+                                            className={`${m.isTemp ? 'text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.6)]' : 'text-orange-500 drop-shadow-[0_0_10px_rgba(249,115,22,0.5)]'} transition-transform`}
                                             style={{ transform: isHovered ? 'scale(1.1)' : 'scale(1)' }}
-                                            fill="currentColor" fillOpacity={0.1}
+                                            fill="currentColor" fillOpacity={m.isTemp ? 0.3 : 0.1}
                                         />
+                                        {m.isTemp && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full border border-black animate-pulse" />}
                                     </div>
                                 </div>
                             );
