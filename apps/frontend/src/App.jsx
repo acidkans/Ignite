@@ -8,6 +8,7 @@ import MainLayout from './components/Layout/MainLayout';
 import MobileDashboard from './components/Mobile/MobileDashboard';
 import OfflineBanner from './components/shared/OfflineBanner';
 import { useDevice } from './hooks/useDevice';
+import { useNetwork } from './hooks/useNetwork';
 import { usePushSubscription, unregisterPushSubscription } from './hooks/usePushSubscription';
 import { prefetchMobileData } from './services/sync/prefetch';
 
@@ -65,6 +66,7 @@ function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isMobile, isTablet } = useDevice();
+  const { isOnline } = useNetwork();
   const inactivityTimer = useRef(null);
   usePushSubscription(token);
 
@@ -85,6 +87,12 @@ function App() {
 
   useEffect(() => {
     if (!token) return;
+    // Inactivity timer pauzowany offline — bez sieci nie ma jak ponownie się zalogować,
+    // więc auto-logout w terenie zostawiałby pracownika bez dostępu (Etap 1.5 quick fix).
+    if (!isOnline) {
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+      return;
+    }
     const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
     events.forEach(e => window.addEventListener(e, resetInactivityTimer, { passive: true }));
     resetInactivityTimer(); // start timer immediately
@@ -92,7 +100,7 @@ function App() {
       events.forEach(e => window.removeEventListener(e, resetInactivityTimer));
       if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
     };
-  }, [token, resetInactivityTimer]);
+  }, [token, isOnline, resetInactivityTimer]);
 
   useEffect(() => {
     const storedToken = loadValidToken();

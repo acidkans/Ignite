@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import SchematicViewer from '../shared/SchematicViewer';
 import { useCachedSubtasks } from '../../hooks/useCachedSubtasks';
+import { useNetwork } from '../../hooks/useNetwork';
 
 const toDateStr = (d) => d.toISOString().slice(0, 10);
 
@@ -18,6 +19,16 @@ export default function MobileDashboard({ onLogout }) {
         ? (localStorage.getItem('token') || sessionStorage.getItem('token'))
         : null;
     const { subtasks, loading } = useCachedSubtasks(token);
+    const { isOnline } = useNetwork();
+
+    const handleLogoutClick = () => {
+        // Logout offline by zostawiał pracownika bez dostępu do appki — wymagamy online.
+        if (!isOnline) {
+            alert('Wylogowanie wymaga połączenia z siecią. Następne logowanie też wymaga połączenia.');
+            return;
+        }
+        onLogout?.();
+    };
 
     const filteredSubtasks = useMemo(() => {
         if (!selectedDate) return subtasks;
@@ -183,7 +194,11 @@ export default function MobileDashboard({ onLogout }) {
             {/* Header */}
             <header className="px-4 py-3 border-b border-white/5 bg-gray-900/50 backdrop-blur-xl sticky top-0 z-10 shadow-lg">
                 <div className="flex items-center gap-3 mb-3">
-                    <button onClick={onLogout} className="p-2 rounded-full bg-white/5 text-gray-400 hover:text-red-400 active:scale-90 transition-all flex-shrink-0">
+                    <button
+                        onClick={handleLogoutClick}
+                        title={isOnline ? 'Wyloguj' : 'Wylogowanie wymaga połączenia'}
+                        className={`p-2 rounded-full bg-white/5 active:scale-90 transition-all flex-shrink-0 ${isOnline ? 'text-gray-400 hover:text-red-400' : 'text-gray-700 cursor-not-allowed'}`}
+                    >
                         <LogOut size={18} className="scale-x-[-1]" />
                     </button>
                     <div className="flex items-center gap-2 flex-1">
