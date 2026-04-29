@@ -202,7 +202,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     };
 
     const uploadFile = async (file) => {
-        if (!isOnline) {
+        if (!isOnline || isTemp) {
             setUploading(true);
             try {
                 const arrayBuffer = await file.arrayBuffer();
