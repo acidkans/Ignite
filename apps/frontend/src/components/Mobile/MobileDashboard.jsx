@@ -1,41 +1,23 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
     Clock, CheckCircle, AlertCircle, ChevronRight,
     LogOut, Briefcase, ChevronLeft, Info, Map as MapIcon,
     Calendar, User, FileText, ExternalLink, MapPin, ChevronDown
 } from 'lucide-react';
-import { API_URL } from '../../config';
 import SchematicViewer from '../shared/SchematicViewer';
+import { useCachedSubtasks } from '../../hooks/useCachedSubtasks';
 
 const toDateStr = (d) => d.toISOString().slice(0, 10);
 
 export default function MobileDashboard({ onLogout }) {
-    const [subtasks, setSubtasks] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [selectedSubtask, setSelectedSubtask] = useState(null);
     const [activeTab, setActiveTab] = useState('details');
     const [selectedDate, setSelectedDate] = useState(toDateStr(new Date()));
 
-    useEffect(() => {
-        const fetchSubtasks = async () => {
-            try {
-                const token = sessionStorage.getItem('token');
-                const res = await fetch(`${API_URL}/subtasks/assigned/me`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    setSubtasks(data);
-                }
-            } catch (err) {
-                console.error('Failed to fetch assigned subtasks:', err);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchSubtasks();
-    }, []);
+    const token = typeof window !== 'undefined'
+        ? (localStorage.getItem('token') || sessionStorage.getItem('token'))
+        : null;
+    const { subtasks, loading } = useCachedSubtasks(token);
 
     const filteredSubtasks = useMemo(() => {
         if (!selectedDate) return subtasks;
@@ -74,7 +56,7 @@ export default function MobileDashboard({ onLogout }) {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-[100dvh] bg-gray-950">
+            <div className="flex items-center justify-center h-full bg-gray-950">
                 <div className="w-8 h-8 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
             </div>
         );
@@ -83,7 +65,7 @@ export default function MobileDashboard({ onLogout }) {
     // --- Detail View Rendering ---
     if (selectedSubtask) {
         return (
-            <div className="flex flex-col h-[100dvh] bg-gray-950 text-white animate-in fade-in slide-in-from-right-4 duration-300">
+            <div className="flex flex-col h-full bg-gray-950 text-white animate-in fade-in slide-in-from-right-4 duration-300">
                 {/* Header with Back Button + inline tabs */}
                 <header className="px-2 py-1.5 flex items-center gap-2 border-b border-white/5 bg-gray-900/80 backdrop-blur-xl sticky top-0 z-30 flex-shrink-0">
                     <button
@@ -197,7 +179,7 @@ export default function MobileDashboard({ onLogout }) {
 
     // --- List View Rendering ---
     return (
-        <div className="flex flex-col h-[100dvh] bg-gray-950 text-white overflow-hidden">
+        <div className="flex flex-col h-full bg-gray-950 text-white overflow-hidden">
             {/* Header */}
             <header className="px-4 py-3 border-b border-white/5 bg-gray-900/50 backdrop-blur-xl sticky top-0 z-10 shadow-lg">
                 <div className="flex items-center gap-3 mb-3">
