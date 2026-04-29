@@ -55,9 +55,28 @@ async function processItem(item, token) {
             : `${API_URL}/schematics/node/${nodeId}`;
         const schRes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
         if (schRes.ok) {
+            const data = await schRes.json();
             const { upsertSchematics } = await import('../repos/schematicsRepo');
-            await upsertSchematics(await schRes.json(), { subtaskId, nodeId });
+            await upsertSchematics(data, { subtaskId, nodeId });
+            // Powiadom SchematicViewer żeby odświeżył stan (zastąpi temp marker prawdziwym)
+            window.dispatchEvent(new CustomEvent('schematic-synced', { detail: { subtaskId, nodeId, schematics: data } }));
         }
+    }
+
+    if (item.type === 'ADD_ATTACHMENT') {
+        const { markerId, outboxId, fileName, fileType } = item.payload;
+        const draft = await db.attachmentDrafts.where('outboxId').equals(outboxId).first();
+        if (!draft) return; // draft already cleaned up
+        const blob = new Blob([draft.arrayBuffer], { type: fileType });
+        const formData = new FormData();
+        formData.append('file', new File([blob], fileName, { type: fileType }));
+        const res = await fetch(`${API_URL}/schematics/markers/${markerId}/attachments`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        await db.attachmentDrafts.where('outboxId').equals(outboxId).delete();
     }
 
     if (item.type === 'DELETE_MARKER') {
