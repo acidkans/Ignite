@@ -1213,10 +1213,9 @@ ${materialsHtml}
 
         const workbook = new ExcelJS.Workbook();
         const safeOrderName = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|\[\]]+/g, '_') || 'zamowienie';
-        // Excel limit: 31 chars/sheet name. Trim base so suffixes "_podsumowanie" (13) i "_budzet" (7) zmieszczą się i były unikalne.
-        const sheetBase = safeOrderName.slice(0, 31 - '_podsumowanie'.length);
-        const summarySheet = workbook.addWorksheet(`${sheetBase}_podsumowanie`.slice(0, 31));
-        const budgetSheet = workbook.addWorksheet(`${sheetBase}_budzet`.slice(0, 31));
+        // Konwencja: arkusze nazwane tylko typem (Podsumowanie / Budżet / Q&A) — nazwa projektu jest w nazwie pliku.
+        const summarySheet = workbook.addWorksheet('Podsumowanie');
+        const budgetSheet = workbook.addWorksheet('Budżet');
         const exportDate = new Date().toLocaleDateString('pl-PL');
         const fileProjectName = String(orderName || projectName || 'projekt').trim() || 'projekt';
         const safeProjectName = fileProjectName.replace(/[\\/:*?"<>|]+/g, '_');
@@ -1269,46 +1268,50 @@ ${materialsHtml}
         summarySheet.getCell('B11').numFmt = '0.00%';
         summarySheet.getRow(1).font = { bold: true, size: 14 };
 
-        // Per-type aggregation table
+        // Per-type aggregation: grupowanie po (typ, jednostka) — np. „Praca / dni" osobno od „Praca / szt".
         const typeAgg = {};
         for (const row of rows) {
             const typeKey = row.type || '';
             const typeLabel = TYPE_LABELS[typeKey] || typeKey || '—';
-            if (!typeAgg[typeLabel]) typeAgg[typeLabel] = { count: 0, cost: 0, revenue: 0 };
-            typeAgg[typeLabel].count += 1;
-            typeAgg[typeLabel].cost += Number(row.totalCost) || 0;
-            typeAgg[typeLabel].revenue += Number(row.offerPrice) || 0;
+            const unit = String(row.unit || '').trim() || '—';
+            const aggKey = `${typeLabel}|${unit}`;
+            if (!typeAgg[aggKey]) typeAgg[aggKey] = { typeLabel, unit, quantity: 0, cost: 0, revenue: 0 };
+            typeAgg[aggKey].quantity += Number(row.quantity) || 0;
+            typeAgg[aggKey].cost += Number(row.totalCost) || 0;
+            typeAgg[aggKey].revenue += Number(row.offerPrice) || 0;
         }
 
         summarySheet.addRow([]);
         const perTypeTitleRow = summarySheet.addRow(['Podsumowanie per typ']);
         perTypeTitleRow.font = { bold: true, size: 12 };
-        const perTypeHeaderRow = summarySheet.addRow(['Typ', 'Liczba', 'Koszt', 'Przychód', 'Zysk', 'Marża %']);
+        const perTypeHeaderRow = summarySheet.addRow(['Typ', 'Jednostka', 'Ilość', 'Koszt', 'Przychód', 'Zysk', 'Marża %']);
         perTypeHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         perTypeHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
 
         const perTypeFirstRow = perTypeHeaderRow.number + 1;
-        const typeEntries = Object.entries(typeAgg).sort((a, b) => b[1].cost - a[1].cost);
-        for (const [label, agg] of typeEntries) {
+        const typeEntries = Object.values(typeAgg).sort((a, b) => {
+            if (a.typeLabel !== b.typeLabel) return a.typeLabel.localeCompare(b.typeLabel, 'pl');
+            return b.cost - a.cost;
+        });
+        for (const agg of typeEntries) {
             const profit = agg.revenue - agg.cost;
             const margin = agg.revenue > 0 ? profit / agg.revenue : 0;
-            summarySheet.addRow([label, agg.count, agg.cost, agg.revenue, profit, margin]);
+            summarySheet.addRow([agg.typeLabel, agg.unit, agg.quantity, agg.cost, agg.revenue, profit, margin]);
         }
-        const perTypeTotalCount = typeEntries.reduce((s, [, a]) => s + a.count, 0);
-        const perTypeTotalCost = typeEntries.reduce((s, [, a]) => s + a.cost, 0);
-        const perTypeTotalRevenue = typeEntries.reduce((s, [, a]) => s + a.revenue, 0);
+        const perTypeTotalCost = typeEntries.reduce((s, a) => s + a.cost, 0);
+        const perTypeTotalRevenue = typeEntries.reduce((s, a) => s + a.revenue, 0);
         const perTypeTotalProfit = perTypeTotalRevenue - perTypeTotalCost;
         const perTypeTotalMargin = perTypeTotalRevenue > 0 ? perTypeTotalProfit / perTypeTotalRevenue : 0;
-        const perTypeTotalsRow = summarySheet.addRow(['Razem', perTypeTotalCount, perTypeTotalCost, perTypeTotalRevenue, perTypeTotalProfit, perTypeTotalMargin]);
+        const perTypeTotalsRow = summarySheet.addRow(['Razem', '', '', perTypeTotalCost, perTypeTotalRevenue, perTypeTotalProfit, perTypeTotalMargin]);
         perTypeTotalsRow.font = { bold: true };
         perTypeTotalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
 
         for (let r = perTypeFirstRow; r <= perTypeTotalsRow.number; r++) {
-            summarySheet.getCell(`B${r}`).numFmt = '#,##0';
-            summarySheet.getCell(`C${r}`).numFmt = '#,##0.00';
+            summarySheet.getCell(`C${r}`).numFmt = '#,##0.##';
             summarySheet.getCell(`D${r}`).numFmt = '#,##0.00';
             summarySheet.getCell(`E${r}`).numFmt = '#,##0.00';
-            summarySheet.getCell(`F${r}`).numFmt = '0.00%';
+            summarySheet.getCell(`F${r}`).numFmt = '#,##0.00';
+            summarySheet.getCell(`G${r}`).numFmt = '0.00%';
         }
 
         // Mapa WBS nodeId → nazwa wymagania
@@ -1400,7 +1403,7 @@ ${materialsHtml}
         budgetSheet.views = [{ state: 'frozen', ySplit: 1 }];
 
         // Q&A sheet — zagnieżdżona tabela: Pozycja WBS / Pytanie / Odpowiedź
-        const qaSheet = workbook.addWorksheet(`${safeOrderName}_qa`);
+        const qaSheet = workbook.addWorksheet('Q&A');
         qaSheet.columns = [
             { header: 'Przedmiot', key: 'subjectName', width: 28 },
             { header: 'Podgałąź', key: 'parentName', width: 24 },
@@ -1925,6 +1928,25 @@ ${materialsHtml}
     ]);
 
 
+    // Wariant A: znajduje wszystkie material-requirements o tej samej nazwie
+    // w obrębie aktualnego scope (allRequirements jest pobrane dla nodeId/versionId).
+    // Match: req.name LUB nazwa dowolnego linkowanego WBS węzła (przez wbsNodeId
+    // albo wbsNodeAllocations). Konieczne, bo zdarzają się orphan reqs z pustą
+    // nazwą (auto-generated) gdzie poprawna nazwa jest tylko na WBS węźle.
+    const findRequirementIdsForLookupKey = useCallback((_subjectName, name) => {
+        const targetName = String(name || '').trim().toLowerCase();
+        if (!targetName) return [];
+        const wbsNameById = new Map((wbsData || []).map(n => [n.id, String(n.name || '').trim().toLowerCase()]));
+        return (allRequirements || []).filter(req => {
+            if (String(req?.name || '').trim().toLowerCase() === targetName) return true;
+            let alloc = {};
+            try { alloc = req.wbsNodeAllocations ? JSON.parse(req.wbsNodeAllocations) : {}; } catch {}
+            const allocIds = Object.keys(alloc).filter(id => parseFloat(alloc[id]) > 0);
+            const ids = allocIds.length > 0 ? allocIds : (req.wbsNodeId ? [String(req.wbsNodeId)] : []);
+            return ids.some(id => wbsNameById.get(id) === targetName);
+        }).map(r => r.id).filter(Boolean);
+    }, [allRequirements, wbsData]);
+
     const onBudgetFieldChange = useCallback((rowOrig, field, rawValue) => {
         const row = { ...rowOrig, [field]: rawValue };
         if (!row) return;
@@ -2093,6 +2115,9 @@ ${materialsHtml}
                 }
             }
             // Sync unitCost → priceNetto in material-requirements for material/equipment rows
+            // Wariant A: ten sam materiał (subject::name) = jedna cena - patchujemy WSZYSTKIE
+            // requirements mapujące się na ten lookupKey, nie tylko ten powiązany przez req: tag.
+            // Inaczej refreshMaterialCosts agreguje "starą" cenę z innych wierszy i ją "odtwarza".
             if (field === 'unitCost') {
                 const normalizedType = String(row.type || row.budgetType || '').toLowerCase();
                 if (normalizedType === 'material' || normalizedType === 'equipment') {
@@ -2102,14 +2127,13 @@ ${materialsHtml}
                         const existingQty = parseFloat(existing?.quantity) || q;
                         return { ...prev, [lookupKey]: { ...(existing || {}), cost: uc * existingQty, quantity: existingQty } };
                     });
-                    const reqTag = (row.tags || []).find(t => String(t).startsWith('req:'));
-                    if (reqTag) {
-                        const reqId = reqTag.slice(4);
-                        fetch(`${API_URL}/material-requirements/${reqId}`, {
+                    const reqIds = findRequirementIdsForLookupKey(row.subjectName || row.name, row.name);
+                    if (reqIds.length > 0) {
+                        Promise.all(reqIds.map(reqId => fetch(`${API_URL}/material-requirements/${reqId}`, {
                             method: 'PATCH',
                             headers: authHeaders(),
                             body: JSON.stringify({ priceNetto: uc }),
-                        }).then(async () => {
+                        }))).then(async () => {
                             setReqRefreshKey(k => k + 1);
                             await refreshMaterialCosts();
                         }).catch(() => {});
@@ -2125,19 +2149,18 @@ ${materialsHtml}
                         ...prev,
                         [lookupKey]: { ...(prev[lookupKey] || {}), unit: row.unit },
                     }));
-                    const reqTag = (row.tags || []).find(t => String(t).startsWith('req:'));
-                    if (reqTag) {
-                        const reqId = reqTag.slice(4);
-                        fetch(`${API_URL}/material-requirements/${reqId}`, {
+                    const reqIds = findRequirementIdsForLookupKey(row.subjectName || row.name, row.name);
+                    if (reqIds.length > 0) {
+                        Promise.all(reqIds.map(reqId => fetch(`${API_URL}/material-requirements/${reqId}`, {
                             method: 'PATCH',
                             headers: authHeaders(),
                             body: JSON.stringify({ unit: row.unit }),
-                        }).then(() => setReqRefreshKey(k => k + 1)).catch(() => {});
+                        }))).then(() => setReqRefreshKey(k => k + 1)).catch(() => {});
                     }
                 }
             }
         }
-    }, [saveBudgetField, updateNodeField, materialMetaByLookupKey, updateLocalWbsBudgetRow, syncMaterialRequirementsFromWbsQuantity, authHeaders, nodeId, versionId, wbsData, refreshUnified]);
+    }, [saveBudgetField, updateNodeField, materialMetaByLookupKey, updateLocalWbsBudgetRow, syncMaterialRequirementsFromWbsQuantity, authHeaders, nodeId, versionId, wbsData, refreshUnified, findRequirementIdsForLookupKey, refreshMaterialCosts]);
 
     const buildRows = (view) => {
         const byId = new Map(wbsData.map(item => [item.id, item]));

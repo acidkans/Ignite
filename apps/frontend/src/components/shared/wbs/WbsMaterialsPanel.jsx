@@ -155,7 +155,7 @@ function ProposalsSection({ req, token, onRefresh }) {
 
 // ─── ProductCard ──────────────────────────────────────────────────────────────
 
-function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, readOnly }) {
+function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, onPropagatePrice, readOnly }) {
     const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
 
     const [fields, setFields] = useState({
@@ -328,7 +328,17 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
                     <div className="flex-1 min-w-[90px]">
                         <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Cena netto</label>
                         <input value={fields.priceNetto} onChange={e => setF('priceNetto', e.target.value)}
-                            onBlur={() => { const v = parseFloat(String(fields.priceNetto).replace(',', '.')); if (!isNaN(v)) patchCard({ priceNetto: v }); }}
+                            onBlur={() => {
+                                // Pusty input = wyczyszczenie ceny (null), inaczej parseFloat
+                                // (wcześniej NaN powodował pominięcie PATCH-a → cena "wracała").
+                                // onPropagatePrice realizuje wariant A (ten sam materiał = jedna cena).
+                                const raw = String(fields.priceNetto ?? '').trim().replace(',', '.');
+                                let next;
+                                if (raw === '') next = null;
+                                else { const v = parseFloat(raw); if (isNaN(v)) return; next = v; }
+                                if (onPropagatePrice) onPropagatePrice(card, wbsNode, next);
+                                else patchCard({ priceNetto: next });
+                            }}
                             disabled={readOnly}
                             className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
                             placeholder="0.00" />
@@ -414,7 +424,7 @@ function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, read
 
 // ─── Row ──────────────────────────────────────────────────────────────────────
 
-function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreateCard, materialDb, offers, token, readOnly, onRefresh, onPatchCard }) {
+function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreateCard, materialDb, offers, token, readOnly, onRefresh, onPatchCard, onPropagatePrice }) {
     const meta = TYPE_META[node.type] || TYPE_META.material;
     const TypeIcon = meta.icon;
     const reqStatus = card?.status;
@@ -423,12 +433,30 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
     const [editQty, setEditQty] = useState(false);
     const [qtyVal, setQtyVal] = useState(String(node.quantity ?? 1));
 
+    const [editPrice, setEditPrice] = useState(false);
+    const [priceVal, setPriceVal] = useState(card?.priceNetto != null ? String(card.priceNetto) : '');
+    useEffect(() => {
+        if (!editPrice) setPriceVal(card?.priceNetto != null ? String(card.priceNetto) : '');
+    }, [card?.priceNetto, editPrice]);
+
     const [creating, setCreating] = useState(false);
 
     const handleQtyBlur = () => {
         setEditQty(false);
         const v = parseFloat(qtyVal.replace(',', '.'));
         if (!isNaN(v) && v !== node.quantity) onPatchNode(node.id, { quantity: v });
+    };
+
+    const handlePriceBlur = () => {
+        setEditPrice(false);
+        if (!card?.id) return;
+        const raw = String(priceVal ?? '').trim().replace(',', '.');
+        let next;
+        if (raw === '') next = null;
+        else { const v = parseFloat(raw); if (isNaN(v)) return; next = v; }
+        if (next === (card.priceNetto ?? null)) return;
+        if (onPropagatePrice) onPropagatePrice(card, node, next);
+        else if (onPatchCard) onPatchCard(card.id, { priceNetto: next });
     };
 
     const handleCreateCard = async () => {
@@ -490,9 +518,21 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                     </button>
                 )}
             </td>
-            {/* Cena */}
-            <td className="px-3 py-2.5 text-sm text-green-400 font-mono whitespace-nowrap">
-                {card?.priceNetto != null ? `${Number(card.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—'}
+            {/* Cena - inline edit (klik aby edytować, Enter/blur zapisuje, propaguje na duplikaty wariant A) */}
+            <td className="px-3 py-2.5 text-sm font-mono whitespace-nowrap">
+                {editPrice && !readOnly && card ? (
+                    <input autoFocus value={priceVal}
+                        onChange={e => setPriceVal(e.target.value)}
+                        onBlur={handlePriceBlur}
+                        onKeyDown={e => { if (e.key === 'Enter') handlePriceBlur(); if (e.key === 'Escape') { setPriceVal(card?.priceNetto != null ? String(card.priceNetto) : ''); setEditPrice(false); } }}
+                        placeholder="0.00"
+                        className="w-24 bg-black/30 border border-blue-500/50 rounded px-2 py-0.5 text-sm text-white outline-none" />
+                ) : (
+                    <span onClick={() => !readOnly && card && setEditPrice(true)}
+                        className={`text-green-400 ${!readOnly && card ? 'cursor-pointer hover:text-green-300' : ''}`}>
+                        {card?.priceNetto != null ? `${Number(card.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—'}
+                    </span>
+                )}
             </td>
             {/* Status — edytowalny dropdown */}
             <td className="px-3 py-2.5">
@@ -792,6 +832,35 @@ export default function WbsMaterialsPanel({
         });
         await refreshCards();
     }, [refreshCards]);
+
+    // Wariant A: ten sam materiał (po nazwie WBS węzła) w obrębie projektu = jedna cena.
+    // Materials view jest już ograniczony do scope projektu (nodeId), więc dopasowanie
+    // po samej nazwie jest bezpieczne. Używamy node.name (zawsze poprawna), nie card.name -
+    // zdarzają się orphan requirements z pustą nazwą (auto-generated) gdzie wiersz pokazuje
+    // node.name, ale card.name=''. Wcześniej te karty były pomijane przy propagacji.
+    const propagatePriceNetto = useCallback(async (sourceCard, sourceWbsNode, priceNetto) => {
+        if (!sourceCard?.id) return;
+        const flatNodes = externalWbsNodes ?? internalWbsNodes;
+        const nodeNameById = new Map((flatNodes || []).map(n => [n.id, String(n.name || '').trim().toLowerCase()]));
+        const targetName = String(sourceWbsNode?.name || sourceCard.name || '').trim().toLowerCase();
+        if (!targetName) {
+            await fetch(`${API_URL}/material-requirements/${sourceCard.id}`, {
+                method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ priceNetto }),
+            });
+            await refreshCards();
+            return;
+        }
+        const matchingIds = Object.entries(cards)
+            .filter(([wbsNodeId, c]) => c?.id && nodeNameById.get(wbsNodeId) === targetName)
+            .map(([, c]) => c.id);
+        const ids = Array.from(new Set(matchingIds.length > 0 ? matchingIds : [sourceCard.id]));
+        await Promise.all(ids.map(id => fetch(`${API_URL}/material-requirements/${id}`, {
+            method: 'PATCH',
+            headers: authHeaders(),
+            body: JSON.stringify({ priceNetto }),
+        })));
+        await refreshCards();
+    }, [cards, externalWbsNodes, internalWbsNodes, refreshCards]);
 
     // ─ Column resize ─────────────────────────────────────────────────────────
 
@@ -1155,6 +1224,7 @@ export default function WbsMaterialsPanel({
                                         node={node}
                                         card={card}
                                         isExpanded={isExpanded}
+                                        onPropagatePrice={propagatePriceNetto}
                                         onToggle={async () => {
                                             if (isExpanded) {
                                                 setExpandedId(null);
@@ -1183,6 +1253,7 @@ export default function WbsMaterialsPanel({
                                                     materialDb={materialDb}
                                                     offers={offers}
                                                     onRefresh={refreshCards}
+                                                    onPropagatePrice={propagatePriceNetto}
                                                     readOnly={readOnly}
                                                 />
                                             </td>
