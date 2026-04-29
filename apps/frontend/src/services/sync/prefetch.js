@@ -28,15 +28,19 @@ export async function prefetchMobileData(token) {
 
             await replaceAssignedSubtasks(subtasks);
 
-            // Prefetch schematów dla każdego subtaska — równolegle, ale ograniczone do 4 naraz.
+            // Prefetch schematów — najpierw per subtask, fallback per node (jak SchematicViewer online).
+            // Bez node-fallbacku schematy przypisane do węzła nie trafiają do IDB.
+            const seenNodeIds = new Set();
             await runWithConcurrency(subtasks, 4, async (task) => {
-                const schematics = await fetchSchematicsFor(token, task.id);
-                if (schematics) {
+                let schematics = await fetchSchematicsFor(token, 'subtask', task.id);
+                if ((!schematics || schematics.length === 0) && task.nodeId && !seenNodeIds.has(task.nodeId)) {
+                    seenNodeIds.add(task.nodeId);
+                    schematics = await fetchSchematicsFor(token, 'node', task.nodeId);
+                }
+                if (schematics?.length) {
                     await replaceSchematicsForSubtask(task.id, schematics);
-                    // Touch plików schematów żeby wpadły do SW runtime cache.
                     for (const s of schematics) {
                         if (s.fileUrl) {
-                            // fire-and-forget; SW przechwyci i scache'uje
                             fetch(`${API_URL}/schematics/file/${s.fileUrl}`, {
                                 headers: { Authorization: `Bearer ${token}` },
                                 cache: 'no-store',
@@ -72,9 +76,9 @@ async function fetchAssignedSubtasks(token) {
     }
 }
 
-async function fetchSchematicsFor(token, subtaskId) {
+async function fetchSchematicsFor(token, type, id) {
     try {
-        const res = await fetch(`${API_URL}/schematics/subtask/${subtaskId}`, {
+        const res = await fetch(`${API_URL}/schematics/${type}/${id}`, {
             headers: { Authorization: `Bearer ${token}` },
             cache: 'no-store',
         });
