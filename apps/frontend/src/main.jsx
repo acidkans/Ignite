@@ -17,6 +17,10 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
         window.location.reload();
     });
 
+    navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data?.type === 'SW_UPDATED') window.location.reload();
+    });
+
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((err) => {
             console.warn('[SW] Rejestracja nieudana:', err);
