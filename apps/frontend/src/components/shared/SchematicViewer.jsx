@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../../config';
-import { 
+import {
     Upload, X, MapPin, Map as MapIcon, Image as ImageIcon, Mic, Trash2,
     Minus, Type, ZoomIn, ZoomOut, Maximize, Minimize2, Hand, Camera, Save, List
 } from 'lucide-react';
@@ -8,6 +8,11 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import MarkerDetailsPanel from './MarkerDetailsPanel';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
+import {
+    getSchematicsBySubtask,
+    getSchematicsByNode,
+    upsertSchematics,
+} from '../../services/repos/schematicsRepo';
 
 // Configure worker for react-pdf
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -79,8 +84,22 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
         };
     }, []);
 
+    // Cache-first: czytaj z IDB natychmiast, w tle odśwież z sieci.
+    // Bez tego offline = pusta lista, mimo że PDF/obrazy są w SW cache.
     useEffect(() => {
-        if (nodeId || subtaskId) fetchSchematics();
+        if (!nodeId && !subtaskId) return;
+        let cancelled = false;
+        (async () => {
+            let cached = [];
+            if (subtaskId) cached = await getSchematicsBySubtask(subtaskId);
+            if (cached.length === 0 && nodeId) cached = await getSchematicsByNode(nodeId);
+            if (!cancelled && cached.length > 0) {
+                setSchematics(cached);
+                setSelectedSchematic((prev) => prev || cached[0]);
+            }
+        })();
+        fetchSchematics(true).catch(() => {});
+        return () => { cancelled = true; };
     }, [nodeId, subtaskId]);
 
     useEffect(() => {
@@ -128,6 +147,8 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
             }
 
             if (data.length > 0) {
+                // Zapis do IDB — żeby kolejne otwarcie offline miało listę z markerami.
+                upsertSchematics(data, { subtaskId, nodeId }).catch(() => {});
                 setSchematics(data);
                 if (selectedSchematic) {
                     const updated = data.find(s => s.id === selectedSchematic.id);
