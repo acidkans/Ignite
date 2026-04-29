@@ -109,6 +109,19 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
         setPan({ x: 0, y: 0 });
     }, [selectedSchematic?.id, pageNumber]);
 
+    // Edycja nazwy/notatki temp markera offline — aktualizuje in-memory bez API
+    useEffect(() => {
+        const handler = (e) => {
+            const { tempId, updates } = e.detail || {};
+            const patch = (markers) => (markers || []).map(m => m.id === tempId ? { ...m, ...updates } : m);
+            setSchematics(prev => prev.map(s => ({ ...s, markers: patch(s.markers) })));
+            setSelectedSchematic(prev => prev ? { ...prev, markers: patch(prev.markers) } : prev);
+            setSelectedMarker(prev => prev?.id === tempId ? { ...prev, ...updates } : prev);
+        };
+        window.addEventListener('temp-marker-updated', handler);
+        return () => window.removeEventListener('temp-marker-updated', handler);
+    }, []);
+
     // Po syncu outboxa: zastąp temp markery prawdziwymi bez zamykania zakładki
     useEffect(() => {
         const handler = (e) => {
