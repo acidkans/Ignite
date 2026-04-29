@@ -109,6 +109,23 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
         setPan({ x: 0, y: 0 });
     }, [selectedSchematic?.id, pageNumber]);
 
+    // Po syncu outboxa: zastąp temp markery prawdziwymi bez zamykania zakładki
+    useEffect(() => {
+        const handler = (e) => {
+            const { subtaskId: sid, nodeId: nid, schematics: fresh } = e.detail || {};
+            if (!fresh?.length) return;
+            const matches = (subtaskId && sid === subtaskId) || (nodeId && nid === nodeId);
+            if (!matches) return;
+            setSchematics(fresh);
+            setSelectedSchematic(prev => {
+                if (!prev) return fresh[0] || null;
+                return fresh.find(s => s.id === prev.id) || prev;
+            });
+        };
+        window.addEventListener('schematic-synced', handler);
+        return () => window.removeEventListener('schematic-synced', handler);
+    }, [subtaskId, nodeId]);
+
     // Aktualizuj selectedMarker gdy schematics się zmienią (np. po dodaniu załącznika)
     const viewerSyncRef = useRef(null);
     useEffect(() => {

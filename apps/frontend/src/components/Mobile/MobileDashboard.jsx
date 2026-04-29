@@ -1,14 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     Clock, CheckCircle, AlertCircle, ChevronRight,
     LogOut, Briefcase, ChevronLeft, Info, Map as MapIcon,
-    Calendar, User, FileText, ExternalLink, MapPin, Play, Flag, PauseCircle
+    Calendar, User, FileText, ExternalLink, MapPin, Play, Flag, PauseCircle,
+    RefreshCw, UploadCloud
 } from 'lucide-react';
 import SchematicViewer from '../shared/SchematicViewer';
 import { useCachedSubtasks } from '../../hooks/useCachedSubtasks';
 import { useNetwork } from '../../hooks/useNetwork';
-import { enqueue } from '../../services/repos/outboxRepo';
-import { db } from '../../services/db';
+import { enqueue, countPending } from '../../services/repos/outboxRepo';
+import { db, getMeta } from '../../services/db';
 import { API_URL } from '../../config';
 
 const toDateStr = (d) => d.toISOString().slice(0, 10);
@@ -23,6 +24,20 @@ export default function MobileDashboard({ onLogout }) {
         : null;
     const { subtasks, loading } = useCachedSubtasks(token);
     const { isOnline } = useNetwork();
+    const [lastSync, setLastSync] = useState(null);
+    const [pendingCount, setPendingCount] = useState(0);
+
+    useEffect(() => {
+        const refresh = async () => {
+            const [ts, cnt] = await Promise.all([getMeta('lastPrefetchAt'), countPending()]);
+            setLastSync(ts);
+            setPendingCount(cnt);
+        };
+        refresh();
+        const interval = setInterval(refresh, 15000);
+        window.addEventListener('schematic-synced', refresh);
+        return () => { clearInterval(interval); window.removeEventListener('schematic-synced', refresh); };
+    }, []);
 
     const handleStatusChange = async (subtask, newStatus) => {
         const updatedAt = new Date().toISOString();
@@ -286,7 +301,21 @@ export default function MobileDashboard({ onLogout }) {
                         </div>
                         <span className="font-bold text-sm">Moje Zadania</span>
                     </div>
-                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{filteredSubtasks.length} / {subtasks.length}</span>
+                    <div className="flex items-center gap-2">
+                        {pendingCount > 0 && (
+                            <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                                <UploadCloud size={11} className="text-amber-400" />
+                                <span className="text-[9px] text-amber-400 font-black">{pendingCount}</span>
+                            </div>
+                        )}
+                        {lastSync && (
+                            <div className="flex items-center gap-1 text-[9px] text-gray-600">
+                                <RefreshCw size={9} />
+                                <span>{new Date(lastSync).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                        )}
+                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{filteredSubtasks.length}/{subtasks.length}</span>
+                    </div>
                 </div>
                 {/* Date navigation */}
                 <div className="flex items-center gap-2">

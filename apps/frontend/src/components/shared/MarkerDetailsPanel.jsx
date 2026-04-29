@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, MapPin, Mic, Camera, FilePlus, Trash2, Save, ChevronDown, Download, Image as ImageIcon, CheckSquare, Square, Layers, Plus, Check } from 'lucide-react';
 import { API_URL } from '../../config';
+import { useNetwork } from '../../hooks/useNetwork';
+import { enqueue } from '../../services/repos/outboxRepo';
+import { db } from '../../services/db';
 
 // Flatten all WBS nodes recursively with path label
 function flattenWbsNodes(nodes, prefix = '') {
@@ -14,6 +17,7 @@ function flattenWbsNodes(nodes, prefix = '') {
 }
 
 export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId }) {
+    const { isOnline } = useNetwork();
     const [uploading, setUploading] = useState(false);
     const [editName, setEditName] = useState(marker.name || '');
     const [editNote, setEditNote] = useState(marker.note || '');
@@ -198,6 +202,35 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
     };
 
     const uploadFile = async (file) => {
+        if (!isOnline) {
+            // Offline — zapisz blob do IDB i dodaj do outboxa
+            setUploading(true);
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const outboxId = crypto.randomUUID();
+                await db.attachmentDrafts.add({
+                    outboxId,
+                    arrayBuffer,
+                    fileName: file.name,
+                    fileType: file.type,
+                    createdAt: new Date().toISOString(),
+                });
+                await enqueue('ADD_ATTACHMENT', {
+                    markerId: marker.id,
+                    outboxId,
+                    fileName: file.name,
+                    fileType: file.type,
+                });
+                // Optymistyczny podgląd w panelu
+                onRefresh(true);
+            } catch (err) {
+                alert('Błąd zapisu lokalnego: ' + err.message);
+            } finally {
+                setUploading(false);
+            }
+            return;
+        }
+
         setUploading(true);
         const formData = new FormData();
         formData.append('file', file);

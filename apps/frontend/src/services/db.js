@@ -19,14 +19,19 @@ db.version(1).stores({
 db.version(2).stores({
     meta: '&key',
     outbox: '++id, clientUuid, type, createdAt',
-    // Subtaski — render listy i widoku detalu offline.
-    // Indeksy: status (filtry), plannedStart/plannedEnd (zakres dat), nodeId, updatedAt.
     subtasks: 'id, status, plannedStart, plannedEnd, nodeId, updatedAt',
-    // Węzły procesu — kontekst nazwy projektu w mobile detail.
     nodes: 'id',
-    // Schematy + ich markery (cały obiekt w polu `data`).
-    // Composite indexes po subtaskId i nodeId, żeby SchematicViewer mógł zapytać tak jak teraz.
     schematics: 'id, subtaskId, nodeId, updatedAt',
+});
+
+db.version(3).stores({
+    meta: '&key',
+    outbox: '++id, clientUuid, type, createdAt',
+    subtasks: 'id, status, plannedStart, plannedEnd, nodeId, updatedAt',
+    nodes: 'id',
+    schematics: 'id, subtaskId, nodeId, updatedAt',
+    // Drafty załączników offline — blob + metadane. Czyszczone po syncu.
+    attachmentDrafts: '++id, outboxId, createdAt',
 });
 
 // --- Helpery meta (proste KV) ---
