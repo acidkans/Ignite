@@ -1212,9 +1212,11 @@ ${materialsHtml}
         }
 
         const workbook = new ExcelJS.Workbook();
-        const safeOrderName = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'zamowienie';
-        const summarySheet = workbook.addWorksheet(`${safeOrderName}_podsumowanie`);
-        const budgetSheet = workbook.addWorksheet(`${safeOrderName}_budzet`);
+        const safeOrderName = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|\[\]]+/g, '_') || 'zamowienie';
+        // Excel limit: 31 chars/sheet name. Trim base so suffixes "_podsumowanie" (13) i "_budzet" (7) zmieszczą się i były unikalne.
+        const sheetBase = safeOrderName.slice(0, 31 - '_podsumowanie'.length);
+        const summarySheet = workbook.addWorksheet(`${sheetBase}_podsumowanie`.slice(0, 31));
+        const budgetSheet = workbook.addWorksheet(`${sheetBase}_budzet`.slice(0, 31));
         const exportDate = new Date().toLocaleDateString('pl-PL');
         const fileProjectName = String(orderName || projectName || 'projekt').trim() || 'projekt';
         const safeProjectName = fileProjectName.replace(/[\\/:*?"<>|]+/g, '_');
