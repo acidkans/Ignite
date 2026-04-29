@@ -499,7 +499,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                             </div>
                         )}
 
-                        <div className={`grid grid-cols-2 gap-2 ${isTemp ? 'opacity-30 pointer-events-none' : ''}`}>
+                        <div className="grid grid-cols-2 gap-2">
                             <button
                                 onClick={isRecording ? stopRecording : startRecording}
                                 className={`flex items-center justify-center gap-2 px-4 py-3 w-full rounded-xl text-xs font-bold transition-all shadow-lg active:scale-95 ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-[#1e293b] text-gray-300 border border-white/5'}`}
