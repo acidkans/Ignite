@@ -114,8 +114,16 @@ function MaterialReqExpandPanel({ node, req, processNodeId, onSaved, onDeleteNod
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
     const [techSpec, setTechSpec] = React.useState(req?.technicalSpec || '');
+    const taRef = React.useRef(null);
 
     React.useEffect(() => { setTechSpec(req?.technicalSpec || ''); }, [req?.id, req?.technicalSpec]);
+
+    React.useLayoutEffect(() => {
+        const el = taRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = `${el.scrollHeight}px`;
+    }, [techSpec]);
 
     const handleBlur = async () => {
         if (techSpec === (req?.technicalSpec || '')) return;
@@ -162,12 +170,13 @@ function MaterialReqExpandPanel({ node, req, processNodeId, onSaved, onDeleteNod
                 </button>
             </div>
             <textarea
+                ref={taRef}
                 value={techSpec}
                 onChange={e => setTechSpec(e.target.value)}
                 onBlur={handleBlur}
-                rows={3}
+                rows={1}
                 placeholder="Określ wymagania techniczne dla tego materiału/sprzętu (jedno per linia)..."
-                className="w-full max-w-2xl bg-black/30 border border-amber-500/20 rounded px-3 py-2 text-xs text-white placeholder-gray-600 outline-none focus:border-amber-500/50 resize-none leading-relaxed"
+                className="w-full max-w-2xl bg-black/30 border border-amber-500/20 rounded px-3 py-2 text-xs text-white placeholder-gray-600 outline-none focus:border-amber-500/50 resize-none leading-relaxed overflow-hidden"
             />
         </div>
     );
