@@ -1,9 +1,44 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-    plugins: [react()],
+    plugins: [
+        react(),
+        VitePWA({
+            strategies: 'injectManifest',
+            srcDir: 'src',
+            filename: 'sw.js',
+            registerType: 'autoUpdate',
+            injectRegister: false,
+            manifest: {
+                name: 'Gigatel ERP',
+                short_name: 'Gigatel ERP',
+                description: 'Gigatel ERP — terenowe zarządzanie zleceniami',
+                theme_color: '#0b1220',
+                background_color: '#0b1220',
+                display: 'standalone',
+                orientation: 'any',
+                lang: 'pl',
+                start_url: '/',
+                scope: '/',
+                icons: [
+                    { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+                    { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+                    { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+                ],
+            },
+            injectManifest: {
+                globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+                maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+                rollupFormat: 'iife',
+            },
+            devOptions: {
+                enabled: false,
+            },
+        }),
+    ],
     optimizeDeps: {
         exclude: ['pdfjs-dist'],
     },
@@ -16,6 +51,17 @@ export default defineConfig({
             usePolling: true,
             interval: 300,
         },
+        proxy: {
+            '/api': {
+                target: process.env.VITE_API_TARGET || 'http://127.0.0.1:3005',
+                changeOrigin: true,
+                secure: false,
+            }
+        }
+    },
+    preview: {
+        port: 4173,
+        strictPort: true,
         proxy: {
             '/api': {
                 target: process.env.VITE_API_TARGET || 'http://127.0.0.1:3005',
