@@ -6,8 +6,10 @@ import ProcessTreePage from './ProcessTreePage';
 import DashboardPage from './DashboardPage';
 import MainLayout from './components/Layout/MainLayout';
 import MobileDashboard from './components/Mobile/MobileDashboard';
+import OfflineBanner from './components/shared/OfflineBanner';
 import { useDevice } from './hooks/useDevice';
 import { usePushSubscription, unregisterPushSubscription } from './hooks/usePushSubscription';
+import { prefetchMobileData } from './services/sync/prefetch';
 
 const NotFound = () => (
   <div className="h-full flex flex-col items-center justify-center text-white p-10">
@@ -103,6 +105,16 @@ function App() {
     return () => window.removeEventListener('auth-expired', doLogout);
   }, [doLogout]);
 
+  // Prefetch danych mobilnych po loginie + na powrót sieci.
+  // Idempotentny — useCachedSubtasks też woła prefetch, inflight guard zapobiega duplikatom.
+  useEffect(() => {
+    if (!token) return;
+    prefetchMobileData(token);
+    const onOnline = () => prefetchMobileData(token);
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [token]);
+
   // Nawigacja z powiadomienia push (kliknięcie gdy aplikacja otwarta)
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
@@ -130,20 +142,32 @@ function App() {
 
   // Mobile/Tablet specific view
   if (isMobile || isTablet) {
-    return <MobileDashboard onLogout={handleLogout} />;
+    return (
+      <div className="flex flex-col h-[100dvh]">
+        <OfflineBanner />
+        <div className="flex-1 min-h-0">
+          <MobileDashboard onLogout={handleLogout} />
+        </div>
+      </div>
+    );
   }
 
   // Desktop view
   return (
-    <Routes>
-      <Route element={<MainLayout onLogout={handleLogout} />}>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/users" element={<UsersPage />} />
-        <Route path="/process-tree" element={<ProcessTreePage />} />
-        <Route path="/hr/*" element={<Placeholder title="Moduł HR" />} />
-        <Route path="*" element={<NotFound />} />
-      </Route>
-    </Routes>
+    <div className="flex flex-col h-screen">
+      <OfflineBanner />
+      <div className="flex-1 min-h-0">
+        <Routes>
+          <Route element={<MainLayout onLogout={handleLogout} />}>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/users" element={<UsersPage />} />
+            <Route path="/process-tree" element={<ProcessTreePage />} />
+            <Route path="/hr/*" element={<Placeholder title="Moduł HR" />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Routes>
+      </div>
+    </div>
   );
 }
 
