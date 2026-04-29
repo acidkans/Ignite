@@ -37,3 +37,19 @@ export async function replaceSchematicsForSubtask(subtaskId, schematics) {
         }
     });
 }
+
+/**
+ * Upsert schematów po pobraniu ich przez SchematicViewer (online flow).
+ * Działa zarówno dla list per-subtask, jak i per-node — bez kasowania innych.
+ */
+export async function upsertSchematics(schematics, { subtaskId, nodeId } = {}) {
+    if (!schematics?.length) return;
+    return db.schematics.bulkPut(
+        schematics.map((s) => ({
+            ...s,
+            subtaskId: s.subtaskId ?? subtaskId ?? null,
+            nodeId: s.nodeId ?? nodeId ?? null,
+            updatedAt: s.updatedAt ?? new Date().toISOString(),
+        })),
+    );
+}
