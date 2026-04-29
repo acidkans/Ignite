@@ -61,20 +61,17 @@ services:
       - "traefik.http.services.erp-backend.loadbalancer.server.port=3000"
       - "traefik.docker.network=traefik-public"
 
-  # Frontend (Vite Dev Server)
+  # Frontend (Production: Vite build → Nginx)
+  # PWA wymaga `npm run build` żeby vite-plugin-pwa wygenerował manifest i SW.
+  # Dockerfile.dev (vite dev server) tego nie robi.
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     container_name: erp-frontend
     restart: always
-    environment:
-      VITE_API_TARGET: http://erp-backend:3000
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    ports:
-      - "5173:5173"
+    expose:
+      - "80"
     depends_on:
       - backend
     networks:
@@ -86,7 +83,7 @@ services:
       - "traefik.http.routers.erp-frontend.entrypoints=web,websecure"
       - "traefik.http.routers.erp-frontend.tls=true"
       - "traefik.http.routers.erp-frontend.tls.certresolver=myresolver"
-      - "traefik.http.services.erp-frontend.loadbalancer.server.port=5173"
+      - "traefik.http.services.erp-frontend.loadbalancer.server.port=80"
       - "traefik.docker.network=traefik-public"
 
   # Baza wektorowa Qdrant
