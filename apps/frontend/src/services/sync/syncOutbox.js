@@ -64,9 +64,9 @@ async function processItem(item, token) {
     }
 
     if (item.type === 'ADD_ATTACHMENT') {
-        const { markerId, outboxId, fileName, fileType } = item.payload;
+        const { markerId, outboxId, fileName, fileType, subtaskId, nodeId } = item.payload;
         const draft = await db.attachmentDrafts.where('outboxId').equals(outboxId).first();
-        if (!draft) return; // draft already cleaned up
+        if (!draft) return;
         const blob = new Blob([draft.arrayBuffer], { type: fileType });
         const formData = new FormData();
         formData.append('file', new File([blob], fileName, { type: fileType }));
@@ -77,6 +77,20 @@ async function processItem(item, token) {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         await db.attachmentDrafts.where('outboxId').equals(outboxId).delete();
+        // Odśwież schematy w IDB i powiadom SchematicViewer
+        const schUrl = subtaskId
+            ? `${API_URL}/schematics/subtask/${subtaskId}`
+            : nodeId ? `${API_URL}/schematics/node/${nodeId}` : null;
+        if (schUrl) {
+            const schRes = await fetch(schUrl, { headers: { Authorization: `Bearer ${token}` } });
+            if (schRes.ok) {
+                const data = await schRes.json();
+                const { upsertSchematics } = await import('../repos/schematicsRepo');
+                await upsertSchematics(data, { subtaskId, nodeId });
+                window.dispatchEvent(new CustomEvent('schematic-synced', { detail: { subtaskId, nodeId, schematics: data } }));
+            }
+        }
+        window.dispatchEvent(new CustomEvent('attachment-synced', { detail: { markerId } }));
     }
 
     if (item.type === 'DELETE_MARKER') {

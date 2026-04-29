@@ -16,7 +16,7 @@ function flattenWbsNodes(nodes, prefix = '') {
     return result;
 }
 
-export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId }) {
+export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId, subtaskId }) {
     const { isOnline } = useNetwork();
     const [uploading, setUploading] = useState(false);
     const [editName, setEditName] = useState(marker.name || '');
@@ -203,26 +203,36 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
 
     const uploadFile = async (file) => {
         if (!isOnline) {
-            // Offline — zapisz blob do IDB i dodaj do outboxa
             setUploading(true);
             try {
                 const arrayBuffer = await file.arrayBuffer();
                 const outboxId = crypto.randomUUID();
                 await db.attachmentDrafts.add({
-                    outboxId,
-                    arrayBuffer,
-                    fileName: file.name,
-                    fileType: file.type,
+                    outboxId, arrayBuffer,
+                    fileName: file.name, fileType: file.type,
                     createdAt: new Date().toISOString(),
                 });
                 await enqueue('ADD_ATTACHMENT', {
-                    markerId: marker.id,
-                    outboxId,
-                    fileName: file.name,
-                    fileType: file.type,
+                    markerId: marker.id, outboxId,
+                    fileName: file.name, fileType: file.type,
+                    subtaskId, nodeId,
                 });
-                // Optymistyczny podgląd w panelu
-                onRefresh(true);
+                // Optimistyczny podgląd — blob URL jako tymczasowy preview
+                const blobUrl = URL.createObjectURL(new Blob([arrayBuffer], { type: file.type }));
+                window.dispatchEvent(new CustomEvent('temp-marker-updated', {
+                    detail: {
+                        tempId: marker.id,
+                        updates: {
+                            attachments: [...(marker.attachments || []), {
+                                id: `pending_${outboxId}`,
+                                isPending: true,
+                                fileType: file.type.startsWith('image/') ? 'IMAGE' : 'FILE',
+                                fileUrl: blobUrl,
+                                fileName: file.name,
+                            }],
+                        },
+                    },
+                }));
             } catch (err) {
                 alert('Błąd zapisu lokalnego: ' + err.message);
             } finally {
@@ -675,10 +685,11 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId 
                             <label className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em] px-1">ZAŁĄCZNIKI ({marker.attachments.length})</label>
                             <div className="grid grid-cols-2 gap-3">
                                 {marker.attachments.map(att => (
-                                    <div key={att.id} className="relative rounded-2xl overflow-hidden bg-[#1e293b] border border-white/5 group shadow-xl">
+                                    <div key={att.id} className={`relative rounded-2xl overflow-hidden bg-[#1e293b] border group shadow-xl ${att.isPending ? 'border-amber-500/40' : 'border-white/5'}`}>
+                                        {att.isPending && <div className="absolute top-2 left-2 z-10 px-1.5 py-0.5 bg-amber-500/80 rounded text-[9px] font-black text-white">⏳</div>}
                                         <div className="aspect-square">
                                             {att.fileType === 'IMAGE' ? (
-                                                <img src={getFileUrl(att.fileUrl)} className="w-full h-full object-cover" alt="attachment" />
+                                                <img src={att.isPending ? att.fileUrl : getFileUrl(att.fileUrl)} className="w-full h-full object-cover" alt="attachment" />
                                             ) : (
                                                 <div className="w-full h-full flex flex-col items-center justify-center gap-2 p-2">
                                                     {att.fileType === 'AUDIO' ? <Mic size={24} className="text-purple-400" /> : <Save size={24} className="text-gray-500" />}
