@@ -42,13 +42,23 @@ async function processItem(item, token) {
     }
 
     if (item.type === 'ADD_MARKER') {
-        const { schematicId, marker, subtaskId, nodeId } = item.payload;
+        const { schematicId, marker, subtaskId, nodeId, tempId } = item.payload;
         const res = await fetch(`${API_URL}/schematics/${schematicId}/markers`, {
             method: 'POST',
             headers,
             body: JSON.stringify(marker),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        // Podmień tempId na realny markerId w pending ADD_ATTACHMENT wpisach
+        const realMarker = await res.json().catch(() => null);
+        if (realMarker?.id && tempId) {
+            const attItems = await db.outbox.where('type').equals('ADD_ATTACHMENT').toArray();
+            for (const att of attItems) {
+                if (att.payload?.markerId === tempId) {
+                    await db.outbox.update(att.id, { payload: { ...att.payload, markerId: realMarker.id } });
+                }
+            }
+        }
         // Refresh schematics in IDB so markers are current after sync
         const url = subtaskId
             ? `${API_URL}/schematics/subtask/${subtaskId}`
