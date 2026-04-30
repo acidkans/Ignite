@@ -2569,7 +2569,7 @@ ${materialsHtml}
                 <WbsMaterialsPanel
                     nodeId={nodeId}
                     versionId={versionId}
-                    readOnly={!isManagerOrAdmin}
+                    readOnly={!isManagerOrAdmin && !isLogistyk}
                     externalWbsNodes={wbsData}
                     onPatchNode={(id, data) => setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))}
                     onWbsUpdate={async () => { await refreshMaterialCosts(); }}
