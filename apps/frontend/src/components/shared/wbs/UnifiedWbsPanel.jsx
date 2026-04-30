@@ -1370,7 +1370,7 @@ ${materialsHtml}
                 totalCost: { formula: `=G${excelRow}*H${excelRow}`, result: Number(row.totalCost) || 0 },
                 margin: (Number(row.margin) || 0) / 100,
                 discount: (Number(row.discount) || 0) / 100,
-                offerPrice: { formula: `=J${excelRow}*(1+K${excelRow})*(1-L${excelRow})`, result: Number(row.offerPrice) || 0 },
+                offerPrice: { formula: `=IF(K${excelRow}=0,0,J${excelRow}*(1+K${excelRow})*(1-L${excelRow}))`, result: Number(row.offerPrice) || 0 },
                 comment: row.comment || '',
                 status: row.status || '',
                 qaCount: qaList.length,
@@ -1470,7 +1470,6 @@ ${materialsHtml}
         sheet.columns = [
             { header: 'Pozycja', key: 'subject', width: 48 },
             { header: 'Cena ofertowa (PLN)', key: 'offerPrice', width: 22 },
-            { header: 'Komentarz', key: 'comment', width: 50 },
         ];
 
         const headerRow = sheet.getRow(1);
@@ -1478,24 +1477,32 @@ ${materialsHtml}
         headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
         headerRow.alignment = { vertical: 'middle' };
 
+        // Rabaty z budżetu — proporcjonalnie rozłożone na pozycje (dopasowanie do PRZYCHÓD w aplikacji)
+        const rawRevenue = [...aggMap.values()].reduce((s, d) => s + (Number(d.offerPrice) || 0), 0);
+        const parsedPct = Number(String(budgetDiscountPercent ?? '').replace(',', '.'));
+        const parsedAmt = Number(String(budgetDiscountAmount ?? '').replace(',', '.'));
+        const discFromPct = Number.isFinite(parsedPct) ? Math.max(0, parsedPct) / 100 * rawRevenue : 0;
+        const discFromAmt = Number.isFinite(parsedAmt) ? Math.max(0, parsedAmt) : 0;
+        const totalRevenue = Math.max(0, rawRevenue - discFromPct - discFromAmt);
+        const discountFactor = rawRevenue > 0 ? totalRevenue / rawRevenue : 1;
+
         const firstDataRow = 2;
         for (const [, data] of aggMap) {
+            const discounted = (Number(data.offerPrice) || 0) * discountFactor;
             const added = sheet.addRow({
                 subject: data.label,
-                offerPrice: data.offerPrice > 0 ? data.offerPrice : null,
-                comment: data.comments.join('; ') || null,
+                offerPrice: discounted > 0 ? discounted : null,
             });
             added.alignment = { wrapText: true, vertical: 'top' };
         }
         const lastDataRow = firstDataRow + aggMap.size - 1;
 
-        // Wiersz sumujący — łączna cena ofertowa
-        const totalOffer = [...aggMap.values()].reduce((s, d) => s + (Number(d.offerPrice) || 0), 0);
+        // Wiersz sumujący — łączna cena ofertowa (po rabatach)
         const totalsRow = sheet.addRow({
             subject: 'Razem',
             offerPrice: aggMap.size > 0
-                ? { formula: `=SUM(B${firstDataRow}:B${lastDataRow})`, result: totalOffer }
-                : totalOffer,
+                ? { formula: `=SUM(B${firstDataRow}:B${lastDataRow})`, result: totalRevenue }
+                : totalRevenue,
         });
         totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
@@ -1519,7 +1526,6 @@ ${materialsHtml}
 
         // ── Sheet Materiały: płaska lista (bez agregacji, bez cen, z komentarzami) ──
         const materialsSheet = workbook.addWorksheet('Materiały');
-        const TYPE_LABELS_XLS = { material: 'Materiał', equipment: 'Sprzęt' };
         const STATUS_LABELS_XLS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
         const upperFirstSegment = (path) => {
             if (!path) return '';
@@ -1552,7 +1558,6 @@ ${materialsHtml}
 
         materialsSheet.columns = [
             { header: 'Lp.', key: 'idx', width: 5 },
-            { header: 'Typ', key: 'type', width: 12 },
             { header: 'Przedmiot projektu', key: 'parent', width: 24 },
             { header: 'Pełna ścieżka WBS', key: 'path', width: 48 },
             { header: 'Pozycja', key: 'name', width: 32 },
@@ -1578,7 +1583,6 @@ ${materialsHtml}
             const chosen = selectedProposal || card || null;
             const added = materialsSheet.addRow({
                 idx: i + 1,
-                type: TYPE_LABELS_XLS[node.type] || node.type || '',
                 parent,
                 path: upperFirstSegment(node.path || ''),
                 name: node.name || '',
