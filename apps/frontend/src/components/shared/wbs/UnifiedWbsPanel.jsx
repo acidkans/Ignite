@@ -1989,12 +1989,13 @@ ${materialsHtml}
                     || parseFloat(row.materialsTotalCost)
                     || 0;
                 const resolvedQuantity = quantity; // per-node, never use aggregate inheritedQuantity
-                const inheritedUnitCost = inheritedQuantity > 0 ? inheritedCost / inheritedQuantity : 0;
+                const persistedRowUnitCost = parseFloat(row.unitCost) || 0;
+                const inheritedUnitCost = inheritedQuantity > 0 && inheritedCost > 0 ? inheritedCost / inheritedQuantity : 0;
                 const resolvedUnitCost = inheritedFromMaterials
-                    ? inheritedUnitCost
-                    : (parseFloat(row.unitCost) || 0);
+                    ? (inheritedUnitCost > 0 ? inheritedUnitCost : persistedRowUnitCost)
+                    : persistedRowUnitCost;
                 const totalCost = inheritedFromMaterials
-                    ? inheritedCost
+                    ? (inheritedCost > 0 ? inheritedCost : resolvedUnitCost * resolvedQuantity)
                     : (Number.isFinite(parseFloat(row.totalCost)) ? parseFloat(row.totalCost) : resolvedUnitCost * resolvedQuantity);
                 const margin = parseFloat(row.margin) || 0;
                 row.inheritedFromMaterials = inheritedFromMaterials;
@@ -2238,15 +2239,18 @@ ${materialsHtml}
                     const quantity = inheritedFromMaterials
                         ? (wbsReqQty != null ? wbsReqQty : persistedQuantity)
                         : (isWorkType && wbsReqQty != null ? wbsReqQty : persistedQuantity);
+                    const persistedUnitCost = parseFloat(item.unitCost) || 0;
                     const totalCost = inheritedFromMaterials
-                        ? inheritedCost
+                        ? (inheritedCost > 0 ? inheritedCost : persistedUnitCost * quantity)
                         : (Number.isFinite(parseFloat(item.totalCost))
                             ? parseFloat(item.totalCost)
-                            : (parseFloat(item.unitCost) || 0) * quantity);
+                            : persistedUnitCost * quantity);
                     const unitCost = inheritedFromMaterials
-                        ? (inheritedQuantity > 0 ? inheritedCost / inheritedQuantity : (quantity > 0 ? totalCost / quantity : totalCost))
-                        : (Number.isFinite(parseFloat(item.unitCost))
-                            ? parseFloat(item.unitCost)
+                        ? (inheritedQuantity > 0 && inheritedCost > 0
+                            ? inheritedCost / inheritedQuantity
+                            : persistedUnitCost)
+                        : (Number.isFinite(persistedUnitCost)
+                            ? persistedUnitCost
                             : (quantity > 0 ? totalCost / quantity : 0));
                     const clearDerivedFields = inheritedFromMaterials && totalCost <= 0;
                     const margin = clearDerivedFields ? 0 : (parseFloat(item.margin) || 0);
