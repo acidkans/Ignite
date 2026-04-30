@@ -432,6 +432,9 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
 
     const [editQty, setEditQty] = useState(false);
     const [qtyVal, setQtyVal] = useState(String(node.quantity ?? 1));
+    useEffect(() => {
+        if (!editQty) setQtyVal(String(node.quantity ?? 1));
+    }, [node.quantity, editQty]);
 
     const [editPrice, setEditPrice] = useState(false);
     const [priceVal, setPriceVal] = useState(card?.priceNetto != null ? String(card.priceNetto) : '');
@@ -494,7 +497,7 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                     <input autoFocus value={qtyVal}
                         onChange={e => setQtyVal(e.target.value)}
                         onBlur={handleQtyBlur}
-                        onKeyDown={e => e.key === 'Enter' && handleQtyBlur()}
+                        onKeyDown={e => { if (e.key === 'Enter') handleQtyBlur(); if (e.key === 'Escape') { setQtyVal(String(node.quantity ?? 1)); setEditQty(false); } }}
                         className="w-16 bg-black/30 border border-blue-500/50 rounded px-2 py-0.5 text-sm text-white outline-none" />
                 ) : (
                     <span onClick={() => !readOnly && setEditQty(true)}
