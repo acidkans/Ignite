@@ -1206,12 +1206,25 @@ ${materialsHtml}
     };
 
     const handleExportBudgetExcel = async () => {
-        const rows = buildRows(VIEWS.BUDGET);
+        const rawRows = buildRows(VIEWS.BUDGET);
 
-        if (!rows.length) {
+        if (!rawRows.length) {
             alert('Brak danych budżetowych do eksportu.');
             return;
         }
+
+        // Przelicz totalCost i offerPrice tak samo jak BudgetTable (calcDerived: uc×qty),
+        // żeby Podsumowanie i arkusz Budżet pokazywały te same wartości po przeliczeniu formuł.
+        const rows = rawRows.map(r => {
+            const q = Math.max(0, parseFloat(r.quantity) || 0);
+            const uc = Math.max(0, parseFloat(r.unitCost) || 0);
+            const marginRaw = (r.margin != null && String(r.margin) !== '') ? parseFloat(r.margin) : null;
+            const d = Math.max(0, parseFloat(r.discount) || 0);
+            const totalCost = uc * q;
+            let offerPrice = (marginRaw !== null && marginRaw !== 0) ? totalCost * (1 + marginRaw / 100) : 0;
+            if (offerPrice > 0 && d > 0) offerPrice = Math.max(0, offerPrice * (1 - d / 100));
+            return { ...r, totalCost, offerPrice };
+        });
 
         const workbook = new ExcelJS.Workbook();
         const safeOrderName = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|\[\]]+/g, '_') || 'zamowienie';
@@ -1558,8 +1571,7 @@ ${materialsHtml}
 
         materialsSheet.columns = [
             { header: 'Lp.', key: 'idx', width: 5 },
-            { header: 'Przedmiot projektu', key: 'parent', width: 24 },
-            { header: 'Pełna ścieżka WBS', key: 'path', width: 48 },
+            { header: 'Pełna ścieżka WBS', key: 'path', width: 56 },
             { header: 'Pozycja', key: 'name', width: 32 },
             { header: 'Ilość', key: 'qty', width: 10 },
             { header: 'Jednostka', key: 'unit', width: 12 },
@@ -1577,14 +1589,13 @@ ${materialsHtml}
         matNodes.forEach((node, i) => {
             const card = reqByNodeId[node.id] || null;
             const segs = node.path ? node.path.split(' › ') : [];
-            const rawParent = segs.length >= 2 ? segs[segs.length - 2] : (segs[0] || '');
-            const parent = segs.length <= 2 ? rawParent.toUpperCase() : rawParent;
+            // Ścieżka bez ostatniego segmentu (sam węzeł jest w kolumnie "Pozycja")
+            const pathWithoutSelf = segs.length > 1 ? segs.slice(0, -1).join(' › ') : '';
             const selectedProposal = (card?.proposals || []).find(p => p.isSelected);
             const chosen = selectedProposal || card || null;
             const added = materialsSheet.addRow({
                 idx: i + 1,
-                parent,
-                path: upperFirstSegment(node.path || ''),
+                path: upperFirstSegment(pathWithoutSelf),
                 name: node.name || '',
                 qty: Number(node.quantity ?? 1),
                 unit: node.unit || 'szt',
