@@ -1446,7 +1446,16 @@ ${materialsHtml}
     };
 
     const handleExportOfertaExcel = async () => {
-        const rows = buildRows(VIEWS.BUDGET);
+        const rows = buildRows(VIEWS.BUDGET).map(r => {
+            const q = Math.max(0, parseFloat(r.quantity) || 0);
+            const uc = Math.max(0, parseFloat(r.unitCost) || 0);
+            const marginRaw = (r.margin != null && String(r.margin) !== '') ? parseFloat(r.margin) : null;
+            const d = Math.max(0, parseFloat(r.discount) || 0);
+            const totalCost = uc * q;
+            let offerPrice = (marginRaw !== null && marginRaw !== 0) ? totalCost * (1 + marginRaw / 100) : 0;
+            if (offerPrice > 0 && d > 0) offerPrice = Math.max(0, offerPrice * (1 - d / 100));
+            return { ...r, totalCost, offerPrice };
+        });
         if (!rows.length) {
             alert('Brak danych budżetowych do eksportu.');
             return;
