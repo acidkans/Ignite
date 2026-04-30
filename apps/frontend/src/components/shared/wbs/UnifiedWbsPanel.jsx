@@ -1432,6 +1432,61 @@ ${materialsHtml}
         URL.revokeObjectURL(url);
     };
 
+    const handleExportOfertaExcel = async () => {
+        const rows = buildRows(VIEWS.BUDGET);
+        if (!rows.length) {
+            alert('Brak danych budżetowych do eksportu.');
+            return;
+        }
+
+        // Agregacja po przedmiocie (subjectName)
+        const aggMap = new Map();
+        for (const row of rows) {
+            const subject = (row.subjectName || '—').trim();
+            if (!aggMap.has(subject)) aggMap.set(subject, { offerPrice: 0, comments: [] });
+            const entry = aggMap.get(subject);
+            entry.offerPrice += Number(row.offerPrice) || 0;
+            const c = String(row.comment || '').trim();
+            if (c && !entry.comments.includes(c)) entry.comments.push(c);
+        }
+
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet('Oferta');
+
+        sheet.columns = [
+            { header: 'Przedmiot', key: 'subject', width: 36 },
+            { header: 'Cena ofertowa (PLN)', key: 'offerPrice', width: 22 },
+            { header: 'Komentarz', key: 'comment', width: 50 },
+        ];
+
+        const headerRow = sheet.getRow(1);
+        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+        headerRow.alignment = { vertical: 'middle' };
+
+        for (const [subject, data] of aggMap) {
+            const added = sheet.addRow({
+                subject,
+                offerPrice: data.offerPrice > 0 ? data.offerPrice : null,
+                comment: data.comments.join('; ') || null,
+            });
+            added.alignment = { wrapText: true, vertical: 'top' };
+        }
+
+        sheet.getColumn('offerPrice').numFmt = '#,##0.00';
+        sheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+        const safeProjectName = String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'projekt';
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `Airtel_oferta_${safeProjectName}.xlsx`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+    };
+
     const addNode = useCallback(async (parentId = null) => {
         try {
             const res = await fetch(`${API_URL}/wbs-nodes`, {
@@ -2537,6 +2592,12 @@ ${materialsHtml}
                 />
             ), () => handleExportPDF('budget'), (
                 <div className="flex items-center gap-2">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); handleExportOfertaExcel(); }}
+                        className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all"
+                    >
+                        <FileDown size={11} /> Eksport oferty
+                    </button>
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
