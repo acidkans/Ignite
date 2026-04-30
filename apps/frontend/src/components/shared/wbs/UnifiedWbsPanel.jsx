@@ -1488,8 +1488,8 @@ ${materialsHtml}
         sheet.getColumn('offerPrice').numFmt = '#,##0.00';
         sheet.views = [{ state: 'frozen', ySplit: 1 }];
 
-        // ── Sheet Agregacja: zagregowane materiały (przeniesione z eksportu materiałów, bez cen) ──
-        const aggregateSheet = workbook.addWorksheet('Agregacja');
+        // ── Sheet Materiały: płaska lista (bez agregacji, bez cen, z komentarzami) ──
+        const materialsSheet = workbook.addWorksheet('Materiały');
         const TYPE_LABELS_XLS = { material: 'Materiał', equipment: 'Sprzęt' };
         const STATUS_LABELS_XLS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
         const upperFirstSegment = (path) => {
@@ -1519,84 +1519,58 @@ ${materialsHtml}
         }
 
         const matNodes = wbsData.filter(n => n.type === 'material' || n.type === 'equipment');
-        const agg = new Map();
-        for (const node of matNodes) {
+        matNodes.sort((a, b) => (a.path || '').localeCompare(b.path || '', 'pl', { numeric: true, sensitivity: 'base' }));
+
+        materialsSheet.columns = [
+            { header: 'Lp.', key: 'idx', width: 5 },
+            { header: 'Typ', key: 'type', width: 12 },
+            { header: 'Przedmiot projektu', key: 'parent', width: 24 },
+            { header: 'Pełna ścieżka WBS', key: 'path', width: 48 },
+            { header: 'Pozycja', key: 'name', width: 32 },
+            { header: 'Ilość', key: 'qty', width: 10 },
+            { header: 'Jednostka', key: 'unit', width: 12 },
+            { header: 'Wymagania techniczne', key: 'tech', width: 48 },
+            { header: 'Producent', key: 'manufacturer', width: 18 },
+            { header: 'Model', key: 'model', width: 18 },
+            { header: 'Nazwa handlowa', key: 'productName', width: 24 },
+            { header: 'Status', key: 'status', width: 14 },
+            { header: 'Komentarz', key: 'comment', width: 40 },
+        ];
+        const matHeader = materialsSheet.getRow(1);
+        matHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        matHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
+
+        matNodes.forEach((node, i) => {
             const card = reqByNodeId[node.id] || null;
-            const name = (node.name || '').trim();
-            const tech = (card?.technicalSpec || '').trim();
-            const unit = (node.unit || 'szt').trim();
-            const type = TYPE_LABELS_XLS[node.type] || node.type || '';
-            if (!name && !tech) continue;
-            const key = `${type}||${name.toLowerCase()}||${tech.toLowerCase()}||${unit.toLowerCase()}`;
-            const qty = Number(node.quantity) || 0;
-            const status = STATUS_LABELS_XLS[card?.status] || '';
+            const segs = node.path ? node.path.split(' › ') : [];
+            const rawParent = segs.length >= 2 ? segs[segs.length - 2] : (segs[0] || '');
+            const parent = segs.length <= 2 ? rawParent.toUpperCase() : rawParent;
             const selectedProposal = (card?.proposals || []).find(p => p.isSelected);
             const chosen = selectedProposal || card || null;
-            const product = [chosen?.manufacturer, chosen?.model].filter(Boolean).join(' / ');
-
-            if (!agg.has(key)) {
-                agg.set(key, {
-                    type, name, tech, unit,
-                    qty: 0, positions: 0,
-                    paths: [], statuses: new Set(), products: new Set(),
-                });
-            }
-            const aggRow = agg.get(key);
-            aggRow.qty += qty;
-            aggRow.positions += 1;
-            if (node.path) aggRow.paths.push(upperFirstSegment(node.path));
-            if (status) aggRow.statuses.add(status);
-            if (product) aggRow.products.add(product);
-        }
-
-        aggregateSheet.columns = [
-            { header: 'Lp.', key: 'idx', width: 5 },
-            { header: 'Gdzie wykorzystywany', key: 'paths', width: 60 },
-            { header: 'Nazwa', key: 'name', width: 32 },
-            { header: 'Łączna ilość', key: 'qty', width: 14 },
-            { header: 'Jednostka', key: 'unit', width: 10 },
-            { header: 'Wymagania techniczne', key: 'tech', width: 48 },
-            { header: 'Liczba pozycji WBS', key: 'positions', width: 14 },
-            { header: 'Proponowany produkt', key: 'product', width: 28 },
-            { header: 'Statusy', key: 'statuses', width: 28 },
-        ];
-        const aggHeader = aggregateSheet.getRow(1);
-        aggHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        aggHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
-
-        const aggRows = [...agg.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl', { numeric: true, sensitivity: 'base' }));
-        aggRows.forEach((row, i) => {
-            const added = aggregateSheet.addRow({
+            const added = materialsSheet.addRow({
                 idx: i + 1,
-                paths: row.paths.join('\n'),
-                name: row.name,
-                tech: row.tech,
-                qty: row.qty,
-                unit: row.unit,
-                positions: row.positions,
-                product: [...row.products].join('; '),
-                statuses: [...row.statuses].join(', '),
+                type: TYPE_LABELS_XLS[node.type] || node.type || '',
+                parent,
+                path: upperFirstSegment(node.path || ''),
+                name: node.name || '',
+                qty: Number(node.quantity ?? 1),
+                unit: node.unit || 'szt',
+                tech: card?.technicalSpec || '',
+                manufacturer: chosen?.manufacturer || '',
+                model: chosen?.model || '',
+                productName: chosen?.productName || '',
+                status: STATUS_LABELS_XLS[card?.status] || (card?.status || ''),
+                comment: node.comment || '',
             });
             added.alignment = { vertical: 'top', wrapText: true };
         });
 
-        if (aggRows.length > 0) {
-            const totalRowNum = aggRows.length + 2;
-            const totalsRow = aggregateSheet.addRow({
-                name: 'Razem',
-                qty: { formula: `=SUM(D2:D${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + r.qty, 0) },
-                positions: { formula: `=SUM(G2:G${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + r.positions, 0) },
-            });
-            totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-            totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
-        }
-
-        aggregateSheet.getColumn('qty').numFmt = '#,##0.##';
-        aggregateSheet.views = [{ state: 'frozen', ySplit: 1 }];
-        if (aggRows.length > 0) {
-            aggregateSheet.autoFilter = {
+        materialsSheet.getColumn('qty').numFmt = '#,##0.##';
+        materialsSheet.views = [{ state: 'frozen', ySplit: 1 }];
+        if (matNodes.length > 0) {
+            materialsSheet.autoFilter = {
                 from: { row: 1, column: 1 },
-                to: { row: aggRows.length + 1, column: aggregateSheet.columnCount },
+                to: { row: matNodes.length + 1, column: materialsSheet.columnCount },
             };
         }
 
