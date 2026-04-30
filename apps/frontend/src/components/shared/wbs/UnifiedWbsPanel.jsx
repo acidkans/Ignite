@@ -1988,9 +1988,7 @@ ${materialsHtml}
                     || parseFloat(row.materialTabCost)
                     || parseFloat(row.materialsTotalCost)
                     || 0;
-                const resolvedQuantity = inheritedFromMaterials
-                    ? (inheritedQuantity > 0 ? inheritedQuantity : quantity)
-                    : quantity;
+                const resolvedQuantity = quantity; // per-node, never use aggregate inheritedQuantity
                 const inheritedUnitCost = inheritedQuantity > 0 ? inheritedCost / inheritedQuantity : 0;
                 const resolvedUnitCost = inheritedFromMaterials
                     ? inheritedUnitCost
@@ -2238,7 +2236,7 @@ ${materialsHtml}
                         ? requirementsQtyByNode[item.id]
                         : null;
                     const quantity = inheritedFromMaterials
-                        ? (inheritedQuantity > 0 ? inheritedQuantity : persistedQuantity)
+                        ? (wbsReqQty != null ? wbsReqQty : persistedQuantity)
                         : (isWorkType && wbsReqQty != null ? wbsReqQty : persistedQuantity);
                     const totalCost = inheritedFromMaterials
                         ? inheritedCost
