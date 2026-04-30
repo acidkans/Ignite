@@ -1439,12 +1439,24 @@ ${materialsHtml}
             return;
         }
 
-        // Agregacja po przedmiocie (subjectName)
+        // Agregacja po gałęzi depth=1 (bezpośrednie dziecko subjectu/depth=0)
+        const byIdMap = new Map(wbsData.map(item => [item.id, item]));
+        const findDepth1Node = (rowItem) => {
+            let current = rowItem;
+            let parent = current.parentId ? byIdMap.get(current.parentId) : null;
+            while (parent && parent.parentId) {
+                current = parent;
+                parent = byIdMap.get(parent.parentId);
+            }
+            return current;
+        };
         const aggMap = new Map();
         for (const row of rows) {
-            const subject = (row.subjectName || '—').trim();
-            if (!aggMap.has(subject)) aggMap.set(subject, { offerPrice: 0, comments: [] });
-            const entry = aggMap.get(subject);
+            const d1 = findDepth1Node(row);
+            const key = d1?.id || `__noid__${(d1?.name || '—').trim()}`;
+            const label = (d1?.name || '—').trim();
+            if (!aggMap.has(key)) aggMap.set(key, { label, offerPrice: 0, comments: [] });
+            const entry = aggMap.get(key);
             entry.offerPrice += Number(row.offerPrice) || 0;
             const c = String(row.comment || '').trim();
             if (c && !entry.comments.includes(c)) entry.comments.push(c);
@@ -1464,9 +1476,9 @@ ${materialsHtml}
         headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
         headerRow.alignment = { vertical: 'middle' };
 
-        for (const [subject, data] of aggMap) {
+        for (const [, data] of aggMap) {
             const added = sheet.addRow({
-                subject,
+                subject: data.label,
                 offerPrice: data.offerPrice > 0 ? data.offerPrice : null,
                 comment: data.comments.join('; ') || null,
             });
@@ -1475,6 +1487,118 @@ ${materialsHtml}
 
         sheet.getColumn('offerPrice').numFmt = '#,##0.00';
         sheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+        // ── Sheet Agregacja: zagregowane materiały (przeniesione z eksportu materiałów, bez cen) ──
+        const aggregateSheet = workbook.addWorksheet('Agregacja');
+        const TYPE_LABELS_XLS = { material: 'Materiał', equipment: 'Sprzęt' };
+        const STATUS_LABELS_XLS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
+        const upperFirstSegment = (path) => {
+            if (!path) return '';
+            const idx = path.indexOf(' › ');
+            if (idx < 0) return path.toUpperCase();
+            return path.slice(0, idx).toUpperCase() + path.slice(idx);
+        };
+
+        // Mapa nodeId → material requirement: po wbsNodeId, po allokacjach, oraz po tagu req:
+        const reqByNodeId = {};
+        for (const req of allRequirements) {
+            if (req.wbsNodeId) reqByNodeId[req.wbsNodeId] = req;
+            try {
+                const alloc = JSON.parse(req.wbsNodeAllocations || '{}');
+                for (const nid of Object.keys(alloc)) {
+                    if (nid && !reqByNodeId[nid]) reqByNodeId[nid] = req;
+                }
+            } catch {}
+        }
+        for (const node of wbsData) {
+            if (reqByNodeId[node.id]) continue;
+            const reqTag = (node.tags || []).find(t => typeof t === 'string' && t.startsWith('req:'));
+            if (!reqTag) continue;
+            const req = allRequirements.find(r => r.id === reqTag.slice(4));
+            if (req) reqByNodeId[node.id] = req;
+        }
+
+        const matNodes = wbsData.filter(n => n.type === 'material' || n.type === 'equipment');
+        const agg = new Map();
+        for (const node of matNodes) {
+            const card = reqByNodeId[node.id] || null;
+            const name = (node.name || '').trim();
+            const tech = (card?.technicalSpec || '').trim();
+            const unit = (node.unit || 'szt').trim();
+            const type = TYPE_LABELS_XLS[node.type] || node.type || '';
+            if (!name && !tech) continue;
+            const key = `${type}||${name.toLowerCase()}||${tech.toLowerCase()}||${unit.toLowerCase()}`;
+            const qty = Number(node.quantity) || 0;
+            const status = STATUS_LABELS_XLS[card?.status] || '';
+            const selectedProposal = (card?.proposals || []).find(p => p.isSelected);
+            const chosen = selectedProposal || card || null;
+            const product = [chosen?.manufacturer, chosen?.model].filter(Boolean).join(' / ');
+
+            if (!agg.has(key)) {
+                agg.set(key, {
+                    type, name, tech, unit,
+                    qty: 0, positions: 0,
+                    paths: [], statuses: new Set(), products: new Set(),
+                });
+            }
+            const aggRow = agg.get(key);
+            aggRow.qty += qty;
+            aggRow.positions += 1;
+            if (node.path) aggRow.paths.push(upperFirstSegment(node.path));
+            if (status) aggRow.statuses.add(status);
+            if (product) aggRow.products.add(product);
+        }
+
+        aggregateSheet.columns = [
+            { header: 'Lp.', key: 'idx', width: 5 },
+            { header: 'Gdzie wykorzystywany', key: 'paths', width: 60 },
+            { header: 'Nazwa', key: 'name', width: 32 },
+            { header: 'Łączna ilość', key: 'qty', width: 14 },
+            { header: 'Jednostka', key: 'unit', width: 10 },
+            { header: 'Wymagania techniczne', key: 'tech', width: 48 },
+            { header: 'Liczba pozycji WBS', key: 'positions', width: 14 },
+            { header: 'Proponowany produkt', key: 'product', width: 28 },
+            { header: 'Statusy', key: 'statuses', width: 28 },
+        ];
+        const aggHeader = aggregateSheet.getRow(1);
+        aggHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        aggHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
+
+        const aggRows = [...agg.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl', { numeric: true, sensitivity: 'base' }));
+        aggRows.forEach((row, i) => {
+            const added = aggregateSheet.addRow({
+                idx: i + 1,
+                paths: row.paths.join('\n'),
+                name: row.name,
+                tech: row.tech,
+                qty: row.qty,
+                unit: row.unit,
+                positions: row.positions,
+                product: [...row.products].join('; '),
+                statuses: [...row.statuses].join(', '),
+            });
+            added.alignment = { vertical: 'top', wrapText: true };
+        });
+
+        if (aggRows.length > 0) {
+            const totalRowNum = aggRows.length + 2;
+            const totalsRow = aggregateSheet.addRow({
+                name: 'Razem',
+                qty: { formula: `=SUM(D2:D${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + r.qty, 0) },
+                positions: { formula: `=SUM(G2:G${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + r.positions, 0) },
+            });
+            totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
+        }
+
+        aggregateSheet.getColumn('qty').numFmt = '#,##0.##';
+        aggregateSheet.views = [{ state: 'frozen', ySplit: 1 }];
+        if (aggRows.length > 0) {
+            aggregateSheet.autoFilter = {
+                from: { row: 1, column: 1 },
+                to: { row: aggRows.length + 1, column: aggregateSheet.columnCount },
+            };
+        }
 
         const safeProjectName = String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'projekt';
         const buffer = await workbook.xlsx.writeBuffer();
