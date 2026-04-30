@@ -1453,8 +1453,10 @@ ${materialsHtml}
         const aggMap = new Map();
         for (const row of rows) {
             const d1 = findDepth1Node(row);
-            const key = d1?.id || `__noid__${(d1?.name || '—').trim()}`;
-            const label = (d1?.name || '—').trim();
+            const d1Name = (d1?.name || '—').trim();
+            const d0Name = (row.subjectName || '').trim().toUpperCase();
+            const label = d0Name ? `${d0Name} › ${d1Name}` : d1Name;
+            const key = d1?.id || `__noid__${label}`;
             if (!aggMap.has(key)) aggMap.set(key, { label, offerPrice: 0, comments: [] });
             const entry = aggMap.get(key);
             entry.offerPrice += Number(row.offerPrice) || 0;
@@ -1466,7 +1468,7 @@ ${materialsHtml}
         const sheet = workbook.addWorksheet('Oferta');
 
         sheet.columns = [
-            { header: 'Przedmiot', key: 'subject', width: 36 },
+            { header: 'Pozycja', key: 'subject', width: 48 },
             { header: 'Cena ofertowa (PLN)', key: 'offerPrice', width: 22 },
             { header: 'Komentarz', key: 'comment', width: 50 },
         ];
@@ -1476,6 +1478,7 @@ ${materialsHtml}
         headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
         headerRow.alignment = { vertical: 'middle' };
 
+        const firstDataRow = 2;
         for (const [, data] of aggMap) {
             const added = sheet.addRow({
                 subject: data.label,
@@ -1484,6 +1487,32 @@ ${materialsHtml}
             });
             added.alignment = { wrapText: true, vertical: 'top' };
         }
+        const lastDataRow = firstDataRow + aggMap.size - 1;
+
+        // Wiersz sumujący — łączna cena ofertowa
+        const totalOffer = [...aggMap.values()].reduce((s, d) => s + (Number(d.offerPrice) || 0), 0);
+        const totalsRow = sheet.addRow({
+            subject: 'Razem',
+            offerPrice: aggMap.size > 0
+                ? { formula: `=SUM(B${firstDataRow}:B${lastDataRow})`, result: totalOffer }
+                : totalOffer,
+        });
+        totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+
+        // Szacowana ilość dni pracy — suma quantity dla type=work/praca, unit=dni
+        const workDays = rows.reduce((sum, r) => {
+            const t = String(r.type || '').toLowerCase();
+            const isWork = t === 'work' || t === 'praca' || String(r.budgetType || '').toUpperCase() === 'WORK';
+            const u = String(r.unit || '').toLowerCase().trim();
+            const isDni = u === 'dni' || u === 'dzień' || u === 'dzien' || u === 'd';
+            return isWork && isDni ? sum + (Number(r.quantity) || 0) : sum;
+        }, 0);
+
+        sheet.addRow([]);
+        sheet.addRow([]);
+        sheet.addRow({ subject: 'szacowana ilość dni pracy', offerPrice: `${workDays} dni` });
+        sheet.addRow({ subject: 'ważność oferty', offerPrice: '14 dni' });
 
         sheet.getColumn('offerPrice').numFmt = '#,##0.00';
         sheet.views = [{ state: 'frozen', ySplit: 1 }];
