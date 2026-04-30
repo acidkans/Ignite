@@ -10,6 +10,7 @@ const SELECT = 'bg-[#0b0f17] text-white text-sm w-full outline-none rounded px-1
 const FILTER = 'w-full bg-black/30 border border-white/10 rounded px-2 py-0.5 text-xs text-white placeholder-gray-700 outline-none focus:border-blue-500/40';
 
 const NUMERIC_COLS = new Set(['unitCost', 'quantity', 'totalCost', 'margin', 'discount', 'offerPrice']);
+const EDITABLE_COLS = ['subjectName', 'name', 'type', 'unitCost', 'quantity', 'unit', 'margin', 'discount', 'comment'];
 
 function calcDerived(r) {
     const q = Math.max(0, parseLocaleNumber(String(r.quantity ?? '')) ?? 1);
@@ -22,7 +23,7 @@ function calcDerived(r) {
     return { ...r, totalCost, offerPrice };
 }
 
-function AutoTextarea({ defaultValue, onBlur, className }) {
+function AutoTextarea({ defaultValue, onBlur, onFocus, onKeyDown, className, dataRowId, dataCol }) {
     const ref = useRef(null);
     const resize = () => {
         const el = ref.current;
@@ -38,6 +39,10 @@ function AutoTextarea({ defaultValue, onBlur, className }) {
             defaultValue={defaultValue}
             onInput={resize}
             onBlur={onBlur}
+            onFocus={onFocus}
+            onKeyDown={onKeyDown}
+            data-row-id={dataRowId}
+            data-col={dataCol}
             className={className}
             style={{ overflow: 'hidden', minHeight: '1.4em' }}
         />
@@ -70,12 +75,16 @@ export default function BudgetTable({
     const [localRows, setLocalRows] = useState(() => rows.map(calcDerived));
     const [syncVersion, setSyncVersion] = useState(0);
     const [colFilters, setColFilters] = useState({});
-    const [sort, setSort] = useState({ key: null, dir: null }); // dir: 'asc' | 'desc' | null
+    const [sort, setSort] = useState({ key: null, dir: null });
+    const [focusedRowId, setFocusedRowId] = useState(null);
 
     const [colWidths, setColWidths] = useState(
         () => Object.fromEntries(COLS.map(c => [c.key, c.defW]))
     );
     const resizeDrag = useRef(null);
+    const blurTimer = useRef(null);
+    const tableRef = useRef(null);
+    const displayedRowsRef = useRef([]);
 
     const startResize = useCallback((colKey, e) => {
         e.preventDefault();
@@ -134,12 +143,15 @@ export default function BudgetTable({
         const keys = Object.keys(colFilters).filter(k => String(colFilters[k] ?? '').trim() !== '');
         if (keys.length === 0) return localRows;
         const match = (val, q) => String(val ?? '').toLowerCase().includes(q);
-        return localRows.filter(r => keys.every(k => {
-            const q = String(colFilters[k]).toLowerCase().trim();
-            const val = k === 'type' ? (TYPE_LABELS[r.type] || r.type) : r[k];
-            return match(val, q);
-        }));
-    }, [localRows, colFilters]);
+        return localRows.filter(r => {
+            if (r.id === focusedRowId) return true; // never hide the row being edited
+            return keys.every(k => {
+                const q = String(colFilters[k]).toLowerCase().trim();
+                const val = k === 'type' ? (TYPE_LABELS[r.type] || r.type) : r[k];
+                return match(val, q);
+            });
+        });
+    }, [localRows, colFilters, focusedRowId]);
 
     const displayedRows = useMemo(() => {
         if (!sort.key || !sort.dir) return filteredRows;
@@ -157,6 +169,8 @@ export default function BudgetTable({
         });
     }, [filteredRows, sort]);
 
+    useEffect(() => { displayedRowsRef.current = displayedRows; }, [displayedRows]);
+
     const summary = useMemo(() => {
         let totalCost = 0, rawRevenue = 0;
         for (const r of localRows) {
@@ -172,6 +186,81 @@ export default function BudgetTable({
         const marginPct = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
         return { totalCost, totalRevenue, rawRevenue, profit, marginPct, rows: localRows.length };
     }, [localRows, discountPercent, discountAmount]);
+
+    const handleCellFocus = useCallback((rowId) => {
+        clearTimeout(blurTimer.current);
+        setFocusedRowId(rowId);
+    }, []);
+
+    const handleCellBlur = useCallback(() => {
+        blurTimer.current = setTimeout(() => setFocusedRowId(null), 200);
+    }, []);
+
+    const navigateCell = useCallback((rowId, colKey, direction) => {
+        const rows = displayedRowsRef.current;
+        const rowIdx = rows.findIndex(r => r.id === rowId);
+        const colIdx = EDITABLE_COLS.indexOf(colKey);
+        let targetRowId = rowId;
+        let targetColKey = colKey;
+
+        if (direction === 'up') {
+            if (rowIdx <= 0) return;
+            targetRowId = rows[rowIdx - 1].id;
+        } else if (direction === 'down') {
+            if (rowIdx >= rows.length - 1) return;
+            targetRowId = rows[rowIdx + 1].id;
+        } else if (direction === 'left') {
+            if (colIdx <= 0) return;
+            targetColKey = EDITABLE_COLS[colIdx - 1];
+        } else if (direction === 'right') {
+            if (colIdx >= EDITABLE_COLS.length - 1) return;
+            targetColKey = EDITABLE_COLS[colIdx + 1];
+        } else if (direction === 'home') {
+            targetColKey = EDITABLE_COLS[0];
+        } else return;
+
+        const el = tableRef.current?.querySelector(`[data-row-id="${targetRowId}"][data-col="${targetColKey}"]`);
+        if (el) {
+            el.focus();
+            if (typeof el.select === 'function' && el.tagName !== 'SELECT') el.select();
+        }
+    }, []);
+
+    const handleKeyDown = useCallback((e, rowId, colKey) => {
+        const tag = e.target.tagName;
+        const isSelect = tag === 'SELECT';
+        const isText = tag === 'INPUT' || tag === 'TEXTAREA';
+
+        switch (e.key) {
+            case 'Enter':
+                if (tag === 'TEXTAREA' && e.shiftKey) return; // Shift+Enter = newline in textarea
+                e.preventDefault();
+                navigateCell(rowId, colKey, 'home');
+                break;
+            case 'ArrowUp':
+                if (isSelect) return;
+                e.preventDefault();
+                navigateCell(rowId, colKey, 'up');
+                break;
+            case 'ArrowDown':
+                if (isSelect) return;
+                e.preventDefault();
+                navigateCell(rowId, colKey, 'down');
+                break;
+            case 'ArrowLeft':
+                if (isSelect) return;
+                if (isText && e.target.selectionStart !== 0) return;
+                e.preventDefault();
+                navigateCell(rowId, colKey, 'left');
+                break;
+            case 'ArrowRight':
+                if (isSelect) return;
+                if (isText && e.target.selectionStart !== e.target.value.length) return;
+                e.preventDefault();
+                navigateCell(rowId, colKey, 'right');
+                break;
+        }
+    }, [navigateCell]);
 
     const SortIcon = ({ k }) => {
         if (sort.key !== k) return null;
@@ -242,7 +331,7 @@ export default function BudgetTable({
 
             {/* Tabela */}
             <div className="flex-1 overflow-auto bg-slate-800/30">
-                <table className="w-full text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
+                <table ref={tableRef} className="w-full text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
                     <colgroup>
                         <col style={{ width: 36 }} />
                         {COLS.map(c => <col key={c.key} style={{ width: colWidths[c.key] }} />)}
@@ -301,7 +390,11 @@ export default function BudgetTable({
                                     <AutoTextarea
                                         key={`${row.id}-subjectName-${syncVersion}`}
                                         defaultValue={row.subjectName || ''}
-                                        onBlur={e => { if (e.target.value !== (row.subjectName || '')) onFieldChange(row, 'subjectName', e.target.value); }}
+                                        onBlur={e => { handleCellBlur(); if (e.target.value !== (row.subjectName || '')) onFieldChange(row, 'subjectName', e.target.value); }}
+                                        onFocus={() => handleCellFocus(row.id)}
+                                        onKeyDown={e => handleKeyDown(e, row.id, 'subjectName')}
+                                        dataRowId={row.id}
+                                        dataCol="subjectName"
                                         className={TEXTAREA}
                                     />
                                 </td>
@@ -310,7 +403,11 @@ export default function BudgetTable({
                                     <AutoTextarea
                                         key={`${row.id}-name-${syncVersion}`}
                                         defaultValue={row.name || ''}
-                                        onBlur={e => { if (e.target.value !== (row.name || '')) onFieldChange(row, 'name', e.target.value); }}
+                                        onBlur={e => { handleCellBlur(); if (e.target.value !== (row.name || '')) onFieldChange(row, 'name', e.target.value); }}
+                                        onFocus={() => handleCellFocus(row.id)}
+                                        onKeyDown={e => handleKeyDown(e, row.id, 'name')}
+                                        dataRowId={row.id}
+                                        dataCol="name"
                                         className={TEXTAREA}
                                     />
                                 </td>
@@ -319,6 +416,11 @@ export default function BudgetTable({
                                     <select
                                         value={row.type || ''}
                                         onChange={e => { handleChange(row.id, 'type', e.target.value); onFieldChange(row, 'type', e.target.value); }}
+                                        onFocus={() => handleCellFocus(row.id)}
+                                        onBlur={handleCellBlur}
+                                        onKeyDown={e => handleKeyDown(e, row.id, 'type')}
+                                        data-row-id={row.id}
+                                        data-col="type"
                                         className={SELECT}
                                     >
                                         <option value="">—</option>
@@ -332,10 +434,15 @@ export default function BudgetTable({
                                         defaultValue={row.unitCost != null && row.unitCost !== 0 ? Number(row.unitCost).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
                                         onChange={e => handleChange(row.id, 'unitCost', e.target.value)}
                                         onBlur={e => {
+                                            handleCellBlur();
                                             const n = parseLocaleNumber(e.target.value);
                                             if (n != null) e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                             onFieldChange(row, 'unitCost', e.target.value);
                                         }}
+                                        onFocus={() => handleCellFocus(row.id)}
+                                        onKeyDown={e => handleKeyDown(e, row.id, 'unitCost')}
+                                        data-row-id={row.id}
+                                        data-col="unitCost"
                                         className={`${INPUT} text-center tabular-nums font-mono ${row.inheritedFromMaterials ? 'text-amber-300' : 'text-red-400'}`}
                                     />
                                 </td>
@@ -346,10 +453,15 @@ export default function BudgetTable({
                                         defaultValue={row.quantity != null && row.quantity !== 0 ? Number(row.quantity).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
                                         onChange={e => handleChange(row.id, 'quantity', e.target.value)}
                                         onBlur={e => {
+                                            handleCellBlur();
                                             const n = parseLocaleNumber(e.target.value);
                                             if (n != null) e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                             onFieldChange(row, 'quantity', e.target.value);
                                         }}
+                                        onFocus={() => handleCellFocus(row.id)}
+                                        onKeyDown={e => handleKeyDown(e, row.id, 'quantity')}
+                                        data-row-id={row.id}
+                                        data-col="quantity"
                                         className={`${INPUT} text-center tabular-nums`}
                                     />
                                 </td>
@@ -358,6 +470,11 @@ export default function BudgetTable({
                                     <select
                                         value={row.unit || ''}
                                         onChange={e => { handleChange(row.id, 'unit', e.target.value); onFieldChange(row, 'unit', e.target.value); }}
+                                        onFocus={() => handleCellFocus(row.id)}
+                                        onBlur={handleCellBlur}
+                                        onKeyDown={e => handleKeyDown(e, row.id, 'unit')}
+                                        data-row-id={row.id}
+                                        data-col="unit"
                                         className={SELECT}
                                     >
                                         <option value="">—</option>
@@ -374,7 +491,11 @@ export default function BudgetTable({
                                         key={`${row.id}-margin-${syncVersion}`}
                                         defaultValue={row.margin != null && row.margin !== 0 ? String(row.margin).replace('.', ',') : ''}
                                         onChange={e => handleChange(row.id, 'margin', e.target.value)}
-                                        onBlur={e => onFieldChange(row, 'margin', e.target.value)}
+                                        onBlur={e => { handleCellBlur(); onFieldChange(row, 'margin', e.target.value); }}
+                                        onFocus={() => handleCellFocus(row.id)}
+                                        onKeyDown={e => handleKeyDown(e, row.id, 'margin')}
+                                        data-row-id={row.id}
+                                        data-col="margin"
                                         className={`${INPUT} text-center tabular-nums text-green-300`}
                                     />
                                 </td>
@@ -384,7 +505,11 @@ export default function BudgetTable({
                                         key={`${row.id}-discount-${syncVersion}`}
                                         defaultValue={row.discount != null && row.discount !== 0 ? String(row.discount).replace('.', ',') : ''}
                                         onChange={e => handleChange(row.id, 'discount', e.target.value)}
-                                        onBlur={e => onFieldChange(row, 'discount', e.target.value)}
+                                        onBlur={e => { handleCellBlur(); onFieldChange(row, 'discount', e.target.value); }}
+                                        onFocus={() => handleCellFocus(row.id)}
+                                        onKeyDown={e => handleKeyDown(e, row.id, 'discount')}
+                                        data-row-id={row.id}
+                                        data-col="discount"
                                         className={`${INPUT} text-center tabular-nums text-orange-300`}
                                     />
                                 </td>
@@ -397,7 +522,11 @@ export default function BudgetTable({
                                     <AutoTextarea
                                         key={`${row.id}-comment-${syncVersion}`}
                                         defaultValue={row.comment || ''}
-                                        onBlur={e => { if (e.target.value !== (row.comment || '')) onFieldChange(row, 'comment', e.target.value); }}
+                                        onBlur={e => { handleCellBlur(); if (e.target.value !== (row.comment || '')) onFieldChange(row, 'comment', e.target.value); }}
+                                        onFocus={() => handleCellFocus(row.id)}
+                                        onKeyDown={e => handleKeyDown(e, row.id, 'comment')}
+                                        dataRowId={row.id}
+                                        dataCol="comment"
                                         className={`${TEXTAREA} text-gray-400`}
                                     />
                                 </td>
