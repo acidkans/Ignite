@@ -539,9 +539,11 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 const exactByName = linked.find(req => normalizedNodeName && normKey(req.name) === normalizedNodeName);
                 targetReq = exactByName || linked[0];
             } else if (normalizedNodeName) {
+                // Tylko orphan requirements (bez wbsNodeId) — nie kradnij reqów innych węzłów o tej samej nazwie
                 targetReq = requirements.find(req =>
                     ['MATERIAL', 'DEVICE'].includes(String(req.type || '').toUpperCase()) &&
-                    normKey(req.name) === normalizedNodeName
+                    normKey(req.name) === normalizedNodeName &&
+                    !req.wbsNodeId
                 ) || null;
             }
 
