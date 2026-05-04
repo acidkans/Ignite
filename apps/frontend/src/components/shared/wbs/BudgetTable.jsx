@@ -143,10 +143,15 @@ export default function BudgetTable({
         const keys = Object.keys(colFilters).filter(k => String(colFilters[k] ?? '').trim() !== '');
         if (keys.length === 0) return localRows;
         const match = (val, q) => String(val ?? '').toLowerCase().includes(q);
+        const matchTokens = (val, q) => {
+            const text = String(val ?? '').toLowerCase();
+            return q.split(/[\s/]+/).filter(Boolean).every(t => text.includes(t));
+        };
         return localRows.filter(r => {
-            if (r.id === focusedRowId) return true; // never hide the row being edited
+            if (r.id === focusedRowId) return true;
             return keys.every(k => {
                 const q = String(colFilters[k]).toLowerCase().trim();
+                if (k === 'subjectName') return matchTokens(r.subjectPath || r.subjectName, q);
                 const val = k === 'type' ? (TYPE_LABELS[r.type] || r.type) : r[k];
                 return match(val, q);
             });
