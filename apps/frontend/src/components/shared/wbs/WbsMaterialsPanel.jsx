@@ -468,7 +468,10 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
     };
 
     const segs = node.path ? node.path.split(' › ') : [];
-    const parent = segs.length >= 2 ? segs[segs.length - 2] : segs[0] || '—';
+    // pomiń pierwszy segment (nazwa projektu) i ostatni (nazwa materiału = kolumna Nazwa)
+    const parent = segs.length > 2
+        ? segs.slice(1, -1).join(' / ')
+        : segs.length === 2 ? segs[0] : segs[0] || '—';
 
     return (
         <tr className={`border-b border-white/[0.03] transition-colors ${isExpanded ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
