@@ -125,11 +125,22 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
     );
 }
 
+function nodeContainsId(node, id) {
+    if (String(node.id) === String(id)) return true;
+    return (node.children || []).some(c => nodeContainsId(c, id));
+}
+
 function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, level = 0, forceExpanded = false, unreadOrderIds = new Set(), isLogistykArea = false }) {
     const [expanded, setExpanded] = useState(true);
     const [editing, setEditing] = useState(false);
     const [editName, setEditName] = useState(node.name);
     const inputRef = useRef(null);
+
+    // Auto-rozwijaj gdy aktywne zamówienie jest w poddrzewie (np. po kliknięciu powiadomienia)
+    useEffect(() => {
+        if (activeAreaId && nodeContainsId(node, activeAreaId)) setExpanded(true);
+    }, [activeAreaId, node]);
+
     const isExpanded = forceExpanded || expanded;
     const nonDocumentChildren = node.children ? node.children.filter(child => child.type !== 'document') : [];
     const hasChildren = nonDocumentChildren.length > 0;

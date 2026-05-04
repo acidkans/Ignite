@@ -1,6 +1,13 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, createContext, useContext } from 'react';
+import { createPortal } from 'react-dom';
 import { Gantt, ViewMode } from 'gantt-task-react';
 import 'gantt-task-react/dist/index.css';
+import DatePicker, { registerLocale } from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import { pl } from 'date-fns/locale/pl';
+registerLocale('pl', pl);
+
+const DpPortal = ({ children }) => createPortal(<div className="ignite-dp">{children}</div>, document.body);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -70,12 +77,24 @@ const nodeDurationDays = (node) => {
     return 0;
 };
 
-const colorForType = (type) => {
-    if (isWorkType(type)) return { bg: '#10b981', sel: '#059669', prog: '#34d399' };
-    if (isMaterialType(type)) return { bg: '#f59e0b', sel: '#d97706', prog: '#fbbf24' };
-    if (isServiceType(type)) return { bg: '#8b5cf6', sel: '#7c3aed', prog: '#a78bfa' };
-    return { bg: '#3b82f6', sel: '#2563eb', prog: '#60a5fa' };
+const BLUE_PALETTE = [
+    { bg: '#1d4ed8', sel: '#1e40af', prog: '#3b82f6', text: '#93c5fd' },
+    { bg: '#0369a1', sel: '#075985', prog: '#0ea5e9', text: '#7dd3fc' },
+    { bg: '#4338ca', sel: '#3730a3', prog: '#818cf8', text: '#a5b4fc' },
+    { bg: '#0891b2', sel: '#0e7490', prog: '#22d3ee', text: '#67e8f9' },
+    { bg: '#2563eb', sel: '#1d4ed8', prog: '#60a5fa', text: '#bfdbfe' },
+    { bg: '#0284c7', sel: '#0369a1', prog: '#38bdf8', text: '#7dd3fc' },
+    { bg: '#3b0764', sel: '#4a044e', prog: '#a855f7', text: '#e9d5ff' },
+    { bg: '#1e3a8a', sel: '#172554', prog: '#93c5fd', text: '#dbeafe' },
+];
+
+const colorForNode = (id) => {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
+    return BLUE_PALETTE[h % BLUE_PALETTE.length];
 };
+
+const colorForType = (type) => colorForNode(type || 'default');
 
 const isNonWorkingDay = (date) => {
     const dow = date.getDay();
@@ -124,50 +143,19 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
             if (!hasChildren && !isWorkType(node.type) && !isServiceType(node.type)) continue;
             if (hasChildren && !hasWorkOrServiceLeaf(node)) continue;
 
-            const colors = colorForType(node.type);
+            const colors = colorForNode(node.id);
             const niceName = String(node.name || '').trim() || '(bez nazwy)';
 
             const wow = depth === 0 ? (branchWorkOnHolidays[node.id] ?? false) : branchWow;
             const thisBranchId = depth === 0 ? node.id : currentBranchId;
 
-            if (depth === 0 && hasChildren) {
-                if (!wow) cursor = advanceToWorkingDay(cursor);
+            if (hasChildren) {
+                if (depth === 0 && !wow) cursor = advanceToWorkingDay(cursor);
                 walk(node.children, parentId, depth + 1, wow, thisBranchId);
                 continue;
             }
 
-            if (hasChildren) {
-                taskBranchMap[node.id] = thisBranchId;
-                const placeholderIdx = tasks.length;
-                tasks.push(null);
-                const beforeCursor = new Date(cursor);
-                walk(node.children, node.id, depth + 1, wow, thisBranchId);
-                const afterCursor = new Date(cursor);
-                const start = beforeCursor;
-                const end = afterCursor.getTime() === beforeCursor.getTime()
-                    ? new Date(beforeCursor.getTime() + DAY_MS)
-                    : afterCursor;
-                const grpColors = colorForType('group');
-                tasks[placeholderIdx] = {
-                    id: node.id,
-                    type: 'project',
-                    name: niceName,
-                    start,
-                    end,
-                    progress: 0,
-                    hideChildren: false,
-                    project: parentId || undefined,
-                    _color: grpColors.bg,
-                    styles: {
-                        backgroundColor: grpColors.bg,
-                        backgroundSelectedColor: grpColors.sel,
-                        progressColor: grpColors.prog,
-                        progressSelectedColor: grpColors.sel,
-                    },
-                };
-                if (!groupStart || start < groupStart) groupStart = start;
-                if (!groupEnd || end > groupEnd) groupEnd = end;
-            } else {
+            {
                 taskBranchMap[node.id] = thisBranchId;
                 if (depth === 0 && !wow) cursor = advanceToWorkingDay(cursor);
 
@@ -203,6 +191,7 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
                     progress: 0,
                     project: parentId || undefined,
                     _color: colors.bg,
+                    _textColor: colors.text,
                     styles: {
                         backgroundColor: colors.bg,
                         backgroundSelectedColor: colors.sel,
@@ -223,41 +212,123 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
 };
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+const toInputDate = (d) => d ? new Date(d).toISOString().slice(0, 10) : '';
+
+const GanttTableContext = createContext(null);
+
+const COL_DATE = 95;
+const COL_DAYS = 52;
+
+const hdrCell = (label, width, extra = {}) => ({
+    width, padding: '0 6px', display: 'flex', alignItems: 'flex-end', paddingBottom: 6,
+    color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+    letterSpacing: '0.08em', justifyContent: 'center', ...extra,
+});
+
+const taskDays = (task, branchWorkOnHolidays = {}, taskBranchMap = {}) => {
+    if (task.type === 'milestone') return 0;
+    const start = new Date(task.start); start.setHours(0, 0, 0, 0);
+    const end   = new Date(task.end);   end.setHours(0, 0, 0, 0);
+    const branchId = taskBranchMap[task.id];
+    const wow = Object.prototype.hasOwnProperty.call(branchWorkOnHolidays, task.id)
+        ? branchWorkOnHolidays[task.id]
+        : (branchWorkOnHolidays[branchId] ?? false);
+    if (wow) return Math.max(0, Math.round((end - start) / DAY_MS));
+    let count = 0;
+    const cur = new Date(start);
+    while (cur < end) { if (!isNonWorkingDay(cur)) count++; cur.setDate(cur.getDate() + 1); }
+    return count;
+};
 
 const GanttTaskListHeader = ({ headerHeight, rowWidth, fontFamily, fontSize }) => (
     <div style={{ display: 'flex', height: headerHeight, fontFamily, borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#0b0f17', boxSizing: 'border-box', width: rowWidth, flexShrink: 0 }}>
         <div style={{ flex: '1 1 0', padding: '0 8px', display: 'flex', alignItems: 'flex-end', paddingBottom: 6, color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Zadanie</div>
-        <div style={{ width: 100, padding: '0 6px', display: 'flex', alignItems: 'flex-end', paddingBottom: 6, color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', justifyContent: 'center' }}>Od</div>
-        <div style={{ width: 100, padding: '0 6px', display: 'flex', alignItems: 'flex-end', paddingBottom: 6, color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', justifyContent: 'center' }}>Do</div>
+        <div style={hdrCell('Od', COL_DATE)}>Od</div>
+        <div style={hdrCell('Do', COL_DATE)}>Do</div>
+        <div style={hdrCell('Dni', COL_DAYS)}>Dni</div>
     </div>
 );
 
-const GanttTaskListTable = ({ rowHeight, rowWidth, fontFamily, fontSize, tasks, selectedTaskId, setSelectedTask, onExpanderClick }) => (
-    <div style={{ fontFamily, fontSize, width: rowWidth, flexShrink: 0 }}>
-        {tasks.map((task) => {
-            const color = task._color || '#e2e8f0';
-            const isGroup = task.type === 'project';
-            const isMilestone = task.type === 'milestone';
-            return (
-                <div
-                    key={task.id}
-                    style={{ display: 'flex', height: rowHeight, alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', background: task.id === selectedTaskId ? 'rgba(255,255,255,0.05)' : 'transparent', cursor: isGroup ? 'pointer' : 'default', boxSizing: 'border-box', width: rowWidth }}
-                    onClick={() => { setSelectedTask(task.id); if (isGroup) onExpanderClick(task); }}
-                >
-                    <div style={{ flex: '1 1 0', paddingLeft: isGroup ? 8 : 22, paddingRight: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color, fontWeight: isGroup ? 600 : 400 }}>
-                        {task.name}
+const DateCell = ({ taskId, field, date, disabled }) => {
+    const { editCell, setEditCell, handleTableDateChange } = useContext(GanttTableContext) || {};
+    const isEditing = editCell?.taskId === taskId && editCell?.field === field;
+    const dateObj = date ? new Date(date) : null;
+
+    return (
+        <div className="ignite-dp" style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <div
+                onClick={disabled ? undefined : () => setEditCell({ taskId, field })}
+                style={{ color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: disabled ? 'default' : 'pointer', borderRadius: 3, padding: '1px 3px', transition: 'background 0.15s, color 0.15s', fontSize: 11 }}
+                onMouseEnter={disabled ? undefined : (e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#67e8f9'; }}
+                onMouseLeave={disabled ? undefined : (e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = '#64748b'; }}
+                title={disabled ? '' : 'Kliknij aby edytować'}
+            >
+                {fmtDate(date)}
+            </div>
+            {isEditing && (
+                <DatePicker
+                    selected={dateObj}
+                    onChange={(newDate) => {
+                        if (newDate) handleTableDateChange(taskId, field, newDate.toISOString().slice(0, 10));
+                        else setEditCell(null);
+                    }}
+                    onClickOutside={() => setEditCell(null)}
+                    onKeyDown={(e) => { if (e.key === 'Escape') setEditCell(null); }}
+                    locale="pl"
+                    dateFormat="dd.MM.yyyy"
+                    open
+                    popperPlacement="bottom-start"
+                    popperContainer={DpPortal}
+                    customInput={<span style={{ display: 'none' }} />}
+                />
+            )}
+        </div>
+    );
+};
+
+const GanttTaskListTable = ({ rowHeight, rowWidth, fontFamily, fontSize, tasks, selectedTaskId, setSelectedTask, onExpanderClick }) => {
+    const { branchWorkOnHolidays = {}, taskBranchMap = {} } = useContext(GanttTableContext) || {};
+    const totalDays = tasks.reduce((s, t) => s + taskDays(t, branchWorkOnHolidays, taskBranchMap), 0);
+    return (
+        <div style={{ fontFamily, fontSize, width: rowWidth, flexShrink: 0 }}>
+            {tasks.map((task) => {
+                const color = task._textColor || '#c7d2fe';
+                const isGroup = task.type === 'project';
+                const isMilestone = task.type === 'milestone';
+                const days = taskDays(task, branchWorkOnHolidays, taskBranchMap);
+                return (
+                    <div
+                        key={task.id}
+                        style={{ display: 'flex', height: rowHeight, alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', background: task.id === selectedTaskId ? 'rgba(255,255,255,0.05)' : 'transparent', cursor: isGroup ? 'pointer' : 'default', boxSizing: 'border-box', width: rowWidth }}
+                        onClick={() => { setSelectedTask(task.id); if (isGroup) onExpanderClick(task); }}
+                    >
+                        <div style={{ flex: '1 1 0', paddingLeft: 8, paddingRight: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color, fontWeight: 400 }}>
+                            {task.name}
+                        </div>
+                        <div style={{ width: COL_DATE, padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <DateCell taskId={task.id} field="start" date={task.start} disabled={false} />
+                        </div>
+                        <div style={{ width: COL_DATE, padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <DateCell taskId={task.id} field="end" date={isMilestone ? task.start : task.end} disabled={isMilestone} />
+                        </div>
+                        <div style={{ width: COL_DAYS, padding: '0 6px', textAlign: 'center', color: isMilestone ? '#334155' : '#94a3b8', fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+                            {isMilestone ? '—' : days}
+                        </div>
                     </div>
-                    <div style={{ width: 100, padding: '0 6px', textAlign: 'center', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 11 }}>
-                        {fmtDate(task.start)}
-                    </div>
-                    <div style={{ width: 100, padding: '0 6px', textAlign: 'center', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 11 }}>
-                        {isMilestone ? fmtDate(task.start) : fmtDate(task.end)}
-                    </div>
+                );
+            })}
+            {/* Wiersz podsumowania */}
+            <div style={{ display: 'flex', height: rowHeight, alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.03)', boxSizing: 'border-box', width: rowWidth }}>
+                <div style={{ flex: '1 1 0', paddingLeft: 8, color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Razem roboczo dni</div>
+                <div style={{ width: COL_DATE }} />
+                <div style={{ width: COL_DATE }} />
+                <div style={{ width: COL_DAYS, padding: '0 6px', textAlign: 'center', color: '#67e8f9', fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                    {totalDays}
                 </div>
-            );
-        })}
-    </div>
-);
+            </div>
+        </div>
+    );
+};
 
 const VIEW_OPTS = [
     { v: ViewMode.Day, label: 'Dzień' },
@@ -265,7 +336,7 @@ const VIEW_OPTS = [
     { v: ViewMode.Month, label: 'Miesiąc' },
 ];
 
-export default function GanttSection({ wbsTree, projectName, onNodeDurationChange }) {
+export default function GanttSection({ wbsTree, projectName, onNodeDurationChange, onExportReady, onGetHtmlReady }) {
     const items = wbsTree?.items || [];
     const [viewMode, setViewMode] = useState(ViewMode.Day);
     const [projectStart, setProjectStart] = useState(() => {
@@ -274,6 +345,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         return d.toISOString().slice(0, 10);
     });
     const [overrides, setOverrides] = useState({});
+    const [editCell, setEditCell] = useState(null); // { taskId, field: 'start'|'end' } | null
     const [branchWorkOnHolidays, setBranchWorkOnHolidays] = useState({});
     const [popup, setPopup] = useState(null); // { x, y, branchId } | null
     const wrapperRef = useRef(null);
@@ -300,6 +372,48 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         return m;
     }, [tasks]);
 
+    const handleTableDateChange = useCallback((taskId, field, dateStr) => {
+        setEditCell(null);
+        if (!dateStr) return;
+        const task = tasks.find(t => t && t.id === taskId);
+        if (!task) return;
+        const newDate = new Date(dateStr);
+        newDate.setHours(0, 0, 0, 0);
+        let newStart = new Date(task.start); newStart.setHours(0, 0, 0, 0);
+        let newEnd   = new Date(task.end);   newEnd.setHours(0, 0, 0, 0);
+        if (field === 'start') {
+            newStart = newDate;
+            if (newStart >= newEnd) newEnd = new Date(newStart.getTime() + DAY_MS);
+        } else {
+            newEnd = newDate;
+            if (newEnd <= newStart) newStart = new Date(newEnd.getTime() - DAY_MS);
+        }
+        // Oblicz liczbę dni roboczych dla onNodeDurationChange
+        const branchId = taskBranchMap[taskId];
+        const wow = Object.prototype.hasOwnProperty.call(branchWorkOnHolidays, taskId)
+            ? branchWorkOnHolidays[taskId]
+            : (branchWorkOnHolidays[branchId] ?? false);
+        let notifyDays;
+        if (wow) {
+            notifyDays = Math.max(1, Math.round((newEnd - newStart) / DAY_MS));
+        } else {
+            let count = 0; const cur = new Date(newStart);
+            while (cur < newEnd) { if (!isNonWorkingDay(cur)) count++; cur.setDate(cur.getDate() + 1); }
+            notifyDays = Math.max(1, count);
+        }
+        setOverrides(prev => {
+            const next = { ...prev, [taskId]: { start: newStart.toISOString(), end: newEnd.toISOString() } };
+            for (const t of tasks) {
+                if (!t || next[t.id] || t.type === 'project') continue;
+                const ts = new Date(t.start); ts.setHours(0, 0, 0, 0);
+                const te = new Date(t.end);   te.setHours(0, 0, 0, 0);
+                next[t.id] = { start: ts.toISOString(), end: te.toISOString() };
+            }
+            return next;
+        });
+        if (task.type !== 'project') onNodeDurationChange?.(taskId, notifyDays);
+    }, [tasks, taskBranchMap, branchWorkOnHolidays, onNodeDurationChange]);
+
     const onDateChange = useCallback((task) => {
         if (task.type === 'milestone') return;
 
@@ -314,15 +428,29 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
 
         let notifyDays;
         if (!effectiveWow) {
-            // Zlicz dni robocze w przeciągniętym przedziale
+            const origTask = tasks.find(t => t && t.id === task.id);
+            const origStart = origTask ? new Date(origTask.start) : null;
+            const origEnd   = origTask ? new Date(origTask.end)   : null;
+            if (origStart) origStart.setHours(0, 0, 0, 0);
+            if (origEnd)   origEnd.setHours(0, 0, 0, 0);
+
+            const startSame = origStart && Math.abs(start.getTime() - origStart.getTime()) < DAY_MS / 2;
+            const endSame   = origEnd   && Math.abs(end.getTime()   - origEnd.getTime())   < DAY_MS / 2;
+            // move = obie daty zmieniły się; resize = tylko jedna
+            const isResize = startSame !== endSame;
+
             let workDays = 0;
-            const cur = new Date(start);
-            while (cur < end) {
-                if (!isNonWorkingDay(cur)) workDays++;
-                cur.setDate(cur.getDate() + 1);
+            if (!isResize && origTask) {
+                // MOVE — zachowaj oryginalną liczbę dni roboczych
+                let d = 0; const c = new Date(origStart);
+                while (c < origEnd) { if (!isNonWorkingDay(c)) d++; c.setDate(c.getDate() + 1); }
+                workDays = Math.max(1, d);
+            } else {
+                // RESIZE — policz dni robocze w nowym zakresie
+                const cur = new Date(start);
+                while (cur < end) { if (!isNonWorkingDay(cur)) workDays++; cur.setDate(cur.getDate() + 1); }
+                workDays = Math.max(1, workDays);
             }
-            workDays = Math.max(1, workDays);
-            // Snap start na najbliższy dzień roboczy, przelicz end zachowując workDays
             start = advanceToWorkingDay(start);
             end   = addWorkingDays(start, workDays);
             notifyDays = workDays;
@@ -387,6 +515,51 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         return () => { cancelled = true; timers.forEach(clearTimeout); cleanup?.(); };
     }, [tasks, taskBranchMap, branchInfoMap]);
 
+    // Blokuj auto-scroll timeline podczas przeciągania tasków
+    useEffect(() => {
+        const wrapper = wrapperRef.current;
+        if (!wrapper) return;
+        let dragging = false;
+        let scrollEl = null;
+
+        const findScroll = () => {
+            const svg = wrapper.querySelector('svg');
+            if (!svg) return null;
+            let el = svg.parentElement;
+            while (el && el !== wrapper) {
+                const s = getComputedStyle(el).overflowX;
+                if (s === 'auto' || s === 'scroll') return el;
+                el = el.parentElement;
+            }
+            return null;
+        };
+
+        const onDown = (e) => {
+            if (!e.target.closest('svg')) return;
+            dragging = true;
+            if (!scrollEl) {
+                scrollEl = findScroll();
+                if (scrollEl) {
+                    const orig = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollLeft');
+                    Object.defineProperty(scrollEl, 'scrollLeft', {
+                        get: () => orig.get.call(scrollEl),
+                        set: (v) => { if (!dragging) orig.set.call(scrollEl, v); },
+                        configurable: true,
+                    });
+                }
+            }
+        };
+        const onUp = () => { dragging = false; };
+
+        document.addEventListener('mousedown', onDown);
+        document.addEventListener('mouseup', onUp);
+        return () => {
+            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener('mouseup', onUp);
+            if (scrollEl) { try { delete scrollEl.scrollLeft; } catch (_) {} }
+        };
+    }, []);
+
     // Zamknij popup po kliknięciu poza nim
     useEffect(() => {
         if (!popup) return;
@@ -439,11 +612,19 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
             const innerH = innerSvg.getBoundingClientRect().height || parseFloat(innerSvg.getAttribute('height') || '0');
             if (!innerH) return false;
 
-            if (getComputedStyle(horiz).position === 'static') horiz.style.position = 'relative';
+            // Wyznacz offset SVG dla firstDate używając pierwszego paska jako referencji
+            const NS = 'http://www.w3.org/2000/svg';
+            const refBar = innerSvg.querySelector('g[tabindex] rect');
+            const refTask = tasks.find(t => t && t.type === 'task');
+            let svgFirstDateX = 0;
+            if (refBar && refTask) {
+                const refBx = parseFloat(refBar.getAttribute('x') || '0');
+                const refStart = new Date(refTask.start); refStart.setHours(0, 0, 0, 0);
+                svgFirstDateX = refBx - Math.round((refStart - firstDate) / DAY_MS) * COL;
+            }
 
-            const overlay = document.createElement('div');
-            overlay.className = 'ignite-weekend-band';
-            overlay.style.cssText = `position:absolute; top:0; left:0; height:${innerH}px; width:${totalDays * COL}px; pointer-events:none; z-index:3;`;
+            const bandG = document.createElementNS(NS, 'g');
+            bandG.classList.add('ignite-weekend-band');
 
             for (let i = 0; i < totalDays; i++) {
                 const date = new Date(firstDate);
@@ -452,15 +633,19 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
                 const holiday = isPolishHoliday(date);
                 if (dow !== 0 && dow !== 6 && !holiday) continue;
 
-                const band = document.createElement('div');
-                band.style.cssText = `position:absolute; top:0; height:100%; left:${i * COL}px; width:${COL}px; background:repeating-linear-gradient(45deg,rgba(248,113,113,0.18) 0px,rgba(248,113,113,0.18) 3px,rgba(8,12,22,0.55) 3px,rgba(8,12,22,0.55) 8px); pointer-events:none;`;
-                overlay.appendChild(band);
+                const rect = document.createElementNS(NS, 'rect');
+                rect.setAttribute('x', String(svgFirstDateX + i * COL));
+                rect.setAttribute('y', '0');
+                rect.setAttribute('width', String(COL));
+                rect.setAttribute('height', String(innerH));
+                rect.setAttribute('fill', 'rgba(150,155,165,0.22)');
+                rect.setAttribute('pointer-events', 'none');
+                bandG.appendChild(rect);
             }
 
-            horiz.appendChild(overlay);
+            innerSvg.insertBefore(bandG, innerSvg.firstChild);
 
             // --- Rozbijanie barów na segmenty: podmiana rectów ---
-            const NS = 'http://www.w3.org/2000/svg';
             const barGroups = innerSvg.querySelectorAll('g[tabindex]');
 
             barGroups.forEach((g, i) => {
@@ -489,29 +674,38 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
                 if (inSeg) segs.push([segS, totalDays]);
                 if (segs.length <= 1) return;
 
-                const barInner = g.children[0];
-                if (!barInner) return;
-                const bgRect = barInner.querySelector('rect');
-                if (!bgRect || bgRect.dataset.igniteSplit) return;
-
-                const labelG = g.children[1];
-                const origText = labelG?.querySelector('text');
+                if (g.dataset.igniteSplit) return;
+                const bgRect = g.querySelector('rect');
+                if (!bgRect) return;
 
                 const bx   = parseFloat(bgRect.getAttribute('x')      || '0');
                 const by   = parseFloat(bgRect.getAttribute('y')      || '0');
                 const bh   = parseFloat(bgRect.getAttribute('height') || '0');
                 const brx  = Math.min(parseFloat(bgRect.getAttribute('rx') || '4'), 4);
                 const fill = bgRect.getAttribute('fill') || '#10b981';
+                const origText = g.querySelector('text');
                 const textFill = origText?.getAttribute('fill') || '#fff';
                 const fontSize = origText?.getAttribute('font-size') || '12';
 
-                bgRect.dataset.igniteSplit    = '1';
-                bgRect.dataset.igniteOrigFill = fill;
-                bgRect.style.opacity = '0';
-                if (origText) { origText.dataset.igniteSplit = '1'; origText.style.opacity = '0'; }
+                // Chowamy całą grupę i wszystkie floating labels gantta poza grupą
+                g.dataset.igniteSplit = '1';
+                g.style.opacity = '0';
+                innerSvg.querySelectorAll('text').forEach(t => {
+                    if (t.textContent.trim() === task.name && !t.closest('.ignite-seg-g')) {
+                        t.dataset.igniteSplit = '1';
+                        t.style.opacity = '0';
+                    }
+                });
 
                 const segG = document.createElementNS(NS, 'g');
                 segG.classList.add('ignite-seg-g');
+
+                // Wyznacz najszerszy segment i sprawdź czy nazwa się mieści
+                const widestSeg = segs.reduce((b, s) => (s[1]-s[0]) > (b[1]-b[0]) ? s : b, segs[0]);
+                const widestW = (widestSeg[1] - widestSeg[0]) * COL;
+                const nameEstW = task.name.length * parseFloat(fontSize) * 0.62;
+                const labelOutside = nameEstW > widestW;
+                const lastSeg = segs[segs.length - 1];
 
                 for (const [s, e] of segs) {
                     const sx = bx + s * COL;
@@ -526,21 +720,26 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
                     r.setAttribute('fill', fill);
                     r.setAttribute('pointer-events', 'none');
                     segG.appendChild(r);
-
-                    const txt = document.createElementNS(NS, 'text');
-                    txt.setAttribute('x', String(sx + sw / 2));
-                    txt.setAttribute('y', String(by + bh / 2 + 1));
-                    txt.setAttribute('text-anchor', 'middle');
-                    txt.setAttribute('dominant-baseline', 'middle');
-                    txt.setAttribute('fill', textFill);
-                    txt.setAttribute('font-size', fontSize);
-                    txt.setAttribute('font-family', 'Inter, system-ui, sans-serif');
-                    txt.setAttribute('pointer-events', 'none');
-                    txt.textContent = task.name;
-                    segG.appendChild(txt);
                 }
 
-                g.appendChild(segG);
+                // Jedna etykieta: wewnątrz najszerszego segmentu lub na zewnątrz po prawej
+                const txt = document.createElementNS(NS, 'text');
+                const labelX = labelOutside
+                    ? bx + lastSeg[1] * COL + 5
+                    : bx + widestSeg[0] * COL + widestW / 2;
+                txt.setAttribute('x', String(labelX));
+                txt.setAttribute('y', String(by + bh / 2 + 1));
+                txt.setAttribute('text-anchor', labelOutside ? 'start' : 'middle');
+                txt.setAttribute('dominant-baseline', 'middle');
+                txt.setAttribute('fill', labelOutside ? fill : '#ffffff');
+                txt.setAttribute('font-size', fontSize);
+                txt.setAttribute('font-family', 'Inter, system-ui, sans-serif');
+                txt.setAttribute('pointer-events', 'none');
+                txt.textContent = task.name;
+                segG.appendChild(txt);
+
+                // Dodajemy do innerSvg (nie do ukrytej grupy g)
+                innerSvg.appendChild(segG);
             });
 
             return true;
@@ -551,6 +750,37 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         const timers = tries.map(ms => setTimeout(() => { if (!cancelled) apply(); }, ms));
         return () => { cancelled = true; timers.forEach(clearTimeout); cleanup(); };
     }, [tasks, viewMode, taskBranchMap, branchWorkOnHolidays]);
+
+    // Wycentruj etykiety tygodni w nagłówku — tylko widok tygodnia (miesiące są już centrowane przez bibliotekę)
+    useEffect(() => {
+        if (!tasks.length || viewMode !== ViewMode.Week) return;
+        const center = () => {
+            const wrapper = wrapperRef.current;
+            if (!wrapper) return false;
+            const vc = wrapper.querySelector('[class*="CZjuD"], [class*="ganttVerticalContainer"]');
+            if (!vc) return false;
+            const calSvg = Array.from(vc.children).find(el => el.tagName === 'svg');
+            if (!calSvg) return false;
+            const headerH = parseFloat(calSvg.getAttribute('height') || '0');
+            if (!headerH) return false;
+            const midY = headerH / 2;
+            const weekTexts = Array.from(calSvg.querySelectorAll('text'))
+                .filter(t => parseFloat(t.getAttribute('y') || '0') > midY && t.getAttribute('text-anchor') !== 'middle');
+            if (!weekTexts.length) return false;
+            weekTexts.sort((a, b) => parseFloat(a.getAttribute('x') || '0') - parseFloat(b.getAttribute('x') || '0'));
+            const svgW = parseFloat(calSvg.getAttribute('width') || '0');
+            weekTexts.forEach((t, i) => {
+                const x = parseFloat(t.getAttribute('x') || '0');
+                const nextX = i < weekTexts.length - 1
+                    ? parseFloat(weekTexts[i + 1].getAttribute('x') || '0') : svgW;
+                t.setAttribute('x', String(x + (nextX - x) / 2));
+                t.setAttribute('text-anchor', 'middle');
+            });
+            return true;
+        };
+        const timers = [50, 200, 600, 1200].map(ms => setTimeout(center, ms));
+        return () => timers.forEach(clearTimeout);
+    }, [tasks, viewMode]);
 
     const exportPdf = useCallback(() => {
         const node = wrapperRef.current?.querySelector('.ignite-gantt-print');
@@ -583,6 +813,25 @@ h1 { font-size: 18px; margin: 0 0 12px 0; }
         win.document.close();
     }, [projectName]);
 
+    useEffect(() => { onExportReady?.(exportPdf); }, [exportPdf, onExportReady]);
+
+    const getGanttHtml = useCallback(() => {
+        const node = wrapperRef.current?.querySelector('.ignite-gantt-print');
+        if (!node) return null;
+        // Zmierz pełną szerokość scrolla (timeline + lewa tabela)
+        const contentWidth = node.scrollWidth || node.offsetWidth || 1200;
+        const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+            .map(s => s.outerHTML)
+            .join('\n');
+        return { html: node.outerHTML, styles, contentWidth };
+    }, []);
+    useEffect(() => { onGetHtmlReady?.(getGanttHtml); }, [getGanttHtml, onGetHtmlReady]);
+
+    const ganttTableCtx = useMemo(
+        () => ({ editCell, setEditCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap }),
+        [editCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap]
+    );
+
     if (!items.length) {
         return (
             <div className="p-6 text-center text-gray-500 text-sm">
@@ -596,6 +845,7 @@ h1 { font-size: 18px; margin: 0 0 12px 0; }
     const popupBranchId = popup?.branchId;
 
     return (
+        <GanttTableContext.Provider value={ganttTableCtx}>
         <div ref={wrapperRef} className="flex flex-col flex-1 min-h-0">
             <div className="flex items-center gap-3 px-4 py-2 border-b border-white/10 bg-white/[0.02] text-xs flex-wrap">
                 <label className="flex items-center gap-2 text-gray-300">
@@ -632,24 +882,18 @@ h1 { font-size: 18px; margin: 0 0 12px 0; }
                     </span>
                 )}
                 <div className="ml-auto flex items-center gap-3 text-[10px] text-gray-400">
-                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: '#10b981' }} />praca</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: '#8b5cf6' }} />usługa/pakiet</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: 'rgba(248,113,113,0.4)' }} />dzień wolny</span>
-                    <button
-                        onClick={exportPdf}
-                        className="ml-2 flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all"
-                    >
-                        Eksport PDF
-                    </button>
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: 'linear-gradient(90deg,#1d4ed8,#0891b2)' }} />zadania</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ background: 'rgba(100,110,120,0.18)', border: '1px solid rgba(150,160,170,0.3)' }} />dzień wolny</span>
                 </div>
             </div>
 
+            <style>{`.ignite-gantt-print svg g[tabindex] text { fill: #ffffff !important; }`}</style>
             <div className="ignite-gantt-print flex-1 min-h-0 overflow-auto custom-scrollbar bg-white/[0.02]">
                 <Gantt
                     tasks={tasks}
                     viewMode={viewMode}
                     locale="pl"
-                    listCellWidth="100px"
+                    listCellWidth="500px"
                     columnWidth={viewMode === ViewMode.Day ? 50 : viewMode === ViewMode.Week ? 90 : 220}
                     rowHeight={32}
                     barCornerRadius={4}
@@ -664,7 +908,8 @@ h1 { font-size: 18px; margin: 0 0 12px 0; }
                 />
             </div>
 
-            {popup && popupBranchId && branchInfoMap[popupBranchId] && (
+        </div>
+        {popup && popupBranchId && branchInfoMap[popupBranchId] && (
                 <div
                     ref={popupRef}
                     style={{
@@ -691,6 +936,6 @@ h1 { font-size: 18px; margin: 0 0 12px 0; }
                     </label>
                 </div>
             )}
-        </div>
+        </GanttTableContext.Provider>
     );
 }

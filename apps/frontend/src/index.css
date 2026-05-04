@@ -31,6 +31,29 @@ body {
   @apply bg-black/60 backdrop-blur-md border border-white/10 shadow-2xl rounded-2xl;
 }
 
+/* gantt-task-react – override jasnych kolorów na ciemny motyw */
+.ignite-gantt-print ._34SS0 { background-color: rgba(255, 255, 255, 0.025); color: #cbd5e1; }
+.ignite-gantt-print ._34SS0:nth-of-type(even) { background-color: rgba(255, 255, 255, 0.06); }
+.ignite-gantt-print ._34SS0:hover { background-color: rgba(34, 211, 238, 0.10); }
+.ignite-gantt-print ._3lLk3 { color: #e2e8f0 !important; }
+.ignite-gantt-print ._WuQ0f { color: #cbd5e1 !important; background: rgba(255,255,255,0.03); }
+.ignite-gantt-print ._3_ygE,
+.ignite-gantt-print ._3ZbQT { border-color: rgba(255,255,255,0.10) !important; }
+.ignite-gantt-print ._2eZzQ { border-right-color: rgba(255,255,255,0.10) !important; }
+.ignite-gantt-print ._35nLX { fill: rgba(255,255,255,0.03); stroke: rgba(255,255,255,0.10); stroke-width: 1; }
+.ignite-gantt-print ._2dZTy { fill: rgba(255,255,255,0.025); }
+.ignite-gantt-print ._2dZTy:nth-child(even) { fill: rgba(255,255,255,0.06); }
+.ignite-gantt-print ._3rUKi,
+.ignite-gantt-print ._RuwuK,
+.ignite-gantt-print ._1rLuZ { stroke: rgba(255,255,255,0.08); }
+.ignite-gantt-print ._9w8d5,
+.ignite-gantt-print ._2q1Kt { fill: #cbd5e1; }
+.ignite-gantt-print ._3KcaM { fill: #94a3b8; }
+.ignite-gantt-print ._2QjE6 { color: #cbd5e1; }
+.ignite-gantt-print ._2TfEi { color: #94a3b8; }
+.ignite-gantt-print ._3T42e { background: #0d1520 !important; color: #cbd5e1 !important; border: 1px solid rgba(255,255,255,0.12) !important; box-shadow: 0 4px 20px rgba(0,0,0,0.6) !important; }
+.ignite-gantt-print ._29NTg { color: #94a3b8 !important; }
+
 /* AG Grid Select Editor (Dropdown) Styling */
 .ag-select-list {
   background: rgba(20, 20, 20, 0.95) !important;
@@ -66,3 +89,71 @@ input[type=number] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* react-datepicker dark theme for Gantt */
+.ignite-dp .react-datepicker {
+  background: #0d1520;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 12px;
+  color: #e2e8f0;
+}
+.ignite-dp .react-datepicker__header {
+  background: #111827;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px 10px 0 0;
+  padding: 8px 0 4px;
+}
+.ignite-dp .react-datepicker__current-month,
+.ignite-dp .react-datepicker-year-header {
+  color: #e2e8f0;
+  font-weight: 600;
+  font-size: 12px;
+}
+.ignite-dp .react-datepicker__day-name {
+  color: #64748b;
+  font-size: 10px;
+  width: 28px;
+  line-height: 24px;
+}
+.ignite-dp .react-datepicker__day {
+  color: #cbd5e1;
+  width: 28px;
+  line-height: 28px;
+  border-radius: 6px;
+  margin: 1px;
+}
+.ignite-dp .react-datepicker__day:hover {
+  background: rgba(34,211,238,0.15);
+  color: #67e8f9;
+}
+.ignite-dp .react-datepicker__day--selected,
+.ignite-dp .react-datepicker__day--keyboard-selected {
+  background: #0891b2;
+  color: #fff;
+  font-weight: 600;
+}
+.ignite-dp .react-datepicker__day--today {
+  border: 1px solid rgba(34,211,238,0.4);
+  color: #67e8f9;
+}
+.ignite-dp .react-datepicker__day--outside-month {
+  color: #334155;
+}
+.ignite-dp .react-datepicker__day--weekend {
+  color: #94a3b8;
+}
+.ignite-dp .react-datepicker__navigation-icon::before {
+  border-color: #64748b;
+}
+.ignite-dp .react-datepicker__navigation:hover .react-datepicker__navigation-icon::before {
+  border-color: #67e8f9;
+}
+.ignite-dp .react-datepicker__month-container { padding: 4px; }
+.ignite-dp .react-datepicker-popper { z-index: 9999; }
+.ignite-dp .react-datepicker-popper[data-placement^=bottom] .react-datepicker__triangle::before,
+.ignite-dp .react-datepicker-popper[data-placement^=bottom] .react-datepicker__triangle::after { border-bottom-color: #111827; }
+.ignite-dp .react-datepicker-popper[data-placement^=top] .react-datepicker__triangle::before,
+.ignite-dp .react-datepicker-popper[data-placement^=top] .react-datepicker__triangle::after { border-top-color: #0d1520; }

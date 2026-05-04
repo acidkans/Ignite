@@ -125,6 +125,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const [reqRefreshKey, setReqRefreshKey] = useState(0);
     const materialsExportFn = useRef(null);
     const materialsPdfExportFn = useRef(null);
+    const ganttExportRef = useRef(null);
+    const ganttGetHtmlRef = useRef(null);
 
     const assignableProjectUsers = useMemo(() => {
         if (!Array.isArray(projectUsers) || projectUsers.length === 0) return [];
@@ -1812,10 +1814,10 @@ ${materialsHtml}
 
     // Drag krawędzi belki w Gantcie → quantity (dni) + unit='dni' przez wbs-nodes/{id} (PATCH).
     // Używa updateNodeField który optymistycznie aktualizuje wbsData i wbsTree.
-    const handleGanttDurationChange = useCallback((nodeId, days) => {
+    const handleGanttDurationChange = useCallback(async (nodeId, days) => {
         if (!nodeId || !Number.isFinite(days)) return;
-        updateNodeField(nodeId, 'quantity', String(days));
-        updateNodeField(nodeId, 'unit', 'dni');
+        await updateNodeField(nodeId, 'quantity', String(days));
+        await updateNodeField(nodeId, 'unit', 'dni');
     }, [updateNodeField]);
 
     const saveBudgetField = useCallback(async (wbsNodeId, data) => {
@@ -2635,7 +2637,7 @@ ${materialsHtml}
                         {onExport && (
                             <>
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); exportProjectPdf({ nodeId, versionId, projectName, orderName }); }}
+                                    onClick={(e) => { e.stopPropagation(); exportProjectPdf({ nodeId, versionId, projectName, orderName, ganttHtml: ganttGetHtmlRef.current?.() || null }); }}
                                     className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                                 >
                                     <FileDown size={11} /> PDF wszystkie sekcje
@@ -2699,8 +2701,10 @@ ${materialsHtml}
                     wbsTree={wbsTree}
                     projectName={orderName || projectName || 'Projekt'}
                     onNodeDurationChange={handleGanttDurationChange}
+                    onExportReady={fn => { ganttExportRef.current = fn; }}
+                    onGetHtmlReady={fn => { ganttGetHtmlRef.current = fn; }}
                 />
-            ))}
+            ), () => ganttExportRef.current?.())}
 
             {renderSection('wbs-hybrid', `Struktura projektu: ${orderName || projectName || '—'}`, ListTree, 'violet', (
                 <div className="flex flex-col flex-1 min-h-0">
