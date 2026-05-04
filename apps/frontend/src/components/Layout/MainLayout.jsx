@@ -228,7 +228,13 @@ export default function MainLayout({ onLogout }) {
                 <div className="p-2 border-t border-white/5 bg-black/20 backdrop-blur-sm">
                     <div className="flex items-center gap-2">
                         <NotificationBell
-                            onNavigateToOrder={(orderId, requirementId) => { pendingTabRef.current = requirementId ? 'materials' : 'comments'; pendingRequirementIdRef.current = requirementId || null; handleNodeChange(orderId); }}
+                            onNavigateToOrder={(orderId, requirementId) => {
+                                const tab = requirementId ? 'materials' : 'comments';
+                                pendingTabRef.current = tab;
+                                pendingRequirementIdRef.current = requirementId || null;
+                                window.dispatchEvent(new CustomEvent('notification-navigate', { detail: { orderId, tab } }));
+                                handleNodeChange(orderId);
+                            }}
                             onNewUnread={triggerFlash}
                         />
                         <button

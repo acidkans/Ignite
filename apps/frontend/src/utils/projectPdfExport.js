@@ -117,7 +117,7 @@ const fetchJson = async (url, token) => {
     }
 };
 
-export async function exportProjectPdf({ nodeId, versionId, projectName, orderName }) {
+export async function exportProjectPdf({ nodeId, versionId, projectName, orderName, ganttHtml = null }) {
     if (!nodeId) { alert('Brak nodeId — nie można wygenerować PDF.'); return; }
     const token = sessionStorage.getItem('token');
     if (!token) { alert('Brak sesji — zaloguj się ponownie.'); return; }
@@ -271,6 +271,18 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
             </table>` : '<div class="empty">Brak danych budżetowych.</div>'}
         </div>`;
 
+    // === Section: Harmonogram (Gantt) ===
+    const ganttData = ganttHtml && typeof ganttHtml === 'object' ? ganttHtml : null;
+    const A4_LANDSCAPE_PX = 950; // A4 landscape content width at 96dpi minus margins
+    const ganttZoom = ganttData?.contentWidth > A4_LANDSCAPE_PX
+        ? (A4_LANDSCAPE_PX / ganttData.contentWidth).toFixed(4)
+        : '1';
+    const ganttSectionHtml = ganttData ? `
+        <div class="section">
+            <div class="section-header">Harmonogram (Gantt)</div>
+            <div class="gantt-wrap"><div class="gantt-scale-inner" style="zoom:${ganttZoom};transform-origin:top left">${ganttData.html}</div></div>
+        </div>` : '';
+
     // === Section: Materiały ===
     const matRows = (materials || []).filter((r) => r && r.id);
     const materialsHtml = `
@@ -333,7 +345,19 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
   .empty { padding: 10px 12px; font-size: 10px; color: #6b7280; background: #f9fafb; border: 1px solid #e5e7eb; }
   thead { display: table-header-group; }
   tr { page-break-inside: avoid; break-inside: avoid; }
+  .gantt-wrap { overflow: hidden; background: #fff; padding: 8px 0; }
+  .gantt-wrap svg text { fill: #0b0f17 !important; }
+  .gantt-wrap [class*="WuQ0f"] { background: #fff !important; }
   @page { margin: 20mm 14mm; size: A4 landscape; }
+</style>
+${ganttData ? ganttData.styles : ''}
+<style>
+  /* Gantt overrides po załadowaniu bibliotecznych styli */
+  .gantt-wrap { background: #fff !important; overflow: hidden; }
+  .gantt-wrap > * { background: #fff !important; }
+  .gantt-wrap [class] { background: #fff !important; }
+  .gantt-wrap svg text { fill: #0b0f17 !important; }
+  .gantt-scale-inner { transform-origin: top left; }
 </style>
 </head>
 <body>
@@ -349,7 +373,11 @@ ${requirementsHtml}
 ${infoHtml}
 ${strategyHtml}
 ${wbsHtml}
+${ganttSectionHtml}
 ${materialsHtml}
+<script>
+window.addEventListener('load', function() { setTimeout(function() { try { window.print(); } catch(e) {} }, 400); });
+</script>
 </body>
 </html>`;
 
@@ -357,5 +385,4 @@ ${materialsHtml}
     win.document.write(html);
     win.document.close();
     win.focus();
-    setTimeout(() => { try { win.print(); } catch (e) { /* user can print manually */ } }, 500);
 }
