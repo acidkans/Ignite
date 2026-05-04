@@ -4,6 +4,13 @@
 
 import { API_URL } from '../config';
 
+const flattenWbsItems = (items) => {
+    const result = [];
+    const walk = (nodes) => { for (const n of nodes || []) { result.push(n); walk(n.children); } };
+    walk(items);
+    return result;
+};
+
 const TYPE_LABELS = {
     project: 'Projekt',
     region: 'Region',
@@ -140,7 +147,10 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
     ]);
 
     const wbsNodes = Array.isArray(wbsResp?.items) ? wbsResp.items : [];
-    const materials = Array.isArray(matsResp) ? matsResp : (Array.isArray(matsResp?.items) ? matsResp.items : []);
+    const allMaterials = Array.isArray(matsResp) ? matsResp : (Array.isArray(matsResp?.items) ? matsResp.items : []);
+    const activeWbsIds = new Set(flattenWbsItems(wbsNodes).map(n => n.id));
+    // Wyklucz materiały których węzeł WBS został usunięty z drzewa
+    const materials = allMaterials.filter(r => !r.wbsNodeId || activeWbsIds.has(r.wbsNodeId));
 
     // Fetch marker links for all WBS nodes in parallel
     const markerEntries = await Promise.all(
