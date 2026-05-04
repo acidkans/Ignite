@@ -619,6 +619,9 @@ export default function WbsMaterialsPanel({
     const sortedFilteredNodes = useMemo(() => {
         let nodes = [...matNodes];
 
+        const matchTokens = (text, q) =>
+            q.split(/[\s/]+/).filter(Boolean).every(t => text.toLowerCase().includes(t));
+
         // Global search
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
@@ -627,7 +630,7 @@ export default function WbsMaterialsPanel({
                 const parent = getParentPath(n.path);
                 return (n.name || '').toLowerCase().includes(q) ||
                     (TYPE_META[n.type]?.label || '').toLowerCase().includes(q) ||
-                    parent.toLowerCase().includes(q) ||
+                    matchTokens(parent, q) ||
                     (c?.manufacturer || '').toLowerCase().includes(q) ||
                     (c?.model || '').toLowerCase().includes(q) ||
                     (STATUS_META[c?.status]?.label || '').toLowerCase().includes(q);
@@ -641,7 +644,7 @@ export default function WbsMaterialsPanel({
             nodes = nodes.filter(n => {
                 const c = cards[n.id];
                 const parent = getParentPath(n.path);
-                if (key === 'parent') return parent.toLowerCase().includes(q);
+                if (key === 'parent') return matchTokens(parent, q);
                 if (key === 'name')   return (n.name || '').toLowerCase().includes(q);
                 if (key === 'qty')    return String(n.quantity ?? '').includes(q);
                 if (key === 'product') return `${c?.manufacturer || ''} ${c?.model || ''}`.toLowerCase().includes(q);
