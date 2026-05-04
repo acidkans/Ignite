@@ -108,11 +108,11 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
     cursor.setHours(0, 0, 0, 0);
     let rootMaxEnd = new Date(cursor);
 
-    const hasNonMaterialLeaf = (node) => {
+    const hasWorkOrServiceLeaf = (node) => {
         if (Array.isArray(node.children) && node.children.length > 0) {
-            return node.children.some(hasNonMaterialLeaf);
+            return node.children.some(hasWorkOrServiceLeaf);
         }
-        return !isMaterialType(node.type);
+        return isWorkType(node.type) || isServiceType(node.type);
     };
 
     const walk = (nodes, parentId, depth, branchWow, currentBranchId) => {
@@ -120,9 +120,9 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
         let groupEnd = null;
 
         for (const node of nodes) {
-            if (isMaterialType(node.type) && !(Array.isArray(node.children) && node.children.length > 0)) continue;
             const hasChildren = Array.isArray(node.children) && node.children.length > 0;
-            if (hasChildren && !hasNonMaterialLeaf(node)) continue;
+            if (!hasChildren && !isWorkType(node.type) && !isServiceType(node.type)) continue;
+            if (hasChildren && !hasWorkOrServiceLeaf(node)) continue;
 
             const colors = colorForType(node.type);
             const niceName = String(node.name || '').trim() || '(bez nazwy)';
@@ -157,6 +157,7 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
                     progress: 0,
                     hideChildren: false,
                     project: parentId || undefined,
+                    _color: grpColors.bg,
                     styles: {
                         backgroundColor: grpColors.bg,
                         backgroundSelectedColor: grpColors.sel,
@@ -201,6 +202,7 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
                     end,
                     progress: 0,
                     project: parentId || undefined,
+                    _color: colors.bg,
                     styles: {
                         backgroundColor: colors.bg,
                         backgroundSelectedColor: colors.sel,
@@ -219,6 +221,43 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
     walk(items, null, 0, false, null);
     return { tasks, taskBranchMap };
 };
+
+const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+
+const GanttTaskListHeader = ({ headerHeight, rowWidth, fontFamily, fontSize }) => (
+    <div style={{ display: 'flex', height: headerHeight, fontFamily, borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#0b0f17', boxSizing: 'border-box', width: rowWidth, flexShrink: 0 }}>
+        <div style={{ flex: '1 1 0', padding: '0 8px', display: 'flex', alignItems: 'flex-end', paddingBottom: 6, color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Zadanie</div>
+        <div style={{ width: 100, padding: '0 6px', display: 'flex', alignItems: 'flex-end', paddingBottom: 6, color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', justifyContent: 'center' }}>Od</div>
+        <div style={{ width: 100, padding: '0 6px', display: 'flex', alignItems: 'flex-end', paddingBottom: 6, color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', justifyContent: 'center' }}>Do</div>
+    </div>
+);
+
+const GanttTaskListTable = ({ rowHeight, rowWidth, fontFamily, fontSize, tasks, selectedTaskId, setSelectedTask, onExpanderClick }) => (
+    <div style={{ fontFamily, fontSize, width: rowWidth, flexShrink: 0 }}>
+        {tasks.map((task) => {
+            const color = task._color || '#e2e8f0';
+            const isGroup = task.type === 'project';
+            const isMilestone = task.type === 'milestone';
+            return (
+                <div
+                    key={task.id}
+                    style={{ display: 'flex', height: rowHeight, alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', background: task.id === selectedTaskId ? 'rgba(255,255,255,0.05)' : 'transparent', cursor: isGroup ? 'pointer' : 'default', boxSizing: 'border-box', width: rowWidth }}
+                    onClick={() => { setSelectedTask(task.id); if (isGroup) onExpanderClick(task); }}
+                >
+                    <div style={{ flex: '1 1 0', paddingLeft: isGroup ? 8 : 22, paddingRight: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color, fontWeight: isGroup ? 600 : 400 }}>
+                        {task.name}
+                    </div>
+                    <div style={{ width: 100, padding: '0 6px', textAlign: 'center', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 11 }}>
+                        {fmtDate(task.start)}
+                    </div>
+                    <div style={{ width: 100, padding: '0 6px', textAlign: 'center', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 11 }}>
+                        {isMilestone ? fmtDate(task.start) : fmtDate(task.end)}
+                    </div>
+                </div>
+            );
+        })}
+    </div>
+);
 
 const VIEW_OPTS = [
     { v: ViewMode.Day, label: 'Dzień' },
@@ -610,7 +649,7 @@ h1 { font-size: 18px; margin: 0 0 12px 0; }
                     tasks={tasks}
                     viewMode={viewMode}
                     locale="pl"
-                    listCellWidth="220px"
+                    listCellWidth="100px"
                     columnWidth={viewMode === ViewMode.Day ? 50 : viewMode === ViewMode.Week ? 90 : 220}
                     rowHeight={32}
                     barCornerRadius={4}
@@ -620,6 +659,8 @@ h1 { font-size: 18px; margin: 0 0 12px 0; }
                     timeStep={DAY_MS}
                     todayColor="rgba(34,211,238,0.18)"
                     TooltipContent={() => null}
+                    TaskListHeader={GanttTaskListHeader}
+                    TaskListTable={GanttTaskListTable}
                 />
             </div>
 
