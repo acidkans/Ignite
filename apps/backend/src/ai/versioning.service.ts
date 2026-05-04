@@ -201,7 +201,69 @@ export class VersioningService {
                 }
             }
 
-            // 9. Deactivate other versions
+            // 9. Clone Material Requirements (with wbsNodeId + subtaskId remap)
+            const matReqs = await loadSourceRows((extra) => tx.materialRequirement.findMany({
+                where: { nodeId, ...extra }
+            }));
+
+            const matReqIdMap = new Map<string, string>();
+
+            // First pass: create without materialId (self-ref parent)
+            for (const mr of matReqs) {
+                const newId = require('crypto').randomUUID();
+                matReqIdMap.set(mr.id, newId);
+                const newWbsNodeId = mr.wbsNodeId ? (wbsIdMap.get(mr.wbsNodeId) ?? null) : null;
+                const newSubtaskId = mr.assignedSubtaskId ? (subtaskIdMap.get(mr.assignedSubtaskId) ?? null) : null;
+                await tx.materialRequirement.create({
+                    data: {
+                        id: newId,
+                        nodeId,
+                        versionId: newVersion.id,
+                        type: mr.type,
+                        quantity: mr.quantity,
+                        unit: mr.unit,
+                        name: mr.name,
+                        technicalSpec: mr.technicalSpec,
+                        sourceDocument: mr.sourceDocument,
+                        productName: mr.productName,
+                        manufacturer: mr.manufacturer,
+                        model: mr.model,
+                        dataSheetUrl: mr.dataSheetUrl,
+                        dataSheetName: mr.dataSheetName,
+                        complianceUrl: mr.complianceUrl,
+                        complianceName: mr.complianceName,
+                        complianceData: mr.complianceData,
+                        imageUrl: mr.imageUrl,
+                        productUrl: mr.productUrl,
+                        seller: mr.seller,
+                        offerNumber: mr.offerNumber,
+                        priceNetto: mr.priceNetto,
+                        availability: mr.availability,
+                        stockStatus: mr.stockStatus,
+                        wbsNodeIds: mr.wbsNodeIds,
+                        wbsNodeAllocations: mr.wbsNodeAllocations,
+                        wbsNodeId: newWbsNodeId,
+                        assignedSubtaskId: newSubtaskId,
+                        isAiAssigned: mr.isAiAssigned,
+                        aiConfidence: mr.aiConfidence,
+                        status: mr.status,
+                        listId: null,
+                        materialId: null,
+                    }
+                });
+            }
+
+            // Second pass: remap materialId (self-ref parent)
+            for (const mr of matReqs) {
+                if (mr.materialId && matReqIdMap.has(mr.materialId)) {
+                    await tx.materialRequirement.update({
+                        where: { id: matReqIdMap.get(mr.id)! },
+                        data: { materialId: matReqIdMap.get(mr.materialId)! },
+                    });
+                }
+            }
+
+            // 10. Deactivate other versions
             await tx.projectVersion.updateMany({
                 where: {
                     nodeId,
