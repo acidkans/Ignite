@@ -176,9 +176,9 @@ export default function BudgetTable({
 
     useEffect(() => { displayedRowsRef.current = displayedRows; }, [displayedRows]);
 
-    const summary = useMemo(() => {
+    const calcSummary = useCallback((rows) => {
         let totalCost = 0, rawRevenue = 0;
-        for (const r of localRows) {
+        for (const r of rows) {
             totalCost += parseFloat(r.totalCost) || 0;
             rawRevenue += parseFloat(r.offerPrice) || 0;
         }
@@ -189,8 +189,12 @@ export default function BudgetTable({
         const totalRevenue = Math.max(0, rawRevenue - discFromPct - discFromAmt);
         const profit = totalRevenue - totalCost;
         const marginPct = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
-        return { totalCost, totalRevenue, rawRevenue, profit, marginPct, rows: localRows.length };
-    }, [localRows, discountPercent, discountAmount]);
+        return { totalCost, totalRevenue, rawRevenue, profit, marginPct, rows: rows.length };
+    }, [discountPercent, discountAmount]);
+
+    const summary = useMemo(() => calcSummary(localRows), [localRows, calcSummary]);
+    const filteredSummary = useMemo(() => calcSummary(filteredRows), [filteredRows, calcSummary]);
+    const isFiltered = filteredRows.length !== localRows.length;
 
     const handleCellFocus = useCallback((rowId) => {
         clearTimeout(blurTimer.current);
@@ -281,20 +285,32 @@ export default function BudgetTable({
                 <div className="grid grid-cols-2 xl:grid-cols-6 gap-2">
                     <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2">
                         <div className="text-[10px] uppercase tracking-widest text-red-300/90 font-bold">Koszt</div>
-                        <div className="text-sm font-black text-red-200">{fmtPLNFull(summary.totalCost)} PLN</div>
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                            <span className="text-sm font-black text-red-200">{fmtPLNFull(summary.totalCost)} PLN</span>
+                            {isFiltered && <span className="text-[10px] text-red-300/70" title="widok filtrowany">/ {fmtPLNFull(filteredSummary.totalCost)} PLN ({filteredSummary.rows} w.)</span>}
+                        </div>
                     </div>
                     <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2">
                         <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Przychód</div>
-                        <div className="text-sm font-black text-green-200">{fmtPLNFull(summary.totalRevenue)} PLN</div>
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                            <span className="text-sm font-black text-green-200">{fmtPLNFull(summary.totalRevenue)} PLN</span>
+                            {isFiltered && <span className="text-[10px] text-green-300/70" title="widok filtrowany">/ {fmtPLNFull(filteredSummary.totalRevenue)} PLN</span>}
+                        </div>
                     </div>
                     <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2">
                         <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Zysk</div>
-                        <div className="text-sm font-black text-green-200">{fmtPLNFull(summary.profit)} PLN</div>
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                            <span className="text-sm font-black text-green-200">{fmtPLNFull(summary.profit)} PLN</span>
+                            {isFiltered && <span className="text-[10px] text-green-300/70" title="widok filtrowany">/ {fmtPLNFull(filteredSummary.profit)} PLN</span>}
+                        </div>
                     </div>
                     <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2">
                         <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Marża</div>
-                        <div className="text-sm font-black text-green-200">{fmtPctFull(summary.marginPct)}</div>
-                        <div className="text-[10px] text-green-200/70 mt-0.5">{summary.rows} wierszy</div>
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                            <span className="text-sm font-black text-green-200">{fmtPctFull(summary.marginPct)}</span>
+                            {isFiltered && <span className="text-[10px] text-green-300/70" title="widok filtrowany">/ {fmtPctFull(filteredSummary.marginPct)}</span>}
+                        </div>
+                        <div className="text-[10px] text-green-200/70 mt-0.5">{isFiltered ? `${filteredSummary.rows} / ${summary.rows} wierszy` : `${summary.rows} wierszy`}</div>
                     </div>
                     <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 px-3 py-2">
                         <div className="text-[10px] uppercase tracking-widest text-orange-300/90 font-bold">Rabat — %</div>
