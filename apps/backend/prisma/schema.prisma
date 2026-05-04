@@ -494,6 +494,7 @@ model WbsMarkerLink {
   marker    SchematicMarker @relation(fields: [markerId], references: [id], onDelete: Cascade)
 
   @@unique([wbsNodeId, markerId])
+  @@index([wbsNodeId])
   @@map("wbs_marker_links")
 }
 
