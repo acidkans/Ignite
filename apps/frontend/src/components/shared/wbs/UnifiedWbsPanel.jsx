@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ExcelJS from 'exceljs';
-import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays } from 'lucide-react';
+import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays, BarChart3 } from 'lucide-react';
 import MarkdownEditor from '../MarkdownEditor';
 import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
+import GanttSection from './GanttSection';
 import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType } from './wbsConstants';
 import { exportProjectPdf } from '../../../utils/projectPdfExport';
 import WBSHybridTable from './WBSHybridTable';
@@ -1213,7 +1214,7 @@ ${materialsHtml}
             return;
         }
 
-        // Przelicz totalCost i offerPrice tak samo jak BudgetTable (calcDerived: uc×qty),
+        // Przelicz tak samo jak BudgetTable (calcDerived: uc×qty),
         // żeby Podsumowanie i arkusz Budżet pokazywały te same wartości po przeliczeniu formuł.
         const rows = rawRows.map(r => {
             const q = Math.max(0, parseFloat(r.quantity) || 0);
@@ -1223,7 +1224,7 @@ ${materialsHtml}
             const totalCost = uc * q;
             let offerPrice = (marginRaw !== null && marginRaw !== 0) ? totalCost * (1 + marginRaw / 100) : 0;
             if (offerPrice > 0 && d > 0) offerPrice = Math.max(0, offerPrice * (1 - d / 100));
-            return { ...r, totalCost, offerPrice };
+            return { ...r, totalCost, cost: totalCost, offerPrice };
         });
 
         const workbook = new ExcelJS.Workbook();
@@ -1821,6 +1822,14 @@ ${materialsHtml}
             }
         } catch (e) { console.error('Update node error:', e); }
     }, [authHeaders, wbsData, refreshMaterialCosts]);
+
+    // Drag krawędzi belki w Gantcie → quantity (dni) + unit='dni' przez wbs-nodes/{id} (PATCH).
+    // Używa updateNodeField który optymistycznie aktualizuje wbsData i wbsTree.
+    const handleGanttDurationChange = useCallback((nodeId, days) => {
+        if (!nodeId || !Number.isFinite(days)) return;
+        updateNodeField(nodeId, 'quantity', String(days));
+        updateNodeField(nodeId, 'unit', 'dni');
+    }, [updateNodeField]);
 
     const saveBudgetField = useCallback(async (wbsNodeId, data) => {
         try {
@@ -2469,10 +2478,13 @@ ${materialsHtml}
                     const directParent = item.parentId ? byId.get(item.parentId) : null;
                     const parentIsRoot = !directParent?.parentId;
                     const parentName = (directParent && !parentIsRoot) ? (directParent.name || '') : '';
+                    const itemSegs = (item.path || '').split(' › ');
+                    const subjectPath = itemSegs.length > 1 ? itemSegs.slice(0, -1).join(' / ') : (itemSegs[0] || subjectName);
                     return {
                         ...item,
                         subjectId: subject.id,
                         subjectName,
+                        subjectPath,
                         parentName,
                         status: inheritedStatus.code,
                         statusLabel: inheritedStatus.label,
@@ -2606,7 +2618,7 @@ ${materialsHtml}
     const renderSection = (key, title, Icon, colorClass, content, onExport, extraButtons = null) => {
         const isActive = expandedSection === key;
         const isHidden = expandedSection !== null && !isActive;
-        const isCompactSection = key === 'budget' || key === 'materials' || key === 'wbs-hybrid' || key === 'strategy';
+        const isCompactSection = key === 'budget' || key === 'materials' || key === 'wbs-hybrid' || key === 'strategy' || key === 'gantt';
 
         return (
             <div
@@ -2659,7 +2671,7 @@ ${materialsHtml}
         );
     };
 
-    const isCompactActive = (expandedSection === 'budget' || expandedSection === 'materials' || expandedSection === 'wbs-hybrid' || expandedSection === 'strategy');
+    const isCompactActive = (expandedSection === 'budget' || expandedSection === 'materials' || expandedSection === 'wbs-hybrid' || expandedSection === 'strategy' || expandedSection === 'gantt');
 
     return (
         <div className={`flex flex-col w-full h-full relative bg-[#0a0c10]/50 border border-white/[0.03] gap-1 pt-0 ${isCompactActive ? 'overflow-hidden p-0' : 'overflow-y-auto pr-2 custom-scrollbar rounded-[40px] p-2'}`}>
@@ -2692,6 +2704,14 @@ ${materialsHtml}
                     versionId={versionId}
                     nodeName={projectName}
                     onWbsUpdate={onWbsUpdate}
+                />
+            ))}
+
+            {renderSection('gantt', 'Harmonogram (Gantt)', BarChart3, 'cyan', (
+                <GanttSection
+                    wbsTree={wbsTree}
+                    projectName={orderName || projectName || 'Projekt'}
+                    onNodeDurationChange={handleGanttDurationChange}
                 />
             ))}
 
