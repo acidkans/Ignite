@@ -1462,24 +1462,11 @@ ${materialsHtml}
             return;
         }
 
-        // Agregacja po gałęzi depth=1 (bezpośrednie dziecko subjectu/depth=0)
-        const byIdMap = new Map(wbsData.map(item => [item.id, item]));
-        const findDepth1Node = (rowItem) => {
-            let current = rowItem;
-            let parent = current.parentId ? byIdMap.get(current.parentId) : null;
-            while (parent && parent.parentId) {
-                current = parent;
-                parent = byIdMap.get(parent.parentId);
-            }
-            return current;
-        };
+        // Agregacja po najwyższej gałęzi WBS (subjectName = root branch)
         const aggMap = new Map();
         for (const row of rows) {
-            const d1 = findDepth1Node(row);
-            const d1Name = (d1?.name || '—').trim();
-            const d0Name = (row.subjectName || '').trim().toUpperCase();
-            const label = d0Name ? `${d0Name} › ${d1Name}` : d1Name;
-            const key = d1?.id || `__noid__${label}`;
+            const label = (row.subjectName || '—').trim().toUpperCase();
+            const key = row.subjectId || `__noid__${label}`;
             if (!aggMap.has(key)) aggMap.set(key, { label, offerPrice: 0, comments: [] });
             const entry = aggMap.get(key);
             entry.offerPrice += Number(row.offerPrice) || 0;
