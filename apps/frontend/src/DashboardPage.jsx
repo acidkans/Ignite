@@ -10,7 +10,7 @@ import MaterialDatabaseTab from './components/shared/MaterialDatabaseTab';
 import OffersTab from './components/shared/OffersTab';
 import UnifiedWbsPanel from './components/shared/wbs/UnifiedWbsPanel';
 import CommentsSlideOver from './components/shared/CommentsSlideOver';
-import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle } from 'lucide-react';
+import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check } from 'lucide-react';
 import { API_URL } from './config';
 
 function getWeekNumber(date) {
@@ -99,6 +99,8 @@ export default function DashboardPage() {
     const [versions, setVersions] = useState([]);
     const [selectedVersionId, setSelectedVersionId] = useState(null);
     const [showVersionMenu, setShowVersionMenu] = useState(false);
+    const [renamingVersionId, setRenamingVersionId] = useState(null);
+    const [renameValue, setRenameValue] = useState('');
     const [wbsUpdateCount, setWbsUpdateCount] = useState(0);
 
     const now = useMemo(() => new Date(), []);
@@ -156,6 +158,18 @@ export default function DashboardPage() {
             setSelectedVersionId(null);
         }
     }, [activeAreaId, isOrder, isLogistykaArea]);
+
+    // Otwórz chat gdy powiadomienie kliknięte dla tego samego zamówienia (activeAreaId się nie zmienił)
+    useEffect(() => {
+        const handler = (e) => {
+            const { orderId, tab } = e.detail;
+            if (String(orderId) === String(activeAreaId) && isOrder && tab === 'comments') {
+                setShowComments(true);
+            }
+        };
+        window.addEventListener('notification-navigate', handler);
+        return () => window.removeEventListener('notification-navigate', handler);
+    }, [activeAreaId, isOrder]);
 
     const fetchVersions = async () => {
         try {
@@ -233,7 +247,22 @@ export default function DashboardPage() {
         }
     };
 
-
+    const handleRenameVersion = async (versionId, newLabel) => {
+        const trimmed = newLabel.trim();
+        if (!trimmed) { setRenamingVersionId(null); return; }
+        try {
+            await fetch(`/api/ai/versions/${versionId}/label`, {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${sessionStorage.getItem('token')}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ label: trimmed }),
+            });
+            setVersions(prev => prev.map(v => v.id === versionId ? { ...v, label: trimmed } : v));
+        } catch (err) {
+            console.error('Failed to rename version:', err);
+        } finally {
+            setRenamingVersionId(null);
+        }
+    };
 
     const handleTabChange = (tab) => {
         setActiveTab(tab);
@@ -360,13 +389,37 @@ export default function DashboardPage() {
                                         {versions.map(v => (
                                             <div key={v.id} className="group relative flex items-center">
                                                 <button
-                                                    onClick={() => { setSelectedVersionId(v.id); setShowVersionMenu(false); }}
+                                                    onClick={() => { if (renamingVersionId !== v.id) { setSelectedVersionId(v.id); setShowVersionMenu(false); } }}
                                                     className={`flex-1 text-left px-3 py-2 text-xs rounded-lg transition-colors flex items-center gap-1 min-w-0 pr-2 ${selectedVersionId === v.id ? 'bg-white/10 text-white font-bold' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`}
                                                 >
-                                                    <span className="truncate flex-1">{v.label}</span>
-                                                    {v.isActive && <span className="text-[8px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full shrink-0">ACTIVE</span>}
+                                                    {renamingVersionId === v.id ? (
+                                                        <input
+                                                            autoFocus
+                                                            value={renameValue}
+                                                            onChange={e => setRenameValue(e.target.value)}
+                                                            onKeyDown={e => {
+                                                                if (e.key === 'Enter') { e.preventDefault(); handleRenameVersion(v.id, renameValue); }
+                                                                if (e.key === 'Escape') setRenamingVersionId(null);
+                                                            }}
+                                                            onBlur={() => handleRenameVersion(v.id, renameValue)}
+                                                            onClick={e => e.stopPropagation()}
+                                                            className="flex-1 bg-white/10 text-white text-xs px-1 rounded outline-none border border-blue-500/50 min-w-0"
+                                                        />
+                                                    ) : (
+                                                        <>
+                                                            <span className="truncate flex-1">{v.label}</span>
+                                                            {v.isActive && <span className="text-[8px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full shrink-0">ACTIVE</span>}
+                                                        </>
+                                                    )}
                                                 </button>
                                                 <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all pr-1 shrink-0">
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setRenamingVersionId(v.id); setRenameValue(v.label); }}
+                                                        className="p-1 text-gray-500 hover:text-yellow-300"
+                                                        title="Zmień nazwę"
+                                                    >
+                                                        <Pencil size={11} />
+                                                    </button>
                                                     {!v.isActive && (
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); handleActivateVersion(v.id); setShowVersionMenu(false); }}

@@ -10,7 +10,7 @@ const SELECT = 'bg-[#0b0f17] text-white text-sm w-full outline-none rounded px-1
 const FILTER = 'w-full bg-black/30 border border-white/10 rounded px-2 py-0.5 text-xs text-white placeholder-gray-700 outline-none focus:border-blue-500/40';
 
 const NUMERIC_COLS = new Set(['unitCost', 'quantity', 'totalCost', 'margin', 'discount', 'offerPrice']);
-const EDITABLE_COLS = ['subjectName', 'name', 'type', 'unitCost', 'quantity', 'unit', 'margin', 'discount', 'comment'];
+const EDITABLE_COLS = ['name', 'type', 'unitCost', 'quantity', 'unit', 'margin', 'discount', 'comment'];
 
 function calcDerived(r) {
     const q = Math.max(0, parseLocaleNumber(String(r.quantity ?? '')) ?? 1);
@@ -75,7 +75,7 @@ export default function BudgetTable({
     const [localRows, setLocalRows] = useState(() => rows.map(calcDerived));
     const [syncVersion, setSyncVersion] = useState(0);
     const [colFilters, setColFilters] = useState({});
-    const [sort, setSort] = useState({ key: null, dir: null });
+    const [sort, setSort] = useState({ key: 'subjectName', dir: 'asc' });
     const [focusedRowId, setFocusedRowId] = useState(null);
 
     const [colWidths, setColWidths] = useState(
@@ -109,7 +109,7 @@ export default function BudgetTable({
 
     useEffect(() => {
         const newRows = rows.map(calcDerived);
-        const editableFields = ['subjectName', 'name', 'unitCost', 'quantity', 'margin', 'discount', 'comment', 'unit', 'type'];
+        const editableFields = ['name', 'unitCost', 'quantity', 'margin', 'discount', 'comment', 'unit', 'type'];
         let externalChange = newRows.length !== localRows.length;
         if (!externalChange) {
             outer: for (let i = 0; i < newRows.length; i++) {
@@ -143,10 +143,15 @@ export default function BudgetTable({
         const keys = Object.keys(colFilters).filter(k => String(colFilters[k] ?? '').trim() !== '');
         if (keys.length === 0) return localRows;
         const match = (val, q) => String(val ?? '').toLowerCase().includes(q);
+        const matchTokens = (val, q) => {
+            const text = String(val ?? '').toLowerCase();
+            return q.split(/[\s/]+/).filter(Boolean).every(t => text.includes(t));
+        };
         return localRows.filter(r => {
-            if (r.id === focusedRowId) return true; // never hide the row being edited
+            if (r.id === focusedRowId) return true;
             return keys.every(k => {
                 const q = String(colFilters[k]).toLowerCase().trim();
+                if (k === 'subjectName') return matchTokens(r.subjectPath || r.subjectName, q);
                 const val = k === 'type' ? (TYPE_LABELS[r.type] || r.type) : r[k];
                 return match(val, q);
             });
@@ -157,7 +162,7 @@ export default function BudgetTable({
         if (!sort.key || !sort.dir) return filteredRows;
         const dir = sort.dir === 'asc' ? 1 : -1;
         const isNum = NUMERIC_COLS.has(sort.key);
-        const get = (r) => sort.key === 'type' ? (TYPE_LABELS[r.type] || r.type || '') : r[sort.key];
+        const get = (r) => sort.key === 'type' ? (TYPE_LABELS[r.type] || r.type || '') : sort.key === 'subjectName' ? (r.subjectPath || r.subjectName || '') : r[sort.key];
         return [...filteredRows].sort((a, b) => {
             const av = get(a), bv = get(b);
             if (isNum) {
@@ -171,9 +176,9 @@ export default function BudgetTable({
 
     useEffect(() => { displayedRowsRef.current = displayedRows; }, [displayedRows]);
 
-    const summary = useMemo(() => {
+    const calcSummary = useCallback((rows) => {
         let totalCost = 0, rawRevenue = 0;
-        for (const r of localRows) {
+        for (const r of rows) {
             totalCost += parseFloat(r.totalCost) || 0;
             rawRevenue += parseFloat(r.offerPrice) || 0;
         }
@@ -184,8 +189,12 @@ export default function BudgetTable({
         const totalRevenue = Math.max(0, rawRevenue - discFromPct - discFromAmt);
         const profit = totalRevenue - totalCost;
         const marginPct = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
-        return { totalCost, totalRevenue, rawRevenue, profit, marginPct, rows: localRows.length };
-    }, [localRows, discountPercent, discountAmount]);
+        return { totalCost, totalRevenue, rawRevenue, profit, marginPct, rows: rows.length };
+    }, [discountPercent, discountAmount]);
+
+    const summary = useMemo(() => calcSummary(localRows), [localRows, calcSummary]);
+    const filteredSummary = useMemo(() => calcSummary(filteredRows), [filteredRows, calcSummary]);
+    const isFiltered = filteredRows.length !== localRows.length;
 
     const handleCellFocus = useCallback((rowId) => {
         clearTimeout(blurTimer.current);
@@ -274,22 +283,55 @@ export default function BudgetTable({
             {/* Karty summary */}
             <div className="rounded-2xl border border-white/10 bg-black/30 p-2.5">
                 <div className="grid grid-cols-2 xl:grid-cols-6 gap-2">
-                    <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2">
-                        <div className="text-[10px] uppercase tracking-widest text-red-300/90 font-bold">Koszt</div>
-                        <div className="text-sm font-black text-red-200">{fmtPLNFull(summary.totalCost)} PLN</div>
+                    <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 flex justify-between items-start gap-2">
+                        <div>
+                            <div className="text-[10px] uppercase tracking-widest text-red-300/90 font-bold">Koszt</div>
+                            <div className="text-sm font-black text-red-200">{fmtPLNFull(summary.totalCost)} PLN</div>
+                        </div>
+                        {isFiltered && (
+                            <div className="text-right shrink-0">
+                                <div className="text-[10px] uppercase tracking-widest text-red-300/60">Koszt częściowy</div>
+                                <div className="text-sm text-red-200/70">{fmtPLNFull(filteredSummary.totalCost)} PLN</div>
+                                <div className="text-[10px] text-red-300/50">{filteredSummary.rows} wierszy</div>
+                            </div>
+                        )}
                     </div>
-                    <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2">
-                        <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Przychód</div>
-                        <div className="text-sm font-black text-green-200">{fmtPLNFull(summary.totalRevenue)} PLN</div>
+                    <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2 flex justify-between items-start gap-2">
+                        <div>
+                            <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Przychód</div>
+                            <div className="text-sm font-black text-green-200">{fmtPLNFull(summary.totalRevenue)} PLN</div>
+                        </div>
+                        {isFiltered && (
+                            <div className="text-right shrink-0">
+                                <div className="text-[10px] uppercase tracking-widest text-green-300/60">Przychód częściowy</div>
+                                <div className="text-sm text-green-200/70">{fmtPLNFull(filteredSummary.totalRevenue)} PLN</div>
+                            </div>
+                        )}
                     </div>
-                    <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2">
-                        <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Zysk</div>
-                        <div className="text-sm font-black text-green-200">{fmtPLNFull(summary.profit)} PLN</div>
+                    <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2 flex justify-between items-start gap-2">
+                        <div>
+                            <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Zysk</div>
+                            <div className="text-sm font-black text-green-200">{fmtPLNFull(summary.profit)} PLN</div>
+                        </div>
+                        {isFiltered && (
+                            <div className="text-right shrink-0">
+                                <div className="text-[10px] uppercase tracking-widest text-green-300/60">Zysk częściowy</div>
+                                <div className="text-sm text-green-200/70">{fmtPLNFull(filteredSummary.profit)} PLN</div>
+                            </div>
+                        )}
                     </div>
-                    <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2">
-                        <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Marża</div>
-                        <div className="text-sm font-black text-green-200">{fmtPctFull(summary.marginPct)}</div>
-                        <div className="text-[10px] text-green-200/70 mt-0.5">{summary.rows} wierszy</div>
+                    <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2 flex justify-between items-start gap-2">
+                        <div>
+                            <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Marża</div>
+                            <div className="text-sm font-black text-green-200">{fmtPctFull(summary.marginPct)}</div>
+                            <div className="text-[10px] text-green-200/70 mt-0.5">{isFiltered ? `${filteredSummary.rows} / ${summary.rows} wierszy` : `${summary.rows} wierszy`}</div>
+                        </div>
+                        {isFiltered && (
+                            <div className="text-right shrink-0">
+                                <div className="text-[10px] uppercase tracking-widest text-green-300/60">Marża częściowa</div>
+                                <div className="text-sm text-green-200/70">{fmtPctFull(filteredSummary.marginPct)}</div>
+                            </div>
+                        )}
                     </div>
                     <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 px-3 py-2">
                         <div className="text-[10px] uppercase tracking-widest text-orange-300/90 font-bold">Rabat — %</div>
@@ -387,16 +429,7 @@ export default function BudgetTable({
                                 <td className={`${TD} text-center text-sm text-white tabular-nums`}>{idx + 1}</td>
 
                                 <td className={TD}>
-                                    <AutoTextarea
-                                        key={`${row.id}-subjectName-${syncVersion}`}
-                                        defaultValue={row.subjectName || ''}
-                                        onBlur={e => { handleCellBlur(); if (e.target.value !== (row.subjectName || '')) onFieldChange(row, 'subjectName', e.target.value); }}
-                                        onFocus={() => handleCellFocus(row.id)}
-                                        onKeyDown={e => handleKeyDown(e, row.id, 'subjectName')}
-                                        dataRowId={row.id}
-                                        dataCol="subjectName"
-                                        className={TEXTAREA}
-                                    />
+                                    <span className="text-sm text-white break-words whitespace-pre-wrap">{row.subjectPath || row.subjectName || '—'}</span>
                                 </td>
 
                                 <td className={TD}>

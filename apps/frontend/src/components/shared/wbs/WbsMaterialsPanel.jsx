@@ -56,6 +56,12 @@ function flattenWbsNodes(items, result = []) {
     return result;
 }
 
+function getParentPath(nodePath) {
+    const segs = nodePath ? nodePath.split(' › ') : [];
+    if (segs.length <= 1) return segs[0] || '—';
+    return segs.slice(0, -1).join(' / ');
+}
+
 // ─── ProposalsSection ─────────────────────────────────────────────────────────
 
 function ProposalsSection({ req, token, onRefresh }) {
@@ -467,8 +473,7 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
         try { await onCreateCard(node); } finally { setCreating(false); }
     };
 
-    const segs = node.path ? node.path.split(' › ') : [];
-    const parent = segs.length >= 2 ? segs[segs.length - 2] : segs[0] || '—';
+    const parent = getParentPath(node.path);
 
     return (
         <tr className={`border-b border-white/[0.03] transition-colors ${isExpanded ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
@@ -614,16 +619,18 @@ export default function WbsMaterialsPanel({
     const sortedFilteredNodes = useMemo(() => {
         let nodes = [...matNodes];
 
+        const matchTokens = (text, q) =>
+            q.split(/[\s/]+/).filter(Boolean).every(t => text.toLowerCase().includes(t));
+
         // Global search
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
             nodes = nodes.filter(n => {
                 const c = cards[n.id];
-                const segs = n.path ? n.path.split(' › ') : [];
-                const parent = segs.length >= 2 ? segs[segs.length - 2] : (segs[0] || '');
+                const parent = getParentPath(n.path);
                 return (n.name || '').toLowerCase().includes(q) ||
                     (TYPE_META[n.type]?.label || '').toLowerCase().includes(q) ||
-                    parent.toLowerCase().includes(q) ||
+                    matchTokens(parent, q) ||
                     (c?.manufacturer || '').toLowerCase().includes(q) ||
                     (c?.model || '').toLowerCase().includes(q) ||
                     (STATUS_META[c?.status]?.label || '').toLowerCase().includes(q);
@@ -636,9 +643,8 @@ export default function WbsMaterialsPanel({
             const q = val.toLowerCase();
             nodes = nodes.filter(n => {
                 const c = cards[n.id];
-                const segs = n.path ? n.path.split(' › ') : [];
-                const parent = segs.length >= 2 ? segs[segs.length - 2] : (segs[0] || '');
-                if (key === 'parent') return parent.toLowerCase().includes(q);
+                const parent = getParentPath(n.path);
+                if (key === 'parent') return matchTokens(parent, q);
                 if (key === 'name')   return (n.name || '').toLowerCase().includes(q);
                 if (key === 'qty')    return String(n.quantity ?? '').includes(q);
                 if (key === 'product') return `${c?.manufacturer || ''} ${c?.model || ''}`.toLowerCase().includes(q);
@@ -655,10 +661,8 @@ export default function WbsMaterialsPanel({
             const cb = cards[b.id];
             let cmp = 0;
             if (sortConfig.key === 'parent') {
-                const sa = a.path ? a.path.split(' › ') : [];
-                const sb = b.path ? b.path.split(' › ') : [];
-                const pa = sa.length >= 2 ? sa[sa.length - 2] : (sa[0] || '');
-                const pb = sb.length >= 2 ? sb[sb.length - 2] : (sb[0] || '');
+                const pa = getParentPath(a.path);
+                const pb = getParentPath(b.path);
                 cmp = pa.localeCompare(pb, 'pl');
             } else if (sortConfig.key === 'name') {
                 cmp = (a.name || '').localeCompare(b.name || '', 'pl');
@@ -935,10 +939,7 @@ export default function WbsMaterialsPanel({
         const detailsNodes = [...matNodes].sort((a, b) => (a.path || '').localeCompare(b.path || '', 'pl', { numeric: true, sensitivity: 'base' }));
         for (const node of detailsNodes) {
             const card = cards[node.id] || null;
-            const segs = node.path ? node.path.split(' › ') : [];
-            const rawParent = segs.length >= 2 ? segs[segs.length - 2] : (segs[0] || '');
-            // Jeśli parent to depth-0 (ścieżka ma 2 segmenty albo brak), uppercase'uj.
-            const parent = segs.length <= 2 ? rawParent.toUpperCase() : rawParent;
+            const parent = getParentPath(node.path);
             const selectedProposal = (card?.proposals || []).find(p => p.isSelected);
             const allProposals = card?.proposals || [];
 
@@ -1100,8 +1101,7 @@ export default function WbsMaterialsPanel({
         const cols = ['Przedmiot projektu', 'Nazwa', 'Wymagania techniczne', 'Ilość', 'Produkt', 'Cena netto', 'Status'];
         const bodyRows = sortedFilteredNodes.map(node => {
             const card = cards[node.id] || null;
-            const segs = node.path ? node.path.split(' › ') : [];
-            const parent = segs.length >= 2 ? segs[segs.length - 2] : (segs[0] || '—');
+            const parent = getParentPath(node.path);
             const product = [card?.manufacturer, card?.model].filter(Boolean).join(' / ') || '—';
             const price = card?.priceNetto != null ? `${Number(card.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—';
             const status = STATUS_LABELS[card?.status] || '—';
