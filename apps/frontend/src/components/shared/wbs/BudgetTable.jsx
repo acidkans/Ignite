@@ -10,7 +10,7 @@ const SELECT = 'bg-[#0b0f17] text-white text-sm w-full outline-none rounded px-1
 const FILTER = 'w-full bg-black/30 border border-white/10 rounded px-2 py-0.5 text-xs text-white placeholder-gray-700 outline-none focus:border-blue-500/40';
 
 const NUMERIC_COLS = new Set(['unitCost', 'quantity', 'totalCost', 'margin', 'discount', 'offerPrice']);
-const EDITABLE_COLS = ['subjectName', 'name', 'type', 'unitCost', 'quantity', 'unit', 'margin', 'discount', 'comment'];
+const EDITABLE_COLS = ['name', 'type', 'unitCost', 'quantity', 'unit', 'margin', 'discount', 'comment'];
 
 function calcDerived(r) {
     const q = Math.max(0, parseLocaleNumber(String(r.quantity ?? '')) ?? 1);
@@ -109,7 +109,7 @@ export default function BudgetTable({
 
     useEffect(() => {
         const newRows = rows.map(calcDerived);
-        const editableFields = ['subjectName', 'name', 'unitCost', 'quantity', 'margin', 'discount', 'comment', 'unit', 'type'];
+        const editableFields = ['name', 'unitCost', 'quantity', 'margin', 'discount', 'comment', 'unit', 'type'];
         let externalChange = newRows.length !== localRows.length;
         if (!externalChange) {
             outer: for (let i = 0; i < newRows.length; i++) {
@@ -387,16 +387,7 @@ export default function BudgetTable({
                                 <td className={`${TD} text-center text-sm text-white tabular-nums`}>{idx + 1}</td>
 
                                 <td className={TD}>
-                                    <AutoTextarea
-                                        key={`${row.id}-subjectName-${syncVersion}`}
-                                        defaultValue={row.subjectName || ''}
-                                        onBlur={e => { handleCellBlur(); if (e.target.value !== (row.subjectName || '')) onFieldChange(row, 'subjectName', e.target.value); }}
-                                        onFocus={() => handleCellFocus(row.id)}
-                                        onKeyDown={e => handleKeyDown(e, row.id, 'subjectName')}
-                                        dataRowId={row.id}
-                                        dataCol="subjectName"
-                                        className={TEXTAREA}
-                                    />
+                                    <span className="text-sm text-white break-words whitespace-pre-wrap">{row.subjectPath || row.subjectName || '—'}</span>
                                 </td>
 
                                 <td className={TD}>
