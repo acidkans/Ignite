@@ -596,7 +596,7 @@ model MaterialRequirement {
   version         ProjectVersion?           @relation(fields: [versionId], references: [id], onDelete: Cascade)
   list            MaterialRequirementsList? @relation(fields: [listId], references: [id], onDelete: SetNull)
   assignedSubtask Subtask?                  @relation(fields: [assignedSubtaskId], references: [id], onDelete: SetNull)
-  wbsNode         WbsNode?                  @relation("WbsNodeMaterialCard", fields: [wbsNodeId], references: [id], onDelete: SetNull)
+  wbsNode         WbsNode?                  @relation("WbsNodeMaterialCard", fields: [wbsNodeId], references: [id], onDelete: Cascade)
   proposals       ProductProposal[]
   wbsAllocations  WbsNodeMaterial[]
 
