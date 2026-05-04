@@ -148,9 +148,10 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
 
     const wbsNodes = Array.isArray(wbsResp?.items) ? wbsResp.items : [];
     const allMaterials = Array.isArray(matsResp) ? matsResp : (Array.isArray(matsResp?.items) ? matsResp.items : []);
-    const activeWbsIds = new Set(flattenWbsItems(wbsNodes).map(n => n.id));
-    // Wyklucz materiały których węzeł WBS został usunięty z drzewa
-    const materials = allMaterials.filter(r => !r.wbsNodeId || activeWbsIds.has(r.wbsNodeId));
+    const allFlatWbs = flattenWbsItems(wbsNodes);
+    const matWbsIds = new Set(allFlatWbs.filter(n => n.type === 'material' || n.type === 'equipment').map(n => n.id));
+    // Uwzględnij tylko materiały których węzeł WBS istnieje w aktualnym drzewie
+    const materials = allMaterials.filter(r => r.wbsNodeId && matWbsIds.has(r.wbsNodeId));
 
     // Fetch marker links for all WBS nodes in parallel
     const markerEntries = await Promise.all(
