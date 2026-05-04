@@ -75,7 +75,7 @@ export default function BudgetTable({
     const [localRows, setLocalRows] = useState(() => rows.map(calcDerived));
     const [syncVersion, setSyncVersion] = useState(0);
     const [colFilters, setColFilters] = useState({});
-    const [sort, setSort] = useState({ key: null, dir: null });
+    const [sort, setSort] = useState({ key: 'subjectName', dir: 'asc' });
     const [focusedRowId, setFocusedRowId] = useState(null);
 
     const [colWidths, setColWidths] = useState(
@@ -162,7 +162,7 @@ export default function BudgetTable({
         if (!sort.key || !sort.dir) return filteredRows;
         const dir = sort.dir === 'asc' ? 1 : -1;
         const isNum = NUMERIC_COLS.has(sort.key);
-        const get = (r) => sort.key === 'type' ? (TYPE_LABELS[r.type] || r.type || '') : r[sort.key];
+        const get = (r) => sort.key === 'type' ? (TYPE_LABELS[r.type] || r.type || '') : sort.key === 'subjectName' ? (r.subjectPath || r.subjectName || '') : r[sort.key];
         return [...filteredRows].sort((a, b) => {
             const av = get(a), bv = get(b);
             if (isNum) {
