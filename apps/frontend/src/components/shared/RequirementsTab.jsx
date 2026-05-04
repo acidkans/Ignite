@@ -405,13 +405,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                 >
                     <FileDown size={11} /> PDF tej zakładki
                 </button>
-                <button
-                    onClick={() => exportProjectPdf({ nodeId, versionId, orderName })}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all"
-                    title="Eksportuj informacje o projekcie i planowanie do PDF"
-                >
-                    <FileDown size={11} /> PDF wszystkie sekcje
-                </button>
+
                 <button
                     onClick={() => {
                         localStorage.removeItem('erp_requirements_grid_layout');

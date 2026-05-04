@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ExcelJS from 'exceljs';
-import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays } from 'lucide-react';
+import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays, BarChart3 } from 'lucide-react';
 import MarkdownEditor from '../MarkdownEditor';
 import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
+import GanttSection from './GanttSection';
 import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType } from './wbsConstants';
 import { exportProjectPdf } from '../../../utils/projectPdfExport';
 import WBSHybridTable from './WBSHybridTable';
@@ -124,6 +125,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const [reqRefreshKey, setReqRefreshKey] = useState(0);
     const materialsExportFn = useRef(null);
     const materialsPdfExportFn = useRef(null);
+    const ganttExportRef = useRef(null);
+    const ganttGetHtmlRef = useRef(null);
 
     const assignableProjectUsers = useMemo(() => {
         if (!Array.isArray(projectUsers) || projectUsers.length === 0) return [];
@@ -1213,7 +1216,7 @@ ${materialsHtml}
             return;
         }
 
-        // Przelicz totalCost i offerPrice tak samo jak BudgetTable (calcDerived: uc×qty),
+        // Przelicz tak samo jak BudgetTable (calcDerived: uc×qty),
         // żeby Podsumowanie i arkusz Budżet pokazywały te same wartości po przeliczeniu formuł.
         const rows = rawRows.map(r => {
             const q = Math.max(0, parseFloat(r.quantity) || 0);
@@ -1223,7 +1226,7 @@ ${materialsHtml}
             const totalCost = uc * q;
             let offerPrice = (marginRaw !== null && marginRaw !== 0) ? totalCost * (1 + marginRaw / 100) : 0;
             if (offerPrice > 0 && d > 0) offerPrice = Math.max(0, offerPrice * (1 - d / 100));
-            return { ...r, totalCost, offerPrice };
+            return { ...r, totalCost, cost: totalCost, offerPrice };
         });
 
         const workbook = new ExcelJS.Workbook();
@@ -1461,24 +1464,11 @@ ${materialsHtml}
             return;
         }
 
-        // Agregacja po gałęzi depth=1 (bezpośrednie dziecko subjectu/depth=0)
-        const byIdMap = new Map(wbsData.map(item => [item.id, item]));
-        const findDepth1Node = (rowItem) => {
-            let current = rowItem;
-            let parent = current.parentId ? byIdMap.get(current.parentId) : null;
-            while (parent && parent.parentId) {
-                current = parent;
-                parent = byIdMap.get(parent.parentId);
-            }
-            return current;
-        };
+        // Agregacja po najwyższej gałęzi WBS (subjectName = root branch)
         const aggMap = new Map();
         for (const row of rows) {
-            const d1 = findDepth1Node(row);
-            const d1Name = (d1?.name || '—').trim();
-            const d0Name = (row.subjectName || '').trim().toUpperCase();
-            const label = d0Name ? `${d0Name} › ${d1Name}` : d1Name;
-            const key = d1?.id || `__noid__${label}`;
+            const label = (row.subjectName || '—').trim().toUpperCase();
+            const key = row.subjectId || `__noid__${label}`;
             if (!aggMap.has(key)) aggMap.set(key, { label, offerPrice: 0, comments: [] });
             const entry = aggMap.get(key);
             entry.offerPrice += Number(row.offerPrice) || 0;
@@ -1821,6 +1811,14 @@ ${materialsHtml}
             }
         } catch (e) { console.error('Update node error:', e); }
     }, [authHeaders, wbsData, refreshMaterialCosts]);
+
+    // Drag krawędzi belki w Gantcie → quantity (dni) + unit='dni' przez wbs-nodes/{id} (PATCH).
+    // Używa updateNodeField który optymistycznie aktualizuje wbsData i wbsTree.
+    const handleGanttDurationChange = useCallback(async (nodeId, days) => {
+        if (!nodeId || !Number.isFinite(days)) return;
+        await updateNodeField(nodeId, 'quantity', String(days));
+        await updateNodeField(nodeId, 'unit', 'dni');
+    }, [updateNodeField]);
 
     const saveBudgetField = useCallback(async (wbsNodeId, data) => {
         try {
@@ -2469,10 +2467,13 @@ ${materialsHtml}
                     const directParent = item.parentId ? byId.get(item.parentId) : null;
                     const parentIsRoot = !directParent?.parentId;
                     const parentName = (directParent && !parentIsRoot) ? (directParent.name || '') : '';
+                    const itemSegs = (item.path || '').split(' › ');
+                    const subjectPath = itemSegs.length > 1 ? itemSegs.slice(0, -1).join(' / ') : (itemSegs[0] || subjectName);
                     return {
                         ...item,
                         subjectId: subject.id,
                         subjectName,
+                        subjectPath,
                         parentName,
                         status: inheritedStatus.code,
                         statusLabel: inheritedStatus.label,
@@ -2606,7 +2607,7 @@ ${materialsHtml}
     const renderSection = (key, title, Icon, colorClass, content, onExport, extraButtons = null) => {
         const isActive = expandedSection === key;
         const isHidden = expandedSection !== null && !isActive;
-        const isCompactSection = key === 'budget' || key === 'materials' || key === 'wbs-hybrid' || key === 'strategy';
+        const isCompactSection = key === 'budget' || key === 'materials' || key === 'wbs-hybrid' || key === 'strategy' || key === 'gantt';
 
         return (
             <div
@@ -2636,7 +2637,7 @@ ${materialsHtml}
                         {onExport && (
                             <>
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); exportProjectPdf({ nodeId, versionId, projectName, orderName }); }}
+                                    onClick={(e) => { e.stopPropagation(); exportProjectPdf({ nodeId, versionId, projectName, orderName, ganttHtml: ganttGetHtmlRef.current?.() || null }); }}
                                     className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                                 >
                                     <FileDown size={11} /> PDF wszystkie sekcje
@@ -2659,7 +2660,7 @@ ${materialsHtml}
         );
     };
 
-    const isCompactActive = (expandedSection === 'budget' || expandedSection === 'materials' || expandedSection === 'wbs-hybrid' || expandedSection === 'strategy');
+    const isCompactActive = (expandedSection === 'budget' || expandedSection === 'materials' || expandedSection === 'wbs-hybrid' || expandedSection === 'strategy' || expandedSection === 'gantt');
 
     return (
         <div className={`flex flex-col w-full h-full relative bg-[#0a0c10]/50 border border-white/[0.03] gap-1 pt-0 ${isCompactActive ? 'overflow-hidden p-0' : 'overflow-y-auto pr-2 custom-scrollbar rounded-[40px] p-2'}`}>
@@ -2694,6 +2695,16 @@ ${materialsHtml}
                     onWbsUpdate={onWbsUpdate}
                 />
             ))}
+
+            {renderSection('gantt', 'Harmonogram (Gantt)', BarChart3, 'cyan', (
+                <GanttSection
+                    wbsTree={wbsTree}
+                    projectName={orderName || projectName || 'Projekt'}
+                    onNodeDurationChange={handleGanttDurationChange}
+                    onExportReady={fn => { ganttExportRef.current = fn; }}
+                    onGetHtmlReady={fn => { ganttGetHtmlRef.current = fn; }}
+                />
+            ), () => ganttExportRef.current?.())}
 
             {renderSection('wbs-hybrid', `Struktura projektu: ${orderName || projectName || '—'}`, ListTree, 'violet', (
                 <div className="flex flex-col flex-1 min-h-0">

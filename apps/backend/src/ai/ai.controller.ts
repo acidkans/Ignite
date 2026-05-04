@@ -166,6 +166,12 @@ export class AiController {
         return this.versioningService.setActiveVersion(id);
     }
 
+    @Patch('versions/:id/label')
+    renameVersion(@Param('id') id: string, @Body() body: { label: string }) {
+        if (!body.label?.trim()) throw new BadRequestException('Label is required');
+        return this.versioningService.renameVersion(id, body.label.trim());
+    }
+
     @Delete('versions/:id')
     deleteVersion(@Param('id') id: string) {
         return this.versioningService.deleteVersion(id);

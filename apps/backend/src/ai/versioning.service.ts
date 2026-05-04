@@ -333,6 +333,12 @@ export class VersioningService {
         return version;
     }
 
+    async renameVersion(versionId: string, label: string) {
+        const version = await this.prisma.projectVersion.findUnique({ where: { id: versionId } });
+        if (!version) throw new NotFoundException('Version not found');
+        return this.prisma.projectVersion.update({ where: { id: versionId }, data: { label } });
+    }
+
     async deleteVersion(versionId: string) {
         const version = await this.prisma.projectVersion.findUnique({ where: { id: versionId } });
         if (!version) throw new NotFoundException('Version not found');
