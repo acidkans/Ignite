@@ -74,7 +74,16 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     wbsDataRef.current = wbsData;
     const [expandedSection, setExpandedSection] = useState(null);
     const [fullscreenSection, setFullscreenSection] = useState(null);
-    const [sectionOrder, setSectionOrder] = useState(DEFAULT_SECTION_ORDER);
+    const [sectionOrder, setSectionOrder] = useState(() => {
+        try {
+            const saved = localStorage.getItem('unifiedWbsSectionOrder');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed) && parsed.length === DEFAULT_SECTION_ORDER.length) return parsed;
+            }
+        } catch {}
+        return DEFAULT_SECTION_ORDER;
+    });
     const [expandedIds, setExpandedIds] = useState(new Set());
     const [selectedId, setSelectedId] = useState(null);
     const [wbsDescription, setWbsDescription] = useState('');
@@ -82,6 +91,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const [strategySaved, setStrategySaved] = useState(false);
     const [offerText, setOfferText] = useState('');
     const [offerSaving, setOfferSaving] = useState(false);
+
+    useEffect(() => {
+        localStorage.setItem('unifiedWbsSectionOrder', JSON.stringify(sectionOrder));
+    }, [sectionOrder]);
 
     const PRESETS_KEY = 'ignite_offer_presets';
     const defaultPresets = [
@@ -745,12 +758,18 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 
     useEffect(() => { 
         if (nodeId) {
-            fetchData(); 
+            fetchData();
             fetchUsers();
             fetchStrategy();
             fetchUnassignedRequirements();
-        } 
+        }
     }, [nodeId, versionId, fetchData, fetchUsers, fetchStrategy, fetchUnassignedRequirements]);
+
+    useEffect(() => {
+        const onQaImported = () => fetchData();
+        window.addEventListener('wbs-qa-imported', onQaImported);
+        return () => window.removeEventListener('wbs-qa-imported', onQaImported);
+    }, [fetchData]);
 
     // ── Hybrid WBS save ──
     const hybridSaveRef = useRef(false);

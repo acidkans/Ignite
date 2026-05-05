@@ -478,6 +478,7 @@ model SchematicMarker {
   pageNumber  Int
   note        String?
   name        String?
+  question    String?
   createdAt   DateTime           @default(now())
   schematic   SchematicDocument  @relation(fields: [schematicId], references: [id], onDelete: Cascade)
   subtask     Subtask?           @relation(fields: [subtaskId], references: [id], onDelete: SetNull)

@@ -578,6 +578,7 @@ export default function DashboardPage() {
                             <PropertyPreview
                                 key={`files-${activeAreaId}`}
                                 nodeId={activeAreaId}
+                                versionId={selectedVersionId}
                                 searchQuery={searchQuery}
                             />
                         )}
@@ -585,6 +586,7 @@ export default function DashboardPage() {
                             <PropertyPreview
                                 key={`financialFiles-${activeAreaId}`}
                                 nodeId={activeAreaId}
+                                versionId={selectedVersionId}
                                 searchQuery={searchQuery}
                                 isFinancialTab={true}
                             />

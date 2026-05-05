@@ -21,6 +21,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     const [uploading, setUploading] = useState(false);
     const [editName, setEditName] = useState(marker.name || '');
     const [editNote, setEditNote] = useState(marker.note || '');
+    const [editQuestion, setEditQuestion] = useState(marker.question || '');
     const [editingAttNote, setEditingAttNote] = useState(null);
     const [subtasks, setSubtasks] = useState([]);
     const [selectedSubtaskId, setSelectedSubtaskId] = useState(marker.subtaskId || '');
@@ -297,6 +298,23 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                 method: 'PATCH',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ note: editNote })
+            });
+            onRefresh(true);
+        } catch(err) { console.error(err); }
+    };
+
+    const handleUpdateQuestion = async () => {
+        if (isTemp) {
+            await updateTempMarkerPayload(marker.id, { question: editQuestion });
+            dispatchTempUpdate({ question: editQuestion });
+            return;
+        }
+        try {
+            const token = sessionStorage.getItem('token');
+            await fetch(`${API_URL}/schematics/markers/${marker.id}`, {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: editQuestion })
             });
             onRefresh(true);
         } catch(err) { console.error(err); }
@@ -678,6 +696,38 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                             )}
                         </div>
                     )}
+
+                    {/* Pytanie – aktywne tylko gdy przypisany do przedmiotu */}
+                    <div className="space-y-2">
+                        <label className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em] px-1">
+                            PYTANIE
+                        </label>
+                        <div className="relative">
+                            <textarea
+                                value={editQuestion}
+                                onChange={e => {
+                                    setEditQuestion(e.target.value);
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = e.target.scrollHeight + 'px';
+                                }}
+                                onBlur={handleUpdateQuestion}
+                                disabled={wbsLinks.length === 0}
+                                rows={1}
+                                placeholder={wbsLinks.length === 0 ? 'Przypisz przedmiot projektu, aby dodać pytanie' : 'Wpisz pytanie…'}
+                                className={`w-full resize-none overflow-hidden rounded-xl px-4 py-3 text-sm leading-snug transition-colors outline-none
+                                    ${wbsLinks.length === 0
+                                        ? 'bg-white/3 border border-white/5 text-gray-600 placeholder-gray-700 cursor-not-allowed'
+                                        : 'bg-white/5 border border-white/10 text-gray-200 placeholder-gray-600 focus:border-blue-500/40 focus:bg-white/8'
+                                    }`}
+                                style={{ minHeight: '48px' }}
+                            />
+                            {wbsLinks.length === 0 && (
+                                <div className="absolute inset-0 rounded-xl flex items-center justify-end pr-3 pointer-events-none">
+                                    <span className="text-[10px] text-gray-700 italic">wymaga przedmiotu</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
 
                     {/* Podgląd wszystkich załączników na dole */}
                     {marker.attachments?.length > 0 && (

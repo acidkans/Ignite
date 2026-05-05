@@ -214,7 +214,7 @@ export async function exportQaFormPdf(wbsData, projectName) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `QA_${(projectName || 'projekt').replace(/\s+/g, '_')}.pdf`;
+    a.download = `Q&A_${(projectName || 'projekt').replace(/\s+/g, '_')}.pdf`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
