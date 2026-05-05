@@ -934,10 +934,28 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         const bold = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
         const lines = (text || '').split('\n');
         const indentLevel = (ws) => Math.floor((ws || '').replace(/\t/g, '  ').length / 2);
+        const isTableRow = (l) => l.trimStart().startsWith('|');
+        const isSepRow = (l) => /^\s*\|[\s\-:|]+\|\s*$/.test(l);
+        const parseCells = (l) => l.split('|').slice(1, -1).map(c => c.trim());
         let html = '';
-        let olCounters = []; // pozycje na każdym poziomie zagnieżdżenia
+        let olCounters = [];
         const resetOl = () => { olCounters = []; };
-        for (const raw of lines) {
+        let idx = 0;
+        while (idx < lines.length) {
+            const raw = lines[idx];
+            if (isTableRow(raw)) {
+                const block = [];
+                while (idx < lines.length && isTableRow(lines[idx])) { block.push(lines[idx]); idx++; }
+                const sepIdx = block.findIndex(isSepRow);
+                const heads = sepIdx > 0 ? block.slice(0, sepIdx) : [block[0]];
+                const body = sepIdx >= 0 ? block.slice(sepIdx + 1) : block.slice(1);
+                resetOl();
+                html += `<table style="border-collapse:collapse;width:100%;margin:10px 0;font-size:11px">`;
+                html += `<thead><tr>${parseCells(heads[0]).map(c => `<th style="font-size:13px;font-weight:bold;text-align:left;border-bottom:2px solid #888;padding:5px 10px">${bold(c)}</th>`).join('')}</tr></thead>`;
+                html += `<tbody>${body.map(dr => `<tr>${parseCells(dr).map(c => `<td style="font-weight:normal;padding:4px 10px;border-bottom:1px solid #ddd">${bold(c)}</td>`).join('')}</tr>`).join('')}</tbody>`;
+                html += `</table>`;
+                continue;
+            }
             const h3m = raw.match(/^### (.+)/);
             const h2m = raw.match(/^## (.+)/);
             const h1m = raw.match(/^# (.+)/);
@@ -963,7 +981,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 if (olCounters.length === L + 1) olCounters[L] = N;
                 else { while (olCounters.length < L) olCounters.push(1); olCounters.push(N); }
                 const num = olCounters.join('.') + '.';
-                // Kolumna numeru rośnie z głębokością (1. → 1.1. → 1.1.1.); flex zapewnia hanging indent bez wyjścia poza kontener.
                 const numColEm = Math.max(2, num.length * 0.55 + 0.4);
                 html += `<div style="display:flex;margin:2px 0;padding-left:${L * 1.5}em"><strong style="display:inline-block;width:${numColEm}em;flex-shrink:0">${num}</strong><span style="flex:1;min-width:0">${bold(olm[3])}</span></div>`;
             } else if (raw.trim() === '') {
@@ -973,6 +990,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 resetOl();
                 html += `<p style="margin:0 0 4px 0">${bold(raw)}</p>`;
             }
+            idx++;
         }
         return html;
     }, []);
@@ -2647,12 +2665,17 @@ ${materialsHtml}
             const key = row.subjectId || row.subjectName || 'Inne';
             const label = row.subjectName || 'Inne';
             if (!bySubject.has(key)) bySubject.set(key, { label, total: 0 });
-            bySubject.get(key).total += Number(row.offerPrice) || 0;
+            const q = parseFloat(row.quantity) || 1;
+            const revenue = parseFloat(row.offerPrice);
+            const fallbackRevenue = Number.isFinite(parseFloat(row.totalPrice))
+                ? parseFloat(row.totalPrice)
+                : (parseFloat(row.unitPrice) || 0) * q;
+            bySubject.get(key).total += Number.isFinite(revenue) && revenue !== 0 ? revenue : fallbackRevenue;
         }
         const entries = [...bySubject.values()].filter(e => e.total > 0);
         if (!entries.length) return '';
-        const tableRows = entries.map(e => `| ${e.label} | ${fmtPLN(e.total)} PLN |`).join('\n');
-        return `| Gałąź projektu | Wartość |\n|---|---|\n${tableRows}`;
+        const tableRows = entries.map((e, i) => `| ${i + 1}. | ${e.label} | ${fmtPLN(e.total)} PLN |`).join('\n');
+        return `| Lp. | Etap projektu | Wartość netto PLN |\n|---|---|---|\n${tableRows}`;
     }, [budgetRows]);
 
     const summarizeBudgetRows = useCallback((rows) => {

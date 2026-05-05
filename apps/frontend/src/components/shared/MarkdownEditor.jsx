@@ -200,10 +200,28 @@ export default function MarkdownEditor({
         const bold = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
         const lines = (text || '').split('\n');
         const indentLevel = (ws) => Math.floor((ws || '').replace(/\t/g, '  ').length / 2);
+        const isTableRow = (l) => l.trimStart().startsWith('|');
+        const isSepRow = (l) => /^\s*\|[\s\-:|]+\|\s*$/.test(l);
+        const parseCells = (l) => l.split('|').slice(1, -1).map(c => c.trim());
         let html = '';
         let olCounters = [];
         const resetOl = () => { olCounters = []; };
-        for (const raw of lines) {
+        let idx = 0;
+        while (idx < lines.length) {
+            const raw = lines[idx];
+            if (isTableRow(raw)) {
+                const block = [];
+                while (idx < lines.length && isTableRow(lines[idx])) { block.push(lines[idx]); idx++; }
+                const sepIdx = block.findIndex(isSepRow);
+                const heads = sepIdx > 0 ? block.slice(0, sepIdx) : [block[0]];
+                const body = sepIdx >= 0 ? block.slice(sepIdx + 1) : block.slice(1);
+                resetOl();
+                html += `<table style="border-collapse:collapse;width:100%;margin:10px 0;font-size:13px">`;
+                html += `<thead><tr>${parseCells(heads[0]).map(c => `<th style="font-size:15px;font-weight:bold;text-align:left;border-bottom:2px solid #555;padding:5px 10px;background:rgba(255,255,255,0.04)">${bold(c)}</th>`).join('')}</tr></thead>`;
+                html += `<tbody>${body.map(dr => `<tr>${parseCells(dr).map(c => `<td style="font-weight:normal;padding:4px 10px;border-bottom:1px solid rgba(255,255,255,0.08)">${bold(c)}</td>`).join('')}</tr>`).join('')}</tbody>`;
+                html += `</table>`;
+                continue;
+            }
             const h3m = raw.match(/^### (.+)/);
             const h2m = raw.match(/^## (.+)/);
             const h1m = raw.match(/^# (.+)/);
@@ -232,6 +250,7 @@ export default function MarkdownEditor({
                 resetOl();
                 html += `<p style="margin:0 0 4px 0">${bold(raw)}</p>`;
             }
+            idx++;
         }
         return html;
     };
