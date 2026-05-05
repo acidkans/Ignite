@@ -343,7 +343,7 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
   .gantt-wrap { overflow: hidden; background: #fff; padding: 8px 0; }
   .gantt-wrap svg text { fill: #0b0f17 !important; }
   .gantt-wrap [class*="WuQ0f"] { background: #fff !important; }
-  @page { margin: 20mm 14mm; size: A4 landscape; }
+  @page { margin: 20mm 14mm; size: A4 portrait; }
 </style>
 ${ganttData ? ganttData.styles : ''}
 <style>

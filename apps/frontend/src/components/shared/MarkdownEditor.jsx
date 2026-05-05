@@ -17,6 +17,7 @@ export default function MarkdownEditor({
     previewTitle = 'Podgląd',
     saveIndicator = false,
     presets = null,
+    onManagePresets = null,
 }) {
     const taRef = useRef(null);
     const saveTimeoutRef = useRef(null);
@@ -281,28 +282,42 @@ export default function MarkdownEditor({
                     <button type="button" onClick={() => setPreviewOpen(true)} className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                         <LayoutList size={11} /> Podgląd
                     </button>
-                    {presets && presets.length > 0 && (
-                        <div className="relative">
-                            <button
-                                type="button"
-                                onClick={() => setPresetsOpen(p => !p)}
-                                className="flex items-center gap-1 px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded text-amber-300 text-[10px] font-bold uppercase tracking-widest transition-all"
-                            >
-                                Wstaw szablon <ChevronDown size={10} />
-                            </button>
-                            {presetsOpen && (
-                                <div className="absolute left-0 top-full mt-1 z-50 bg-[#0d1520] border border-white/10 rounded-xl shadow-2xl min-w-[260px] py-1">
-                                    {presets.map((p, i) => (
-                                        <button
-                                            key={i}
-                                            type="button"
-                                            onClick={() => insertPreset(p.text)}
-                                            className="w-full text-left px-4 py-2 text-xs text-gray-200 hover:bg-white/10 transition-colors"
-                                        >
-                                            {p.label}
-                                        </button>
-                                    ))}
-                                </div>
+                    {(presets || onManagePresets) && (
+                        <div className="relative flex items-center gap-1">
+                            {presets && presets.length > 0 && (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPresetsOpen(p => !p)}
+                                        className="flex items-center gap-1 px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded text-amber-300 text-[10px] font-bold uppercase tracking-widest transition-all"
+                                    >
+                                        Wstaw szablon <ChevronDown size={10} />
+                                    </button>
+                                    {presetsOpen && (
+                                        <div className="absolute left-0 top-full mt-1 z-50 bg-[#0d1520] border border-white/10 rounded-xl shadow-2xl min-w-[260px] py-1">
+                                            {presets.map((p, i) => (
+                                                <button
+                                                    key={i}
+                                                    type="button"
+                                                    onClick={() => insertPreset(p.text)}
+                                                    className="w-full text-left px-4 py-2 text-xs text-gray-200 hover:bg-white/10 transition-colors"
+                                                >
+                                                    {p.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                            {onManagePresets && (
+                                <button
+                                    type="button"
+                                    onClick={onManagePresets}
+                                    className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-gray-400 hover:text-gray-200 text-[10px] transition-all"
+                                    title="Zarządzaj szablonami"
+                                >
+                                    ⚙
+                                </button>
                             )}
                         </div>
                     )}
