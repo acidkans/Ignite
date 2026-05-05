@@ -1226,7 +1226,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 20mm 14mm; }
   .doc-header { border-bottom: 3px solid #1a1a2e; padding: 18px 0 10px 0; margin: 0 0 18px 0; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; display: flex; align-items: flex-start; gap: 16px; }
   .doc-header-logo { height: 48px; width: auto; object-fit: contain; flex-shrink: 0; }
   .doc-header-text { flex: 1; }
@@ -1261,7 +1261,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
   th { background: #f3f4f6; color: #374151; padding: 7px 8px; text-align: center; font-size: 12px; font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
   thead { display: table-header-group; }
   tr { page-break-inside: avoid; break-inside: avoid; }
-  @page { margin: 20mm 14mm; size: A4 portrait; }
+  @page { margin: 0; size: A4 portrait; }
   .budget-table { table-layout: fixed; word-wrap: break-word; }
   @media print {
     .summary-grid { display: block; }
