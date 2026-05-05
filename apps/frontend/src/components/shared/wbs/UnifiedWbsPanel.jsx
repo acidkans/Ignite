@@ -107,6 +107,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     };
     const deletePreset = (id) => savePresets(offerPresets.filter(p => p.id !== id));
     const [offerSaved, setOfferSaved] = useState(false);
+    const [offerDate, setOfferDate] = useState(() => new Date().toLocaleDateString('pl-PL'));
+    const offerDateLoadedRef = useRef(false);
     const [projectUsers, setProjectUsers] = useState([]);
     const [nodeTeamIds, setNodeTeamIds] = useState([]);
     const [logistykUsers, setLogistykUsers] = useState([]);
@@ -709,6 +711,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     useEffect(() => {
         strategyLoadedRef.current = false;
         offerLoadedRef.current = false;
+        offerDateLoadedRef.current = false;
         setWbsDescription('');
         setOfferText('');
     }, [nodeId, versionId]);
@@ -727,6 +730,13 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 if (data && !offerLoadedRef.current) {
                     setOfferText(data.offerText || '');
                     offerLoadedRef.current = true;
+                }
+                if (data && !offerDateLoadedRef.current) {
+                    const d = data.createdAt
+                        ? new Date(data.createdAt).toLocaleDateString('pl-PL')
+                        : new Date().toLocaleDateString('pl-PL');
+                    setOfferDate(d);
+                    offerDateLoadedRef.current = true;
                 }
             }
         } catch (e) { console.error('Fetch strategy error:', e); }
@@ -2630,6 +2640,21 @@ ${materialsHtml}
         [wbsData, materialMetaByLookupKey, materialCostsByNode, requirementsQtyByNode, normalizedSearchQuery]
     );
 
+    const wbsBranchTable = useMemo(() => {
+        if (!budgetRows.length) return '';
+        const bySubject = new Map();
+        for (const row of budgetRows) {
+            const key = row.subjectId || row.subjectName || 'Inne';
+            const label = row.subjectName || 'Inne';
+            if (!bySubject.has(key)) bySubject.set(key, { label, total: 0 });
+            bySubject.get(key).total += Number(row.offerPrice) || 0;
+        }
+        const entries = [...bySubject.values()].filter(e => e.total > 0);
+        if (!entries.length) return '';
+        const tableRows = entries.map(e => `| ${e.label} | ${fmtPLN(e.total)} PLN |`).join('\n');
+        return `| Gałąź projektu | Wartość |\n|---|---|\n${tableRows}`;
+    }, [budgetRows]);
+
     const summarizeBudgetRows = useCallback((rows) => {
         let totalCost = 0;
         let totalRevenue = 0;
@@ -2765,12 +2790,28 @@ ${materialsHtml}
             {sectionOrder.map(key => {
                 if (key === 'oferta') {
                     if (!isManagerOrAdmin) return null;
+                    const offerSummary = summarizeBudgetRows(budgetRows);
                     const resolvedPresets = offerPresets.map(p => ({
                         ...p,
-                        text: p.text.replace(/\{nazwa projektu\}/g, orderName || projectName || ''),
+                        text: p.text
+                            .replace(/\{nazwa projektu\}/g, orderName || projectName || '')
+                            .replace(/\{wartość oferty\}/g, fmtPLN(offerSummary.totalRevenue) + ' PLN')
+                            .replace(/\{data oferty\}/g, offerDate)
+                            .replace(/\{tabela wbs\}/g, wbsBranchTable),
                     }));
                     return renderSection('oferta', 'Oferta', FileText, 'amber', (
-                        <div className="flex flex-col flex-1 min-h-0 p-4">
+                        <div className="flex flex-col flex-1 min-h-0 p-4 gap-2">
+                            <div className="flex items-center gap-3 px-1">
+                                <span className="text-[11px] text-gray-400 uppercase tracking-widest">Data oferty</span>
+                                <input
+                                    type="text"
+                                    value={offerDate}
+                                    onChange={e => setOfferDate(e.target.value)}
+                                    className="bg-white/5 border border-white/10 rounded px-2 py-0.5 text-xs text-gray-200 focus:outline-none focus:border-amber-500/50 w-32"
+                                    placeholder="dd.mm.rrrr"
+                                />
+                                <span className="text-[11px] text-gray-500">Przychód: <span className="text-amber-300 font-semibold">{fmtPLN(offerSummary.totalRevenue)} PLN</span></span>
+                            </div>
                             <MarkdownEditor
                                 value={offerText}
                                 onChange={setOfferText}
@@ -2929,7 +2970,9 @@ ${materialsHtml}
                         <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between flex-shrink-0">
                             <div>
                                 <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-white">Szablony oferty</h3>
-                                <p className="text-[10px] text-gray-500 uppercase tracking-widest">Użyj <code className="bg-black/30 px-1 rounded text-amber-300">{'{nazwa projektu}'}</code> jako zmiennej</p>
+                                <p className="text-[10px] text-gray-500 mt-0.5">Zmienne: {['{nazwa projektu}', '{wartość oferty}', '{data oferty}', '{tabela wbs}'].map(v => (
+                                    <code key={v} className="bg-black/30 px-1 rounded text-amber-300 mr-1">{v}</code>
+                                ))}</p>
                             </div>
                             <button onClick={() => setPresetManagerOpen(false)} className="p-2 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 transition-all"><X size={14} /></button>
                         </div>
