@@ -1195,7 +1195,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             const labels = { DEVICE: 'Urządzenie', MATERIAL: 'Materiał', CABLE: 'Kabel', SOFTWARE: 'Oprogramowanie', SERVICE: 'Usługa' };
             return labels[String(code || '').toUpperCase()] || code || '—';
         };
-        const materialsHtml = show('materials') ? (() => {
+        const materialsHtml = (show('materials') || show('oferta')) ? (() => {
             const reqs = allRequirements.filter(r => r.id);
             if (!reqs.length) return '';
             const rows = reqs.map(r => {
@@ -1208,8 +1208,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 const price = r.priceNetto != null ? fmtPLN(r.priceNetto) : '—';
                 return `<tr><td style="text-align:left">${name}</td><td>${type}</td><td class="num">${qty}</td><td>${unit}</td><td>${status}</td><td class="num">${price}</td><td style="font-size:9px;color:#6b7280;text-align:left">${spec}</td></tr>`;
             }).join('');
+            const pageBreak = show('oferta') ? 'page-break-before: always;' : '';
             return `
-            <div class="section">
+            <div class="section" style="${pageBreak}">
                 <div class="section-header">Materiały</div>
                 <table>
                     <thead><tr><th>Nazwa</th><th>Typ</th><th>Ilość</th><th>Jedn.</th><th>Status</th><th>Cena netto</th><th>Specyfikacja</th></tr></thead>
