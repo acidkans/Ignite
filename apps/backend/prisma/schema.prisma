@@ -246,6 +246,7 @@ model OrderRequirements {
   createdAt                 DateTime        @default(now())
   updatedAt                 DateTime        @updatedAt
   wbsDescription            String?
+  offerText                 String?
   wbsTree                   String?
   budgetNotes               String?
   clientContacts            String?
