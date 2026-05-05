@@ -1,4 +1,12 @@
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts, PDFName, PDFString } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
+import fontRegularUrl from 'pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf?url';
+import fontBoldUrl from 'pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf?url';
+
+async function fetchFont(url) {
+    const res = await fetch(url);
+    return res.arrayBuffer();
+}
 
 const PAGE_W = 595;
 const PAGE_H = 842;
@@ -11,18 +19,41 @@ const FONT_SIZE = 9;
 const LABEL_SIZE = 7;
 const LINE_H = FONT_SIZE * 1.4;
 
+function breakLongWord(word, maxWidth, font, size) {
+    // Łamie słowo na fragmenty mieszczące się w maxWidth
+    const out = [];
+    let buf = '';
+    for (const ch of word) {
+        const test = buf + ch;
+        if (font.widthOfTextAtSize(test, size) > maxWidth && buf) {
+            out.push(buf);
+            buf = ch;
+        } else {
+            buf = test;
+        }
+    }
+    if (buf) out.push(buf);
+    return out;
+}
+
 function wrapText(text, maxWidth, font, size) {
-    const words = String(text || '').split(' ');
+    const words = String(text || '').split(/\s+/);
     const lines = [];
     let current = '';
-    for (const word of words) {
-        const test = current ? current + ' ' + word : word;
-        const w = font.widthOfTextAtSize(test, size);
-        if (w > maxWidth && current) {
-            lines.push(current);
-            current = word;
-        } else {
-            current = test;
+    for (const w of words) {
+        if (!w) continue;
+        // Słowo dłuższe niż kolumna — rozetnij
+        const fragments = font.widthOfTextAtSize(w, size) > maxWidth
+            ? breakLongWord(w, maxWidth, font, size)
+            : [w];
+        for (const frag of fragments) {
+            const test = current ? current + ' ' + frag : frag;
+            if (font.widthOfTextAtSize(test, size) > maxWidth && current) {
+                lines.push(current);
+                current = frag;
+            } else {
+                current = test;
+            }
         }
     }
     if (current) lines.push(current);
@@ -36,8 +67,11 @@ function textBlockHeight(text, maxWidth, font, size) {
 
 export async function exportQaFormPdf(wbsData, projectName) {
     const pdfDoc = await PDFDocument.create();
-    const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const fontBold    = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    pdfDoc.registerFontkit(fontkit);
+    const [regularBytes, boldBytes] = await Promise.all([fetchFont(fontRegularUrl), fetchFont(fontBoldUrl)]);
+    const fontRegular = await pdfDoc.embedFont(regularBytes, { subset: true });
+    const fontBold    = await pdfDoc.embedFont(boldBytes,    { subset: true });
+    const fontField   = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const form = pdfDoc.getForm();
 
     const colorBg      = rgb(0.95, 0.97, 1.0);
@@ -96,12 +130,7 @@ export async function exportQaFormPdf(wbsData, projectName) {
         const nodeLabel = (node.name || '').trim();
         ensureSpace(20);
         page.drawRectangle({ x: MARGIN, y: y - 18, width: CONTENT_W, height: 18, color: rgb(0.88, 0.92, 0.98) });
-        page.drawText('└ ' + nodeLabel, { x: MARGIN + 6, y: y - 13, size: 9, font: fontBold, color: colorHeader });
-        const statusText = node.status || '';
-        if (statusText) {
-            const sw = fontRegular.widthOfTextAtSize(statusText, 7);
-            page.drawText(statusText, { x: MARGIN + CONTENT_W - sw - 6, y: y - 13, size: 7, font: fontRegular, color: colorLabel });
-        }
+        page.drawText(nodeLabel, { x: MARGIN + 6, y: y - 13, size: 9, font: fontBold, color: colorHeader });
         y -= 18;
 
         drawTableHeader();
@@ -149,8 +178,8 @@ export async function exportQaFormPdf(wbsData, projectName) {
             page.drawRectangle({ x: fieldX, y: fieldY, width: fieldW, height: fieldH, color: colorField });
 
             const tf = form.createTextField(fieldName);
+            tf.acroField.dict.set(PDFName.of('DA'), PDFString.of(`/Helv ${FONT_SIZE} Tf 0 g`));
             tf.setText(aText);
-            tf.setFontSize(FONT_SIZE);
             tf.enableMultiline();
             tf.addToPage(page, {
                 x: fieldX, y: fieldY, width: fieldW, height: fieldH,

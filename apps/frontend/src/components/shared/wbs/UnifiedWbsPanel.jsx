@@ -1035,8 +1035,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             if (list.length === 0) return '';
             const rows = list.map(p => `
                 <tr>
-                    <td style="padding:2px 4px;border:1px solid #e5e7eb;font-size:9px;text-align:left;vertical-align:top;color:#1f2937;background:#fff">${esc(p.question || '')}</td>
-                    <td style="padding:2px 4px;border:1px solid #e5e7eb;font-size:9px;text-align:left;vertical-align:top;color:#374151;background:#fff">${esc(p.answer || '')}</td>
+                    <td style="padding:2px 4px;border:1px solid #e5e7eb;font-size:9px;text-align:left;vertical-align:top;color:#1f2937;background:#fff;word-wrap:break-word;white-space:normal;max-width:0">${esc(p.question || '')}</td>
+                    <td style="padding:2px 4px;border:1px solid #e5e7eb;font-size:9px;text-align:left;vertical-align:top;color:#374151;background:#fff;word-wrap:break-word;white-space:normal;max-width:0">${esc(p.answer || '')}</td>
                 </tr>`).join('');
             return `<table style="width:100%;border-collapse:collapse;margin:0">
                 <thead><tr>
@@ -2810,9 +2810,9 @@ ${materialsHtml}
                         )}
                         {onExport && (
                             <>
-                                {key === 'wbs' && (
+                                {(key === 'wbs' || key === 'wbs-hybrid') && (
                                     <button
-                                        onClick={(e) => { e.stopPropagation(); exportQaFormPdf(wbsData, orderName || projectName || 'Projekt'); }}
+                                        onClick={(e) => { e.stopPropagation(); exportQaFormPdf(wbsData, orderName || projectName || 'Projekt').catch(err => { console.error('[Q&A PDF]', err); alert('Błąd generowania PDF: ' + err.message); }); }}
                                         className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                                     >
                                         <FileDown size={11} /> Q&A PDF
