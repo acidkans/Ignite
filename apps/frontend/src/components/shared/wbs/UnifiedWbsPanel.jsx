@@ -2686,6 +2686,31 @@ ${materialsHtml}
         return `| Lp. | Etap projektu | Wartość netto |\n|---|---|---|\n${tableRows}`;
     }, [wbsData]);
 
+    const offerRevenueTotal = useMemo(() => {
+        return wbsData.reduce((sum, item) => {
+            if (!item.parentId) return sum;
+            const q = Math.max(0, parseFloat(item.quantity) || 0);
+            const uc = Math.max(0, parseFloat(item.unitCost) || 0);
+            const totalCost = uc * q;
+            const marginRaw = (item.margin != null && String(item.margin) !== '') ? parseFloat(item.margin) : null;
+            const d = Math.max(0, parseFloat(item.discount) || 0);
+            let offerPrice = (marginRaw !== null && marginRaw !== 0) ? totalCost * (1 + marginRaw / 100) : 0;
+            if (offerPrice > 0 && d > 0) offerPrice = Math.max(0, offerPrice * (1 - d / 100));
+            return sum + offerPrice;
+        }, 0);
+    }, [wbsData]);
+
+    const workDaysMemo = useMemo(() => {
+        return wbsData.reduce((sum, item) => {
+            if (!item.parentId) return sum;
+            const t = String(item.type || '').toLowerCase();
+            const isWork = t === 'work' || t === 'praca' || String(item.budgetType || '').toUpperCase() === 'WORK';
+            const u = String(item.unit || '').toLowerCase().trim();
+            const isDni = u === 'dni' || u === 'dzień' || u === 'dzien' || u === 'd';
+            return isWork && isDni ? sum + (Math.max(0, parseFloat(item.quantity) || 0)) : sum;
+        }, 0);
+    }, [wbsData]);
+
     const summarizeBudgetRows = useCallback((rows) => {
         let totalCost = 0;
         let totalRevenue = 0;
@@ -2821,35 +2846,45 @@ ${materialsHtml}
             {sectionOrder.map(key => {
                 if (key === 'oferta') {
                     if (!isManagerOrAdmin) return null;
-                    const offerSummary = summarizeBudgetRows(budgetRows);
-                    const workDaysTotal = budgetRows.reduce((sum, r) => {
-                        const t = String(r.type || '').toLowerCase();
-                        const isWork = t === 'work' || t === 'praca' || String(r.budgetType || '').toUpperCase() === 'WORK';
-                        const u = String(r.unit || '').toLowerCase().trim();
-                        const isDni = u === 'dni' || u === 'dzień' || u === 'dzien' || u === 'd';
-                        return isWork && isDni ? sum + (Number(r.quantity) || 0) : sum;
-                    }, 0);
+                    const workDaysFmt = workDaysMemo % 1 === 0 ? String(workDaysMemo) : workDaysMemo.toFixed(1);
                     const resolvedPresets = offerPresets.map(p => ({
                         ...p,
                         text: p.text
                             .replace(/\{nazwa projektu\}/g, orderName || projectName || '')
-                            .replace(/\{wartość oferty\}/g, fmtPLN(offerSummary.totalRevenue) + ' PLN')
+                            .replace(/\{wartość oferty\}/g, fmtPLN(offerRevenueTotal) + ' PLN')
                             .replace(/\{data oferty\}/g, offerDate)
                             .replace(/\{tabela wbs\}/g, wbsBranchTable)
-                            .replace(/\{Roboczo dni w projekcie\}/gi, workDaysTotal % 1 === 0 ? String(workDaysTotal) : workDaysTotal.toFixed(1)),
+                            .replace(/\{Roboczo dni w projekcie\}/gi, workDaysFmt),
                     }));
                     return renderSection('oferta', 'Oferta', FileText, 'amber', (
                         <div className="flex flex-col flex-1 min-h-0 p-4 gap-2">
-                            <div className="flex items-center gap-3 px-1">
-                                <span className="text-[11px] text-gray-400 uppercase tracking-widest">Data oferty</span>
-                                <input
-                                    type="text"
-                                    value={offerDate}
-                                    onChange={e => setOfferDate(e.target.value)}
-                                    className="bg-white/5 border border-white/10 rounded px-2 py-0.5 text-xs text-gray-200 focus:outline-none focus:border-amber-500/50 w-32"
-                                    placeholder="dd.mm.rrrr"
-                                />
-                                <span className="text-[11px] text-gray-500">Przychód: <span className="text-amber-300 font-semibold">{fmtPLN(offerSummary.totalRevenue)} PLN</span></span>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 py-1 bg-white/3 rounded-lg border border-white/5">
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-gray-500 uppercase tracking-widest">{'{data oferty}'}</span>
+                                    <input
+                                        type="text"
+                                        value={offerDate}
+                                        onChange={e => setOfferDate(e.target.value)}
+                                        className="bg-white/5 border border-white/10 rounded px-2 py-0.5 text-xs text-gray-200 focus:outline-none focus:border-amber-500/50 w-28"
+                                        placeholder="dd.mm.rrrr"
+                                    />
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-gray-500 uppercase tracking-widest">{'{wartość oferty}'}</span>
+                                    <span className="text-xs text-amber-300 font-semibold">{fmtPLN(offerRevenueTotal)} PLN</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-gray-500 uppercase tracking-widest">{'{Roboczo dni}'}</span>
+                                    <span className="text-xs text-blue-300 font-semibold">{workDaysFmt} dni</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-gray-500 uppercase tracking-widest">{'{tabela wbs}'}</span>
+                                    <span className="text-xs text-gray-400">{wbsBranchTable ? `${wbsBranchTable.split('\n').length - 2} etapów` : '—'}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-gray-500 uppercase tracking-widest">{'{nazwa projektu}'}</span>
+                                    <span className="text-xs text-gray-300">{orderName || projectName || '—'}</span>
+                                </div>
                             </div>
                             <MarkdownEditor
                                 value={offerText}
