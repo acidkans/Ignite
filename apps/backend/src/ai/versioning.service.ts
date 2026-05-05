@@ -300,6 +300,7 @@ export class VersioningService {
                         clientProjectManagerPhone: sourceReq.clientProjectManagerPhone,
                         offerStatus: sourceReq.offerStatus,
                         offerStatusComment: sourceReq.offerStatusComment,
+                        offerText: sourceReq.offerText,
                     }
                 });
             }
