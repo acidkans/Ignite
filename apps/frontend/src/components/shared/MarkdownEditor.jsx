@@ -217,7 +217,7 @@ export default function MarkdownEditor({
                 const body = sepIdx >= 0 ? block.slice(sepIdx + 1) : block.slice(1);
                 resetOl();
                 html += `<table style="border-collapse:collapse;width:100%;margin:10px 0;font-size:13px">`;
-                html += `<thead><tr>${parseCells(heads[0]).map(c => `<th style="font-size:15px;font-weight:bold;text-align:left;border-bottom:2px solid #555;padding:5px 10px;background:rgba(255,255,255,0.04)">${bold(c)}</th>`).join('')}</tr></thead>`;
+                html += `<thead><tr>${parseCells(heads[0]).map(c => `<th style="font-size:15px;font-weight:bold;text-align:center;border-bottom:2px solid #555;padding:5px 10px;background:rgba(255,255,255,0.04)">${bold(c)}</th>`).join('')}</tr></thead>`;
                 html += `<tbody>${body.map(dr => `<tr>${parseCells(dr).map(c => `<td style="font-weight:normal;padding:4px 10px;border-bottom:1px solid rgba(255,255,255,0.08)">${bold(c)}</td>`).join('')}</tr>`).join('')}</tbody>`;
                 html += `</table>`;
                 continue;
