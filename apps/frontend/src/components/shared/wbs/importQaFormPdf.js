@@ -28,7 +28,7 @@ export async function importQaFormPdf(fileBuffer, wbsData) {
             } catch {
                 // pole nie istnieje w tym PDF
             }
-            if (fieldValue !== newQa[origIdx].answer) {
+            if (fieldValue && fieldValue !== newQa[origIdx].answer) {
                 newQa[origIdx].answer = fieldValue;
                 changed = true;
             }
