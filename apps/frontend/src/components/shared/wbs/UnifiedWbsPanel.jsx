@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ExcelJS from 'exceljs';
-import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays, BarChart3 } from 'lucide-react';
+import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays, BarChart3, ChevronUp, FileText } from 'lucide-react';
 import MarkdownEditor from '../MarkdownEditor';
 import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
@@ -63,6 +63,8 @@ const excelCellToText = (cellValue) => {
 };
 
 
+const DEFAULT_SECTION_ORDER = ['oferta', 'strategy', 'tasks', 'gantt', 'wbs-hybrid', 'budget', 'materials'];
+
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible }) {
@@ -71,11 +73,15 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     wbsDataRef.current = wbsData;
     const [expandedSection, setExpandedSection] = useState(null);
     const [fullscreenSection, setFullscreenSection] = useState(null);
+    const [sectionOrder, setSectionOrder] = useState(DEFAULT_SECTION_ORDER);
     const [expandedIds, setExpandedIds] = useState(new Set());
     const [selectedId, setSelectedId] = useState(null);
     const [wbsDescription, setWbsDescription] = useState('');
     const [strategySaving, setStrategySaving] = useState(false);
     const [strategySaved, setStrategySaved] = useState(false);
+    const [offerText, setOfferText] = useState('');
+    const [offerSaving, setOfferSaving] = useState(false);
+    const [offerSaved, setOfferSaved] = useState(false);
     const [projectUsers, setProjectUsers] = useState([]);
     const [nodeTeamIds, setNodeTeamIds] = useState([]);
     const [logistykUsers, setLogistykUsers] = useState([]);
@@ -112,6 +118,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const materialRef = useRef();
     const strategyLoadedRef = useRef(false);
     const strategySaveTimeout = useRef(null);
+    const offerLoadedRef = useRef(false);
+    const offerSaveTimeout = useRef(null);
     const budgetImportFileInputRef = useRef(null);
     const reqDropTargetRef = useRef(null);
 
@@ -668,13 +676,16 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     }, [nodeId, userRoles]);
 
     const getStrategyText = useCallback(() => wbsDescription, [wbsDescription]);
+    const getOfferText = useCallback(() => offerText, [offerText]);
 
     // Reset strategy state when switching nodes/versions so the new record loads fresh.
     // Pending autosave timeouts are left intact — they capture the old saveStrategy closure
     // (with the old nodeId) so typed-but-unsaved text still flushes to the correct record.
     useEffect(() => {
         strategyLoadedRef.current = false;
+        offerLoadedRef.current = false;
         setWbsDescription('');
+        setOfferText('');
     }, [nodeId, versionId]);
 
     const fetchStrategy = useCallback(async () => {
@@ -687,6 +698,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 if (data && !strategyLoadedRef.current) {
                     setWbsDescription(data.wbsDescription || '');
                     strategyLoadedRef.current = true;
+                }
+                if (data && !offerLoadedRef.current) {
+                    setOfferText(data.offerText || '');
+                    offerLoadedRef.current = true;
                 }
             }
         } catch (e) { console.error('Fetch strategy error:', e); }
@@ -855,6 +870,20 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
         finally { setStrategySaving(false); }
     }, [nodeId, versionId, authHeaders]);
 
+    const saveOffer = useCallback(async (desc) => {
+        setOfferSaving(true);
+        try {
+            await fetch(`${API_URL}/order-requirements`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({ nodeId, versionId, offerText: desc }),
+            });
+            setOfferSaved(true);
+            setTimeout(() => setOfferSaved(false), 2000);
+        } catch (e) { console.error('Save offer error:', e); }
+        finally { setOfferSaving(false); }
+    }, [nodeId, versionId, authHeaders]);
+
     // Zachowane dla zewnętrznych wywołań (np. fetchData). MarkdownEditor zapisuje przez własny onSave.
     const handleStrategySave = useCallback((immediate = false) => {
         if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
@@ -992,6 +1021,12 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             <div class="section">
                 <div class="section-header">Jak to chcemy zrobić</div>
                 <div class="strategy-text">${renderStrategyHtml(getStrategyText() || 'Brak treści strategii')}</div>
+            </div>` : '';
+
+        const offerHtml = show('oferta') ? `
+            <div class="section">
+                <div class="section-header">Oferta</div>
+                <div class="strategy-text">${renderStrategyHtml(getOfferText() || 'Brak treści oferty')}</div>
             </div>` : '';
 
         const wbsHtml = show('wbs') ? `
@@ -1188,10 +1223,11 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
   ${logoDataUrl ? `<img class="doc-header-logo" src="${logoDataUrl}" alt="Logo" />` : ''}
   <div class="doc-header-text">
     <h1>${esc(orderName || projectName || 'Zamówienie')}</h1>
-    <div class="sub">${{ strategy: 'Jak to chcemy zrobić', budget: 'Budżet', 'wbs-hybrid': 'Struktura projektu', wbs: 'Struktura projektu', materials: 'Materiały' }[sectionKey] || 'Planowanie'}</div>
+    <div class="sub">${{ strategy: 'Jak to chcemy zrobić', oferta: 'Oferta', budget: 'Budżet', 'wbs-hybrid': 'Struktura projektu', wbs: 'Struktura projektu', materials: 'Materiały' }[sectionKey] || 'Planowanie'}</div>
     <div class="meta">Przygotowano: ${date}</div>
   </div>
 </div>
+${offerHtml}
 ${strategyHtml}
 ${wbsHtml}
 ${budgetHtml}
@@ -2604,13 +2640,35 @@ ${materialsHtml}
         setExpandedSection(prev => prev === key ? null : key);
     }, [commitPendingEdits]);
 
+    const moveSectionUp = useCallback((key) => {
+        setSectionOrder(prev => {
+            const i = prev.indexOf(key);
+            if (i <= 0) return prev;
+            const next = [...prev];
+            [next[i - 1], next[i]] = [next[i], next[i - 1]];
+            return next;
+        });
+    }, []);
+
+    const moveSectionDown = useCallback((key) => {
+        setSectionOrder(prev => {
+            const i = prev.indexOf(key);
+            if (i < 0 || i >= prev.length - 1) return prev;
+            const next = [...prev];
+            [next[i], next[i + 1]] = [next[i + 1], next[i]];
+            return next;
+        });
+    }, []);
+
     const renderSection = (key, title, Icon, colorClass, content, onExport, extraButtons = null) => {
         const isActive = expandedSection === key;
         const isHidden = expandedSection !== null && !isActive;
-        const isCompactSection = key === 'budget' || key === 'materials' || key === 'wbs-hybrid' || key === 'strategy' || key === 'gantt';
+        const isCompactSection = key === 'budget' || key === 'materials' || key === 'wbs-hybrid' || key === 'strategy' || key === 'gantt' || key === 'oferta';
+        const orderIdx = sectionOrder.indexOf(key);
 
         return (
             <div
+                key={key}
                 className={`flex flex-col glass-panel border border-white/5 transition-all duration-300 shadow-2xl overflow-hidden ${isCompactSection && isActive ? 'rounded-none flex-1 min-h-0' : 'rounded-2xl'} ${isActive ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
                 style={isActive && !isCompactSection ? { minHeight: 'calc(100vh - 200px)' } : isHidden ? { display: 'none' } : {}}
             >
@@ -2622,6 +2680,14 @@ ${materialsHtml}
                     <h3 className="text-xs font-bold uppercase tracking-widest text-gray-300 font-inter">{title}</h3>
                     <div className="flex-1 px-4 flex items-center gap-2 flex-nowrap min-w-0">{isActive && extraButtons}</div>
                     <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex flex-col gap-0.5 opacity-40 hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                            <button onClick={() => moveSectionUp(key)} disabled={orderIdx <= 0} className="p-0.5 rounded hover:bg-white/10 disabled:opacity-20 disabled:cursor-not-allowed transition-all" title="Przesuń sekcję w górę">
+                                <ChevronUp size={10} className="text-gray-400" />
+                            </button>
+                            <button onClick={() => moveSectionDown(key)} disabled={orderIdx >= sectionOrder.length - 1} className="p-0.5 rounded hover:bg-white/10 disabled:opacity-20 disabled:cursor-not-allowed transition-all" title="Przesuń sekcję w dół">
+                                <ChevronDown size={10} className="text-gray-400" />
+                            </button>
+                        </div>
                         {key === 'wbs' && (
                             <button
                                 className="ml-2 px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-xs rounded-lg font-bold shadow border border-emerald-900/40 transition-all flex-shrink-0"
@@ -2660,7 +2726,7 @@ ${materialsHtml}
         );
     };
 
-    const isCompactActive = (expandedSection === 'budget' || expandedSection === 'materials' || expandedSection === 'wbs-hybrid' || expandedSection === 'strategy' || expandedSection === 'gantt');
+    const isCompactActive = (expandedSection === 'budget' || expandedSection === 'materials' || expandedSection === 'wbs-hybrid' || expandedSection === 'strategy' || expandedSection === 'gantt' || expandedSection === 'oferta');
 
     return (
         <div className={`flex flex-col w-full h-full relative bg-[#0a0c10]/50 border border-white/[0.03] gap-1 pt-0 ${isCompactActive ? 'overflow-hidden p-0' : 'overflow-y-auto pr-2 custom-scrollbar rounded-[40px] p-2'}`}>
@@ -2671,157 +2737,167 @@ ${materialsHtml}
                 className="hidden"
                 onChange={handleBudgetImportFileChange}
             />
-            {renderSection('strategy', 'Jak to chcemy zrobić', HelpCircle, 'blue', (
-                <div className="flex flex-col flex-1 min-h-0 p-4">
-                    <MarkdownEditor
-                        value={wbsDescription}
-                        onChange={setWbsDescription}
-                        onSave={(v) => saveStrategy(v)}
-                        previewTitle="Jak to chcemy zrobić"
-                        onExportPDF={() => handleExportPDF('strategy')}
-                        placeholder="Zdefiniuj plan i strategię realizacji projektu..."
-                        containerClassName="flex-1 min-h-0"
-                        className="flex-1 min-h-0 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed resize-none"
-                        saveIndicator={true}
-                    />
-                </div>
-            ), () => handleExportPDF('strategy'))}
-
-            {renderSection('tasks', 'Zadania', CalendarDays, 'blue', (
-                <TasksCalendarSection
-                    nodeId={nodeId}
-                    versionId={versionId}
-                    nodeName={projectName}
-                    onWbsUpdate={onWbsUpdate}
-                />
-            ))}
-
-            {renderSection('gantt', 'Harmonogram (Gantt)', BarChart3, 'cyan', (
-                <GanttSection
-                    wbsTree={wbsTree}
-                    projectName={orderName || projectName || 'Projekt'}
-                    onNodeDurationChange={handleGanttDurationChange}
-                    onExportReady={fn => { ganttExportRef.current = fn; }}
-                    onGetHtmlReady={fn => { ganttGetHtmlRef.current = fn; }}
-                />
-            ), () => ganttExportRef.current?.())}
-
-            {renderSection('wbs-hybrid', `Struktura projektu: ${orderName || projectName || '—'}`, ListTree, 'violet', (
-                <div className="flex flex-col flex-1 min-h-0">
-                    <WBSHybridTable
-                        wbsTree={wbsTree}
-                        setWbsTree={setWbsTreeAndRef}
-                        nodeName={orderName || projectName || 'Projekt'}
-                        processNodeId={nodeId}
-                        onSave={handleSaveHybridWBS}
-                        users={assignedUsers}
-                        onRequirementDrop={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
-                        isManager={isManagerOrAdmin}
-                        onNodesDeleted={handleHybridNodesDeleted}
-                        onMaterialNodeCreated={handleMaterialNodeCreated}
-                        requirementsQtyByNode={requirementsQtyByNode}
-                        onRequirementsQtyChange={handleHybridRequirementsQtyChange}
-                        onNodeStatusChange={handleHybridNodeStatusChange}
-                        unassignedRequirements={isManagerOrAdmin ? unassignedRequirements : []}
-                        onRequirementAssign={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
-                        onNodeFieldSave={updateNodeField}
-                        materialRefreshKey={reqRefreshKey}
-                        searchQuery={normalizedSearchQuery}
-                        onMaterialReqUpdated={() => setReqRefreshKey(k => k + 1)}
-                        onPasteCloned={handlePasteCloned}
-                    />
-                </div>
-            ), () => handleExportPDF('wbs'), isManagerOrAdmin ? (
-                <button
-                    onClick={(e) => { e.stopPropagation(); handleWbsExtract(); }}
-                    disabled={extractingForWbs}
-                    className={`flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 ${extractingForWbs ? 'opacity-50 pointer-events-none' : ''}`}
-                >
-                    {extractingForWbs ? <div className="w-3 h-3 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" /> : <Sparkles size={11} />}
-                    Wyciągnij z dokumentów
-                </button>
-            ) : null)}
-
-            {isManagerOrAdmin && renderSection('budget', 'Budżet', DollarSign, 'green', (
-                <BudgetTable
-                    rows={budgetRows}
-                    onFieldChange={onBudgetFieldChange}
-                    onDeleteRow={(id) => deleteNodeByIdRef.current?.(id)}
-                    discountPercent={budgetDiscountPercent}
-                    discountAmount={budgetDiscountAmount}
-                    onDiscountPercentChange={setBudgetDiscountPercent}
-                    onDiscountAmountChange={setBudgetDiscountAmount}
-                />
-            ), () => handleExportPDF('budget'), (
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); handleExportOfertaExcel(); }}
-                        className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all"
-                    >
-                        <FileDown size={11} /> Eksport oferty
-                    </button>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleExportBudgetExcel();
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-1 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-lg text-green-300 text-[10px] font-bold uppercase tracking-widest transition-all"
-                    >
-                        <FileDown size={11} /> Eksport budżetu do Excel
-                    </button>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            budgetImportFileInputRef.current?.click();
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all"
-                    >
-                        <FileDown size={11} /> Import budżetu z Excel
-                    </button>
-                </div>
-            ),
-            null,
-            // extraButtons
-            wbsData.filter(n => n.parentId == null).length === 0 ? (
-                <button
-                    className="ml-2 px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-xs rounded-lg font-bold shadow border border-emerald-900/40 transition-all"
-                    onClick={e => { e.stopPropagation(); addNode(null); }}
-                >
-                    + Dodaj produkt projektu
-                </button>
-            ) : null
-        )}
-
-            {renderSection('materials', 'Materiały', Zap, 'yellow', (
-                <WbsMaterialsPanel
-                    nodeId={nodeId}
-                    versionId={versionId}
-                    readOnly={!isManagerOrAdmin && !isLogistyk}
-                    externalWbsNodes={wbsData}
-                    onPatchNode={(id, data) => setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))}
-                    onWbsUpdate={async () => { await refreshMaterialCosts(); }}
-                    refreshKey={reqRefreshKey}
-                    projectName={projectName}
-                    orderName={orderName}
-                    onExportReady={fn => { materialsExportFn.current = fn; }}
-                    onExportPdfReady={fn => { materialsPdfExportFn.current = fn; }}
-                />
-            ), null, (
-                <>
-                    <button
-                        onClick={e => { e.stopPropagation(); materialsPdfExportFn.current?.(); }}
-                        className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0"
-                    >
-                        <FileDown size={11} /> PDF
-                    </button>
-                    <button
-                        onClick={e => { e.stopPropagation(); materialsExportFn.current?.(); }}
-                        className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0"
-                    >
-                        <FileDown size={11} /> Excel
-                    </button>
-                </>
-            ))}
+            {sectionOrder.map(key => {
+                if (key === 'oferta') {
+                    if (!isManagerOrAdmin) return null;
+                    const offerPresets = [
+                        {
+                            label: 'Wstęp — odpowiedź na zapytanie',
+                            text: `# W odpowiedzi na zapytanie wyceny projektu ${orderName || projectName || '{nazwa projektu}'}, firma Airtel Services składa ofertę obejmującą:`,
+                        },
+                    ];
+                    return renderSection('oferta', 'Oferta', FileText, 'amber', (
+                        <div className="flex flex-col flex-1 min-h-0 p-4">
+                            <MarkdownEditor
+                                value={offerText}
+                                onChange={setOfferText}
+                                onSave={(v) => saveOffer(v)}
+                                previewTitle="Oferta"
+                                onExportPDF={() => handleExportPDF('oferta')}
+                                placeholder="Treść oferty dla klienta..."
+                                containerClassName="flex-1 min-h-0"
+                                className="flex-1 min-h-0 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-amber-500 transition-colors custom-scrollbar leading-relaxed resize-none"
+                                saveIndicator={true}
+                                presets={offerPresets}
+                            />
+                        </div>
+                    ), () => handleExportPDF('oferta'));
+                }
+                if (key === 'strategy') {
+                    return renderSection('strategy', 'Jak to chcemy zrobić', HelpCircle, 'blue', (
+                        <div className="flex flex-col flex-1 min-h-0 p-4">
+                            <MarkdownEditor
+                                value={wbsDescription}
+                                onChange={setWbsDescription}
+                                onSave={(v) => saveStrategy(v)}
+                                previewTitle="Jak to chcemy zrobić"
+                                onExportPDF={() => handleExportPDF('strategy')}
+                                placeholder="Zdefiniuj plan i strategię realizacji projektu..."
+                                containerClassName="flex-1 min-h-0"
+                                className="flex-1 min-h-0 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed resize-none"
+                                saveIndicator={true}
+                            />
+                        </div>
+                    ), () => handleExportPDF('strategy'));
+                }
+                if (key === 'tasks') {
+                    return renderSection('tasks', 'Zadania', CalendarDays, 'blue', (
+                        <TasksCalendarSection
+                            nodeId={nodeId}
+                            versionId={versionId}
+                            nodeName={projectName}
+                            onWbsUpdate={onWbsUpdate}
+                        />
+                    ));
+                }
+                if (key === 'gantt') {
+                    return renderSection('gantt', 'Harmonogram (Gantt)', BarChart3, 'cyan', (
+                        <GanttSection
+                            wbsTree={wbsTree}
+                            projectName={orderName || projectName || 'Projekt'}
+                            onNodeDurationChange={handleGanttDurationChange}
+                            onExportReady={fn => { ganttExportRef.current = fn; }}
+                            onGetHtmlReady={fn => { ganttGetHtmlRef.current = fn; }}
+                        />
+                    ), () => ganttExportRef.current?.());
+                }
+                if (key === 'wbs-hybrid') {
+                    return renderSection('wbs-hybrid', `Struktura projektu: ${orderName || projectName || '—'}`, ListTree, 'violet', (
+                        <div className="flex flex-col flex-1 min-h-0">
+                            <WBSHybridTable
+                                wbsTree={wbsTree}
+                                setWbsTree={setWbsTreeAndRef}
+                                nodeName={orderName || projectName || 'Projekt'}
+                                processNodeId={nodeId}
+                                onSave={handleSaveHybridWBS}
+                                users={assignedUsers}
+                                onRequirementDrop={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
+                                isManager={isManagerOrAdmin}
+                                onNodesDeleted={handleHybridNodesDeleted}
+                                onMaterialNodeCreated={handleMaterialNodeCreated}
+                                requirementsQtyByNode={requirementsQtyByNode}
+                                onRequirementsQtyChange={handleHybridRequirementsQtyChange}
+                                onNodeStatusChange={handleHybridNodeStatusChange}
+                                unassignedRequirements={isManagerOrAdmin ? unassignedRequirements : []}
+                                onRequirementAssign={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
+                                onNodeFieldSave={updateNodeField}
+                                materialRefreshKey={reqRefreshKey}
+                                searchQuery={normalizedSearchQuery}
+                                onMaterialReqUpdated={() => setReqRefreshKey(k => k + 1)}
+                                onPasteCloned={handlePasteCloned}
+                            />
+                        </div>
+                    ), () => handleExportPDF('wbs'), isManagerOrAdmin ? (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); handleWbsExtract(); }}
+                            disabled={extractingForWbs}
+                            className={`flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 ${extractingForWbs ? 'opacity-50 pointer-events-none' : ''}`}
+                        >
+                            {extractingForWbs ? <div className="w-3 h-3 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" /> : <Sparkles size={11} />}
+                            Wyciągnij z dokumentów
+                        </button>
+                    ) : null);
+                }
+                if (key === 'budget') {
+                    if (!isManagerOrAdmin) return null;
+                    return renderSection('budget', 'Budżet', DollarSign, 'green', (
+                        <BudgetTable
+                            rows={budgetRows}
+                            onFieldChange={onBudgetFieldChange}
+                            onDeleteRow={(id) => deleteNodeByIdRef.current?.(id)}
+                            discountPercent={budgetDiscountPercent}
+                            discountAmount={budgetDiscountAmount}
+                            onDiscountPercentChange={setBudgetDiscountPercent}
+                            onDiscountAmountChange={setBudgetDiscountAmount}
+                        />
+                    ), () => handleExportPDF('budget'), (
+                        <div className="flex items-center gap-2">
+                            <button onClick={(e) => { e.stopPropagation(); handleExportOfertaExcel(); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                                <FileDown size={11} /> Eksport oferty
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); handleExportBudgetExcel(); }} className="flex items-center gap-1.5 px-3 py-1 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-lg text-green-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                                <FileDown size={11} /> Eksport budżetu do Excel
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); budgetImportFileInputRef.current?.click(); }} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                                <FileDown size={11} /> Import budżetu z Excel
+                            </button>
+                        </div>
+                    ),
+                    null,
+                    wbsData.filter(n => n.parentId == null).length === 0 ? (
+                        <button className="ml-2 px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-xs rounded-lg font-bold shadow border border-emerald-900/40 transition-all" onClick={e => { e.stopPropagation(); addNode(null); }}>
+                            + Dodaj produkt projektu
+                        </button>
+                    ) : null);
+                }
+                if (key === 'materials') {
+                    return renderSection('materials', 'Materiały', Zap, 'yellow', (
+                        <WbsMaterialsPanel
+                            nodeId={nodeId}
+                            versionId={versionId}
+                            readOnly={!isManagerOrAdmin && !isLogistyk}
+                            externalWbsNodes={wbsData}
+                            onPatchNode={(id, data) => setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))}
+                            onWbsUpdate={async () => { await refreshMaterialCosts(); }}
+                            refreshKey={reqRefreshKey}
+                            projectName={projectName}
+                            orderName={orderName}
+                            onExportReady={fn => { materialsExportFn.current = fn; }}
+                            onExportPdfReady={fn => { materialsPdfExportFn.current = fn; }}
+                        />
+                    ), null, (
+                        <>
+                            <button onClick={e => { e.stopPropagation(); materialsPdfExportFn.current?.(); }} className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
+                                <FileDown size={11} /> PDF
+                            </button>
+                            <button onClick={e => { e.stopPropagation(); materialsExportFn.current?.(); }} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
+                                <FileDown size={11} /> Excel
+                            </button>
+                        </>
+                    ));
+                }
+                return null;
+            })}
 
             {budgetImportOpen && (
                 <div className="fixed inset-0 z-[125] bg-[#05070bcc] backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !budgetImportLoading && setBudgetImportOpen(false)}>

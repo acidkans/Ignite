@@ -235,12 +235,7 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
         </div>`;
 
     // === Section: Jak to chcemy zrobić ===
-    const strategyText = orderReq?.wbsDescription || '';
-    const strategyHtml = `
-        <div class="section">
-            <div class="section-header">Jak to chcemy zrobić</div>
-            <div class="strategy-text"><p>${renderStrategyHtml(strategyText || 'Brak treści strategii')}</p></div>
-        </div>`;
+    const strategyHtml = '';
 
     // === Section: WBS ===
     const wbsHtml = `
@@ -308,7 +303,7 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
-<title>${esc(projectName || info?.name || 'Projekt')} — ${date}</title>
+<title>${esc((projectName || info?.name || 'Projekt').replace(/^Oferty/i, 'Oferta'))} — ${date}</title>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -319,8 +314,8 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
   .doc-header h1 { font-size: 20px; margin: 0 0 2px 0; }
   .doc-header .sub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: #6b7280; }
   .doc-header .meta { font-size: 10px; color: #9ca3af; margin-top: 4px; }
-  .section { margin-bottom: 32px; }
-  .section + .section { margin-top: 0; }
+  .section { margin-bottom: 0; page-break-before: always; break-before: page; }
+  .doc-header + .section { page-break-before: avoid; break-before: avoid; }
   .section-header { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; background: #1a1a2e; color: #fff; padding: 7px 12px; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
   h1, h2, h3, h4, h5, h6, .section-header, .table-title, .md-bold,
   .strategy-text h2, .strategy-text h3, .strategy-text h4 {

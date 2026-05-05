@@ -75,6 +75,7 @@ export class OrderRequirementsService {
             if (data.projectGoal !== undefined) requirementFields.projectGoal = data.projectGoal;
             if (data.projectItems !== undefined) requirementFields.projectItems = data.projectItems;
             if (data.wbsDescription !== undefined) requirementFields.wbsDescription = data.wbsDescription;
+            if (data.offerText !== undefined) requirementFields.offerText = data.offerText;
             if (data.clientProjectManager !== undefined) requirementFields.clientProjectManager = data.clientProjectManager;
             if (data.clientProjectManagerPhone !== undefined) requirementFields.clientProjectManagerPhone = data.clientProjectManagerPhone;
             if (data.clientProjectManagerEmail !== undefined) requirementFields.clientProjectManagerEmail = data.clientProjectManagerEmail;

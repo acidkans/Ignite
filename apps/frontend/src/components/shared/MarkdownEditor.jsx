@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronsRight, ChevronsLeft, LayoutList, X, FileDown } from 'lucide-react';
+import { ChevronsRight, ChevronsLeft, LayoutList, X, FileDown, ChevronDown } from 'lucide-react';
 
 // Wspólny edytor markdown z toolbarem (B, H1-H3, Lista, 1., wcięcie/cofnięcie + Tab) i podglądem
 // (multi-level numeracja: 1, 1.1, 1.1.1 …, hanging indent w flexie — bez wyjścia poza obramówkę).
@@ -16,12 +16,14 @@ export default function MarkdownEditor({
     saveDebounceMs = 1500,
     previewTitle = 'Podgląd',
     saveIndicator = false,
+    presets = null,
 }) {
     const taRef = useRef(null);
     const saveTimeoutRef = useRef(null);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [previewOpen, setPreviewOpen] = useState(false);
+    const [presetsOpen, setPresetsOpen] = useState(false);
 
     const triggerSave = useCallback((nextVal, immediate = false) => {
         if (!onSave) return;
@@ -233,6 +235,18 @@ export default function MarkdownEditor({
         return html;
     };
 
+    const insertPreset = (text) => {
+        const ta = taRef.current;
+        setPresetsOpen(false);
+        if (!ta) { onChange?.(text); triggerSave(text); return; }
+        const start = ta.selectionStart ?? 0;
+        const end = ta.selectionEnd ?? start;
+        const current = ta.value;
+        const prefix = current.length > 0 && !current.endsWith('\n') ? '\n\n' : '';
+        const next = current.slice(0, start) + prefix + text + current.slice(end);
+        updateValue(next, start + prefix.length + text.length, start + prefix.length + text.length);
+    };
+
     const handleChange = (e) => {
         const next = e.target.value;
         onChange?.(next);
@@ -267,6 +281,31 @@ export default function MarkdownEditor({
                     <button type="button" onClick={() => setPreviewOpen(true)} className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                         <LayoutList size={11} /> Podgląd
                     </button>
+                    {presets && presets.length > 0 && (
+                        <div className="relative">
+                            <button
+                                type="button"
+                                onClick={() => setPresetsOpen(p => !p)}
+                                className="flex items-center gap-1 px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded text-amber-300 text-[10px] font-bold uppercase tracking-widest transition-all"
+                            >
+                                Wstaw szablon <ChevronDown size={10} />
+                            </button>
+                            {presetsOpen && (
+                                <div className="absolute left-0 top-full mt-1 z-50 bg-[#0d1520] border border-white/10 rounded-xl shadow-2xl min-w-[260px] py-1">
+                                    {presets.map((p, i) => (
+                                        <button
+                                            key={i}
+                                            type="button"
+                                            onClick={() => insertPreset(p.text)}
+                                            className="w-full text-left px-4 py-2 text-xs text-gray-200 hover:bg-white/10 transition-colors"
+                                        >
+                                            {p.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
                 <textarea
                     ref={taRef}
