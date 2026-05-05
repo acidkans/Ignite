@@ -2659,24 +2659,33 @@ ${materialsHtml}
     );
 
     const wbsBranchTable = useMemo(() => {
-        if (!budgetRows.length) return '';
+        if (!wbsData.length) return '';
+        const byId = new Map(wbsData.map(n => [n.id, n]));
+        const getRootName = (item) => {
+            let cur = item;
+            while (cur?.parentId) { const p = byId.get(cur.parentId); if (!p) break; cur = p; }
+            return { id: cur?.id || item.id, name: cur?.name || item.name || '' };
+        };
         const bySubject = new Map();
-        for (const row of budgetRows) {
-            const key = row.subjectId || row.subjectName || 'Inne';
-            const label = row.subjectName || 'Inne';
-            if (!bySubject.has(key)) bySubject.set(key, { label, total: 0 });
-            const q = parseFloat(row.quantity) || 1;
-            const revenue = parseFloat(row.offerPrice);
-            const fallbackRevenue = Number.isFinite(parseFloat(row.totalPrice))
-                ? parseFloat(row.totalPrice)
-                : (parseFloat(row.unitPrice) || 0) * q;
-            bySubject.get(key).total += Number.isFinite(revenue) && revenue !== 0 ? revenue : fallbackRevenue;
+        for (const item of wbsData) {
+            if (!item.parentId) continue;
+            const q = Math.max(0, parseFloat(item.quantity) || 0);
+            const uc = Math.max(0, parseFloat(item.unitCost) || 0);
+            const totalCost = uc * q;
+            const marginRaw = (item.margin != null && String(item.margin) !== '') ? parseFloat(item.margin) : null;
+            const d = Math.max(0, parseFloat(item.discount) || 0);
+            let offerPrice = (marginRaw !== null && marginRaw !== 0) ? totalCost * (1 + marginRaw / 100) : 0;
+            if (offerPrice > 0 && d > 0) offerPrice = Math.max(0, offerPrice * (1 - d / 100));
+            if (offerPrice <= 0) continue;
+            const { id, name } = getRootName(item);
+            if (!bySubject.has(id)) bySubject.set(id, { label: name, total: 0 });
+            bySubject.get(id).total += offerPrice;
         }
         const entries = [...bySubject.values()].filter(e => e.total > 0);
         if (!entries.length) return '';
         const tableRows = entries.map((e, i) => `| ${i + 1}. | ${e.label} | ${fmtPLN(e.total)} PLN |`).join('\n');
         return `| Lp. | Etap projektu | Wartość netto PLN |\n|---|---|---|\n${tableRows}`;
-    }, [budgetRows]);
+    }, [wbsData]);
 
     const summarizeBudgetRows = useCallback((rows) => {
         let totalCost = 0;
