@@ -9,6 +9,7 @@ import TasksCalendarSection from './TasksCalendarSection';
 import GanttSection from './GanttSection';
 import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType } from './wbsConstants';
 import { exportProjectPdf } from '../../../utils/projectPdfExport';
+import { exportQaFormPdf } from './exportQaFormPdf';
 import WBSHybridTable from './WBSHybridTable';
 import BudgetTable from './BudgetTable';
 
@@ -2809,6 +2810,14 @@ ${materialsHtml}
                         )}
                         {onExport && (
                             <>
+                                {key === 'wbs' && (
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); exportQaFormPdf(wbsData, orderName || projectName || 'Projekt'); }}
+                                        className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
+                                    >
+                                        <FileDown size={11} /> Q&A PDF
+                                    </button>
+                                )}
                                 <button
                                     onClick={(e) => { e.stopPropagation(); exportProjectPdf({ nodeId, versionId, projectName, orderName, ganttHtml: ganttGetHtmlRef.current?.() || null }); }}
                                     className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
