@@ -951,7 +951,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                 const body = sepIdx >= 0 ? block.slice(sepIdx + 1) : block.slice(1);
                 resetOl();
                 html += `<table style="border-collapse:collapse;width:100%;margin:10px 0;font-size:11px">`;
-                html += `<thead><tr>${parseCells(heads[0]).map(c => `<th style="font-size:13px;font-weight:bold;text-align:left;border-bottom:2px solid #888;padding:5px 10px">${bold(c)}</th>`).join('')}</tr></thead>`;
+                html += `<thead><tr>${parseCells(heads[0]).map(c => `<th style="font-size:13px;font-weight:bold;text-align:center;border-bottom:2px solid #888;padding:5px 10px">${bold(c)}</th>`).join('')}</tr></thead>`;
                 html += `<tbody>${body.map(dr => `<tr>${parseCells(dr).map(c => `<td style="font-weight:normal;padding:4px 10px;border-bottom:1px solid #ddd">${bold(c)}</td>`).join('')}</tr>`).join('')}</tbody>`;
                 html += `</table>`;
                 continue;
@@ -1078,7 +1078,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 
         const offerHtml = show('oferta') ? `
             <div class="section">
-                <div class="section-header">Oferta</div>
                 <div class="strategy-text">${renderStrategyHtml(getOfferText() || 'Brak treści oferty')}</div>
             </div>` : '';
 
@@ -1223,7 +1222,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
-<title>${esc(projectName || orderName || 'Projekt')}_${esc(orderName || 'zamowienie')}_projekt</title>
+<title></title>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -1289,12 +1288,12 @@ ${materialsHtml}
 </body>
 </html>`;
 
-        const win = window.open('', '_blank');
-        if (!win) { alert('Zezwól na otwieranie pop-upów aby eksportować PDF'); return; }
-        win.document.write(html);
-        win.document.close();
+        const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+        const blobUrl = URL.createObjectURL(blob);
+        const win = window.open(blobUrl, '_blank');
+        if (!win) { alert('Zezwól na otwieranie pop-upów aby eksportować PDF'); URL.revokeObjectURL(blobUrl); return; }
         win.focus();
-        setTimeout(() => { win.print(); }, 400);
+        setTimeout(() => { win.print(); setTimeout(() => URL.revokeObjectURL(blobUrl), 60000); }, 600);
     };
 
     const handleExportBudgetExcel = async () => {
@@ -2683,8 +2682,8 @@ ${materialsHtml}
         }
         const entries = [...bySubject.values()].filter(e => e.total > 0);
         if (!entries.length) return '';
-        const tableRows = entries.map((e, i) => `| ${i + 1}. | ${e.label} | ${fmtPLN(e.total)} PLN |`).join('\n');
-        return `| Lp. | Etap projektu | Wartość netto PLN |\n|---|---|---|\n${tableRows}`;
+        const tableRows = entries.map((e, i) => `| ${i + 1}. | ${e.label} | ${fmtPLN(e.total)} |`).join('\n');
+        return `| Lp. | Etap projektu | Wartość netto |\n|---|---|---|\n${tableRows}`;
     }, [wbsData]);
 
     const summarizeBudgetRows = useCallback((rows) => {
