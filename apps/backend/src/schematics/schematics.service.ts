@@ -200,7 +200,7 @@ export class SchematicsService {
         });
     }
 
-    async updateMarker(markerId: string, data: { type?: string; x?: number; y?: number; x2?: number; y2?: number; pageNumber?: number; note?: string; name?: string; subtaskId?: string | null }) {
+    async updateMarker(markerId: string, data: { type?: string; x?: number; y?: number; x2?: number; y2?: number; pageNumber?: number; note?: string; name?: string; question?: string | null; subtaskId?: string | null }) {
         return this.prisma.schematicMarker.update({
             where: { id: markerId },
             data,

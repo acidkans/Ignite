@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Trash2, Upload, MapPin, Hash, User, FileText, Eye, Clock, Image, Film, FileCode, ChevronDown, Pencil } from 'lucide-react';
+import { Trash2, Upload, MapPin, Hash, User, FileText, Eye, Clock, Image, Film, FileCode, ChevronDown, Pencil, FileInput } from 'lucide-react';
 import { API_URL } from '../../config';
 import DocumentViewer from './DocumentViewer';
+import { importQaFormPdf } from './wbs/importQaFormPdf';
 
-export default function PropertyPreview({ nodeId, searchQuery = '', isFinancialTab = false, isOfferTab = false, isDatasheetTab = false, onApprove = null, onDatasheetApprove = null }) {
+export default function PropertyPreview({ nodeId, versionId = null, searchQuery = '', isFinancialTab = false, isOfferTab = false, isDatasheetTab = false, onApprove = null, onDatasheetApprove = null }) {
     const [node, setNode] = useState(null);
     const [loading, setLoading] = useState(false);
     const [files, setFiles] = useState([]);
@@ -17,6 +18,55 @@ export default function PropertyPreview({ nodeId, searchQuery = '', isFinancialT
     const [renameSaving, setRenameSaving] = useState(false);
     const fileInputRef = useRef(null);
     const fileDropdownRef = useRef(null);
+    const [qaImporting, setQaImporting] = useState(false);
+    const [qaImportResult, setQaImportResult] = useState(null); // { ok: bool, msg: string }
+
+    const isQaFile = (file) => file && /Q&A/i.test(file.fileName || '');
+
+    const handleQaImport = async (file = selectedFile) => {
+        if (!file?.id || !nodeId) return;
+        setQaImporting(true);
+        setQaImportResult(null);
+        try {
+            const token = sessionStorage.getItem('token');
+            const [wbsRes, pdfRes] = await Promise.all([
+                fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: { Authorization: `Bearer ${token}` } }),
+                fetch(`${API_URL}/documents/download/${file.id}`, { headers: { Authorization: `Bearer ${token}` } }),
+            ]);
+            if (!wbsRes.ok) throw new Error('Nie udało się pobrać struktury WBS');
+            if (!pdfRes.ok) throw new Error('Nie udało się pobrać pliku PDF');
+            const wbsJson = await wbsRes.json();
+            const wbsItems = wbsJson.items || [];
+            const buffer = await pdfRes.arrayBuffer();
+            const updates = await importQaFormPdf(buffer, wbsItems);
+            if (!updates.length) {
+                setQaImportResult({ ok: false, msg: 'Brak nowych odpowiedzi' });
+                return;
+            }
+            const results = await Promise.all(updates.map(({ nodeId: nid, qa }) =>
+                fetch(`${API_URL}/wbs-nodes/${nid}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ qa }),
+                })
+            ));
+            const failed = results.filter(r => !r.ok).length;
+            if (failed) throw new Error(`${failed} z ${results.length} węzłów nie zostało zapisanych`);
+            setQaImportResult({ ok: true, msg: `Zaimportowano (${updates.length} węzłów)` });
+            window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
+        } catch (err) {
+            console.error('[Import Q&A]', err);
+            setQaImportResult({ ok: false, msg: 'Błąd: ' + err.message });
+        } finally {
+            setQaImporting(false);
+        }
+    };
+
+    // Auto-import gdy wybrany plik zawiera "Q&A" w nazwie
+    useEffect(() => {
+        if (isQaFile(selectedFile)) handleQaImport(selectedFile);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedFile?.id]);
 
     // Click-outside zamyka dropdown
     useEffect(() => {
@@ -361,6 +411,24 @@ export default function PropertyPreview({ nodeId, searchQuery = '', isFinancialT
                         </div>
                     )}
                 </div>
+
+                {/* Import Q&A — widoczny gdy wybrany plik ma "Q&A" w nazwie */}
+                {isQaFile(selectedFile) && (
+                    <button
+                        onClick={() => handleQaImport()}
+                        disabled={qaImporting}
+                        className="flex items-center gap-2 px-4 py-1.5 rounded-lg border cursor-pointer transition-all text-xs font-semibold flex-shrink-0 bg-green-500/15 hover:bg-green-500/25 text-green-400 border-green-500/30 hover:border-green-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Zaimportuj odpowiedzi Q&A z tego PDF do struktury WBS"
+                    >
+                        <FileInput size={14} />
+                        {qaImporting ? 'Importuję...' : 'Import Q&A'}
+                    </button>
+                )}
+                {qaImportResult && isQaFile(selectedFile) && (
+                    <span className={`text-[10px] font-semibold flex-shrink-0 ${qaImportResult.ok ? 'text-green-400' : 'text-amber-400'}`}>
+                        {qaImportResult.msg}
+                    </span>
+                )}
 
                 {/* Upload */}
                 <label
