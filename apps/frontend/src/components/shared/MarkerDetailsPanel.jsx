@@ -30,6 +30,8 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     const [mediaRecorder, setMediaRecorder] = useState(null);
     // WBS multi-assign
     const [wbsNodes, setWbsNodes] = useState([]);
+    const wbsItemsRef = useRef([]); // pełne obiekty z polem qa
+    const prevQuestionRef = useRef(marker.question || '');
     const [wbsLinks, setWbsLinks] = useState([]); // [{id, wbsNodeId, markerId}]
     const [wbsToggling, setWbsToggling] = useState(null);
     const [addWbsMode, setAddWbsMode] = useState(null); // null | 'item' | 'requirement'
@@ -74,7 +76,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         }).then(r => r.json()).then(data => {
             try {
                 const items = data.items || [];
-                // Build tree from flat list with parentId
+                wbsItemsRef.current = items;
                 const byId = new Map(items.map(n => [n.id, { ...n, children: [] }]));
                 const roots = [];
                 for (const n of byId.values()) {
@@ -309,15 +311,39 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
             dispatchTempUpdate({ question: editQuestion });
             return;
         }
+        const token = sessionStorage.getItem('token');
+        const prev = prevQuestionRef.current;
+        const next = editQuestion.trim();
+        prevQuestionRef.current = next;
         try {
-            const token = sessionStorage.getItem('token');
             await fetch(`${API_URL}/schematics/markers/${marker.id}`, {
                 method: 'PATCH',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question: editQuestion })
+                body: JSON.stringify({ question: next || null })
             });
-            onRefresh(true);
         } catch(err) { console.error(err); }
+
+        // Sync pytania do qa każdego powiązanego węzła WBS
+        for (const link of wbsLinks) {
+            const node = wbsItemsRef.current.find(n => n.id === link.wbsNodeId);
+            if (!node) continue;
+            const qa = Array.isArray(node.qa) ? [...node.qa] : [];
+            // Usuń poprzednie pytanie tego znacznika (match po treści)
+            const filtered = prev ? qa.filter(p => p.question !== prev) : qa;
+            // Dodaj nowe (jeśli niepuste)
+            const updated = next ? [...filtered, { question: next, answer: '' }] : filtered;
+            // Aktualizuj lokalny cache
+            node.qa = updated;
+            try {
+                await fetch(`${API_URL}/wbs-nodes/${link.wbsNodeId}`, {
+                    method: 'PATCH',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ qa: updated })
+                });
+            } catch(err) { console.error('[qa sync]', err); }
+        }
+        window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
+        onRefresh(true);
     };
 
     const handleDeleteMarker = async () => {
