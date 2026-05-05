@@ -240,14 +240,47 @@ const taskDays = (task, branchWorkOnHolidays = {}, taskBranchMap = {}) => {
     return count;
 };
 
-const GanttTaskListHeader = ({ headerHeight, rowWidth, fontFamily, fontSize }) => (
-    <div style={{ display: 'flex', height: headerHeight, fontFamily, borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#0b0f17', boxSizing: 'border-box', width: rowWidth, flexShrink: 0 }}>
-        <div style={{ flex: '1 1 0', padding: '0 8px', display: 'flex', alignItems: 'flex-end', paddingBottom: 6, color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Zadanie</div>
-        <div style={hdrCell('Od', COL_DATE)}>Od</div>
-        <div style={hdrCell('Do', COL_DATE)}>Do</div>
-        <div style={hdrCell('Dni', COL_DAYS)}>Dni</div>
-    </div>
-);
+const SortIcon = ({ col, active, dir }) => {
+    if (!active) return <span style={{ opacity: 0.25, fontSize: 9, marginLeft: 3 }}>⇅</span>;
+    return <span style={{ fontSize: 9, marginLeft: 3, color: '#67e8f9' }}>{dir === 'asc' ? '↑' : '↓'}</span>;
+};
+
+const GanttTaskListHeader = ({ headerHeight, rowWidth, fontFamily }) => {
+    const { sortConfig, setSortConfig } = useContext(GanttTableContext) || {};
+    const handleSort = (col) => {
+        if (!setSortConfig) return;
+        setSortConfig(prev => prev.col === col
+            ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+            : { col, dir: 'asc' }
+        );
+    };
+    const sortCol = sortConfig?.col;
+    const sortDir = sortConfig?.dir;
+    const sortHdr = (col, width, label) => ({
+        ...hdrCell(label, width),
+        cursor: 'pointer',
+        userSelect: 'none',
+        color: sortCol === col ? '#67e8f9' : '#64748b',
+        transition: 'color 0.15s',
+    });
+    return (
+        <div style={{ display: 'flex', height: headerHeight, fontFamily, borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#0b0f17', boxSizing: 'border-box', width: rowWidth, flexShrink: 0 }}>
+            <div
+                style={{ flex: '1 1 0', padding: '0 8px', display: 'flex', alignItems: 'flex-end', paddingBottom: 6, color: sortCol === 'name' ? '#67e8f9' : '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', cursor: 'pointer', userSelect: 'none', transition: 'color 0.15s' }}
+                onClick={() => handleSort('name')}
+            >
+                Zadanie<SortIcon col="name" active={sortCol === 'name'} dir={sortDir} />
+            </div>
+            <div style={sortHdr('start', COL_DATE, 'Od')} onClick={() => handleSort('start')}>
+                Od<SortIcon col="start" active={sortCol === 'start'} dir={sortDir} />
+            </div>
+            <div style={sortHdr('end', COL_DATE, 'Do')} onClick={() => handleSort('end')}>
+                Do<SortIcon col="end" active={sortCol === 'end'} dir={sortDir} />
+            </div>
+            <div style={hdrCell('Dni', COL_DAYS)}>Dni</div>
+        </div>
+    );
+};
 
 const DateCell = ({ taskId, field, date, disabled }) => {
     const { editCell, setEditCell, handleTableDateChange } = useContext(GanttTableContext) || {};
@@ -346,6 +379,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
     });
     const [overrides, setOverrides] = useState({});
     const [editCell, setEditCell] = useState(null); // { taskId, field: 'start'|'end' } | null
+    const [sortConfig, setSortConfig] = useState({ col: null, dir: 'asc' });
     const [branchWorkOnHolidays, setBranchWorkOnHolidays] = useState({});
     const [popup, setPopup] = useState(null); // { x, y, branchId } | null
     const wrapperRef = useRef(null);
@@ -362,6 +396,17 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         () => buildTasksFromTree(items, new Date(projectStart), projectName, overrides, branchWorkOnHolidays),
         [items, projectStart, projectName, overrides, branchWorkOnHolidays]
     );
+
+    const sortedTasks = useMemo(() => {
+        if (!sortConfig.col) return tasks;
+        const dir = sortConfig.dir === 'asc' ? 1 : -1;
+        return [...tasks].sort((a, b) => {
+            if (sortConfig.col === 'name') return dir * a.name.localeCompare(b.name, 'pl');
+            if (sortConfig.col === 'start') return dir * (new Date(a.start) - new Date(b.start));
+            if (sortConfig.col === 'end')   return dir * (new Date(a.end)   - new Date(b.end));
+            return 0;
+        });
+    }, [tasks, sortConfig]);
 
     // Mapa taskId → nazwa (wszystkie taski w harmonogramie)
     const branchInfoMap = useMemo(() => {
@@ -832,8 +877,8 @@ h1 { font-size: 18px; margin: 0 0 12px 0; }
     useEffect(() => { onGetHtmlReady?.(getGanttHtml); }, [getGanttHtml, onGetHtmlReady]);
 
     const ganttTableCtx = useMemo(
-        () => ({ editCell, setEditCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap }),
-        [editCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap]
+        () => ({ editCell, setEditCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap, sortConfig, setSortConfig }),
+        [editCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap, sortConfig]
     );
 
     if (!items.length) {
@@ -894,7 +939,7 @@ h1 { font-size: 18px; margin: 0 0 12px 0; }
             <style>{`.ignite-gantt-print svg g[tabindex] text { fill: #ffffff !important; }`}</style>
             <div className="ignite-gantt-print flex-1 min-h-0 overflow-auto custom-scrollbar bg-white/[0.02]">
                 <Gantt
-                    tasks={tasks}
+                    tasks={sortedTasks}
                     viewMode={viewMode}
                     locale="pl"
                     listCellWidth="500px"
