@@ -1200,20 +1200,20 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             if (!reqs.length) return '';
             const rows = reqs.map(r => {
                 const name = esc(r.name || r.productName || '—');
-                const type = esc(matTypeLabel(r.type));
+                const manufacturer = esc(r.manufacturer || r.producent || '—');
+                const model = esc(r.model || '—');
+                const tradeName = esc(r.tradeName || r.nazwHandlowa || r.nazwaHandlowa || '—');
                 const qty = r.quantity != null ? `${r.quantity}` : '—';
                 const unit = esc(r.unit || '');
-                const status = esc(matStatusLabel(r.status));
                 const spec = esc(String(r.technicalSpec || '').slice(0, 120));
-                const price = r.priceNetto != null ? fmtPLN(r.priceNetto) : '—';
-                return `<tr><td style="text-align:left">${name}</td><td>${type}</td><td class="num">${qty}</td><td>${unit}</td><td>${status}</td><td class="num">${price}</td><td style="font-size:9px;color:#6b7280;text-align:left">${spec}</td></tr>`;
+                return `<tr><td style="text-align:left">${name}</td><td>${manufacturer}</td><td>${model}</td><td>${tradeName}</td><td class="num">${qty}</td><td>${unit}</td><td style="font-size:9px;color:#6b7280;text-align:left">${spec}</td></tr>`;
             }).join('');
             const pageBreak = show('oferta') ? 'page-break-before: always;' : '';
             return `
             <div class="section" style="${pageBreak}">
                 <div class="section-header">Materiały</div>
                 <table>
-                    <thead><tr><th>Nazwa</th><th>Typ</th><th>Ilość</th><th>Jedn.</th><th>Status</th><th>Cena netto</th><th>Specyfikacja</th></tr></thead>
+                    <thead><tr><th>Nazwa</th><th>Producent</th><th>Model</th><th>Nazwa handlowa</th><th>Ilość</th><th>Jedn.</th><th>Specyfikacja</th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
             </div>`;
