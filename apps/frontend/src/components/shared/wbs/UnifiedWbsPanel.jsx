@@ -81,6 +81,31 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const [strategySaved, setStrategySaved] = useState(false);
     const [offerText, setOfferText] = useState('');
     const [offerSaving, setOfferSaving] = useState(false);
+
+    const PRESETS_KEY = 'ignite_offer_presets';
+    const defaultPresets = [
+        { id: '1', label: 'Wstęp — odpowiedź na zapytanie', text: `# W odpowiedzi na zapytanie wyceny projektu {nazwa projektu}, firma Airtel Services składa ofertę obejmującą:` },
+    ];
+    const loadPresets = () => { try { const s = localStorage.getItem(PRESETS_KEY); return s ? JSON.parse(s) : defaultPresets; } catch { return defaultPresets; } };
+    const [offerPresets, setOfferPresets] = useState(loadPresets);
+    const [presetManagerOpen, setPresetManagerOpen] = useState(false);
+    const [editingPreset, setEditingPreset] = useState(null); // { id, label, text } | null (null = nowy)
+    const [editingPresetDraft, setEditingPresetDraft] = useState({ label: '', text: '' });
+
+    const savePresets = (next) => { setOfferPresets(next); localStorage.setItem(PRESETS_KEY, JSON.stringify(next)); };
+    const openNewPreset = () => { setEditingPreset(null); setEditingPresetDraft({ label: '', text: '' }); };
+    const openEditPreset = (p) => { setEditingPreset(p); setEditingPresetDraft({ label: p.label, text: p.text }); };
+    const commitPreset = () => {
+        if (!editingPresetDraft.label.trim()) return;
+        if (editingPreset) {
+            savePresets(offerPresets.map(p => p.id === editingPreset.id ? { ...p, ...editingPresetDraft } : p));
+        } else {
+            savePresets([...offerPresets, { id: Date.now().toString(), ...editingPresetDraft }]);
+        }
+        setEditingPreset(undefined); // undefined = zamknij formularz
+        setEditingPresetDraft({ label: '', text: '' });
+    };
+    const deletePreset = (id) => savePresets(offerPresets.filter(p => p.id !== id));
     const [offerSaved, setOfferSaved] = useState(false);
     const [projectUsers, setProjectUsers] = useState([]);
     const [nodeTeamIds, setNodeTeamIds] = useState([]);
@@ -1209,7 +1234,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
   th { background: #f3f4f6; color: #374151; padding: 7px 8px; text-align: center; font-size: 12px; font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
   thead { display: table-header-group; }
   tr { page-break-inside: avoid; break-inside: avoid; }
-  @page { margin: 20mm 14mm; size: A4 landscape; }
+  @page { margin: 20mm 14mm; size: A4 portrait; }
   .budget-table { table-layout: fixed; word-wrap: break-word; }
   @media print {
     .summary-grid { display: block; }
@@ -2740,12 +2765,10 @@ ${materialsHtml}
             {sectionOrder.map(key => {
                 if (key === 'oferta') {
                     if (!isManagerOrAdmin) return null;
-                    const offerPresets = [
-                        {
-                            label: 'Wstęp — odpowiedź na zapytanie',
-                            text: `# W odpowiedzi na zapytanie wyceny projektu ${orderName || projectName || '{nazwa projektu}'}, firma Airtel Services składa ofertę obejmującą:`,
-                        },
-                    ];
+                    const resolvedPresets = offerPresets.map(p => ({
+                        ...p,
+                        text: p.text.replace(/\{nazwa projektu\}/g, orderName || projectName || ''),
+                    }));
                     return renderSection('oferta', 'Oferta', FileText, 'amber', (
                         <div className="flex flex-col flex-1 min-h-0 p-4">
                             <MarkdownEditor
@@ -2758,7 +2781,8 @@ ${materialsHtml}
                                 containerClassName="flex-1 min-h-0"
                                 className="flex-1 min-h-0 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-amber-500 transition-colors custom-scrollbar leading-relaxed resize-none"
                                 saveIndicator={true}
-                                presets={offerPresets}
+                                presets={resolvedPresets}
+                                onManagePresets={() => setPresetManagerOpen(true)}
                             />
                         </div>
                     ), () => handleExportPDF('oferta'));
@@ -2898,6 +2922,90 @@ ${materialsHtml}
                 }
                 return null;
             })}
+
+            {presetManagerOpen && (
+                <div className="fixed inset-0 z-[130] bg-[#05070bcc] backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPresetManagerOpen(false)}>
+                    <div className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-white/10 bg-[#0b0f17] shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between flex-shrink-0">
+                            <div>
+                                <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-white">Szablony oferty</h3>
+                                <p className="text-[10px] text-gray-500 uppercase tracking-widest">Użyj <code className="bg-black/30 px-1 rounded text-amber-300">{'{nazwa projektu}'}</code> jako zmiennej</p>
+                            </div>
+                            <button onClick={() => setPresetManagerOpen(false)} className="p-2 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 transition-all"><X size={14} /></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 flex flex-col gap-3">
+                            {offerPresets.map((p, idx) => (
+                                <div key={p.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-3 flex flex-col gap-2">
+                                    {editingPreset?.id === p.id ? (
+                                        <>
+                                            <input
+                                                className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400 transition-colors"
+                                                placeholder="Nazwa szablonu"
+                                                value={editingPresetDraft.label}
+                                                onChange={e => setEditingPresetDraft(d => ({ ...d, label: e.target.value }))}
+                                            />
+                                            <textarea
+                                                rows={5}
+                                                className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-amber-400 transition-colors resize-none custom-scrollbar leading-relaxed"
+                                                placeholder="Treść szablonu (Markdown)..."
+                                                value={editingPresetDraft.text}
+                                                onChange={e => setEditingPresetDraft(d => ({ ...d, text: e.target.value }))}
+                                            />
+                                            <div className="flex gap-2">
+                                                <button onClick={commitPreset} className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 rounded-lg text-amber-300 text-[10px] font-bold uppercase tracking-widest transition-all">Zapisz</button>
+                                                <button onClick={() => { setEditingPreset(undefined); setEditingPresetDraft({ label: '', text: '' }); }} className="px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-gray-400 text-[10px] font-bold uppercase tracking-widest transition-all">Anuluj</button>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="flex items-start gap-2">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-xs font-bold text-amber-300 truncate">{p.label}</div>
+                                                <div className="text-[10px] text-gray-500 mt-0.5 line-clamp-2 whitespace-pre-wrap">{p.text}</div>
+                                            </div>
+                                            <div className="flex gap-1 flex-shrink-0">
+                                                <button onClick={() => openEditPreset(p)} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-all text-[10px]">✏️</button>
+                                                <button onClick={() => deletePreset(p.id)} className="p-1.5 rounded-lg hover:bg-red-500/20 text-gray-400 hover:text-red-300 transition-all text-[10px]">🗑</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                            {editingPreset === null && (
+                                <div className="rounded-xl border border-dashed border-amber-500/30 bg-amber-500/5 p-3 flex flex-col gap-2">
+                                    <p className="text-[10px] text-amber-400/60 uppercase tracking-widest font-bold">Nowy szablon</p>
+                                    <input
+                                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400 transition-colors"
+                                        placeholder="Nazwa szablonu"
+                                        value={editingPresetDraft.label}
+                                        onChange={e => setEditingPresetDraft(d => ({ ...d, label: e.target.value }))}
+                                        autoFocus
+                                    />
+                                    <textarea
+                                        rows={5}
+                                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-amber-400 transition-colors resize-none custom-scrollbar leading-relaxed"
+                                        placeholder="Treść szablonu (Markdown)..."
+                                        value={editingPresetDraft.text}
+                                        onChange={e => setEditingPresetDraft(d => ({ ...d, text: e.target.value }))}
+                                    />
+                                    <div className="flex gap-2">
+                                        <button onClick={commitPreset} disabled={!editingPresetDraft.label.trim()} className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 rounded-lg text-amber-300 text-[10px] font-bold uppercase tracking-widest transition-all disabled:opacity-40">Dodaj</button>
+                                        <button onClick={() => { setEditingPreset(undefined); setEditingPresetDraft({ label: '', text: '' }); }} className="px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-gray-400 text-[10px] font-bold uppercase tracking-widest transition-all">Anuluj</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="px-4 py-3 border-t border-white/10 flex-shrink-0">
+                            <button
+                                onClick={openNewPreset}
+                                disabled={editingPreset === null}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-lg text-amber-300 text-[10px] font-bold uppercase tracking-widest transition-all disabled:opacity-40"
+                            >
+                                <Plus size={11} /> Nowy szablon
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {budgetImportOpen && (
                 <div className="fixed inset-0 z-[125] bg-[#05070bcc] backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !budgetImportLoading && setBudgetImportOpen(false)}>
