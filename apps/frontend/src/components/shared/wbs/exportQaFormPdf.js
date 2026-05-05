@@ -177,16 +177,35 @@ export async function exportQaFormPdf(wbsData, projectName) {
 
             page.drawRectangle({ x: fieldX, y: fieldY, width: fieldW, height: fieldH, color: colorField });
 
+            // Istniejącą odpowiedź rysujemy jako statyczny tekst (LiberationSans — pełne UTF-8, bez WinAnsi)
+            if (aText) {
+                const aLines = wrapText(aText, fieldW - 6, fontRegular, FONT_SIZE);
+                aLines.forEach((line, li) => {
+                    page.drawText(line, {
+                        x: fieldX + 3,
+                        y: y - 10 - li * LINE_H,
+                        size: FONT_SIZE,
+                        font: fontRegular,
+                        color: colorText,
+                    });
+                });
+            }
+
+            // Pole formularza zawsze puste — służy do wpisania nowej/zmienionej odpowiedzi
             const tf = form.createTextField(fieldName);
             tf.acroField.dict.set(PDFName.of('DA'), PDFString.of(`/Helv ${FONT_SIZE} Tf 0 g`));
-            tf.setText(aText);
             tf.enableMultiline();
             tf.addToPage(page, {
                 x: fieldX, y: fieldY, width: fieldW, height: fieldH,
                 borderWidth: 0,
-                backgroundColor: rgb(0.97, 0.99, 1.0),
+                backgroundColor: aText ? rgb(1, 1, 1) : rgb(0.97, 0.99, 1.0),
                 textColor: colorText,
             });
+            // Lekka przezroczystość gdy jest już odpowiedź — wizualnie odróżnia
+            if (aText) {
+                page.drawRectangle({ x: fieldX, y: fieldY, width: fieldW, height: fieldH,
+                    color: rgb(1, 1, 1), opacity: 0 });
+            }
 
             y -= rowH;
         });
