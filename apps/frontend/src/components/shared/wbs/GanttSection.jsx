@@ -614,8 +614,12 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
 
             // Wyznacz offset SVG dla firstDate używając pierwszego paska jako referencji
             const NS = 'http://www.w3.org/2000/svg';
-            const refBar = innerSvg.querySelector('g[tabindex] rect');
-            const refTask = tasks.find(t => t && t.type === 'task');
+            const refTaskIndex = tasks.findIndex(t => t && t.type === 'task');
+            const refTask = refTaskIndex >= 0 ? tasks[refTaskIndex] : null;
+            const refBarGroups = innerSvg.querySelectorAll('g[tabindex]');
+            const refBar = refTask && refBarGroups[refTaskIndex]
+                ? refBarGroups[refTaskIndex].querySelector('rect')
+                : null;
             let svgFirstDateX = 0;
             if (refBar && refTask) {
                 const refBx = parseFloat(refBar.getAttribute('x') || '0');
