@@ -2791,13 +2791,21 @@ ${materialsHtml}
                 if (key === 'oferta') {
                     if (!isManagerOrAdmin) return null;
                     const offerSummary = summarizeBudgetRows(budgetRows);
+                    const workDaysTotal = budgetRows.reduce((sum, r) => {
+                        const t = String(r.type || '').toLowerCase();
+                        const isWork = t === 'work' || t === 'praca' || String(r.budgetType || '').toUpperCase() === 'WORK';
+                        const u = String(r.unit || '').toLowerCase().trim();
+                        const isDni = u === 'dni' || u === 'dzień' || u === 'dzien' || u === 'd';
+                        return isWork && isDni ? sum + (Number(r.quantity) || 0) : sum;
+                    }, 0);
                     const resolvedPresets = offerPresets.map(p => ({
                         ...p,
                         text: p.text
                             .replace(/\{nazwa projektu\}/g, orderName || projectName || '')
                             .replace(/\{wartość oferty\}/g, fmtPLN(offerSummary.totalRevenue) + ' PLN')
                             .replace(/\{data oferty\}/g, offerDate)
-                            .replace(/\{tabela wbs\}/g, wbsBranchTable),
+                            .replace(/\{tabela wbs\}/g, wbsBranchTable)
+                            .replace(/\{Roboczo dni w projekcie\}/gi, workDaysTotal % 1 === 0 ? String(workDaysTotal) : workDaysTotal.toFixed(1)),
                     }));
                     return renderSection('oferta', 'Oferta', FileText, 'amber', (
                         <div className="flex flex-col flex-1 min-h-0 p-4 gap-2">
@@ -2970,7 +2978,7 @@ ${materialsHtml}
                         <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between flex-shrink-0">
                             <div>
                                 <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-white">Szablony oferty</h3>
-                                <p className="text-[10px] text-gray-500 mt-0.5">Zmienne: {['{nazwa projektu}', '{wartość oferty}', '{data oferty}', '{tabela wbs}'].map(v => (
+                                <p className="text-[10px] text-gray-500 mt-0.5">Zmienne: {['{nazwa projektu}', '{wartość oferty}', '{data oferty}', '{tabela wbs}', '{Roboczo dni w projekcie}'].map(v => (
                                     <code key={v} className="bg-black/30 px-1 rounded text-amber-300 mr-1">{v}</code>
                                 ))}</p>
                             </div>
