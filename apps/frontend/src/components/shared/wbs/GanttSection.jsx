@@ -881,7 +881,7 @@ h1 { font-size: 18px; margin: 0 0 12px 0; }
         [editCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap, sortConfig]
     );
 
-    if (!items.length) {
+    if (!items.length || !tasks.length) {
         return (
             <div className="p-6 text-center text-gray-500 text-sm">
                 Brak danych w strukturze WBS – dodaj produkty / pozycje pracy żeby zobaczyć harmonogram.
