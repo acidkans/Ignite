@@ -536,15 +536,8 @@ export default function SchematTab({ nodeId, wbsData: externalWbsData, orderName
             });
             const freshSchematics = freshRes.ok ? await freshRes.json() : schematics;
 
-            // Użyj aktualnego stanu WBS z pamięci (jeśli dostępny), inaczej pobierz z backendu
-            let allWbsNodes = Array.isArray(externalWbsData) && externalWbsData.length > 0 ? externalWbsData : null;
-            if (!allWbsNodes) {
-                const wbsRes = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                const wbsRespJson = wbsRes.ok ? await wbsRes.json() : {};
-                allWbsNodes = Array.isArray(wbsRespJson?.items) ? wbsRespJson.items : [];
-            }
+            // Q&A tylko z aktualnego stanu WBS z pamięci — bez fallbacku na backend (stare dane)
+            const allWbsNodes = Array.isArray(externalWbsData) ? externalWbsData : [];
 
             // Przypisz globalne numery przed renderowaniem (spójność tabela ↔ obrazy)
             let _globalNum = 0;
