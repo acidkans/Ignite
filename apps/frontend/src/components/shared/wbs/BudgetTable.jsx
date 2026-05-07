@@ -28,10 +28,14 @@ function AutoTextarea({ defaultValue, onBlur, onFocus, onKeyDown, className, dat
     const resize = () => {
         const el = ref.current;
         if (!el) return;
-        el.style.height = 'auto';
+        el.style.height = '1px';
         el.style.height = `${el.scrollHeight}px`;
     };
-    useLayoutEffect(() => { resize(); }, [defaultValue]);
+    useLayoutEffect(() => {
+        resize();
+        const id = requestAnimationFrame(resize);
+        return () => cancelAnimationFrame(id);
+    }, [defaultValue]);
     return (
         <textarea
             ref={ref}
