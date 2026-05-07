@@ -128,9 +128,14 @@ export async function exportQaFormPdf(wbsData, projectName) {
 
         // Nazwa węzła
         const nodeLabel = (node.name || '').trim();
+        const nodeSegs = (node.path || '').split(' › ');
+        // Ścieżka bez pierwszego segmentu (nazwa projektu)
+        const nodePath = nodeSegs.length > 1 ? nodeSegs.slice(1).join(' › ') : nodeLabel;
         ensureSpace(20);
         page.drawRectangle({ x: MARGIN, y: y - 18, width: CONTENT_W, height: 18, color: rgb(0.88, 0.92, 0.98) });
         page.drawText(nodeLabel, { x: MARGIN + 6, y: y - 13, size: 9, font: fontBold, color: colorHeader });
+        const pathW = fontRegular.widthOfTextAtSize(nodePath, 7);
+        page.drawText(nodePath, { x: MARGIN + CONTENT_W - pathW - 6, y: y - 12, size: 7, font: fontRegular, color: colorLabel });
         y -= 18;
 
         drawTableHeader();
