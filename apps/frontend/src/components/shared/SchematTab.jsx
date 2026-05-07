@@ -25,7 +25,7 @@ import 'react-pdf/dist/Page/TextLayer.css';
 // Konfiguracja workera dla react-pdf
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-export default function SchematTab({ nodeId, wbsData: externalWbsData }) {
+export default function SchematTab({ nodeId, wbsData: externalWbsData, orderName = '' }) {
     const { isDesktop } = useDevice();
     const { dirHandle, dirName, syncStatus, syncStats, lastSync, isSupported, chooseFolder, syncFiles } = useLocalSchemaSync();
 
@@ -716,21 +716,31 @@ export default function SchematTab({ nodeId, wbsData: externalWbsData }) {
                 return parts.join(' › ');
             };
             const qaNodes = allWbsNodes.filter(n => Array.isArray(n.qa) && n.qa.some(p => (p?.question || '').trim()));
-            const qaRows = qaNodes.flatMap(n => {
+            const qaTitle = `Q&A${orderName ? ` — ${esc(orderName)}` : ''}`;
+            const qaNodeSections = qaNodes.map(n => {
                 const pairs = n.qa.filter(p => (p?.question || '').trim());
                 const path = buildQaPath(n.id);
-                return [
-                    `<tr><td colspan="2" style="background:#dbeafe;color:#1e40af;font-weight:bold;padding:5px 8px;font-size:10px;page-break-inside:avoid;break-inside:avoid;">${esc(path)}</td></tr>`,
-                    ...pairs.map(p => `<tr><td style="vertical-align:top;white-space:pre-wrap;word-break:break-word;">${esc(p.question)}</td><td style="vertical-align:top;white-space:pre-wrap;word-break:break-word;color:#374151;">${esc(p.answer || '')}</td></tr>`)
-                ];
+                const trs = pairs.map(p => `<tr>
+                    <td class="qa-q">${esc(p.question)}</td>
+                    <td class="qa-a">${esc(p.answer || '')}</td>
+                </tr>`).join('');
+                return `<div class="qa-block">
+                    <div class="qa-node-hdr">${esc(path)}</div>
+                    <table class="qa-tbl">
+                        <colgroup><col style="width:52%"><col style="width:48%"></colgroup>
+                        <thead><tr><th class="qa-th">PYTANIE</th><th class="qa-th">ODPOWIEDŹ</th></tr></thead>
+                        <tbody>${trs}</tbody>
+                    </table>
+                </div>`;
             }).join('');
             const qaHtml = qaNodes.length > 0 ? `
-                <h2>Pytania i odpowiedzi</h2>
-                <table style="table-layout:fixed;width:100%;border-collapse:collapse;">
-                    <colgroup><col style="width:50%"><col style="width:50%"></colgroup>
-                    <thead><tr><th>Pytanie</th><th>Odpowiedź</th></tr></thead>
-                    <tbody>${qaRows}</tbody>
-                </table>` : '';
+                <div class="qa-section">
+                    <div class="qa-hdr">
+                        <div class="qa-hdr-title">${qaTitle}</div>
+                        <div class="qa-hdr-sub">Formularz pytań i odpowiedzi</div>
+                    </div>
+                    ${qaNodeSections}
+                </div>` : '';
 
             const schematicHtml = schematicSections.map((s) => `
                 <div class="sch-section">
@@ -745,8 +755,7 @@ export default function SchematTab({ nodeId, wbsData: externalWbsData }) {
             <title>Raport z wizji lokalnej</title>
             <style>
                 body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 8px; }
-                h1 { font-size: 16px; margin-bottom: 4px; }
-                h2 { font-size: 13px; margin: 24px 0 8px; color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 4px; break-after: avoid; page-break-after: avoid; }
+                h1 { font-size: 16px; margin-bottom: 4px; color: #1e40af; }
                 .meta { font-size: 10px; color: #666; margin-bottom: 16px; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
                 th { background: #1e40af; color: white; padding: 6px 8px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -760,6 +769,16 @@ export default function SchematTab({ nodeId, wbsData: externalWbsData }) {
                 tr { break-inside: avoid; page-break-inside: avoid; }
                 thead { display: table-header-group; }
                 p { orphans: 3; widows: 3; }
+                .qa-section { page-break-before: always; break-before: page; padding-top: 4px; }
+                .qa-hdr { background: #1e3560; color: white; padding: 14px 20px; margin-bottom: 16px; }
+                .qa-hdr-title { font-size: 17px; font-weight: bold; }
+                .qa-hdr-sub { font-size: 10px; opacity: 0.75; margin-top: 3px; }
+                .qa-block { margin-bottom: 16px; break-inside: avoid; page-break-inside: avoid; }
+                .qa-node-hdr { background: #dbeafe; color: #1e40af; font-weight: bold; padding: 7px 12px; font-size: 11px; }
+                .qa-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0; }
+                .qa-th { background: #e8eef6; color: #4b5563; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; padding: 5px 10px; text-align: left; border-bottom: 2px solid #c5d5e8; }
+                .qa-q { padding: 8px 10px; border-bottom: 1px solid #e0e7f0; vertical-align: top; background: white; white-space: pre-wrap; word-break: break-word; }
+                .qa-a { padding: 8px 10px; border: 1px solid #c5d5e8; background: #f7faff; vertical-align: top; min-height: 40px; white-space: pre-wrap; word-break: break-word; }
                 .sch-section { }
                 .sch-name { font-size: 9px; color: #6b7280; margin-bottom: 4px; font-style: italic; flex-shrink: 0; }
                 .sch-page {
