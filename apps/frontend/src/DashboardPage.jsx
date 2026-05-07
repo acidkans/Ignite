@@ -102,6 +102,7 @@ export default function DashboardPage() {
     const [renamingVersionId, setRenamingVersionId] = useState(null);
     const [renameValue, setRenameValue] = useState('');
     const [wbsUpdateCount, setWbsUpdateCount] = useState(0);
+    const [wbsDataCache, setWbsDataCache] = useState({});
 
     const now = useMemo(() => new Date(), []);
     const dateLabel = formatPolishDate(now);
@@ -601,6 +602,7 @@ export default function DashboardPage() {
                                     searchQuery={searchQuery}
                                     userRoles={currentRoles}
                                     onWbsUpdate={() => setWbsUpdateCount(c => c + 1)}
+                                    onWbsDataLoad={(data) => setWbsDataCache(prev => ({ ...prev, [activeAreaId]: data }))}
                                     setLeftVisible={setLeftVisible}
                                     setAiVisible={setAiVisible}
                                 />
@@ -611,6 +613,7 @@ export default function DashboardPage() {
                                <SchematTab
                                    key={`schematics-${activeAreaId}`}
                                    nodeId={activeAreaId}
+                                   wbsData={wbsDataCache[activeAreaId]}
                                />
                            </div>
                         )}

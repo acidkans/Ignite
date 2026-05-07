@@ -25,7 +25,7 @@ import 'react-pdf/dist/Page/TextLayer.css';
 // Konfiguracja workera dla react-pdf
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-export default function SchematTab({ nodeId }) {
+export default function SchematTab({ nodeId, wbsData: externalWbsData }) {
     const { isDesktop } = useDevice();
     const { dirHandle, dirName, syncStatus, syncStats, lastSync, isSupported, chooseFolder, syncFiles } = useLocalSchemaSync();
 
@@ -536,12 +536,15 @@ export default function SchematTab({ nodeId }) {
             });
             const freshSchematics = freshRes.ok ? await freshRes.json() : schematics;
 
-            // Pobierz dane WBS (Q&A)
-            const wbsRes = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const wbsRespJson = wbsRes.ok ? await wbsRes.json() : {};
-            const allWbsNodes = Array.isArray(wbsRespJson?.items) ? wbsRespJson.items : [];
+            // Użyj aktualnego stanu WBS z pamięci (jeśli dostępny), inaczej pobierz z backendu
+            let allWbsNodes = Array.isArray(externalWbsData) && externalWbsData.length > 0 ? externalWbsData : null;
+            if (!allWbsNodes) {
+                const wbsRes = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const wbsRespJson = wbsRes.ok ? await wbsRes.json() : {};
+                allWbsNodes = Array.isArray(wbsRespJson?.items) ? wbsRespJson.items : [];
+            }
 
             // Przypisz globalne numery przed renderowaniem (spójność tabela ↔ obrazy)
             let _globalNum = 0;

@@ -68,7 +68,7 @@ const DEFAULT_SECTION_ORDER = ['oferta', 'strategy', 'tasks', 'gantt', 'wbs-hybr
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
-export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible }) {
+export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsDataLoad, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible }) {
     const [wbsData, setWbsData] = useState([]);
     const wbsDataRef = useRef(wbsData);
     wbsDataRef.current = wbsData;
@@ -130,6 +130,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
     const [materialMetaByLookupKey, setMaterialMetaByLookupKey] = useState({});
     const [requirementsQtyByNode, setRequirementsQtyByNode] = useState({});
     const [requirementByNodeId, setRequirementByNodeId] = useState({});
+    const [ganttProjectStart, setGanttProjectStart] = useState(null);
+    const [ganttProjectEnd, setGanttProjectEnd] = useState(null);
     const [budgetDiscountAmount, setBudgetDiscountAmount] = useState('');
     const [budgetDiscountPercent, setBudgetDiscountPercent] = useState('');
     const [markerLinksCache, setMarkerLinksCache] = useState({});
@@ -332,6 +334,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
             if (res.ok) {
                 const data = await res.json();
                 setWbsData(data.items || []);
+                onWbsDataLoad?.(data.items || []);
                 wbsItemsById = new Map((data.items || []).map(n => [n.id, n]));
                 nextRequirementsQtyByNode = Object.fromEntries(
                     (data.items || [])
@@ -359,6 +362,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, userRo
                         const text = await reqRes.text();
                         if (text) {
                             const reqData = JSON.parse(text);
+                            if (reqData.projectStart) setGanttProjectStart(reqData.projectStart);
+                            if (reqData.projectEnd) setGanttProjectEnd(reqData.projectEnd);
                             const tree = JSON.parse(reqData.wbsTree || '{}');
                             const normalizedTree = Array.isArray(tree.items) ? tree : { items: [] };
 
@@ -3019,6 +3024,8 @@ ${materialsHtml}
                             onNodeDurationChange={handleGanttDurationChange}
                             onExportReady={fn => { ganttExportRef.current = fn; }}
                             onGetHtmlReady={fn => { ganttGetHtmlRef.current = fn; }}
+                            projectStartDate={ganttProjectStart}
+                            projectEndDate={ganttProjectEnd}
                         />
                     ), () => ganttExportRef.current?.());
                 }
