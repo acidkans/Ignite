@@ -86,17 +86,17 @@ export async function exportQaFormPdf(wbsData, projectName) {
     // Flatten: tylko węzły z pytaniami
     const nodes = (wbsData || []).filter(n => Array.isArray(n.qa) && n.qa.some(p => (p?.question || '').trim()));
 
-    // Buduj mapę id→node i funkcję ścieżki bez korzenia (nazwa projektu)
-    const byId = new Map((wbsData || []).map(n => [n.id, n]));
+    // Buduj mapę id→node (String key — unika mismatch number/string)
+    const byId = new Map((wbsData || []).map(n => [String(n.id), n]));
     const getWbsPath = (node) => {
         const segs = [];
         let cur = node;
         while (cur) {
             segs.unshift(cur.name || '');
-            cur = cur.parentId ? byId.get(cur.parentId) : null;
+            cur = cur.parentId ? byId.get(String(cur.parentId)) : null;
         }
         // Usuń pierwszy segment (nazwa projektu/korzenia)
-        return segs.length > 1 ? segs.slice(1).join(' › ') : (segs[0] || '');
+        return segs.length > 1 ? segs.slice(1).join(' / ') : (segs[0] || '');
     };
 
     let page = pdfDoc.addPage([PAGE_W, PAGE_H]);
@@ -140,13 +140,10 @@ export async function exportQaFormPdf(wbsData, projectName) {
         if (!pairs.length) continue;
 
         // Nazwa węzła
-        const nodeLabel = (node.name || '').trim();
         const nodePath = getWbsPath(node);
         ensureSpace(20);
         page.drawRectangle({ x: MARGIN, y: y - 18, width: CONTENT_W, height: 18, color: rgb(0.88, 0.92, 0.98) });
-        page.drawText(nodeLabel, { x: MARGIN + 6, y: y - 13, size: 9, font: fontBold, color: colorHeader });
-        const pathW = fontRegular.widthOfTextAtSize(nodePath, 7);
-        page.drawText(nodePath, { x: MARGIN + CONTENT_W - pathW - 6, y: y - 12, size: 7, font: fontRegular, color: colorLabel });
+        page.drawText(nodePath, { x: MARGIN + 6, y: y - 13, size: 9, font: fontBold, color: colorHeader });
         y -= 18;
 
         drawTableHeader();
