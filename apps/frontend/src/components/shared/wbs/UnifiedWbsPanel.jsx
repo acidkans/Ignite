@@ -780,6 +780,20 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const hybridSaveRef = useRef(false);
     const hybridSavePending = useRef(false);
     const hybridSaveTimeout = useRef(null);
+
+    // Sync Q&A from in-memory tree into wbsData/cache without replacing wbsTree.
+    // Called after every tree save to keep SchematTab export up-to-date while
+    // avoiding the fetchData() race that overwrites in-progress Q&A edits.
+    const syncQaToWbsData = useCallback(() => {
+        const flatQa = (nodes, acc = {}) => { for (const n of nodes) { acc[n.id] = n.qa; if (n.children?.length) flatQa(n.children, acc); } return acc; };
+        const qaMap = flatQa(wbsTreeRef.current?.items || []);
+        setWbsData(prev => {
+            const updated = prev.map(n => ({ ...n, qa: qaMap[n.id] !== undefined ? qaMap[n.id] : (n.qa || []) }));
+            onWbsDataLoad?.(updated);
+            return updated;
+        });
+    }, [onWbsDataLoad]);
+
     const handleSaveHybridWBS = useCallback(async () => {
         if (hybridSaveTimeout.current) clearTimeout(hybridSaveTimeout.current);
         hybridSaveTimeout.current = setTimeout(async () => {
@@ -800,7 +814,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                     }),
                 });
                 onWbsUpdate?.();
-                fetchData();
+                // Nie wywołuj fetchData() — nadpisałoby wbsTree i skasowało edytowane pola Q&A.
+                // Zamiast tego synchronizuj Q&A z drzewa do wbsData (dla cache SchematTab).
+                syncQaToWbsData();
             } catch (err) {
                 console.error('[HybridWBS save]', err);
             } finally {
@@ -817,14 +833,14 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                                 body: JSON.stringify({ nodeId, versionId, wbsTree: JSON.stringify(wbsTreeRef.current) }),
                             });
                             onWbsUpdate?.();
-                            fetchData();
+                            syncQaToWbsData();
                         } catch (e) { console.error('[HybridWBS retry]', e); }
                         finally { hybridSaveRef.current = false; }
                     }, 0);
                 }
             }
         }, 400);
-    }, [nodeId, versionId, authHeaders, onWbsUpdate, fetchData]);
+    }, [nodeId, versionId, authHeaders, onWbsUpdate, syncQaToWbsData]);
 
     // Po wklejeniu skopiowanej pozycji w WBS — natychmiast zapisz drzewo (omijamy debounce, żeby
     // nowe wbs_nodes powstały w bazie), a następnie sklonuj powiązane wymagania techniczne
