@@ -536,6 +536,13 @@ export default function SchematTab({ nodeId }) {
             });
             const freshSchematics = freshRes.ok ? await freshRes.json() : schematics;
 
+            // Pobierz dane WBS (Q&A)
+            const wbsRes = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const wbsRespJson = wbsRes.ok ? await wbsRes.json() : {};
+            const allWbsNodes = Array.isArray(wbsRespJson?.items) ? wbsRespJson.items : [];
+
             const allMarkers = freshSchematics.flatMap(sch =>
                 sch.markers.map(m => ({ ...m, schematicName: sch.fileName }))
             );
@@ -687,13 +694,40 @@ export default function SchematTab({ nodeId }) {
                 return [textRow, ...imageRows, ...noImageRow];
             }).join('');
 
-            const schematicHtml = schematicSections.map((s, si) => `
+            // Buduj sekcję Q&A z WBS
+            const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const wbsNodeMap = new Map(allWbsNodes.map(n => [String(n.id), n]));
+            const buildQaPath = (id) => {
+                const parts = [];
+                let cur = wbsNodeMap.get(String(id));
+                while (cur) {
+                    parts.unshift(cur.name || '');
+                    cur = cur.parentId != null ? wbsNodeMap.get(String(cur.parentId)) : null;
+                }
+                return parts.join(' › ');
+            };
+            const qaNodes = allWbsNodes.filter(n => Array.isArray(n.qa) && n.qa.some(p => (p?.question || '').trim()));
+            const qaRows = qaNodes.flatMap(n => {
+                const pairs = n.qa.filter(p => (p?.question || '').trim());
+                const path = buildQaPath(n.id);
+                return [
+                    `<tr><td colspan="2" style="background:#dbeafe;color:#1e40af;font-weight:bold;padding:5px 8px;font-size:10px;page-break-inside:avoid;break-inside:avoid;">${esc(path)}</td></tr>`,
+                    ...pairs.map(p => `<tr><td style="vertical-align:top;width:50%;white-space:pre-wrap;">${esc(p.question)}</td><td style="vertical-align:top;white-space:pre-wrap;color:#374151;">${esc(p.answer || '')}</td></tr>`)
+                ];
+            }).join('');
+            const qaHtml = qaNodes.length > 0 ? `
+                <h2>Pytania i odpowiedzi</h2>
+                <table>
+                    <thead><tr><th style="width:50%">Pytanie</th><th style="width:50%">Odpowiedź</th></tr></thead>
+                    <tbody>${qaRows}</tbody>
+                </table>` : '';
+
+            const schematicHtml = schematicSections.map((s) => `
                 <div class="sch-section">
                     ${s.pages.map((pg, i) => `
                         <div class="sch-page">
-                            ${si === 0 && i === 0 ? `<div class="sch-section-header">Schematy</div>` : ''}
-                            <div class="sch-name">${s.name}${s.pages.length > 1 ? ` — strona ${i + 1} / ${s.pages.length}` : ''}</div>
-                            <img src="${pg}" style="width:100%;height:auto;display:block;border:1px solid #e5e7eb;" />
+                            <div class="sch-name">${esc(s.name)}${s.pages.length > 1 ? ` — strona ${i + 1} / ${s.pages.length}` : ''}</div>
+                            <img src="${pg}" />
                         </div>`).join('')}
                 </div>`).join('');
 
@@ -702,30 +736,45 @@ export default function SchematTab({ nodeId }) {
             <style>
                 body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 8px; }
                 h1 { font-size: 16px; margin-bottom: 4px; }
-                h2 { font-size: 13px; margin: 24px 0 8px; color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 4px; }
+                h2 { font-size: 13px; margin: 24px 0 8px; color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 4px; break-after: avoid; page-break-after: avoid; }
                 .meta { font-size: 10px; color: #666; margin-bottom: 16px; }
-                table { width: 100%; border-collapse: collapse; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
                 th { background: #1e40af; color: white; padding: 6px 8px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
-                td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
-                tr:nth-child(even) td { background: #f9fafb; }
                 td { padding: 4px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+                tr:nth-child(even) td { background: #f9fafb; }
                 tr.text-row td:nth-child(1) { width: 24px; color: #6b7280; }
                 tr.text-row td:nth-child(2) { width: 22%; font-weight: bold; color: #1e40af; }
                 tr.text-row td:nth-child(3) { width: 28%; }
-                tr.text-row td:nth-child(4) { }
                 tr.img-row td, tr.note-row td { background: #f8faff; }
                 tr.note-row td { font-style: italic; color: #555; font-size: 10px; }
-                .sch-section { }
-                .sch-section-header { font-size: 13px; font-weight: bold; color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 4px; margin-bottom: 8px; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
-                h1, h2, h3, h4, h5, h6 { break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
-                p { orphans: 3; widows: 3; }
                 tr { break-inside: avoid; page-break-inside: avoid; }
                 thead { display: table-header-group; }
-                .sch-name { font-size: 9px; color: #6b7280; margin-bottom: 4px; }
-                .sch-page { page-break-before: always; padding-top: 8px; display: flex; flex-direction: column; min-height: 95vh; }
-                .sch-page img { flex: 1; object-fit: contain; width: 100%; height: auto; }
-                @page { margin: 20mm 14mm; }
-                @media print { body { margin: 0; } .sch-page { min-height: 0; page-break-before: always; } }
+                p { orphans: 3; widows: 3; }
+                .sch-section { }
+                .sch-name { font-size: 9px; color: #6b7280; margin-bottom: 4px; font-style: italic; flex-shrink: 0; }
+                .sch-page {
+                    page-break-before: always;
+                    page-break-after: always;
+                    page-break-inside: avoid;
+                    break-before: page;
+                    break-after: page;
+                    break-inside: avoid;
+                    display: flex;
+                    flex-direction: column;
+                    height: 257mm;
+                    box-sizing: border-box;
+                    padding: 4px 0;
+                }
+                .sch-page img {
+                    flex: 1;
+                    min-height: 0;
+                    object-fit: contain;
+                    width: 100%;
+                    display: block;
+                    border: 1px solid #e5e7eb;
+                }
+                @page { size: A4 portrait; margin: 20mm 14mm; }
+                @media print { body { margin: 0; } }
             </style></head><body>
             <h1>Raport z wizji lokalnej</h1>
             <div class="meta">Wygenerowano: ${date} &nbsp;|&nbsp; Łączna liczba punktów: ${allMarkers.length} &nbsp;|&nbsp; Pliki: ${schematics.length}</div>
@@ -735,6 +784,7 @@ export default function SchematTab({ nodeId }) {
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>
+            ${qaHtml}
             ${schematicSections.length > 0 ? schematicHtml : ''}
             <script>window.onload = () => { window.print(); }<\/script>
             </body></html>`;
