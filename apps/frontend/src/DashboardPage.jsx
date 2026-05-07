@@ -614,6 +614,7 @@ export default function DashboardPage() {
                                    key={`schematics-${activeAreaId}`}
                                    nodeId={activeAreaId}
                                    wbsData={wbsDataCache[activeAreaId]}
+                                   orderName={activeNode?.name || ''}
                                />
                            </div>
                         )}
