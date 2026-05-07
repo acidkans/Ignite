@@ -543,6 +543,12 @@ export default function SchematTab({ nodeId }) {
             const wbsRespJson = wbsRes.ok ? await wbsRes.json() : {};
             const allWbsNodes = Array.isArray(wbsRespJson?.items) ? wbsRespJson.items : [];
 
+            // Przypisz globalne numery przed renderowaniem (spójność tabela ↔ obrazy)
+            let _globalNum = 0;
+            for (const sch of freshSchematics) {
+                for (const m of (sch.markers || [])) m._num = ++_globalNum;
+            }
+
             const allMarkers = freshSchematics.flatMap(sch =>
                 sch.markers.map(m => ({ ...m, schematicName: sch.fileName }))
             );
@@ -602,7 +608,7 @@ export default function SchematTab({ nodeId }) {
                         ctx.font = `bold ${Math.round(r * 1.1)}px Arial`;
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
-                        ctx.fillText(String(idx + 1), x, y);
+                        ctx.fillText(String(m._num != null ? m._num : idx + 1), x, y);
                         // etykieta
                         if (m.name) {
                             ctx.textAlign = 'left';
