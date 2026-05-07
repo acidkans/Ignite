@@ -95,8 +95,7 @@ export async function exportQaFormPdf(wbsData, projectName) {
             segs.unshift(cur.name || '');
             cur = cur.parentId ? byId.get(String(cur.parentId)) : null;
         }
-        // Usuń pierwszy segment (nazwa projektu/korzenia)
-        return segs.length > 1 ? segs.slice(1).join(' / ') : (segs[0] || '');
+        return segs.join(' / ');
     };
 
     let page = pdfDoc.addPage([PAGE_W, PAGE_H]);
