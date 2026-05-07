@@ -2220,6 +2220,36 @@ ${materialsHtml}
             }
 
             await refreshUnified();
+
+            // Rebuild wbsTree from fresh wbs_nodes so PLANOWANIE tab reflects imported data
+            try {
+                const latestRes = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders() });
+                if (latestRes.ok) {
+                    const latestData = await latestRes.json();
+                    const nodes = [...(latestData.items || [])].sort((a, b) => (a.path || '').localeCompare(b.path || '', 'pl'));
+                    const treeMap = new Map();
+                    nodes.forEach(n => treeMap.set(n.id, {
+                        id: n.id, name: n.name, type: n.type || null,
+                        quantity: n.quantity, unit: n.unit,
+                        status: n.status, owner: n.owner, comment: n.comment,
+                        children: [],
+                    }));
+                    const roots = [];
+                    nodes.forEach(n => {
+                        const tn = treeMap.get(n.id);
+                        if (n.parentId && treeMap.has(n.parentId)) treeMap.get(n.parentId).children.push(tn);
+                        else roots.push(tn);
+                    });
+                    const rebuiltTree = { items: roots };
+                    setWbsTreeAndRef(rebuiltTree);
+                    await fetch(`${API_URL}/order-requirements`, {
+                        method: 'POST',
+                        headers: authHeaders(),
+                        body: JSON.stringify({ nodeId, versionId, wbsTree: JSON.stringify(rebuiltTree) }),
+                    });
+                }
+            } catch (e) { console.error('WBS tree rebuild after import error:', e); }
+
             setBudgetImportOpen(false);
             alert(`Import zakończony: przetworzono ${imported} wierszy, zaktualizowano ${updated}, dodano ${created}, pominięto ${skipped}.`);
         } catch (e) {
@@ -2237,6 +2267,7 @@ ${materialsHtml}
         authHeaders,
         saveBudgetField,
         refreshUnified,
+        setWbsTreeAndRef,
         wbsData,
         nodeId,
         versionId,
