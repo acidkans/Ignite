@@ -780,25 +780,12 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
                     segG.appendChild(r);
                 }
 
-                // Jedna etykieta: wewnątrz najszerszego segmentu lub na zewnątrz po prawej
-                const txt = document.createElementNS(NS, 'text');
-                const labelX = labelOutside
-                    ? bx + lastSeg[1] * COL + 5
-                    : bx + widestSeg[0] * COL + widestW / 2;
-                txt.setAttribute('x', String(labelX));
-                txt.setAttribute('y', String(by + bh / 2 + 1));
-                txt.setAttribute('text-anchor', labelOutside ? 'start' : 'middle');
-                txt.setAttribute('dominant-baseline', 'middle');
-                txt.setAttribute('fill', labelOutside ? fill : '#ffffff');
-                txt.setAttribute('font-size', fontSize);
-                txt.setAttribute('font-family', 'Inter, system-ui, sans-serif');
-                txt.setAttribute('pointer-events', 'none');
-                txt.textContent = task.name;
-                segG.appendChild(txt);
-
                 // Dodajemy do innerSvg (nie do ukrytej grupy g)
                 innerSvg.appendChild(segG);
             });
+
+            // Ukryj wszystkie etykiety nazw na barach — opisy tylko w tabeli po lewej
+            innerSvg.querySelectorAll('text').forEach(t => { t.style.display = 'none'; });
 
             return true;
         };
