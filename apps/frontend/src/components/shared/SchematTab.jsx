@@ -718,13 +718,14 @@ export default function SchematTab({ nodeId }) {
                 const path = buildQaPath(n.id);
                 return [
                     `<tr><td colspan="2" style="background:#dbeafe;color:#1e40af;font-weight:bold;padding:5px 8px;font-size:10px;page-break-inside:avoid;break-inside:avoid;">${esc(path)}</td></tr>`,
-                    ...pairs.map(p => `<tr><td style="vertical-align:top;width:50%;white-space:pre-wrap;">${esc(p.question)}</td><td style="vertical-align:top;white-space:pre-wrap;color:#374151;">${esc(p.answer || '')}</td></tr>`)
+                    ...pairs.map(p => `<tr><td style="vertical-align:top;white-space:pre-wrap;word-break:break-word;">${esc(p.question)}</td><td style="vertical-align:top;white-space:pre-wrap;word-break:break-word;color:#374151;">${esc(p.answer || '')}</td></tr>`)
                 ];
             }).join('');
             const qaHtml = qaNodes.length > 0 ? `
                 <h2>Pytania i odpowiedzi</h2>
-                <table>
-                    <thead><tr><th style="width:50%">Pytanie</th><th style="width:50%">Odpowiedź</th></tr></thead>
+                <table style="table-layout:fixed;width:100%;border-collapse:collapse;">
+                    <colgroup><col style="width:50%"><col style="width:50%"></colgroup>
+                    <thead><tr><th>Pytanie</th><th>Odpowiedź</th></tr></thead>
                     <tbody>${qaRows}</tbody>
                 </table>` : '';
 
