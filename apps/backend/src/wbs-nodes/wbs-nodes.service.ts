@@ -97,8 +97,25 @@ export class WbsNodesService {
                         },
                     });
                 } else {
-                    // Insert nowy węzeł
-                    await tx.wbsNode.create({ data: row });
+                    // Insert nowy węzeł (upsert — idempotentne przy równoległych zapisach)
+                    await tx.wbsNode.upsert({
+                        where: { id: row.id },
+                        create: row,
+                        update: {
+                            parentId: row.parentId,
+                            name: row.name,
+                            type: row.type,
+                            status: row.status,
+                            unit: row.unit,
+                            owner: row.owner,
+                            resources: row.resources,
+                            cost: row.cost,
+                            comment: row.comment,
+                            tags: row.tags,
+                            qa: row.qa,
+                            sortOrder: row.sortOrder,
+                        },
+                    });
                 }
             }
         });
