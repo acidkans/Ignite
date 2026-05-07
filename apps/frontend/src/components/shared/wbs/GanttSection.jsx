@@ -71,37 +71,25 @@ const isPacketType = (t) => {
     const s = String(t || '').toLowerCase();
     return s === 'pakiet' || s === 'komplet';
 };
+const isDayUnit = (u) => { const s = String(u || '').toLowerCase().trim(); return s === 'dni' || s === 'dzień' || s === 'dzien' || s === 'd' || s === ''; };
+const isPacketUnit = (u) => { const s = String(u || '').toLowerCase().trim(); return s === 'pakiet' || s === 'komplet'; };
 
 const nodeDurationDays = (node) => {
     const u = String(node.unit || '').toLowerCase().trim();
     const qty = Number(String(node.quantity ?? '').replace(',', '.')) || 0;
     if (isWorkType(node.type)) {
-        const isDni = u === 'dni' || u === 'dzień' || u === 'dzien' || u === 'd' || u === '';
-        if (isDni && qty > 0) return Math.max(1, Math.round(qty));
+        if (isDayUnit(u) && qty > 0) return Math.max(1, Math.round(qty));
     }
     // Packet types (type=pakiet/komplet) or work with packet units → use qty as gantt days, min 1
-    if (isPacketType(node.type) || (isWorkType(node.type) && (u === 'pakiet' || u === 'komplet'))) {
+    if (isPacketType(node.type) || (isWorkType(node.type) && isPacketUnit(u))) {
         return qty > 0 ? Math.max(1, Math.round(qty)) : 1;
     }
     return 0;
 };
 
-const BLUE_PALETTE = [
-    { bg: '#1d4ed8', sel: '#1e40af', prog: '#3b82f6', text: '#93c5fd' },
-    { bg: '#0369a1', sel: '#075985', prog: '#0ea5e9', text: '#7dd3fc' },
-    { bg: '#4338ca', sel: '#3730a3', prog: '#818cf8', text: '#a5b4fc' },
-    { bg: '#0891b2', sel: '#0e7490', prog: '#22d3ee', text: '#67e8f9' },
-    { bg: '#2563eb', sel: '#1d4ed8', prog: '#60a5fa', text: '#bfdbfe' },
-    { bg: '#0284c7', sel: '#0369a1', prog: '#38bdf8', text: '#7dd3fc' },
-    { bg: '#3b0764', sel: '#4a044e', prog: '#a855f7', text: '#e9d5ff' },
-    { bg: '#1e3a8a', sel: '#172554', prog: '#93c5fd', text: '#dbeafe' },
-];
+const TASK_COLOR = { bg: '#1d4ed8', sel: '#1e40af', prog: '#3b82f6', text: '#93c5fd' };
 
-const colorForNode = (id) => {
-    let h = 0;
-    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
-    return BLUE_PALETTE[h % BLUE_PALETTE.length];
-};
+const colorForNode = (_id) => TASK_COLOR;
 
 const colorForType = (type) => colorForNode(type || 'default');
 
@@ -113,6 +101,12 @@ const isNonWorkingDay = (date) => {
 const advanceToWorkingDay = (date) => {
     const d = new Date(date);
     while (isNonWorkingDay(d)) d.setDate(d.getDate() + 1);
+    return d;
+};
+
+const retreatToWorkingDay = (date) => {
+    const d = new Date(date);
+    while (isNonWorkingDay(d)) d.setDate(d.getDate() - 1);
     return d;
 };
 
@@ -175,21 +169,25 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
                 const dur = nodeDurationDays(node);
                 const ovr = overrides?.[node.id];
                 let start, end, type;
-                const alwaysMilestone = isServiceType(node.type) && !isPacketType(node.type);
+                // pureService (usługa/service, nie pakiet/komplet): 1-dniowy bar, tylko przesuwany
+                const pureService = isServiceType(node.type) && !isPacketType(node.type);
+                // tylko praca z jednostką dni może aktualizować ilość przez timeline
+                const canUpdateDuration = isWorkType(node.type) && isDayUnit(node.unit);
+                const defaultStart = effectiveWow ? new Date(projectStart) : advanceToWorkingDay(new Date(projectStart));
                 if (ovr?.start && ovr?.end) {
                     start = new Date(ovr.start);
-                    end = alwaysMilestone ? new Date(start.getTime() + DAY_MS) : new Date(ovr.end);
-                    type = alwaysMilestone ? 'milestone' : ((end - start) <= DAY_MS / 2 ? 'milestone' : 'task');
-                } else if (dur > 0 && !alwaysMilestone) {
-                    start = effectiveWow ? new Date(cursor) : advanceToWorkingDay(cursor);
+                    end = pureService ? new Date(start.getTime() + DAY_MS) : new Date(ovr.end);
+                    type = pureService ? 'task' : ((end - start) <= DAY_MS / 2 ? 'milestone' : 'task');
+                } else if (dur > 0 && !pureService) {
+                    start = defaultStart;
                     end = effectiveWow
                         ? new Date(start.getTime() + dur * DAY_MS)
                         : addWorkingDays(start, dur);
                     type = 'task';
                 } else {
-                    start = effectiveWow ? new Date(cursor) : advanceToWorkingDay(cursor);
+                    start = defaultStart;
                     end = new Date(start.getTime() + DAY_MS);
-                    type = 'milestone';
+                    type = pureService ? 'task' : 'milestone';
                 }
                 tasks.push({
                     id: node.id,
@@ -201,6 +199,8 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
                     project: parentId || undefined,
                     _color: colors.bg,
                     _textColor: colors.text,
+                    _pureService: pureService,
+                    _canUpdateDuration: canUpdateDuration,
                     styles: {
                         backgroundColor: colors.bg,
                         backgroundSelectedColor: colors.sel,
@@ -378,14 +378,30 @@ const VIEW_OPTS = [
     { v: ViewMode.Month, label: 'Miesiąc' },
 ];
 
-export default function GanttSection({ wbsTree, projectName, onNodeDurationChange, onExportReady, onGetHtmlReady }) {
+export default function GanttSection({ wbsTree, projectName, onNodeDurationChange, onExportReady, onGetHtmlReady, projectStartDate, projectEndDate }) {
     const items = wbsTree?.items || [];
     const [viewMode, setViewMode] = useState(ViewMode.Day);
     const [projectStart, setProjectStart] = useState(() => {
+        if (projectStartDate) return projectStartDate.slice(0, 10);
         const d = new Date();
         d.setHours(0, 0, 0, 0);
         return d.toISOString().slice(0, 10);
     });
+    const syncedStartRef = useRef(false);
+    useEffect(() => {
+        if (projectStartDate && !syncedStartRef.current) {
+            setProjectStart(projectStartDate.slice(0, 10));
+            syncedStartRef.current = true;
+        }
+    }, [projectStartDate]);
+    const [projectEnd, setProjectEnd] = useState(() => projectEndDate ? projectEndDate.slice(0, 10) : '');
+    const syncedEndRef = useRef(false);
+    useEffect(() => {
+        if (projectEndDate && !syncedEndRef.current) {
+            setProjectEnd(projectEndDate.slice(0, 10));
+            syncedEndRef.current = true;
+        }
+    }, [projectEndDate]);
     const [overrides, setOverrides] = useState({});
     const [editCell, setEditCell] = useState(null); // { taskId, field: 'start'|'end' } | null
     const [sortConfig, setSortConfig] = useState({ col: null, dir: 'asc' });
@@ -465,7 +481,8 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
             }
             return next;
         });
-        if (task.type !== 'project') onNodeDurationChange?.(taskId, notifyDays);
+        const origTask = tasks.find(t => t && t.id === taskId);
+        if (task.type !== 'project' && origTask?._canUpdateDuration !== false) onNodeDurationChange?.(taskId, notifyDays);
     }, [tasks, taskBranchMap, branchWorkOnHolidays, onNodeDurationChange]);
 
     const onDateChange = useCallback((task) => {
@@ -475,6 +492,28 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         let end   = new Date(task.end);   end.setHours(0, 0, 0, 0);
         if (end.getTime() <= start.getTime()) end.setDate(start.getDate() + 1);
 
+        const origTask = tasks.find(t => t && t.id === task.id);
+        const origStart = origTask ? new Date(origTask.start) : null;
+        if (origStart) origStart.setHours(0, 0, 0, 0);
+
+        // pureService: tylko przesunięcie, zawsze 1-dniowy bar, bez zmiany długości
+        if (origTask?._pureService) {
+            const goingLeft = origStart && start.getTime() < origStart.getTime();
+            start = goingLeft ? retreatToWorkingDay(start) : advanceToWorkingDay(start);
+            end = new Date(start.getTime() + DAY_MS);
+            setOverrides(prev => {
+                const next = { ...prev, [task.id]: { start: start.toISOString(), end: end.toISOString() } };
+                for (const t of tasks) {
+                    if (!t || next[t.id] || t.type === 'project') continue;
+                    const ts = new Date(t.start); ts.setHours(0, 0, 0, 0);
+                    const te = new Date(t.end);   te.setHours(0, 0, 0, 0);
+                    next[t.id] = { start: ts.toISOString(), end: te.toISOString() };
+                }
+                return next;
+            });
+            return;
+        }
+
         const branchId   = taskBranchMap[task.id];
         const effectiveWow = Object.prototype.hasOwnProperty.call(branchWorkOnHolidays, task.id)
             ? (branchWorkOnHolidays[task.id] ?? false)
@@ -482,11 +521,8 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
 
         let notifyDays;
         if (!effectiveWow) {
-            const origTask = tasks.find(t => t && t.id === task.id);
-            const origStart = origTask ? new Date(origTask.start) : null;
-            const origEnd   = origTask ? new Date(origTask.end)   : null;
-            if (origStart) origStart.setHours(0, 0, 0, 0);
-            if (origEnd)   origEnd.setHours(0, 0, 0, 0);
+            const origEnd = origTask ? new Date(origTask.end) : null;
+            if (origEnd) origEnd.setHours(0, 0, 0, 0);
 
             const startSame = origStart && Math.abs(start.getTime() - origStart.getTime()) < DAY_MS / 2;
             const endSame   = origEnd   && Math.abs(end.getTime()   - origEnd.getTime())   < DAY_MS / 2;
@@ -505,7 +541,8 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
                 while (cur < end) { if (!isNonWorkingDay(cur)) workDays++; cur.setDate(cur.getDate() + 1); }
                 workDays = Math.max(1, workDays);
             }
-            start = advanceToWorkingDay(start);
+            const goingLeft = origStart && start.getTime() < origStart.getTime();
+            start = goingLeft ? retreatToWorkingDay(start) : advanceToWorkingDay(start);
             end   = addWorkingDays(start, workDays);
             notifyDays = workDays;
         } else {
@@ -523,7 +560,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
             }
             return next;
         });
-        if (task.id !== '__root__' && task.type !== 'project') {
+        if (task.id !== '__root__' && task.type !== 'project' && origTask?._canUpdateDuration !== false) {
             onNodeDurationChange?.(task.id, notifyDays);
         }
     }, [onNodeDurationChange, branchWorkOnHolidays, taskBranchMap, tasks]);
@@ -632,6 +669,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         const cleanup = () => {
             wrapper.querySelectorAll('.ignite-weekend-band').forEach(el => el.remove());
             wrapper.querySelectorAll('.ignite-seg-g').forEach(el => el.remove());
+            wrapper.querySelectorAll('.ignite-project-marker').forEach(el => el.remove());
             wrapper.querySelectorAll('[data-ignite-split]').forEach(el => {
                 if (el.dataset.igniteOrigFill) el.setAttribute('fill', el.dataset.igniteOrigFill);
                 el.style.opacity = '';
@@ -796,6 +834,71 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         return () => { cancelled = true; timers.forEach(clearTimeout); cleanup(); };
     }, [tasks, viewMode, taskBranchMap, branchWorkOnHolidays]);
 
+    // Markery start/koniec projektu — działa we wszystkich widokach
+    useEffect(() => {
+        const wrapper = wrapperRef.current;
+        if (!wrapper || !tasks.length) return;
+        const cleanup = () => wrapper.querySelectorAll('.ignite-project-marker').forEach(el => el.remove());
+        if (!projectStart && !projectEnd) { cleanup(); return; }
+
+        const NS = 'http://www.w3.org/2000/svg';
+        const apply = () => {
+            cleanup();
+            const vc = wrapper.querySelector('[class*="CZjuD"], [class*="ganttVerticalContainer"]');
+            if (!vc) return false;
+            const horiz = vc.children[1];
+            if (!horiz?.querySelector('svg')) return false;
+            const innerSvg = horiz.querySelector('svg');
+            const innerH = innerSvg.getBoundingClientRect().height || parseFloat(innerSvg.getAttribute('height') || '0');
+            if (!innerH) return false;
+
+            // Oblicz pixelsPerDay z rzeczywistego paska (niezależnie od widoku)
+            const refIdx = tasks.findIndex(t => t && t.type === 'task');
+            const refTask = refIdx >= 0 ? tasks[refIdx] : null;
+            const refGroups = innerSvg.querySelectorAll('g[tabindex]');
+            const refBar = refTask && refGroups[refIdx] ? refGroups[refIdx].querySelector('rect') : null;
+            if (!refBar || !refTask) return false;
+            const refBx = parseFloat(refBar.getAttribute('x') || '0');
+            const refW  = parseFloat(refBar.getAttribute('width') || '1');
+            const refStart = new Date(refTask.start); refStart.setHours(0, 0, 0, 0);
+            const refEnd   = new Date(refTask.end);   refEnd.setHours(0, 0, 0, 0);
+            const refDays  = Math.max(1, Math.round((refEnd - refStart) / DAY_MS));
+            const ppd = refW / refDays; // pixels per day
+
+            const earliest = tasks.reduce((m, t) => t.start < m ? t.start : m, tasks[0].start);
+            const firstDate = new Date(earliest); firstDate.setHours(0, 0, 0, 0);
+            firstDate.setDate(firstDate.getDate() - 1);
+            const svgX0 = refBx - Math.round((refStart - firstDate) / DAY_MS) * ppd;
+
+            const markerG = document.createElementNS(NS, 'g');
+            markerG.classList.add('ignite-project-marker');
+            const draw = (dateStr, color) => {
+                if (!dateStr) return;
+                const d = new Date(dateStr); d.setHours(0, 0, 0, 0);
+                const x = svgX0 + Math.round((d - firstDate) / DAY_MS) * ppd + ppd / 2;
+                const line = document.createElementNS(NS, 'line');
+                line.setAttribute('x1', String(x)); line.setAttribute('y1', '0');
+                line.setAttribute('x2', String(x)); line.setAttribute('y2', String(innerH));
+                line.setAttribute('stroke', color); line.setAttribute('stroke-width', '1.5');
+                line.setAttribute('stroke-dasharray', '5,3'); line.setAttribute('pointer-events', 'none');
+                markerG.appendChild(line);
+                const sz = 7;
+                const poly = document.createElementNS(NS, 'polygon');
+                poly.setAttribute('points', `${x},0 ${x+sz},${sz} ${x},${sz*2} ${x-sz},${sz}`);
+                poly.setAttribute('fill', color); poly.setAttribute('pointer-events', 'none');
+                markerG.appendChild(poly);
+            };
+            draw(projectStart, '#22c55e');
+            draw(projectEnd, '#ef4444');
+            innerSvg.appendChild(markerG);
+            return true;
+        };
+
+        let cancelled = false;
+        const timers = [50, 200, 600, 1200].map(ms => setTimeout(() => { if (!cancelled) apply(); }, ms));
+        return () => { cancelled = true; timers.forEach(clearTimeout); cleanup(); };
+    }, [tasks, viewMode, projectStart, projectEnd]);
+
     // Wycentruj etykiety tygodni w nagłówku — tylko widok tygodnia (miesiące są już centrowane przez bibliotekę)
     useEffect(() => {
         if (!tasks.length || viewMode !== ViewMode.Week) return;
@@ -830,6 +933,31 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
     const exportPdf = useCallback(() => {
         const node = wrapperRef.current?.querySelector('.ignite-gantt-print');
         if (!node) return;
+
+        const clone = node.cloneNode(true);
+        const NS = 'http://www.w3.org/2000/svg';
+        // Timeline SVG siedzi w pionowym kontenerze (children[1]) — taki sam selektor jak live app
+        const liveVc = node.querySelector('[class*="CZjuD"], [class*="ganttVerticalContainer"]');
+        const liveInnerSvg = liveVc?.children[1]?.querySelector('svg');
+        const cloneVc = clone.querySelector('[class*="CZjuD"], [class*="ganttVerticalContainer"]');
+        const innerSvg = cloneVc?.children[1]?.querySelector('svg');
+        if (innerSvg && liveInnerSvg) {
+            const svgW = liveInnerSvg.getBoundingClientRect().width || parseFloat(liveInnerSvg.getAttribute('width') || '2000');
+            const rowH = 32;
+            const rowLineG = document.createElementNS(NS, 'g');
+            for (let r = 1; r <= tasks.length; r++) {
+                const line = document.createElementNS(NS, 'line');
+                line.setAttribute('x1', '0');
+                line.setAttribute('x2', String(svgW));
+                line.setAttribute('y1', String(r * rowH));
+                line.setAttribute('y2', String(r * rowH));
+                line.setAttribute('stroke', 'rgba(0,0,0,0.12)');
+                line.setAttribute('stroke-width', '0.5');
+                rowLineG.appendChild(line);
+            }
+            innerSvg.insertBefore(rowLineG, innerSvg.firstChild);
+        }
+
         const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
             .map(s => s.outerHTML)
             .join('\n');
@@ -844,11 +972,17 @@ h1 { font-size: 18px; margin: 0 0 12px 0; }
 .wrap { background:#fff; }
 .wrap ._WuQ0f { background:#fff !important; }
 .wrap text { fill:#0b0f17 !important; }
+.wrap * { scrollbar-width: none !important; }
+.wrap *::-webkit-scrollbar { display: none !important; }
 </style>
 </head><body>
 <h1>${(projectName || 'Projekt').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'})[c])}</h1>
 <div class="meta">Harmonogram – wygenerowano ${new Date().toLocaleString('pl-PL')}</div>
-<div class="wrap">${node.outerHTML}</div>
+${(projectStart || projectEnd) ? `<div class="meta" style="display:flex;gap:18px;align-items:center;margin-bottom:10px;">
+${projectStart ? `<span style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:10px;height:10px;background:#22c55e;transform:rotate(45deg);"></span><b>Start:</b> ${new Date(projectStart).toLocaleDateString('pl-PL')}</span>` : ''}
+${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span style="display:inline-block;width:10px;height:10px;background:#ef4444;transform:rotate(45deg);"></span><b>Koniec:</b> ${new Date(projectEnd).toLocaleDateString('pl-PL')}</span>` : ''}
+</div>` : ''}
+<div class="wrap">${clone.outerHTML}</div>
 <script>setTimeout(()=>{window.print();}, 400);</script>
 </body></html>`;
         const win = window.open('', '_blank', 'width=1400,height=900');
@@ -856,7 +990,7 @@ h1 { font-size: 18px; margin: 0 0 12px 0; }
         win.document.open();
         win.document.write(html);
         win.document.close();
-    }, [projectName]);
+    }, [projectName, projectStart, projectEnd, tasks.length]);
 
     useEffect(() => { onExportReady?.(exportPdf); }, [exportPdf, onExportReady]);
 
@@ -894,11 +1028,22 @@ h1 { font-size: 18px; margin: 0 0 12px 0; }
         <div ref={wrapperRef} className="flex flex-col flex-1 min-h-0">
             <div className="flex items-center gap-3 px-4 py-2 border-b border-white/10 bg-white/[0.02] text-xs flex-wrap">
                 <label className="flex items-center gap-2 text-gray-300">
-                    Start projektu:
+                    <span className="w-2 h-2 rotate-45 inline-block" style={{ background: '#22c55e' }} />
+                    Start:
                     <input
                         type="date"
                         value={projectStart}
                         onChange={(e) => setProjectStart(e.target.value)}
+                        className="bg-black/40 border border-white/10 rounded px-2 py-1 text-white text-xs"
+                    />
+                </label>
+                <label className="flex items-center gap-2 text-gray-300">
+                    <span className="w-2 h-2 rotate-45 inline-block" style={{ background: '#ef4444' }} />
+                    Koniec:
+                    <input
+                        type="date"
+                        value={projectEnd}
+                        onChange={(e) => setProjectEnd(e.target.value)}
                         className="bg-black/40 border border-white/10 rounded px-2 py-1 text-white text-xs"
                     />
                 </label>
