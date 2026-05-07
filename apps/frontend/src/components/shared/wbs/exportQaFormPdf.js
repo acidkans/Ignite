@@ -140,10 +140,14 @@ export async function exportQaFormPdf(wbsData, projectName) {
 
         // Nazwa węzła
         const nodePath = getWbsPath(node);
-        ensureSpace(20);
-        page.drawRectangle({ x: MARGIN, y: y - 18, width: CONTENT_W, height: 18, color: rgb(0.88, 0.92, 0.98) });
-        page.drawText(nodePath, { x: MARGIN + 6, y: y - 13, size: 9, font: fontBold, color: colorHeader });
-        y -= 18;
+        const nodeLines = wrapText(nodePath, CONTENT_W - 12, fontBold, 9);
+        const nodeH = Math.max(18, nodeLines.length * (9 * 1.4) + 8);
+        ensureSpace(nodeH);
+        page.drawRectangle({ x: MARGIN, y: y - nodeH, width: CONTENT_W, height: nodeH, color: rgb(0.88, 0.92, 0.98) });
+        nodeLines.forEach((line, li) => {
+            page.drawText(line, { x: MARGIN + 6, y: y - 13 - li * (9 * 1.4), size: 9, font: fontBold, color: colorHeader });
+        });
+        y -= nodeH;
 
         drawTableHeader();
 
