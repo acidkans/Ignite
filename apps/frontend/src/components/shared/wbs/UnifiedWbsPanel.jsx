@@ -2013,6 +2013,7 @@ ${materialsHtml}
             const budgetRows = [...wbsData]
                 .sort((a, b) => (a.path || '').localeCompare(b.path || '', 'pl'));
             const used = new Set();
+            const newNodeIds = new Set(); // IDs created in this import session
             let imported = 0;
             let updated = 0;
             let created = 0;
@@ -2075,6 +2076,7 @@ ${materialsHtml}
                                 subjectRoot = { id: rootNode.id, name: rootNode.name, parentId: null };
                                 subjectRootsByName.set(wantedSubject, subjectRoot);
                                 byId.set(rootNode.id, subjectRoot);
+                                newNodeIds.add(rootNode.id);
                             }
                         }
                     }
@@ -2100,6 +2102,7 @@ ${materialsHtml}
                                     parentNode = { id: pgNode.id, name: pgNode.name, parentId: subjectRoot.id };
                                     budgetRows.push(parentNode);
                                     byId.set(pgNode.id, parentNode);
+                                    newNodeIds.add(pgNode.id);
                                 }
                             }
                         }
@@ -2127,6 +2130,7 @@ ${materialsHtml}
                         unitCost: 0,
                     };
                     budgetRows.push(target);
+                    newNodeIds.add(createdNode.id);
                     created += 1;
                 }
                 used.add(target.id);
@@ -2221,34 +2225,45 @@ ${materialsHtml}
 
             await refreshUnified();
 
-            // Rebuild wbsTree from fresh wbs_nodes so PLANOWANIE tab reflects imported data
-            try {
-                const latestRes = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders() });
-                if (latestRes.ok) {
-                    const latestData = await latestRes.json();
-                    const nodes = [...(latestData.items || [])].sort((a, b) => (a.path || '').localeCompare(b.path || '', 'pl'));
-                    const treeMap = new Map();
-                    nodes.forEach(n => treeMap.set(n.id, {
-                        id: n.id, name: n.name, type: n.type || null,
-                        quantity: n.quantity, unit: n.unit,
-                        status: n.status, owner: n.owner, comment: n.comment,
-                        children: [],
-                    }));
-                    const roots = [];
-                    nodes.forEach(n => {
-                        const tn = treeMap.get(n.id);
-                        if (n.parentId && treeMap.has(n.parentId)) treeMap.get(n.parentId).children.push(tn);
-                        else roots.push(tn);
-                    });
-                    const rebuiltTree = { items: roots };
-                    setWbsTreeAndRef(rebuiltTree);
-                    await fetch(`${API_URL}/order-requirements`, {
-                        method: 'POST',
-                        headers: authHeaders(),
-                        body: JSON.stringify({ nodeId, versionId, wbsTree: JSON.stringify(rebuiltTree) }),
-                    });
-                }
-            } catch (e) { console.error('WBS tree rebuild after import error:', e); }
+            // Insert only newly created nodes into the existing WBS tree
+            if (newNodeIds.size > 0) {
+                try {
+                    const latestRes = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders() });
+                    if (latestRes.ok) {
+                        const latestData = await latestRes.json();
+                        const nodeById = new Map((latestData.items || []).map(n => [n.id, n]));
+
+                        // Deep-clone current tree and build id→treeNode index
+                        const cloneNodes = (nodes) => (nodes || []).map(n => ({ ...n, children: cloneNodes(n.children) }));
+                        const treeNodeById = new Map();
+                        const indexNodes = (nodes) => nodes.forEach(n => { treeNodeById.set(n.id, n); indexNodes(n.children || []); });
+                        const updatedTree = { items: cloneNodes((wbsTreeRef.current || { items: [] }).items) };
+                        indexNodes(updatedTree.items);
+
+                        // Insert parents before children
+                        const sorted = [...newNodeIds].sort((a, b) => {
+                            const pa = nodeById.get(a)?.parentId;
+                            const pb = nodeById.get(b)?.parentId;
+                            return (pa && newNodeIds.has(pa) ? 1 : 0) - (pb && newNodeIds.has(pb) ? 1 : 0);
+                        });
+                        for (const id of sorted) {
+                            if (treeNodeById.has(id)) continue;
+                            const n = nodeById.get(id);
+                            if (!n) continue;
+                            const tn = { id: n.id, name: n.name, type: n.type || null, quantity: n.quantity, unit: n.unit, status: n.status, owner: n.owner, comment: n.comment, children: [] };
+                            treeNodeById.set(id, tn);
+                            if (n.parentId && treeNodeById.has(n.parentId)) treeNodeById.get(n.parentId).children.push(tn);
+                            else updatedTree.items.push(tn);
+                        }
+                        setWbsTreeAndRef(updatedTree);
+                        await fetch(`${API_URL}/order-requirements`, {
+                            method: 'POST',
+                            headers: authHeaders(),
+                            body: JSON.stringify({ nodeId, versionId, wbsTree: JSON.stringify(updatedTree) }),
+                        });
+                    }
+                } catch (e) { console.error('WBS tree update after import error:', e); }
+            }
 
             setBudgetImportOpen(false);
             alert(`Import zakończony: przetworzono ${imported} wierszy, zaktualizowano ${updated}, dodano ${created}, pominięto ${skipped}.`);
