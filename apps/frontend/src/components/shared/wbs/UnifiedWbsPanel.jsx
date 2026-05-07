@@ -1921,13 +1921,20 @@ ${materialsHtml}
         } catch (e) { console.error('Update node error:', e); }
     }, [authHeaders, wbsData, refreshMaterialCosts]);
 
-    // Drag krawędzi belki w Gantcie → quantity (dni) + unit='dni' przez wbs-nodes/{id} (PATCH).
-    // Używa updateNodeField który optymistycznie aktualizuje wbsData i wbsTree.
+    // Drag krawędzi belki w Gantcie → quantity (dni) przez wbs-nodes/{id} (PATCH).
+    // Unit zmienia się na 'dni' tylko gdy node ma już dniową jednostkę lub pustą — pakiet/komplet itp. zostają bez zmian.
     const handleGanttDurationChange = useCallback(async (nodeId, days) => {
         if (!nodeId || !Number.isFinite(days)) return;
+        const node = wbsData.find(n => n.id === nodeId);
+        const nodeType = String(node?.type || '').toLowerCase();
+        const isPacket = nodeType === 'pakiet' || nodeType === 'komplet';
+        const u = String(node?.unit || '').toLowerCase().trim();
+        const isDayUnit = !isPacket && (u === 'dni' || u === 'dzień' || u === 'dzien' || u === 'd' || u === '');
         await updateNodeField(nodeId, 'quantity', String(days));
-        await updateNodeField(nodeId, 'unit', 'dni');
-    }, [updateNodeField]);
+        if (isDayUnit) {
+            await updateNodeField(nodeId, 'unit', 'dni');
+        }
+    }, [updateNodeField, wbsData]);
 
     const saveBudgetField = useCallback(async (wbsNodeId, data) => {
         try {
