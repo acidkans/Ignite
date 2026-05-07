@@ -64,15 +64,24 @@ const isMaterialType = (t) => {
 };
 const isServiceType = (t) => {
     const s = String(t || '').toLowerCase();
-    return s === 'service' || s === 'usługa' || s === 'usluga' || s === 'pakiet';
+    return s === 'service' || s === 'usługa' || s === 'usluga' || s === 'pakiet' || s === 'komplet';
+};
+// Packet types: show as resizable bars (not milestones), duration = quantity days
+const isPacketType = (t) => {
+    const s = String(t || '').toLowerCase();
+    return s === 'pakiet' || s === 'komplet';
 };
 
 const nodeDurationDays = (node) => {
+    const u = String(node.unit || '').toLowerCase().trim();
+    const qty = Number(String(node.quantity ?? '').replace(',', '.')) || 0;
     if (isWorkType(node.type)) {
-        const u = String(node.unit || '').toLowerCase().trim();
         const isDni = u === 'dni' || u === 'dzień' || u === 'dzien' || u === 'd' || u === '';
-        const qty = Number(String(node.quantity ?? '').replace(',', '.')) || 0;
         if (isDni && qty > 0) return Math.max(1, Math.round(qty));
+    }
+    // Packet types (type=pakiet/komplet) or work with packet units → use qty as gantt days, min 1
+    if (isPacketType(node.type) || (isWorkType(node.type) && (u === 'pakiet' || u === 'komplet'))) {
+        return qty > 0 ? Math.max(1, Math.round(qty)) : 1;
     }
     return 0;
 };
@@ -166,7 +175,7 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
                 const dur = nodeDurationDays(node);
                 const ovr = overrides?.[node.id];
                 let start, end, type;
-                const alwaysMilestone = isServiceType(node.type);
+                const alwaysMilestone = isServiceType(node.type) && !isPacketType(node.type);
                 if (ovr?.start && ovr?.end) {
                     start = new Date(ovr.start);
                     end = alwaysMilestone ? new Date(start.getTime() + DAY_MS) : new Date(ovr.end);
