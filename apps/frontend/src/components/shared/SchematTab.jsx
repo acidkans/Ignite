@@ -536,8 +536,23 @@ export default function SchematTab({ nodeId, wbsData: externalWbsData, orderName
             });
             const freshSchematics = freshRes.ok ? await freshRes.json() : schematics;
 
-            // Q&A tylko z aktualnego stanu WBS z pamięci — bez fallbacku na backend (stare dane)
-            const allWbsNodes = Array.isArray(externalWbsData) ? externalWbsData : [];
+            // Preferuj dane WBS z pamięci (cache po odwiedzeniu zakładki WBS).
+            // Jeśli nie ma (użytkownik nie otwierał WBS), pobierz z backendu — teraz bezpieczne,
+            // bo mergeRelational już zawiera pole qa.
+            let allWbsNodes = Array.isArray(externalWbsData) && externalWbsData.length > 0
+                ? externalWbsData
+                : [];
+            if (allWbsNodes.length === 0) {
+                try {
+                    const wbsRes = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (wbsRes.ok) {
+                        const wbsData = await wbsRes.json();
+                        allWbsNodes = wbsData.items || [];
+                    }
+                } catch (_) {}
+            }
 
             // Przypisz globalne numery przed renderowaniem (spójność tabela ↔ obrazy)
             let _globalNum = 0;
