@@ -979,12 +979,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             >
                 {/* WBS ID — uchwyt drag */}
                 <td
-                    className="px-1 py-2.5 cursor-grab"
+                    className="px-2 py-2.5 cursor-grab min-w-[48px]"
                     draggable
                     onDragStart={e => onDragStart(e, node.id)}
                     onDragEnd={onDragEnd}
                 >
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                         <GripVertical
                             size={11}
                             className="text-gray-700 group-hover/node:text-gray-500 flex-shrink-0"
@@ -1047,12 +1047,19 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         {depth < MAX_DEPTH && (
                             <button
                                 onClick={e => handleAddChild(node.id, e)}
-                                className="opacity-0 group-hover/node:opacity-100 p-0.5 hover:bg-white/10 rounded text-gray-600 transition-all flex-shrink-0"
+                                className="p-1 hover:bg-white/10 rounded text-gray-500 hover:text-blue-400 transition-all flex-shrink-0"
                                 title="Dodaj element podrzędny"
                             >
-                                <Plus size={10} />
+                                <Plus size={12} />
                             </button>
                         )}
+                        <button
+                            onClick={e => handleDelete(node.id, e)}
+                            className="p-1 hover:bg-red-500/10 rounded text-gray-600 hover:text-red-500 transition-all flex-shrink-0"
+                            title="Usuń"
+                        >
+                            <Trash2 size={12} />
+                        </button>
                     </div>
                 </td>
 
@@ -1162,12 +1169,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     />
                 </td>
 
-                {/* Usuń */}
-                <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                    <button onClick={e => handleDelete(node.id, e)} className="opacity-0 group-hover/node:opacity-100 p-1 hover:bg-red-500/10 rounded text-red-500 transition-all">
-                        <Trash2 size={11} />
-                    </button>
-                </td>
+                {/* (delete przeniesiony do komórki nazwy) */}
+                <td />
             </tr>
         );
 
