@@ -97,7 +97,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         // Fetch WBS from relational table (same source as UnifiedWbsPanel)
         fetch(`${API_URL}/wbs-nodes/unified/${nodeId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
-        }).then(r => r.json()).then(data => {
+        }).then(r => r.json()).then(async data => {
             try {
                 const items = data.items || [];
                 wbsItemsRef.current = items;
