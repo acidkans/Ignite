@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Document, pdfjs } from 'react-pdf';
-import { FileText, ZoomIn, ZoomOut, Download, X, Maximize2, RefreshCw, FileQuestion } from 'lucide-react';
+import { FileText, ZoomIn, ZoomOut, Download, X, Maximize2, RefreshCw, FileQuestion, ChevronLeft, ChevronRight } from 'lucide-react';
 import { API_URL } from '../../config';
 import PdfPageWithHighlights from '../shared/PdfPageWithHighlights';
 
@@ -190,6 +190,30 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
                     </div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
+                    {files.length > 1 && (() => {
+                        const idx = files.findIndex(f => f.id === selectedFile?.id);
+                        const hasPrev = idx > 0;
+                        const hasNext = idx < files.length - 1 && idx !== -1;
+                        return <>
+                            <button
+                                onClick={() => { if (hasPrev) { setSelectedFile(files[idx - 1]); setScale(1.0); } }}
+                                disabled={!hasPrev}
+                                title="Poprzedni dokument"
+                                className={`p-1.5 rounded-lg transition-colors ${hasPrev ? 'text-amber-300/60 hover:text-amber-200 hover:bg-amber-500/10' : 'text-amber-300/20 cursor-not-allowed'}`}>
+                                <ChevronLeft size={14} />
+                            </button>
+                            <span className="text-[9px] text-amber-400/50 tabular-nums">
+                                {idx === -1 ? '-' : idx + 1}/{files.length}
+                            </span>
+                            <button
+                                onClick={() => { if (hasNext) { setSelectedFile(files[idx + 1]); setScale(1.0); } }}
+                                disabled={!hasNext}
+                                title="Następny dokument"
+                                className={`p-1.5 rounded-lg transition-colors ${hasNext ? 'text-amber-300/60 hover:text-amber-200 hover:bg-amber-500/10' : 'text-amber-300/20 cursor-not-allowed'}`}>
+                                <ChevronRight size={14} />
+                            </button>
+                        </>;
+                    })()}
                     <button onClick={fetchFiles} title="Odśwież listę"
                         className="p-1.5 text-amber-300/60 hover:text-amber-200 hover:bg-amber-500/10 rounded-lg transition-colors">
                         <RefreshCw size={14} className={loadingFiles ? 'animate-spin' : ''} />

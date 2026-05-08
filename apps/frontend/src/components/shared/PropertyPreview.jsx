@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Trash2, Upload, MapPin, Hash, User, FileText, Eye, Clock, Image, Film, FileCode, ChevronDown, Pencil, FileInput } from 'lucide-react';
+import { Trash2, Upload, MapPin, Hash, User, FileText, Eye, Clock, Image, Film, FileCode, ChevronDown, Pencil, FileInput, ChevronLeft, ChevronRight } from 'lucide-react';
 import { API_URL } from '../../config';
 import DocumentViewer from './DocumentViewer';
 import { importQaFormPdf } from './wbs/importQaFormPdf';
@@ -333,12 +333,12 @@ export default function PropertyPreview({ nodeId, versionId = null, searchQuery 
                     <button
                         type="button"
                         onClick={() => setShowFileDropdown(v => !v)}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                        className={`w-[240px] flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
                             showFileDropdown ? 'bg-white/10 border-white/20 text-white' : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white'
                         }`}
                     >
                         <FileText size={13} className={isFinancialTab ? 'text-amber-400 shrink-0' : 'text-blue-400 shrink-0'} />
-                        <span className="max-w-[220px] truncate">
+                        <span className="flex-1 truncate text-left">
                             {selectedFile ? selectedFile.fileName : (isFinancialTab ? 'Pliki finansowe' : 'Wybierz dokument')}
                         </span>
                         <span className="text-[10px] text-gray-500 shrink-0">({files.length})</span>
@@ -411,6 +411,30 @@ export default function PropertyPreview({ nodeId, versionId = null, searchQuery 
                         </div>
                     )}
                 </div>
+
+                {/* Prev/next navigation */}
+                {files.length > 1 && (() => {
+                    const idx = files.findIndex(f => f.id === selectedFile?.id);
+                    const hasPrev = idx > 0;
+                    const hasNext = idx !== -1 && idx < files.length - 1;
+                    return <div className="flex items-center gap-0.5 flex-shrink-0">
+                        <button
+                            onClick={() => { if (hasPrev) setSelectedFile(files[idx - 1]); }}
+                            disabled={!hasPrev}
+                            title="Poprzedni dokument"
+                            className={`p-1.5 rounded-lg transition-colors ${hasPrev ? 'text-gray-400 hover:text-white hover:bg-white/10' : 'text-gray-700 cursor-not-allowed'}`}>
+                            <ChevronLeft size={14} />
+                        </button>
+                        <span className="text-[10px] text-gray-500 tabular-nums px-0.5">{idx === -1 ? '-' : idx + 1}/{files.length}</span>
+                        <button
+                            onClick={() => { if (hasNext) setSelectedFile(files[idx + 1]); }}
+                            disabled={!hasNext}
+                            title="Następny dokument"
+                            className={`p-1.5 rounded-lg transition-colors ${hasNext ? 'text-gray-400 hover:text-white hover:bg-white/10' : 'text-gray-700 cursor-not-allowed'}`}>
+                            <ChevronRight size={14} />
+                        </button>
+                    </div>;
+                })()}
 
                 {/* Import Q&A — widoczny gdy wybrany plik ma "Q&A" w nazwie */}
                 {isQaFile(selectedFile) && (
