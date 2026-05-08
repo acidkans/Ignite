@@ -16,11 +16,11 @@ function flattenWbsNodes(nodes, prefix = '') {
     return result;
 }
 
-export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId, subtaskId }) {
+export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId, subtaskId, versionId }) {
     const { isOnline } = useNetwork();
     const [uploading, setUploading] = useState(false);
     const [editName, setEditName] = useState(marker.name || '');
-    const [editNote, setEditNote] = useState(marker.note || '');
+    const [editComment, setEditComment] = useState('');
     const [editQuestion, setEditQuestion] = useState(marker.question || '');
     const [editingAttNote, setEditingAttNote] = useState(null);
     const [subtasks, setSubtasks] = useState([]);
@@ -33,6 +33,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     const wbsItemsRef = useRef([]); // pełne obiekty z polem qa
     const prevQuestionRef = useRef(marker.question || '');
     const [wbsLinks, setWbsLinks] = useState([]); // [{id, wbsNodeId, markerId}]
+    const wbsLinksRef = useRef([]);
     const [wbsToggling, setWbsToggling] = useState(null);
     const [addWbsMode, setAddWbsMode] = useState(null); // null | 'item' | 'requirement'
     const [addWbsParentId, setAddWbsParentId] = useState('');
@@ -42,6 +43,26 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const camInputRef = useRef(null);
+
+    // Sync wbsLinksRef i inicjalizacja komentarza z pierwszego węzła WBS
+    useEffect(() => { wbsLinksRef.current = wbsLinks; }, [wbsLinks]);
+    useEffect(() => {
+        if (!wbsLinks.length) return;
+        const node = wbsItemsRef.current.find(n => n.id === wbsLinks[0].wbsNodeId);
+        if (node != null) setEditComment(node.comment || '');
+    }, [wbsLinks]);
+
+    // Sync komentarza z WBS tabeli → panel
+    useEffect(() => {
+        const handler = (e) => {
+            const { wbsNodeIds, comment } = e.detail || {};
+            if (wbsLinksRef.current.some(l => wbsNodeIds?.includes(l.wbsNodeId))) {
+                setEditComment(comment || '');
+            }
+        };
+        window.addEventListener('wbs-comment-changed', handler);
+        return () => window.removeEventListener('wbs-comment-changed', handler);
+    }, []);
 
     // Responsive check
     const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
@@ -54,18 +75,21 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     useEffect(() => {
         if (!nodeId) return;
         const token = sessionStorage.getItem('token');
-        fetch(`${API_URL}/subtasks/node/${nodeId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        }).then(r => r.json()).then(data => setSubtasks(Array.isArray(data) ? data : [])).catch(() => {});
-    }, [nodeId]);
+        const url = versionId
+            ? `${API_URL}/subtasks/node/${nodeId}?versionId=${versionId}`
+            : `${API_URL}/subtasks/node/${nodeId}`;
+        fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
+            .then(r => r.json()).then(data => setSubtasks(Array.isArray(data) ? data : [])).catch(() => {});
+    }, [nodeId, versionId]);
 
     const fetchWbsLinks = useCallback(async () => {
         const token = sessionStorage.getItem('token');
-        const res = await fetch(`${API_URL}/schematics/marker-wbs-links/${marker.id}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const url = versionId
+            ? `${API_URL}/schematics/marker-wbs-links/${marker.id}?versionId=${versionId}`
+            : `${API_URL}/schematics/marker-wbs-links/${marker.id}`;
+        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
         if (res.ok) setWbsLinks(await res.json());
-    }, [marker.id]);
+    }, [marker.id, versionId]);
 
     useEffect(() => {
         if (!nodeId) return;
@@ -288,21 +312,22 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         } catch(err) { console.error(err); }
     };
 
-    const handleUpdateNote = async () => {
-        if (isTemp) {
-            await updateTempMarkerPayload(marker.id, { note: editNote });
-            dispatchTempUpdate({ note: editNote });
-            return;
+    const handleUpdateComment = async () => {
+        const token = sessionStorage.getItem('token');
+        for (const link of wbsLinks) {
+            try {
+                await fetch(`${API_URL}/wbs-nodes/${link.wbsNodeId}`, {
+                    method: 'PATCH',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ comment: editComment })
+                });
+                const node = wbsItemsRef.current.find(n => n.id === link.wbsNodeId);
+                if (node) node.comment = editComment;
+            } catch(err) { console.error(err); }
         }
-        try {
-            const token = sessionStorage.getItem('token');
-            await fetch(`${API_URL}/schematics/markers/${marker.id}`, {
-                method: 'PATCH',
-                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ note: editNote })
-            });
-            onRefresh(true);
-        } catch(err) { console.error(err); }
+        window.dispatchEvent(new CustomEvent('wbs-comment-changed', {
+            detail: { wbsNodeIds: wbsLinks.map(l => l.wbsNodeId), comment: editComment }
+        }));
     };
 
     const handleUpdateQuestion = async () => {
@@ -611,17 +636,47 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                         </div>
                     </div>
 
-                    {/* Notatka */}
-                    <div className="space-y-3">
-                        <label className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em] px-1">NOTATKA</label>
-                        <textarea
-                            value={editNote}
-                            onChange={e => setEditNote(e.target.value)}
-                            onBlur={handleUpdateNote}
-                            className="w-full bg-[#1e293b]/50 border border-white/5 rounded-2xl p-4 text-sm text-gray-100 resize-none h-32 focus:outline-none focus:border-blue-500/50 transition-all shadow-inner placeholder:text-gray-600"
-                            placeholder="Wpisz tutaj swoje uwagi..."
-                        />
+                    {/* Komentarz WBS */}
+                    <div className="space-y-2">
+                        <label className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em] px-1">KOMENTARZ</label>
+                        <div className="relative">
+                            <textarea
+                                value={editComment}
+                                onChange={e => setEditComment(e.target.value)}
+                                onBlur={handleUpdateComment}
+                                disabled={wbsLinks.length === 0}
+                                className={`w-full rounded-2xl p-4 text-sm resize-none h-32 focus:outline-none transition-all shadow-inner
+                                    ${wbsLinks.length === 0
+                                        ? 'bg-white/3 border border-white/5 text-gray-600 placeholder-gray-700 cursor-not-allowed'
+                                        : 'bg-[#1e293b]/50 border border-white/5 text-gray-100 placeholder-gray-600 focus:border-blue-500/50'
+                                    }`}
+                                placeholder={wbsLinks.length === 0 ? 'Przypisz przedmiot projektu, aby dodać komentarz' : 'Wpisz komentarz…'}
+                            />
+                            {wbsLinks.length === 0 && (
+                                <div className="absolute inset-0 rounded-2xl flex items-end justify-end p-3 pointer-events-none">
+                                    <span className="text-[10px] text-gray-700 italic">wymaga przedmiotu</span>
+                                </div>
+                            )}
+                        </div>
                     </div>
+
+                    {/* Subtask */}
+                    {subtasks.length > 0 && (
+                        <div className="space-y-3">
+                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em] px-1">ZADANIE</label>
+                            <select
+                                value={selectedSubtaskId || ''}
+                                onChange={handleSubtaskChange}
+                                disabled={isTemp}
+                                className="w-full bg-[#1e293b]/50 border border-white/5 rounded-2xl px-4 py-3 text-sm text-gray-100 focus:outline-none focus:border-orange-500/50 transition-all appearance-none"
+                            >
+                                <option value="">— brak przypisania —</option>
+                                {subtasks.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
 
                     {/* Przedmioty projektu (WBS) */}
                     {nodeId && (
