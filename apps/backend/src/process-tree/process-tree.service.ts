@@ -48,9 +48,13 @@ export class ProcessTreeService {
 
             // Auto-create "Wizja lokalna" subtask for every new order
             if (dto.type === NodeType.ORDER) {
+                const activeVersion = await tx.projectVersion.findFirst({
+                    where: { nodeId: node.id, isActive: true },
+                });
                 await tx.subtask.create({
                     data: {
                         nodeId: node.id,
+                        versionId: activeVersion?.id ?? null,
                         name: 'Wizja lokalna',
                         assignedUserId: node.ownerId || null,
                         plannedStart: node.createdAt,

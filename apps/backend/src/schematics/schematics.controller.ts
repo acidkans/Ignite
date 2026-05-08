@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Delete, Body, Param, UseInterceptors, UploadedFile, BadRequestException, Patch, Res } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Param, UseInterceptors, UploadedFile, BadRequestException, Patch, Res, Query } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { SchematicsService } from './schematics.service';
 import { Response } from 'express';
@@ -28,6 +28,11 @@ export class SchematicsController {
   @Get('subtask/:subtaskId')
   async getSchematicsBySubtask(@Param('subtaskId') subtaskId: string) {
     return this.schematicsService.getSchematicsBySubtask(subtaskId);
+  }
+
+  @Get('subtask/:subtaskId/markers')
+  async getMarkersBySubtask(@Param('subtaskId') subtaskId: string) {
+    return this.schematicsService.getMarkersBySubtask(subtaskId);
   }
 
   @Get(':id')
@@ -100,8 +105,8 @@ export class SchematicsController {
   }
 
   @Get('marker-wbs-links/:markerId')
-  async getWbsLinksForMarker(@Param('markerId') markerId: string) {
-    return this.schematicsService.getWbsLinksForMarker(markerId);
+  async getWbsLinksForMarker(@Param('markerId') markerId: string, @Query('versionId') versionId?: string) {
+    return this.schematicsService.getWbsLinksForMarker(markerId, versionId);
   }
 
   @Get('process-node-markers/:processNodeId')

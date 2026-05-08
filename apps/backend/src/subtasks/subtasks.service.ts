@@ -98,12 +98,7 @@ export class SubtasksService {
         const isManager = user.roles.some((r: string) => ['ADMIN', 'MANAGER'].includes(r));
         const isLogistyk = user.roles.some((r: string) => r === 'LOGISTYK');
 
-        const where: any = {
-            nodeId,
-            ...(vId
-                ? { OR: [{ versionId: vId }, { versionId: null }] }
-                : { versionId: null }),
-        };
+        const where: any = { nodeId, versionId: vId };
 
         if (!isManager) {
             if (isLogistyk) {
@@ -290,8 +285,7 @@ export class SubtasksService {
             }
 
             const versionedTasks = await tx.subtask.findMany({ where: { nodeId, versionId: vId }, orderBy: { createdAt: 'asc' } });
-            const freshAutoTasks = await tx.subtask.findMany({ where: { nodeId, versionId: null }, orderBy: { createdAt: 'asc' } });
-            return [...freshAutoTasks, ...versionedTasks];
+            return versionedTasks;
         });
     }
 
