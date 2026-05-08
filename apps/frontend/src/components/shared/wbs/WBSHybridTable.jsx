@@ -50,7 +50,7 @@ function QaCell({ pairs, fieldClass, onChange, onPersist }) {
     return (
         <div className="flex flex-col gap-1">
             {list.length > 0 && (
-                <table className="w-full text-[10px] border-collapse">
+                <table className="w-full text-[11px] border-collapse">
                     <thead>
                         <tr>
                             <th className="text-left font-semibold uppercase tracking-wider text-gray-500 pb-0.5 w-1/2">Pytanie</th>
@@ -67,7 +67,7 @@ function QaCell({ pairs, fieldClass, onChange, onPersist }) {
                                         onChange={e => update(idx, 'question', e.target.value)}
                                         onBlur={() => onPersist?.()}
                                         placeholder="Pytanie…"
-                                        className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[10px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
+                                        className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[11px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
                                     />
                                 </td>
                                 <td className="pr-1 py-0.5 border-t border-white/5">
@@ -76,7 +76,7 @@ function QaCell({ pairs, fieldClass, onChange, onPersist }) {
                                         onChange={e => update(idx, 'answer', e.target.value)}
                                         onBlur={() => onPersist?.()}
                                         placeholder="Odpowiedź…"
-                                        className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[10px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
+                                        className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[11px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
                                     />
                                 </td>
                                 <td className="py-0.5 border-t border-white/5">
@@ -425,8 +425,9 @@ function AttachmentThumb({ att, onClick }) {
     if (att.fileType === 'IMAGE') {
         return (
             <button onClick={e => { e.stopPropagation(); onClick(att); }} title={att.fileName}
-                className="w-8 h-8 rounded overflow-hidden border border-white/10 hover:border-blue-500/60 transition-all flex-shrink-0">
-                <img src={url} alt={att.fileName} className="w-full h-full object-cover" />
+                className="w-8 h-8 rounded overflow-hidden border border-white/10 hover:border-blue-500/60 transition-all flex-shrink-0 bg-black/20">
+                <img src={url} alt={att.fileName} className="w-full h-full object-cover"
+                    onError={e => { e.target.style.display = 'none'; }} />
             </button>
         );
     }
@@ -626,34 +627,21 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal, on
     const links = markerLinksCache[wbsNodeId] || [];
 
     const allAtts = links.flatMap(l => (l.marker?.attachments || []));
-    const imgAtts = allAtts.filter(a => a.fileType === 'IMAGE');
-    const otherCount = allAtts.length - imgAtts.length;
+    if (allAtts.length === 0) return null;
 
     const open = (e) => { e?.stopPropagation?.(); onOpenModal({ wbsNodeId, wbsNodeName: nodeName }); };
+    const hasImg = allAtts.some(a => a.fileType === 'IMAGE');
+    const hasAudio = allAtts.some(a => a.fileType === 'AUDIO');
+    const Icon = hasImg ? Image : hasAudio ? Volume2 : Paperclip;
 
     return (
-        <div className="flex items-center gap-1 flex-nowrap overflow-hidden">
-            {imgAtts.slice(0, 3).map(att => (
-                <AttachmentThumb key={att.id} att={att} onClick={(a) => onPreview?.(a)} />
-            ))}
-            {otherCount > 0 && (
-                <span className="text-[9px] text-gray-500 flex items-center gap-0.5">
-                    <FileText size={9} /> {otherCount}
-                </span>
-            )}
-            <button
-                onClick={open}
-                className="opacity-0 group-hover/node:opacity-100 p-1 rounded hover:bg-white/10 text-gray-600 hover:text-blue-400 transition-all flex-shrink-0"
-                title="Zarządzaj załącznikami znaczników"
-            >
-                <Paperclip size={11} />
-            </button>
-            {allAtts.length > 3 && (
-                <button onClick={open} className="text-[9px] text-gray-600 hover:text-blue-400 transition-all">
-                    +{allAtts.length - 3}
-                </button>
-            )}
-        </div>
+        <button
+            onClick={open}
+            title={`${allAtts.length} załącznik(ów) — kliknij aby otworzyć`}
+            className="p-1.5 rounded hover:bg-white/10 text-gray-500 hover:text-blue-400 transition-all"
+        >
+            <Icon size={18} />
+        </button>
     );
 }
 
@@ -696,7 +684,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [selectedNodeId, setSelectedNodeId] = useState(null);
     const [showBasket, setShowBasket] = useState(false);
     const [copyBuffer, setCopyBuffer] = useState(null); // { node, sourceName }
-    const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, status: 128, wlasciciel: 128, komentarz: 200, qa: 260 });
+    const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, status: 128, wlasciciel: 128, komentarz: 200, qa: 260, zalaczniki: 44 });
     const resizeDrag = useRef(null);
 
     const startColResize = (col, e) => {
@@ -945,6 +933,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
+            <td className="px-3 py-3" />
         </tr>
     );
 
@@ -997,18 +986,18 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             <button
                                 title="Wymagania materiałowe"
                                 onClick={e => { e.stopPropagation(); setExpandedMaterialIds(prev => { const n = new Set(prev); n.has(node.id) ? n.delete(node.id) : n.add(node.id); return n; }); }}
-                                className={`p-0.5 rounded transition-all flex-shrink-0 ${expandedMaterialIds.has(node.id) ? 'text-amber-400 bg-amber-500/10' : 'text-gray-600 hover:text-amber-400'}`}
+                                className={`p-1 rounded transition-all flex-shrink-0 ${expandedMaterialIds.has(node.id) ? 'text-amber-400 bg-amber-500/10' : 'text-gray-600 hover:text-amber-400'}`}
                             >
-                                <FileText size={9} />
+                                <FileText size={13} />
                             </button>
                         )}
                         <div className="flex flex-col gap-0.5 opacity-0 group-hover/node:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
                             <button
                                 title="Kopiuj pozycję"
                                 onClick={e => { e.stopPropagation(); setCopyBuffer({ node: findNode(items, node.id), sourceName: node.name }); }}
-                                className="p-0.5 rounded hover:bg-blue-500/20 text-gray-600 hover:text-blue-400 transition-all"
+                                className="p-1 rounded hover:bg-blue-500/20 text-gray-600 hover:text-blue-400 transition-all"
                             >
-                                <Copy size={9} />
+                                <Copy size={13} />
                             </button>
                             {copyBuffer && !subtreeContains(copyBuffer.node, node.id) && copyBuffer.node.id !== node.id && (
                                 <button
@@ -1020,9 +1009,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                         setCopyBuffer(null);
                                         if (mappings.length > 0) onPasteCloned?.(mappings);
                                     }}
-                                    className="p-0.5 rounded hover:bg-emerald-500/20 text-gray-600 hover:text-emerald-400 transition-all"
+                                    className="p-1 rounded hover:bg-emerald-500/20 text-gray-600 hover:text-emerald-400 transition-all"
                                 >
-                                    <Clipboard size={9} />
+                                    <Clipboard size={13} />
                                 </button>
                             )}
                         </div>
@@ -1030,35 +1019,35 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 </td>
 
                 {/* Nazwa */}
-                <td className="px-3 py-1.5 select-text" style={{ paddingLeft: `calc(0.75rem + ${depth * 14}px)` }} onClick={e => e.stopPropagation()}>
-                    <div className="flex items-start gap-1.5">
-                        <AutoResizeTextarea
-                            value={node.name || ''}
-                            onChange={e => handleField(node.id, 'name', e.target.value)}
-                            onBlur={() => {
-                                onSave?.();
-                                if ((node.type === 'equipment' || node.type === 'material') && node.name) {
-                                    onMaterialNodeCreated?.({ wbsNodeId: node.id, name: node.name, type: node.type, parentId });
-                                }
-                            }}
-                            placeholder={depth === 0 ? 'Nazwa przedmiotu projektu…' : 'Nazwa elementu…'}
-                            className={`bg-transparent border-none resize-none focus:outline-none placeholder-gray-700 min-w-[60px] select-text leading-snug ${d.nameClass}`}
-                        />
+                <td className="px-3 py-1.5 select-text relative" style={{ paddingLeft: `calc(0.75rem + ${depth * 14}px)`, paddingRight: '3.5rem' }} onClick={e => e.stopPropagation()}>
+                    <AutoResizeTextarea
+                        value={node.name || ''}
+                        onChange={e => handleField(node.id, 'name', e.target.value)}
+                        onBlur={() => {
+                            onSave?.();
+                            if ((node.type === 'equipment' || node.type === 'material') && node.name) {
+                                onMaterialNodeCreated?.({ wbsNodeId: node.id, name: node.name, type: node.type, parentId });
+                            }
+                        }}
+                        placeholder={depth === 0 ? 'Nazwa przedmiotu projektu…' : 'Nazwa elementu…'}
+                        className={`w-full bg-transparent border-none resize-none focus:outline-none placeholder-gray-700 min-w-[60px] select-text leading-snug ${d.nameClass}`}
+                    />
+                    <div className="absolute top-1/2 -translate-y-1/2 right-1 flex items-center gap-1">
                         {depth < MAX_DEPTH && (
                             <button
                                 onClick={e => handleAddChild(node.id, e)}
-                                className="p-1 hover:bg-white/10 rounded text-gray-500 hover:text-blue-400 transition-all flex-shrink-0"
+                                className="p-1.5 hover:bg-white/10 rounded text-gray-500 hover:text-blue-400 transition-all"
                                 title="Dodaj element podrzędny"
                             >
-                                <Plus size={12} />
+                                <Plus size={16} />
                             </button>
                         )}
                         <button
                             onClick={e => handleDelete(node.id, e)}
-                            className="ml-3 p-1 hover:bg-red-500/10 rounded text-gray-600 hover:text-red-500 transition-all flex-shrink-0"
+                            className="p-1 hover:bg-red-500/10 rounded text-gray-600 hover:text-red-500 transition-all"
                             title="Usuń"
                         >
-                            <Trash2 size={12} />
+                            <Trash2 size={13} />
                         </button>
                     </div>
                 </td>
@@ -1169,6 +1158,17 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     />
                 </td>
 
+                {/* Załączniki — miniatury zdjęć z markerów */}
+                <td className="px-2 py-2 overflow-hidden max-w-0" style={{ width: colWidths.zalaczniki }} onClick={e => e.stopPropagation()}>
+                    <AttachmentCell
+                        wbsNodeId={node.id}
+                        nodeName={node.name}
+                        markerLinksCache={markerLinksCache}
+                        onOpenModal={setAttachmentModal}
+                        onPreview={setLightboxAtt}
+                    />
+                </td>
+
                 {/* (delete przeniesiony do komórki nazwy) */}
                 <td />
             </tr>
@@ -1247,9 +1247,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             } catch { return null; }
         };
 
-        // Collect all nodes with their attachments
+        // Collect only visible (expanded) nodes with their attachments
         const nodeRows = [];
-        const collectNodes = (nodes, prefix = '') => {
+        const collectNodes = (nodes, prefix = '', depth = 0) => {
             nodes.forEach((n, i) => {
                 const path = prefix ? `${prefix}.${i + 1}` : `${i + 1}`;
                 const links = markerLinksCache[n.id] || [];
@@ -1257,7 +1257,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 nodeRows.push({
                     path,
                     name: n.name || '(bez nazwy)',
-                    type: n.type || '',
                     status: n.status || '',
                     quantity: n.quantity || '',
                     unit: n.unit || '',
@@ -1265,8 +1264,11 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     comment: n.comment || '',
                     tags: n.tags || [],
                     atts,
+                    depth,
                 });
-                collectNodes(n.children || [], path);
+                if (expanded.has(n.id) && (n.children || []).length > 0) {
+                    collectNodes(n.children, path, depth + 1);
+                }
             });
         };
         collectNodes(items);
@@ -1294,8 +1296,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
             return `<tr>
                 ${cell(r.path, 'white-space:nowrap;font-family:monospace')}
-                ${cell(r.name)}
-                ${cell(r.type)}
+                ${cell(`<span style="padding-left:${r.depth * 14}px">${r.name}</span>`)}
                 ${cell(r.quantity, 'text-align:right')}
                 ${cell(r.unit)}
                 ${cell(r.status)}
@@ -1330,12 +1331,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         <h1>WBS — ${nodeName}</h1>
         <table>
             <colgroup>
-                <col class="c-wbs"/><col class="c-name"/><col class="c-sm"/>
+                <col class="c-wbs"/><col class="c-name"/>
                 <col class="c-xs"/><col class="c-xs"/><col class="c-md"/>
                 <col class="c-sm"/><col class="c-xl"/><col class="c-lg"/><col class="c-att"/>
             </colgroup>
             <thead><tr>
-                <th>WBS</th><th>Nazwa</th><th>Typ</th>
+                <th>WBS</th><th>Nazwa</th>
                 <th style="text-align:right">Ilość</th><th>Jednostka</th><th>Status</th>
                 <th style="text-align:right">Koszt</th>
                 <th>Komentarz</th><th>Znaczniki</th><th>Załączniki</th>
@@ -1372,12 +1373,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         <col style={{ width: colWidths.wlasciciel }} />
                         <col style={{ width: colWidths.komentarz }} />
                         <col style={{ width: colWidths.qa }} />
+                        <col style={{ width: colWidths.zalaczniki }} />
                         <col style={{ width: 48 }} />
                     </colgroup>
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
                         <tr className="border-b border-white/10">
                             <th className="px-1 py-2.5 text-base font-bold uppercase tracking-widest text-white" />
-                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jednostka','text-left'],['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['qa','Q&A','text-left']].map(([key, label, align]) => (
+                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jednostka','text-left'],['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['qa','Q&A','text-left'],['zalaczniki','Attach.','text-left']].map(([key, label, align]) => (
                                 <th key={key} className={`px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white ${align} relative select-none`}>
                                     {label}
                                     <div onMouseDown={e => startColResize(key, e)} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-500/40 transition-colors" />
