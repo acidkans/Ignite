@@ -112,8 +112,8 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                 }
                 setWbsNodes(flattenWbsNodes(roots));
             } catch { setWbsNodes([]); }
+            await fetchWbsLinks();
         }).catch(() => {});
-        fetchWbsLinks();
     }, [nodeId, fetchWbsLinks]);
 
     const toggleWbsLink = async (wbsNodeId) => {

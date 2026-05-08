@@ -1581,15 +1581,21 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
             : `${API_URL}/order-requirements/${nodeId}`;
         fetch(url, {
             headers: { 'Authorization': `Bearer ${token}` }
-        }).then(r => r.json()).then(data => {
+        }).then(r => r.json()).then(async data => {
             try {
                 const tree = JSON.parse(data?.wbsTree || '{}');
                 const items = tree.items || [];
-                wbsItemsRef.current = items;
+                // spłaszcz rekurencyjnie żeby móc szukać po id
+                const flatAll = (nodes) => nodes.reduce((acc, n) => {
+                    acc.push(n);
+                    if (n.children?.length) acc.push(...flatAll(n.children));
+                    return acc;
+                }, []);
+                wbsItemsRef.current = flatAll(items);
                 setWbsNodes(flattenWbsNodes(items));
             } catch { setWbsNodes([]); }
+            await fetchWbsLinks();
         }).catch(() => {});
-        fetchWbsLinks();
     }, [nodeId, versionId, fetchWbsLinks]);
 
     const toggleWbsLink = async (wbsNodeId) => {
