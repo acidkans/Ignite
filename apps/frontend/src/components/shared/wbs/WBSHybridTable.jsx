@@ -1042,7 +1042,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 }
                             }}
                             placeholder={depth === 0 ? 'Nazwa przedmiotu projektu…' : 'Nazwa elementu…'}
-                            className={`bg-transparent border-none resize-none focus:outline-none placeholder-gray-700 w-full min-w-0 select-text leading-snug ${d.nameClass}`}
+                            className={`bg-transparent border-none resize-none focus:outline-none placeholder-gray-700 min-w-[60px] select-text leading-snug ${d.nameClass}`}
                         />
                         {depth < MAX_DEPTH && (
                             <button
