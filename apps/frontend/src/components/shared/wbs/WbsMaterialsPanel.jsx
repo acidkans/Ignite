@@ -161,7 +161,7 @@ function ProposalsSection({ req, token, onRefresh }) {
 
 // ─── ProductCard ──────────────────────────────────────────────────────────────
 
-function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, onPropagatePrice, readOnly }) {
+export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, onPropagatePrice, readOnly }) {
     const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
 
     const [fields, setFields] = useState({

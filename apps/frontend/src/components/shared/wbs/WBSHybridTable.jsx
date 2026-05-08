@@ -37,14 +37,68 @@ function AutoResizeTextarea({ value, onChange, onBlur, placeholder, className, s
 import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle } from 'lucide-react';
 
 // ── Q&A cell — zagnieżdżona tabela Pytanie / Odpowiedź per WBS node ───────────
+function QaPairRow({ p, idx, fieldClass, onUpdate, onRemove, onPersist }) {
+    const qRef = useRef(null);
+    const aRef = useRef(null);
+    const syncHeights = useCallback(() => {
+        const q = qRef.current;
+        const a = aRef.current;
+        if (!q || !a) return;
+        q.style.height = 'auto';
+        a.style.height = 'auto';
+        const h = Math.max(q.scrollHeight, a.scrollHeight);
+        q.style.height = h + 'px';
+        a.style.height = h + 'px';
+    }, []);
+    useLayoutEffect(() => { syncHeights(); }, [p.question, p.answer, syncHeights]);
+
+    return (
+        <tr className="align-top">
+            <td className="pr-1 py-0.5 border-t border-white/5">
+                <textarea
+                    ref={qRef}
+                    rows={1}
+                    value={p.question || ''}
+                    onChange={e => { onUpdate(idx, 'question', e.target.value); syncHeights(); }}
+                    onBlur={() => onPersist?.()}
+                    onFocus={syncHeights}
+                    placeholder="Pytanie…"
+                    className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[11px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
+                    style={{ overflow: 'hidden', minHeight: '1.4em', resize: 'none' }}
+                />
+            </td>
+            <td className="pr-1 py-0.5 border-t border-white/5">
+                <textarea
+                    ref={aRef}
+                    rows={1}
+                    value={p.answer || ''}
+                    onChange={e => { onUpdate(idx, 'answer', e.target.value); syncHeights(); }}
+                    onBlur={() => onPersist?.()}
+                    onFocus={syncHeights}
+                    placeholder="Odpowiedź…"
+                    className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[11px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
+                    style={{ overflow: 'hidden', minHeight: '1.4em', resize: 'none' }}
+                />
+            </td>
+            <td className="py-0.5 border-t border-white/5">
+                <button
+                    onClick={() => onRemove(idx)}
+                    className="p-0.5 rounded text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                    title="Usuń pytanie"
+                >
+                    <X size={9} />
+                </button>
+            </td>
+        </tr>
+    );
+}
+
 function QaCell({ pairs, fieldClass, onChange, onPersist }) {
     const list = Array.isArray(pairs) ? pairs : [];
     const update = (idx, field, value) => {
         onChange(list.map((p, i) => i === idx ? { ...p, [field]: value } : p));
     };
     const remove = (idx) => { onChange(list.filter((_, i) => i !== idx)); onPersist?.(); };
-    // Nie zapisujemy zaraz po `add` — pusta para zostałaby odfiltrowana na backendzie
-    // (parseQa drop'uje pary bez treści). Save leci dopiero na blur, gdy user coś wpisał.
     const add = () => { onChange([...list, { question: '', answer: '' }]); };
 
     return (
@@ -60,35 +114,15 @@ function QaCell({ pairs, fieldClass, onChange, onPersist }) {
                     </thead>
                     <tbody>
                         {list.map((p, idx) => (
-                            <tr key={idx} className="align-top">
-                                <td className="pr-1 py-0.5 border-t border-white/5">
-                                    <AutoResizeTextarea
-                                        value={p.question || ''}
-                                        onChange={e => update(idx, 'question', e.target.value)}
-                                        onBlur={() => onPersist?.()}
-                                        placeholder="Pytanie…"
-                                        className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[11px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
-                                    />
-                                </td>
-                                <td className="pr-1 py-0.5 border-t border-white/5">
-                                    <AutoResizeTextarea
-                                        value={p.answer || ''}
-                                        onChange={e => update(idx, 'answer', e.target.value)}
-                                        onBlur={() => onPersist?.()}
-                                        placeholder="Odpowiedź…"
-                                        className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[11px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
-                                    />
-                                </td>
-                                <td className="py-0.5 border-t border-white/5">
-                                    <button
-                                        onClick={() => remove(idx)}
-                                        className="p-0.5 rounded text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                                        title="Usuń pytanie"
-                                    >
-                                        <X size={9} />
-                                    </button>
-                                </td>
-                            </tr>
+                            <QaPairRow
+                                key={idx}
+                                p={p}
+                                idx={idx}
+                                fieldClass={fieldClass}
+                                onUpdate={update}
+                                onRemove={remove}
+                                onPersist={onPersist}
+                            />
                         ))}
                     </tbody>
                 </table>
@@ -104,6 +138,7 @@ function QaCell({ pairs, fieldClass, onChange, onPersist }) {
     );
 }
 import { UNIT_OPTIONS } from './wbsConstants';
+import { ProductCard } from './WbsMaterialsPanel';
 
 const API_URL = '/api';
 
@@ -111,57 +146,45 @@ const API_URL = '/api';
 
 function MaterialReqExpandPanel({ node, req, processNodeId, onSaved, onDeleteNode }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const headers = React.useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
 
-    const [techSpec, setTechSpec] = React.useState(req?.technicalSpec || '');
-    const taRef = React.useRef(null);
+    const [card, setCard] = React.useState(req || null);
+    const [materialDb, setMaterialDb] = React.useState([]);
+    const [offers, setOffers] = React.useState([]);
 
-    React.useEffect(() => { setTechSpec(req?.technicalSpec || ''); }, [req?.id, req?.technicalSpec]);
+    // Jeśli nie ma karty — utwórz ją automatycznie
+    React.useEffect(() => {
+        if (card) { setCard(req); return; }
+        if (!node.id) return;
+        const reqType = node.type === 'equipment' ? 'DEVICE' : 'MATERIAL';
+        fetch(`${API_URL}/material-requirements`, {
+            method: 'POST', headers,
+            body: JSON.stringify({
+                nodeId: processNodeId, name: node.name, type: reqType,
+                quantity: node.quantity || 1, unit: node.unit || 'sztuki', wbsNodeId: node.id,
+            }),
+        }).then(r => r.ok ? r.json() : null).then(data => { if (data) { setCard(data); onSaved?.(data); } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [node.id]);
 
-    React.useLayoutEffect(() => {
-        const el = taRef.current;
-        if (!el) return;
-        el.style.height = 'auto';
-        el.style.height = `${el.scrollHeight}px`;
-    }, [techSpec]);
+    React.useEffect(() => { setCard(req); }, [req]);
 
-    const handleBlur = async () => {
-        if (techSpec === (req?.technicalSpec || '')) return;
-        if (req?.id) {
-            const res = await fetch(`${API_URL}/material-requirements/${req.id}`, {
-                method: 'PATCH', headers, body: JSON.stringify({ technicalSpec: techSpec }),
-            });
-            if (res.ok) onSaved({ ...req, technicalSpec: techSpec });
-        } else {
-            const reqType = node.type === 'equipment' ? 'DEVICE' : 'MATERIAL';
-            const res = await fetch(`${API_URL}/material-requirements`, {
-                method: 'POST', headers, body: JSON.stringify({
-                    nodeId: processNodeId,
-                    name: node.name,
-                    type: reqType,
-                    quantity: node.quantity || 1,
-                    unit: node.unit || 'szt',
-                    wbsNodeId: node.id,
-                    technicalSpec: techSpec,
-                }),
-            });
-            if (res.ok) onSaved(await res.json());
-        }
-    };
+    React.useEffect(() => {
+        const auth = { Authorization: `Bearer ${token}` };
+        fetch(`${API_URL}/material-requirements/all-materials`, { headers: auth }).then(r => r.ok ? r.json() : []).then(setMaterialDb);
+        fetch(`${API_URL}/offers/node/${processNodeId}`, { headers: auth }).then(r => r.ok ? r.json() : []).then(setOffers);
+    }, [processNodeId, token]);
 
     const handleDelete = async () => {
         if (!window.confirm(`Usunąć pozycję „${node.name}" z WBS i wymagania materiałowe?`)) return;
-        if (req?.id) {
-            await fetch(`${API_URL}/material-requirements/${req.id}`, { method: 'DELETE', headers });
-        }
+        if (card?.id) await fetch(`${API_URL}/material-requirements/${card.id}`, { method: 'DELETE', headers });
         onDeleteNode?.();
     };
 
     return (
-        <div className="px-6 py-3 flex flex-col gap-2 border-l-2 border-amber-500/30 ml-8">
-            <div className="flex items-center gap-3">
+        <div className="border-l-2 border-amber-500/30 ml-8">
+            <div className="flex items-center gap-3 px-4 pt-3 pb-1">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400/80">Wymagania materiałowe</span>
-                <span className="text-[10px] text-gray-600">Logistyk dopasowuje produkty w zakładce Materiały</span>
                 <button
                     onClick={handleDelete}
                     className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-red-400 hover:bg-red-500/10 border border-red-500/20 transition-colors"
@@ -169,15 +192,20 @@ function MaterialReqExpandPanel({ node, req, processNodeId, onSaved, onDeleteNod
                     <Trash2 size={10} /> Usuń z WBS
                 </button>
             </div>
-            <textarea
-                ref={taRef}
-                value={techSpec}
-                onChange={e => setTechSpec(e.target.value)}
-                onBlur={handleBlur}
-                rows={1}
-                placeholder="Określ wymagania techniczne dla tego materiału/sprzętu (jedno per linia)..."
-                className="w-full max-w-2xl bg-black/30 border border-amber-500/20 rounded px-3 py-2 text-xs text-white placeholder-gray-600 outline-none focus:border-amber-500/50 resize-none leading-relaxed overflow-hidden"
-            />
+            {card ? (
+                <ProductCard
+                    card={card}
+                    wbsNode={{ id: node.id, name: node.name }}
+                    token={token}
+                    materialDb={materialDb}
+                    offers={offers}
+                    onRefresh={updated => { setCard(updated); onSaved?.(updated); }}
+                    onPropagatePrice={() => {}}
+                    readOnly={false}
+                />
+            ) : (
+                <div className="px-4 py-3 text-[10px] text-gray-600">Tworzenie karty materiałowej…</div>
+            )}
         </div>
     );
 }
@@ -982,15 +1010,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             ? <ChevronRight size={12} className={`text-gray-400 transition-transform flex-shrink-0 ${isOpen(rowId) ? 'rotate-90' : ''}`} />
                             : <span className="w-[12px] flex-shrink-0" />
                         }
-                        {(node.type === 'material' || node.type === 'equipment') && (
-                            <button
-                                title="Wymagania materiałowe"
-                                onClick={e => { e.stopPropagation(); setExpandedMaterialIds(prev => { const n = new Set(prev); n.has(node.id) ? n.delete(node.id) : n.add(node.id); return n; }); }}
-                                className={`p-1 rounded transition-all flex-shrink-0 ${expandedMaterialIds.has(node.id) ? 'text-amber-400 bg-amber-500/10' : 'text-gray-600 hover:text-amber-400'}`}
-                            >
-                                <FileText size={13} />
-                            </button>
-                        )}
                         <div className="flex flex-col gap-0.5 opacity-0 group-hover/node:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
                             <button
                                 title="Kopiuj pozycję"
@@ -1033,6 +1052,15 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         className={`w-full bg-transparent border-none resize-none focus:outline-none placeholder-gray-700 min-w-[60px] select-text leading-snug ${d.nameClass}`}
                     />
                     <div className="absolute top-1/2 -translate-y-1/2 right-1 flex items-center gap-1">
+                        {(node.type === 'material' || node.type === 'equipment') && (
+                            <button
+                                onClick={e => { e.stopPropagation(); setExpandedMaterialIds(prev => { const n = new Set(prev); n.has(node.id) ? n.delete(node.id) : n.add(node.id); return n; }); }}
+                                title="Karta materiałowa"
+                                className={`p-1 rounded transition-all ${expandedMaterialIds.has(node.id) ? 'text-amber-400 bg-amber-500/15' : 'text-amber-500/50 hover:text-amber-400 hover:bg-amber-500/10'}`}
+                            >
+                                <Package size={14} />
+                            </button>
+                        )}
                         {depth < MAX_DEPTH && (
                             <button
                                 onClick={e => handleAddChild(node.id, e)}
@@ -1059,10 +1087,16 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             value={node.type || ''}
                             onChange={e => {
                                 const newType = e.target.value;
+                                const isMaterial = newType === 'equipment' || newType === 'material';
+                                const wasWork = node.type === 'work' || node.type === 'service';
                                 handleField(node.id, 'type', newType);
                                 onNodeFieldSave?.(node.id, 'type', newType);
+                                if (isMaterial && wasWork) {
+                                    handleField(node.id, 'unit', 'sztuki');
+                                    onNodeFieldSave?.(node.id, 'unit', 'sztuki');
+                                }
                                 onSave?.();
-                                if ((newType === 'equipment' || newType === 'material') && node.name) {
+                                if (isMaterial && node.name) {
                                     onMaterialNodeCreated?.({ wbsNodeId: node.id, name: node.name, type: newType, parentId });
                                 }
                             }}
@@ -1177,7 +1211,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         if ((node.type === 'material' || node.type === 'equipment') && expandedMaterialIds.has(node.id)) {
             rows.push(
                 <tr key={`mat-req-${node.id}`}>
-                    <td colSpan={10} className="p-0 border-b border-amber-500/10 bg-amber-500/[0.02]">
+                    <td colSpan={11} className="p-0 border-b border-amber-500/10 bg-amber-500/[0.02]">
                         <MaterialReqExpandPanel
                             node={node}
                             req={matReqByWbsId[node.id] || null}
