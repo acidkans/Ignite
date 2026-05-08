@@ -201,11 +201,36 @@ export class SchematicsService {
     }
 
     async updateMarker(markerId: string, data: { type?: string; x?: number; y?: number; x2?: number; y2?: number; pageNumber?: number; note?: string; name?: string; question?: string | null; subtaskId?: string | null }) {
+        const { subtaskId, ...rest } = data;
+
+        if (subtaskId !== undefined) {
+            await this.prisma.subtaskMarkerLink.deleteMany({ where: { markerId } });
+            if (subtaskId) {
+                await this.prisma.subtaskMarkerLink.create({ data: { markerId, subtaskId } });
+            }
+        }
+
         return this.prisma.schematicMarker.update({
             where: { id: markerId },
-            data,
+            data: { ...rest, subtaskId },
             include: { attachments: true, subtask: { select: { id: true, name: true } } }
         });
+    }
+
+    async getMarkersBySubtask(subtaskId: string) {
+        const links = await this.prisma.subtaskMarkerLink.findMany({
+            where: { subtaskId },
+            include: {
+                marker: {
+                    include: {
+                        attachments: true,
+                        subtask: { select: { id: true, name: true } },
+                        schematic: { select: { id: true, fileName: true, fileUrl: true } },
+                    }
+                }
+            }
+        });
+        return links.map(l => l.marker);
     }
 
     async deleteMarker(markerId: string) {
@@ -300,7 +325,19 @@ export class SchematicsService {
         return schematics;
     }
 
-    async getWbsLinksForMarker(markerId: string) {
+    async getWbsLinksForMarker(markerId: string, versionId?: string) {
+        const vId = (versionId === 'null' || versionId === 'undefined' || !versionId) ? null : versionId;
+        if (vId) {
+            const nodes = await this.prisma.wbsNode.findMany({
+                where: { versionId: vId },
+                select: { id: true }
+            });
+            const nodeIds = nodes.map(n => n.id);
+            return this.prisma.wbsMarkerLink.findMany({
+                where: { markerId, wbsNodeId: { in: nodeIds } },
+                orderBy: { createdAt: 'asc' }
+            });
+        }
         return this.prisma.wbsMarkerLink.findMany({
             where: { markerId },
             orderBy: { createdAt: 'asc' }

@@ -20,6 +20,10 @@ export class CreateSubtaskDto {
     @IsUUID()
     nodeId: string;
 
+    @IsUUID()
+    @IsOptional()
+    versionId?: string;
+
     @IsString()
     name: string;
 
