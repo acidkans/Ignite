@@ -1055,7 +1055,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         )}
                         <button
                             onClick={e => handleDelete(node.id, e)}
-                            className="p-1 hover:bg-red-500/10 rounded text-gray-600 hover:text-red-500 transition-all flex-shrink-0"
+                            className="ml-3 p-1 hover:bg-red-500/10 rounded text-gray-600 hover:text-red-500 transition-all flex-shrink-0"
                             title="Usuń"
                         >
                             <Trash2 size={12} />
