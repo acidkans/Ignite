@@ -1264,17 +1264,38 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 }
                 return r.quantity;
             };
-            const rows = reqs.map(r => {
-                const name = esc(r.name || r.productName || '—');
-                const manufacturer = esc(r.manufacturer || r.producent || '—');
-                const model = esc(r.model || '—');
-                const tradeName = esc(r.tradeName || r.nazwHandlowa || r.nazwaHandlowa || '—');
-                const qty = effectiveQty(r);
-                const qtyStr = qty != null ? `${qty}` : '—';
-                const unit = esc(r.unit || '');
-                const spec = esc(String(r.technicalSpec || '').slice(0, 120));
-                return `<tr><td style="text-align:left">${name}</td><td>${manufacturer}</td><td>${model}</td><td>${tradeName}</td><td class="num">${qtyStr}</td><td>${unit}</td><td style="font-size:9px;color:#6b7280;text-align:left">${spec}</td></tr>`;
-            }).join('');
+            const getParentName = (r) => {
+                const nodeId = r.wbsNodeId ? String(r.wbsNodeId) : (() => {
+                    try { const a = JSON.parse(r.wbsNodeAllocations || '{}'); return Object.keys(a)[0] || null; } catch { return null; }
+                })();
+                if (!nodeId) return '—';
+                const node = wbsNodeById.get(nodeId);
+                if (!node) return '—';
+                const parent = node.parentId ? wbsNodeById.get(String(node.parentId)) : null;
+                return parent ? parent.name : node.name;
+            };
+            // Grupuj po rodzicu WBS
+            const groups = [];
+            const groupIdx = {};
+            for (const r of reqs) {
+                const label = getParentName(r);
+                if (!(label in groupIdx)) { groupIdx[label] = groups.length; groups.push({ label, reqs: [] }); }
+                groups[groupIdx[label]].reqs.push(r);
+            }
+            const rows = groups.flatMap(g => [
+                `<tr><td colspan="7" style="text-align:left;font-weight:bold;font-size:15px;background:#f0f4ff;padding:6px 8px;border-bottom:2px solid #1a1a2e;color:#1a1a2e">${esc(g.label)}</td></tr>`,
+                ...g.reqs.map(r => {
+                    const name = esc(r.name || r.productName || '—');
+                    const manufacturer = esc(r.manufacturer || r.producent || '—');
+                    const model = esc(r.model || '—');
+                    const tradeName = esc(r.tradeName || r.nazwHandlowa || r.nazwaHandlowa || '—');
+                    const qty = effectiveQty(r);
+                    const qtyStr = qty != null ? `${qty}` : '—';
+                    const unit = esc(r.unit || '');
+                    const spec = esc(String(r.technicalSpec || '').slice(0, 120));
+                    return `<tr><td style="text-align:left;padding-left:16px">${name}</td><td>${manufacturer}</td><td>${model}</td><td>${tradeName}</td><td class="num">${qtyStr}</td><td>${unit}</td><td style="font-size:9px;color:#6b7280;text-align:left">${spec}</td></tr>`;
+                })
+            ]).join('');
             const pageBreak = show('oferta') ? 'page-break-before: always;' : '';
             return `
             <div class="section" style="${pageBreak}">
