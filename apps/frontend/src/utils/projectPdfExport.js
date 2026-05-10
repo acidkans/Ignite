@@ -279,23 +279,40 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
         </div>` : '';
 
     // === Section: Materiały ===
+    const wbsNodeById = Object.fromEntries(allFlatWbs.map(n => [n.id, n]));
+    const getParentLabel = (wbsNodeId) => {
+        const node = wbsNodeById[wbsNodeId];
+        if (!node) return '—';
+        const parent = wbsNodeById[node.parentId];
+        return parent ? parent.name : (node.name || '—');
+    };
     const matRows = (materials || []).filter((r) => r && r.id);
+    // Grupuj po rodzicu WBS, zachowaj kolejność z drzewa (sortOrder)
+    const matGroups = [];
+    const groupIndex = {};
+    for (const r of matRows) {
+        const label = getParentLabel(r.wbsNodeId);
+        if (!(label in groupIndex)) { groupIndex[label] = matGroups.length; matGroups.push({ label, rows: [] }); }
+        matGroups[groupIndex[label]].rows.push(r);
+    }
+    const matTableRows = matGroups.flatMap(g => [
+        `<tr><td colspan="6" style="background:#1a1a2e;color:#fff;font-size:9px;font-weight:bold;padding:4px 8px;text-align:left;letter-spacing:0.05em">${esc(g.label)}</td></tr>`,
+        ...g.rows.map(r => `<tr>
+            <td style="padding-left:16px">${esc(r.name || r.productName || '—')}</td>
+            <td>${esc(MAT_TYPE[String(r.type || '').toUpperCase()] || r.type || '—')}</td>
+            <td class="num">${esc(r.quantity != null ? r.quantity : '—')}</td>
+            <td>${esc(r.unit || '')}</td>
+            <td>${esc(MAT_STATUS[r.status] || r.status || '—')}</td>
+            <td style="font-size:9px;color:#6b7280;text-align:left">${esc(String(r.technicalSpec || '').slice(0, 140))}</td>
+        </tr>`)
+    ]).join('');
     const materialsHtml = `
         <div class="section">
             <div class="section-header">Materiały</div>
             ${matRows.length ? `
             <table>
                 <thead><tr><th>Nazwa</th><th>Typ</th><th>Ilość</th><th>Jedn.</th><th>Status</th><th>Specyfikacja</th></tr></thead>
-                <tbody>
-                    ${matRows.map((r) => `<tr>
-                        <td>${esc(r.name || r.productName || '—')}</td>
-                        <td>${esc(MAT_TYPE[String(r.type || '').toUpperCase()] || r.type || '—')}</td>
-                        <td class="num">${esc(r.quantity != null ? r.quantity : '—')}</td>
-                        <td>${esc(r.unit || '')}</td>
-                        <td>${esc(MAT_STATUS[r.status] || r.status || '—')}</td>
-                        <td style="font-size:9px;color:#6b7280;text-align:left">${esc(String(r.technicalSpec || '').slice(0, 140))}</td>
-                    </tr>`).join('')}
-                </tbody>
+                <tbody>${matTableRows}</tbody>
             </table>` : '<div class="empty">Brak materiałów.</div>'}
         </div>`;
 

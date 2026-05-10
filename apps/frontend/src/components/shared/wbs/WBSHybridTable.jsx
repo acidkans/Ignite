@@ -50,7 +50,14 @@ function QaPairRow({ p, idx, fieldClass, onUpdate, onRemove, onPersist }) {
         q.style.height = h + 'px';
         a.style.height = h + 'px';
     }, []);
-    useLayoutEffect(() => { syncHeights(); }, [p.question, p.answer, syncHeights]);
+    useLayoutEffect(() => { requestAnimationFrame(() => syncHeights()); }, [p.question, p.answer, syncHeights]);
+    useEffect(() => {
+        const q = qRef.current;
+        if (!q) return;
+        const obs = new ResizeObserver(() => syncHeights());
+        obs.observe(q);
+        return () => obs.disconnect();
+    }, [syncHeights]);
 
     return (
         <tr className="align-top">
@@ -1044,6 +1051,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         onChange={e => handleField(node.id, 'name', e.target.value)}
                         onBlur={() => {
                             onSave?.();
+                            if (node.name) onNodeFieldSave?.(node.id, 'name', node.name);
                             if ((node.type === 'equipment' || node.type === 'material') && node.name) {
                                 onMaterialNodeCreated?.({ wbsNodeId: node.id, name: node.name, type: node.type, parentId });
                             }
