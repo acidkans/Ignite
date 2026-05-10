@@ -2838,38 +2838,49 @@ ${materialsHtml}
     const wbsBranchTable = useMemo(() => {
         if (!wbsData.length) return '';
         const byId = new Map(wbsData.map(n => [n.id, n]));
-        // Szukaj przodka będącego bezpośrednim dzieckiem "korzenia" widoku (BUD-level)
-        // a zwracaj jego bezpośrednie dziecko (poziom product: szafa OT, Okablowanie…)
-        const isRootChild = (n) => n.parentId && !byId.has(n.parentId);
-        const getProductLevel = (item) => {
+        // BUD level = węzeł którego rodzic nie ma w byId
+        const isRootChild = (n) => n && n.parentId && !byId.has(n.parentId);
+        // Zwróć { budNode, productNode } dla danego węzła
+        const getBudProduct = (item) => {
             let cur = item;
-            while (cur?.parentId) {
+            let prev = null;
+            while (cur && cur.parentId) {
                 const p = byId.get(cur.parentId);
                 if (!p) break;
-                if (isRootChild(p)) return { id: cur.id, name: cur.name || '' };
-                cur = p;
+                if (isRootChild(p)) return { budNode: p, productNode: cur };
+                prev = cur; cur = p;
             }
-            return { id: cur?.id || item.id, name: cur?.name || item.name || '' };
+            if (cur && isRootChild(cur)) return { budNode: cur, productNode: prev || cur };
+            return { budNode: cur, productNode: prev || cur };
         };
-        const bySubject = new Map();
-        for (const item of wbsData) {
-            if (!item.parentId) continue;
+        const offerPriceOf = (item) => {
             const q = Math.max(0, parseFloat(item.quantity) || 0);
             const uc = Math.max(0, parseFloat(item.unitCost) || 0);
-            const totalCost = uc * q;
-            const marginRaw = (item.margin != null && String(item.margin) !== '') ? parseFloat(item.margin) : null;
+            const tc = uc * q;
+            const m = (item.margin != null && String(item.margin) !== '') ? parseFloat(item.margin) : null;
             const d = Math.max(0, parseFloat(item.discount) || 0);
-            let offerPrice = (marginRaw !== null && marginRaw !== 0) ? totalCost * (1 + marginRaw / 100) : 0;
-            if (offerPrice > 0 && d > 0) offerPrice = Math.max(0, offerPrice * (1 - d / 100));
-            if (offerPrice <= 0) continue;
-            const { id, name } = getProductLevel(item);
-            if (!bySubject.has(id)) bySubject.set(id, { label: name, total: 0 });
-            bySubject.get(id).total += offerPrice;
+            let p = (m !== null && m !== 0) ? tc * (1 + m / 100) : (parseFloat(item.totalPrice) || 0);
+            if (p > 0 && d > 0) p = Math.max(0, p * (1 - d / 100));
+            return p;
+        };
+        // Zbierz ceny per produkt, pogrupowane pod BUD
+        const byProduct = new Map(); // productId → { budName, productName, total }
+        for (const item of wbsData) {
+            if (!item.parentId) continue;
+            const price = offerPriceOf(item);
+            if (price <= 0) continue;
+            const { budNode, productNode } = getBudProduct(item);
+            if (!productNode) continue;
+            const key = productNode.id;
+            if (!byProduct.has(key)) byProduct.set(key, { budName: budNode?.name || '', productName: productNode.name || '', total: 0 });
+            byProduct.get(key).total += price;
         }
-        const entries = [...bySubject.values()].filter(e => e.total > 0);
+        const entries = [...byProduct.values()].filter(e => e.total > 0)
+            .sort((a, b) => a.budName.localeCompare(b.budName) || a.productName.localeCompare(b.productName));
         if (!entries.length) return '';
-        const tableRows = entries.map((e, i) => `| ${i + 1}. | ${e.label} | ${fmtPLN(e.total)} |`).join('\n');
-        return `| Lp. | Etap projektu | Wartość netto |\n|---|---|---|\n${tableRows}`;
+        const total = entries.reduce((s, e) => s + e.total, 0);
+        const tableRows = entries.map(e => `| ${e.budName} › ${e.productName} | ${fmtPLN(e.total)} |`).join('\n');
+        return `| Pozycja | Cena ofertowa (PLN) |\n|---|---|\n${tableRows}\n| **Razem** | **${fmtPLN(total)}** |`;
     }, [wbsData]);
 
     const offerRevenueTotal = useMemo(() => {
