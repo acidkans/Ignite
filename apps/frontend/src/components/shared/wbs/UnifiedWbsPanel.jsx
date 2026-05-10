@@ -1247,14 +1247,21 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 } catch { return false; }
             });
             if (!reqs.length) return '';
+            const wbsNodeById = new Map((wbsData || []).map(n => [n.id, n]));
             const effectiveQty = (r) => {
+                // Suma ilości z aktualnych węzłów WBS (ignorujemy stare wartości w allokacjach)
                 try {
                     const alloc = JSON.parse(r.wbsNodeAllocations || '{}');
-                    const sum = Object.entries(alloc)
-                        .filter(([nid]) => wbsNodeIdSet.has(nid))
-                        .reduce((s, [, v]) => s + (parseFloat(v) || 0), 0);
-                    if (sum > 0) return sum;
+                    const validIds = Object.keys(alloc).filter(nid => wbsNodeIdSet.has(nid));
+                    if (validIds.length > 0) {
+                        const sum = validIds.reduce((s, nid) => s + (parseFloat(wbsNodeById.get(nid)?.quantity) || 0), 0);
+                        if (sum > 0) return sum;
+                    }
                 } catch {}
+                if (r.wbsNodeId) {
+                    const node = wbsNodeById.get(String(r.wbsNodeId));
+                    if (node?.quantity != null) return node.quantity;
+                }
                 return r.quantity;
             };
             const rows = reqs.map(r => {
