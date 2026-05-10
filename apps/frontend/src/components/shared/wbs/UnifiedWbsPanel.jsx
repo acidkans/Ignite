@@ -1237,17 +1237,36 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             return labels[String(code || '').toUpperCase()] || code || '—';
         };
         const materialsHtml = (show('materials') || show('oferta')) ? (() => {
-            const reqs = allRequirements.filter(r => r.id);
+            const wbsNodeIdSet = new Set((wbsData || []).map(n => n.id));
+            const reqs = allRequirements.filter(r => {
+                if (!r.id) return false;
+                if (r.wbsNodeId && wbsNodeIdSet.has(String(r.wbsNodeId))) return true;
+                try {
+                    const alloc = JSON.parse(r.wbsNodeAllocations || '{}');
+                    return Object.keys(alloc).some(nid => wbsNodeIdSet.has(nid));
+                } catch { return false; }
+            });
             if (!reqs.length) return '';
+            const effectiveQty = (r) => {
+                try {
+                    const alloc = JSON.parse(r.wbsNodeAllocations || '{}');
+                    const sum = Object.entries(alloc)
+                        .filter(([nid]) => wbsNodeIdSet.has(nid))
+                        .reduce((s, [, v]) => s + (parseFloat(v) || 0), 0);
+                    if (sum > 0) return sum;
+                } catch {}
+                return r.quantity;
+            };
             const rows = reqs.map(r => {
                 const name = esc(r.name || r.productName || '—');
                 const manufacturer = esc(r.manufacturer || r.producent || '—');
                 const model = esc(r.model || '—');
                 const tradeName = esc(r.tradeName || r.nazwHandlowa || r.nazwaHandlowa || '—');
-                const qty = r.quantity != null ? `${r.quantity}` : '—';
+                const qty = effectiveQty(r);
+                const qtyStr = qty != null ? `${qty}` : '—';
                 const unit = esc(r.unit || '');
                 const spec = esc(String(r.technicalSpec || '').slice(0, 120));
-                return `<tr><td style="text-align:left">${name}</td><td>${manufacturer}</td><td>${model}</td><td>${tradeName}</td><td class="num">${qty}</td><td>${unit}</td><td style="font-size:9px;color:#6b7280;text-align:left">${spec}</td></tr>`;
+                return `<tr><td style="text-align:left">${name}</td><td>${manufacturer}</td><td>${model}</td><td>${tradeName}</td><td class="num">${qtyStr}</td><td>${unit}</td><td style="font-size:9px;color:#6b7280;text-align:left">${spec}</td></tr>`;
             }).join('');
             const pageBreak = show('oferta') ? 'page-break-before: always;' : '';
             return `
