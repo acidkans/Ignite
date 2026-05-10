@@ -1117,9 +1117,17 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 <div class="strategy-text">${renderStrategyHtml(getStrategyText() || 'Brak treści strategii')}</div>
             </div>` : '';
 
+        const offerTextForPdf = (() => {
+            let t = getOfferText() || 'Brak treści oferty';
+            // Podmień placeholder
+            t = t.replace(/\{tabela wbs\}/g, wbsBranchTable);
+            // Podmień zapisaną (hardkodowaną) tabelę markdown na świeżą
+            t = t.replace(/(\|[^\n]+\n\|[\s\-:|]+\n(?:\|[^\n]+\n?)+)/m, wbsBranchTable + '\n');
+            return t;
+        })();
         const offerHtml = show('oferta') ? `
             <div class="section">
-                <div class="strategy-text">${renderStrategyHtml(getOfferText() || 'Brak treści oferty')}</div>
+                <div class="strategy-text">${renderStrategyHtml(offerTextForPdf)}</div>
             </div>` : '';
 
         const wbsHtml = show('wbs') ? `
