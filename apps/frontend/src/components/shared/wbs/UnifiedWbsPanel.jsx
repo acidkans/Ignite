@@ -1264,44 +1264,78 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 }
                 return r.quantity;
             };
-            const getParentName = (r) => {
-                const nodeId = r.wbsNodeId ? String(r.wbsNodeId) : (() => {
-                    try { const a = JSON.parse(r.wbsNodeAllocations || '{}'); return Object.keys(a)[0] || null; } catch { return null; }
-                })();
-                if (!nodeId) return '—';
-                const node = wbsNodeById.get(nodeId);
-                if (!node) return '—';
-                const parent = node.parentId ? wbsNodeById.get(String(node.parentId)) : null;
-                return parent ? parent.name : node.name;
+            const fmtPln = (v) => {
+                const n = parseFloat(v);
+                return Number.isFinite(n) ? n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' zł' : '—';
             };
-            // Grupuj po rodzicu WBS
-            const groups = [];
-            const groupIdx = {};
+            const getWbsNodeId = (r) => r.wbsNodeId ? String(r.wbsNodeId) : (() => {
+                try { const a = JSON.parse(r.wbsNodeAllocations || '{}'); return Object.keys(a)[0] || null; } catch { return null; }
+            })();
+            const getAncestor = (nodeId, levels) => {
+                let node = wbsNodeById.get(nodeId);
+                for (let i = 0; i < levels && node?.parentId; i++) node = wbsNodeById.get(String(node.parentId));
+                return node;
+            };
+            // Grupuj 2-poziomowo: gałąź+1 (BUD) → rodzic (produkt)
+            const branchMap = new Map(); // branchId → { node, subMap: Map<parentId, { node, reqs[] }> }
             for (const r of reqs) {
-                const label = getParentName(r);
-                if (!(label in groupIdx)) { groupIdx[label] = groups.length; groups.push({ label, reqs: [] }); }
-                groups[groupIdx[label]].reqs.push(r);
+                const nodeId = getWbsNodeId(r);
+                if (!nodeId) continue;
+                const matNode = wbsNodeById.get(nodeId);
+                if (!matNode) continue;
+                const parentNode = matNode.parentId ? wbsNodeById.get(String(matNode.parentId)) : matNode;
+                const branchNode = parentNode?.parentId ? wbsNodeById.get(String(parentNode.parentId)) : parentNode;
+                const bId = branchNode?.id || 'other';
+                const pId = parentNode?.id || 'other';
+                if (!branchMap.has(bId)) branchMap.set(bId, { node: branchNode, subMap: new Map() });
+                const sub = branchMap.get(bId).subMap;
+                if (!sub.has(pId)) sub.set(pId, { node: parentNode, reqs: [] });
+                sub.get(pId).reqs.push(r);
             }
-            const rows = groups.flatMap(g => [
-                `<tr><td colspan="7" style="text-align:left;font-weight:bold;font-size:15px;background:#f0f4ff;padding:6px 8px;border-bottom:2px solid #1a1a2e;color:#1a1a2e">${esc(g.label)}</td></tr>`,
-                ...g.reqs.map(r => {
-                    const name = esc(r.name || r.productName || '—');
-                    const manufacturer = esc(r.manufacturer || r.producent || '—');
-                    const model = esc(r.model || '—');
-                    const tradeName = esc(r.tradeName || r.nazwHandlowa || r.nazwaHandlowa || '—');
-                    const qty = effectiveQty(r);
-                    const qtyStr = qty != null ? `${qty}` : '—';
-                    const unit = esc(r.unit || '');
-                    const spec = esc(String(r.technicalSpec || '').slice(0, 120));
-                    return `<tr><td style="text-align:left;padding-left:16px">${name}</td><td>${manufacturer}</td><td>${model}</td><td>${tradeName}</td><td class="num">${qtyStr}</td><td>${unit}</td><td style="font-size:9px;color:#6b7280;text-align:left">${spec}</td></tr>`;
-                })
-            ]).join('');
+            const rows = [...branchMap.values()].flatMap(branch => {
+                const branchLabel = branch.node?.name || '—';
+                const branchTotal = [...branch.subMap.values()].flatMap(s => s.reqs).reduce((sum, r) => {
+                    const qty = parseFloat(effectiveQty(r)) || 0;
+                    const price = parseFloat(r.priceNetto) || 0;
+                    return sum + qty * price;
+                }, 0);
+                const totalStr = branchTotal > 0 ? fmtPln(branchTotal) : '';
+                const branchRow = `<tr><td colspan="7" style="text-align:left;font-weight:bold;font-size:15px;background:#1a1a2e;color:#fff;padding:6px 8px;border-bottom:2px solid #1a1a2e">
+                    <span>${esc(branchLabel)}</span>${totalStr ? `<span style="float:right;font-size:13px;font-weight:normal">Razem: ${totalStr}</span>` : ''}</td></tr>`;
+                const subRows = [...branch.subMap.values()].flatMap(sub => {
+                    const subLabel = sub.node?.name || '—';
+                    const subTotal = sub.reqs.reduce((sum, r) => {
+                        const qty = parseFloat(effectiveQty(r)) || 0;
+                        const price = parseFloat(r.priceNetto) || 0;
+                        return sum + qty * price;
+                    }, 0);
+                    const subTotalStr = subTotal > 0 ? fmtPln(subTotal) : '';
+                    const subHeader = `<tr><td colspan="7" style="text-align:left;font-weight:bold;font-size:12px;background:#f0f4ff;padding:5px 8px 5px 20px;border-bottom:1px solid #1a1a2e;color:#1a1a2e">
+                        <span>${esc(subLabel)}</span>${subTotalStr ? `<span style="float:right;font-size:11px;color:#374151">Razem: ${subTotalStr}</span>` : ''}</td></tr>`;
+                    const matRows = sub.reqs.map(r => {
+                        const name = esc(r.name || r.productName || '—');
+                        const manufacturer = esc(r.manufacturer || r.producent || '—');
+                        const model = esc(r.model || '—');
+                        const tradeName = esc(r.tradeName || r.nazwHandlowa || r.nazwaHandlowa || '—');
+                        const qty = effectiveQty(r);
+                        const qtyStr = qty != null ? `${qty}` : '—';
+                        const unit = esc(r.unit || '');
+                        const spec = esc(String(r.technicalSpec || '').slice(0, 100));
+                        const unitPrice = parseFloat(r.priceNetto);
+                        const unitPriceStr = Number.isFinite(unitPrice) ? fmtPln(unitPrice) : '—';
+                        const valueStr = (Number.isFinite(unitPrice) && qty != null) ? fmtPln(parseFloat(qty) * unitPrice) : '—';
+                        return `<tr><td style="text-align:left;padding-left:28px">${name}</td><td>${manufacturer}</td><td>${model}</td><td>${tradeName}</td><td class="num">${qtyStr}</td><td>${unit}</td><td class="num" style="font-size:9px">${unitPriceStr}</td><td class="num" style="font-size:9px">${valueStr}</td><td style="font-size:9px;color:#6b7280;text-align:left">${spec}</td></tr>`;
+                    });
+                    return [subHeader, ...matRows];
+                });
+                return [branchRow, ...subRows];
+            }).join('');
             const pageBreak = show('oferta') ? 'page-break-before: always;' : '';
             return `
             <div class="section" style="${pageBreak}">
                 <div class="section-header">Materiały</div>
                 <table>
-                    <thead><tr><th>Nazwa</th><th>Producent</th><th>Model</th><th>Nazwa handlowa</th><th>Ilość</th><th>Jedn.</th><th>Specyfikacja</th></tr></thead>
+                    <thead><tr><th>Nazwa</th><th>Producent</th><th>Model</th><th>Nazwa handlowa</th><th>Ilość</th><th>Jedn.</th><th>Cena jedn.</th><th>Wartość netto</th><th>Specyfikacja</th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
             </div>`;
