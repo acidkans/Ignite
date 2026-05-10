@@ -1264,37 +1264,73 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 }
                 return r.quantity;
             };
-            const getParentName = (r) => {
-                const nodeId = r.wbsNodeId ? String(r.wbsNodeId) : (() => {
-                    try { const a = JSON.parse(r.wbsNodeAllocations || '{}'); return Object.keys(a)[0] || null; } catch { return null; }
-                })();
-                if (!nodeId) return '—';
-                const node = wbsNodeById.get(nodeId);
-                if (!node) return '—';
-                const parent = node.parentId ? wbsNodeById.get(String(node.parentId)) : null;
-                return parent ? parent.name : node.name;
+            // Cena ofertowa węzła z budżetu
+            const fmtPln = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' zł' : ''; };
+            const nodeOfferPrice = (node) => {
+                if (!node) return 0;
+                const q = Math.max(0, parseFloat(node.quantity) || 0);
+                const uc = Math.max(0, parseFloat(node.unitCost) || 0);
+                const tc = uc * q;
+                const m = (node.margin != null && String(node.margin) !== '') ? parseFloat(node.margin) : null;
+                const d = Math.max(0, parseFloat(node.discount) || 0);
+                let p = (m !== null && m !== 0) ? tc * (1 + m / 100) : (parseFloat(node.totalPrice) || 0);
+                if (p > 0 && d > 0) p = Math.max(0, p * (1 - d / 100));
+                return p;
             };
-            const groups = [];
-            const groupIdx = {};
+            const getWbsNodeId = (r) => r.wbsNodeId ? String(r.wbsNodeId) : (() => {
+                try { const a = JSON.parse(r.wbsNodeAllocations || '{}'); return Object.keys(a)[0] || null; } catch { return null; }
+            })();
+            // Ustal poziom BUD (root child = node którego rodzic nie ma w wbsNodeById)
+            const isBudLevel = (node) => node.parentId && !wbsNodeById.has(String(node.parentId));
+            const getBudAndProduct = (r) => {
+                const nodeId = getWbsNodeId(r);
+                if (!nodeId) return { budNode: null, productNode: null };
+                let cur = wbsNodeById.get(nodeId);
+                let prev = null;
+                while (cur?.parentId) {
+                    const p = wbsNodeById.get(String(cur.parentId));
+                    if (!p) break;
+                    if (isBudLevel(p)) return { budNode: p, productNode: cur };
+                    prev = cur; cur = p;
+                }
+                if (isBudLevel(cur)) return { budNode: cur, productNode: prev || cur };
+                return { budNode: cur, productNode: prev || cur };
+            };
+            // Grupuj: BUD → produkt → reqs
+            const budMap = new Map();
             for (const r of reqs) {
-                const label = getParentName(r);
-                if (!(label in groupIdx)) { groupIdx[label] = groups.length; groups.push({ label, reqs: [] }); }
-                groups[groupIdx[label]].reqs.push(r);
+                const { budNode, productNode } = getBudAndProduct(r);
+                const bId = budNode?.id || 'other';
+                const pId = productNode?.id || 'other';
+                if (!budMap.has(bId)) budMap.set(bId, { node: budNode, prodMap: new Map() });
+                const pm = budMap.get(bId).prodMap;
+                if (!pm.has(pId)) pm.set(pId, { node: productNode, reqs: [] });
+                pm.get(pId).reqs.push(r);
             }
-            const rows = groups.flatMap(g => [
-                `<tr><td colspan="7" style="text-align:left;font-weight:bold;font-size:15px;background:#f0f4ff;padding:6px 8px;border-bottom:2px solid #1a1a2e;color:#1a1a2e">${esc(g.label)}</td></tr>`,
-                ...g.reqs.map(r => {
-                    const name = esc(r.name || r.productName || '—');
-                    const manufacturer = esc(r.manufacturer || r.producent || '—');
-                    const model = esc(r.model || '—');
-                    const tradeName = esc(r.tradeName || r.nazwHandlowa || r.nazwaHandlowa || '—');
-                    const qty = effectiveQty(r);
-                    const qtyStr = qty != null ? `${qty}` : '—';
-                    const unit = esc(r.unit || '');
-                    const spec = esc(String(r.technicalSpec || '').slice(0, 120));
-                    return `<tr><td style="text-align:left;padding-left:16px">${name}</td><td>${manufacturer}</td><td>${model}</td><td>${tradeName}</td><td class="num">${qtyStr}</td><td>${unit}</td><td style="font-size:9px;color:#6b7280;text-align:left">${spec}</td></tr>`;
-                })
-            ]).join('');
+            const rows = [...budMap.values()].flatMap(bud => {
+                const budLabel = bud.node?.name || '—';
+                const budRow = `<tr><td colspan="7" style="text-align:left;font-weight:bold;font-size:15px;background:#1a1a2e;color:#fff;padding:6px 10px;border-bottom:2px solid #1a1a2e">${esc(budLabel)}</td></tr>`;
+                const prodRows = [...bud.prodMap.values()].flatMap(prod => {
+                    const prodLabel = prod.node?.name || '—';
+                    const price = nodeOfferPrice(prod.node);
+                    const priceStr = price > 0 ? fmtPln(price) : '';
+                    const prodHeader = `<tr><td colspan="7" style="text-align:left;font-weight:bold;font-size:12px;background:#f0f4ff;padding:5px 8px 5px 20px;border-bottom:1px solid #1a1a2e;color:#1a1a2e">
+                        <span>${esc(prodLabel)}</span>${priceStr ? `<span style="float:right;font-size:11px;color:#374151">${priceStr}</span>` : ''}</td></tr>`;
+                    const matRows = prod.reqs.map(r => {
+                        const name = esc(r.name || r.productName || '—');
+                        const manufacturer = esc(r.manufacturer || r.producent || '—');
+                        const model = esc(r.model || '—');
+                        const tradeName = esc(r.tradeName || r.nazwHandlowa || r.nazwaHandlowa || '—');
+                        const qty = effectiveQty(r);
+                        const qtyStr = qty != null ? `${qty}` : '—';
+                        const unit = esc(r.unit || '');
+                        const spec = esc(String(r.technicalSpec || '').slice(0, 120));
+                        return `<tr><td style="text-align:left;padding-left:28px">${name}</td><td>${manufacturer}</td><td>${model}</td><td>${tradeName}</td><td class="num">${qtyStr}</td><td>${unit}</td><td style="font-size:9px;color:#6b7280;text-align:left">${spec}</td></tr>`;
+                    });
+                    return [prodHeader, ...matRows];
+                });
+                return [budRow, ...prodRows];
+            }).join('');
             const pageBreak = show('oferta') ? 'page-break-before: always;' : '';
             return `
             <div class="section" style="${pageBreak}">
