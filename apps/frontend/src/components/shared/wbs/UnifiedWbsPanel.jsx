@@ -1281,20 +1281,21 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 try { const a = JSON.parse(r.wbsNodeAllocations || '{}'); return Object.keys(a)[0] || null; } catch { return null; }
             })();
             // Ustal poziom BUD (root child = node którego rodzic nie ma w wbsNodeById)
-            const isBudLevel = (node) => node.parentId && !wbsNodeById.has(String(node.parentId));
+            const isBudLevel = (node) => node && node.parentId && !wbsNodeById.has(String(node.parentId));
             const getBudAndProduct = (r) => {
                 const nodeId = getWbsNodeId(r);
                 if (!nodeId) return { budNode: null, productNode: null };
                 let cur = wbsNodeById.get(nodeId);
+                if (!cur) return { budNode: null, productNode: null };
                 let prev = null;
-                while (cur?.parentId) {
+                while (cur && cur.parentId) {
                     const p = wbsNodeById.get(String(cur.parentId));
                     if (!p) break;
                     if (isBudLevel(p)) return { budNode: p, productNode: cur };
                     prev = cur; cur = p;
                 }
-                if (isBudLevel(cur)) return { budNode: cur, productNode: prev || cur };
-                return { budNode: cur, productNode: prev || cur };
+                if (cur && isBudLevel(cur)) return { budNode: cur, productNode: prev || cur };
+                return { budNode: cur || null, productNode: prev || cur || null };
             };
             // Grupuj: BUD → produkt → reqs
             const budMap = new Map();
