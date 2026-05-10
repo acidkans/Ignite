@@ -1321,10 +1321,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 const budRow = `<tr><td colspan="7" style="text-align:left;font-weight:bold;font-size:15px;background:#1a1a2e;color:#fff;padding:6px 10px;border-bottom:2px solid #1a1a2e">${esc(budLabel)}</td></tr>`;
                 const prodRows = [...bud.prodMap.values()].flatMap(prod => {
                     const prodLabel = prod.node?.name || '—';
-                    const price = nodeOfferPrice(prod.node);
-                    const priceStr = price > 0 ? fmtPln(price) : '';
-                    const prodHeader = `<tr><td colspan="7" style="text-align:left;font-weight:bold;font-size:12px;background:#f0f4ff;padding:5px 8px 5px 20px;border-bottom:1px solid #1a1a2e;color:#1a1a2e">
-                        <span>${esc(prodLabel)}</span>${priceStr ? `<span style="float:right;font-size:11px;color:#374151">${priceStr}</span>` : ''}</td></tr>`;
+                    const prodHeader = `<tr><td colspan="7" style="text-align:left;font-weight:bold;font-size:12px;background:#f0f4ff;padding:5px 8px 5px 20px;border-bottom:1px solid #1a1a2e;color:#1a1a2e"><span>${esc(prodLabel)}</span></td></tr>`;
                     const matRows = prod.reqs.map(r => {
                         const name = esc(r.name || r.productName || '—');
                         const manufacturer = esc(r.manufacturer || r.producent || '—');
