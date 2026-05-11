@@ -376,6 +376,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
     }, [projectEndDate]);
     const [overrides, setOverrides] = useState({});
     const [editCell, setEditCell] = useState(null); // { taskId, field: 'start'|'end' } | null
+    const [nonWorkingWarn, setNonWorkingWarn] = useState(null); // { taskId, field, dateStr } | null
 
     const [branchWorkOnHolidays, setBranchWorkOnHolidays] = useState({});
     const [popup, setPopup] = useState(null); // { x, y, branchId } | null
@@ -404,8 +405,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         return m;
     }, [tasks]);
 
-    const handleTableDateChange = useCallback((taskId, field, dateStr) => {
-        setEditCell(null);
+    const applyDateChange = useCallback((taskId, field, dateStr) => {
         if (!dateStr) return;
         const task = tasks.find(t => t && t.id === taskId);
         if (!task) return;
@@ -420,7 +420,6 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
             newEnd = newDate;
             if (newEnd <= newStart) newStart = new Date(newEnd.getTime() - DAY_MS);
         }
-        // Oblicz liczbę dni roboczych dla onNodeDurationChange
         const branchId = taskBranchMap[taskId];
         const wow = Object.prototype.hasOwnProperty.call(branchWorkOnHolidays, taskId)
             ? branchWorkOnHolidays[taskId]
@@ -446,6 +445,19 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         const origTask = tasks.find(t => t && t.id === taskId);
         if (task.type !== 'project' && origTask?._canUpdateDuration !== false) onNodeDurationChange?.(taskId, notifyDays);
     }, [tasks, taskBranchMap, branchWorkOnHolidays, onNodeDurationChange]);
+
+    const handleTableDateChange = useCallback((taskId, field, dateStr) => {
+        setEditCell(null);
+        if (!dateStr) return;
+        const picked = new Date(dateStr);
+        picked.setHours(0, 0, 0, 0);
+        const checkDate = field === 'start' ? picked : picked;
+        if (isNonWorkingDay(checkDate)) {
+            setNonWorkingWarn({ taskId, field, dateStr });
+            return;
+        }
+        applyDateChange(taskId, field, dateStr);
+    }, [applyDateChange]);
 
     const onDateChange = useCallback((task) => {
         if (task.type === 'milestone') return;
@@ -1088,6 +1100,41 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                     </label>
                 </div>
             )}
+        {nonWorkingWarn && (() => {
+            const d = new Date(nonWorkingWarn.dateStr);
+            const dow = d.getDay();
+            const reason = dow === 0 ? 'niedziela' : dow === 6 ? 'sobota' : 'święto';
+            const label = d.toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' });
+            return (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)' }}
+                    onClick={() => setNonWorkingWarn(null)}>
+                    <div onClick={e => e.stopPropagation()}
+                        className="bg-[#0d1520] border border-amber-500/30 rounded-2xl px-6 py-5 shadow-2xl max-w-sm w-full mx-4">
+                        <div className="text-[10px] text-amber-400 uppercase tracking-widest font-bold mb-2">Dzień wolny od pracy</div>
+                        <p className="text-sm text-gray-200 mb-1">
+                            Wybrana data (<span className="text-amber-300 font-semibold">{label}</span>) to <span className="text-amber-300">{reason}</span>.
+                        </p>
+                        <p className="text-xs text-gray-400 mb-5">Czy zadanie ma być zaplanowane w ten dzień?</p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => { applyDateChange(nonWorkingWarn.taskId, nonWorkingWarn.field, nonWorkingWarn.dateStr); setNonWorkingWarn(null); }}
+                                className="flex-1 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold rounded-xl transition-all"
+                            >Tak, zostaw</button>
+                            <button
+                                onClick={() => {
+                                    const d2 = new Date(nonWorkingWarn.dateStr);
+                                    d2.setHours(0, 0, 0, 0);
+                                    const moved = nonWorkingWarn.field === 'start' ? advanceToWorkingDay(d2) : retreatToWorkingDay(d2);
+                                    applyDateChange(nonWorkingWarn.taskId, nonWorkingWarn.field, moved.toISOString().slice(0, 10));
+                                    setNonWorkingWarn(null);
+                                }}
+                                className="flex-1 px-4 py-2 bg-blue-600/80 hover:bg-blue-600 text-white text-xs font-bold rounded-xl transition-all"
+                            >Nie, przesuń na roboczy</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        })()}
         </GanttTableContext.Provider>
     );
 }
