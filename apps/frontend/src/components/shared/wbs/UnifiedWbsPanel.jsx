@@ -794,6 +794,21 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         });
     }, [onWbsDataLoad]);
 
+    // Pobiera świeżą płaską listę węzłów WBS z backendu i nakłada live Q&A z wbsTreeRef.
+    // Używane po zapisie drzewa — dodaje nowe węzły do wbsData bez ryzyka nadpisania wbsTree.
+    const refreshWbsNodes = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders() });
+            if (!res.ok) return;
+            const data = await res.json();
+            const flatQa = (nodes, acc = {}) => { for (const n of nodes) { acc[n.id] = n.qa; if (n.children?.length) flatQa(n.children, acc); } return acc; };
+            const qaMap = flatQa(wbsTreeRef.current?.items || []);
+            const updated = (data.items || []).map(n => ({ ...n, qa: qaMap[n.id] !== undefined ? qaMap[n.id] : (n.qa || []) }));
+            setWbsData(updated);
+            onWbsDataLoad?.(updated);
+        } catch (_) {}
+    }, [nodeId, versionId, authHeaders, onWbsDataLoad]);
+
     const handleSaveHybridWBS = useCallback(async () => {
         if (hybridSaveTimeout.current) clearTimeout(hybridSaveTimeout.current);
         hybridSaveTimeout.current = setTimeout(async () => {
@@ -814,9 +829,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                     }),
                 });
                 onWbsUpdate?.();
-                // Nie wywołuj fetchData() — nadpisałoby wbsTree i skasowało edytowane pola Q&A.
-                // Zamiast tego synchronizuj Q&A z drzewa do wbsData (dla cache SchematTab).
-                syncQaToWbsData();
+                // refreshWbsNodes pobiera świeżą listę z backendu (dodaje nowe węzły)
+                // i nakłada live Q&A z wbsTreeRef — nie dotyka wbsTree.
+                await refreshWbsNodes();
             } catch (err) {
                 console.error('[HybridWBS save]', err);
             } finally {
@@ -833,14 +848,14 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                                 body: JSON.stringify({ nodeId, versionId, wbsTree: JSON.stringify(wbsTreeRef.current) }),
                             });
                             onWbsUpdate?.();
-                            syncQaToWbsData();
+                            await refreshWbsNodes();
                         } catch (e) { console.error('[HybridWBS retry]', e); }
                         finally { hybridSaveRef.current = false; }
                     }, 0);
                 }
             }
         }, 400);
-    }, [nodeId, versionId, authHeaders, onWbsUpdate, syncQaToWbsData]);
+    }, [nodeId, versionId, authHeaders, onWbsUpdate, refreshWbsNodes]);
 
     // Po wklejeniu skopiowanej pozycji w WBS — natychmiast zapisz drzewo (omijamy debounce, żeby
     // nowe wbs_nodes powstały w bazie), a następnie sklonuj powiązane wymagania techniczne
@@ -1040,6 +1055,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         const date = new Date().toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' });
         const show = (key) => sectionKey === key || sectionKey === 'all';
 
+        // Zawsze czytaj Q&A z live ref, żeby nie eksportować przestarzałego stanu przed debounced save.
+        const buildLiveQaMap = (nodes, acc = {}) => { for (const n of nodes) { acc[n.id] = n.qa; if (n.children?.length) buildLiveQaMap(n.children, acc); } return acc; };
+        const liveQaMap = buildLiveQaMap(wbsTreeRef.current?.items || []);
+
         let logoDataUrl = '';
         try {
             const logoRes = await fetch(`${window.location.origin}/airtel-logo-services.png`);
@@ -1103,7 +1122,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                     <td class="num">${fmtPLN(n.totalPrice)}</td>
                     <td style="text-align:left;word-wrap:break-word;white-space:normal;max-width:120px">${esc(n.comment || '')}</td>` : `
                     <td>${esc(n.status || '')}</td>
-                    <td style="text-align:left;padding:4px">${renderQaCell(n.qa)}</td>`;
+                    <td style="text-align:left;padding:4px">${renderQaCell(liveQaMap[n.id] ?? n.qa)}</td>`;
                 return `<tr>
                     <td style="padding-left:${8 + indent}px;${nameStyle};text-align:left">${depth > 0 ? '└ ' : ''}${(n.name || '').replace(/</g, '&lt;')}</td>
                     ${budgetCols}
@@ -2691,9 +2710,28 @@ ${materialsHtml}
         };
 
         if (view === VIEWS.BUDGET) {
+            const wbsByParent = new Map();
+            for (const item of wbsData) {
+                const pid = item.parentId || '__root__';
+                if (!wbsByParent.has(pid)) wbsByParent.set(pid, []);
+                wbsByParent.get(pid).push(item);
+            }
+            for (const siblings of wbsByParent.values()) {
+                siblings.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+            }
+            const wbsOrderMap = new Map();
+            let wbsIdx = 0;
+            const traverseWbs = (pid) => {
+                for (const child of (wbsByParent.get(pid) || [])) {
+                    wbsOrderMap.set(child.id, wbsIdx++);
+                    traverseWbs(child.id);
+                }
+            };
+            traverseWbs('__root__');
+
             return [...wbsData]
                 .filter(item => item.parentId != null)
-                .sort((a, b) => (a.path || '').localeCompare(b.path || '', 'pl'))
+                .sort((a, b) => (wbsOrderMap.get(a.id) ?? 0) - (wbsOrderMap.get(b.id) ?? 0))
                 .map(item => {
                     const normalizedType = String(item.type || '').toLowerCase();
                     const inheritedFromMaterials = normalizedType === 'material' || normalizedType === 'equipment';
