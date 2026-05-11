@@ -989,6 +989,18 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
         [editCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap]
     );
 
+    // Dynamiczna wysokość wiersza — musi być przed early return (Rules of Hooks)
+    const NAME_COL_W = 500 - COL_DATE * 2 - COL_DAYS - 12;
+    const CHAR_W = 6.8;
+    const rowHeight = useMemo(() => {
+        const charsPerLine = Math.floor(NAME_COL_W / CHAR_W);
+        const maxLines = tasks.reduce((max, t) => {
+            if (!t?.name) return max;
+            return Math.max(max, Math.ceil(t.name.length / charsPerLine));
+        }, 1);
+        return Math.max(32, Math.min(maxLines * 17 + 10, 90));
+    }, [tasks]);
+
     if (!items.length || !tasks.length) {
         return (
             <div className="p-6 text-center text-gray-500 text-sm">
@@ -1000,18 +1012,6 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
     const hasOverrides = Object.keys(overrides).length > 0;
     const activeBranches = Object.values(branchWorkOnHolidays).filter(Boolean).length;
     const popupBranchId = popup?.branchId;
-
-    // Dynamiczna wysokość wiersza — dopasowana do najdłuższej nazwy zadania
-    const NAME_COL_W = 500 - COL_DATE * 2 - COL_DAYS - 12; // ~246px dostępnych na tekst
-    const CHAR_W = 6.8; // przybliżona szerokość znaku Inter 12px
-    const rowHeight = useMemo(() => {
-        const charsPerLine = Math.floor(NAME_COL_W / CHAR_W);
-        const maxLines = tasks.reduce((max, t) => {
-            if (!t?.name) return max;
-            return Math.max(max, Math.ceil(t.name.length / charsPerLine));
-        }, 1);
-        return Math.max(32, Math.min(maxLines * 17 + 10, 90));
-    }, [tasks]);
 
     return (
         <GanttTableContext.Provider value={ganttTableCtx}>
