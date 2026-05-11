@@ -62,6 +62,15 @@ export class ProcessTreeService {
                         status: 'NEW',
                     },
                 });
+                await tx.wbsNode.create({
+                    data: {
+                        nodeId: node.id,
+                        versionId: null,
+                        name: 'PYTANIA OGÓLNE',
+                        status: '',
+                        sortOrder: 0,
+                    },
+                });
             }
 
             return node;
