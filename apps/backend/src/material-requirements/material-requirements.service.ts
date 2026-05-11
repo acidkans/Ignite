@@ -165,7 +165,7 @@ export class MaterialRequirementsService {
                     quantity: freshQuantity,
                     wbsNodeAllocations: JSON.stringify(allocMap),
                     wbsNodeIds: JSON.stringify(nodeIds),
-                    wbsNodeId: nodeIds[0] || null,
+                    wbsNodeId: normalizedItem.wbsNodeId || nodeIds[0] || null,
                     wbsAllocations: undefined, // nie wysyłaj surowej relacji do frontendu
                 };
             }

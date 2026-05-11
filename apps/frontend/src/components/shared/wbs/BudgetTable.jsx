@@ -5,7 +5,7 @@ import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, TYPE_OPTIONS, TYPE_LABE
 const TH_BASE = 'text-left px-3 py-2.5 text-[17px] font-bold uppercase tracking-widest text-white whitespace-normal break-words select-none relative align-bottom';
 const TD = 'px-2 py-1.5 align-top break-words';
 const INPUT = 'bg-transparent text-white text-sm w-full outline-none focus:bg-white/5 rounded px-1 py-0.5 min-w-0';
-const TEXTAREA = 'bg-transparent text-white text-sm w-full outline-none focus:bg-white/5 rounded px-1 py-0.5 min-w-0 resize-none leading-snug whitespace-pre-wrap break-all';
+const TEXTAREA = 'bg-transparent text-white text-sm w-full outline-none focus:bg-white/5 rounded px-1 py-0.5 min-w-0 resize-none leading-snug whitespace-pre-wrap break-words overflow-hidden';
 const SELECT = 'bg-[#0b0f17] text-white text-sm w-full outline-none rounded px-1 py-0.5 cursor-pointer border border-white/5 hover:border-white/10 focus:border-blue-500/40 transition-colors';
 const FILTER = 'w-full bg-black/30 border border-white/10 rounded px-2 py-0.5 text-xs text-white placeholder-gray-700 outline-none focus:border-blue-500/40';
 

@@ -42,6 +42,10 @@ export class UpsertOrderRequirementsDto {
 
     @IsOptional()
     @IsString()
+    clientProjectManagerCompany?: string;
+
+    @IsOptional()
+    @IsString()
     clientProjectManagerPhone?: string;
 
     @IsOptional()
