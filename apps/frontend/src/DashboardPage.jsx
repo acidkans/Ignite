@@ -613,6 +613,7 @@ export default function DashboardPage() {
                                <SchematTab
                                    key={`schematics-${activeAreaId}`}
                                    nodeId={activeAreaId}
+                                   versionId={selectedVersionId}
                                    wbsData={wbsDataCache[activeAreaId]}
                                    orderName={activeNode?.name || ''}
                                />

@@ -80,7 +80,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
         projectEnd: '',
         projectGoal: '',
         pmName: '',
-        pmSurname: '',
+        pmCompany: '',
         clientProjectManagerPhone: '',
         clientProjectManagerEmail: '',
         clientContacts: [],
@@ -263,10 +263,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                             const d = new Date(iso);
                             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                         };
-                        const fullPM = data.clientProjectManager || '';
-                        const pmParts = fullPM.split(' ');
-                        const pmName = pmParts[0] || '';
-                        const pmSurname = pmParts.slice(1).join(' ') || '';
+                        const pmName = data.clientProjectManager || '';
 
                         setForm({
                             offerDeadlineDate: data.offerDeadline ? data.offerDeadline.split('T')[0] : '',
@@ -275,10 +272,14 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                             projectEnd: toLocalDate(data.projectEnd),
                             projectGoal: data.projectGoal || '',
                             pmName,
-                            pmSurname,
+                            pmCompany: data.clientProjectManagerCompany || '',
                             clientProjectManagerPhone: data.clientProjectManagerPhone || '',
                             clientProjectManagerEmail: data.clientProjectManagerEmail || '',
-                            clientContacts: data.clientContacts ? JSON.parse(data.clientContacts) : [],
+                            clientContacts: data.clientContacts ? JSON.parse(data.clientContacts).map(c => ({
+                                ...c,
+                                name: c.surname ? `${c.name || ''} ${c.surname}`.trim() : (c.name || ''),
+                                surname: undefined,
+                            })) : [],
                             offerStatus: data.offerStatus || '',
                             offerStatusComment: data.offerStatusComment || '',
                         });
@@ -307,7 +308,8 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                 projectStart: form.projectStart || null,
                 projectEnd: form.projectEnd || null,
                 projectGoal: form.projectGoal || null,
-                clientProjectManager: `${form.pmName} ${form.pmSurname}`.trim() || null,
+                clientProjectManager: form.pmName || null,
+                clientProjectManagerCompany: form.pmCompany || null,
                 clientProjectManagerPhone: form.clientProjectManagerPhone || null,
                 clientProjectManagerEmail: form.clientProjectManagerEmail || null,
                 clientContacts: JSON.stringify(form.clientContacts),
@@ -338,7 +340,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
     const addContact = () => {
         setForm(prev => ({
             ...prev,
-            clientContacts: [...prev.clientContacts, { id: crypto.randomUUID(), name: '', surname: '', role: '', phone: '', email: '' }]
+            clientContacts: [...prev.clientContacts, { id: crypto.randomUUID(), name: '', company: '', role: '', phone: '', email: '' }]
         }));
     };
 
@@ -596,12 +598,12 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                                     </div>
                                     <div className="grid grid-cols-4 gap-3">
                                         <div>
-                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię</label>
+                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię i Nazwisko</label>
                                             <input type="text" value={form.pmName} onChange={set('pmName')} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
                                         </div>
                                         <div>
-                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Nazwisko</label>
-                                            <input type="text" value={form.pmSurname} onChange={set('pmSurname')} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Firma</label>
+                                            <input type="text" value={form.pmCompany} onChange={set('pmCompany')} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
                                         </div>
                                         <div>
                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Telefon</label>
@@ -656,12 +658,12 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                                                     </div>
                                                     <div className="grid grid-cols-4 gap-3">
                                                         <div>
-                                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię</label>
+                                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię i Nazwisko</label>
                                                             <input type="text" value={contact.name} onChange={e => updateContact(contact.id, 'name', e.target.value)} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
                                                         </div>
                                                         <div>
-                                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Nazwisko</label>
-                                                            <input type="text" value={contact.surname} onChange={e => updateContact(contact.id, 'surname', e.target.value)} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Firma</label>
+                                                            <input type="text" value={contact.company || ''} onChange={e => updateContact(contact.id, 'company', e.target.value)} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
                                                         </div>
                                                         <div>
                                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Telefon</label>

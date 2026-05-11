@@ -132,6 +132,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const [requirementByNodeId, setRequirementByNodeId] = useState({});
     const [ganttProjectStart, setGanttProjectStart] = useState(null);
     const [ganttProjectEnd, setGanttProjectEnd] = useState(null);
+    const [projectContacts, setProjectContacts] = useState([]);
     const [budgetDiscountAmount, setBudgetDiscountAmount] = useState('');
     const [budgetDiscountPercent, setBudgetDiscountPercent] = useState('');
     const [markerLinksCache, setMarkerLinksCache] = useState({});
@@ -364,6 +365,16 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                             const reqData = JSON.parse(text);
                             if (reqData.projectStart) setGanttProjectStart(reqData.projectStart);
                             if (reqData.projectEnd) setGanttProjectEnd(reqData.projectEnd);
+                            // Zbierz kontakty projektu (PM + dodatkowe) jako opcje właściciela WBS
+                            {
+                                const contacts = [];
+                                if (reqData.clientProjectManager) contacts.push({ id: 'pm', firstName: reqData.clientProjectManager, lastName: '', email: '' });
+                                try {
+                                    const extras = reqData.clientContacts ? JSON.parse(reqData.clientContacts) : [];
+                                    extras.forEach(c => { if (c.name) contacts.push({ id: c.id || c.name, firstName: c.name, lastName: c.surname || '', email: c.email || '' }); });
+                                } catch { /* ignore */ }
+                                setProjectContacts(contacts);
+                            }
                             const tree = JSON.parse(reqData.wbsTree || '{}');
                             const normalizedTree = Array.isArray(tree.items) ? tree : { items: [] };
 
@@ -3200,6 +3211,7 @@ ${materialsHtml}
                                 processNodeId={nodeId}
                                 onSave={handleSaveHybridWBS}
                                 users={assignedUsers}
+                                projectContacts={projectContacts}
                                 onRequirementDrop={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
                                 isManager={isManagerOrAdmin}
                                 onNodesDeleted={handleHybridNodesDeleted}

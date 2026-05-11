@@ -250,9 +250,10 @@ model OrderRequirements {
   wbsTree                   String?
   budgetNotes               String?
   clientContacts            String?
-  clientProjectManager      String?
-  clientProjectManagerEmail String?
-  clientProjectManagerPhone String?
+  clientProjectManager        String?
+  clientProjectManagerCompany String?
+  clientProjectManagerEmail   String?
+  clientProjectManagerPhone   String?
   offerStatus               String?
   offerStatusComment        String?
   node                      ProcessNode     @relation(fields: [nodeId], references: [id], onDelete: Cascade)

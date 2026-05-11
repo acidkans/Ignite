@@ -17,8 +17,10 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
     const latestSubtasksRef = useRef([]);
     const isSavingRef = useRef(false);
     const saveTimeoutRef = useRef(null);
+    const activeVersionRef = useRef(versionId);
 
     useEffect(() => { latestSubtasksRef.current = subtasks; }, [subtasks]);
+    useEffect(() => { activeVersionRef.current = versionId; }, [versionId]);
 
     const token = () => sessionStorage.getItem('token') || localStorage.getItem('token');
 
@@ -47,6 +49,7 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
 
     const saveSubtasks = async (tasks, immediate = false) => {
         if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        const saveVersionId = versionId;
         const perform = async () => {
             if (isSavingRef.current) { saveTimeoutRef.current = setTimeout(perform, 250); return; }
             isSavingRef.current = true;
@@ -65,8 +68,10 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
                 });
                 if (res.ok) {
                     const saved = await res.json();
-                    setSubtasks(saved || []);
-                    latestSubtasksRef.current = saved || [];
+                    if (saveVersionId === activeVersionRef.current) {
+                        setSubtasks(saved || []);
+                        latestSubtasksRef.current = saved || [];
+                    }
                     setSaved(true);
                     onWbsUpdate?.();
                     setTimeout(() => setSaved(false), 2000);
