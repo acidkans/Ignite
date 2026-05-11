@@ -283,8 +283,12 @@ const DateCell = ({ taskId, field, date, disabled }) => {
                 <DatePicker
                     selected={dateObj}
                     onChange={(newDate) => {
-                        if (newDate) handleTableDateChange(taskId, field, newDate.toISOString().slice(0, 10));
-                        else setEditCell(null);
+                        if (newDate) {
+                            const y = newDate.getFullYear();
+                            const m = String(newDate.getMonth() + 1).padStart(2, '0');
+                            const d = String(newDate.getDate()).padStart(2, '0');
+                            handleTableDateChange(taskId, field, `${y}-${m}-${d}`);
+                        } else setEditCell(null);
                     }}
                     onClickOutside={() => setEditCell(null)}
                     onKeyDown={(e) => { if (e.key === 'Escape') setEditCell(null); }}
@@ -1125,7 +1129,8 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                                     const d2 = new Date(nonWorkingWarn.dateStr);
                                     d2.setHours(0, 0, 0, 0);
                                     const moved = nonWorkingWarn.field === 'start' ? advanceToWorkingDay(d2) : retreatToWorkingDay(d2);
-                                    applyDateChange(nonWorkingWarn.taskId, nonWorkingWarn.field, moved.toISOString().slice(0, 10));
+                                    const my = moved.getFullYear(), mm = String(moved.getMonth() + 1).padStart(2, '0'), md = String(moved.getDate()).padStart(2, '0');
+                                    applyDateChange(nonWorkingWarn.taskId, nonWorkingWarn.field, `${my}-${mm}-${md}`);
                                     setNonWorkingWarn(null);
                                 }}
                                 className="flex-1 px-4 py-2 bg-blue-600/80 hover:bg-blue-600 text-white text-xs font-bold rounded-xl transition-all"
