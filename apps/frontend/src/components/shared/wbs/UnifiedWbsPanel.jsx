@@ -7,7 +7,7 @@ import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import GanttSection from './GanttSection';
-import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType } from './wbsConstants';
+import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy } from './wbsConstants';
 import { exportProjectPdf } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import WBSHybridTable from './WBSHybridTable';
@@ -341,7 +341,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                         .filter((n) => n?.id != null && Number.isFinite(Number(n.quantity)))
                         .map((n) => [n.id, Number(n.quantity)])
                 );
-                // Domyślnie wszystkie sekcje zwinięte — użytkownik rozwija ręcznie
+                // Buduj drzewo hierarchiczne z relacyjnej listy (parentId)
+                setWbsTreeAndRef({ items: buildHierarchy(data.items || []) });
             }
 
             const materialsParams = new URLSearchParams();
@@ -364,38 +365,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                             const reqData = JSON.parse(text);
                             if (reqData.projectStart) setGanttProjectStart(reqData.projectStart);
                             if (reqData.projectEnd) setGanttProjectEnd(reqData.projectEnd);
-                            const tree = JSON.parse(reqData.wbsTree || '{}');
-                            const normalizedTree = Array.isArray(tree.items) ? tree : { items: [] };
-
-                            // Reconcile: remove nodes deleted from wbs_nodes so saveTree() won't re-insert them
-                            const reconcileNodes = (nodes) => (nodes || [])
-                                .filter(n => !n.id || !wbsItemsById.size || wbsItemsById.has(n.id))
-                                .map(n => ({ ...n, children: reconcileNodes(n.children) }));
-                            const countNodes = (nodes) => (nodes || []).reduce((sum, n) => sum + 1 + countNodes(n.children), 0);
-                            const originalCount = countNodes(normalizedTree.items);
-                            const reconciledItems = wbsItemsById.size > 0 ? reconcileNodes(normalizedTree.items) : normalizedTree.items;
-                            const wasStale = countNodes(reconciledItems) < originalCount;
-
-                            // Merge relational fields (comment, status, owner) from wbsData into tree nodes
-                            const mergeRelational = nodes => nodes.map(n => {
-                                const rel = wbsItemsById.get(n.id);
-                                const merged = rel ? { ...n, comment: rel.comment || n.comment, status: rel.status || n.status, owner: rel.owner || n.owner, unit: rel.unit || n.unit, quantity: rel.quantity ?? n.quantity, qa: Array.isArray(rel.qa) ? rel.qa : (n.qa || []) } : n;
-                                return merged.children?.length ? { ...merged, children: mergeRelational(merged.children) } : merged;
-                            });
-                            const cleanedTree = { ...normalizedTree, items: mergeRelational(reconciledItems) };
-                            setWbsTreeAndRef(cleanedTree);
-
-                            // If stale nodes were removed, immediately persist to prevent re-insertion by saveTree()
-                            if (wasStale) {
-                                fetch(`${API_URL}/order-requirements`, {
-                                    method: 'POST',
-                                    headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ nodeId, versionId, wbsTree: JSON.stringify(cleanedTree) }),
-                                }).catch(e => console.error('[WBS reconcile save]', e));
-                            }
-
+                            // Pobierz nazwy węzłów produktowych z relacyjnej listy (wbsItemsById)
                             projectItemNamesById = Object.fromEntries(
-                                (tree.items || [])
+                                [...wbsItemsById.values()]
                                     .filter(item => !item.type || item.type === 'product')
                                     .map(item => [item.id, item.name])
                             );
@@ -818,19 +790,14 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             }
             hybridSaveRef.current = true;
             hybridSavePending.current = false;
+            const saveUrl = `${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`;
             try {
-                await fetch(`${API_URL}/order-requirements`, {
+                await fetch(saveUrl, {
                     method: 'POST',
                     headers: authHeaders(),
-                    body: JSON.stringify({
-                        nodeId,
-                        versionId,
-                        wbsTree: JSON.stringify(wbsTreeRef.current),
-                    }),
+                    body: JSON.stringify(wbsTreeRef.current),
                 });
                 onWbsUpdate?.();
-                // refreshWbsNodes pobiera świeżą listę z backendu (dodaje nowe węzły)
-                // i nakłada live Q&A z wbsTreeRef — nie dotyka wbsTree.
                 await refreshWbsNodes();
             } catch (err) {
                 console.error('[HybridWBS save]', err);
@@ -838,14 +805,13 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 hybridSaveRef.current = false;
                 if (hybridSavePending.current) {
                     hybridSavePending.current = false;
-                    // retry z najnowszymi danymi
                     setTimeout(async () => {
                         hybridSaveRef.current = true;
                         try {
-                            await fetch(`${API_URL}/order-requirements`, {
+                            await fetch(saveUrl, {
                                 method: 'POST',
                                 headers: authHeaders(),
-                                body: JSON.stringify({ nodeId, versionId, wbsTree: JSON.stringify(wbsTreeRef.current) }),
+                                body: JSON.stringify(wbsTreeRef.current),
                             });
                             onWbsUpdate?.();
                             await refreshWbsNodes();
@@ -864,14 +830,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         if (!Array.isArray(mappings) || mappings.length === 0) return;
         if (hybridSaveTimeout.current) clearTimeout(hybridSaveTimeout.current);
         try {
-            await fetch(`${API_URL}/order-requirements`, {
+            await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, {
                 method: 'POST',
                 headers: authHeaders(),
-                body: JSON.stringify({
-                    nodeId,
-                    versionId,
-                    wbsTree: JSON.stringify(wbsTreeRef.current),
-                }),
+                body: JSON.stringify(wbsTreeRef.current),
             });
             await fetch(`${API_URL}/material-requirements/clone-for-wbs`, {
                 method: 'POST',
@@ -2391,10 +2353,10 @@ ${materialsHtml}
                             else updatedTree.items.push(tn);
                         }
                         setWbsTreeAndRef(updatedTree);
-                        await fetch(`${API_URL}/order-requirements`, {
+                        await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, {
                             method: 'POST',
                             headers: authHeaders(),
-                            body: JSON.stringify({ nodeId, versionId, wbsTree: JSON.stringify(updatedTree) }),
+                            body: JSON.stringify(updatedTree),
                         });
                     }
                 } catch (e) { console.error('WBS tree update after import error:', e); }

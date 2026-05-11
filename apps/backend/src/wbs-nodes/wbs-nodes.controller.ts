@@ -17,6 +17,18 @@ export class WbsNodesController {
     }
 
     /**
+     * Zapisuje całe drzewo WBS do tabeli relacyjnej (zastępuje dual-write przez order-requirements).
+     */
+    @Post('unified/:nodeId')
+    saveTree(
+        @Param('nodeId') nodeId: string,
+        @Query('versionId') versionId: string | undefined,
+        @Body() tree: { items: any[] },
+    ) {
+        return this.service.saveTree(nodeId, versionId, tree);
+    }
+
+    /**
      * Tworzy nowy węzeł WBS.
      */
     @Post()
