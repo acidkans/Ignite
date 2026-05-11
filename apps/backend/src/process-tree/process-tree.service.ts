@@ -62,13 +62,37 @@ export class ProcessTreeService {
                         status: 'NEW',
                     },
                 });
-                await tx.wbsNode.create({
+                const pytaniaNode = await tx.wbsNode.create({
                     data: {
                         nodeId: node.id,
                         versionId: null,
                         name: 'PYTANIA OGÓLNE',
                         status: '',
                         sortOrder: 0,
+                    },
+                });
+
+                // Utwórz OrderRequirements z wbsTree żeby gałąź pojawiła się w panelu struktury
+                await tx.orderRequirements.create({
+                    data: {
+                        nodeId: node.id,
+                        versionId: null,
+                        wbsTree: JSON.stringify({
+                            items: [{
+                                id: pytaniaNode.id,
+                                name: 'PYTANIA OGÓLNE',
+                                type: '',
+                                status: '',
+                                unit: '',
+                                owner: '',
+                                resources: '',
+                                cost: '',
+                                comment: '',
+                                tags: [],
+                                qa: [],
+                                children: [],
+                            }],
+                        }),
                     },
                 });
             }
