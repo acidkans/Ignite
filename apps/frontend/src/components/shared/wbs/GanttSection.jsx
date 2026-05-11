@@ -305,7 +305,7 @@ const DateCell = ({ taskId, field, date, disabled }) => {
 };
 
 const GanttTaskListTable = ({ rowHeight, rowWidth, fontFamily, fontSize, tasks, selectedTaskId, setSelectedTask, onExpanderClick }) => {
-    const { branchWorkOnHolidays = {}, taskBranchMap = {} } = useContext(GanttTableContext) || {};
+    const { branchWorkOnHolidays = {}, taskBranchMap = {}, wrapNames = false } = useContext(GanttTableContext) || {};
     const totalDays = tasks.reduce((s, t) => s + taskDays(t, branchWorkOnHolidays, taskBranchMap), 0);
     return (
         <div style={{ fontFamily, fontSize, width: rowWidth, flexShrink: 0 }}>
@@ -320,7 +320,7 @@ const GanttTaskListTable = ({ rowHeight, rowWidth, fontFamily, fontSize, tasks, 
                         style={{ display: 'flex', height: rowHeight, alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', background: task.id === selectedTaskId ? 'rgba(255,255,255,0.05)' : 'transparent', cursor: isGroup ? 'pointer' : 'default', boxSizing: 'border-box', width: rowWidth }}
                         onClick={() => { setSelectedTask(task.id); if (isGroup) onExpanderClick(task); }}
                     >
-                        <div style={{ flex: '1 1 0', paddingLeft: 8, paddingRight: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color, fontWeight: 400 }}>
+                        <div style={{ flex: '1 1 0', paddingLeft: 8, paddingRight: 4, overflow: 'hidden', color, fontWeight: 400, ...(wrapNames ? { whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.35 } : { textOverflow: 'ellipsis', whiteSpace: 'nowrap' }) }}>
                             {task.name}
                         </div>
                         <div style={{ width: COL_DATE, padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -381,6 +381,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
     const [overrides, setOverrides] = useState({});
     const [editCell, setEditCell] = useState(null); // { taskId, field: 'start'|'end' } | null
     const [nonWorkingWarn, setNonWorkingWarn] = useState(null); // { taskId, field, dateStr } | null
+    const [wrapNames, setWrapNames] = useState(false);
 
     const [branchWorkOnHolidays, setBranchWorkOnHolidays] = useState({});
     const [popup, setPopup] = useState(null); // { x, y, branchId } | null
@@ -985,8 +986,8 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
     useEffect(() => { onGetHtmlReady?.(getGanttHtml); }, [getGanttHtml, onGetHtmlReady]);
 
     const ganttTableCtx = useMemo(
-        () => ({ editCell, setEditCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap }),
-        [editCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap]
+        () => ({ editCell, setEditCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap, wrapNames }),
+        [editCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap, wrapNames]
     );
 
     if (!items.length || !tasks.length) {
@@ -1036,6 +1037,13 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                         </button>
                     ))}
                 </div>
+                <button
+                    onClick={() => setWrapNames(w => !w)}
+                    className={`px-2 py-1 rounded border text-[10px] uppercase tracking-widest transition-all ${wrapNames ? 'bg-cyan-500/20 border-cyan-400/40 text-cyan-200' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'}`}
+                    title="Zawijaj nazwy zadań"
+                >
+                    Zawijaj
+                </button>
                 {hasOverrides && (
                     <button
                         onClick={resetOverrides}
@@ -1063,7 +1071,7 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                     locale="pl"
                     listCellWidth="500px"
                     columnWidth={viewMode === ViewMode.Day ? 50 : viewMode === ViewMode.Week ? 90 : 220}
-                    rowHeight={32}
+                    rowHeight={wrapNames ? 52 : 32}
                     barCornerRadius={4}
                     fontSize="12px"
                     fontFamily="Inter, system-ui, sans-serif"
