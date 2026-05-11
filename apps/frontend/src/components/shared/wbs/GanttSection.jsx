@@ -394,10 +394,11 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         }));
     }, []);
 
-    const { tasks, taskBranchMap } = useMemo(
-        () => buildTasksFromTree(items, new Date(projectStart), projectName, overrides, branchWorkOnHolidays),
-        [items, projectStart, projectName, overrides, branchWorkOnHolidays]
-    );
+    const { tasks, taskBranchMap } = useMemo(() => {
+        const result = buildTasksFromTree(items, new Date(projectStart), projectName, overrides, branchWorkOnHolidays);
+        result.tasks.sort((a, b) => a.start - b.start);
+        return result;
+    }, [items, projectStart, projectName, overrides, branchWorkOnHolidays]);
 
 
     // Mapa taskId → nazwa (wszystkie taski w harmonogramie)
