@@ -138,14 +138,20 @@ export class SubtasksService {
         return this.prisma.$transaction(async (tx) => {
             // 1. Fetch current state
             const currentTasks = await tx.subtask.findMany({ where: { nodeId, versionId: vId } });
-            const autoTasks = await tx.subtask.findMany({ where: { nodeId, versionId: null } });
-            const autoTaskIds = new Set(autoTasks.map(t => t.id));
+            // autoTasks guard: only relevant when saving to a specific version (vId != null).
+            // When vId=null the baseline IS the only store, so treating all baseline tasks as
+            // "auto" would skip them all and the subsequent purge would delete them.
+            const autoTaskIds = new Set<string>();
+            if (vId !== null) {
+                const autoTasks = await tx.subtask.findMany({ where: { nodeId, versionId: null } });
+                autoTasks.forEach(t => autoTaskIds.add(t.id));
+            }
             const currentBudgetItems = await tx.budgetLineItem.findMany({ where: { nodeId, versionId: vId } });
 
             const preservedIds = new Set<string>();
             const savedTasks = [];
 
-            // 2. Process ALL tasks from the payload (skip auto-tasks with versionId=null)
+            // 2. Process ALL tasks from the payload (skip baseline auto-tasks when saving per-version)
             for (const t of tasks) {
                 if (!t.name) continue;
                 if (t.id && autoTaskIds.has(t.id)) continue;
