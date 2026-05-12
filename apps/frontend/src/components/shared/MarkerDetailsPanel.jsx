@@ -19,10 +19,11 @@ function flattenWbsNodes(nodes, prefix = '') {
 export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId, subtaskId, versionId }) {
     const { isOnline } = useNetwork();
     const [uploading, setUploading] = useState(false);
-    const [editName, setEditName] = useState(marker.name || '');
+    const [editName, setEditName] = useState(marker.name || (marker.type === 'TEXT' ? marker.note || '' : ''));
     const [editComment, setEditComment] = useState('');
     const [editQuestion, setEditQuestion] = useState(marker.question || '');
     const [editingAttNote, setEditingAttNote] = useState(null);
+    const [lightboxAtt, setLightboxAtt] = useState(null);
     const [subtasks, setSubtasks] = useState([]);
     const [selectedSubtaskId, setSelectedSubtaskId] = useState(marker.subtaskId || '');
     const [isCameraActive, setIsCameraActive] = useState(false);
@@ -820,7 +821,12 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                         {att.isPending && <div className="absolute top-2 left-2 z-10 px-1.5 py-0.5 bg-amber-500/80 rounded text-[9px] font-black text-white">⏳</div>}
                                         <div className="aspect-square">
                                             {att.fileType === 'IMAGE' ? (
-                                                <img src={att.isPending ? att.fileUrl : getFileUrl(att.fileUrl)} className="w-full h-full object-cover" alt="attachment" />
+                                                <img
+                                                    src={att.isPending ? att.fileUrl : getFileUrl(att.fileUrl)}
+                                                    className="w-full h-full object-cover cursor-zoom-in"
+                                                    alt="attachment"
+                                                    onClick={(e) => { e.stopPropagation(); setLightboxAtt(att); }}
+                                                />
                                             ) : (
                                                 <div className="w-full h-full flex flex-col items-center justify-center gap-2 p-2">
                                                     {att.fileType === 'AUDIO' ? <Mic size={24} className="text-purple-400" /> : <Save size={24} className="text-gray-500" />}
@@ -836,6 +842,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                                     autoFocus
                                                     value={editingAttNote.note}
                                                     onChange={e => setEditingAttNote({ ...editingAttNote, note: e.target.value })}
+                                                    onBlur={() => handleUpdateAttachmentNote(att.id, editingAttNote.note)}
                                                     onKeyDown={e => {
                                                         if (e.key === 'Enter') handleUpdateAttachmentNote(att.id, editingAttNote.note);
                                                         if (e.key === 'Escape') setEditingAttNote(null);
@@ -843,7 +850,6 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                                     className="flex-1 bg-transparent text-white text-[11px] outline-none placeholder:text-gray-500 min-w-0"
                                                     placeholder="Wpisz notatkę..."
                                                 />
-                                                <button onClick={() => handleUpdateAttachmentNote(att.id, editingAttNote.note)} className="text-blue-400 shrink-0"><Save size={12}/></button>
                                             </div>
                                         ) : (
                                             <div
@@ -893,6 +899,51 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                     </button>
                 </div>
             </div>
+
+            {/* Lightbox */}
+            {lightboxAtt && (
+                <div
+                    className="fixed inset-0 z-[9999] bg-black/95 flex flex-col items-center justify-center"
+                    onClick={() => setLightboxAtt(null)}
+                >
+                    <button
+                        className="absolute top-4 right-4 p-2 bg-white/10 rounded-full text-white"
+                        onClick={() => setLightboxAtt(null)}
+                    >
+                        <X size={24} />
+                    </button>
+                    <button
+                        className="absolute top-4 left-4 p-2 bg-white/10 rounded-full text-blue-400"
+                        onClick={(e) => { e.stopPropagation(); downloadFile(lightboxAtt); }}
+                    >
+                        <Download size={24} />
+                    </button>
+                    <div
+                        style={{ display: 'grid', gridTemplateRows: '1fr', maxWidth: '90vw', maxHeight: '85vh' }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <img
+                            src={lightboxAtt.isPending ? lightboxAtt.fileUrl : getFileUrl(lightboxAtt.fileUrl)}
+                            alt="podgląd"
+                            style={{ gridRow: 1, gridColumn: 1, maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', display: 'block' }}
+                        />
+                        {lightboxAtt.note && (
+                            <div style={{
+                                gridRow: 1, gridColumn: 1,
+                                alignSelf: 'end',
+                                background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%)',
+                                color: '#fff',
+                                padding: '20px 16px 12px',
+                                fontSize: '13px',
+                                lineHeight: 1.4,
+                                pointerEvents: 'none',
+                            }}>
+                                {lightboxAtt.note}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </>
     );
 }
