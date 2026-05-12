@@ -2857,27 +2857,40 @@ ${materialsHtml}
     );
 
     const wbsBranchTable = useMemo(() => {
-        if (!budgetRows.length) return '';
+        if (!wbsData.length) return '';
         const byId = new Map(wbsData.map(n => [n.id, n]));
-        // BUD level = bezpośredni potomek roota (rodzic nie istnieje w byId)
-        const isRootChild = (n) => n && n.parentId && !byId.has(n.parentId);
+        // root = węzeł bez parentId lub którego parentId nie istnieje w byId
+        const isRoot = (n) => !n?.parentId || !byId.has(n.parentId);
+        // BUD = bezpośredni potomek roota
+        const isBud = (n) => n && !isRoot(n) && isRoot(byId.get(n.parentId));
         // Zwróć węzeł BUD (1. poziom) dla danej pozycji
         const getBudNode = (item) => {
             let cur = byId.get(item.id) || item;
-            while (cur && cur.parentId) {
+            if (isBud(cur)) return cur;
+            while (cur?.parentId) {
                 const p = byId.get(cur.parentId);
                 if (!p) break;
-                if (isRootChild(p)) return p;
+                if (isBud(p)) return p;
                 cur = p;
             }
-            return isRootChild(cur) ? cur : null;
+            return null;
         };
-        // Agreguj wartość ofertową per gałąź 1. poziomu — offerPrice gdy marża>0, inaczej totalCost
+        const offerPriceOf = (item) => {
+            const q = Math.max(0, parseFloat(item.quantity) || 0);
+            const uc = Math.max(0, parseFloat(item.unitCost) || 0);
+            const tc = uc * q || parseFloat(item.totalCost) || 0;
+            const m = (item.margin != null && String(item.margin) !== '') ? parseFloat(item.margin) : null;
+            const d = Math.max(0, parseFloat(item.discount) || 0);
+            let p = (m !== null && m !== 0) ? tc * (1 + m / 100) : tc;
+            if (p > 0 && d > 0) p = Math.max(0, p * (1 - d / 100));
+            return p;
+        };
         const byBud = new Map();
-        for (const row of budgetRows) {
-            const price = (row.offerPrice > 0 ? row.offerPrice : row.totalCost) || 0;
+        for (const item of wbsData) {
+            if (!item.parentId) continue;
+            const price = offerPriceOf(item);
             if (price <= 0) continue;
-            const budNode = getBudNode(row);
+            const budNode = getBudNode(item);
             if (!budNode) continue;
             if (!byBud.has(budNode.id)) byBud.set(budNode.id, { name: budNode.name || '', total: 0 });
             byBud.get(budNode.id).total += price;
@@ -2888,7 +2901,7 @@ ${materialsHtml}
         const total = entries.reduce((s, e) => s + e.total, 0);
         const tableRows = entries.map(e => `| ${e.name} | ${fmtPLN(e.total)} |`).join('\n');
         return `| Pozycja | Cena ofertowa (PLN) |\n|---|---|\n${tableRows}\n| **Razem** | **${fmtPLN(total)}** |`;
-    }, [budgetRows, wbsData]);
+    }, [wbsData]);
 
     const offerRevenueTotal = useMemo(() => {
         return wbsData.reduce((sum, item) => {
