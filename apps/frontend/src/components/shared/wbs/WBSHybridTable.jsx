@@ -1125,6 +1125,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                     {depth >= 1 && (
                         <input type="text" value={node.quantity || ''} onChange={e => handleField(node.id, 'quantity', e.target.value)}
+                            onFocus={e => e.target.select()} onMouseUp={e => e.target.select()}
                             onBlur={e => { onSave?.(); onRequirementsQtyChange?.(node.id, e.target.value, node.name); }}
                             placeholder="0" className={`bg-transparent border-none focus:outline-none text-xs w-full text-right placeholder-gray-700 ${d.fieldClass}`} />
                     )}

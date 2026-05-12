@@ -105,6 +105,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const [presetManagerOpen, setPresetManagerOpen] = useState(false);
     const [editingPreset, setEditingPreset] = useState(null); // { id, label, text } | null (null = nowy)
     const [editingPresetDraft, setEditingPresetDraft] = useState({ label: '', text: '' });
+    const presetTextareaRef = useRef(null);
 
     const savePresets = (next) => { setOfferPresets(next); localStorage.setItem(PRESETS_KEY, JSON.stringify(next)); };
     const openNewPreset = () => { setEditingPreset(null); setEditingPresetDraft({ label: '', text: '' }); };
@@ -1111,10 +1112,14 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
 
         const offerTextForPdf = (() => {
             let t = getOfferText() || 'Brak treści oferty';
-            // Podmień placeholder
-            t = t.replace(/\{tabela wbs\}/g, wbsBranchTable);
-            // Podmień zapisaną (hardkodowaną) tabelę markdown na świeżą
-            t = t.replace(/(\|[^\n]+\n\|[\s\-:|]+\n(?:\|[^\n]+\n?)+)/m, wbsBranchTable + '\n');
+            // Normalizacja: upewnij się że wiersz tabeli (|...) zaczyna od nowej linii
+            t = t.replace(/([^\n])(\|[^\n]+\n\|[\s\-:|]+)/g, '$1\n$2');
+            if (wbsBranchTable) {
+                // Podmień placeholder
+                t = t.replace(/\{tabela wbs\}/g, wbsBranchTable);
+                // Odśwież osadzoną tabelę świeżymi danymi
+                t = t.replace(/^(\|[^\n]+\n\|[\s\-:|]+\n(?:\|[^\n]+\n?)+)/m, wbsBranchTable + '\n');
+            }
             return t;
         })();
         const offerHtml = show('oferta') ? `
@@ -2543,7 +2548,7 @@ ${materialsHtml}
                 comment: row.comment ?? '',
             });
             // Sync WBS-visible fields to wbsTree (WBSHybridTable reads from wbsTree, not wbsData)
-            if (field === 'comment' || field === 'unit') {
+            if (field === 'comment' || field === 'unit' || field === 'quantity') {
                 setWbsTreeAndRef(prev => {
                     const upd = items => items.map(n =>
                         n.id === row.id
@@ -2852,52 +2857,38 @@ ${materialsHtml}
     );
 
     const wbsBranchTable = useMemo(() => {
-        if (!wbsData.length) return '';
+        if (!budgetRows.length) return '';
         const byId = new Map(wbsData.map(n => [n.id, n]));
-        // BUD level = węzeł którego rodzic nie ma w byId
+        // BUD level = bezpośredni potomek roota (rodzic nie istnieje w byId)
         const isRootChild = (n) => n && n.parentId && !byId.has(n.parentId);
-        // Zwróć { budNode, productNode } dla danego węzła
-        const getBudProduct = (item) => {
-            let cur = item;
-            let prev = null;
+        // Zwróć węzeł BUD (1. poziom) dla danej pozycji
+        const getBudNode = (item) => {
+            let cur = byId.get(item.id) || item;
             while (cur && cur.parentId) {
                 const p = byId.get(cur.parentId);
                 if (!p) break;
-                if (isRootChild(p)) return { budNode: p, productNode: cur };
-                prev = cur; cur = p;
+                if (isRootChild(p)) return p;
+                cur = p;
             }
-            if (cur && isRootChild(cur)) return { budNode: cur, productNode: prev || cur };
-            return { budNode: cur, productNode: prev || cur };
+            return isRootChild(cur) ? cur : null;
         };
-        const offerPriceOf = (item) => {
-            const q = Math.max(0, parseFloat(item.quantity) || 0);
-            const uc = Math.max(0, parseFloat(item.unitCost) || 0);
-            const tc = uc * q;
-            const m = (item.margin != null && String(item.margin) !== '') ? parseFloat(item.margin) : null;
-            const d = Math.max(0, parseFloat(item.discount) || 0);
-            let p = (m !== null && m !== 0) ? tc * (1 + m / 100) : (parseFloat(item.totalPrice) || 0);
-            if (p > 0 && d > 0) p = Math.max(0, p * (1 - d / 100));
-            return p;
-        };
-        // Zbierz ceny per produkt, pogrupowane pod BUD
-        const byProduct = new Map(); // productId → { budName, productName, total }
-        for (const item of wbsData) {
-            if (!item.parentId) continue;
-            const price = offerPriceOf(item);
+        // Agreguj wartość ofertową per gałąź 1. poziomu — offerPrice gdy marża>0, inaczej totalCost
+        const byBud = new Map();
+        for (const row of budgetRows) {
+            const price = (row.offerPrice > 0 ? row.offerPrice : row.totalCost) || 0;
             if (price <= 0) continue;
-            const { budNode, productNode } = getBudProduct(item);
-            if (!productNode) continue;
-            const key = productNode.id;
-            if (!byProduct.has(key)) byProduct.set(key, { budName: budNode?.name || '', productName: productNode.name || '', total: 0 });
-            byProduct.get(key).total += price;
+            const budNode = getBudNode(row);
+            if (!budNode) continue;
+            if (!byBud.has(budNode.id)) byBud.set(budNode.id, { name: budNode.name || '', total: 0 });
+            byBud.get(budNode.id).total += price;
         }
-        const entries = [...byProduct.values()].filter(e => e.total > 0)
-            .sort((a, b) => a.budName.localeCompare(b.budName) || a.productName.localeCompare(b.productName));
+        const entries = [...byBud.values()].filter(e => e.total > 0)
+            .sort((a, b) => a.name.localeCompare(b.name, 'pl'));
         if (!entries.length) return '';
         const total = entries.reduce((s, e) => s + e.total, 0);
-        const tableRows = entries.map(e => `| ${e.budName} › ${e.productName} | ${fmtPLN(e.total)} |`).join('\n');
+        const tableRows = entries.map(e => `| ${e.name} | ${fmtPLN(e.total)} |`).join('\n');
         return `| Pozycja | Cena ofertowa (PLN) |\n|---|---|\n${tableRows}\n| **Razem** | **${fmtPLN(total)}** |`;
-    }, [wbsData]);
+    }, [budgetRows, wbsData]);
 
     const offerRevenueTotal = useMemo(() => {
         return wbsData.reduce((sum, item) => {
@@ -3240,7 +3231,22 @@ ${materialsHtml}
                             versionId={versionId}
                             readOnly={!isManagerOrAdmin && !isLogistyk}
                             externalWbsNodes={wbsData}
-                            onPatchNode={(id, data) => setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))}
+                            onPatchNode={(id, data) => {
+                                setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n));
+                                if ('quantity' in data) {
+                                    const q = parseFloat(data.quantity) || 0;
+                                    setRequirementsQtyByNode(prev => ({ ...prev, [id]: q }));
+                                    updateLocalWbsBudgetRow(id, { quantity: q });
+                                    saveBudgetField(id, { quantity: q });
+                                    setWbsTreeAndRef(prev => {
+                                        const upd = items => items.map(n =>
+                                            n.id === id ? { ...n, quantity: q }
+                                            : { ...n, children: n.children?.length ? upd(n.children) : n.children }
+                                        );
+                                        return { ...prev, items: upd(prev.items || []) };
+                                    });
+                                }
+                            }}
                             onWbsUpdate={async () => { await refreshMaterialCosts(); }}
                             refreshKey={reqRefreshKey}
                             projectName={projectName}

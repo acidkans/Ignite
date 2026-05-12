@@ -200,9 +200,13 @@ export default function BudgetTable({
     const filteredSummary = useMemo(() => calcSummary(filteredRows), [filteredRows, calcSummary]);
     const isFiltered = filteredRows.length !== localRows.length;
 
-    const handleCellFocus = useCallback((rowId) => {
+    const handleCellFocus = useCallback((rowId, e) => {
         clearTimeout(blurTimer.current);
         setFocusedRowId(rowId);
+        if (e?.target?.select) e.target.select();
+    }, []);
+    const handleCellMouseUp = useCallback((e) => {
+        if (e.target.tagName === 'INPUT') e.target.select();
     }, []);
 
     const handleCellBlur = useCallback(() => {
@@ -235,7 +239,7 @@ export default function BudgetTable({
         const el = tableRef.current?.querySelector(`[data-row-id="${targetRowId}"][data-col="${targetColKey}"]`);
         if (el) {
             el.focus();
-            if (typeof el.select === 'function' && el.tagName !== 'SELECT') el.select();
+            if (typeof el.select === 'function' && el.tagName !== 'SELECT') setTimeout(() => el.select(), 0);
         }
     }, []);
 
@@ -441,7 +445,7 @@ export default function BudgetTable({
                                         key={`${row.id}-name-${syncVersion}`}
                                         defaultValue={row.name || ''}
                                         onBlur={e => { handleCellBlur(); if (e.target.value !== (row.name || '')) onFieldChange(row, 'name', e.target.value); }}
-                                        onFocus={() => handleCellFocus(row.id)}
+                                        onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
                                         onKeyDown={e => handleKeyDown(e, row.id, 'name')}
                                         dataRowId={row.id}
                                         dataCol="name"
@@ -453,7 +457,7 @@ export default function BudgetTable({
                                     <select
                                         value={row.type || ''}
                                         onChange={e => { handleChange(row.id, 'type', e.target.value); onFieldChange(row, 'type', e.target.value); }}
-                                        onFocus={() => handleCellFocus(row.id)}
+                                        onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
                                         onBlur={handleCellBlur}
                                         onKeyDown={e => handleKeyDown(e, row.id, 'type')}
                                         data-row-id={row.id}
@@ -476,7 +480,7 @@ export default function BudgetTable({
                                             if (n != null) e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                             onFieldChange(row, 'unitCost', e.target.value);
                                         }}
-                                        onFocus={() => handleCellFocus(row.id)}
+                                        onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
                                         onKeyDown={e => handleKeyDown(e, row.id, 'unitCost')}
                                         data-row-id={row.id}
                                         data-col="unitCost"
@@ -495,7 +499,7 @@ export default function BudgetTable({
                                             if (n != null) e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                             onFieldChange(row, 'quantity', e.target.value);
                                         }}
-                                        onFocus={() => handleCellFocus(row.id)}
+                                        onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
                                         onKeyDown={e => handleKeyDown(e, row.id, 'quantity')}
                                         data-row-id={row.id}
                                         data-col="quantity"
@@ -507,7 +511,7 @@ export default function BudgetTable({
                                     <select
                                         value={row.unit || ''}
                                         onChange={e => { handleChange(row.id, 'unit', e.target.value); onFieldChange(row, 'unit', e.target.value); }}
-                                        onFocus={() => handleCellFocus(row.id)}
+                                        onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
                                         onBlur={handleCellBlur}
                                         onKeyDown={e => handleKeyDown(e, row.id, 'unit')}
                                         data-row-id={row.id}
@@ -529,7 +533,7 @@ export default function BudgetTable({
                                         defaultValue={row.margin != null && row.margin !== 0 ? String(row.margin).replace('.', ',') : ''}
                                         onChange={e => handleChange(row.id, 'margin', e.target.value)}
                                         onBlur={e => { handleCellBlur(); onFieldChange(row, 'margin', e.target.value); }}
-                                        onFocus={() => handleCellFocus(row.id)}
+                                        onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
                                         onKeyDown={e => handleKeyDown(e, row.id, 'margin')}
                                         data-row-id={row.id}
                                         data-col="margin"
@@ -543,7 +547,7 @@ export default function BudgetTable({
                                         defaultValue={row.discount != null && row.discount !== 0 ? String(row.discount).replace('.', ',') : ''}
                                         onChange={e => handleChange(row.id, 'discount', e.target.value)}
                                         onBlur={e => { handleCellBlur(); onFieldChange(row, 'discount', e.target.value); }}
-                                        onFocus={() => handleCellFocus(row.id)}
+                                        onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
                                         onKeyDown={e => handleKeyDown(e, row.id, 'discount')}
                                         data-row-id={row.id}
                                         data-col="discount"
@@ -560,7 +564,7 @@ export default function BudgetTable({
                                         key={`${row.id}-comment-${syncVersion}`}
                                         defaultValue={row.comment || ''}
                                         onBlur={e => { handleCellBlur(); if (e.target.value !== (row.comment || '')) onFieldChange(row, 'comment', e.target.value); }}
-                                        onFocus={() => handleCellFocus(row.id)}
+                                        onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
                                         onKeyDown={e => handleKeyDown(e, row.id, 'comment')}
                                         dataRowId={row.id}
                                         dataCol="comment"
