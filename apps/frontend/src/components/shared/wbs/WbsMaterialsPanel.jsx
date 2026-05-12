@@ -176,10 +176,11 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     const [comboOpen, setComboOpen] = useState(null);
     const [localImageUrl, setLocalImageUrl] = useState(null);
     const [imageKey, setImageKey] = useState(0);
-    const [imageError, setImageError] = useState(false);
+    const [fetchedImageUrl, setFetchedImageUrl] = useState(null);
     const fileInputRef = useRef(null);
     const pasteInputRef = useRef(null);
     const localImageUrlRef = useRef(null);
+    const fetchedImageUrlRef = useRef(null);
 
     useEffect(() => {
         setFields({
@@ -193,11 +194,31 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
         });
     }, [card?.id, card?.manufacturer, card?.model, card?.productName, card?.productUrl]);
 
-    useEffect(() => { setImageError(false); }, [card?.id, imageKey]);
+    // Pobierz obrazek z auth nagłówkiem i stwórz blob URL (img src nie może wysłać Authorization)
+    useEffect(() => {
+        if (!card?.imageUrl || !card?.id) {
+            setFetchedImageUrl(null);
+            return;
+        }
+        let cancelled = false;
+        fetch(`${API_URL}/material-requirements/${card.id}/image?t=${imageKey}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        }).then(async res => {
+            if (!res.ok || cancelled) return;
+            const blob = await res.blob();
+            if (cancelled) return;
+            if (fetchedImageUrlRef.current) URL.revokeObjectURL(fetchedImageUrlRef.current);
+            const url = URL.createObjectURL(blob);
+            fetchedImageUrlRef.current = url;
+            setFetchedImageUrl(url);
+        }).catch(() => { if (!cancelled) setFetchedImageUrl(null); });
+        return () => { cancelled = true; };
+    }, [card?.id, card?.imageUrl, imageKey, token]);
 
     // Zwolnij objectURL przy odmontowaniu
     useEffect(() => () => {
         if (localImageUrlRef.current) URL.revokeObjectURL(localImageUrlRef.current);
+        if (fetchedImageUrlRef.current) URL.revokeObjectURL(fetchedImageUrlRef.current);
     }, []);
 
     const uploadBlob = useCallback(async (blob, filename = 'image.png') => {
@@ -413,12 +434,11 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                     aria-hidden="true"
                     style={{ position: 'absolute', opacity: 0, width: 0, height: 0, border: 'none', outline: 'none', padding: 0 }}
                 />
-                {(localImageUrl || (card.imageUrl && !imageError)) ? (
+                {(localImageUrl || fetchedImageUrl) ? (
                     <img
                         key={imageKey}
-                        src={localImageUrl || `${API_URL}/material-requirements/${card.id}/image?t=${imageKey}`}
+                        src={localImageUrl || fetchedImageUrl}
                         alt="podgląd"
-                        onError={() => setImageError(true)}
                         className="absolute inset-0 w-full h-full object-contain p-2"
                     />
                 ) : (
