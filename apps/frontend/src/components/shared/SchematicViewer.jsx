@@ -525,7 +525,20 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                             )}
                         </svg>
 
-                        {selectedSchematic.markers.filter(m => m.pageNumber === pageNumber && m.type !== 'LINE').map(m => {
+                        {selectedSchematic.markers.filter(m => m.pageNumber === pageNumber && m.type === 'TEXT').map(m => (
+                            <div
+                                key={m.id}
+                                className="absolute cursor-pointer z-10 select-none transform -translate-x-1/2 -translate-y-1/2"
+                                style={{ left: `${m.x}%`, top: `${m.y}%` }}
+                                onClick={(e) => { e.stopPropagation(); setSelectedMarker(m); }}
+                            >
+                                <div className="bg-orange-500/90 text-white text-[11px] font-bold px-1.5 py-0.5 rounded shadow-sm border border-orange-400 whitespace-nowrap">
+                                    {m.note}
+                                </div>
+                            </div>
+                        ))}
+
+                        {selectedSchematic.markers.filter(m => m.pageNumber === pageNumber && m.type !== 'LINE' && m.type !== 'TEXT').map(m => {
                             const isHovered = hoveredMarkerId === m.id;
                             const hasTooltip = !!(m.name || m.note);
                             return (
