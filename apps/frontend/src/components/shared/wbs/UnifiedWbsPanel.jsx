@@ -1313,13 +1313,15 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 if (!pm.has(pId)) pm.set(pId, { node: productNode, reqs: [] });
                 pm.get(pId).reqs.push(r);
             }
+            let matLp = 0;
             const rows = [...budMap.values()].flatMap(bud => {
                 const budLabel = bud.node?.name || '—';
-                const budRow = `<tr><td colspan="7" style="text-align:left;font-weight:bold;font-size:15px;background:#1a1a2e;color:#fff;padding:6px 10px;border-bottom:2px solid #1a1a2e">${esc(budLabel)}</td></tr>`;
+                const budRow = `<tr><td colspan="8" style="text-align:left;font-weight:bold;font-size:15px;background:#1a1a2e;color:#fff;padding:6px 10px;border-bottom:2px solid #1a1a2e">${esc(budLabel)}</td></tr>`;
                 const prodRows = [...bud.prodMap.values()].flatMap(prod => {
                     const prodLabel = prod.node?.name || '—';
-                    const prodHeader = `<tr><td colspan="7" style="text-align:left;font-weight:bold;font-size:12px;background:#f0f4ff;padding:5px 8px 5px 20px;border-bottom:1px solid #1a1a2e;color:#1a1a2e"><span>${esc(prodLabel)}</span></td></tr>`;
+                    const prodHeader = `<tr><td colspan="8" style="text-align:left;font-weight:bold;font-size:12px;background:#f0f4ff;padding:5px 8px 5px 20px;border-bottom:1px solid #1a1a2e;color:#1a1a2e"><span>${esc(prodLabel)}</span></td></tr>`;
                     const matRows = prod.reqs.map(r => {
+                        matLp++;
                         const name = esc(r.name || r.productName || '—');
                         const manufacturer = esc(r.manufacturer || r.producent || '—');
                         const model = esc(r.model || '—');
@@ -1328,7 +1330,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                         const qtyStr = qty != null ? `${qty}` : '—';
                         const unit = esc(r.unit || '');
                         const spec = esc(String(r.technicalSpec || '').slice(0, 120));
-                        return `<tr><td style="text-align:left;padding-left:28px">${name}</td><td>${manufacturer}</td><td>${model}</td><td>${tradeName}</td><td class="num">${qtyStr}</td><td>${unit}</td><td style="font-size:9px;color:#6b7280;text-align:left">${spec}</td></tr>`;
+                        return `<tr><td class="mat-lp">${matLp}</td><td class="mat-name">${name}</td><td class="mat-txt">${manufacturer}</td><td class="mat-txt">${model}</td><td class="mat-txt">${tradeName}</td><td class="mat-num">${qtyStr}</td><td class="mat-txt">${unit}</td><td class="mat-spec">${spec}</td></tr>`;
                     });
                     return [prodHeader, ...matRows];
                 });
@@ -1338,8 +1340,18 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             return `
             <div class="section" style="${pageBreak}">
                 <div class="section-header">Materiały</div>
-                <table>
-                    <thead><tr><th>Nazwa</th><th>Producent</th><th>Model</th><th>Nazwa handlowa</th><th>Ilość</th><th>Jedn.</th><th>Specyfikacja</th></tr></thead>
+                <table class="mat-table">
+                    <colgroup>
+                        <col style="width:4%">
+                        <col style="width:25%">
+                        <col style="width:14%">
+                        <col style="width:13%">
+                        <col style="width:13%">
+                        <col style="width:6%">
+                        <col style="width:5%">
+                        <col style="width:20%">
+                    </colgroup>
+                    <thead><tr><th class="mat-lp">Lp.</th><th style="text-align:left">Nazwa</th><th style="text-align:left">Producent</th><th style="text-align:left">Model</th><th style="text-align:left">Nazwa handlowa</th><th class="mat-num">Ilość</th><th style="text-align:left">Jedn.</th><th style="text-align:left">Specyfikacja</th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
             </div>`;
@@ -1377,6 +1389,13 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   table { border-collapse: collapse; width: 100%; }
   td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; text-align: center; }
   td.num { text-align: center; font-family: monospace; font-size: 10px; }
+  table.mat-table { table-layout: fixed; width: 100%; font-size: 10px; }
+  table.mat-table th { text-align: left; font-size: 9px; padding: 4px 6px; }
+  td.mat-lp, th.mat-lp { text-align: center; color: #6b7280; font-size: 9px; padding: 4px 4px; }
+  td.mat-name { text-align: left; padding-left: 20px; font-size: 10px; }
+  td.mat-txt { text-align: left; font-size: 10px; }
+  td.mat-num { text-align: right; font-family: monospace; font-size: 10px; }
+  td.mat-spec { text-align: left; font-size: 9px; color: #6b7280; }
   tr:nth-child(even) td { background: #f9fafb; }
   .budget-table td { font-size: 12px; }
   .budget-table td.num { font-size: 11px; }
