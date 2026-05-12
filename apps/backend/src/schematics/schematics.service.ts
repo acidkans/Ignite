@@ -25,6 +25,7 @@ export class SchematicsService {
     private getFileType(mimeType: string): string {
         if (mimeType.startsWith('image/')) return 'IMAGE';
         if (mimeType.startsWith('audio/')) return 'AUDIO';
+        if (mimeType.startsWith('video/')) return 'VIDEO';
         return 'FILE';
     }
 
