@@ -1332,7 +1332,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                     const prodHeader = `<tr><td colspan="9" style="text-align:left;font-weight:bold;font-size:12px;background:#f0f4ff;padding:5px 8px 5px 20px;border-bottom:1px solid #1a1a2e;color:#1a1a2e"><span>${esc(prodLabel)}</span></td></tr>`;
                     const matRows = prod.reqs.map(r => {
                         matLp++;
-                        const name = esc(r.name || r.productName || '—');
+                        const wbsNodeId = getWbsNodeId(r);
+                        const wbsNode = wbsNodeId ? wbsNodeById.get(String(wbsNodeId)) : null;
+                        const name = esc(wbsNode?.name || r.name || r.productName || '—');
                         const manufacturer = esc(r.manufacturer || r.producent || '—');
                         const model = esc(r.model || '—');
                         const tradeName = esc(r.tradeName || r.nazwHandlowa || r.nazwaHandlowa || '—');
