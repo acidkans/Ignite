@@ -176,6 +176,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     const [comboOpen, setComboOpen] = useState(null);
     const [localImageUrl, setLocalImageUrl] = useState(null);
     const [imageKey, setImageKey] = useState(0);
+    const [imageError, setImageError] = useState(false);
     const fileInputRef = useRef(null);
     const pasteInputRef = useRef(null);
     const localImageUrlRef = useRef(null);
@@ -191,6 +192,8 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
             productUrl: card?.productUrl || '',
         });
     }, [card?.id, card?.manufacturer, card?.model, card?.productName, card?.productUrl]);
+
+    useEffect(() => { setImageError(false); }, [card?.id, imageKey]);
 
     // Zwolnij objectURL przy odmontowaniu
     useEffect(() => () => {
@@ -410,11 +413,12 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                     aria-hidden="true"
                     style={{ position: 'absolute', opacity: 0, width: 0, height: 0, border: 'none', outline: 'none', padding: 0 }}
                 />
-                {(localImageUrl || card.imageUrl) ? (
+                {(localImageUrl || (card.imageUrl && !imageError)) ? (
                     <img
                         key={imageKey}
                         src={localImageUrl || `${API_URL}/material-requirements/${card.id}/image?t=${imageKey}`}
                         alt="podgląd"
+                        onError={() => setImageError(true)}
                         className="absolute inset-0 w-full h-full object-contain p-2"
                     />
                 ) : (
@@ -501,6 +505,7 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                 {editQty && !readOnly ? (
                     <input autoFocus value={qtyVal}
                         onChange={e => setQtyVal(e.target.value)}
+                        onFocus={e => e.target.select()} onMouseUp={e => e.target.select()}
                         onBlur={handleQtyBlur}
                         onKeyDown={e => { if (e.key === 'Enter') handleQtyBlur(); if (e.key === 'Escape') { setQtyVal(String(node.quantity ?? 1)); setEditQty(false); } }}
                         className="w-16 bg-black/30 border border-blue-500/50 rounded px-2 py-0.5 text-sm text-white outline-none" />
@@ -531,6 +536,7 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                 {editPrice && !readOnly && card ? (
                     <input autoFocus value={priceVal}
                         onChange={e => setPriceVal(e.target.value)}
+                        onFocus={e => e.target.select()} onMouseUp={e => e.target.select()}
                         onBlur={handlePriceBlur}
                         onKeyDown={e => { if (e.key === 'Enter') handlePriceBlur(); if (e.key === 'Escape') { setPriceVal(card?.priceNetto != null ? String(card.priceNetto) : ''); setEditPrice(false); } }}
                         placeholder="0.00"
