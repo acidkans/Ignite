@@ -1122,17 +1122,38 @@ export default function WbsMaterialsPanel({
         URL.revokeObjectURL(url);
     }, [matNodes, cards, orderName, projectName]);
 
-    const exportToPdf = useCallback(() => {
-        const STATUS_LABELS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
-        const cols = ['Przedmiot projektu', 'Nazwa', 'Wymagania techniczne', 'Ilość', 'Produkt', 'Cena netto', 'Status'];
+    const exportToPdf = useCallback(async () => {
+        const cols = ['Przedmiot projektu', 'Nazwa', 'Wymagania techniczne', 'Ilość', 'Produkt', 'Zdjęcie'];
+
+        // Pobierz obrazki z auth headerem i zakoduj do base64
+        const imageBase64 = {};
+        await Promise.all(sortedFilteredNodes.map(async node => {
+            const card = cards[node.id];
+            if (!card?.imageUrl || !card?.id) return;
+            try {
+                const res = await fetch(`${API_URL}/material-requirements/${card.id}/image`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!res.ok) return;
+                const blob = await res.blob();
+                const b64 = await new Promise(resolve => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.readAsDataURL(blob);
+                });
+                imageBase64[node.id] = b64;
+            } catch {}
+        }));
+
         const bodyRows = sortedFilteredNodes.map(node => {
             const card = cards[node.id] || null;
             const parent = getParentPath(node.path);
             const product = [card?.manufacturer, card?.model].filter(Boolean).join(' / ') || '—';
-            const price = card?.priceNetto != null ? `${Number(card.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—';
-            const status = STATUS_LABELS[card?.status] || '—';
             const techSpec = (card?.technicalSpec || '—').replace(/\n/g, '<br>');
-            return [parent, node.name || '—', techSpec, `${node.quantity ?? 1} ${node.unit || 'szt'}`, product, price, status];
+            const imgCell = imageBase64[node.id]
+                ? `<img src="${imageBase64[node.id]}" style="max-width:80px;max-height:80px;object-fit:contain;" />`
+                : '—';
+            return [parent, node.name || '—', techSpec, `${node.quantity ?? 1} ${node.unit || 'szt'}`, product, imgCell];
         });
 
         const safeOrderPdf = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'zamowienie';
@@ -1164,7 +1185,7 @@ export default function WbsMaterialsPanel({
         win.document.close();
         win.focus();
         setTimeout(() => { win.print(); }, 400);
-    }, [sortedFilteredNodes, cards]);
+    }, [sortedFilteredNodes, cards, token]);
 
     // Notify parent when export functions update
     useEffect(() => { onExportReady?.(exportToExcel); }, [exportToExcel]);
