@@ -1018,7 +1018,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 html += '<br>';
             } else {
                 resetOl();
-                html += `<p style="margin:0 0 4px 0">${bold(raw)}</p>`;
+                const wsMatch = raw.match(/^(\s+)/);
+                const indentEm = wsMatch ? wsMatch[1].replace(/\t/g, '    ').length * 0.55 : 0;
+                const indentStyle = indentEm > 0 ? `text-indent:${indentEm.toFixed(1)}em;` : '';
+                html += `<p style="margin:0 0 4px 0;${indentStyle}">${bold(raw.trimStart())}</p>`;
             }
             idx++;
         }
