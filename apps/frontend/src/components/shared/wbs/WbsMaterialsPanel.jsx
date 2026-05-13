@@ -893,7 +893,7 @@ export default function WbsMaterialsPanel({
             });
             if (res.ok) {
                 const data = await res.json();
-                setMaterialDb(data.map(m => ({ ...m, manufacturer: normalizeName(m.manufacturer) })));
+                setMaterialDb(data.map(m => ({ ...m, manufacturer: m.manufacturer ? m.manufacturer.toUpperCase() : m.manufacturer })));
             }
         } catch {}
     }, [token]);
