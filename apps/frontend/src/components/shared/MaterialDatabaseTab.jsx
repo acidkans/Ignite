@@ -260,7 +260,7 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
                                             <tr key={`ds-${r.id}`} className="border-b border-white/5 hover:bg-white/[0.02] group transition-colors">
                                                 <td className="px-3 py-2 text-gray-200 max-w-[200px]"><span className="line-clamp-2" title={r.productName || '—'}>{r.productName || <span className="text-gray-500">—</span>}</span></td>
                                                 <td className="px-3 py-2"><span className="px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-300 text-[10px] font-semibold">{TYPE_LABELS[r.type] || r.type}</span></td>
-                                                <td className="px-3 py-2 text-gray-300">{r.manufacturer || '—'}</td>
+                                                <td className="px-3 py-2 text-gray-300">{r.manufacturer ? r.manufacturer.toUpperCase() : '—'}</td>
                                                 <td className="px-3 py-2 text-gray-400 font-mono">{r.model || '—'}</td>
                                                 <td className="px-3 py-2 text-right text-gray-600">{r.stockStatus ? `${r.stockStatus} szt` : '—'}</td>
                                                 <td className="px-3 py-2 text-gray-500 text-[10px] max-w-[180px]"><span className="truncate block" title={r.dataSheetName}>{r.dataSheetName || '—'}</span></td>

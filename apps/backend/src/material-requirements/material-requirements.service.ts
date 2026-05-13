@@ -378,6 +378,7 @@ export class MaterialRequirementsService {
         await this.findOne(id);
         const data = { ...dto };
         if (data.productName === null || data.productName === undefined) delete data.productName;
+        if (data.manufacturer) data.manufacturer = data.manufacturer.toUpperCase();
 
         // Jedno źródło prawdy dla quantity: WbsNode.
         // - 1 alokacja → update WbsNode.quantity (cascade: WbsNodeMaterial + MR.quantity + JSON)
@@ -1039,7 +1040,7 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
             if (!Array.isArray(items)) return [];
             const mapped = items.map(item => ({
                 productName: String(item.productName || '').slice(0, 300),
-                manufacturer: item.manufacturer ? String(item.manufacturer).slice(0, 200) : null,
+                manufacturer: item.manufacturer ? String(item.manufacturer).slice(0, 200).toUpperCase() : null,
                 model: item.model ? String(item.model).slice(0, 200) : null,
                 type: ['DEVICE', 'MATERIAL', 'CABLE', 'SOFTWARE', 'SERVICE'].includes(item.type) ? item.type : 'DEVICE',
             })).filter(i => i.productName.length > 0);
@@ -1066,7 +1067,7 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
         const results: any[] = [];
         for (const item of items) {
             const productName = String(item.productName).slice(0, 300);
-            const manufacturer = item.manufacturer ? String(item.manufacturer).slice(0, 200) : null;
+            const manufacturer = item.manufacturer ? String(item.manufacturer).slice(0, 200).toUpperCase() : null;
             const model = item.model ? String(item.model).slice(0, 200) : null;
 
             const existing = await this.prisma.materialRequirement.findFirst({

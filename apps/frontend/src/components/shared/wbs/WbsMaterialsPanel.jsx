@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import ExcelJS from 'exceljs';
 import {
     ChevronRight, ChevronDown, Package, Wrench,
     CheckCircle, Clock, XCircle, Star, Trash2, AlertCircle,
     ShoppingCart, Warehouse, LogOut, Plus, Search, Sparkles,
-    FileText, Link as LinkIcon, Download,
+    FileText, Link as LinkIcon, Download, BookOpen, X,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { UNIT_OPTIONS } from './wbsConstants';
@@ -177,10 +178,18 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     const [localImageUrl, setLocalImageUrl] = useState(null);
     const [imageKey, setImageKey] = useState(0);
     const [fetchedImageUrl, setFetchedImageUrl] = useState(null);
+    const [showCatalogModal, setShowCatalogModal] = useState(false);
+    const [catalogImageUrl, setCatalogImageUrl] = useState(null);
     const fileInputRef = useRef(null);
     const pasteInputRef = useRef(null);
     const localImageUrlRef = useRef(null);
     const fetchedImageUrlRef = useRef(null);
+    const catalogImageUrlRef = useRef(null);
+
+    const linkedMaterial = useMemo(
+        () => materialDb?.find(m => m.id === card?.materialId) || null,
+        [materialDb, card?.materialId]
+    );
 
     useEffect(() => {
         setFields({
@@ -215,10 +224,33 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
         return () => { cancelled = true; };
     }, [card?.id, card?.imageUrl, imageKey, token]);
 
+    // Pobierz obrazek dla karty katalogowej gdy modal otwarty
+    useEffect(() => {
+        if (!showCatalogModal || !linkedMaterial?.id) {
+            if (catalogImageUrlRef.current) { URL.revokeObjectURL(catalogImageUrlRef.current); catalogImageUrlRef.current = null; }
+            setCatalogImageUrl(null);
+            return;
+        }
+        let cancelled = false;
+        fetch(`${API_URL}/material-requirements/${linkedMaterial.id}/image`, {
+            headers: { Authorization: `Bearer ${token}` },
+        }).then(async res => {
+            if (!res.ok || cancelled) return;
+            const blob = await res.blob();
+            if (cancelled) return;
+            if (catalogImageUrlRef.current) URL.revokeObjectURL(catalogImageUrlRef.current);
+            const url = URL.createObjectURL(blob);
+            catalogImageUrlRef.current = url;
+            setCatalogImageUrl(url);
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [showCatalogModal, linkedMaterial?.id, token]);
+
     // Zwolnij objectURL przy odmontowaniu
     useEffect(() => () => {
         if (localImageUrlRef.current) URL.revokeObjectURL(localImageUrlRef.current);
         if (fetchedImageUrlRef.current) URL.revokeObjectURL(fetchedImageUrlRef.current);
+        if (catalogImageUrlRef.current) URL.revokeObjectURL(catalogImageUrlRef.current);
     }, []);
 
     const uploadBlob = useCallback(async (blob, filename = 'image.png') => {
@@ -304,6 +336,8 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
             if (mat.productName) { uiFields.productName = mat.productName; updates.productName = mat.productName; }
             if (mat.dataSheetUrl) { updates.dataSheetUrl = mat.dataSheetUrl; updates.dataSheetName = mat.dataSheetName || mat.productName || 'karta.pdf'; }
         }
+        if (uiFields.manufacturer) uiFields.manufacturer = uiFields.manufacturer.toUpperCase();
+        if (updates.manufacturer) updates.manufacturer = updates.manufacturer.toUpperCase();
         setFields(prev => ({ ...prev, ...uiFields }));
         setComboOpen(null);
         if (Object.keys(updates).length > 0) await patchCard(updates);
@@ -318,6 +352,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     if (!card) return null;
 
     return (
+        <>
         <div className="flex gap-0 p-0">
             {/* Lewa kolumna — pola (zwężona) */}
             <div className="flex flex-col gap-3 p-4 flex-1 min-w-0">
@@ -330,7 +365,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                 <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">{label}</label>
                                 <input
                                     value={fields[key]}
-                                    onChange={e => setF(key, e.target.value)}
+                                    onChange={e => setF(key, key === 'manufacturer' ? e.target.value.toUpperCase() : e.target.value)}
                                     onFocus={() => setComboOpen(key)}
                                     onBlur={() => setTimeout(() => setComboOpen(null), 150)}
                                     onKeyDown={e => { if (e.key === 'Enter') { setComboOpen(null); patchCard({ [key]: fields[key] }); } }}
@@ -416,6 +451,19 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                 {!readOnly && <ProposalsSection req={card} token={token} onRefresh={onRefresh} />}
             </div>
 
+            {/* Ikona karty katalogowej — widoczna gdy materiał zaciągnięty z bazy */}
+            {linkedMaterial && (
+                <div className="flex flex-col items-center justify-start pt-3 w-7 flex-shrink-0 border-l border-white/5">
+                    <button
+                        onClick={() => setShowCatalogModal(true)}
+                        title="Karta katalogowa"
+                        className="p-1.5 rounded hover:bg-white/10 text-blue-400/60 hover:text-blue-300 transition-colors"
+                    >
+                        <BookOpen size={13} />
+                    </button>
+                </div>
+            )}
+
             {/* Prawa kolumna — kliknięcie = file picker, hover+Ctrl+V = schowek */}
             <div
                 onMouseEnter={() => !readOnly && pasteInputRef.current?.focus()}
@@ -449,6 +497,59 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                 )}
             </div>
         </div>
+
+        {/* Modal karty katalogowej */}
+        {showCatalogModal && linkedMaterial && createPortal(
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70" onClick={() => setShowCatalogModal(false)}>
+                <div className="bg-[#0d1520] border border-white/15 rounded-2xl shadow-2xl w-80 overflow-hidden" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                        <div className="flex items-center gap-2 text-[10px] text-blue-400 uppercase tracking-widest font-bold">
+                            <BookOpen size={12} /> Karta katalogowa
+                        </div>
+                        <button onClick={() => setShowCatalogModal(false)} className="text-gray-500 hover:text-gray-300 transition-colors">
+                            <X size={14} />
+                        </button>
+                    </div>
+                    {catalogImageUrl && (
+                        <div className="w-full h-36 bg-black/30 border-b border-white/5">
+                            <img src={catalogImageUrl} alt="produkt" className="w-full h-full object-contain p-2" />
+                        </div>
+                    )}
+                    <div className="p-4 flex flex-col gap-2 text-xs">
+                        {linkedMaterial.manufacturer && (
+                            <div className="flex gap-2"><span className="text-gray-500 w-20 flex-shrink-0">Producent</span><span className="text-white font-semibold">{linkedMaterial.manufacturer.toUpperCase()}</span></div>
+                        )}
+                        {linkedMaterial.model && (
+                            <div className="flex gap-2"><span className="text-gray-500 w-20 flex-shrink-0">Model</span><span className="text-gray-200">{linkedMaterial.model}</span></div>
+                        )}
+                        {linkedMaterial.productName && (
+                            <div className="flex gap-2"><span className="text-gray-500 w-20 flex-shrink-0">Nazwa</span><span className="text-gray-200">{linkedMaterial.productName}</span></div>
+                        )}
+                        {linkedMaterial.stockStatus != null && (
+                            <div className="flex gap-2"><span className="text-gray-500 w-20 flex-shrink-0">Magazyn</span><span className="text-gray-200">{linkedMaterial.stockStatus} szt.</span></div>
+                        )}
+                    </div>
+                    {(linkedMaterial.dataSheetUrl || linkedMaterial.complianceUrl) && (
+                        <div className="px-4 pb-4 flex flex-col gap-2">
+                            {linkedMaterial.dataSheetUrl && (
+                                <a href={linkedMaterial.dataSheetUrl} target="_blank" rel="noopener noreferrer"
+                                    className="flex items-center justify-center gap-1.5 px-3 py-2 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 rounded-lg text-teal-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                                    <FileText size={11} /> Karta katalogowa (PDF)
+                                </a>
+                            )}
+                            {linkedMaterial.complianceUrl && (
+                                <a href={linkedMaterial.complianceUrl} target="_blank" rel="noopener noreferrer"
+                                    className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                                    <FileText size={11} /> Deklaracja zgodności
+                                </a>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>,
+            document.body
+        )}
+        </>
     );
 }
 
