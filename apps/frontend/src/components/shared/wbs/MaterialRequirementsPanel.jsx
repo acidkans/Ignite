@@ -181,9 +181,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
             const res = await fetch(`${API_URL}/material-requirements/all-materials`, { headers });
             if (res.ok) {
                 const data = await res.json();
-                // Normalize manufacturer names: first letter uppercase, rest lowercase
-                const normalize = s => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
-                setMaterialDb(data.map(m => ({ ...m, manufacturer: normalize(m.manufacturer) })));
+                setMaterialDb(data.map(m => ({ ...m, manufacturer: m.manufacturer ? m.manufacturer.toUpperCase() : m.manufacturer })));
             }
         } catch {}
     }, []);
