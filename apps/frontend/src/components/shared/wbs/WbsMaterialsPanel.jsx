@@ -193,11 +193,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     const localImageUrlRef = useRef(null);
     const fetchedImageUrlRef = useRef(null);
     const catalogImageUrlRef = useRef(null);
-
-    const linkedMaterial = useMemo(
-        () => materialDb?.find(m => m.id === card?.materialId) || null,
-        [materialDb, card?.materialId]
-    );
+    const [catalogMaterial, setCatalogMaterial] = useState(null);
 
     useEffect(() => {
         setFields({
@@ -232,15 +228,25 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
         return () => { cancelled = true; };
     }, [card?.id, card?.imageUrl, imageKey, token]);
 
-    // Pobierz obrazek dla karty katalogowej gdy modal otwarty
+    // Pobierz dane i obrazek karty katalogowej gdy modal otwarty
     useEffect(() => {
-        if (!showCatalogModal || !linkedMaterial?.id) {
+        if (!showCatalogModal || !card?.materialId) {
             if (catalogImageUrlRef.current) { URL.revokeObjectURL(catalogImageUrlRef.current); catalogImageUrlRef.current = null; }
             setCatalogImageUrl(null);
+            setCatalogMaterial(null);
             return;
         }
         let cancelled = false;
-        fetch(`${API_URL}/material-requirements/${linkedMaterial.id}/image`, {
+        // Fetch danych materiału
+        fetch(`${API_URL}/material-requirements/${card.materialId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        }).then(async res => {
+            if (!res.ok || cancelled) return;
+            const data = await res.json();
+            if (!cancelled) setCatalogMaterial(data);
+        }).catch(() => {});
+        // Fetch obrazka
+        fetch(`${API_URL}/material-requirements/${card.materialId}/image`, {
             headers: { Authorization: `Bearer ${token}` },
         }).then(async res => {
             if (!res.ok || cancelled) return;
@@ -252,7 +258,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
             setCatalogImageUrl(url);
         }).catch(() => {});
         return () => { cancelled = true; };
-    }, [showCatalogModal, linkedMaterial?.id, token]);
+    }, [showCatalogModal, card?.materialId, token]);
 
     // Zwolnij objectURL przy odmontowaniu
     useEffect(() => () => {
@@ -406,10 +412,6 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                             </div>
                         );
                     })}
-                </div>
-
-                {/* Dane ofertowe + URL */}
-                <div className="flex flex-wrap gap-2">
                     <div className="flex-1 min-w-[90px]">
                         <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Cena netto</label>
                         <input value={fields.priceNetto} onChange={e => setF('priceNetto', e.target.value)}
@@ -472,7 +474,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
             </div>
 
             {/* Ikona karty katalogowej — widoczna gdy materiał zaciągnięty z bazy */}
-            {linkedMaterial && (
+            {card?.materialId && (
                 <div className="flex flex-col items-center justify-start pt-3 w-7 flex-shrink-0 border-l border-white/5">
                     <button
                         onClick={() => setShowCatalogModal(true)}
@@ -519,7 +521,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
         </div>
 
         {/* Modal karty katalogowej */}
-        {showCatalogModal && linkedMaterial && createPortal(
+        {showCatalogModal && createPortal(
             <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70" onClick={() => setShowCatalogModal(false)}>
                 <div className="bg-[#0d1520] border border-white/15 rounded-2xl shadow-2xl w-80 overflow-hidden" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
@@ -535,35 +537,42 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                             <img src={catalogImageUrl} alt="produkt" className="w-full h-full object-contain p-2" />
                         </div>
                     )}
-                    <div className="p-4 flex flex-col gap-2 text-xs">
-                        {linkedMaterial.manufacturer && (
-                            <div className="flex gap-2"><span className="text-gray-500 w-20 flex-shrink-0">Producent</span><span className="text-white font-semibold">{linkedMaterial.manufacturer.toUpperCase()}</span></div>
-                        )}
-                        {linkedMaterial.model && (
-                            <div className="flex gap-2"><span className="text-gray-500 w-20 flex-shrink-0">Model</span><span className="text-gray-200">{linkedMaterial.model}</span></div>
-                        )}
-                        {linkedMaterial.productName && (
-                            <div className="flex gap-2"><span className="text-gray-500 w-20 flex-shrink-0">Nazwa</span><span className="text-gray-200">{linkedMaterial.productName}</span></div>
-                        )}
-                        {linkedMaterial.stockStatus != null && (
-                            <div className="flex gap-2"><span className="text-gray-500 w-20 flex-shrink-0">Magazyn</span><span className="text-gray-200">{linkedMaterial.stockStatus} szt.</span></div>
-                        )}
-                    </div>
-                    {(linkedMaterial.dataSheetUrl || linkedMaterial.complianceUrl) && (
-                        <div className="px-4 pb-4 flex flex-col gap-2">
-                            {linkedMaterial.dataSheetUrl && (
-                                <a href={linkedMaterial.dataSheetUrl} target="_blank" rel="noopener noreferrer"
-                                    className="flex items-center justify-center gap-1.5 px-3 py-2 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 rounded-lg text-teal-300 text-[10px] font-bold uppercase tracking-widest transition-all">
-                                    <FileText size={11} /> Karta katalogowa (PDF)
-                                </a>
+                    {!catalogMaterial && (
+                        <div className="p-4 text-xs text-gray-500 text-center">Ładowanie...</div>
+                    )}
+                    {catalogMaterial && (
+                        <>
+                        <div className="p-4 flex flex-col gap-2 text-xs">
+                            {catalogMaterial.manufacturer && (
+                                <div className="flex gap-2"><span className="text-gray-500 w-20 flex-shrink-0">Producent</span><span className="text-white font-semibold">{catalogMaterial.manufacturer.toUpperCase()}</span></div>
                             )}
-                            {linkedMaterial.complianceUrl && (
-                                <a href={linkedMaterial.complianceUrl} target="_blank" rel="noopener noreferrer"
-                                    className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
-                                    <FileText size={11} /> Deklaracja zgodności
-                                </a>
+                            {catalogMaterial.model && (
+                                <div className="flex gap-2"><span className="text-gray-500 w-20 flex-shrink-0">Model</span><span className="text-gray-200">{catalogMaterial.model}</span></div>
+                            )}
+                            {catalogMaterial.productName && (
+                                <div className="flex gap-2"><span className="text-gray-500 w-20 flex-shrink-0">Nazwa</span><span className="text-gray-200">{catalogMaterial.productName}</span></div>
+                            )}
+                            {catalogMaterial.stockStatus != null && (
+                                <div className="flex gap-2"><span className="text-gray-500 w-20 flex-shrink-0">Magazyn</span><span className="text-gray-200">{catalogMaterial.stockStatus} szt.</span></div>
                             )}
                         </div>
+                        {(catalogMaterial.dataSheetUrl || catalogMaterial.complianceUrl) && (
+                            <div className="px-4 pb-4 flex flex-col gap-2">
+                                {catalogMaterial.dataSheetUrl && (
+                                    <a href={catalogMaterial.dataSheetUrl} target="_blank" rel="noopener noreferrer"
+                                        className="flex items-center justify-center gap-1.5 px-3 py-2 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 rounded-lg text-teal-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                                        <FileText size={11} /> Karta katalogowa (PDF)
+                                    </a>
+                                )}
+                                {catalogMaterial.complianceUrl && (
+                                    <a href={catalogMaterial.complianceUrl} target="_blank" rel="noopener noreferrer"
+                                        className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                                        <FileText size={11} /> Deklaracja zgodności
+                                    </a>
+                                )}
+                            </div>
+                        )}
+                        </>
                     )}
                 </div>
             </div>,
