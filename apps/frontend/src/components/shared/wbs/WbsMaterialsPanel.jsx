@@ -335,26 +335,16 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
         }).sort((a, b) => (a[fieldKey] || '').localeCompare(b[fieldKey] || ''));
     }, [materialDb, fields]);
 
-    const selectMaterial = useCallback(async (mat, fromField) => {
+    const selectMaterial = useCallback(async (mat) => {
         const uiFields = {};
-        const updates = {};
-        if (fromField === 'manufacturer') {
-            if (mat.manufacturer) { uiFields.manufacturer = mat.manufacturer; updates.manufacturer = mat.manufacturer; }
-        } else if (fromField === 'model') {
-            if (mat.manufacturer) { uiFields.manufacturer = mat.manufacturer; updates.manufacturer = mat.manufacturer; }
-            if (mat.model) { uiFields.model = mat.model; updates.model = mat.model; }
-        } else {
-            updates.materialId = mat.id;
-            if (mat.manufacturer) { uiFields.manufacturer = mat.manufacturer; updates.manufacturer = mat.manufacturer; }
-            if (mat.model) { uiFields.model = mat.model; updates.model = mat.model; }
-            if (mat.productName) { uiFields.productName = mat.productName; updates.productName = mat.productName; }
-            if (mat.dataSheetUrl) { updates.dataSheetUrl = mat.dataSheetUrl; updates.dataSheetName = mat.dataSheetName || mat.productName || 'karta.pdf'; }
-        }
-        if (uiFields.manufacturer) uiFields.manufacturer = uiFields.manufacturer.toUpperCase();
-        if (updates.manufacturer) updates.manufacturer = updates.manufacturer.toUpperCase();
+        const updates = { materialId: mat.id };
+        if (mat.manufacturer) { uiFields.manufacturer = mat.manufacturer.toUpperCase(); updates.manufacturer = mat.manufacturer.toUpperCase(); }
+        if (mat.model) { uiFields.model = mat.model; updates.model = mat.model; }
+        if (mat.productName) { uiFields.productName = mat.productName; updates.productName = mat.productName; }
+        if (mat.dataSheetUrl) { updates.dataSheetUrl = mat.dataSheetUrl; updates.dataSheetName = mat.dataSheetName || mat.productName || 'karta.pdf'; }
         setFields(prev => ({ ...prev, ...uiFields }));
         setComboOpen(null);
-        if (Object.keys(updates).length > 0) await patchCard(updates);
+        await patchCard(updates);
     }, [patchCard]);
 
     const comboFields = [
@@ -383,22 +373,22 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                     onFocus={() => setComboOpen(key)}
                                     onBlur={() => {
                                         setTimeout(() => setComboOpen(null), 150);
-                                        if (key === 'manufacturer' && !fields.manufacturer && card?.materialId) {
+                                        if (key === 'manufacturer' && !fields.manufacturer) {
                                             setF('model', '');
-                                            setF('tradeName', '');
-                                            patchCard({ manufacturer: '', model: '', tradeName: '', materialId: null });
+                                            setF('productName', '');
+                                            patchCard({ manufacturer: '', model: '', productName: '', materialId: null });
                                         }
                                     }}
                                     onKeyDown={e => {
                                         if (e.key === 'Enter') {
                                             setComboOpen(null);
                                             const updates = { [key]: fields[key] };
-                                            if (key === 'manufacturer' && !fields[key] && card?.materialId) {
+                                            if (key === 'manufacturer' && !fields[key]) {
                                                 updates.model = '';
-                                                updates.tradeName = '';
+                                                updates.productName = '';
                                                 updates.materialId = null;
                                                 setF('model', '');
-                                                setF('tradeName', '');
+                                                setF('productName', '');
                                             }
                                             patchCard(updates);
                                         }
@@ -410,7 +400,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                 {comboOpen === key && suggestions.length > 0 && (
                                     <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-gray-900 border border-white/20 rounded shadow-xl max-h-48 overflow-auto custom-scrollbar">
                                         {suggestions.map((m, i) => (
-                                            <button key={i} onMouseDown={() => selectMaterial(m, key)}
+                                            <button key={i} onMouseDown={() => selectMaterial(m)}
                                                 className="w-full text-left px-3 py-1.5 text-xs text-gray-200 hover:bg-white/10 truncate">
                                                 {m[key]}
                                             </button>
