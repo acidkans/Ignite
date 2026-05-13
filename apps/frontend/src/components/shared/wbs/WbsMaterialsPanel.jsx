@@ -384,14 +384,22 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                     onBlur={() => {
                                         setTimeout(() => setComboOpen(null), 150);
                                         if (key === 'manufacturer' && !fields.manufacturer && card?.materialId) {
-                                            patchCard({ manufacturer: '', materialId: null });
+                                            setF('model', '');
+                                            setF('tradeName', '');
+                                            patchCard({ manufacturer: '', model: '', tradeName: '', materialId: null });
                                         }
                                     }}
                                     onKeyDown={e => {
                                         if (e.key === 'Enter') {
                                             setComboOpen(null);
                                             const updates = { [key]: fields[key] };
-                                            if (key === 'manufacturer' && !fields[key] && card?.materialId) updates.materialId = null;
+                                            if (key === 'manufacturer' && !fields[key] && card?.materialId) {
+                                                updates.model = '';
+                                                updates.tradeName = '';
+                                                updates.materialId = null;
+                                                setF('model', '');
+                                                setF('tradeName', '');
+                                            }
                                             patchCard(updates);
                                         }
                                     }}
