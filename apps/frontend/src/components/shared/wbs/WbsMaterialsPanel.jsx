@@ -65,6 +65,43 @@ function getParentPath(nodePath) {
 
 // ─── ProposalsSection ─────────────────────────────────────────────────────────
 
+function ProposalImage({ proposalId, token, onDeleted }) {
+    const [blobUrl, setBlobUrl] = useState(null);
+    const blobRef = useRef(null);
+    useEffect(() => {
+        let cancelled = false;
+        fetch(`${API_URL}/material-requirements/proposals/${proposalId}/image`, {
+            headers: { Authorization: `Bearer ${token}` },
+        }).then(async res => {
+            if (!res.ok || cancelled) return;
+            const blob = await res.blob();
+            if (cancelled) return;
+            if (blobRef.current) URL.revokeObjectURL(blobRef.current);
+            const url = URL.createObjectURL(blob);
+            blobRef.current = url;
+            setBlobUrl(url);
+        }).catch(() => {});
+        return () => {
+            cancelled = true;
+            if (blobRef.current) { URL.revokeObjectURL(blobRef.current); blobRef.current = null; }
+        };
+    }, [proposalId, token]);
+
+    if (!blobUrl) return null;
+    return (
+        <div className="relative flex-shrink-0 w-10 h-10 group">
+            <img src={blobUrl} alt="produkt" className="w-full h-full object-contain rounded" />
+            <button
+                onClick={onDeleted}
+                title="Usuń obrazek"
+                className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 rounded transition-opacity text-red-400 hover:text-red-300"
+            >
+                <Trash2 size={12} />
+            </button>
+        </div>
+    );
+}
+
 function ProposalsSection({ req, token, onRefresh }) {
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const [proposals, setProposals] = useState(req.proposals || []);
@@ -89,6 +126,12 @@ function ProposalsSection({ req, token, onRefresh }) {
     const deleteProposal = async (p) => {
         await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, { method: 'DELETE', headers });
         setProposals(prev => prev.filter(x => x.id !== p.id));
+        onRefresh();
+    };
+
+    const deleteProposalImage = async (p) => {
+        await fetch(`${API_URL}/material-requirements/proposals/${p.id}/image`, { method: 'DELETE', headers });
+        setProposals(prev => prev.map(x => x.id === p.id ? { ...x, imageUrl: null } : x));
         onRefresh();
     };
 
@@ -135,6 +178,7 @@ function ProposalsSection({ req, token, onRefresh }) {
                     <button onClick={() => deleteProposal(p)} title="Usuń propozycję" className="text-gray-600 hover:text-red-400 transition-colors flex-shrink-0">
                         <Trash2 size={11} />
                     </button>
+                    {p.imageUrl && <ProposalImage proposalId={p.id} token={token} onDeleted={() => deleteProposalImage(p)} />}
                     <span className="w-16 flex-shrink-0 truncate text-gray-300" title={p.manufacturer}>{p.manufacturer || '—'}</span>
                     <span className="w-20 flex-shrink-0 truncate text-gray-400 font-mono" title={p.model}>{p.model || '—'}</span>
                     <span className="flex-1 min-w-0 truncate text-white" title={p.productName}>{p.productName || '—'}</span>

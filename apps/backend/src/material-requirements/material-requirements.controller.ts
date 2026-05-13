@@ -323,6 +323,12 @@ export class MaterialRequirementsController {
         stream.pipe(res);
     }
 
+    /** Usuń obrazek propozycji */
+    @Delete('proposals/:proposalId/image')
+    deleteProposalImage(@Param('proposalId') proposalId: string) {
+        return this.service.deleteProposalImage(proposalId);
+    }
+
     /** Usunięcie propozycji */
     @Delete('proposals/:proposalId')
     deleteProposal(@Param('proposalId') proposalId: string) {

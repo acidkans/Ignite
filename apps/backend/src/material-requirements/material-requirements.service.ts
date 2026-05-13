@@ -909,6 +909,15 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
         return this.prisma.productProposal.update({ where: { id: proposalId }, data: { imageUrl: filePath } });
     }
 
+    async deleteProposalImage(proposalId: string) {
+        const proposal = await this.prisma.productProposal.findUnique({ where: { id: proposalId } });
+        if (!proposal) throw new NotFoundException('Proposal not found');
+        if (proposal.imageUrl && fs.existsSync(proposal.imageUrl)) {
+            try { fs.unlinkSync(proposal.imageUrl); } catch {}
+        }
+        return this.prisma.productProposal.update({ where: { id: proposalId }, data: { imageUrl: null } });
+    }
+
     async getProposalImageStream(proposalId: string) {
         const proposal = await this.prisma.productProposal.findUnique({ where: { id: proposalId } });
         if (!proposal?.imageUrl) throw new NotFoundException('No image for this proposal');
