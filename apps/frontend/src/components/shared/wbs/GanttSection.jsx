@@ -1068,7 +1068,24 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                 </div>
             </div>
 
-            <style>{`.ignite-gantt-print svg g[tabindex] text { fill: #ffffff !important; }`}</style>
+            <style>{`
+.ignite-gantt-print svg g[tabindex] text { fill: #ffffff !important; }
+.ignite-gantt-print ._3_ygE {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 15 !important;
+  background: #0b0f17 !important;
+}
+.ignite-gantt-print ._CZjuD {
+  overflow: clip !important;
+}
+.ignite-gantt-print ._CZjuD > svg:first-child {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10 !important;
+  background: #0b0f17 !important;
+}
+`}</style>
             <div className="ignite-gantt-print flex-1 min-h-0 overflow-auto custom-scrollbar bg-white/[0.02]">
                 <Gantt
                     tasks={tasks}
