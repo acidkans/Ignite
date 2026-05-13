@@ -481,7 +481,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                         title="Karta katalogowa"
                         className="p-1.5 rounded hover:bg-white/10 text-blue-400/60 hover:text-blue-300 transition-colors"
                     >
-                        <BookOpen size={13} />
+                        <BookOpen size={20} />
                     </button>
                 </div>
             )}
