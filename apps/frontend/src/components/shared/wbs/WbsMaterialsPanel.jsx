@@ -131,29 +131,37 @@ function ProposalsSection({ req, token, onRefresh }) {
             )}
 
             {proposals.map(p => (
-                <div key={p.id} className={`flex items-center gap-3 px-3 py-2 rounded border transition-colors ${p.isSelected ? 'bg-green-500/10 border-green-500/30' : 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]'}`}>
-                    <div className="flex-1 min-w-0">
-                        <div className="text-xs text-white truncate">{p.productName}</div>
-                        <div className="text-[10px] text-gray-400">{[p.manufacturer, p.model].filter(Boolean).join(' · ')}</div>
-                        {p.matchScore != null && (
-                            <div className="text-[10px] text-blue-400 mt-0.5">{Math.round(p.matchScore * 100)}% zgodności</div>
-                        )}
-                    </div>
+                <div key={p.id} className={`flex items-center gap-2 px-2 py-1.5 rounded border text-[10px] transition-colors ${p.isSelected ? 'bg-green-500/10 border-green-500/30' : 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]'}`}>
+                    <button onClick={() => deleteProposal(p)} title="Usuń propozycję" className="text-gray-600 hover:text-red-400 transition-colors flex-shrink-0">
+                        <Trash2 size={11} />
+                    </button>
+                    <span className="w-16 flex-shrink-0 truncate text-gray-300" title={p.manufacturer}>{p.manufacturer || '—'}</span>
+                    <span className="w-20 flex-shrink-0 truncate text-gray-400 font-mono" title={p.model}>{p.model || '—'}</span>
+                    <span className="flex-1 min-w-0 truncate text-white" title={p.productName}>{p.productName || '—'}</span>
+                    {p.priceNetto != null && (
+                        <span className="flex-shrink-0 text-green-400 font-mono whitespace-nowrap">{Number(p.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł</span>
+                    )}
+                    {p.availability && (
+                        <span className="flex-shrink-0 w-16 truncate text-cyan-400" title={p.availability}>{p.availability}</span>
+                    )}
                     {p.sourceUrl && (
-                        <a href={p.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">
-                            <LinkIcon size={12} />
+                        <a href={p.sourceUrl} target="_blank" rel="noopener noreferrer"
+                           className="flex-shrink-0 w-24 truncate text-blue-400 hover:text-blue-300 transition-colors block"
+                           title={p.sourceUrl}>
+                            {(() => { try { return new URL(p.sourceUrl).hostname.replace(/^www\./, ''); } catch { return p.sourceUrl.slice(0, 20); } })()}
                         </a>
                     )}
-                    {!p.isSelected && (
+                    {p.matchScore != null && (
+                        <span className="flex-shrink-0 text-blue-400">{Math.round(p.matchScore * 100)}%</span>
+                    )}
+                    {!p.isSelected ? (
                         <button onClick={() => selectProposal(p)}
-                            className="px-2 py-1 rounded bg-green-600/20 hover:bg-green-600/40 text-green-400 text-[10px] border border-green-500/20 transition-colors">
+                            className="flex-shrink-0 px-2 py-0.5 rounded bg-green-600/20 hover:bg-green-600/40 text-green-400 border border-green-500/20 transition-colors">
                             Wybierz
                         </button>
+                    ) : (
+                        <CheckCircle size={12} className="text-green-400 flex-shrink-0" />
                     )}
-                    {p.isSelected && <CheckCircle size={14} className="text-green-400 flex-shrink-0" />}
-                    <button onClick={() => deleteProposal(p)} className="text-gray-600 hover:text-red-400 transition-colors flex-shrink-0">
-                        <Trash2 size={12} />
-                    </button>
                 </div>
             ))}
         </div>
@@ -367,8 +375,20 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                     value={fields[key]}
                                     onChange={e => setF(key, key === 'manufacturer' ? e.target.value.toUpperCase() : e.target.value)}
                                     onFocus={() => setComboOpen(key)}
-                                    onBlur={() => setTimeout(() => setComboOpen(null), 150)}
-                                    onKeyDown={e => { if (e.key === 'Enter') { setComboOpen(null); patchCard({ [key]: fields[key] }); } }}
+                                    onBlur={() => {
+                                        setTimeout(() => setComboOpen(null), 150);
+                                        if (key === 'manufacturer' && !fields.manufacturer && card?.materialId) {
+                                            patchCard({ manufacturer: '', materialId: null });
+                                        }
+                                    }}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                            setComboOpen(null);
+                                            const updates = { [key]: fields[key] };
+                                            if (key === 'manufacturer' && !fields[key] && card?.materialId) updates.materialId = null;
+                                            patchCard(updates);
+                                        }
+                                    }}
                                     disabled={readOnly}
                                     className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
                                     placeholder={`Wpisz ${label.toLowerCase()}...`}
