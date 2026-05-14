@@ -1175,8 +1175,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             })}
                             {projectContacts.length > 0 && users.length > 0 && <option disabled className="bg-gray-900">──────────</option>}
                             {projectContacts.length > 0 && projectContacts.map(c => {
-                                const label = [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email;
-                                const alreadyInUsers = users.some(u => ([u.firstName, u.lastName].filter(Boolean).join(' ') || u.email) === label);
+                                const fullName = [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email;
+                                const label = c.company ? `${c.company} - ${fullName}` : fullName;
+                                const alreadyInUsers = users.some(u => ([u.firstName, u.lastName].filter(Boolean).join(' ') || u.email) === fullName);
                                 if (alreadyInUsers) return null;
                                 return <option key={c.id} value={label} className="bg-gray-900">{label}</option>;
                             })}
