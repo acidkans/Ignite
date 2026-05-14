@@ -2946,10 +2946,10 @@ ${materialsHtml}
             if (!item.parentId) return sum;
             const q = Math.max(0, parseFloat(item.quantity) || 0);
             const uc = Math.max(0, parseFloat(item.unitCost) || 0);
-            const totalCost = uc * q;
+            const totalCost = uc * q || parseFloat(item.totalCost) || 0;
             const marginRaw = (item.margin != null && String(item.margin) !== '') ? parseFloat(item.margin) : null;
             const d = Math.max(0, parseFloat(item.discount) || 0);
-            let offerPrice = (marginRaw !== null && marginRaw !== 0) ? totalCost * (1 + marginRaw / 100) : 0;
+            let offerPrice = (marginRaw !== null && marginRaw !== 0) ? totalCost * (1 + marginRaw / 100) : totalCost;
             if (offerPrice > 0 && d > 0) offerPrice = Math.max(0, offerPrice * (1 - d / 100));
             return sum + offerPrice;
         }, 0);
