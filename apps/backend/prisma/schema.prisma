@@ -701,6 +701,8 @@ model WbsNode {
   totalPrice Float   @default(0)
   comment    String?
   phase      String? // PRZED | INSTAL | PO
+  ganttStart DateTime? // data startowa paska na Gantcie (persystowana)
+  ganttEnd   DateTime? // data końcowa paska na Gantcie (persystowana)
 
   parent              WbsNode?          @relation("WbsTree", fields: [parentId], references: [id], onDelete: Cascade)
   children            WbsNode[]         @relation("WbsTree")

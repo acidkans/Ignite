@@ -399,6 +399,8 @@ export class WbsNodesService {
                 totalPrice: node.totalPrice,
                 comment: node.comment,
                 phase: node.phase,
+                ganttStart: node.ganttStart ? node.ganttStart.toISOString() : null,
+                ganttEnd: node.ganttEnd ? node.ganttEnd.toISOString() : null,
                 // Materials
                 materials,
                 materialsTotalCost,
@@ -450,6 +452,12 @@ export class WbsNodesService {
         const allowed: Record<string, any> = {};
         for (const key of ['name', 'type', 'status', 'owner', 'resources', 'cost', 'parentId', 'sortOrder', 'comment', 'unit']) {
             if (data[key] !== undefined) allowed[key] = data[key];
+        }
+        if (data.ganttStart !== undefined) {
+            allowed.ganttStart = data.ganttStart ? new Date(data.ganttStart) : null;
+        }
+        if (data.ganttEnd !== undefined) {
+            allowed.ganttEnd = data.ganttEnd ? new Date(data.ganttEnd) : null;
         }
         let quantityChanged = false;
         if (data.quantity !== undefined) {
