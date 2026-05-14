@@ -373,7 +373,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                                 if (reqData.clientProjectManager) contacts.push({ id: 'pm', firstName: reqData.clientProjectManager, lastName: '', email: '' });
                                 try {
                                     const extras = reqData.clientContacts ? JSON.parse(reqData.clientContacts) : [];
-                                    extras.forEach(c => { if (c.name) contacts.push({ id: c.id || c.name, firstName: c.name, lastName: c.surname || '', email: c.email || '' }); });
+                                    extras.forEach(c => { if (c.name) contacts.push({ id: c.id || c.name, firstName: c.name, lastName: c.surname || '', email: c.email || '', company: c.company || '' }); });
                                 } catch { /* ignore */ }
                                 setProjectContacts(contacts);
                             }

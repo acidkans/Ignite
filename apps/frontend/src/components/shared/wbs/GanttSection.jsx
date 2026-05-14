@@ -252,7 +252,7 @@ const taskDays = (task, branchWorkOnHolidays = {}, taskBranchMap = {}) => {
 
 const GanttTaskListHeader = ({ headerHeight, rowWidth, fontFamily }) => {
     return (
-        <div style={{ display: 'flex', height: headerHeight, fontFamily, borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#0b0f17', boxSizing: 'border-box', width: rowWidth, flexShrink: 0 }}>
+        <div style={{ display: 'flex', height: headerHeight, fontFamily, borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#0b0f17', boxSizing: 'border-box', width: rowWidth, flexShrink: 0, position: 'sticky', top: 0, zIndex: 10 }}>
             <div style={{ flex: '1 1 0', padding: '0 8px', display: 'flex', alignItems: 'flex-end', paddingBottom: 6, color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 Zadanie
             </div>
@@ -317,10 +317,11 @@ const GanttTaskListTable = ({ rowHeight, rowWidth, fontFamily, fontSize, tasks, 
                 return (
                     <div
                         key={task.id}
-                        style={{ display: 'flex', height: rowHeight, alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', background: task.id === selectedTaskId ? 'rgba(255,255,255,0.05)' : 'transparent', cursor: isGroup ? 'pointer' : 'default', boxSizing: 'border-box', width: rowWidth }}
+                        title={task.name}
+                        style={{ display: 'flex', height: rowHeight, alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', background: task.id === selectedTaskId ? 'rgba(255,255,255,0.05)' : 'transparent', cursor: isGroup ? 'pointer' : 'default', boxSizing: 'border-box', width: rowWidth, overflow: 'hidden' }}
                         onClick={() => { setSelectedTask(task.id); if (isGroup) onExpanderClick(task); }}
                     >
-                        <div style={{ flex: '1 1 0', paddingLeft: 8, paddingRight: 4, overflow: 'hidden', color, fontWeight: 400, whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.35 }}>
+                        <div style={{ flex: '1 1 0', paddingLeft: 8, paddingRight: 4, color, fontWeight: 400, wordBreak: 'break-word', lineHeight: 1.35, display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 4, overflow: 'hidden' }}>
                             {task.name}
                         </div>
                         <div style={{ width: COL_DATE, padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -336,7 +337,7 @@ const GanttTaskListTable = ({ rowHeight, rowWidth, fontFamily, fontSize, tasks, 
                 );
             })}
             {/* Wiersz podsumowania */}
-            <div style={{ display: 'flex', height: rowHeight, alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.03)', boxSizing: 'border-box', width: rowWidth }}>
+            <div style={{ display: 'flex', height: 32, alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.03)', boxSizing: 'border-box', width: rowWidth }}>
                 <div style={{ flex: '1 1 0', paddingLeft: 8, color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Razem roboczo dni</div>
                 <div style={{ width: COL_DATE }} />
                 <div style={{ width: COL_DATE }} />
@@ -386,6 +387,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
     const [popup, setPopup] = useState(null); // { x, y, branchId } | null
     const wrapperRef = useRef(null);
     const popupRef = useRef(null);
+    const isDraggingRef = useRef(false);
 
     const toggleBranch = useCallback((branchId) => {
         setBranchWorkOnHolidays(prev => ({
@@ -562,16 +564,18 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
                 const branchId = task.id;
                 const onEnter = () => {
                     const rect = g.getBoundingClientRect();
+                    if (isDraggingRef.current) return;
+                    const POPUP_W = 230;
                     const POPUP_H = 80;
-                    const showAbove = rect.top > POPUP_H + 20;
-                    setPopup({
-                        x: Math.min(rect.left + 4, window.innerWidth - 230),
-                        y: showAbove ? rect.top - POPUP_H - 4 : rect.bottom + 4,
-                        branchId,
-                    });
+                    const spaceRight = window.innerWidth - rect.right;
+                    const x = spaceRight >= POPUP_W + 8 ? rect.right + 8 : rect.left - POPUP_W - 8;
+                    const y = Math.min(rect.top, window.innerHeight - POPUP_H - 8);
+                    setPopup({ x, y, branchId });
                 };
+                const onLeave = () => setPopup(null);
                 g.addEventListener('mouseenter', onEnter);
-                removers.push(() => g.removeEventListener('mouseenter', onEnter));
+                g.addEventListener('mouseleave', onLeave);
+                removers.push(() => { g.removeEventListener('mouseenter', onEnter); g.removeEventListener('mouseleave', onLeave); });
             });
             return removers.length > 0 ? () => removers.forEach(fn => fn()) : false;
         };
@@ -607,6 +611,8 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         const onDown = (e) => {
             if (!e.target.closest('svg')) return;
             dragging = true;
+            isDraggingRef.current = true;
+            setPopup(null);
             if (!scrollEl) {
                 scrollEl = findScroll();
                 if (scrollEl) {
@@ -619,7 +625,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
                 }
             }
         };
-        const onUp = () => { dragging = false; };
+        const onUp = () => { dragging = false; isDraggingRef.current = false; };
 
         document.addEventListener('mousedown', onDown);
         document.addEventListener('mouseup', onUp);
@@ -994,12 +1000,28 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
     const NAME_COL_W = 500 - COL_DATE * 2 - COL_DAYS - 12;
     const CHAR_W = 6.8;
     const rowHeight = useMemo(() => {
-        const charsPerLine = Math.floor(NAME_COL_W / CHAR_W);
-        const maxLines = tasks.reduce((max, t) => {
-            if (!t?.name) return max;
-            return Math.max(max, Math.ceil(t.name.length / charsPerLine));
-        }, 1);
-        return Math.max(32, Math.min(maxLines * 17 + 10, 90));
+        const charsPerLine = Math.max(1, Math.floor(NAME_COL_W / CHAR_W));
+        const countLines = (name) => {
+            if (!name) return 1;
+            const words = name.split(/\s+/);
+            let lines = 1, lineLen = 0;
+            for (const w of words) {
+                // słowo dłuższe niż linia — zawijaj po znakach
+                if (w.length >= charsPerLine) {
+                    if (lineLen > 0) { lines++; lineLen = 0; }
+                    lines += Math.ceil(w.length / charsPerLine) - 1;
+                    lineLen = w.length % charsPerLine || charsPerLine;
+                    continue;
+                }
+                if (lineLen === 0) { lineLen = w.length; continue; }
+                if (lineLen + 1 + w.length > charsPerLine) { lines++; lineLen = w.length; }
+                else { lineLen += 1 + w.length; }
+            }
+            return lines;
+        };
+        const MAX_LINES = 4;
+        const maxLines = tasks.reduce((max, t) => Math.max(max, Math.min(countLines(t?.name), MAX_LINES)), 1);
+        return Math.max(36, maxLines * 18 + 12);
     }, [tasks]);
 
     if (!items.length || !tasks.length) {
@@ -1085,6 +1107,9 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
   z-index: 10 !important;
   background: #0b0f17 !important;
 }
+.ignite-gantt-print ._34SS0 {
+  overflow: visible !important;
+}
 `}</style>
             <div className="ignite-gantt-print flex-1 min-h-0 overflow-auto custom-scrollbar bg-white/[0.02]">
                 <Gantt
@@ -1114,7 +1139,7 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                         position: 'fixed',
                         left: Math.min(popup.x, window.innerWidth - 220),
                         top: Math.min(popup.y, window.innerHeight - 90),
-                        zIndex: 9999,
+                        zIndex: 10,
                     }}
                     className="bg-[#0d1520]/96 border border-white/15 rounded-lg px-3 py-2.5 shadow-2xl backdrop-blur-sm"
                 >

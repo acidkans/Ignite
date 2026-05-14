@@ -232,6 +232,25 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     const [fetchedImageUrl, setFetchedImageUrl] = useState(null);
     const [showCatalogModal, setShowCatalogModal] = useState(false);
     const [catalogImageUrl, setCatalogImageUrl] = useState(null);
+    const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
+    const pdfBlobUrlRef = useRef(null);
+
+    const openPdfPreview = useCallback(async (type = 'datasheet') => {
+        const res = await fetch(`${API_URL}/material-requirements/${card.id}/${type}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const blob = await res.blob();
+        if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
+        const url = URL.createObjectURL(blob);
+        pdfBlobUrlRef.current = url;
+        setPdfPreviewUrl(url);
+    }, [card?.id, token]);
+
+    const closePdfPreview = useCallback(() => {
+        setPdfPreviewUrl(null);
+        if (pdfBlobUrlRef.current) { URL.revokeObjectURL(pdfBlobUrlRef.current); pdfBlobUrlRef.current = null; }
+    }, []);
     const fileInputRef = useRef(null);
     const pasteInputRef = useRef(null);
     const localImageUrlRef = useRef(null);
@@ -562,6 +581,25 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
             </div>
         </div>
 
+        {/* Modal podglądu PDF */}
+        {pdfPreviewUrl && createPortal(
+            <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80" onClick={closePdfPreview}>
+                <div className="bg-[#0d1520] border border-white/15 rounded-2xl shadow-2xl flex flex-col" style={{ width: '90vw', height: '90vh' }} onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
+                        <div className="flex items-center gap-2 text-[10px] text-teal-400 uppercase tracking-widest font-bold">
+                            <FileText size={12} /> Karta katalogowa (PDF)
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <a href={pdfPreviewUrl} download className="text-gray-400 hover:text-gray-200 text-[10px] uppercase tracking-wider">Pobierz</a>
+                            <button onClick={closePdfPreview} className="text-gray-500 hover:text-gray-300 transition-colors ml-2"><X size={14} /></button>
+                        </div>
+                    </div>
+                    <iframe src={pdfPreviewUrl} className="flex-1 w-full rounded-b-2xl" title="Karta katalogowa" />
+                </div>
+            </div>,
+            document.body
+        )}
+
         {/* Modal karty katalogowej */}
         {showCatalogModal && createPortal(
             <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70" onClick={() => setShowCatalogModal(false)}>
@@ -601,16 +639,16 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                         {(catalogMaterial.dataSheetUrl || catalogMaterial.complianceUrl) && (
                             <div className="px-4 pb-4 flex flex-col gap-2">
                                 {catalogMaterial.dataSheetUrl && (
-                                    <a href={catalogMaterial.dataSheetUrl} target="_blank" rel="noopener noreferrer"
-                                        className="flex items-center justify-center gap-1.5 px-3 py-2 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 rounded-lg text-teal-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                                    <button onClick={() => openPdfPreview('datasheet')}
+                                        className="flex items-center justify-center gap-1.5 px-3 py-2 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 rounded-lg text-teal-300 text-[10px] font-bold uppercase tracking-widest transition-all w-full">
                                         <FileText size={11} /> Karta katalogowa (PDF)
-                                    </a>
+                                    </button>
                                 )}
                                 {catalogMaterial.complianceUrl && (
-                                    <a href={catalogMaterial.complianceUrl} target="_blank" rel="noopener noreferrer"
-                                        className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                                    <button onClick={() => openPdfPreview('compliance')}
+                                        className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all w-full">
                                         <FileText size={11} /> Deklaracja zgodności
-                                    </a>
+                                    </button>
                                 )}
                             </div>
                         )}
