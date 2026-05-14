@@ -394,7 +394,9 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
             }
         };
         walk(items);
-        setOverrides(dbOverrides);
+        // DB values jako baza, session overrides (prev) mają priorytet — zapobiega
+        // resetowi po updateNodeField który zmienia referencję wbsTree
+        setOverrides(prev => ({ ...dbOverrides, ...prev }));
     }, [wbsTree, items]);
     const [editCell, setEditCell] = useState(null); // { taskId, field: 'start'|'end' } | null
     const [nonWorkingWarn, setNonWorkingWarn] = useState(null); // { taskId, field, dateStr } | null
