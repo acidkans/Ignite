@@ -355,7 +355,7 @@ const VIEW_OPTS = [
     { v: ViewMode.Month, label: 'Miesiąc' },
 ];
 
-export default function GanttSection({ wbsTree, projectName, onNodeDurationChange, onExportReady, onGetHtmlReady, projectStartDate, projectEndDate }) {
+export default function GanttSection({ wbsTree, projectName, onNodeDurationChange, onGanttDateChange, onExportReady, onGetHtmlReady, projectStartDate, projectEndDate }) {
     const items = wbsTree?.items || [];
     const [viewMode, setViewMode] = useState(ViewMode.Day);
     const [projectStart, setProjectStart] = useState(() => {
@@ -380,6 +380,22 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         }
     }, [projectEndDate]);
     const [overrides, setOverrides] = useState({});
+    const prevWbsTreeRef = useRef(null);
+    useEffect(() => {
+        if (wbsTree === prevWbsTreeRef.current) return;
+        prevWbsTreeRef.current = wbsTree;
+        const dbOverrides = {};
+        const walk = (nodes) => {
+            for (const node of nodes) {
+                if (node.ganttStart && node.ganttEnd) {
+                    dbOverrides[node.id] = { start: node.ganttStart, end: node.ganttEnd };
+                }
+                if (Array.isArray(node.children)) walk(node.children);
+            }
+        };
+        walk(items);
+        setOverrides(dbOverrides);
+    }, [wbsTree, items]);
     const [editCell, setEditCell] = useState(null); // { taskId, field: 'start'|'end' } | null
     const [nonWorkingWarn, setNonWorkingWarn] = useState(null); // { taskId, field, dateStr } | null
 
@@ -451,7 +467,8 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         });
         const origTask = tasks.find(t => t && t.id === taskId);
         if (task.type !== 'project' && origTask?._canUpdateDuration !== false) onNodeDurationChange?.(taskId, notifyDays);
-    }, [tasks, taskBranchMap, branchWorkOnHolidays, onNodeDurationChange]);
+        onGanttDateChange?.(taskId, newStart.toISOString(), newEnd.toISOString());
+    }, [tasks, taskBranchMap, branchWorkOnHolidays, onNodeDurationChange, onGanttDateChange]);
 
     const handleTableDateChange = useCallback((taskId, field, dateStr) => {
         setEditCell(null);
@@ -492,6 +509,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
                 }
                 return next;
             });
+            onGanttDateChange?.(task.id, start.toISOString(), end.toISOString());
             return;
         }
 
@@ -544,7 +562,8 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         if (task.id !== '__root__' && task.type !== 'project' && origTask?._canUpdateDuration !== false) {
             onNodeDurationChange?.(task.id, notifyDays);
         }
-    }, [onNodeDurationChange, branchWorkOnHolidays, taskBranchMap, tasks]);
+        onGanttDateChange?.(task.id, start.toISOString(), end.toISOString());
+    }, [onNodeDurationChange, onGanttDateChange, branchWorkOnHolidays, taskBranchMap, tasks]);
 
     const resetOverrides = useCallback(() => setOverrides({}), []);
 

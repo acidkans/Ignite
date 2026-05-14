@@ -134,6 +134,8 @@ export class VersioningService {
                         totalPrice: wn.totalPrice,
                         comment: wn.comment,
                         phase: wn.phase,
+                        ganttStart: (wn as any).ganttStart ?? null,
+                        ganttEnd: (wn as any).ganttEnd ?? null,
                     },
                 });
             }
