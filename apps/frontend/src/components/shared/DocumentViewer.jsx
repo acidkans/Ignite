@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
+import 'react-pdf/dist/Page/TextLayer.css';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
 import DocViewer, { DocViewerRenderers } from '@cyntler/react-doc-viewer';
 import { Maximize2, Minimize2, Download, X, ZoomIn, ZoomOut, CheckCircle, RotateCcw, FileText, ChevronRight, Link2, AlertCircle, ChevronDown, Sparkles, Trash2 } from 'lucide-react';
 import { API_URL } from '../../config';
