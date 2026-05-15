@@ -89,7 +89,7 @@ export class MaterialRequirementsService {
             select: {
                 id: true, manufacturer: true, model: true, productName: true,
                 dataSheetUrl: true, dataSheetName: true, complianceUrl: true, complianceName: true,
-                type: true,
+                type: true, priceNetto: true, availability: true, productUrl: true,
             },
             orderBy: { createdAt: 'desc' }
         });
@@ -889,11 +889,23 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
         return { stream, mimeType: mimeMap[ext] || 'application/octet-stream' };
     }
 
-    async addManualProposal(id: string, dto: { productName: string; manufacturer: string; model?: string; sourceUrl?: string }) {
-        await this.findOne(id);
-        return this.prisma.productProposal.create({
+    async addManualProposal(id: string, dto: { productName: string; manufacturer: string; model?: string; sourceUrl?: string; priceNetto?: number | null; availability?: string }) {
+        const req = await this.findOne(id);
+        const proposal = await this.prisma.productProposal.create({
             data: { materialRequirementId: id, isManual: true, ...dto },
         });
+        // Uzupełnij pola wymagania jeśli są puste → wpis trafia do bazy materiałów logistyki
+        const update: any = {};
+        if (!req.manufacturer && dto.manufacturer) update.manufacturer = dto.manufacturer.toUpperCase();
+        if (!req.model && dto.model) update.model = dto.model;
+        if (!req.productName && dto.productName) update.productName = dto.productName;
+        if (!req.productUrl && dto.sourceUrl) update.productUrl = dto.sourceUrl;
+        if (req.priceNetto == null && dto.priceNetto != null) update.priceNetto = dto.priceNetto;
+        if (!req.availability && dto.availability) update.availability = dto.availability;
+        if (Object.keys(update).length > 0) {
+            await this.prisma.materialRequirement.update({ where: { id }, data: update }).catch(() => {});
+        }
+        return proposal;
     }
 
     async updateProposal(proposalId: string, dto: Partial<{ productName: string; manufacturer: string; model: string; sourceUrl: string; priceNetto: number | null; seller: string | null; offerNumber: string | null; availability: string | null; isRejected: boolean; }>) {
@@ -948,6 +960,8 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
             if (proposal.model) updateData.model = proposal.model;
             if (proposal.priceNetto != null) updateData.priceNetto = proposal.priceNetto;
             if (proposal.seller) updateData.seller = proposal.seller;
+            if (proposal.availability) updateData.availability = proposal.availability;
+            if (proposal.sourceUrl) updateData.productUrl = proposal.sourceUrl;
             if (Object.keys(updateData).length > 0) {
                 await this.prisma.materialRequirement.update({
                     where: { id: proposal.materialRequirementId },

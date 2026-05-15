@@ -125,6 +125,9 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 }); // Offset in pixels inside tile
     const [lastGridPos, setLastGridPos] = useState({ x: -1, y: -1 });
 
+    const [allUsers, setAllUsers] = useState([]);
+    const [contactSuggest, setContactSuggest] = useState({}); // { contactId: { query, results, open } }
+
     const GRID_COLS = 12;
     const ROW_HEIGHT = 40; // piksele per grid unit
 
@@ -296,6 +299,15 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
 
     useEffect(() => { fetchData(); }, [fetchData, versionId]);
 
+    useEffect(() => {
+        const token = sessionStorage.getItem('token');
+        if (!token) return;
+        fetch(`${API_URL}/users/suggest`, { headers: { Authorization: `Bearer ${token}` } })
+            .then(r => r.ok ? r.json() : [])
+            .then(data => setAllUsers(Array.isArray(data) ? data : []))
+            .catch(() => {});
+    }, []);
+
     const handleSave = async (overrideItems = null) => {
         setSaving(true);
         try {
@@ -356,7 +368,35 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
             ...prev,
             clientContacts: prev.clientContacts.filter(c => c.id !== id)
         }));
-        // Zapiszemy od razu przy usunięciu, chociaż może to poczekać na onBlur
+        setContactSuggest(prev => { const n = { ...prev }; delete n[id]; return n; });
+    };
+
+    const handleContactNameChange = (contactId, value) => {
+        updateContact(contactId, 'name', value);
+        if (value.length < 2) {
+            setContactSuggest(prev => ({ ...prev, [contactId]: { open: false, results: [] } }));
+            return;
+        }
+        const q = value.toLowerCase();
+        const results = allUsers.filter(u => {
+            const full = `${u.firstName || ''} ${u.lastName || ''} ${u.email}`.toLowerCase();
+            return full.includes(q);
+        }).slice(0, 8);
+        setContactSuggest(prev => ({ ...prev, [contactId]: { open: results.length > 0, results } }));
+    };
+
+    const selectUserForContact = (contactId, user) => {
+        const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
+        setForm(prev => ({
+            ...prev,
+            clientContacts: prev.clientContacts.map(c =>
+                c.id === contactId
+                    ? { ...c, name: fullName, email: user.email || c.email }
+                    : c
+            ),
+        }));
+        setContactSuggest(prev => ({ ...prev, [contactId]: { open: false, results: [] } }));
+        setTimeout(handleSave, 100);
     };
 
     const set = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }));
@@ -657,9 +697,36 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                                                         </button>
                                                     </div>
                                                     <div className="grid grid-cols-4 gap-3">
-                                                        <div>
+                                                        <div className="relative">
                                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię i Nazwisko</label>
-                                                            <input type="text" value={contact.name} onChange={e => updateContact(contact.id, 'name', e.target.value)} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                                            <input
+                                                                type="text"
+                                                                value={contact.name}
+                                                                onChange={e => handleContactNameChange(contact.id, e.target.value)}
+                                                                onBlur={() => {
+                                                                    setTimeout(() => setContactSuggest(prev => ({ ...prev, [contact.id]: { ...prev[contact.id], open: false } })), 150);
+                                                                    handleSave();
+                                                                }}
+                                                                onFocus={() => {
+                                                                    if (contact.name.length >= 2) handleContactNameChange(contact.id, contact.name);
+                                                                }}
+                                                                className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30"
+                                                            />
+                                                            {contactSuggest[contact.id]?.open && (
+                                                                <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-[#1a1a2e] border border-white/10 rounded-lg shadow-xl overflow-hidden">
+                                                                    {contactSuggest[contact.id].results.map(u => (
+                                                                        <button
+                                                                            key={u.id}
+                                                                            type="button"
+                                                                            onMouseDown={() => selectUserForContact(contact.id, u)}
+                                                                            className="w-full text-left px-3 py-2 hover:bg-white/10 transition-colors border-b border-white/5 last:border-0"
+                                                                        >
+                                                                            <div className="text-[13px] text-gray-200">{[u.firstName, u.lastName].filter(Boolean).join(' ')}</div>
+                                                                            <div className="text-[11px] text-gray-500">{u.email}</div>
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                         <div>
                                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Firma</label>
