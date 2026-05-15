@@ -290,7 +290,16 @@ export default function PropertyPreview({ nodeId, versionId = null, searchQuery 
                 const filesRes = await fetch(`${API_URL}/documents/node/${nodeId}?category=${category}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                if (filesRes.ok) setFiles(await filesRes.json());
+                if (filesRes.ok) {
+                    const refreshed = await filesRes.json();
+                    setFiles(refreshed);
+                    // Automatycznie importuj odpowiedzi jeśli wgrany plik zawiera "Q&A"
+                    const uploadedQaNames = new Set(filesToUpload.filter(f => /Q&A/i.test(f.name)).map(f => f.name));
+                    if (uploadedQaNames.size > 0) {
+                        const qaFile = refreshed.find(f => isQaFile(f) && uploadedQaNames.has(f.fileName));
+                        if (qaFile) handleQaImport(qaFile);
+                    }
+                }
             } catch (err) {
                 console.error('Error refreshing file list:', err);
             }

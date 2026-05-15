@@ -137,8 +137,11 @@ function ProposalsSection({ req, token, onRefresh }) {
 
     const addManual = async () => {
         if (!manualForm?.productName) return;
+        const payload = { ...manualForm, isManual: true };
+        const raw = String(manualForm.priceNetto ?? '').trim().replace(',', '.');
+        payload.priceNetto = raw === '' ? null : (parseFloat(raw) || null);
         const res = await fetch(`${API_URL}/material-requirements/${req.id}/proposals`, {
-            method: 'POST', headers, body: JSON.stringify({ ...manualForm, isManual: true }),
+            method: 'POST', headers, body: JSON.stringify(payload),
         });
         if (res.ok) { const p = await res.json(); setProposals(prev => [...prev, p]); setManualForm(null); onRefresh(); }
     };
@@ -151,7 +154,7 @@ function ProposalsSection({ req, token, onRefresh }) {
                     className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-colors disabled:opacity-40">
                     <Sparkles size={10} /> {searching ? 'Szukam...' : 'Szukaj AI'}
                 </button>
-                <button onClick={() => setManualForm(manualForm ? null : { productName: '', manufacturer: '', model: '' })}
+                <button onClick={() => setManualForm(manualForm ? null : { productName: '', manufacturer: '', model: '', priceNetto: '', availability: '', sourceUrl: '' })}
                     className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 transition-colors">
                     <Plus size={10} /> Dodaj ręcznie
                 </button>
@@ -159,13 +162,20 @@ function ProposalsSection({ req, token, onRefresh }) {
 
             {manualForm && (
                 <div className="flex items-center gap-2 p-2 rounded bg-white/5 border border-white/10">
-                    {['productName', 'manufacturer', 'model'].map(k => (
-                        <input key={k} value={manualForm[k] || ''} onChange={e => setManualForm(p => ({ ...p, [k]: e.target.value }))}
-                            placeholder={{ productName: 'Nazwa handlowa', manufacturer: 'Producent', model: 'Model' }[k]}
-                            className="flex-1 bg-black/30 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-gray-600 outline-none" />
+                    {[
+                        { key: 'manufacturer', ph: 'Producent' },
+                        { key: 'model', ph: 'Model' },
+                        { key: 'productName', ph: 'Nazwa handlowa' },
+                        { key: 'priceNetto', ph: 'Cena netto' },
+                        { key: 'availability', ph: 'Dostępność' },
+                        { key: 'sourceUrl', ph: 'https://...' },
+                    ].map(({ key, ph }) => (
+                        <input key={key} value={manualForm[key] || ''} onChange={e => setManualForm(p => ({ ...p, [key]: e.target.value }))}
+                            placeholder={ph}
+                            className="flex-1 min-w-0 bg-black/30 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-gray-600 outline-none" />
                     ))}
-                    <button onClick={addManual} className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs transition-colors">Dodaj</button>
-                    <button onClick={() => setManualForm(null)} className="text-gray-500 hover:text-gray-300"><XCircle size={14} /></button>
+                    <button onClick={addManual} className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs transition-colors flex-shrink-0">Dodaj</button>
+                    <button onClick={() => setManualForm(null)} className="text-gray-500 hover:text-gray-300 flex-shrink-0"><XCircle size={14} /></button>
                 </div>
             )}
 
@@ -268,7 +278,10 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
             priceNetto: card?.priceNetto ?? '',
             productUrl: card?.productUrl || '',
         });
-    }, [card?.id, card?.manufacturer, card?.model, card?.productName, card?.productUrl]);
+    // Zresetuj formularz tylko przy zmianie karty (nowe id).
+    // Nie reaguj na zmiany pojedynczych pól — każdy blur sam wywołuje patchCard,
+    // a reset po onRefresh kasował niezapisane wartości innych pól.
+    }, [card?.id]);
 
     // Pobierz obrazek z auth nagłówkiem i stwórz blob URL (img src nie może wysłać Authorization)
     useEffect(() => {

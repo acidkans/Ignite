@@ -83,8 +83,23 @@ export async function exportQaFormPdf(wbsData, projectName) {
     const colorWhite   = rgb(1, 1, 1);
     const colorField   = rgb(0.97, 0.99, 1.0);
 
-    // Flatten: tylko węzły z pytaniami
-    const nodes = (wbsData || []).filter(n => Array.isArray(n.qa) && n.qa.some(p => (p?.question || '').trim()));
+    // Sortuj węzły w kolejności DFS (tak jak wyświetla UI: sortOrder per poziom)
+    const treeWalkOrder = (flat) => {
+        const byParent = new Map();
+        for (const n of flat) {
+            const pid = n.parentId || null;
+            if (!byParent.has(pid)) byParent.set(pid, []);
+            byParent.get(pid).push(n);
+        }
+        for (const children of byParent.values()) children.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        const result = [];
+        const walk = (pid) => { for (const n of (byParent.get(pid) || [])) { result.push(n); walk(n.id); } };
+        walk(null);
+        return result;
+    };
+
+    // Węzły z pytaniami w kolejności drzewa
+    const nodes = treeWalkOrder(wbsData || []).filter(n => Array.isArray(n.qa) && n.qa.some(p => (p?.question || '').trim()));
 
     // Buduj mapę id→node (String key — unika mismatch number/string)
     const byId = new Map((wbsData || []).map(n => [String(n.id), n]));

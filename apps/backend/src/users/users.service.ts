@@ -179,6 +179,21 @@ export class UsersService {
     });
   }
 
+  async suggest(q: string) {
+    const term = q.trim().toLowerCase();
+    const users = await this.prisma.user.findMany({
+      where: { isActive: true },
+      select: { id: true, firstName: true, lastName: true, email: true },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+      take: 50,
+    });
+    if (!term) return users;
+    return users.filter(u => {
+      const full = `${u.firstName || ''} ${u.lastName || ''} ${u.email}`.toLowerCase();
+      return full.includes(term);
+    });
+  }
+
   async findByRole(roleName: string) {
     return this.prisma.user.findMany({
       where: { userRoles: { some: { role: { name: roleName } } } },

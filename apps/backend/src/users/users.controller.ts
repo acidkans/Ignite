@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Request } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UsersService } from './users.service';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -23,6 +23,12 @@ export class UsersController {
       const user = await this.usersService.findById(req.user.userId);
       return user ? [user] : [];
     }
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('suggest')
+  suggest(@Query('q') q: string) {
+    return this.usersService.suggest(q || '');
   }
 
   @UseGuards(JwtAuthGuard)

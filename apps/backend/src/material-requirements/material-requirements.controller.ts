@@ -17,10 +17,10 @@ export class MaterialRequirementsController {
 
     // ─── BAZA GLOBALNA ─────────────────────────────────────────────────────────
 
-    /** Wszystkie materiały z wypełnionym producentem i kartą katalogową */
+    /** Wszystkie materiały z wypełnionym producentem (w tym ręczne, bez karty katalogowej) */
     @Get('database')
     findGlobalDatabase() {
-        return this.service.findGlobalDatabase();
+        return this.service.findAllMaterials();
     }
 
     /** Wszystkie materiały z producentem (bez wymagania karty katalogowej) */
@@ -280,9 +280,16 @@ export class MaterialRequirementsController {
     @Post(':id/proposals')
     addProposal(
         @Param('id') id: string,
-        @Body() body: { productName: string; manufacturer: string; model?: string; sourceUrl?: string },
+        @Body() body: { productName: string; manufacturer: string; model?: string; sourceUrl?: string; priceNetto?: number | null; availability?: string },
     ) {
-        return this.service.addManualProposal(id, { productName: body.productName || '', manufacturer: body.manufacturer || '', model: body.model, sourceUrl: body.sourceUrl });
+        return this.service.addManualProposal(id, {
+            productName: body.productName || '',
+            manufacturer: body.manufacturer || '',
+            model: body.model,
+            sourceUrl: body.sourceUrl,
+            priceNetto: body.priceNetto ?? null,
+            availability: body.availability,
+        });
     }
 
     /** Aktualizacja propozycji */

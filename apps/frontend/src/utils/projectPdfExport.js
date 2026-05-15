@@ -200,7 +200,11 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
     try {
         const contacts = reqData.clientContacts ? JSON.parse(reqData.clientContacts) : [];
         if (contacts.length > 0) {
-            contactsHtml = `<table style="margin-top:8px"><thead><tr><th>Rola</th><th>Imię</th><th>Nazwisko</th><th>Telefon</th><th>E-mail</th></tr></thead><tbody>${contacts.map(c => `<tr><td>${esc(c.role || '')}</td><td>${esc(c.name || '')}</td><td>${esc(c.surname || '')}</td><td>${esc(c.phone || '')}</td><td>${esc(c.email || '')}</td></tr>`).join('')}</tbody></table>`;
+            const rows = contacts.map(c => {
+                const fullName = c.surname ? `${c.name || ''} ${c.surname}`.trim() : (c.name || '');
+                return `<tr><td>${esc(c.role || '')}</td><td>${esc(c.company || '')}</td><td>${esc(fullName)}</td><td>${esc(c.phone || '')}</td><td>${esc(c.email || '')}</td></tr>`;
+            }).join('');
+            contactsHtml = `<table style="margin-top:8px"><thead><tr><th>Rola</th><th>Firma</th><th>Imię i Nazwisko</th><th>Telefon</th><th>E-mail</th></tr></thead><tbody>${rows}</tbody></table>`;
         }
     } catch (_) {}
 

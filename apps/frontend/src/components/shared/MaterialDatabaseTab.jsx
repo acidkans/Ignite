@@ -249,6 +249,9 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
                                             <th className="text-left px-3 py-2 text-gray-400 font-semibold uppercase tracking-wider">Typ</th>
                                             <th className="text-left px-3 py-2 text-gray-400 font-semibold uppercase tracking-wider">Producent</th>
                                             <th className="text-left px-3 py-2 text-gray-400 font-semibold uppercase tracking-wider">Model</th>
+                                            <th className="text-right px-3 py-2 text-gray-400 font-semibold uppercase tracking-wider">Cena netto</th>
+                                            <th className="text-left px-3 py-2 text-gray-400 font-semibold uppercase tracking-wider">Dostępność</th>
+                                            <th className="text-left px-3 py-2 text-gray-400 font-semibold uppercase tracking-wider">Adres www</th>
                                             <th className="text-right px-3 py-2 text-gray-400 font-semibold uppercase tracking-wider">Stan magazynowy</th>
                                             <th className="text-left px-3 py-2 text-gray-400 font-semibold uppercase tracking-wider">Źródło</th>
                                             <th className="text-center px-3 py-2 text-gray-400 font-semibold uppercase tracking-wider">Karta</th>
@@ -262,6 +265,9 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
                                                 <td className="px-3 py-2"><span className="px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-300 text-[10px] font-semibold">{TYPE_LABELS[r.type] || r.type}</span></td>
                                                 <td className="px-3 py-2 text-gray-300">{r.manufacturer ? r.manufacturer.toUpperCase() : '—'}</td>
                                                 <td className="px-3 py-2 text-gray-400 font-mono">{r.model || '—'}</td>
+                                                <td className="px-3 py-2 text-right text-green-400 font-mono whitespace-nowrap">{r.priceNetto != null ? `${Number(r.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—'}</td>
+                                                <td className="px-3 py-2 text-cyan-400 text-[11px]">{r.availability || '—'}</td>
+                                                <td className="px-3 py-2 text-[11px] max-w-[140px]">{r.productUrl ? <a href={r.productUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 truncate block" title={r.productUrl}>{(() => { try { return new URL(r.productUrl).hostname.replace(/^www\./, ''); } catch { return r.productUrl.slice(0, 20); } })()}</a> : <span className="text-gray-600">—</span>}</td>
                                                 <td className="px-3 py-2 text-right text-gray-600">{r.stockStatus ? `${r.stockStatus} szt` : '—'}</td>
                                                 <td className="px-3 py-2 text-gray-500 text-[10px] max-w-[180px]"><span className="truncate block" title={r.dataSheetName}>{r.dataSheetName || '—'}</span></td>
                                                 <td className="px-3 py-2 text-center">
@@ -282,6 +288,9 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
                                                 <td className="px-3 py-2"><span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-300 text-[10px] font-semibold">{TYPE_LABELS[r.type] || r.type}</span></td>
                                                 <td className="px-3 py-2 text-gray-300">{r.manufacturer || '—'}</td>
                                                 <td className="px-3 py-2 text-gray-400">{r.model || '—'}</td>
+                                                <td className="px-3 py-2 text-right text-green-400 font-mono whitespace-nowrap">{r.priceNetto != null ? `${Number(r.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—'}</td>
+                                                <td className="px-3 py-2 text-cyan-400 text-[11px]">{r.availability || '—'}</td>
+                                                <td className="px-3 py-2 text-[11px] max-w-[140px]">{r.productUrl ? <a href={r.productUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 truncate block" title={r.productUrl}>{(() => { try { return new URL(r.productUrl).hostname.replace(/^www\./, ''); } catch { return r.productUrl.slice(0, 20); } })()}</a> : <span className="text-gray-600">—</span>}</td>
                                                 <td className="px-3 py-2 text-right text-gray-300">{r.stockStatus ? `${r.stockStatus} szt` : '—'}</td>
                                                 <td className="px-3 py-2">
                                                     <div className="text-gray-300">{r.node?.name || '—'}</div>
