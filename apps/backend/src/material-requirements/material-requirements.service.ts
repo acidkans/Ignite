@@ -186,12 +186,11 @@ export class MaterialRequirementsService {
                 },
                 orderBy: { createdAt: 'desc' }
             }),
-            // Ręcznie dodane propozycje, które mogą nie mieć odzwierciedlenia w wymaganiu
+            // Propozycje z wypełnionym producentem (ręczne i wybrane AI)
             this.prisma.productProposal.findMany({
                 where: {
-                    isManual: true,
-                    manufacturer: { not: null },
                     NOT: { manufacturer: '' },
+                    OR: [{ isManual: true }, { isSelected: true }],
                 },
                 select: {
                     id: true, manufacturer: true, model: true, productName: true,
