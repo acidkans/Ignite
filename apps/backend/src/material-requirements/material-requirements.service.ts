@@ -77,25 +77,149 @@ export class MaterialRequirementsService {
         });
     }
 
+    /** Wszystkie wymagania pasujące do producenta+modelu — użycie materiału w projektach */
+    async findMaterialUsage(manufacturer: string, model?: string) {
+        const mfWhere: any = { equals: manufacturer, mode: 'insensitive' };
+        const mdWhere: any = model ? { equals: model, mode: 'insensitive' } : undefined;
+
+        // 1. Szukaj wymagań z manufacturer/model ustawionym bezpośrednio
+        const directWhere: any = { manufacturer: mfWhere };
+        if (mdWhere) directWhere.model = mdWhere;
+
+        // 2. Szukaj wymagań, które mają wybraną propozycję z tym manufacturer/model
+        const proposalWhere: any = {
+            manufacturer: mfWhere,
+            isSelected: true,
+        };
+        if (mdWhere) proposalWhere.model = mdWhere;
+
+        const reqSelect = {
+            id: true,
+            name: true,
+            quantity: true,
+            unit: true,
+            priceNetto: true,
+            availability: true,
+            status: true,
+            createdAt: true,
+            node: {
+                select: {
+                    id: true,
+                    name: true,
+                    parent: {
+                        select: {
+                            id: true,
+                            name: true,
+                            parent: { select: { id: true, name: true } },
+                        },
+                    },
+                },
+            },
+        };
+
+        const [direct, viaProposal] = await Promise.all([
+            this.prisma.materialRequirement.findMany({
+                where: directWhere,
+                select: reqSelect,
+                orderBy: { createdAt: 'desc' },
+            }),
+            this.prisma.productProposal.findMany({
+                where: proposalWhere,
+                select: {
+                    priceNetto: true,
+                    availability: true,
+                    materialRequirement: {
+                        select: {
+                            id: true, name: true, quantity: true, unit: true,
+                            priceNetto: true, availability: true, status: true, createdAt: true,
+                            node: {
+                                select: {
+                                    id: true, name: true,
+                                    parent: {
+                                        select: {
+                                            id: true, name: true,
+                                            parent: { select: { id: true, name: true } },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            }),
+        ]);
+
+        // Łącz i deduplikuj po id wymagania
+        const seen = new Set<string>();
+        const results: any[] = [];
+        for (const r of direct) {
+            if (!seen.has(r.id)) { seen.add(r.id); results.push(r); }
+        }
+        for (const p of viaProposal) {
+            const r = p.materialRequirement;
+            if (!r || seen.has(r.id)) continue;
+            seen.add(r.id);
+            // Użyj ceny z wybranej propozycji jeśli wymaganie jej nie ma
+            results.push({
+                ...r,
+                priceNetto: r.priceNetto ?? p.priceNetto,
+                availability: r.availability || p.availability,
+            });
+        }
+        return results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+
     /** All materials with manufacturer filled (no dataSheetUrl requirement) */
     async findAllMaterials() {
-        const items = await this.prisma.materialRequirement.findMany({
-            where: {
-                AND: [
-                    { manufacturer: { not: null } },
-                    { NOT: { manufacturer: '' } },
-                ]
-            },
-            select: {
-                id: true, manufacturer: true, model: true, productName: true,
-                dataSheetUrl: true, dataSheetName: true, complianceUrl: true, complianceName: true,
-                type: true, priceNetto: true, availability: true, productUrl: true,
-            },
-            orderBy: { createdAt: 'desc' }
-        });
+        const [items, manualProposals] = await Promise.all([
+            this.prisma.materialRequirement.findMany({
+                where: {
+                    AND: [
+                        { manufacturer: { not: null } },
+                        { NOT: { manufacturer: '' } },
+                    ]
+                },
+                select: {
+                    id: true, manufacturer: true, model: true, productName: true,
+                    dataSheetUrl: true, dataSheetName: true, complianceUrl: true, complianceName: true,
+                    type: true, priceNetto: true, availability: true, productUrl: true,
+                },
+                orderBy: { createdAt: 'desc' }
+            }),
+            // Ręcznie dodane propozycje, które mogą nie mieć odzwierciedlenia w wymaganiu
+            this.prisma.productProposal.findMany({
+                where: {
+                    isManual: true,
+                    manufacturer: { not: null },
+                    NOT: { manufacturer: '' },
+                },
+                select: {
+                    id: true, manufacturer: true, model: true, productName: true,
+                    priceNetto: true, availability: true, sourceUrl: true,
+                },
+                orderBy: { createdAt: 'desc' }
+            }),
+        ]);
+
+        // Normalizuj propozycje do formatu wymagania
+        const proposalsMapped = manualProposals.map(p => ({
+            id: `proposal:${p.id}`,
+            manufacturer: p.manufacturer,
+            model: p.model,
+            productName: p.productName,
+            dataSheetUrl: null,
+            dataSheetName: null,
+            complianceUrl: null,
+            complianceName: null,
+            type: 'MATERIAL',
+            priceNetto: p.priceNetto,
+            availability: p.availability,
+            productUrl: p.sourceUrl,
+        }));
+
         // Deduplicate by manufacturer+model (case-insensitive), keep first (newest)
-        const seen = new Set();
-        return items.filter(m => {
+        const seen = new Set<string>();
+        return [...items, ...proposalsMapped].filter(m => {
             const key = `${(m.manufacturer || '').toLowerCase()}|${(m.model || '').toLowerCase()}`;
             if (seen.has(key)) return false;
             seen.add(key);

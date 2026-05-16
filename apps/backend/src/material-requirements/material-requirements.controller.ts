@@ -29,6 +29,16 @@ export class MaterialRequirementsController {
         return this.service.findAllMaterials();
     }
 
+    /** Użycie konkretnego materiału (producent+model) we wszystkich projektach z cenami */
+    @Get('usage')
+    findUsage(
+        @Query('manufacturer') manufacturer: string,
+        @Query('model') model?: string,
+    ) {
+        if (!manufacturer) return [];
+        return this.service.findMaterialUsage(manufacturer, model);
+    }
+
     /** Wszystkie materiały zaimportowane z kart katalogowych (globalnie) */
     @Get('datasheets')
     findAllDatasheetItems() {

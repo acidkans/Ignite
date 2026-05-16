@@ -161,21 +161,25 @@ function ProposalsSection({ req, token, onRefresh }) {
             </div>
 
             {manualForm && (
-                <div className="flex items-center gap-2 p-2 rounded bg-white/5 border border-white/10">
-                    {[
-                        { key: 'manufacturer', ph: 'Producent' },
-                        { key: 'model', ph: 'Model' },
-                        { key: 'productName', ph: 'Nazwa handlowa' },
-                        { key: 'priceNetto', ph: 'Cena netto' },
-                        { key: 'availability', ph: 'Dostępność' },
-                        { key: 'sourceUrl', ph: 'https://...' },
-                    ].map(({ key, ph }) => (
-                        <input key={key} value={manualForm[key] || ''} onChange={e => setManualForm(p => ({ ...p, [key]: e.target.value }))}
-                            placeholder={ph}
-                            className="flex-1 min-w-0 bg-black/30 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-gray-600 outline-none" />
-                    ))}
-                    <button onClick={addManual} className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs transition-colors flex-shrink-0">Dodaj</button>
-                    <button onClick={() => setManualForm(null)} className="text-gray-500 hover:text-gray-300 flex-shrink-0"><XCircle size={14} /></button>
+                <div className="p-2 rounded bg-white/5 border border-white/10 flex flex-col gap-1.5">
+                    <div className="grid grid-cols-3 gap-1.5">
+                        {[
+                            { key: 'manufacturer', ph: 'Producent' },
+                            { key: 'model', ph: 'Model' },
+                            { key: 'productName', ph: 'Nazwa handlowa' },
+                            { key: 'priceNetto', ph: 'Cena netto' },
+                            { key: 'availability', ph: 'Dostępność' },
+                            { key: 'sourceUrl', ph: 'https://...' },
+                        ].map(({ key, ph }) => (
+                            <input key={key} value={manualForm[key] || ''} onChange={e => setManualForm(p => ({ ...p, [key]: e.target.value }))}
+                                placeholder={ph}
+                                className="w-full bg-black/30 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50" />
+                        ))}
+                    </div>
+                    <div className="flex justify-end gap-1.5">
+                        <button onClick={() => setManualForm(null)} className="px-2 py-1 text-[10px] text-gray-500 hover:text-white">Anuluj</button>
+                        <button onClick={addManual} className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs transition-colors">Dodaj</button>
+                    </div>
                 </div>
             )}
 
@@ -192,19 +196,23 @@ function ProposalsSection({ req, token, onRefresh }) {
                     <span className="w-16 flex-shrink-0 truncate text-gray-300" title={p.manufacturer}>{p.manufacturer || '—'}</span>
                     <span className="w-20 flex-shrink-0 truncate text-gray-400 font-mono" title={p.model}>{p.model || '—'}</span>
                     <span className="flex-1 min-w-0 truncate text-white" title={p.productName}>{p.productName || '—'}</span>
-                    {p.priceNetto != null && (
-                        <span className="flex-shrink-0 text-green-400 font-mono whitespace-nowrap">{Number(p.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł</span>
-                    )}
-                    {p.availability && (
-                        <span className="flex-shrink-0 w-16 truncate text-cyan-400" title={p.availability}>{p.availability}</span>
-                    )}
-                    {p.sourceUrl && (
-                        <a href={p.sourceUrl} target="_blank" rel="noopener noreferrer"
-                           className="flex-shrink-0 w-24 truncate text-blue-400 hover:text-blue-300 transition-colors block"
-                           title={p.sourceUrl}>
-                            {(() => { try { return new URL(p.sourceUrl).hostname.replace(/^www\./, ''); } catch { return p.sourceUrl.slice(0, 20); } })()}
-                        </a>
-                    )}
+                    <span className="flex-shrink-0 w-20 text-right font-mono whitespace-nowrap">
+                        {p.priceNetto != null
+                            ? <span className="text-green-400">{Number(p.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł</span>
+                            : <span className="text-gray-600">—</span>}
+                    </span>
+                    <span className="flex-shrink-0 w-16 truncate text-cyan-400" title={p.availability || ''}>
+                        {p.availability || <span className="text-gray-600">—</span>}
+                    </span>
+                    <span className="flex-shrink-0 w-24 truncate text-[10px]">
+                        {p.sourceUrl
+                            ? <a href={p.sourceUrl} target="_blank" rel="noopener noreferrer"
+                                 className="text-blue-400 hover:text-blue-300 transition-colors block truncate"
+                                 title={p.sourceUrl}>
+                                {(() => { try { return new URL(p.sourceUrl).hostname.replace(/^www\./, ''); } catch { return p.sourceUrl.slice(0, 20); } })()}
+                              </a>
+                            : <span className="text-gray-600">—</span>}
+                    </span>
                     {p.matchScore != null && (
                         <span className="flex-shrink-0 text-blue-400">{Math.round(p.matchScore * 100)}%</span>
                     )}
