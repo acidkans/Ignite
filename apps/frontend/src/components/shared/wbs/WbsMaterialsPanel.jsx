@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import ExcelJS from 'exceljs';
 import {
     ChevronRight, ChevronDown, Package, Wrench,
     CheckCircle, Clock, XCircle, Star, Trash2, AlertCircle,
     ShoppingCart, Warehouse, LogOut, Plus, Search, Sparkles,
-    FileText, Link as LinkIcon, Download, BookOpen, X,
+    FileText, Link as LinkIcon, Download, BookOpen, X, Database,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { UNIT_OPTIONS } from './wbsConstants';
@@ -102,11 +102,217 @@ function ProposalImage({ proposalId, token, onDeleted }) {
     );
 }
 
-function ProposalsSection({ req, token, onRefresh }) {
+const PROPOSAL_FIELDS = [
+    { key: 'manufacturer', ph: 'Producent',     ac: true  },
+    { key: 'model',        ph: 'Model',          ac: true  },
+    { key: 'productName',  ph: 'Nazwa handlowa', ac: true  },
+    { key: 'priceNetto',   ph: 'Cena netto',     ac: false },
+    { key: 'availability', ph: 'Dostępność',     ac: false },
+    { key: 'sourceUrl',    ph: 'https://...',    ac: false },
+];
+const AC_KEYS = PROPOSAL_FIELDS.filter(f => f.ac).map(f => f.key);
+
+// Cross-filter: only upstream fields narrow suggestions (manufacturer → model → productName)
+const AC_UPSTREAM = { manufacturer: [], model: ['manufacturer'], productName: ['manufacturer', 'model'] };
+
+function findInlineAc(fieldKey, typed, materialDb, vals) {
+    if (!typed || !materialDb?.length || !AC_KEYS.includes(fieldKey)) return null;
+    const typedLower = typed.toLowerCase();
+    let base = materialDb;
+    for (const f of (AC_UPSTREAM[fieldKey] || [])) {
+        if (vals[f]) base = base.filter(m => (m[f] || '').toLowerCase() === vals[f].toLowerCase());
+    }
+    const match = base
+        .filter(m => (m[fieldKey] || '').toLowerCase().startsWith(typedLower))
+        .sort((a, b) => (a[fieldKey] || '').localeCompare(b[fieldKey] || ''))[0];
+    return match ? (match[fieldKey] || '') : null;
+}
+
+function ProposalRow({ p, token, onDelete, onSelect, onDeleted: onImageDeleted, onPatch, materialDb }) {
+    const [vals, setVals] = useState({
+        manufacturer: p.manufacturer || '',
+        model: p.model || '',
+        productName: p.productName || '',
+        priceNetto: p.priceNetto != null ? String(p.priceNetto) : '',
+        availability: p.availability || '',
+        sourceUrl: p.sourceUrl || '',
+    });
+    const [inlineAc, setInlineAc] = useState({});
+    const inputRefs = useRef({});
+    const suppressAcRef = useRef(false);
+
+    useEffect(() => {
+        setVals({
+            manufacturer: p.manufacturer || '',
+            model: p.model || '',
+            productName: p.productName || '',
+            priceNetto: p.priceNetto != null ? String(p.priceNetto) : '',
+            availability: p.availability || '',
+            sourceUrl: p.sourceUrl || '',
+        });
+        setInlineAc({});
+    }, [p.id]);
+
+    // After every render: restore selection for the currently active inline suggestion
+    useLayoutEffect(() => {
+        for (const key of AC_KEYS) {
+            const el = inputRefs.current[key];
+            const suggestion = inlineAc[key];
+            if (suggestion && el && document.activeElement === el) {
+                el.setSelectionRange((vals[key] || '').length, suggestion.length);
+            }
+        }
+    });
+
+    const save = (key, raw) => {
+        let value = raw;
+        if (key === 'priceNetto') {
+            const n = parseFloat(String(raw).replace(',', '.'));
+            value = isNaN(n) ? null : n;
+        }
+        onPatch(p.id, { [key]: value });
+    };
+
+    const handleChange = (key, typed) => {
+        if (suppressAcRef.current) {
+            suppressAcRef.current = false;
+            setVals(v => ({ ...v, [key]: typed }));
+            setInlineAc(a => ({ ...a, [key]: null }));
+            return;
+        }
+        const suggestion = findInlineAc(key, typed, materialDb, { ...vals, [key]: typed });
+        setVals(v => ({ ...v, [key]: typed }));
+        setInlineAc(a => ({ ...a, [key]: suggestion }));
+    };
+
+    const acceptField = (key) => {
+        const raw = inlineAc[key] || vals[key];
+        const value = key === 'manufacturer' ? raw.toUpperCase() : raw;
+        setVals(v => ({ ...v, [key]: value }));
+        setInlineAc(a => ({ ...a, [key]: null }));
+        return value;
+    };
+
+    const focusNext = (key) => {
+        const keys = PROPOSAL_FIELDS.map(f => f.key);
+        const nextKey = keys[keys.indexOf(key) + 1];
+        if (nextKey) { inputRefs.current[nextKey]?.focus(); return true; }
+        return false;
+    };
+
+    const knownProduct = useMemo(() => {
+        if (!materialDb?.length || !vals.manufacturer) return null;
+        const mfr = vals.manufacturer.toLowerCase();
+        const mdl = (vals.model || '').toLowerCase();
+        return materialDb.find(m =>
+            (m.manufacturer || '').toLowerCase() === mfr &&
+            (!mdl || (m.model || '').toLowerCase() === mdl)
+        ) || null;
+    }, [materialDb, vals.manufacturer, vals.model]);
+
+    return (
+        <div className={`flex items-center gap-1 px-2 py-1 rounded border text-[10px] transition-colors ${p.isSelected ? 'bg-green-500/10 border-green-500/30' : 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]'}`}>
+            <button onClick={() => onDelete(p)} title="Usuń" className="flex-shrink-0 text-gray-600 hover:text-red-400 transition-colors mr-0.5">
+                <Trash2 size={11} />
+            </button>
+            {p.imageUrl && <ProposalImage proposalId={p.id} token={token} onDeleted={() => onImageDeleted(p)} />}
+            {knownProduct && (
+                <span title="Produkt znany w bazie materiałów" className="flex-shrink-0 text-cyan-500/70">
+                    <Database size={10} />
+                </span>
+            )}
+            {PROPOSAL_FIELDS.map(({ key, ph, ac }) => (
+                <div key={key} className="flex-1 min-w-0">
+                    <input
+                        ref={el => inputRefs.current[key] = el}
+                        value={ac && inlineAc[key] ? inlineAc[key] : vals[key]}
+                        onChange={e => ac ? handleChange(key, e.target.value) : setVals(v => ({ ...v, [key]: e.target.value }))}
+                        onBlur={e => {
+                            if (ac) { const v = acceptField(key); save(key, v); }
+                            else save(key, e.target.value);
+                        }}
+                        onKeyDown={e => {
+                            if (e.key === 'Tab') {
+                                e.preventDefault();
+                                const v = ac ? acceptField(key) : vals[key];
+                                save(key, v);
+                                focusNext(key);
+                            } else if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const v = ac ? acceptField(key) : vals[key];
+                                save(key, v);
+                                if (!focusNext(key)) e.target.blur();
+                            } else if ((e.key === 'Escape' || e.key === 'Backspace') && inlineAc[key]) {
+                                suppressAcRef.current = true;
+                                setInlineAc(a => ({ ...a, [key]: null }));
+                            }
+                        }}
+                        placeholder={ph}
+                        className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/50 rounded px-1.5 py-0.5 text-white placeholder-gray-700 outline-none transition-colors cursor-pointer focus:cursor-text"
+                    />
+                </div>
+            ))}
+            {p.matchScore != null && (
+                <span className="flex-shrink-0 text-blue-400 text-[9px] w-8 text-right">{Math.round(p.matchScore * 100)}%</span>
+            )}
+            {!p.isSelected ? (
+                <button onClick={() => onSelect(p)}
+                    className="flex-shrink-0 px-2 py-0.5 rounded bg-green-600/20 hover:bg-green-600/40 text-green-400 border border-green-500/20 transition-colors ml-1">
+                    Wybierz
+                </button>
+            ) : (
+                <CheckCircle size={12} className="text-green-400 flex-shrink-0 ml-1" />
+            )}
+        </div>
+    );
+}
+
+function ProposalsSection({ req, token, onRefresh, materialDb }) {
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const [proposals, setProposals] = useState(req.proposals || []);
     const [searching, setSearching] = useState(false);
     const [manualForm, setManualForm] = useState(null);
+    const [manualAc, setManualAc] = useState({});
+    const manualInputRefs = useRef({});
+    const suppressManualAcRef = useRef(false);
+
+    useLayoutEffect(() => {
+        if (!manualForm) return;
+        for (const key of AC_KEYS) {
+            const el = manualInputRefs.current[key];
+            const suggestion = manualAc[key];
+            if (suggestion && el && document.activeElement === el) {
+                el.setSelectionRange((manualForm[key] || '').length, suggestion.length);
+            }
+        }
+    });
+
+    const handleManualChange = (key, typed) => {
+        if (suppressManualAcRef.current) {
+            suppressManualAcRef.current = false;
+            setManualForm(f => ({ ...f, [key]: typed }));
+            setManualAc(a => ({ ...a, [key]: null }));
+            return;
+        }
+        const suggestion = findInlineAc(key, typed, materialDb, { ...manualForm, [key]: typed });
+        setManualForm(f => ({ ...f, [key]: typed }));
+        setManualAc(a => ({ ...a, [key]: suggestion }));
+    };
+
+    const acceptManualField = (key) => {
+        const raw = manualAc[key] || manualForm[key] || '';
+        const value = key === 'manufacturer' ? raw.toUpperCase() : raw;
+        setManualForm(f => ({ ...f, [key]: value }));
+        setManualAc(a => ({ ...a, [key]: null }));
+        return value;
+    };
+
+    const focusManualNext = (key) => {
+        const keys = PROPOSAL_FIELDS.map(f => f.key);
+        const nextKey = keys[keys.indexOf(key) + 1];
+        if (nextKey) { manualInputRefs.current[nextKey]?.focus(); return true; }
+        return false;
+    };
 
     useEffect(() => { setProposals(req.proposals || []); }, [req.id, req.proposals]);
 
@@ -135,19 +341,31 @@ function ProposalsSection({ req, token, onRefresh }) {
         onRefresh();
     };
 
+    const patchProposal = async (id, data) => {
+        await fetch(`${API_URL}/material-requirements/proposals/${id}`, {
+            method: 'PATCH', headers, body: JSON.stringify(data),
+        });
+        onRefresh();
+    };
+
     const addManual = async () => {
-        if (!manualForm?.productName) return;
-        const payload = { ...manualForm, isManual: true };
-        const raw = String(manualForm.priceNetto ?? '').trim().replace(',', '.');
+        // Merge any pending inline AC suggestions before submitting
+        const form = { ...manualForm };
+        for (const key of AC_KEYS) {
+            if (manualAc[key]) form[key] = key === 'manufacturer' ? manualAc[key].toUpperCase() : manualAc[key];
+        }
+        if (!form.productName) return;
+        const payload = { ...form, isManual: true };
+        const raw = String(form.priceNetto ?? '').trim().replace(',', '.');
         payload.priceNetto = raw === '' ? null : (parseFloat(raw) || null);
         const res = await fetch(`${API_URL}/material-requirements/${req.id}/proposals`, {
             method: 'POST', headers, body: JSON.stringify(payload),
         });
-        if (res.ok) { const p = await res.json(); setProposals(prev => [...prev, p]); setManualForm(null); onRefresh(); }
+        if (res.ok) { setManualForm(null); setManualAc({}); onRefresh(); }
     };
 
     return (
-        <div className="flex flex-col gap-2 mt-2">
+        <div className="flex flex-col gap-1 mt-2">
             <div className="flex items-center gap-2">
                 <span className="text-[10px] italic uppercase tracking-widest text-white font-semibold">Propozycje produktów</span>
                 <button onClick={searchAI} disabled={searching}
@@ -160,71 +378,68 @@ function ProposalsSection({ req, token, onRefresh }) {
                 </button>
             </div>
 
-            {manualForm && (
-                <div className="p-2 rounded bg-white/5 border border-white/10 flex flex-col gap-1.5">
-                    <div className="grid grid-cols-3 gap-1.5">
-                        {[
-                            { key: 'manufacturer', ph: 'Producent' },
-                            { key: 'model', ph: 'Model' },
-                            { key: 'productName', ph: 'Nazwa handlowa' },
-                            { key: 'priceNetto', ph: 'Cena netto' },
-                            { key: 'availability', ph: 'Dostępność' },
-                            { key: 'sourceUrl', ph: 'https://...' },
-                        ].map(({ key, ph }) => (
-                            <input key={key} value={manualForm[key] || ''} onChange={e => setManualForm(p => ({ ...p, [key]: e.target.value }))}
+            {manualForm && (() => {
+                const mfr = (manualAc.manufacturer || manualForm.manufacturer || '').toLowerCase();
+                const mdl = (manualAc.model || manualForm.model || '').toLowerCase();
+                const knownManual = mfr && materialDb?.find(m =>
+                    (m.manufacturer || '').toLowerCase() === mfr &&
+                    (!mdl || (m.model || '').toLowerCase() === mdl)
+                );
+                return (
+                <div className="flex items-center gap-1 px-2 py-1 rounded bg-white/5 border border-white/10">
+                    <div className="w-5 flex-shrink-0 flex items-center justify-center">
+                        {knownManual && <Database size={10} title="Produkt znany w bazie materiałów" className="text-cyan-500/70" />}
+                    </div>
+                    {PROPOSAL_FIELDS.map(({ key, ph, ac }) => (
+                        <div key={key} className="flex-1 min-w-0">
+                            <input
+                                ref={el => manualInputRefs.current[key] = el}
+                                value={ac && manualAc[key] ? manualAc[key] : (manualForm[key] || '')}
+                                onChange={e => ac ? handleManualChange(key, e.target.value) : setManualForm(f => ({ ...f, [key]: e.target.value }))}
+                                onBlur={() => ac && acceptManualField(key)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Tab') {
+                                        e.preventDefault();
+                                        if (ac) acceptManualField(key);
+                                        focusManualNext(key);
+                                    } else if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (ac) acceptManualField(key);
+                                        if (!focusManualNext(key)) addManual();
+                                    } else if (e.key === 'Escape') {
+                                        if (manualAc[key]) { suppressManualAcRef.current = true; setManualAc(a => ({ ...a, [key]: null })); }
+                                        else setManualForm(null);
+                                    } else if (e.key === 'Backspace' && manualAc[key]) {
+                                        suppressManualAcRef.current = true;
+                                        setManualAc(a => ({ ...a, [key]: null }));
+                                    }
+                                }}
                                 placeholder={ph}
-                                className="w-full bg-black/30 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50" />
-                        ))}
-                    </div>
-                    <div className="flex justify-end gap-1.5">
-                        <button onClick={() => setManualForm(null)} className="px-2 py-1 text-[10px] text-gray-500 hover:text-white">Anuluj</button>
-                        <button onClick={addManual} className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs transition-colors">Dodaj</button>
-                    </div>
+                                className="w-full bg-black/30 border border-white/10 rounded px-1.5 py-0.5 text-[10px] text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
+                            />
+                        </div>
+                    ))}
+                    <button onClick={() => setManualForm(null)} className="flex-shrink-0 px-2 py-0.5 text-[10px] text-gray-500 hover:text-white transition-colors ml-1">Anuluj</button>
+                    <button onClick={addManual} className="flex-shrink-0 px-3 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-[10px] text-white transition-colors">Dodaj</button>
                 </div>
-            )}
+                );
+            })()}
 
             {proposals.length === 0 && !manualForm && (
                 <p className="text-[11px] text-gray-600 italic">Brak propozycji — kliknij „Szukaj AI" lub dodaj ręcznie.</p>
             )}
 
             {proposals.map(p => (
-                <div key={p.id} className={`flex items-center gap-2 px-2 py-1.5 rounded border text-[10px] transition-colors ${p.isSelected ? 'bg-green-500/10 border-green-500/30' : 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]'}`}>
-                    <button onClick={() => deleteProposal(p)} title="Usuń propozycję" className="text-gray-600 hover:text-red-400 transition-colors flex-shrink-0">
-                        <Trash2 size={11} />
-                    </button>
-                    {p.imageUrl && <ProposalImage proposalId={p.id} token={token} onDeleted={() => deleteProposalImage(p)} />}
-                    <span className="w-16 flex-shrink-0 truncate text-gray-300" title={p.manufacturer}>{p.manufacturer || '—'}</span>
-                    <span className="w-20 flex-shrink-0 truncate text-gray-400 font-mono" title={p.model}>{p.model || '—'}</span>
-                    <span className="flex-1 min-w-0 truncate text-white" title={p.productName}>{p.productName || '—'}</span>
-                    <span className="flex-shrink-0 w-20 text-right font-mono whitespace-nowrap">
-                        {p.priceNetto != null
-                            ? <span className="text-green-400">{Number(p.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł</span>
-                            : <span className="text-gray-600">—</span>}
-                    </span>
-                    <span className="flex-shrink-0 w-16 truncate text-cyan-400" title={p.availability || ''}>
-                        {p.availability || <span className="text-gray-600">—</span>}
-                    </span>
-                    <span className="flex-shrink-0 w-24 truncate text-[10px]">
-                        {p.sourceUrl
-                            ? <a href={p.sourceUrl} target="_blank" rel="noopener noreferrer"
-                                 className="text-blue-400 hover:text-blue-300 transition-colors block truncate"
-                                 title={p.sourceUrl}>
-                                {(() => { try { return new URL(p.sourceUrl).hostname.replace(/^www\./, ''); } catch { return p.sourceUrl.slice(0, 20); } })()}
-                              </a>
-                            : <span className="text-gray-600">—</span>}
-                    </span>
-                    {p.matchScore != null && (
-                        <span className="flex-shrink-0 text-blue-400">{Math.round(p.matchScore * 100)}%</span>
-                    )}
-                    {!p.isSelected ? (
-                        <button onClick={() => selectProposal(p)}
-                            className="flex-shrink-0 px-2 py-0.5 rounded bg-green-600/20 hover:bg-green-600/40 text-green-400 border border-green-500/20 transition-colors">
-                            Wybierz
-                        </button>
-                    ) : (
-                        <CheckCircle size={12} className="text-green-400 flex-shrink-0" />
-                    )}
-                </div>
+                <ProposalRow
+                    key={p.id}
+                    p={p}
+                    token={token}
+                    materialDb={materialDb}
+                    onDelete={deleteProposal}
+                    onSelect={selectProposal}
+                    onDeleted={deleteProposalImage}
+                    onPatch={patchProposal}
+                />
             ))}
         </div>
     );
@@ -552,7 +767,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                 </div>
 
                 {/* Propozycje */}
-                {!readOnly && <ProposalsSection req={card} token={token} onRefresh={onRefresh} />}
+                {!readOnly && <ProposalsSection req={card} token={token} onRefresh={onRefresh} materialDb={materialDb} />}
             </div>
 
             {/* Ikona karty katalogowej — widoczna gdy materiał zaciągnięty z bazy */}
