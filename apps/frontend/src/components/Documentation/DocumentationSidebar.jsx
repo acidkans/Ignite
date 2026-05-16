@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Document, pdfjs } from 'react-pdf';
 import { FileText, ZoomIn, ZoomOut, Download, X, Maximize2, RefreshCw, FileQuestion, ChevronLeft, ChevronRight } from 'lucide-react';
+import { PDFDocument, rgb } from 'pdf-lib';
 import { API_URL } from '../../config';
 import PdfPageWithHighlights from '../shared/PdfPageWithHighlights';
 
@@ -176,6 +177,65 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
 
     const fileUrl = selectedFile ? `${API_URL}/documents/download/${selectedFile.id}` : null;
 
+    const HL_RGB = {
+        yellow: rgb(0.996, 0.941, 0.541),
+        green:  rgb(0.733, 0.969, 0.816),
+        blue:   rgb(0.749, 0.859, 0.996),
+        pink:   rgb(0.984, 0.812, 0.910),
+        orange: rgb(0.996, 0.843, 0.667),
+    };
+    const [downloading, setDownloading] = useState(false);
+
+    const handleDownload = useCallback(async () => {
+        if (!fileUrl) return;
+        if (!isPdf || highlights.length === 0) {
+            const a = document.createElement('a');
+            a.href = fileUrl;
+            a.download = selectedFile.fileName;
+            a.click();
+            return;
+        }
+        setDownloading(true);
+        try {
+            const res = await fetch(fileUrl, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+            const buffer = await res.arrayBuffer();
+            const pdfDoc = await PDFDocument.load(buffer);
+            const pages = pdfDoc.getPages();
+            for (const h of highlights) {
+                const page = pages[h.page - 1];
+                if (!page) continue;
+                const { width, height } = page.getSize();
+                const color = HL_RGB[h.color] || HL_RGB.yellow;
+                for (const r of (h.rects || [])) {
+                    page.drawRectangle({
+                        x: r.x * width,
+                        y: height - (r.y + r.h) * height,
+                        width: r.w * width,
+                        height: r.h * height,
+                        color,
+                        opacity: 0.45,
+                    });
+                }
+            }
+            const bytes = await pdfDoc.save();
+            const blob = new Blob([bytes], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = selectedFile.fileName;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+        } catch (err) {
+            console.error('[Sidebar Download] Błąd wypalania highlightów:', err);
+            const a = document.createElement('a');
+            a.href = fileUrl;
+            a.download = selectedFile.fileName;
+            a.click();
+        } finally {
+            setDownloading(false);
+        }
+    }, [fileUrl, isPdf, highlights, selectedFile, token]);
+
     return (
         <div className="flex flex-col h-full w-full overflow-hidden">
             {/* Header */}
@@ -296,10 +356,10 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
                                 <Maximize2 size={12} />
                             </button>
                         )}
-                        <a href={fileUrl} download={selectedFile.fileName} target="_blank" rel="noreferrer" title="Pobierz"
-                            className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded inline-flex">
-                            <Download size={12} />
-                        </a>
+                        <button onClick={handleDownload} disabled={downloading} title={isPdf && highlights.length > 0 ? 'Pobierz z zaznaczeniami' : 'Pobierz'}
+                            className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded inline-flex disabled:opacity-50">
+                            {downloading ? <div className="w-3 h-3 border border-gray-400/30 border-t-gray-400 rounded-full animate-spin" /> : <Download size={12} />}
+                        </button>
                     </div>
                 </div>
             )}
@@ -364,10 +424,10 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
                                     <Maximize2 size={11} /> Pełny ekran
                                 </button>
                             )}
-                            <a href={fileUrl} download={selectedFile.fileName}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-gray-300 border border-white/10 rounded-lg text-[10px] font-bold hover:bg-white/10 transition-colors">
-                                <Download size={11} /> Pobierz
-                            </a>
+                            <button onClick={handleDownload} disabled={downloading}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-gray-300 border border-white/10 rounded-lg text-[10px] font-bold hover:bg-white/10 transition-colors disabled:opacity-50">
+                                <Download size={11} /> {downloading ? 'Pobieranie...' : 'Pobierz'}
+                            </button>
                         </div>
                     </div>
                 )}
