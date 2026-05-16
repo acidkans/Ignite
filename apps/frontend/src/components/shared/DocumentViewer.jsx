@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
-import { PDFDocument, rgb } from 'pdf-lib';
+import { downloadPdfWithHighlights } from '../../utils/downloadPdfWithHighlights';
 import DocViewer, { DocViewerRenderers } from '@cyntler/react-doc-viewer';
 import { Maximize2, Minimize2, Download, X, ZoomIn, ZoomOut, CheckCircle, RotateCcw, FileText, ChevronRight, Link2, AlertCircle, ChevronDown, Sparkles, Trash2 } from 'lucide-react';
 import { API_URL } from '../../config';
@@ -683,19 +683,10 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
             console.error('[DocumentViewer] Błąd zmiany koloru highlightu:', err);
         }
     }, [documentId, authToken]);
-    const HL_RGB = {
-        yellow: rgb(0.996, 0.941, 0.541),
-        green:  rgb(0.733, 0.969, 0.816),
-        blue:   rgb(0.749, 0.859, 0.996),
-        pink:   rgb(0.984, 0.812, 0.910),
-        orange: rgb(0.996, 0.843, 0.667),
-    };
-
     const [downloading, setDownloading] = useState(false);
 
     const handleDownload = useCallback(async () => {
-        if (!isPdf || highlights.length === 0) {
-            // Brak highlightów — zwykłe pobieranie
+        if (!isPdf) {
             const a = document.createElement('a');
             a.href = fileUrl;
             a.download = fileName;
@@ -704,36 +695,9 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
         }
         setDownloading(true);
         try {
-            const res = await fetch(fileUrl, { headers: authToken ? { Authorization: `Bearer ${authToken}` } : {} });
-            const buffer = await res.arrayBuffer();
-            const pdfDoc = await PDFDocument.load(buffer);
-            const pages = pdfDoc.getPages();
-            for (const h of highlights) {
-                const page = pages[h.page - 1];
-                if (!page) continue;
-                const { width, height } = page.getSize();
-                const color = HL_RGB[h.color] || HL_RGB.yellow;
-                for (const r of (h.rects || [])) {
-                    page.drawRectangle({
-                        x: r.x * width,
-                        y: height - (r.y + r.h) * height,
-                        width: r.w * width,
-                        height: r.h * height,
-                        color,
-                        opacity: 0.45,
-                    });
-                }
-            }
-            const bytes = await pdfDoc.save();
-            const blob = new Blob([bytes], { type: 'application/pdf' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            a.click();
-            setTimeout(() => URL.revokeObjectURL(url), 5000);
+            await downloadPdfWithHighlights({ fileUrl, fileName, highlights, token: authToken });
         } catch (err) {
-            console.error('[Download] Błąd wypalania highlightów:', err);
+            console.error('[Download]', err);
             const a = document.createElement('a');
             a.href = fileUrl;
             a.download = fileName;
