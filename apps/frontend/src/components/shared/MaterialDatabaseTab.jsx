@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { ExternalLink, Package, ChevronDown, Cpu, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ExternalLink, Package, ChevronDown, ChevronRight, Cpu, Trash2, Building2, Loader2 } from 'lucide-react';
 import { API_URL } from '../../config';
 import PropertyPreview from './PropertyPreview';
 
@@ -39,6 +39,105 @@ function CollapsibleSection({ title, open, onToggle, children, accent = 'teal', 
     );
 }
 
+const STATUS_COLORS = {
+    PENDING:   'text-amber-400',
+    CONFIRMED: 'text-green-400',
+    REJECTED:  'text-red-400',
+    PROPOSAL:  'text-blue-400',
+    ORDERED:   'text-purple-400',
+    IN_STOCK:  'text-cyan-400',
+    ISSUED:    'text-emerald-400',
+};
+const STATUS_LABELS = {
+    PENDING: 'Oczekuje', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone',
+    PROPOSAL: 'Propozycja', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane',
+};
+
+function MaterialUsagePanel({ manufacturer, model }) {
+    const [rows, setRows] = useState(null);
+
+    useEffect(() => {
+        const token = sessionStorage.getItem('token');
+        const params = new URLSearchParams({ manufacturer });
+        if (model) params.set('model', model);
+        fetch(`${API_URL}/material-requirements/usage?${params}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then(r => r.ok ? r.json() : [])
+            .then(setRows)
+            .catch(() => setRows([]));
+    }, [manufacturer, model]);
+
+    if (rows === null) {
+        return (
+            <div className="flex items-center gap-2 px-6 py-3 text-gray-500 text-xs">
+                <Loader2 size={12} className="animate-spin" /> Ładowanie użycia…
+            </div>
+        );
+    }
+    if (rows.length === 0) {
+        return <p className="px-6 py-3 text-xs text-gray-600 italic">Brak wymagań z tym produktem.</p>;
+    }
+
+    const getProjectName = (node) => {
+        if (!node) return '—';
+        const segments = [];
+        let n = node;
+        while (n) { segments.unshift(n.name); n = n.parent; }
+        return segments.join(' › ');
+    };
+
+    return (
+        <div className="px-2 pb-2">
+            <table className="w-full text-[11px]">
+                <thead>
+                    <tr className="text-gray-500 border-b border-white/5">
+                        <th className="text-left px-3 py-1.5 font-semibold uppercase tracking-wider">Projekt / WBS</th>
+                        <th className="text-left px-3 py-1.5 font-semibold uppercase tracking-wider">Wymaganie</th>
+                        <th className="text-right px-3 py-1.5 font-semibold uppercase tracking-wider">Ilość</th>
+                        <th className="text-right px-3 py-1.5 font-semibold uppercase tracking-wider">Cena netto</th>
+                        <th className="text-left px-3 py-1.5 font-semibold uppercase tracking-wider">Dostępność</th>
+                        <th className="text-left px-3 py-1.5 font-semibold uppercase tracking-wider">Status</th>
+                        <th className="text-right px-3 py-1.5 font-semibold uppercase tracking-wider">Data</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map(r => (
+                        <tr key={r.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                            <td className="px-3 py-1.5 text-gray-300 max-w-[220px]">
+                                <div className="flex items-center gap-1.5">
+                                    <Building2 size={10} className="text-gray-600 flex-shrink-0" />
+                                    <span className="truncate" title={getProjectName(r.node)}>{getProjectName(r.node)}</span>
+                                </div>
+                            </td>
+                            <td className="px-3 py-1.5 text-gray-400 max-w-[180px]">
+                                <span className="truncate block" title={r.name}>{r.name || '—'}</span>
+                            </td>
+                            <td className="px-3 py-1.5 text-right text-gray-300 whitespace-nowrap">
+                                {r.quantity ?? '—'} <span className="text-gray-600">{r.unit || 'szt'}</span>
+                            </td>
+                            <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap">
+                                {r.priceNetto != null
+                                    ? <span className="text-green-400">{Number(r.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł</span>
+                                    : <span className="text-gray-600">—</span>}
+                            </td>
+                            <td className="px-3 py-1.5 text-cyan-400">{r.availability || '—'}</td>
+                            <td className="px-3 py-1.5">
+                                <span className={STATUS_COLORS[r.status] || 'text-gray-500'}>
+                                    {STATUS_LABELS[r.status] || r.status || '—'}
+                                </span>
+                            </td>
+                            <td className="px-3 py-1.5 text-right text-gray-600 whitespace-nowrap">
+                                {r.createdAt ? new Date(r.createdAt).toLocaleDateString('pl-PL') : '—'}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
 export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal = false }) {
     const [items, setItems] = useState([]);
     const [datasheetItems, setDatasheetItems] = useState([]);
@@ -47,6 +146,7 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
     const [openSection, setOpenSection] = useState('database');
     const toggle = (section) => setOpenSection(s => s === section ? null : section);
     const [refreshKey, setRefreshKey] = useState(0);
+    const [expandedKey, setExpandedKey] = useState(null);
     const [batchParsing, setBatchParsing] = useState(false);
     const [batchStatus, setBatchStatus] = useState(null);
     const [parsedIds, setParsedIds] = useState(() => new Set());
@@ -245,6 +345,7 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
                                 <table className="w-full text-xs">
                                     <thead>
                                         <tr className="border-b border-white/10 bg-[#0f1117]">
+                                            <th className="w-8 px-2 py-2 bg-[#0f1117]" />
                                             <th className="text-left px-3 py-2 text-gray-400 font-semibold uppercase tracking-wider">Nazwa handlowa</th>
                                             <th className="text-left px-3 py-2 text-gray-400 font-semibold uppercase tracking-wider">Typ</th>
                                             <th className="text-left px-3 py-2 text-gray-400 font-semibold uppercase tracking-wider">Producent</th>
@@ -259,8 +360,17 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {filteredDatasheets.map(r => (
-                                            <tr key={`ds-${r.id}`} className="border-b border-white/5 hover:bg-white/[0.02] group transition-colors">
+                                        {filteredDatasheets.map(r => {
+                                            const rowKey = `ds-${r.id}`;
+                                            const isExpanded = expandedKey === rowKey;
+                                            return (
+                                            <React.Fragment key={rowKey}>
+                                            <tr className={`border-b border-white/5 group transition-colors ${isExpanded ? 'bg-white/[0.03]' : 'hover:bg-white/[0.02]'}`}>
+                                                <td className="px-2 py-2 text-center">
+                                                    <button onClick={() => setExpandedKey(isExpanded ? null : rowKey)} className="text-gray-600 hover:text-gray-300 transition-colors">
+                                                        {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                                                    </button>
+                                                </td>
                                                 <td className="px-3 py-2 text-gray-200 max-w-[200px]"><span className="line-clamp-2" title={r.productName || '—'}>{r.productName || <span className="text-gray-500">—</span>}</span></td>
                                                 <td className="px-3 py-2"><span className="px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-300 text-[10px] font-semibold">{TYPE_LABELS[r.type] || r.type}</span></td>
                                                 <td className="px-3 py-2 text-gray-300">{r.manufacturer ? r.manufacturer.toUpperCase() : '—'}</td>
@@ -281,9 +391,27 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
                                                     </button>
                                                 </td>
                                             </tr>
-                                        ))}
-                                        {filteredDeduped.map(r => (
-                                            <tr key={`db-${r.id}`} className="border-b border-white/5 hover:bg-white/[0.02] group transition-colors">
+                                            {isExpanded && (
+                                                <tr className="border-b border-white/5 bg-black/20">
+                                                    <td colSpan={12} className="p-0">
+                                                        <MaterialUsagePanel manufacturer={r.manufacturer} model={r.model} />
+                                                    </td>
+                                                </tr>
+                                            )}
+                                            </React.Fragment>
+                                            );
+                                        })}
+                                        {filteredDeduped.map(r => {
+                                            const rowKey = `db-${r.id}`;
+                                            const isExpanded = expandedKey === rowKey;
+                                            return (
+                                            <React.Fragment key={rowKey}>
+                                            <tr className={`border-b border-white/5 group transition-colors ${isExpanded ? 'bg-white/[0.03]' : 'hover:bg-white/[0.02]'}`}>
+                                                <td className="px-2 py-2 text-center">
+                                                    <button onClick={() => setExpandedKey(isExpanded ? null : rowKey)} className="text-gray-600 hover:text-gray-300 transition-colors">
+                                                        {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                                                    </button>
+                                                </td>
                                                 <td className="px-3 py-2 text-gray-200 max-w-[200px]"><span className="line-clamp-2" title={r.productName || '—'}>{r.productName || <span className="text-gray-500">—</span>}</span></td>
                                                 <td className="px-3 py-2"><span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-300 text-[10px] font-semibold">{TYPE_LABELS[r.type] || r.type}</span></td>
                                                 <td className="px-3 py-2 text-gray-300">{r.manufacturer || '—'}</td>
@@ -309,7 +437,16 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
                                                     </button>
                                                 </td>
                                             </tr>
-                                        ))}
+                                            {isExpanded && (
+                                                <tr className="border-b border-white/5 bg-black/20">
+                                                    <td colSpan={12} className="p-0">
+                                                        <MaterialUsagePanel manufacturer={r.manufacturer} model={r.model} />
+                                                    </td>
+                                                </tr>
+                                            )}
+                                            </React.Fragment>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>
