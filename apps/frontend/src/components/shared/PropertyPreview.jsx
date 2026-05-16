@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Trash2, Upload, MapPin, Hash, User, FileText, Eye, Clock, Image, Film, FileCode, ChevronDown, Pencil, FileInput, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Trash2, Upload, MapPin, Hash, User, FileText, Eye, Clock, Image, Film, FileCode, ChevronDown, Pencil, ChevronLeft, ChevronRight } from 'lucide-react';
 import { API_URL } from '../../config';
 import DocumentViewer from './DocumentViewer';
 import { importQaFormPdf } from './wbs/importQaFormPdf';
@@ -445,18 +445,6 @@ export default function PropertyPreview({ nodeId, versionId = null, searchQuery 
                     </div>;
                 })()}
 
-                {/* Import Q&A — widoczny gdy wybrany plik ma "Q&A" w nazwie */}
-                {isQaFile(selectedFile) && (
-                    <button
-                        onClick={() => handleQaImport()}
-                        disabled={qaImporting}
-                        className="flex items-center gap-2 px-4 py-1.5 rounded-lg border cursor-pointer transition-all text-xs font-semibold flex-shrink-0 bg-green-500/15 hover:bg-green-500/25 text-green-400 border-green-500/30 hover:border-green-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Zaimportuj odpowiedzi Q&A z tego PDF do struktury WBS"
-                    >
-                        <FileInput size={14} />
-                        {qaImporting ? 'Importuję...' : 'Import Q&A'}
-                    </button>
-                )}
                 {qaImportResult && isQaFile(selectedFile) && (
                     <span className={`text-[10px] font-semibold flex-shrink-0 ${qaImportResult.ok ? 'text-green-400' : 'text-amber-400'}`}>
                         {qaImportResult.msg}
