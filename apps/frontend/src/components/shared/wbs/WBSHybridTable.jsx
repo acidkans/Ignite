@@ -1003,7 +1003,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             >
                 {/* WBS ID — uchwyt drag */}
                 <td
-                    className="px-2 py-2.5 cursor-grab min-w-[48px]"
+                    className="px-2 py-2.5 cursor-grab min-w-[96px] w-[96px]"
                     draggable
                     onDragStart={e => onDragStart(e, node.id)}
                     onDragEnd={onDragEnd}
@@ -1017,17 +1017,21 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             ? <ChevronRight size={12} className={`text-gray-400 transition-transform flex-shrink-0 ${isOpen(rowId) ? 'rotate-90' : ''}`} />
                             : <span className="w-[12px] flex-shrink-0" />
                         }
-                        <div className="flex flex-col gap-0.5 opacity-0 group-hover/node:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                        <div className="relative z-20 flex flex-col gap-1 opacity-0 group-hover/node:opacity-100 transition-opacity" draggable={false} onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
                             <button
                                 title="Kopiuj pozycję"
+                                onMouseDown={e => e.stopPropagation()}
+                                onPointerDown={e => e.stopPropagation()}
                                 onClick={e => { e.stopPropagation(); setCopyBuffer({ node: findNode(items, node.id), sourceName: node.name }); }}
-                                className="p-1 rounded hover:bg-blue-500/20 text-gray-600 hover:text-blue-400 transition-all"
+                                className="p-1.5 rounded bg-black/40 hover:bg-blue-500/40 text-gray-300 hover:text-white transition-all"
                             >
-                                <Copy size={13} />
+                                <Copy size={16} />
                             </button>
                             {copyBuffer && !subtreeContains(copyBuffer.node, node.id) && copyBuffer.node.id !== node.id && (
                                 <button
                                     title={`Wklej „${copyBuffer.sourceName}" jako dziecko (z wymaganiami technicznymi, typem i statusem)`}
+                                    onMouseDown={e => e.stopPropagation()}
+                                    onPointerDown={e => e.stopPropagation()}
                                     onClick={e => {
                                         e.stopPropagation();
                                         const { clone, mappings } = deepCloneNodeWithMappings(copyBuffer.node);
@@ -1035,9 +1039,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                         setCopyBuffer(null);
                                         if (mappings.length > 0) onPasteCloned?.(mappings);
                                     }}
-                                    className="p-1 rounded hover:bg-emerald-500/20 text-gray-600 hover:text-emerald-400 transition-all"
+                                    className="p-1.5 rounded bg-black/40 hover:bg-emerald-500/40 text-gray-300 hover:text-emerald-200 transition-all"
                                 >
-                                    <Clipboard size={13} />
+                                    <Clipboard size={16} />
                                 </button>
                             )}
                         </div>
