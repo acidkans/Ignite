@@ -162,7 +162,7 @@ export function buildWbsHtmlTable(wbsData, depth) {
     const thS = 'background:#1e3a5f;color:#fff;font-weight:bold;padding:7px 16px;text-align:center;border:1px solid #16304d;white-space:nowrap;';
     const tdS = 'padding:5px 14px;border:1px solid #ccc;vertical-align:middle;font-weight:normal;';
     const tdR = 'padding:5px 14px;border:1px solid #ccc;text-align:right;vertical-align:middle;font-weight:normal;';
-    const tdCont = `${tdS}border-top:none;`;
+    const tdCont = `${tdS}border-top:none;color:transparent;`;
     const sumS = 'padding:6px 14px;border:1px solid #aaa;font-weight:bold;background:#eef2f7;';
     const sumR = 'padding:6px 14px;border:1px solid #aaa;font-weight:bold;background:#eef2f7;text-align:right;';
 
