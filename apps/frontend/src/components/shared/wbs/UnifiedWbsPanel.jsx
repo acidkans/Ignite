@@ -3168,7 +3168,11 @@ ${ganttSectionHtml}
                                 onManagePresets={() => setPresetManagerOpen(true)}
                             />
                         </div>
-                    ), () => handleExportPDF('oferta'));
+                    ), () => handleExportPDF('oferta'), (
+                        <button onClick={(e) => { e.stopPropagation(); handleExportOfertaExcel(); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                            <FileDown size={11} /> Eksport oferty XLS
+                        </button>
+                    ));
                 }
                 if (key === 'strategy') {
                     return renderSection('strategy', 'Jak to chcemy zrobić', HelpCircle, 'blue', (
