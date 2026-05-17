@@ -1028,6 +1028,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         }
         const date = new Date().toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' });
         const show = (key) => sectionKey === key || sectionKey === 'all';
+        const ganttData = sectionKey === 'gantt' ? (ganttGetHtmlRef.current?.() || null) : null;
 
         // Zawsze czytaj Q&A z live ref, żeby nie eksportować przestarzałego stanu przed debounced save.
         const buildLiveQaMap = (nodes, acc = {}) => { for (const n of nodes) { acc[n.id] = n.qa; if (n.children?.length) buildLiveQaMap(n.children, acc); } return acc; };
@@ -1341,11 +1342,20 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             </div>`;
         })() : '';
 
+        const ganttContentWidth = ganttData?.contentWidth || 1200;
+        const A3_LANDSCAPE_USABLE = 1400; // A3 landscape minus margins (~392mm @ 96dpi)
+        const ganttZoom = ganttContentWidth > A3_LANDSCAPE_USABLE ? (A3_LANDSCAPE_USABLE / ganttContentWidth).toFixed(4) : '1';
+        const ganttSectionHtml = ganttData ? `
+            <div class="section">
+                <div class="section-header">Harmonogram (Gantt)</div>
+                <div class="gantt-wrap"><div class="gantt-scale-inner" style="zoom:${ganttZoom};transform-origin:top left">${ganttData.html}</div></div>
+            </div>` : '';
+
         const html = `<!DOCTYPE html>
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
-<title></title>
+<title>${sectionKey === 'gantt' ? esc((orderName || projectName || 'projekt').replace(/[\\/:*?"<>|]/g, '_')) + '_gantt' : ''}</title>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -1386,21 +1396,39 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   th { background: #f3f4f6; color: #374151; padding: 7px 8px; text-align: center; font-size: 12px; font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
   thead { display: table-header-group; }
   tr { page-break-inside: avoid; break-inside: avoid; }
-  @page { margin: 0; size: A4 portrait; }
+  @page { margin: 0; size: ${sectionKey === 'gantt' ? 'A3 landscape' : 'A4 portrait'}; }
   .budget-table { table-layout: fixed; word-wrap: break-word; }
+  .gantt-wrap { overflow: hidden; background: #fff; padding: 8px 0; }
+  .gantt-wrap svg text { fill: #0b0f17 !important; }
+  .gantt-wrap > * { background: #fff !important; }
+  .gantt-wrap [class] { background: #fff !important; }
+  .gantt-wrap div { color: #1f2937 !important; }
+  /* Reset horizontal-scroll transform i overflow clipping żeby pokazać nagłówek miesięcy */
+  .gantt-wrap ._CZjuD { overflow: visible !important; }
+  .gantt-wrap ._2B2zv { overflow: visible !important; }
+  .gantt-wrap ._CZjuD > * { transform: none !important; }
+  .gantt-wrap ._2k9Ys { display: none !important; }
+  /* Lekkie kratki wierszy i kolumn */
+  .gantt-wrap ._2dZTy { fill: #fff !important; }
+  .gantt-wrap ._2dZTy:nth-child(even) { fill: #f7f8f9 !important; }
+  .gantt-wrap ._3rUKi { stroke: #dde0e4 !important; }
+  .gantt-wrap ._RuwuK { stroke: #dde0e4 !important; }
+  .gantt-wrap ._1rLuZ { stroke: #dde0e4 !important; }
+  .gantt-scale-inner { transform-origin: top left; }
   @media print {
     .summary-grid { display: block; }
     .summary-block { margin-bottom: 16px; }
     .summary-section { page-break-before: always; }
   }
 </style>
+${ganttData ? ganttData.styles : ''}
 </head>
 <body>
 <div class="doc-header">
   ${logoDataUrl ? `<img class="doc-header-logo" src="${logoDataUrl}" alt="Logo" />` : ''}
   <div class="doc-header-text">
     <h1>${esc(orderName || projectName || 'Zamówienie')}</h1>
-    <div class="sub">${{ strategy: 'Jak to chcemy zrobić', oferta: 'Oferta', budget: 'Budżet', 'wbs-hybrid': 'Struktura projektu', wbs: 'Struktura projektu', materials: 'Materiały' }[sectionKey] || 'Planowanie'}</div>
+    <div class="sub">${{ strategy: 'Jak to chcemy zrobić', oferta: 'Oferta', budget: 'Budżet', 'wbs-hybrid': 'Struktura projektu', wbs: 'Struktura projektu', materials: 'Materiały', gantt: 'Harmonogram (Gantt)' }[sectionKey] || 'Planowanie'}</div>
     <div class="meta">Przygotowano: ${date}</div>
   </div>
 </div>
@@ -1410,6 +1438,7 @@ ${wbsHtml}
 ${budgetHtml}
 ${_budgetSummaryHtml}
 ${materialsHtml}
+${ganttSectionHtml}
 </body>
 </html>`;
 
@@ -3177,7 +3206,7 @@ ${materialsHtml}
                             projectStartDate={ganttProjectStart}
                             projectEndDate={ganttProjectEnd}
                         />
-                    ), () => ganttExportRef.current?.());
+                    ), () => handleExportPDF('gantt'));
                 }
                 if (key === 'wbs-hybrid') {
                     return renderSection('wbs-hybrid', `Struktura projektu: ${orderName || projectName || '—'}`, ListTree, 'violet', (
