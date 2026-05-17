@@ -1363,7 +1363,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   html, body { margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 20mm 14mm; }
   .doc-wrap { width: 100%; border-collapse: collapse; }
-  .doc-header-cell { padding: 8px 0 12px 0; }
+  .doc-header-cell { padding: 8px 0 12px 0; border: none !important; background: none !important; }
   .doc-header-line { border-bottom: 3px solid #1a1a2e; height: 0; line-height: 0; font-size: 0; }
   .doc-spacer-cell { height: 20px; padding: 0; border: none; background: none !important; }
   .doc-header { display: flex; align-items: flex-start; gap: 16px; }
