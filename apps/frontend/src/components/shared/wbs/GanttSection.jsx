@@ -1003,13 +1003,39 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
     const getGanttHtml = useCallback(() => {
         const node = wrapperRef.current?.querySelector('.ignite-gantt-print');
         if (!node) return null;
-        // Zmierz pełną szerokość scrolla (timeline + lewa tabela)
-        const contentWidth = node.scrollWidth || node.offsetWidth || 1200;
+
+        const vc = node.querySelector('[class*="CZjuD"], [class*="ganttVerticalContainer"]');
+        const timelinePanel = vc?.children[1];
+        const innerSvg = timelinePanel?.querySelector('svg');
+        const savedTransform = innerSvg ? innerSvg.style.transform : null;
+        if (innerSvg) innerSvg.style.transform = '';
+
+        // Utnij SVG do ostatniego dnia ostatniego taska (nie do końca miesiąca)
+        const colW = viewMode === ViewMode.Day ? 50 : viewMode === ViewMode.Week ? 90 : 220;
+        const daysPerCol = viewMode === ViewMode.Day ? 1 : viewMode === ViewMode.Week ? 7 : 30;
+        const pxPerDay = colW / daysPerCol;
+        const projStartMs = new Date(projectStart).getTime();
+        const maxTaskEndMs = tasks.reduce((max, t) => Math.max(max, new Date(t.end).getTime()), projStartMs);
+        const daysTotal = (maxTaskEndMs - projStartMs) / DAY_MS;
+        const endPixel = Math.ceil(daysTotal * pxPerDay) + colW * 2;
+
+        const savedSvgWidth = innerSvg ? innerSvg.getAttribute('width') : null;
+        if (innerSvg) innerSvg.setAttribute('width', String(Math.round(endPixel)));
+
+        const taskListWidth = vc?.children[0]?.offsetWidth || 500;
+        const contentWidth = Math.round(endPixel) + taskListWidth;
+
         const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
             .map(s => s.outerHTML)
             .join('\n');
-        return { html: node.outerHTML, styles, contentWidth };
-    }, []);
+        const html = node.outerHTML;
+
+        // Przywróć stan live view
+        if (innerSvg && savedTransform !== null) innerSvg.style.transform = savedTransform;
+        if (innerSvg && savedSvgWidth !== null) innerSvg.setAttribute('width', savedSvgWidth);
+
+        return { html, styles, contentWidth };
+    }, [tasks, viewMode, projectStart]);
     useEffect(() => { onGetHtmlReady?.(getGanttHtml); }, [getGanttHtml, onGetHtmlReady]);
 
     const ganttTableCtx = useMemo(
