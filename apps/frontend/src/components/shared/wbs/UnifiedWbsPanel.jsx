@@ -1014,6 +1014,18 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     }, []);
 
     const handleExportPDF = async (sectionKey = 'all') => {
+        if (sectionKey === 'oferta' || sectionKey === 'all') {
+            const unanswered = wbsData.filter(n =>
+                Array.isArray(n.qa) && n.qa.some(p => (p?.question || '').trim() && !(p?.answer || '').trim())
+            );
+            if (unanswered.length > 0) {
+                const names = unanswered.map(n => n.name || '(bez nazwy)').join(', ');
+                const ok = window.confirm(
+                    `Uwaga: ${unanswered.length} węzeł/węzły WBS mają pytania bez odpowiedzi:\n${names}\n\nCzy mimo to kontynuować drukowanie oferty?`
+                );
+                if (!ok) return;
+            }
+        }
         const date = new Date().toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' });
         const show = (key) => sectionKey === key || sectionKey === 'all';
 
@@ -1100,15 +1112,15 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
 
         const offerTextForPdf = (() => {
             let t = getOfferText() || 'Brak treści oferty';
-            // Podmień placeholder
-            t = t.replace(/\{tabela wbs\}/g, wbsBranchTable);
-            // Podmień zapisaną (hardkodowaną) tabelę markdown na świeżą
-            t = t.replace(/(\|[^\n]+\n\|[\s\-:|]+\n(?:\|[^\n]+\n?)+)/m, wbsBranchTable + '\n');
+            t = t.replace(/\{tabela wbs1\}/gi, wbsTablesByDepth[1] || '');
+            t = t.replace(/\{tabela wbs2\}/gi, wbsTablesByDepth[2] || '');
+            t = t.replace(/\{tabela wbs3\}/gi, wbsTablesByDepth[3] || '');
+            t = t.replace(/\{tabela wbs\}/gi, wbsTablesByDepth[2] || '');
             return t;
         })();
         const offerHtml = show('oferta') ? `
             <div class="section">
-                <div class="strategy-text">${renderStrategyHtml(offerTextForPdf)}</div>
+                <div class="offer-text">${renderStrategyHtml(offerTextForPdf)}</div>
             </div>` : '';
 
         const wbsHtml = show('wbs') ? `
@@ -1353,11 +1365,13 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   }
   p { orphans: 3; widows: 3; }
   .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.6; }
-  .strategy-text p { margin: 0 0 4px 0; orphans: 3; widows: 3; }
-  .strategy-text p:empty { display: none; margin: 0; }
-  .strategy-text h1:first-child, .strategy-text h2:first-child, .strategy-text h3:first-child { margin-top: 0; }
-  .strategy-text ul, .strategy-text ol { margin: 4px 0 8px 1.5em; padding-left: 1em; }
-  .strategy-text li { margin: 2px 0; }
+  .offer-text { padding: 0; background: none; border: none; line-height: 1.6; }
+  .strategy-text p, .offer-text p { margin: 0 0 4px 0; orphans: 3; widows: 3; }
+  .strategy-text p:empty, .offer-text p:empty { display: none; margin: 0; }
+  .strategy-text h1:first-child, .strategy-text h2:first-child, .strategy-text h3:first-child,
+  .offer-text h1:first-child, .offer-text h2:first-child, .offer-text h3:first-child { margin-top: 0; }
+  .strategy-text ul, .strategy-text ol, .offer-text ul, .offer-text ol { margin: 4px 0 8px 1.5em; padding-left: 1em; }
+  .strategy-text li, .offer-text li { margin: 2px 0; }
   table { border-collapse: collapse; width: 100%; }
   td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; text-align: center; }
   td.num { text-align: center; font-family: monospace; font-size: 10px; }
@@ -2840,24 +2854,9 @@ ${materialsHtml}
         [wbsData, materialMetaByLookupKey, materialCostsByNode, requirementsQtyByNode, normalizedSearchQuery]
     );
 
-    const wbsBranchTable = useMemo(() => {
-        if (!wbsData.length) return '';
+    const wbsTablesByDepth = useMemo(() => {
+        if (!wbsData.length) return {};
         const byId = new Map(wbsData.map(n => [n.id, n]));
-        // BUD level = węzeł którego rodzic nie ma w byId
-        const isRootChild = (n) => n && n.parentId && !byId.has(n.parentId);
-        // Zwróć { budNode, productNode } dla danego węzła
-        const getBudProduct = (item) => {
-            let cur = item;
-            let prev = null;
-            while (cur && cur.parentId) {
-                const p = byId.get(cur.parentId);
-                if (!p) break;
-                if (isRootChild(p)) return { budNode: p, productNode: cur };
-                prev = cur; cur = p;
-            }
-            if (cur && isRootChild(cur)) return { budNode: cur, productNode: prev || cur };
-            return { budNode: cur, productNode: prev || cur };
-        };
         const offerPriceOf = (item) => {
             const q = Math.max(0, parseFloat(item.quantity) || 0);
             const uc = Math.max(0, parseFloat(item.unitCost) || 0);
@@ -2868,25 +2867,48 @@ ${materialsHtml}
             if (p > 0 && d > 0) p = Math.max(0, p * (1 - d / 100));
             return p;
         };
-        // Zbierz ceny per produkt, pogrupowane pod BUD
-        const byProduct = new Map(); // productId → { budName, productName, total }
-        for (const item of wbsData) {
-            if (!item.parentId) continue;
-            const price = offerPriceOf(item);
-            if (price <= 0) continue;
-            const { budNode, productNode } = getBudProduct(item);
-            if (!productNode) continue;
-            const key = productNode.id;
-            if (!byProduct.has(key)) byProduct.set(key, { budName: budNode?.name || '', productName: productNode.name || '', total: 0 });
-            byProduct.get(key).total += price;
-        }
-        const entries = [...byProduct.values()].filter(e => e.total > 0)
-            .sort((a, b) => a.budName.localeCompare(b.budName) || a.productName.localeCompare(b.productName));
-        if (!entries.length) return '';
-        const total = entries.reduce((s, e) => s + e.total, 0);
-        const tableRows = entries.map(e => `| ${e.budName} › ${e.productName} | ${fmtPLN(e.total)} |`).join('\n');
-        return `| Pozycja | Cena ofertowa (PLN) |\n|---|---|\n${tableRows}\n| **Razem** | **${fmtPLN(total)}** |`;
+        // Chain of ancestors within wbsData (root-first), excluding project root (parentId not in byId)
+        const getChain = (id) => {
+            const chain = [];
+            let cur = byId.get(id);
+            while (cur) {
+                chain.unshift(cur);
+                cur = (cur.parentId && byId.has(cur.parentId)) ? byId.get(cur.parentId) : null;
+            }
+            return chain;
+        };
+        const buildTable = (depth) => {
+            const grouped = new Map();
+            for (const item of wbsData) {
+                if (!item.parentId) continue;
+                const price = offerPriceOf(item);
+                if (price <= 0) continue;
+                const chain = getChain(item.id);
+                // Jeśli węzeł jest płytszy niż depth, podbija się do własnego poziomu (rollup).
+                // Jeśli jest głębszy, agreguje do przodka na poziomie depth.
+                const targetNode = chain[Math.min(depth - 1, chain.length - 1)];
+                if (!targetNode) continue;
+                if (!grouped.has(targetNode.id)) {
+                    const displayChain = chain.slice(0, Math.min(depth, chain.length));
+                    grouped.set(targetNode.id, {
+                        label: displayChain.map(n => n.name || '').join(' › '),
+                        sortKey: displayChain.map(n => n.name || '').join('|'),
+                        total: 0,
+                    });
+                }
+                grouped.get(targetNode.id).total += price;
+            }
+            const entries = [...grouped.values()].filter(e => e.total > 0)
+                .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+            if (!entries.length) return '';
+            const total = entries.reduce((s, e) => s + e.total, 0);
+            const rows = entries.map(e => `| ${e.label} | ${fmtPLN(e.total)} |`).join('\n');
+            return `| Pozycja | Cena ofertowa (PLN) |\n|---|---|\n${rows}\n| **Razem** | **${fmtPLN(total)}** |`;
+        };
+        return { 1: buildTable(1), 2: buildTable(2), 3: buildTable(3) };
     }, [wbsData]);
+
+    const wbsBranchTable = wbsTablesByDepth[2] || '';
 
     const offerRevenueTotal = useMemo(() => {
         return wbsData.reduce((sum, item) => {
@@ -3063,7 +3085,10 @@ ${materialsHtml}
                             .replace(/\{nazwa projektu\}/g, orderName || projectName || '')
                             .replace(/\{wartość oferty\}/g, fmtPLN(offerRevenueTotal) + ' PLN')
                             .replace(/\{data oferty\}/g, offerDate)
-                            .replace(/\{tabela wbs\}/g, wbsBranchTable)
+                            .replace(/\{tabela wbs1\}/gi, wbsTablesByDepth[1] || '')
+                            .replace(/\{tabela wbs2\}/gi, wbsTablesByDepth[2] || '')
+                            .replace(/\{tabela wbs3\}/gi, wbsTablesByDepth[3] || '')
+                            .replace(/\{tabela wbs\}/gi, wbsTablesByDepth[2] || '')
                             .replace(/\{Roboczo dni w projekcie\}/gi, workDaysFmt),
                     }));
                     return renderSection('oferta', 'Oferta', FileText, 'amber', (
@@ -3087,10 +3112,12 @@ ${materialsHtml}
                                     <span className="text-[10px] text-gray-500 uppercase tracking-widest">{'{Roboczo dni}'}</span>
                                     <span className="text-xs text-blue-300 font-semibold">{workDaysFmt} dni</span>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                    <span className="text-[10px] text-gray-500 uppercase tracking-widest">{'{tabela wbs}'}</span>
-                                    <span className="text-xs text-gray-400">{wbsBranchTable ? `${wbsBranchTable.split('\n').length - 2} etapów` : '—'}</span>
-                                </div>
+                                {[1, 2, 3].map(d => (
+                                    <div key={d} className="flex items-center gap-1.5">
+                                        <span className="text-[10px] text-gray-500 uppercase tracking-widest">{`{tabela wbs${d}}`}</span>
+                                        <span className="text-xs text-gray-400">{wbsTablesByDepth[d] ? `${wbsTablesByDepth[d].split('\n').length - 3} poz.` : '—'}</span>
+                                    </div>
+                                ))}
                                 <div className="flex items-center gap-1.5">
                                     <span className="text-[10px] text-gray-500 uppercase tracking-widest">{'{nazwa projektu}'}</span>
                                     <span className="text-xs text-gray-300">{orderName || projectName || '—'}</span>
@@ -3256,7 +3283,7 @@ ${materialsHtml}
                         <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between flex-shrink-0">
                             <div>
                                 <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-white">Szablony oferty</h3>
-                                <p className="text-[10px] text-gray-500 mt-0.5">Zmienne: {['{nazwa projektu}', '{wartość oferty}', '{data oferty}', '{tabela wbs}', '{Roboczo dni w projekcie}'].map(v => (
+                                <p className="text-[10px] text-gray-500 mt-0.5">Zmienne: {['{nazwa projektu}', '{wartość oferty}', '{data oferty}', '{tabela wbs}', '{tabela wbs1}', '{tabela wbs2}', '{tabela wbs3}', '{Roboczo dni w projekcie}'].map(v => (
                                     <code key={v} className="bg-black/30 px-1 rounded text-amber-300 mr-1">{v}</code>
                                 ))}</p>
                             </div>
