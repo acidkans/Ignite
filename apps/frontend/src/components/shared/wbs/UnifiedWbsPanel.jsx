@@ -1982,7 +1982,7 @@ ${ganttSectionHtml}
             for (const g1 of [...level1.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
                 const children = [...g1.children.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'));
                 for (let i = 0; i < children.length; i++) {
-                    const r = sheet.addRow([i === 0 ? g1.name : '', children[i].name, children[i].total]);
+                    const r = sheet.addRow([g1.name, children[i].name, children[i].total]);
                     r.getCell(3).numFmt = numFmt;
                     r.getCell(3).alignment = { horizontal: 'right' };
                     applyBorder(r, 3, cellBorder);
@@ -2028,7 +2028,7 @@ ${ganttSectionHtml}
                 for (const g2 of [...g1.children.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
                     let firstD2 = true;
                     for (const d3 of [...g2.children.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
-                        const r = sheet.addRow([firstD1 && firstD2 ? g1.name : '', firstD2 ? g2.name : '', d3.name, d3.total]);
+                        const r = sheet.addRow([g1.name, g2.name, d3.name, d3.total]);
                         r.getCell(4).numFmt = numFmt;
                         r.getCell(4).alignment = { horizontal: 'right' };
                         applyBorder(r, 4, cellBorder);
