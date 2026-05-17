@@ -10,6 +10,7 @@ import GanttSection from './GanttSection';
 import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy } from './wbsConstants';
 import { exportProjectPdf } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
+import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
 import WBSHybridTable from './WBSHybridTable';
 import BudgetTable from './BudgetTable';
 
@@ -1111,17 +1112,18 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 <div class="strategy-text">${renderStrategyHtml(getStrategyText() || 'Brak treści strategii')}</div>
             </div>` : '';
 
-        const offerTextForPdf = (() => {
-            let t = getOfferText() || 'Brak treści oferty';
-            t = t.replace(/\{tabela wbs1\}/gi, wbsTablesByDepth[1] || '');
-            t = t.replace(/\{tabela wbs2\}/gi, wbsTablesByDepth[2] || '');
-            t = t.replace(/\{tabela wbs3\}/gi, wbsTablesByDepth[3] || '');
-            t = t.replace(/\{tabela wbs\}/gi, wbsTablesByDepth[2] || '');
-            return t;
+        const offerHtmlContent = (() => {
+            const text = getOfferText() || 'Brak treści oferty';
+            const parts = text.split(/(\{tabela wbs[123]?\})/gi);
+            return parts.map(part => {
+                const m = part.match(/^\{tabela wbs([123]?)\}$/i);
+                if (m) return buildWbsHtmlTable(wbsData, parseInt(m[1]) || 2);
+                return renderStrategyHtml(part);
+            }).join('');
         })();
         const offerHtml = show('oferta') ? `
             <div class="section">
-                <div class="offer-text">${renderStrategyHtml(offerTextForPdf)}</div>
+                <div class="offer-text">${offerHtmlContent}</div>
             </div>` : '';
 
         const wbsHtml = show('wbs') ? `
