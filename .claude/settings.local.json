@@ -395,7 +395,25 @@
       "Bash(echo \"EXIT:$?\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/material-requirements/all-materials -H \"Authorization: Bearer test\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/api/material-requirements/all-materials -H \"Authorization: Bearer test\")",
-      "PowerShell(Get-Process -Id 16640 -ErrorAction SilentlyContinue)"
+      "PowerShell(Get-Process -Id 16640 -ErrorAction SilentlyContinue)",
+      "Bash(npx --no-install tsc --noEmit --jsx react-jsx --target esnext --moduleResolution bundler --allowImportingTsExtensions)",
+      "Bash(node --input-type=module --eval \"import\\('./src/components/shared/wbs/UnifiedWbsPanel.jsx'\\)\")",
+      "Bash(node -e \"require\\('acorn'\\).parse\\(require\\('fs'\\).readFileSync\\('src/components/shared/wbs/UnifiedWbsPanel.jsx','utf8'\\), {ecmaVersion:2022, sourceType:'module'}\\)\")",
+      "Bash(git -C \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\" status)",
+      "Bash(git -C \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\" diff --stat)",
+      "Bash(git -C \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\" log --oneline -3)",
+      "Bash(git -C \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\" add CHANGELOG.md CLAUDE.md apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx apps/frontend/src/utils/wbsPdfExport.js)",
+      "Bash(git -C \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\" stash)",
+      "Bash(git -C \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\" checkout oferta)",
+      "Bash(git -C \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\" branch -a)",
+      "Bash(git -C \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\" log --oneline -5)",
+      "Bash(git -C \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\" show --stat HEAD)",
+      "Bash(git -C \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\" show --stat HEAD~1)",
+      "Bash(git -C \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\" diff HEAD -- apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx)",
+      "Bash(git -C \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\" checkout main)",
+      "Bash(git -C \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\" diff 2331c3d 5e8c074 -- apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx)",
+      "Bash(git -C \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\" add apps/frontend/src/utils/wbsPdfExport.js apps/frontend/src/LoginPage.jsx)",
+      "Bash(awk '/^const handleExport|^const export|^function handleExport|^function export/' components/shared/wbs/UnifiedWbsPanel.jsx)"
     ]
   }
 }
