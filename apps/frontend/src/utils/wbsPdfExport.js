@@ -158,11 +158,10 @@ export function buildWbsHtmlTable(wbsData, depth) {
         return chain;
     };
 
-    const tblStyle = 'border-collapse:collapse;margin:14px auto;font-size:11px;';
-    const thS = 'background:#1e3a5f;color:#fff;font-weight:bold;padding:7px 16px;text-align:center;border:1px solid #16304d;white-space:nowrap;';
+    const tblStyle = 'border-collapse:collapse;width:100%;font-size:11px;margin:0;';
+    const thS = 'background:#1e3a5f !important;color:#fff !important;font-weight:bold;padding:7px 16px;text-align:center;border:1px solid #16304d;white-space:nowrap;text-transform:none !important;font-size:11px !important;';
     const tdS = 'padding:5px 14px;border:1px solid #ccc;vertical-align:middle;font-weight:normal;';
     const tdR = 'padding:5px 14px;border:1px solid #ccc;text-align:right;vertical-align:middle;font-weight:normal;';
-    const tdCont = `${tdS}border-top:none;color:transparent;`;
     const sumS = 'padding:6px 14px;border:1px solid #aaa;font-weight:bold;background:#eef2f7;';
     const sumR = 'padding:6px 14px;border:1px solid #aaa;font-weight:bold;background:#eef2f7;text-align:right;';
 
@@ -185,7 +184,7 @@ export function buildWbsHtmlTable(wbsData, depth) {
         const tdRNarrow = tdR + 'width:120px;';
         const sumRNarrow = sumR + 'width:120px;';
         const rows = entries.map(e => `<tr><td style="${tdS}">${esc(e.name)}</td><td style="${tdRNarrow}">${fmtPLN(e.total)}</td></tr>`).join('');
-        return `<table style="border-collapse:collapse;margin:14px auto;font-size:11px;width:auto;"><thead><tr><th style="${thS}">Zakresy</th><th style="${thNarrow}">Cena ofertowa (PLN)</th></tr></thead><tbody>${rows}<tr><td style="${sumS}text-align:right;"><strong>Razem</strong></td><td style="${sumRNarrow}"><strong>${fmtPLN(total)}</strong></td></tr></tbody></table>`;
+        return `<div class="wbs-offer-table"><table style="${tblStyle}width:auto;"><thead><tr><th style="${thS}">Zakresy</th><th style="${thNarrow}">Cena ofertowa (PLN)</th></tr></thead><tbody>${rows}<tr><td style="${sumS}text-align:right;"><strong>Razem</strong></td><td style="${sumRNarrow}"><strong>${fmtPLN(total)}</strong></td></tr></tbody></table></div>`;
     }
 
     if (depth === 2) {
@@ -208,10 +207,10 @@ export function buildWbsHtmlTable(wbsData, depth) {
         for (const g1 of [...level1.values()].sort((a, b) => a.name.localeCompare(b.name))) {
             const children = [...g1.children.values()].sort((a, b) => a.name.localeCompare(b.name));
             for (let i = 0; i < children.length; i++) {
-                rows += `<tr><td style="${i === 0 ? tdS : tdCont}">${esc(g1.name)}</td><td style="${tdS}">${esc(children[i].name)}</td><td style="${tdR}">${fmtPLN(children[i].total)}</td></tr>`;
+                rows += `<tr><td style="${tdS}">${esc(g1.name)}</td><td style="${tdS}">${esc(children[i].name)}</td><td style="${tdR}">${fmtPLN(children[i].total)}</td></tr>`;
             }
         }
-        return `<table style="${tblStyle}"><thead><tr><th style="${thS}">Zakresy</th><th style="${thS}">Składowe zakresów</th><th style="${thS}">Cena ofertowa (PLN)</th></tr></thead><tbody>${rows}<tr><td colspan="2" style="${sumS}text-align:right;"><strong>Razem</strong></td><td style="${sumR}"><strong>${fmtPLN(total)}</strong></td></tr></tbody></table>`;
+        return `<div class="wbs-offer-table"><table style="${tblStyle}"><thead><tr><th style="${thS}">Zakresy</th><th style="${thS}">Składowe zakresów</th><th style="${thS}">Cena ofertowa (PLN)</th></tr></thead><tbody>${rows}<tr><td colspan="2" style="${sumS}text-align:right;"><strong>Razem</strong></td><td style="${sumR}"><strong>${fmtPLN(total)}</strong></td></tr></tbody></table></div>`;
     }
 
     if (depth === 3) {
@@ -241,15 +240,13 @@ export function buildWbsHtmlTable(wbsData, depth) {
                 let firstD2 = true;
                 for (let i = 0; i < d3list.length; i++) {
                     rows += `<tr>`;
-                    rows += `<td style="${firstD1 && firstD2 ? tdS : tdCont}">${esc(g1.name)}</td>`;
-                    rows += `<td style="${firstD2 ? tdS : tdCont}">${esc(g2.name)}</td>`;
+                    rows += `<td style="${tdS}">${esc(g1.name)}</td>`;
+                    rows += `<td style="${tdS}">${esc(g2.name)}</td>`;
                     rows += `<td style="${tdS}">${esc(d3list[i].name)}</td><td style="${tdR}">${fmtPLN(d3list[i].total)}</td></tr>`;
-                    if (firstD1 && firstD2) firstD1 = false;
-                    firstD2 = false;
                 }
             }
         }
-        return `<table style="${tblStyle}"><thead><tr><th style="${thS}">Zakresy</th><th style="${thS}">Składowe zakresów</th><th style="${thS}">Składowe zakresów</th><th style="${thS}">Cena ofertowa (PLN)</th></tr></thead><tbody>${rows}<tr><td colspan="3" style="${sumS}text-align:right;"><strong>Razem</strong></td><td style="${sumR}"><strong>${fmtPLN(total)}</strong></td></tr></tbody></table>`;
+        return `<div class="wbs-offer-table"><table style="${tblStyle}"><thead><tr><th style="${thS}">Zakresy</th><th style="${thS}">Składowe zakresów</th><th style="${thS}">Pozycje</th><th style="${thS}">Cena ofertowa (PLN)</th></tr></thead><tbody>${rows}<tr><td colspan="3" style="${sumS}text-align:right;"><strong>Razem</strong></td><td style="${sumR}"><strong>${fmtPLN(total)}</strong></td></tr></tbody></table></div>`;
     }
 
     return '';

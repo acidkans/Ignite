@@ -1420,6 +1420,11 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   .gantt-wrap ._3rUKi { stroke: #dde0e4 !important; }
   .gantt-wrap ._RuwuK { stroke: #dde0e4 !important; }
   .gantt-wrap ._1rLuZ { stroke: #dde0e4 !important; }
+  .wbs-offer-table { margin: 14px 0; }
+  .wbs-offer-table table { width: 100%; border-collapse: collapse; }
+  .wbs-offer-table th { background: #1e3a5f !important; color: #fff !important; font-weight: bold !important; padding: 7px 16px !important; text-align: center !important; border: 1px solid #16304d !important; text-transform: none !important; font-size: 11px !important; }
+  .wbs-offer-table td { border: 1px solid #ccc; padding: 5px 14px; vertical-align: middle; }
+  .wbs-offer-table tr:nth-child(even) td { background: #f7f8f9; }
   .gantt-scale-inner { transform-origin: top left; }
   @media print {
     .summary-grid { display: block; }
