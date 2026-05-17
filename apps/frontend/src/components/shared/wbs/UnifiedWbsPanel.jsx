@@ -1368,6 +1368,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   .doc-header h1 { font-size: 20px; margin: 0 0 2px 0; }
   .doc-header .sub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: #6b7280; }
   .doc-header .meta { font-size: 10px; color: #9ca3af; margin-top: 4px; }
+  @media print {
+    .doc-header { position: fixed; top: 0; left: 0; right: 0; background: #fff; padding: 10px 14mm 8px 14mm; margin: 0; z-index: 1000; }
+    .doc-body { margin-top: 88px; }
+  }
   .section { margin-bottom: 22px; }
   .section-header { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; background: #1a1a2e; color: #fff; padding: 7px 12px; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
   h1, h2, h3, h4, h5, h6, .section-header, .table-title, .md-bold,
@@ -1434,6 +1438,7 @@ ${ganttData ? ganttData.styles : ''}
     <div class="meta">Przygotowano: ${date}</div>
   </div>
 </div>
+<div class="doc-body">
 ${offerHtml}
 ${strategyHtml}
 ${wbsHtml}
@@ -1441,6 +1446,7 @@ ${budgetHtml}
 ${_budgetSummaryHtml}
 ${materialsHtml}
 ${ganttSectionHtml}
+</div>
 </body>
 </html>`;
 
