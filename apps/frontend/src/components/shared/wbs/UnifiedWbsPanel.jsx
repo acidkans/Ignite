@@ -1872,6 +1872,178 @@ ${ganttSectionHtml}
         URL.revokeObjectURL(url);
     };
 
+    const handleExportOfertaWbsExcel = async () => {
+        if (!wbsData.length) { alert('Brak danych WBS do eksportu.'); return; }
+
+        const safeProjectName = String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'projekt';
+        const workbook = new ExcelJS.Workbook();
+
+        const navyFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
+        const sumFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF2F7' } };
+        const thinBorder = (color = 'FFCCCCCC') => ({ style: 'thin', color: { argb: color } });
+        const cellBorder = { top: thinBorder(), bottom: thinBorder(), left: thinBorder(), right: thinBorder() };
+        const sumBorder = { top: thinBorder('FFAAAAAA'), bottom: thinBorder('FFAAAAAA'), left: thinBorder('FFAAAAAA'), right: thinBorder('FFAAAAAA') };
+
+        const applyBorder = (row, colCount, border) => {
+            for (let c = 1; c <= colCount; c++) row.getCell(c).border = border;
+        };
+
+        const localById = new Map(wbsData.map(n => [n.id, n]));
+        const localPriceOf = (item) => {
+            const q = Math.max(0, parseFloat(item.quantity) || 0);
+            const uc = Math.max(0, parseFloat(item.unitCost) || 0);
+            const tc = uc * q || parseFloat(item.totalCost) || 0;
+            const m = (item.margin != null && String(item.margin) !== '') ? parseFloat(item.margin) : null;
+            const d = Math.max(0, parseFloat(item.discount) || 0);
+            let p = (m !== null && m !== 0) ? tc * (1 + m / 100) : tc;
+            if (p > 0 && d > 0) p = Math.max(0, p * (1 - d / 100));
+            return p;
+        };
+        const localChain = (id) => {
+            const chain = [];
+            let cur = localById.get(id);
+            while (cur) { chain.unshift(cur); cur = (cur.parentId && localById.has(cur.parentId)) ? localById.get(cur.parentId) : null; }
+            return chain;
+        };
+        const numFmt = '#,##0.00';
+
+        // ── Sheet WBS1 ──
+        {
+            const sheet = workbook.addWorksheet('WBS1 - Zakresy');
+            sheet.columns = [{ width: 45 }, { width: 24 }];
+            const hdr = sheet.addRow(['Zakresy', 'Cena ofertowa (PLN)']);
+            hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            hdr.fill = navyFill;
+            hdr.alignment = { horizontal: 'center', vertical: 'middle' };
+            applyBorder(hdr, 2, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
+
+            const groups = new Map();
+            for (const item of wbsData) {
+                if (!item.parentId) continue;
+                const price = localPriceOf(item);
+                if (price <= 0) continue;
+                const d1 = localChain(item.id)[0];
+                if (!d1) continue;
+                if (!groups.has(d1.id)) groups.set(d1.id, { name: d1.name || '', total: 0 });
+                groups.get(d1.id).total += price;
+            }
+            const entries = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'));
+            const total = entries.reduce((s, e) => s + e.total, 0);
+            for (const e of entries) {
+                const r = sheet.addRow([e.name, e.total]);
+                r.getCell(2).numFmt = numFmt;
+                r.getCell(2).alignment = { horizontal: 'right' };
+                applyBorder(r, 2, cellBorder);
+            }
+            const sumRow = sheet.addRow(['Razem', total]);
+            sumRow.font = { bold: true };
+            sumRow.fill = sumFill;
+            sumRow.getCell(2).numFmt = numFmt;
+            sumRow.getCell(2).alignment = { horizontal: 'right' };
+            applyBorder(sumRow, 2, sumBorder);
+            sheet.views = [{ state: 'frozen', ySplit: 1 }];
+        }
+
+        // ── Sheet WBS2 ──
+        {
+            const sheet = workbook.addWorksheet('WBS2 - Składowe');
+            sheet.columns = [{ width: 35 }, { width: 35 }, { width: 24 }];
+            const hdr = sheet.addRow(['Zakresy', 'Składowe zakresów', 'Cena ofertowa (PLN)']);
+            hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            hdr.fill = navyFill;
+            hdr.alignment = { horizontal: 'center', vertical: 'middle' };
+            applyBorder(hdr, 3, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
+
+            const level1 = new Map();
+            for (const item of wbsData) {
+                if (!item.parentId) continue;
+                const price = localPriceOf(item);
+                if (price <= 0) continue;
+                const chain = localChain(item.id);
+                const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)];
+                if (!d1) continue;
+                if (!level1.has(d1.id)) level1.set(d1.id, { name: d1.name || '', children: new Map() });
+                const g1 = level1.get(d1.id);
+                if (!g1.children.has(d2.id)) g1.children.set(d2.id, { name: d2.name || '', total: 0 });
+                g1.children.get(d2.id).total += price;
+            }
+            const total = [...level1.values()].reduce((s, g) => s + [...g.children.values()].reduce((s2, c) => s2 + c.total, 0), 0);
+            for (const g1 of [...level1.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
+                const children = [...g1.children.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'));
+                for (let i = 0; i < children.length; i++) {
+                    const r = sheet.addRow([i === 0 ? g1.name : '', children[i].name, children[i].total]);
+                    r.getCell(3).numFmt = numFmt;
+                    r.getCell(3).alignment = { horizontal: 'right' };
+                    applyBorder(r, 3, cellBorder);
+                }
+            }
+            const sumRow = sheet.addRow(['Razem', '', total]);
+            sumRow.font = { bold: true };
+            sumRow.fill = sumFill;
+            sumRow.getCell(3).numFmt = numFmt;
+            sumRow.getCell(3).alignment = { horizontal: 'right' };
+            applyBorder(sumRow, 3, sumBorder);
+            sheet.views = [{ state: 'frozen', ySplit: 1 }];
+        }
+
+        // ── Sheet WBS3 ──
+        {
+            const sheet = workbook.addWorksheet('WBS3 - Szczegóły');
+            sheet.columns = [{ width: 28 }, { width: 28 }, { width: 28 }, { width: 24 }];
+            const hdr = sheet.addRow(['Zakresy', 'Składowe zakresów', 'Pozycje', 'Cena ofertowa (PLN)']);
+            hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            hdr.fill = navyFill;
+            hdr.alignment = { horizontal: 'center', vertical: 'middle' };
+            applyBorder(hdr, 4, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
+
+            const level1 = new Map();
+            for (const item of wbsData) {
+                if (!item.parentId) continue;
+                const price = localPriceOf(item);
+                if (price <= 0) continue;
+                const chain = localChain(item.id);
+                const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)], d3 = chain[Math.min(2, chain.length - 1)];
+                if (!d1) continue;
+                if (!level1.has(d1.id)) level1.set(d1.id, { name: d1.name || '', children: new Map() });
+                const g1 = level1.get(d1.id);
+                if (!g1.children.has(d2.id)) g1.children.set(d2.id, { name: d2.name || '', children: new Map() });
+                const g2 = g1.children.get(d2.id);
+                if (!g2.children.has(d3.id)) g2.children.set(d3.id, { name: d3.name || '', total: 0 });
+                g2.children.get(d3.id).total += price;
+            }
+            const total = [...level1.values()].reduce((s, g1) => s + [...g1.children.values()].reduce((s2, g2) => s2 + [...g2.children.values()].reduce((s3, c) => s3 + c.total, 0), 0), 0);
+            for (const g1 of [...level1.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
+                let firstD1 = true;
+                for (const g2 of [...g1.children.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
+                    let firstD2 = true;
+                    for (const d3 of [...g2.children.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
+                        const r = sheet.addRow([firstD1 && firstD2 ? g1.name : '', firstD2 ? g2.name : '', d3.name, d3.total]);
+                        r.getCell(4).numFmt = numFmt;
+                        r.getCell(4).alignment = { horizontal: 'right' };
+                        applyBorder(r, 4, cellBorder);
+                        if (firstD1 && firstD2) firstD1 = false;
+                        firstD2 = false;
+                    }
+                }
+            }
+            const sumRow = sheet.addRow(['Razem', '', '', total]);
+            sumRow.font = { bold: true };
+            sumRow.fill = sumFill;
+            sumRow.getCell(4).numFmt = numFmt;
+            sumRow.getCell(4).alignment = { horizontal: 'right' };
+            applyBorder(sumRow, 4, sumBorder);
+            sheet.views = [{ state: 'frozen', ySplit: 1 }];
+        }
+
+        const buf = await workbook.xlsx.writeBuffer();
+        const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `Airtel_oferta_${safeProjectName}.xlsx`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+    };
+
     const addNode = useCallback(async (parentId = null) => {
         try {
             const res = await fetch(`${API_URL}/wbs-nodes`, {
@@ -3169,8 +3341,8 @@ ${ganttSectionHtml}
                             />
                         </div>
                     ), () => handleExportPDF('oferta'), (
-                        <button onClick={(e) => { e.stopPropagation(); handleExportOfertaExcel(); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
-                            <FileDown size={11} /> Eksport oferty XLS
+                        <button onClick={(e) => { e.stopPropagation(); handleExportOfertaWbsExcel(); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                            <FileDown size={11} /> Eksport tabel WBS XLS
                         </button>
                     ));
                 }
