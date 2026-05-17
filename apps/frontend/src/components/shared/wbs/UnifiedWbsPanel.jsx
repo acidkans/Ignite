@@ -1424,8 +1424,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   .gantt-scale-inner { transform-origin: top left; }
   @media print {
     body { padding: 0; }
-    .doc-header { position: fixed; top: 0; left: 0; right: 0; height: 30mm; background: #fff; padding: 5mm 14mm; border-bottom: 3px solid #1a1a2e; display: flex; align-items: center; z-index: 1000; box-sizing: border-box; }
-    .doc-body { padding-top: 8mm; }
+    .doc-header { position: fixed; top: -30mm; left: -14mm; right: -14mm; height: 30mm; background: #fff; padding: 5mm 14mm; border-bottom: 3px solid #1a1a2e; display: flex; align-items: center; z-index: 1000; box-sizing: border-box; }
+    .doc-body { padding-top: 4mm; }
     thead { display: table-header-group !important; }
     thead tr { break-inside: avoid !important; break-after: avoid !important; }
     .summary-grid { display: block; }
