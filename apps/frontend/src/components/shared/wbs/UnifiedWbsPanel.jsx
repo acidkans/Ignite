@@ -9,7 +9,6 @@ import TasksCalendarSection from './TasksCalendarSection';
 import GanttSection from './GanttSection';
 import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy } from './wbsConstants';
 import { exportProjectPdf } from '../../../utils/projectPdfExport';
-import { esc as pdfEsc, buildPdfDocument, buildWbsHtmlTable as buildWbsHtmlTableUtil, openPdfBlob, fetchLogoDataUrl } from '../../../utils/wbsPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import WBSHybridTable from './WBSHybridTable';
 import BudgetTable from './BudgetTable';
@@ -106,7 +105,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const [presetManagerOpen, setPresetManagerOpen] = useState(false);
     const [editingPreset, setEditingPreset] = useState(null); // { id, label, text } | null (null = nowy)
     const [editingPresetDraft, setEditingPresetDraft] = useState({ label: '', text: '' });
-    const presetTextareaRef = useRef(null);
 
     const savePresets = (next) => { setOfferPresets(next); localStorage.setItem(PRESETS_KEY, JSON.stringify(next)); };
     const openNewPreset = () => { setEditingPreset(null); setEditingPresetDraft({ label: '', text: '' }); };
@@ -134,7 +132,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const [requirementByNodeId, setRequirementByNodeId] = useState({});
     const [ganttProjectStart, setGanttProjectStart] = useState(null);
     const [ganttProjectEnd, setGanttProjectEnd] = useState(null);
-    const [projectContacts, setProjectContacts] = useState([]);
     const [budgetDiscountAmount, setBudgetDiscountAmount] = useState('');
     const [budgetDiscountPercent, setBudgetDiscountPercent] = useState('');
     const [markerLinksCache, setMarkerLinksCache] = useState({});
@@ -368,16 +365,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                             const reqData = JSON.parse(text);
                             if (reqData.projectStart) setGanttProjectStart(reqData.projectStart);
                             if (reqData.projectEnd) setGanttProjectEnd(reqData.projectEnd);
-                            // Zbierz kontakty projektu (PM + dodatkowe) jako opcje właściciela WBS
-                            {
-                                const contacts = [];
-                                if (reqData.clientProjectManager) contacts.push({ id: 'pm', firstName: reqData.clientProjectManager, lastName: '', email: '' });
-                                try {
-                                    const extras = reqData.clientContacts ? JSON.parse(reqData.clientContacts) : [];
-                                    extras.forEach(c => { if (c.name) contacts.push({ id: c.id || c.name, firstName: c.name, lastName: c.surname || '', email: c.email || '', company: c.company || '' }); });
-                                } catch { /* ignore */ }
-                                setProjectContacts(contacts);
-                            }
                             // Pobierz nazwy węzłów produktowych z relacyjnej listy (wbsItemsById)
                             projectItemNamesById = Object.fromEntries(
                                 [...wbsItemsById.values()]
@@ -1019,10 +1006,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 html += '<br>';
             } else {
                 resetOl();
-                const wsMatch = raw.match(/^(\s+)/);
-                const indentEm = wsMatch ? wsMatch[1].replace(/\t/g, '    ').length * 0.55 : 0;
-                const indentStyle = indentEm > 0 ? `text-indent:${indentEm.toFixed(1)}em;` : '';
-                html += `<p style="margin:0 0 4px 0;${indentStyle}">${bold(raw.trimStart())}</p>`;
+                html += `<p style="margin:0 0 4px 0">${bold(raw)}</p>`;
             }
             idx++;
         }
@@ -1044,13 +1028,21 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         }
         const date = new Date().toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' });
         const show = (key) => sectionKey === key || sectionKey === 'all';
+        const ganttData = sectionKey === 'gantt' ? (ganttGetHtmlRef.current?.() || null) : null;
 
         // Zawsze czytaj Q&A z live ref, żeby nie eksportować przestarzałego stanu przed debounced save.
         const buildLiveQaMap = (nodes, acc = {}) => { for (const n of nodes) { acc[n.id] = n.qa; if (n.children?.length) buildLiveQaMap(n.children, acc); } return acc; };
         const liveQaMap = buildLiveQaMap(wbsTreeRef.current?.items || []);
 
-        const logoDataUrl = await fetchLogoDataUrl();
-        const esc = pdfEsc;
+        let logoDataUrl = '';
+        try {
+            const logoRes = await fetch(`${window.location.origin}/airtel-logo-services.png`);
+            if (logoRes.ok) {
+                const blob = await logoRes.blob();
+                logoDataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+            }
+        } catch (_) {}
+        const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
         const markerSummary = (nodeId) => {
             const links = markerLinksCache[nodeId] || [];
@@ -1119,20 +1111,17 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 <div class="strategy-text">${renderStrategyHtml(getStrategyText() || 'Brak treści strategii')}</div>
             </div>` : '';
 
-        const buildWbsHtmlTable = (depth) => buildWbsHtmlTableUtil(wbsData, depth);
-
-        const offerHtmlContent = (() => {
-            const text = getOfferText() || 'Brak treści oferty';
-            const parts = text.split(/(\{tabela wbs[123]\})/gi);
-            return parts.map(part => {
-                const m = part.match(/^\{tabela wbs([123])\}$/i);
-                if (m) return buildWbsHtmlTable(parseInt(m[1]));
-                return renderStrategyHtml(part);
-            }).join('');
+        const offerTextForPdf = (() => {
+            let t = getOfferText() || 'Brak treści oferty';
+            t = t.replace(/\{tabela wbs1\}/gi, wbsTablesByDepth[1] || '');
+            t = t.replace(/\{tabela wbs2\}/gi, wbsTablesByDepth[2] || '');
+            t = t.replace(/\{tabela wbs3\}/gi, wbsTablesByDepth[3] || '');
+            t = t.replace(/\{tabela wbs\}/gi, wbsTablesByDepth[2] || '');
+            return t;
         })();
         const offerHtml = show('oferta') ? `
             <div class="section">
-                <div class="offer-text">${offerHtmlContent}</div>
+                <div class="offer-text">${renderStrategyHtml(offerTextForPdf)}</div>
             </div>` : '';
 
         const wbsHtml = show('wbs') ? `
@@ -1249,7 +1238,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             const labels = { DEVICE: 'Urządzenie', MATERIAL: 'Materiał', CABLE: 'Kabel', SOFTWARE: 'Oprogramowanie', SERVICE: 'Usługa' };
             return labels[String(code || '').toUpperCase()] || code || '—';
         };
-        const materialsHtml = (show('materials') || show('oferta')) ? await (async () => {
+        const materialsHtml = (show('materials') || show('oferta')) ? (() => {
             const wbsNodeIdSet = new Set((wbsData || []).map(n => n.id));
             const reqs = allRequirements.filter(r => {
                 if (!r.id) return false;
@@ -1260,16 +1249,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 } catch { return false; }
             });
             if (!reqs.length) return '';
-            const imageMap = new Map();
-            await Promise.all(reqs.filter(r => r.imageUrl && r.id).map(async r => {
-                try {
-                    const res = await fetch(`${API_URL}/material-requirements/${r.id}/image`, { headers: { Authorization: `Bearer ${token()}` } });
-                    if (!res.ok) return;
-                    const blob = await res.blob();
-                    const b64 = await new Promise(resolve => { const fr = new FileReader(); fr.onload = () => resolve(fr.result); fr.readAsDataURL(blob); });
-                    imageMap.set(String(r.id), b64);
-                } catch {}
-            }));
             const wbsNodeById = new Map((wbsData || []).map(n => [n.id, n]));
             const effectiveQty = (r) => {
                 // Suma ilości z aktualnych węzłów WBS (ignorujemy stare wartości w allokacjach)
@@ -1331,18 +1310,14 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 if (!pm.has(pId)) pm.set(pId, { node: productNode, reqs: [] });
                 pm.get(pId).reqs.push(r);
             }
-            let matLp = 0;
             const rows = [...budMap.values()].flatMap(bud => {
                 const budLabel = bud.node?.name || '—';
-                const budRow = `<tr><td colspan="9" style="text-align:left;font-weight:bold;font-size:15px;background:#1a1a2e;color:#fff;padding:6px 10px;border-bottom:2px solid #1a1a2e">${esc(budLabel)}</td></tr>`;
+                const budRow = `<tr><td colspan="7" style="text-align:left;font-weight:bold;font-size:15px;background:#1a1a2e;color:#fff;padding:6px 10px;border-bottom:2px solid #1a1a2e">${esc(budLabel)}</td></tr>`;
                 const prodRows = [...bud.prodMap.values()].flatMap(prod => {
                     const prodLabel = prod.node?.name || '—';
-                    const prodHeader = `<tr><td colspan="9" style="text-align:left;font-weight:bold;font-size:12px;background:#f0f4ff;padding:5px 8px 5px 20px;border-bottom:1px solid #1a1a2e;color:#1a1a2e"><span>${esc(prodLabel)}</span></td></tr>`;
+                    const prodHeader = `<tr><td colspan="7" style="text-align:left;font-weight:bold;font-size:12px;background:#f0f4ff;padding:5px 8px 5px 20px;border-bottom:1px solid #1a1a2e;color:#1a1a2e"><span>${esc(prodLabel)}</span></td></tr>`;
                     const matRows = prod.reqs.map(r => {
-                        matLp++;
-                        const wbsNodeId = getWbsNodeId(r);
-                        const wbsNode = wbsNodeId ? wbsNodeById.get(String(wbsNodeId)) : null;
-                        const name = esc(wbsNode?.name || r.name || r.productName || '—');
+                        const name = esc(r.name || r.productName || '—');
                         const manufacturer = esc(r.manufacturer || r.producent || '—');
                         const model = esc(r.model || '—');
                         const tradeName = esc(r.tradeName || r.nazwHandlowa || r.nazwaHandlowa || '—');
@@ -1350,9 +1325,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                         const qtyStr = qty != null ? `${qty}` : '—';
                         const unit = esc(r.unit || '');
                         const spec = esc(String(r.technicalSpec || '').slice(0, 120));
-                        const imgB64 = imageMap.get(String(r.id));
-                        const imgCell = imgB64 ? `<img src="${imgB64}" style="max-width:48px;max-height:48px;object-fit:contain;border:1px solid #e5e7eb;border-radius:3px;" />` : '';
-                        return `<tr><td class="mat-lp">${matLp}</td><td class="mat-img">${imgCell}</td><td class="mat-name">${name}</td><td class="mat-txt">${manufacturer}</td><td class="mat-txt">${model}</td><td class="mat-txt">${tradeName}</td><td class="mat-num">${qtyStr}</td><td class="mat-txt">${unit}</td><td class="mat-spec">${spec}</td></tr>`;
+                        return `<tr><td style="text-align:left;padding-left:28px">${name}</td><td>${manufacturer}</td><td>${model}</td><td>${tradeName}</td><td class="num">${qtyStr}</td><td>${unit}</td><td style="font-size:9px;color:#6b7280;text-align:left">${spec}</td></tr>`;
                     });
                     return [prodHeader, ...matRows];
                 });
@@ -1362,33 +1335,119 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             return `
             <div class="section" style="${pageBreak}">
                 <div class="section-header">Materiały</div>
-                <table class="mat-table">
-                    <colgroup>
-                        <col style="width:4%">
-                        <col style="width:7%">
-                        <col style="width:21%">
-                        <col style="width:13%">
-                        <col style="width:11%">
-                        <col style="width:11%">
-                        <col style="width:6%">
-                        <col style="width:5%">
-                        <col style="width:22%">
-                    </colgroup>
-                    <thead><tr><th class="mat-lp">Lp.</th><th></th><th style="text-align:left">Nazwa</th><th style="text-align:left">Producent</th><th style="text-align:left">Model</th><th style="text-align:left">Nazwa handlowa</th><th class="mat-num">Ilość</th><th style="text-align:left">Jedn.</th><th style="text-align:left">Specyfikacja</th></tr></thead>
+                <table>
+                    <thead><tr><th>Nazwa</th><th>Producent</th><th>Model</th><th>Nazwa handlowa</th><th>Ilość</th><th>Jedn.</th><th>Specyfikacja</th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
             </div>`;
         })() : '';
 
-        const SECTION_SUBTITLES = { strategy: 'Jak to chcemy zrobić', oferta: 'Oferta', budget: 'Budżet', 'wbs-hybrid': 'Struktura projektu', wbs: 'Struktura projektu', materials: 'Materiały' };
-        const html = buildPdfDocument({
-            logoDataUrl,
-            title: orderName || projectName || 'Zamówienie',
-            subtitle: SECTION_SUBTITLES[sectionKey] || 'Planowanie',
-            date,
-            bodyHtml: `${offerHtml}${strategyHtml}${wbsHtml}${budgetHtml}${_budgetSummaryHtml}${materialsHtml}`,
-        });
-        openPdfBlob(html);
+        const ganttContentWidth = ganttData?.contentWidth || 1200;
+        const A3_LANDSCAPE_USABLE = 1400; // A3 landscape minus margins (~392mm @ 96dpi)
+        const ganttZoom = ganttContentWidth > A3_LANDSCAPE_USABLE ? (A3_LANDSCAPE_USABLE / ganttContentWidth).toFixed(4) : '1';
+        const ganttSectionHtml = ganttData ? `
+            <div class="section">
+                <div class="section-header">Harmonogram (Gantt)</div>
+                <div class="gantt-wrap"><div class="gantt-scale-inner" style="zoom:${ganttZoom};transform-origin:top left">${ganttData.html}</div></div>
+            </div>` : '';
+
+        const html = `<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>${sectionKey === 'gantt' ? esc((orderName || projectName || 'projekt').replace(/[\\/:*?"<>|]/g, '_')) + '_gantt' : ''}</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 20mm 14mm; }
+  .doc-header { border-bottom: 3px solid #1a1a2e; padding: 18px 0 10px 0; margin: 0 0 18px 0; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; display: flex; align-items: flex-start; gap: 16px; }
+  .doc-header-logo { height: 48px; width: auto; object-fit: contain; flex-shrink: 0; }
+  .doc-header-text { flex: 1; }
+  .doc-header h1 { font-size: 20px; margin: 0 0 2px 0; }
+  .doc-header .sub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: #6b7280; }
+  .doc-header .meta { font-size: 10px; color: #9ca3af; margin-top: 4px; }
+  .section { margin-bottom: 22px; }
+  .section-header { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; background: #1a1a2e; color: #fff; padding: 7px 12px; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
+  h1, h2, h3, h4, h5, h6, .section-header, .table-title, .md-bold,
+  .strategy-text h1, .strategy-text h2, .strategy-text h3, .strategy-text h4 {
+    break-after: avoid; page-break-after: avoid;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  p { orphans: 3; widows: 3; }
+  .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.6; }
+  .offer-text { padding: 0; background: none; border: none; line-height: 1.6; }
+  .strategy-text p, .offer-text p { margin: 0 0 4px 0; orphans: 3; widows: 3; }
+  .strategy-text p:empty, .offer-text p:empty { display: none; margin: 0; }
+  .strategy-text h1:first-child, .strategy-text h2:first-child, .strategy-text h3:first-child,
+  .offer-text h1:first-child, .offer-text h2:first-child, .offer-text h3:first-child { margin-top: 0; }
+  .strategy-text ul, .strategy-text ol, .offer-text ul, .offer-text ol { margin: 4px 0 8px 1.5em; padding-left: 1em; }
+  .strategy-text li, .offer-text li { margin: 2px 0; }
+  table { border-collapse: collapse; width: 100%; }
+  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; text-align: center; }
+  td.num { text-align: center; font-family: monospace; font-size: 10px; }
+  tr:nth-child(even) td { background: #f9fafb; }
+  .budget-table td { font-size: 12px; }
+  .budget-table td.num { font-size: 11px; }
+  table.kv th { width: 50%; background: #f9fafb; text-transform: none; font-size: 10px; color: #4b5563; text-align: left; border-bottom: 1px solid #e5e7eb; }
+  table.kv td { font-size: 11px; color: #111; }
+  .summary-grid { display: grid; grid-template-columns: 1fr 1.6fr; gap: 16px; padding: 12px 0 0 0; }
+  .summary-block { margin-bottom: 24px; break-inside: avoid; page-break-inside: avoid; }
+  .table-title { font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; color: #111; margin-bottom: 6px; padding: 5px 0; border-bottom: 2px solid #1a1a2e; }
+  th { background: #f3f4f6; color: #374151; padding: 7px 8px; text-align: center; font-size: 12px; font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
+  thead { display: table-header-group; }
+  tr { page-break-inside: avoid; break-inside: avoid; }
+  @page { margin: 0; size: ${sectionKey === 'gantt' ? 'A3 landscape' : 'A4 portrait'}; }
+  .budget-table { table-layout: fixed; word-wrap: break-word; }
+  .gantt-wrap { overflow: hidden; background: #fff; padding: 8px 0; }
+  .gantt-wrap svg text { fill: #0b0f17 !important; }
+  .gantt-wrap > * { background: #fff !important; }
+  .gantt-wrap [class] { background: #fff !important; }
+  .gantt-wrap div { color: #1f2937 !important; }
+  /* Reset horizontal-scroll transform i overflow clipping żeby pokazać nagłówek miesięcy */
+  .gantt-wrap ._CZjuD { overflow: visible !important; }
+  .gantt-wrap ._2B2zv { overflow: visible !important; }
+  .gantt-wrap ._CZjuD > * { transform: none !important; }
+  .gantt-wrap ._2k9Ys { display: none !important; }
+  /* Lekkie kratki wierszy i kolumn */
+  .gantt-wrap ._2dZTy { fill: #fff !important; }
+  .gantt-wrap ._2dZTy:nth-child(even) { fill: #f7f8f9 !important; }
+  .gantt-wrap ._3rUKi { stroke: #dde0e4 !important; }
+  .gantt-wrap ._RuwuK { stroke: #dde0e4 !important; }
+  .gantt-wrap ._1rLuZ { stroke: #dde0e4 !important; }
+  .gantt-scale-inner { transform-origin: top left; }
+  @media print {
+    .summary-grid { display: block; }
+    .summary-block { margin-bottom: 16px; }
+    .summary-section { page-break-before: always; }
+  }
+</style>
+${ganttData ? ganttData.styles : ''}
+</head>
+<body>
+<div class="doc-header">
+  ${logoDataUrl ? `<img class="doc-header-logo" src="${logoDataUrl}" alt="Logo" />` : ''}
+  <div class="doc-header-text">
+    <h1>${esc(orderName || projectName || 'Zamówienie')}</h1>
+    <div class="sub">${{ strategy: 'Jak to chcemy zrobić', oferta: 'Oferta', budget: 'Budżet', 'wbs-hybrid': 'Struktura projektu', wbs: 'Struktura projektu', materials: 'Materiały', gantt: 'Harmonogram (Gantt)' }[sectionKey] || 'Planowanie'}</div>
+    <div class="meta">Przygotowano: ${date}</div>
+  </div>
+</div>
+${offerHtml}
+${strategyHtml}
+${wbsHtml}
+${budgetHtml}
+${_budgetSummaryHtml}
+${materialsHtml}
+${ganttSectionHtml}
+</body>
+</html>`;
+
+        const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+        const blobUrl = URL.createObjectURL(blob);
+        const win = window.open(blobUrl, '_blank');
+        if (!win) { alert('Zezwól na otwieranie pop-upów aby eksportować PDF'); URL.revokeObjectURL(blobUrl); return; }
+        win.focus();
+        setTimeout(() => { win.print(); setTimeout(() => URL.revokeObjectURL(blobUrl), 60000); }, 600);
     };
 
     const handleExportBudgetExcel = async () => {
@@ -1995,18 +2054,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         } catch (e) { console.error('Update node error:', e); }
     }, [authHeaders, wbsData, refreshMaterialCosts]);
 
-    // Zapis dat startowej/końcowej paska Gantta do bazy — wywoływany przy każdym drag/resize/datepicker.
-    const handleGanttDateChange = useCallback(async (nodeId, startIso, endIso) => {
-        if (!nodeId || !startIso || !endIso) return;
-        try {
-            await fetch(`${API_URL}/wbs-nodes/${nodeId}`, {
-                method: 'PATCH',
-                headers: authHeaders(),
-                body: JSON.stringify({ ganttStart: startIso, ganttEnd: endIso }),
-            });
-        } catch (e) { console.error('Gantt date save error:', e); }
-    }, [authHeaders]);
-
     // Drag krawędzi belki w Gantcie → quantity (dni) przez wbs-nodes/{id} (PATCH).
     // Unit zmienia się na 'dni' tylko gdy node ma już dniową jednostkę lub pustą — pakiet/komplet itp. zostają bez zmian.
     const handleGanttDurationChange = useCallback(async (nodeId, days) => {
@@ -2528,7 +2575,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 comment: row.comment ?? '',
             });
             // Sync WBS-visible fields to wbsTree (WBSHybridTable reads from wbsTree, not wbsData)
-            if (field === 'comment' || field === 'unit' || field === 'quantity') {
+            if (field === 'comment' || field === 'unit') {
                 setWbsTreeAndRef(prev => {
                     const upd = items => items.map(n =>
                         n.id === row.id
@@ -2842,10 +2889,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         const offerPriceOf = (item) => {
             const q = Math.max(0, parseFloat(item.quantity) || 0);
             const uc = Math.max(0, parseFloat(item.unitCost) || 0);
-            const tc = uc * q || parseFloat(item.totalCost) || 0;
+            const tc = uc * q;
             const m = (item.margin != null && String(item.margin) !== '') ? parseFloat(item.margin) : null;
             const d = Math.max(0, parseFloat(item.discount) || 0);
-            let p = (m !== null && m !== 0) ? tc * (1 + m / 100) : tc;
+            let p = (m !== null && m !== 0) ? tc * (1 + m / 100) : (parseFloat(item.totalPrice) || 0);
             if (p > 0 && d > 0) p = Math.max(0, p * (1 - d / 100));
             return p;
         };
@@ -2866,6 +2913,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 const price = offerPriceOf(item);
                 if (price <= 0) continue;
                 const chain = getChain(item.id);
+                // Jeśli węzeł jest płytszy niż depth, podbija się do własnego poziomu (rollup).
+                // Jeśli jest głębszy, agreguje do przodka na poziomie depth.
                 const targetNode = chain[Math.min(depth - 1, chain.length - 1)];
                 if (!targetNode) continue;
                 if (!grouped.has(targetNode.id)) {
@@ -2888,16 +2937,17 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         return { 1: buildTable(1), 2: buildTable(2), 3: buildTable(3) };
     }, [wbsData]);
 
+    const wbsBranchTable = wbsTablesByDepth[2] || '';
 
     const offerRevenueTotal = useMemo(() => {
         return wbsData.reduce((sum, item) => {
             if (!item.parentId) return sum;
             const q = Math.max(0, parseFloat(item.quantity) || 0);
             const uc = Math.max(0, parseFloat(item.unitCost) || 0);
-            const totalCost = uc * q || parseFloat(item.totalCost) || 0;
+            const totalCost = uc * q;
             const marginRaw = (item.margin != null && String(item.margin) !== '') ? parseFloat(item.margin) : null;
             const d = Math.max(0, parseFloat(item.discount) || 0);
-            let offerPrice = (marginRaw !== null && marginRaw !== 0) ? totalCost * (1 + marginRaw / 100) : totalCost;
+            let offerPrice = (marginRaw !== null && marginRaw !== 0) ? totalCost * (1 + marginRaw / 100) : 0;
             if (offerPrice > 0 && d > 0) offerPrice = Math.max(0, offerPrice * (1 - d / 100));
             return sum + offerPrice;
         }, 0);
@@ -3064,6 +3114,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                             .replace(/\{nazwa projektu\}/g, orderName || projectName || '')
                             .replace(/\{wartość oferty\}/g, fmtPLN(offerRevenueTotal) + ' PLN')
                             .replace(/\{data oferty\}/g, offerDate)
+                            .replace(/\{tabela wbs1\}/gi, wbsTablesByDepth[1] || '')
+                            .replace(/\{tabela wbs2\}/gi, wbsTablesByDepth[2] || '')
+                            .replace(/\{tabela wbs3\}/gi, wbsTablesByDepth[3] || '')
+                            .replace(/\{tabela wbs\}/gi, wbsTablesByDepth[2] || '')
                             .replace(/\{Roboczo dni w projekcie\}/gi, workDaysFmt),
                     }));
                     return renderSection('oferta', 'Oferta', FileText, 'amber', (
@@ -3147,13 +3201,12 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                             wbsTree={wbsTree}
                             projectName={orderName || projectName || 'Projekt'}
                             onNodeDurationChange={handleGanttDurationChange}
-                            onGanttDateChange={handleGanttDateChange}
                             onExportReady={fn => { ganttExportRef.current = fn; }}
                             onGetHtmlReady={fn => { ganttGetHtmlRef.current = fn; }}
                             projectStartDate={ganttProjectStart}
                             projectEndDate={ganttProjectEnd}
                         />
-                    ), () => ganttExportRef.current?.());
+                    ), () => handleExportPDF('gantt'));
                 }
                 if (key === 'wbs-hybrid') {
                     return renderSection('wbs-hybrid', `Struktura projektu: ${orderName || projectName || '—'}`, ListTree, 'violet', (
@@ -3165,7 +3218,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                                 processNodeId={nodeId}
                                 onSave={handleSaveHybridWBS}
                                 users={assignedUsers}
-                                projectContacts={projectContacts}
                                 onRequirementDrop={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
                                 isManager={isManagerOrAdmin}
                                 onNodesDeleted={handleHybridNodesDeleted}
@@ -3232,22 +3284,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                             versionId={versionId}
                             readOnly={!isManagerOrAdmin && !isLogistyk}
                             externalWbsNodes={wbsData}
-                            onPatchNode={(id, data) => {
-                                setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n));
-                                if ('quantity' in data) {
-                                    const q = parseFloat(data.quantity) || 0;
-                                    setRequirementsQtyByNode(prev => ({ ...prev, [id]: q }));
-                                    updateLocalWbsBudgetRow(id, { quantity: q });
-                                    saveBudgetField(id, { quantity: q });
-                                    setWbsTreeAndRef(prev => {
-                                        const upd = items => items.map(n =>
-                                            n.id === id ? { ...n, quantity: q }
-                                            : { ...n, children: n.children?.length ? upd(n.children) : n.children }
-                                        );
-                                        return { ...prev, items: upd(prev.items || []) };
-                                    });
-                                }
-                            }}
+                            onPatchNode={(id, data) => setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))}
                             onWbsUpdate={async () => { await refreshMaterialCosts(); }}
                             refreshKey={reqRefreshKey}
                             projectName={projectName}
@@ -3275,7 +3312,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                         <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between flex-shrink-0">
                             <div>
                                 <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-white">Szablony oferty</h3>
-                                <p className="text-[10px] text-gray-500 mt-0.5">Zmienne: {['{nazwa projektu}', '{wartość oferty}', '{data oferty}', '{tabela wbs1}', '{tabela wbs2}', '{tabela wbs3}', '{Roboczo dni w projekcie}'].map(v => (
+                                <p className="text-[10px] text-gray-500 mt-0.5">Zmienne: {['{nazwa projektu}', '{wartość oferty}', '{data oferty}', '{tabela wbs}', '{tabela wbs1}', '{tabela wbs2}', '{tabela wbs3}', '{Roboczo dni w projekcie}'].map(v => (
                                     <code key={v} className="bg-black/30 px-1 rounded text-amber-300 mr-1">{v}</code>
                                 ))}</p>
                             </div>
