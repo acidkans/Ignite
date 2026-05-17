@@ -3,6 +3,7 @@
 // Includes: Informacje o projekcie + Strategia + WBS + Materiały. NO budget.
 
 import { API_URL } from '../config';
+import { buildPdfDocument, openPdfBlob, fetchLogoDataUrl, esc as escUtil } from './wbsPdfExport';
 
 const flattenWbsItems = (items) => {
     const result = [];
@@ -32,7 +33,7 @@ const MAT_TYPE = {
     SOFTWARE: 'Oprogramowanie', SERVICE: 'Usługa',
 };
 
-const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const esc = escUtil;
 
 const renderStrategyHtml = (text) => (text || '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -130,14 +131,7 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
     const date = new Date().toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' });
     const versionQuery = versionId ? `?versionId=${versionId}` : '';
 
-    let logoDataUrl = '';
-    try {
-        const logoRes = await fetch(`${window.location.origin}/airtel-logo-services.png`);
-        if (logoRes.ok) {
-            const blob = await logoRes.blob();
-            logoDataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
-        }
-    } catch (_) {}
+    const logoDataUrl = await fetchLogoDataUrl();
 
     const [info, orderReq, wbsResp, matsResp] = await Promise.all([
         fetchJson(`${API_URL}/process-tree/${nodeId}/info`, token),
@@ -320,85 +314,41 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
             </table>` : '<div class="empty">Brak materiałów.</div>'}
         </div>`;
 
-    const html = `<!DOCTYPE html>
-<html lang="pl">
-<head>
-<meta charset="UTF-8">
-<title>${esc((projectName || info?.name || 'Projekt').replace(/^Oferty/i, 'Oferta'))} — ${date}</title>
-<style>
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 0; }
-  .doc-header { border-bottom: 3px solid #1a1a2e; padding: 18px 0 10px 0; margin: 0 0 18px 0; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; display: flex; align-items: flex-start; gap: 16px; }
-  .doc-header-logo { height: 48px; width: auto; object-fit: contain; flex-shrink: 0; }
-  .doc-header-text { flex: 1; }
-  .doc-header h1 { font-size: 20px; margin: 0 0 2px 0; }
-  .doc-header .sub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: #6b7280; }
-  .doc-header .meta { font-size: 10px; color: #9ca3af; margin-top: 4px; }
-  .section { margin-bottom: 0; page-break-before: always; break-before: page; }
-  .doc-header + .section { page-break-before: avoid; break-before: avoid; }
-  .section-header { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; background: #1a1a2e; color: #fff; padding: 7px 12px; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
-  h1, h2, h3, h4, h5, h6, .section-header, .table-title, .md-bold,
-  .strategy-text h2, .strategy-text h3, .strategy-text h4 {
-    break-after: avoid; page-break-after: avoid;
-    break-inside: avoid; page-break-inside: avoid;
-  }
-  p { orphans: 3; widows: 3; }
-  .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.6; text-align: justify; }
-  .strategy-text p { margin: 0 0 4px 0; text-align: justify; orphans: 3; widows: 3; }
-  .strategy-text p:empty { display: none; margin: 0; }
-  .strategy-text h2, .strategy-text h3, .strategy-text h4, .strategy-text .md-bold { font-size: 11px; font-weight: bold; margin: 16px 0 2px 0; text-align: left; }
-  .strategy-text h3:first-child, .strategy-text h2:first-child, .strategy-text .md-bold:first-child { margin-top: 0; }
-  table { border-collapse: collapse; width: 100%; }
-  th { background: #f3f4f6; color: #374151; padding: 6px 8px; text-align: center; font-size: 10px; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
-  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; text-align: center; }
-  td.num { text-align: center; font-family: monospace; font-size: 10px; }
-  tr:nth-child(even) td { background: #f9fafb; }
-  .budget-table td { font-size: 12px; }
-  .budget-table td.num { font-size: 11px; }
-  table.kv th { width: 28%; background: #f9fafb; text-transform: none; font-size: 10px; color: #4b5563; }
-  table.kv td { font-size: 11px; color: #111; }
-  .empty { padding: 10px 12px; font-size: 10px; color: #6b7280; background: #f9fafb; border: 1px solid #e5e7eb; }
-  thead { display: table-header-group; }
-  tr { page-break-inside: avoid; break-inside: avoid; }
-  .gantt-wrap { overflow: hidden; background: #fff; padding: 8px 0; }
-  .gantt-wrap svg text { fill: #0b0f17 !important; }
-  .gantt-wrap [class*="WuQ0f"] { background: #fff !important; }
-  @page { margin: 20mm 14mm; size: A4 portrait; }
-</style>
-${ganttData ? ganttData.styles : ''}
-<style>
-  /* Gantt overrides po załadowaniu bibliotecznych styli */
-  .gantt-wrap { background: #fff !important; overflow: hidden; }
-  .gantt-wrap > * { background: #fff !important; }
-  .gantt-wrap [class] { background: #fff !important; }
-  .gantt-wrap svg text { fill: #0b0f17 !important; }
-  .gantt-scale-inner { transform-origin: top left; }
-</style>
-</head>
-<body>
-<div class="doc-header">
-  ${logoDataUrl ? `<img class="doc-header-logo" src="${logoDataUrl}" alt="Logo" />` : ''}
-  <div class="doc-header-text">
-    <h1>${esc(orderName || info?.name || 'Zamówienie')}</h1>
-    <div class="sub">Informacje o projekcie i planowanie</div>
-    <div class="meta">Wygenerowano: ${date}</div>
-  </div>
-</div>
+    const bodyHtml = `
 ${requirementsHtml}
 ${infoHtml}
 ${strategyHtml}
 ${wbsHtml}
 ${ganttSectionHtml}
-${materialsHtml}
-<script>
-window.addEventListener('load', function() { setTimeout(function() { try { window.print(); } catch(e) {} }, 400); });
-</script>
-</body>
-</html>`;
+${materialsHtml}`;
+
+    const ganttExtraCss = ganttData ? `${ganttData.styles}
+  .gantt-wrap { background: #fff !important; overflow: hidden; }
+  .gantt-wrap > * { background: #fff !important; }
+  .gantt-wrap [class] { background: #fff !important; }
+  .gantt-wrap svg text { fill: #0b0f17 !important; }
+  .gantt-scale-inner { transform-origin: top left; }` : '';
+
+    const html = buildPdfDocument({
+        logoDataUrl,
+        title: orderName || info?.name || 'Zamówienie',
+        subtitle: 'Informacje o projekcie i planowanie',
+        date,
+        bodyHtml,
+        extraCss: `
+  .section { margin-bottom: 0; page-break-before: always; break-before: page; }
+  .section:first-child { page-break-before: avoid; break-before: avoid; }
+  table.kv th { width: 28%; }
+  .empty { padding: 10px 12px; font-size: 10px; color: #6b7280; background: #f9fafb; border: 1px solid #e5e7eb; }
+  .gantt-wrap { overflow: hidden; background: #fff; padding: 8px 0; }
+  .gantt-wrap svg text { fill: #0b0f17 !important; }
+  @page { margin: 20mm 14mm; size: A4 portrait; }
+${ganttExtraCss}`,
+    });
 
     win.document.open();
     win.document.write(html);
     win.document.close();
     win.focus();
+    setTimeout(() => { try { win.print(); } catch (_) {} }, 600);
 }
