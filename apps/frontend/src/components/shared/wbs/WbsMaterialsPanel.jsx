@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { UNIT_OPTIONS } from './wbsConstants';
+import { buildPdfDocument, openPdfBlob, fetchLogoDataUrl, esc as escPdf } from '../../../utils/wbsPdfExport';
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
 
@@ -1571,6 +1572,8 @@ export default function WbsMaterialsPanel({
     const exportToPdf = useCallback(async () => {
         const cols = ['Przedmiot projektu', 'Nazwa', 'Wymagania techniczne', 'Ilość', 'Produkt', 'Zdjęcie'];
 
+        const [logoDataUrl] = await Promise.all([fetchLogoDataUrl()]);
+
         // Pobierz obrazki z auth headerem i zakoduj do base64
         const imageBase64 = {};
         await Promise.all(sortedFilteredNodes.map(async node => {
@@ -1603,35 +1606,26 @@ export default function WbsMaterialsPanel({
         });
 
         const safeOrderPdf = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'zamowienie';
-        const safeProjectPdf = String(projectName || '').trim().replace(/[\\/:*?"<>|]+/g, '_');
-        const pdfTitle = safeProjectPdf ? `${safeProjectPdf}_${safeOrderPdf}_materialy` : `${safeOrderPdf}_materialy`;
-        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${pdfTitle}</title>
-<style>
-  body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 0; }
-  h1, h2, h3, h4, h5, h6 { break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
-  h2 { font-size: 16px; margin-bottom: 12px; }
-  table { width: 100%; border-collapse: collapse; }
-  th { background: #1a1a2e; color: #fff; text-align: left; padding: 6px 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
-  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
-  tr:nth-child(even) td { background: #f9fafb; }
-  tr { break-inside: avoid; page-break-inside: avoid; }
-  thead { display: table-header-group; }
-  @page { size: A4 landscape; margin: 20mm 14mm; }
-</style></head><body>
-<h2>Pozycje materiałowe dla projektu_${safeOrderPdf}</h2>
-<table>
-  <thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
-  <tbody>${bodyRows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
-</table>
-</body></html>`;
+        const date = new Date().toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' });
 
-        const win = window.open('', '_blank');
-        if (!win) return;
-        win.document.write(html);
-        win.document.close();
-        win.focus();
-        setTimeout(() => { win.print(); }, 400);
-    }, [sortedFilteredNodes, cards, token]);
+        const bodyHtml = `
+<table>
+  <thead><tr>${cols.map(c => `<th>${escPdf(c)}</th>`).join('')}</tr></thead>
+  <tbody>${bodyRows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
+</table>`;
+
+        const html = buildPdfDocument({
+            logoDataUrl,
+            title: orderName || projectName || 'Zamówienie',
+            subtitle: 'Pozycje materiałowe',
+            date,
+            bodyHtml,
+            extraCss: `@page { size: A4 landscape; margin: 20mm 14mm; }
+  th { background: #1a1a2e; color: #fff; text-align: left; }`,
+        });
+
+        openPdfBlob(html);
+    }, [sortedFilteredNodes, cards, token, orderName, projectName]);
 
     // Notify parent when export functions update
     useEffect(() => { onExportReady?.(exportToExcel); }, [exportToExcel]);
