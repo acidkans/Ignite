@@ -302,7 +302,23 @@
       "Bash(wsl --list --verbose)",
       "Bash(node --input-type=module --eval \"import\\('./src/components/shared/wbs/GanttSection.jsx'\\)\")",
       "Bash(npx eslint *)",
-      "Bash(node --input-type=module)"
+      "Bash(node --input-type=module)",
+      "Bash(ssh gigatel *)",
+      "Bash(sed -n '150,170p' /tmp/prod_UnifiedWbsPanel.jsx)",
+      "Bash(sed -n '780,870p' /tmp/prod_UnifiedWbsPanel.jsx)",
+      "Bash(git cherry-pick *)",
+      "Bash(GIT_EDITOR=true git cherry-pick --continue)",
+      "Bash(curl -s -X POST http://localhost:3001/api/wbs-nodes/unified/test -H \"Content-Type: application/json\" -d '{}')",
+      "PowerShell(docker exec erp-backend sh -c 'ls /usr/src/app/dist/wbs-nodes/ && grep -c \"unified\" /usr/src/app/dist/wbs-nodes/wbs-nodes.controller.js')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/api/wbs-nodes/unified/test)",
+      "Bash(curl -s http://localhost:5174 -o /dev/null -w \"%{http_code}\\\\n\")",
+      "Bash(curl -s \"http://localhost:5174/src/components/shared/wbs/WBSHybridTable.jsx\")",
+      "Bash(tasklist /FI \"PID eq 24416\")",
+      "Bash(curl -s \"http://localhost:5174/src/components/shared/wbs/UnifiedWbsPanel.jsx?import\")",
+      "Bash(curl -s \"https://erp.gigatel.org/assets/\" -o /dev/null -w \"%{http_code}\\\\n\")",
+      "Bash(Get-Content \"C:\\\\Users\\\\Andrzej\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Andrzej--gemini-antigravity-scratch-Ignite\\\\3c423540-81bc-4edb-8d55-e76696ae3c62\\\\tasks\\\\bkjesxjwv.output\" -Tail 30)",
+      "Bash(tail -30 \"/mnt/c/Users/Andrzej/AppData/Local/Temp/claude/C--Users-Andrzej--gemini-antigravity-scratch-Ignite/3c423540-81bc-4edb-8d55-e76696ae3c62/tasks/bkjesxjwv.output\" 2>&1)",
+      "PowerShell(docker context ls 2>&1)"
     ]
   }
 }

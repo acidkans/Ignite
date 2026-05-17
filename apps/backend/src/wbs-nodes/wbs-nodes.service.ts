@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface QaPair {
@@ -458,7 +458,13 @@ export class WbsNodesService {
                 : [];
             allowed.qa = cleaned.length > 0 ? JSON.stringify(cleaned) : null;
         }
-        const updated = await this.prisma.wbsNode.update({ where: { id }, data: allowed });
+        let updated;
+        try {
+            updated = await this.prisma.wbsNode.update({ where: { id }, data: allowed });
+        } catch (e: any) {
+            if (e?.code === 'P2025') throw new NotFoundException(`WbsNode ${id} not found`);
+            throw e;
+        }
 
         if (quantityChanged) {
             await this.syncMaterialsFromWbsNode(id, allowed.quantity).catch(() => {});
