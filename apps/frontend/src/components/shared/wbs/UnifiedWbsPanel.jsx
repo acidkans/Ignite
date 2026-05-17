@@ -1125,17 +1125,126 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 <div class="strategy-text">${renderStrategyHtml(getStrategyText() || 'Brak treści strategii')}</div>
             </div>` : '';
 
-        const offerTextForPdf = (() => {
-            let t = getOfferText() || 'Brak treści oferty';
-            t = t.replace(/\{tabela wbs1\}/gi, wbsTablesByDepth[1] || '');
-            t = t.replace(/\{tabela wbs2\}/gi, wbsTablesByDepth[2] || '');
-            t = t.replace(/\{tabela wbs3\}/gi, wbsTablesByDepth[3] || '');
-            t = t.replace(/\{tabela wbs\}/gi, wbsTablesByDepth[2] || '');
-            return t;
+        const buildWbsHtmlTable = (depth) => {
+            const localById = new Map(wbsData.map(n => [n.id, n]));
+            const localPriceOf = (item) => {
+                const q = Math.max(0, parseFloat(item.quantity) || 0);
+                const uc = Math.max(0, parseFloat(item.unitCost) || 0);
+                const tc = uc * q || parseFloat(item.totalCost) || 0;
+                const m = (item.margin != null && String(item.margin) !== '') ? parseFloat(item.margin) : null;
+                const d = Math.max(0, parseFloat(item.discount) || 0);
+                let p = (m !== null && m !== 0) ? tc * (1 + m / 100) : tc;
+                if (p > 0 && d > 0) p = Math.max(0, p * (1 - d / 100));
+                return p;
+            };
+            const localChain = (id) => {
+                const chain = [];
+                let cur = localById.get(id);
+                while (cur) { chain.unshift(cur); cur = (cur.parentId && localById.has(cur.parentId)) ? localById.get(cur.parentId) : null; }
+                return chain;
+            };
+            const tblStyle = 'border-collapse:collapse;margin:14px auto;font-size:11px;';
+            const thS = 'background:#1e3a5f;color:#fff;font-weight:bold;padding:7px 16px;text-align:center;border:1px solid #16304d;white-space:nowrap;';
+            const tdS = 'padding:5px 14px;border:1px solid #ccc;vertical-align:middle;';
+            const tdR = 'padding:5px 14px;border:1px solid #ccc;text-align:right;vertical-align:middle;';
+            const sumS = 'padding:6px 14px;border:1px solid #aaa;font-weight:bold;background:#eef2f7;';
+            const sumR = 'padding:6px 14px;border:1px solid #aaa;font-weight:bold;background:#eef2f7;text-align:right;';
+
+            if (depth === 1) {
+                const groups = new Map();
+                for (const item of wbsData) {
+                    if (!item.parentId) continue;
+                    const price = localPriceOf(item);
+                    if (price <= 0) continue;
+                    const chain = localChain(item.id);
+                    const d1 = chain[0];
+                    if (!d1) continue;
+                    if (!groups.has(d1.id)) groups.set(d1.id, { name: d1.name || '', total: 0 });
+                    groups.get(d1.id).total += price;
+                }
+                const entries = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+                if (!entries.length) return '';
+                const total = entries.reduce((s, e) => s + e.total, 0);
+                const rows = entries.map(e => `<tr><td style="${tdS}">${esc(e.name)}</td><td style="${tdR}">${fmtPLN(e.total)}</td></tr>`).join('');
+                return `<table style="${tblStyle}"><thead><tr><th style="${thS}">Zakresy</th><th style="${thS}">Cena ofertowa (PLN)</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td style="${sumS}"><strong>Razem</strong></td><td style="${sumR}"><strong>${fmtPLN(total)}</strong></td></tr></tfoot></table>`;
+            }
+
+            if (depth === 2) {
+                const level1 = new Map();
+                for (const item of wbsData) {
+                    if (!item.parentId) continue;
+                    const price = localPriceOf(item);
+                    if (price <= 0) continue;
+                    const chain = localChain(item.id);
+                    const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)];
+                    if (!d1) continue;
+                    if (!level1.has(d1.id)) level1.set(d1.id, { name: d1.name || '', children: new Map() });
+                    const g1 = level1.get(d1.id);
+                    if (!g1.children.has(d2.id)) g1.children.set(d2.id, { name: d2.name || '', total: 0 });
+                    g1.children.get(d2.id).total += price;
+                }
+                if (!level1.size) return '';
+                const total = [...level1.values()].reduce((s, g) => s + [...g.children.values()].reduce((s2, c) => s2 + c.total, 0), 0);
+                let rows = '';
+                for (const g1 of [...level1.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+                    const children = [...g1.children.values()].sort((a, b) => a.name.localeCompare(b.name));
+                    for (let i = 0; i < children.length; i++) {
+                        rows += `<tr>${i === 0 ? `<td style="${tdS}" rowspan="${children.length}">${esc(g1.name)}</td>` : ''}<td style="${tdS}">${esc(children[i].name)}</td><td style="${tdR}">${fmtPLN(children[i].total)}</td></tr>`;
+                    }
+                }
+                return `<table style="${tblStyle}"><thead><tr><th style="${thS}">Zakresy</th><th style="${thS}">Składowe zakresów</th><th style="${thS}">Cena ofertowa (PLN)</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td colspan="2" style="${sumS}"><strong>Razem</strong></td><td style="${sumR}"><strong>${fmtPLN(total)}</strong></td></tr></tfoot></table>`;
+            }
+
+            if (depth === 3) {
+                const level1 = new Map();
+                for (const item of wbsData) {
+                    if (!item.parentId) continue;
+                    const price = localPriceOf(item);
+                    if (price <= 0) continue;
+                    const chain = localChain(item.id);
+                    const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)], d3 = chain[Math.min(2, chain.length - 1)];
+                    if (!d1) continue;
+                    if (!level1.has(d1.id)) level1.set(d1.id, { name: d1.name || '', children: new Map() });
+                    const g1 = level1.get(d1.id);
+                    if (!g1.children.has(d2.id)) g1.children.set(d2.id, { name: d2.name || '', children: new Map() });
+                    const g2 = g1.children.get(d2.id);
+                    if (!g2.children.has(d3.id)) g2.children.set(d3.id, { name: d3.name || '', total: 0 });
+                    g2.children.get(d3.id).total += price;
+                }
+                if (!level1.size) return '';
+                const total = [...level1.values()].reduce((s, g1) => s + [...g1.children.values()].reduce((s2, g2) => s2 + [...g2.children.values()].reduce((s3, c) => s3 + c.total, 0), 0), 0);
+                let rows = '';
+                for (const g1 of [...level1.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+                    const d2list = [...g1.children.values()].sort((a, b) => a.name.localeCompare(b.name));
+                    const g1span = d2list.reduce((s, g2) => s + g2.children.size, 0);
+                    let firstD1 = true;
+                    for (const g2 of d2list) {
+                        const d3list = [...g2.children.values()].sort((a, b) => a.name.localeCompare(b.name));
+                        for (let i = 0; i < d3list.length; i++) {
+                            rows += `<tr>`;
+                            if (firstD1 && i === 0) { rows += `<td style="${tdS}" rowspan="${g1span}">${esc(g1.name)}</td>`; firstD1 = false; }
+                            if (i === 0) rows += `<td style="${tdS}" rowspan="${d3list.length}">${esc(g2.name)}</td>`;
+                            rows += `<td style="${tdS}">${esc(d3list[i].name)}</td><td style="${tdR}">${fmtPLN(d3list[i].total)}</td></tr>`;
+                        }
+                    }
+                }
+                return `<table style="${tblStyle}"><thead><tr><th style="${thS}">Zakresy</th><th style="${thS}">Składowe zakresów</th><th style="${thS}">Składowe zakresów</th><th style="${thS}">Cena ofertowa (PLN)</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td colspan="3" style="${sumS}"><strong>Razem</strong></td><td style="${sumR}"><strong>${fmtPLN(total)}</strong></td></tr></tfoot></table>`;
+            }
+            return '';
+        };
+
+        const offerHtmlContent = (() => {
+            const text = getOfferText() || 'Brak treści oferty';
+            const parts = text.split(/(\{tabela wbs[123]?\})/gi);
+            return parts.map(part => {
+                const m = part.match(/^\{tabela wbs([123]?)\}$/i);
+                if (m) return buildWbsHtmlTable(parseInt(m[1]) || 2);
+                return renderStrategyHtml(part);
+            }).join('');
         })();
         const offerHtml = show('oferta') ? `
             <div class="section">
-                <div class="offer-text">${renderStrategyHtml(offerTextForPdf)}</div>
+                <div class="offer-text">${offerHtmlContent}</div>
             </div>` : '';
 
         const wbsHtml = show('wbs') ? `
