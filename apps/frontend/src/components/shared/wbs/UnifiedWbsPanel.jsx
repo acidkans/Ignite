@@ -1362,12 +1362,15 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   html, body { margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 20mm 14mm; }
-  .doc-header { border-bottom: 3px solid #1a1a2e; padding: 18px 0 10px 0; margin: 0 0 18px 0; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; display: flex; align-items: flex-start; gap: 16px; }
+  .doc-wrap { width: 100%; border-collapse: collapse; }
+  .doc-header-cell { border-bottom: 3px solid #1a1a2e; padding: 14px 0 10px 0; }
+  .doc-header { display: flex; align-items: flex-start; gap: 16px; }
   .doc-header-logo { height: 48px; width: auto; object-fit: contain; flex-shrink: 0; }
   .doc-header-text { flex: 1; }
   .doc-header h1 { font-size: 20px; margin: 0 0 2px 0; }
   .doc-header .sub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: #6b7280; }
   .doc-header .meta { font-size: 10px; color: #9ca3af; margin-top: 4px; }
+  .doc-body-cell { padding-top: 14px; vertical-align: top; }
   .section { margin-bottom: 22px; }
   .section-header { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; background: #1a1a2e; color: #fff; padding: 7px 12px; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
   h1, h2, h3, h4, h5, h6, .section-header, .table-title, .md-bold,
@@ -1398,7 +1401,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   th { background: #f3f4f6; color: #374151; padding: 7px 8px; text-align: center; font-size: 12px; font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
   thead { display: table-header-group; }
   tr { page-break-inside: avoid; break-inside: avoid; }
-  @page { margin: 30mm 14mm 14mm 14mm; size: ${sectionKey === 'gantt' ? 'A3 landscape' : 'A4 portrait'}; }
+  @page { margin: 14mm; size: ${sectionKey === 'gantt' ? 'A3 landscape' : 'A4 portrait'}; }
   .budget-table { table-layout: fixed; word-wrap: break-word; }
   .gantt-wrap { overflow: hidden; background: #fff; padding: 8px 0; }
   .gantt-wrap svg text { fill: #0b0f17 !important; }
@@ -1424,8 +1427,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   .gantt-scale-inner { transform-origin: top left; }
   @media print {
     body { padding: 0; }
-    .doc-header { position: fixed; top: -30mm; left: -14mm; right: -14mm; height: 30mm; background: #fff; padding: 5mm 14mm; border-bottom: 3px solid #1a1a2e; display: flex; align-items: center; z-index: 1000; box-sizing: border-box; }
-    .doc-body { padding-top: 4mm; }
     thead { display: table-header-group !important; }
     thead tr { break-inside: avoid !important; break-after: avoid !important; }
     .summary-grid { display: block; }
@@ -1436,15 +1437,24 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
 ${ganttData ? ganttData.styles : ''}
 </head>
 <body>
-<div class="doc-header">
-  ${logoDataUrl ? `<img class="doc-header-logo" src="${logoDataUrl}" alt="Logo" />` : ''}
-  <div class="doc-header-text">
-    <h1>${esc(orderName || projectName || 'Zamówienie')}</h1>
-    <div class="sub">${{ strategy: 'Jak to chcemy zrobić', oferta: 'Oferta', budget: 'Budżet', 'wbs-hybrid': 'Struktura projektu', wbs: 'Struktura projektu', materials: 'Materiały', gantt: 'Harmonogram (Gantt)' }[sectionKey] || 'Planowanie'}</div>
-    <div class="meta">Przygotowano: ${date}</div>
-  </div>
-</div>
-<div class="doc-body">
+<table class="doc-wrap">
+  <thead>
+    <tr>
+      <td class="doc-header-cell">
+        <div class="doc-header">
+          ${logoDataUrl ? `<img class="doc-header-logo" src="${logoDataUrl}" alt="Logo" />` : ''}
+          <div class="doc-header-text">
+            <h1>${esc(orderName || projectName || 'Zamówienie')}</h1>
+            <div class="sub">${{ strategy: 'Jak to chcemy zrobić', oferta: 'Oferta', budget: 'Budżet', 'wbs-hybrid': 'Struktura projektu', wbs: 'Struktura projektu', materials: 'Materiały', gantt: 'Harmonogram (Gantt)' }[sectionKey] || 'Planowanie'}</div>
+            <div class="meta">Przygotowano: ${date}</div>
+          </div>
+        </div>
+      </td>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="doc-body-cell">
 ${offerHtml}
 ${strategyHtml}
 ${wbsHtml}
@@ -1452,7 +1462,10 @@ ${budgetHtml}
 ${_budgetSummaryHtml}
 ${materialsHtml}
 ${ganttSectionHtml}
-</div>
+      </td>
+    </tr>
+  </tbody>
+</table>
 </body>
 </html>`;
 
