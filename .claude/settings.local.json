@@ -318,7 +318,10 @@
       "Bash(curl -s \"https://erp.gigatel.org/assets/\" -o /dev/null -w \"%{http_code}\\\\n\")",
       "Bash(Get-Content \"C:\\\\Users\\\\Andrzej\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Andrzej--gemini-antigravity-scratch-Ignite\\\\3c423540-81bc-4edb-8d55-e76696ae3c62\\\\tasks\\\\bkjesxjwv.output\" -Tail 30)",
       "Bash(tail -30 \"/mnt/c/Users/Andrzej/AppData/Local/Temp/claude/C--Users-Andrzej--gemini-antigravity-scratch-Ignite/3c423540-81bc-4edb-8d55-e76696ae3c62/tasks/bkjesxjwv.output\" 2>&1)",
-      "PowerShell(docker context ls 2>&1)"
+      "PowerShell(docker context ls 2>&1)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\" -Recurse -Directory)",
+      "Bash(Select-Object -First 20)",
+      "Bash(Format-Table FullName)"
     ]
   }
 }

@@ -369,6 +369,7 @@ ${ganttData ? ganttData.styles : ''}
   .gantt-wrap > * { background: #fff !important; }
   .gantt-wrap [class] { background: #fff !important; }
   .gantt-wrap svg text { fill: #0b0f17 !important; }
+  .gantt-wrap div { color: #1f2937 !important; }
   .gantt-scale-inner { transform-origin: top left; }
 </style>
 </head>
