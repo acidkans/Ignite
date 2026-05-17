@@ -1398,7 +1398,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   th { background: #f3f4f6; color: #374151; padding: 7px 8px; text-align: center; font-size: 12px; font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
   thead { display: table-header-group; }
   tr { page-break-inside: avoid; break-inside: avoid; }
-  @page { margin: 25mm 14mm 14mm 14mm; size: ${sectionKey === 'gantt' ? 'A3 landscape' : 'A4 portrait'}; }
+  @page { margin: 30mm 14mm 14mm 14mm; size: ${sectionKey === 'gantt' ? 'A3 landscape' : 'A4 portrait'}; }
   .budget-table { table-layout: fixed; word-wrap: break-word; }
   .gantt-wrap { overflow: hidden; background: #fff; padding: 8px 0; }
   .gantt-wrap svg text { fill: #0b0f17 !important; }
@@ -1424,8 +1424,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   .gantt-scale-inner { transform-origin: top left; }
   @media print {
     body { padding: 0; }
-    .doc-header { position: fixed; top: 0; left: 0; right: 0; height: 25mm; background: #fff; padding: 5mm 14mm; border-bottom: 3px solid #1a1a2e; display: flex; align-items: center; z-index: 1000; box-sizing: border-box; }
-    .doc-body { padding-top: 3mm; }
+    .doc-header { position: fixed; top: 0; left: 0; right: 0; height: 30mm; background: #fff; padding: 5mm 14mm; border-bottom: 3px solid #1a1a2e; display: flex; align-items: center; z-index: 1000; box-sizing: border-box; }
+    .doc-body { padding-top: 8mm; }
+    thead { display: table-header-group !important; }
+    thead tr { break-inside: avoid !important; break-after: avoid !important; }
     .summary-grid { display: block; }
     .summary-block { margin-bottom: 16px; }
     .summary-section { page-break-before: always; }
