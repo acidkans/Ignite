@@ -70,7 +70,6 @@ export default function NodeInfoTab({ nodeId }) {
             if (res.ok) {
                 setSaved(true);
                 setTimeout(() => setSaved(false), 3000);
-                // Trigger global refresh if needed
                 window.dispatchEvent(new CustomEvent('node-updated', { detail: { nodeId, name: data.name } }));
             }
         } catch (err) {

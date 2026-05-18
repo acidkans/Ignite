@@ -44,8 +44,9 @@ export class UsersService {
     });
   }
 
-  async create(data: Prisma.UserCreateInput & { teamIds?: string[], roleName?: string }): Promise<User> {
-    const hashedPassword = await argon2.hash(data.password);
+  async create(data: Prisma.UserCreateInput & { teamIds?: string[], roleName?: string, password?: string }): Promise<User> {
+    const rawPassword = data.password || require('crypto').randomBytes(20).toString('hex');
+    const hashedPassword = await argon2.hash(rawPassword);
 
     // Sprawdź czy to super-admin z listy
     const adminEmails = this.configService.get<string>('ADMIN_EMAILS')?.split(',').map(e => e.trim()) || [];
@@ -153,6 +154,8 @@ export class UsersService {
         email: true,
         firstName: true,
         lastName: true,
+        phone: true,
+        company: true,
         createdAt: true,
         userRoles: {
           select: {

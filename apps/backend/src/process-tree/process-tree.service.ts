@@ -507,6 +507,55 @@ export class ProcessTreeService {
         });
     }
 
+    /**
+     * Add a user as a project contact (direct NodePermission with VIEW).
+     * Body: { userId } to link existing user, or { email, firstName, lastName, phone?, company? } to create new.
+     */
+    async addProjectContact(nodeId: string, dto: any) {
+        let userId: string = dto.userId;
+
+        if (!userId) {
+            // Create new external contact with auto-generated password
+            const crypto = require('crypto');
+            const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+            if (existing) {
+                userId = existing.id;
+            } else {
+                const argon2 = require('argon2');
+                const hashed = await argon2.hash(crypto.randomBytes(20).toString('hex'));
+                const role = await this.prisma.role.findUnique({ where: { name: 'USER' } });
+                const user = await this.prisma.user.create({
+                    data: {
+                        email: dto.email,
+                        password: hashed,
+                        firstName: dto.firstName || null,
+                        lastName: dto.lastName || null,
+                        phone: dto.phone || null,
+                        company: dto.company || null,
+                        ...(role ? { userRoles: { create: { roleId: role.id } } } : {}),
+                    },
+                });
+                userId = user.id;
+            }
+        }
+
+        await this.prisma.nodePermission.upsert({
+            where: { nodeId_userId: { nodeId, userId } },
+            update: { permission: 'VIEW' },
+            create: { nodeId, userId, permission: 'VIEW' },
+        });
+
+        return this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, email: true, firstName: true, lastName: true, phone: true, company: true },
+        });
+    }
+
+    async removeProjectContact(nodeId: string, userId: string) {
+        await this.prisma.nodePermission.deleteMany({ where: { nodeId, userId } });
+        return { ok: true };
+    }
+
     private async checkAncestorAccess(nodeId: string, user?: { userId: string, roles: string[], teamIds?: string[] }): Promise<boolean> {
         if (!user) return true;
 
