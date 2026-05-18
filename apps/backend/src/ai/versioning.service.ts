@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+﻿import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -82,6 +82,18 @@ export class VersioningService {
                 subtaskIdMap.set(subtask.id, newSubtask.id);
             }
 
+            // 4b. Clone SubtaskMarkerLinks dla sklonowanych subtasków
+            for (const [oldSubtaskId, newSubtaskId] of subtaskIdMap.entries()) {
+                const links = await tx.subtaskMarkerLink.findMany({ where: { subtaskId: oldSubtaskId } });
+                for (const link of links) {
+                    await tx.subtaskMarkerLink.upsert({
+                        where: { subtaskId_markerId: { subtaskId: newSubtaskId, markerId: link.markerId } },
+                        update: {},
+                        create: { subtaskId: newSubtaskId, markerId: link.markerId },
+                    });
+                }
+            }
+
             // 5. Clone WBS Nodes with ID mapping (must happen before BudgetLineItem
             //    so wbsNodeId can be remapped to the new tree)
             const wbsRaw = await loadSourceRows((extra) => tx.wbsNode.findMany({
@@ -122,6 +134,8 @@ export class VersioningService {
                         totalPrice: wn.totalPrice,
                         comment: wn.comment,
                         phase: wn.phase,
+                        ganttStart: (wn as any).ganttStart ?? null,
+                        ganttEnd: (wn as any).ganttEnd ?? null,
                     },
                 });
             }
@@ -293,6 +307,7 @@ export class VersioningService {
                         projectGoal: sourceReq.projectGoal,
                         projectItems: sourceReq.projectItems,
                         wbsDescription: sourceReq.wbsDescription,
+                        wbsTree: sourceReq.wbsTree,
                         budgetNotes: sourceReq.budgetNotes,
                         clientContacts: sourceReq.clientContacts,
                         clientProjectManager: sourceReq.clientProjectManager,

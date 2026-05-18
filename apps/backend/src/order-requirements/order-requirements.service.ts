@@ -28,18 +28,28 @@ export class OrderRequirementsService {
     async findByNodeId(nodeId: string, versionId?: string) {
         if (!nodeId) return null;
         const effectiveNodeId = await this.resolveOrderNodeId(nodeId);
-        // 1. Try global version first
+        const vId = (versionId === 'null' || versionId === 'undefined' || !versionId) ? null : versionId;
+
+        // 1. Pola "globalne" (offerStatus, projectGoal itp.) — z baseline
         const global = await this.prisma.orderRequirements.findFirst({
             where: { nodeId: effectiveNodeId, versionId: null },
         });
-        const record = global || await this.prisma.orderRequirements.findFirst({
+
+        // 2. Rekord per-version (dla wbsTree per-wersja)
+        const versioned = vId
+            ? await this.prisma.orderRequirements.findFirst({
+                where: { nodeId: effectiveNodeId, versionId: vId },
+            })
+            : null;
+
+        const record = global || versioned || await this.prisma.orderRequirements.findFirst({
             where: { nodeId: effectiveNodeId },
             orderBy: { updatedAt: 'desc' },
         });
 
         if (!record) return null;
 
-        // 2. Spróbuj zbudować wbsTree z tabeli relacyjnej WbsNode (źródło prawdy)
+        // 3. Najlepsze źródło wbsTree: WbsNode tabela relacyjna dla tej wersji
         try {
             const relationalTree = await this.wbsNodes.getTree(effectiveNodeId, versionId);
             if (relationalTree) {
@@ -49,8 +59,9 @@ export class OrderRequirementsService {
             console.error('WbsNode read failed, falling back to blob:', e?.message);
         }
 
-        // 3. Fallback: zwróć oryginalny blob z OrderRequirements
-        return record;
+        // 4. Fallback wbsTree: per-version blob > baseline blob
+        const effectiveWbsTree = versioned?.wbsTree ?? record.wbsTree;
+        return { ...record, wbsTree: effectiveWbsTree };
     }
 
     async upsert(dto: UpsertOrderRequirementsDto) {
@@ -77,6 +88,7 @@ export class OrderRequirementsService {
             if (data.wbsDescription !== undefined) requirementFields.wbsDescription = data.wbsDescription;
             if (data.offerText !== undefined) requirementFields.offerText = data.offerText;
             if (data.clientProjectManager !== undefined) requirementFields.clientProjectManager = data.clientProjectManager;
+            if (data.clientProjectManagerCompany !== undefined) requirementFields.clientProjectManagerCompany = data.clientProjectManagerCompany;
             if (data.clientProjectManagerPhone !== undefined) requirementFields.clientProjectManagerPhone = data.clientProjectManagerPhone;
             if (data.clientProjectManagerEmail !== undefined) requirementFields.clientProjectManagerEmail = data.clientProjectManagerEmail;
             if (data.clientContacts !== undefined) requirementFields.clientContacts = data.clientContacts;
@@ -156,20 +168,56 @@ export class OrderRequirementsService {
                 }
             }
 
+            // Pola "globalne" idą do baseline (versionId=null). wbsTree wyciągamy do per-version.
+            const { wbsTree: wbsTreeField, ...globalFields } = requirementFields;
+
+            let baselineRecord;
             if (existing) {
-                return tx.orderRequirements.update({
+                baselineRecord = await tx.orderRequirements.update({
                     where: { id: existing.id },
-                    data: requirementFields
+                    data: globalFields,
                 });
             } else {
-                return tx.orderRequirements.create({
+                baselineRecord = await tx.orderRequirements.create({
                     data: {
                         nodeId: effectiveNodeId,
                         versionId: null,
-                        ...requirementFields
+                        ...globalFields,
                     },
                 });
             }
+
+            // wbsTree zapisujemy per-version (do rekordu (nodeId, versionId)).
+            // Gdy vId=null, wbsTree leci do baseline (back-compat).
+            if (wbsTreeField !== undefined) {
+                if (vId) {
+                    const versionedExisting = await tx.orderRequirements.findFirst({
+                        where: { nodeId: effectiveNodeId, versionId: vId },
+                    });
+                    if (versionedExisting) {
+                        await tx.orderRequirements.update({
+                            where: { id: versionedExisting.id },
+                            data: { wbsTree: wbsTreeField },
+                        });
+                    } else {
+                        await tx.orderRequirements.create({
+                            data: {
+                                nodeId: effectiveNodeId,
+                                versionId: vId,
+                                wbsTree: wbsTreeField,
+                            },
+                        });
+                    }
+                } else {
+                    // brak versionId → zapis do baseline (zgodnie z poprzednim zachowaniem)
+                    await tx.orderRequirements.update({
+                        where: { id: baselineRecord.id },
+                        data: { wbsTree: wbsTreeField },
+                    });
+                }
+            }
+
+            return baselineRecord;
         });
 
         return result;

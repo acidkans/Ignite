@@ -164,20 +164,26 @@ export class WbsNodesService {
     private buildTree(nodes: any[], parentId: string | null): WbsTreeItem[] {
         return nodes
             .filter(n => n.parentId === parentId)
-            .map(n => ({
-                id: n.id,
-                name: n.name,
-                type: n.type || '',
-                status: n.status || '',
-                unit: n.unit || '',
-                owner: n.owner || '',
-                resources: n.resources || '',
-                cost: n.cost || '',
-                comment: n.comment || '',
-                tags: this.parseTags(n.tags),
-                qa: this.parseQa(n.qa),
-                children: this.buildTree(nodes, n.id),
-            }));
+            .map(n => {
+                const qa = this.parseQa(n.qa);
+                const status = n.name === 'PYTANIA OGÓLNE'
+                    ? this.computeQaStatus(qa)
+                    : (n.status || '');
+                return {
+                    id: n.id,
+                    name: n.name,
+                    type: n.type || '',
+                    status,
+                    unit: n.unit || '',
+                    owner: n.owner || '',
+                    resources: n.resources || '',
+                    cost: n.cost || '',
+                    comment: n.comment || '',
+                    tags: this.parseTags(n.tags),
+                    qa,
+                    children: this.buildTree(nodes, n.id),
+                };
+            });
     }
 
     private flattenForInsert(
@@ -189,6 +195,10 @@ export class WbsNodesService {
         const rows: any[] = [];
         for (let i = 0; i < items.length; i++) {
             const item = items[i];
+            const qaArr = Array.isArray(item.qa) ? item.qa : [];
+            const status = item.name === 'PYTANIA OGÓLNE'
+                ? this.computeQaStatus(qaArr)
+                : (item.status || '');
             rows.push({
                 id: item.id,
                 parentId,
@@ -196,7 +206,7 @@ export class WbsNodesService {
                 versionId,
                 name: item.name || '',
                 type: item.type || '',
-                status: item.status || '',
+                status,
                 unit: item.unit || '',
                 owner: item.owner || '',
                 resources: item.resources || '',
@@ -238,6 +248,11 @@ export class WbsNodesService {
                 answer: String(p?.answer ?? ''),
             }));
         } catch { return []; }
+    }
+
+    private computeQaStatus(qa: QaPair[]): string {
+        if (!qa || qa.length === 0) return '';
+        return qa.every(p => String(p.answer || '').trim() !== '') ? 'CONFIRMED' : 'PENDING';
     }
 
     // ─── Unified tree (Phase 4) ─────────────────────────────────────────
@@ -384,6 +399,8 @@ export class WbsNodesService {
                 totalPrice: node.totalPrice,
                 comment: node.comment,
                 phase: node.phase,
+                ganttStart: node.ganttStart ? node.ganttStart.toISOString() : null,
+                ganttEnd: node.ganttEnd ? node.ganttEnd.toISOString() : null,
                 // Materials
                 materials,
                 materialsTotalCost,
@@ -435,6 +452,12 @@ export class WbsNodesService {
         const allowed: Record<string, any> = {};
         for (const key of ['name', 'type', 'status', 'owner', 'resources', 'cost', 'parentId', 'sortOrder', 'comment', 'unit']) {
             if (data[key] !== undefined) allowed[key] = data[key];
+        }
+        if (data.ganttStart !== undefined) {
+            allowed.ganttStart = data.ganttStart ? new Date(data.ganttStart) : null;
+        }
+        if (data.ganttEnd !== undefined) {
+            allowed.ganttEnd = data.ganttEnd ? new Date(data.ganttEnd) : null;
         }
         let quantityChanged = false;
         if (data.quantity !== undefined) {

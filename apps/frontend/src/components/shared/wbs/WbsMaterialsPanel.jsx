@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import ExcelJS from 'exceljs';
 import {
     ChevronRight, ChevronDown, Package, Wrench,
     CheckCircle, Clock, XCircle, Star, Trash2, AlertCircle,
     ShoppingCart, Warehouse, LogOut, Plus, Search, Sparkles,
-    FileText, Link as LinkIcon, Download,
+    FileText, Link as LinkIcon, Download, BookOpen, X, Database,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { UNIT_OPTIONS } from './wbsConstants';
+import { buildPdfDocument, openPdfBlob, fetchLogoDataUrl, esc as escPdf } from '../../../utils/wbsPdfExport';
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
 
@@ -64,11 +66,254 @@ function getParentPath(nodePath) {
 
 // ─── ProposalsSection ─────────────────────────────────────────────────────────
 
-function ProposalsSection({ req, token, onRefresh }) {
+function ProposalImage({ proposalId, token, onDeleted }) {
+    const [blobUrl, setBlobUrl] = useState(null);
+    const blobRef = useRef(null);
+    useEffect(() => {
+        let cancelled = false;
+        fetch(`${API_URL}/material-requirements/proposals/${proposalId}/image`, {
+            headers: { Authorization: `Bearer ${token}` },
+        }).then(async res => {
+            if (!res.ok || cancelled) return;
+            const blob = await res.blob();
+            if (cancelled) return;
+            if (blobRef.current) URL.revokeObjectURL(blobRef.current);
+            const url = URL.createObjectURL(blob);
+            blobRef.current = url;
+            setBlobUrl(url);
+        }).catch(() => {});
+        return () => {
+            cancelled = true;
+            if (blobRef.current) { URL.revokeObjectURL(blobRef.current); blobRef.current = null; }
+        };
+    }, [proposalId, token]);
+
+    if (!blobUrl) return null;
+    return (
+        <div className="relative flex-shrink-0 w-10 h-10 group">
+            <img src={blobUrl} alt="produkt" className="w-full h-full object-contain rounded" />
+            <button
+                onClick={onDeleted}
+                title="Usuń obrazek"
+                className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 rounded transition-opacity text-red-400 hover:text-red-300"
+            >
+                <Trash2 size={12} />
+            </button>
+        </div>
+    );
+}
+
+const PROPOSAL_FIELDS = [
+    { key: 'manufacturer', ph: 'Producent',     ac: true  },
+    { key: 'model',        ph: 'Model',          ac: true  },
+    { key: 'productName',  ph: 'Nazwa handlowa', ac: true  },
+    { key: 'priceNetto',   ph: 'Cena netto',     ac: false },
+    { key: 'availability', ph: 'Dostępność',     ac: false },
+    { key: 'sourceUrl',    ph: 'https://...',    ac: false },
+];
+const AC_KEYS = PROPOSAL_FIELDS.filter(f => f.ac).map(f => f.key);
+
+// Cross-filter: only upstream fields narrow suggestions (manufacturer → model → productName)
+const AC_UPSTREAM = { manufacturer: [], model: ['manufacturer'], productName: ['manufacturer', 'model'] };
+
+function findInlineAc(fieldKey, typed, materialDb, vals) {
+    if (!typed || !materialDb?.length || !AC_KEYS.includes(fieldKey)) return null;
+    const typedLower = typed.toLowerCase();
+    let base = materialDb;
+    for (const f of (AC_UPSTREAM[fieldKey] || [])) {
+        if (vals[f]) base = base.filter(m => (m[f] || '').toLowerCase() === vals[f].toLowerCase());
+    }
+    const match = base
+        .filter(m => (m[fieldKey] || '').toLowerCase().startsWith(typedLower))
+        .sort((a, b) => (a[fieldKey] || '').localeCompare(b[fieldKey] || ''))[0];
+    return match ? (match[fieldKey] || '') : null;
+}
+
+function ProposalRow({ p, token, onDelete, onSelect, onDeleted: onImageDeleted, onPatch, materialDb }) {
+    const [vals, setVals] = useState({
+        manufacturer: p.manufacturer || '',
+        model: p.model || '',
+        productName: p.productName || '',
+        priceNetto: p.priceNetto != null ? String(p.priceNetto) : '',
+        availability: p.availability || '',
+        sourceUrl: p.sourceUrl || '',
+    });
+    const [inlineAc, setInlineAc] = useState({});
+    const inputRefs = useRef({});
+    const suppressAcRef = useRef(false);
+
+    useEffect(() => {
+        setVals({
+            manufacturer: p.manufacturer || '',
+            model: p.model || '',
+            productName: p.productName || '',
+            priceNetto: p.priceNetto != null ? String(p.priceNetto) : '',
+            availability: p.availability || '',
+            sourceUrl: p.sourceUrl || '',
+        });
+        setInlineAc({});
+    }, [p.id]);
+
+    // After every render: restore selection for the currently active inline suggestion
+    useLayoutEffect(() => {
+        for (const key of AC_KEYS) {
+            const el = inputRefs.current[key];
+            const suggestion = inlineAc[key];
+            if (suggestion && el && document.activeElement === el) {
+                el.setSelectionRange((vals[key] || '').length, suggestion.length);
+            }
+        }
+    });
+
+    const save = (key, raw) => {
+        let value = raw;
+        if (key === 'priceNetto') {
+            const n = parseFloat(String(raw).replace(',', '.'));
+            value = isNaN(n) ? null : n;
+        }
+        onPatch(p.id, { [key]: value });
+    };
+
+    const handleChange = (key, typed) => {
+        if (suppressAcRef.current) {
+            suppressAcRef.current = false;
+            setVals(v => ({ ...v, [key]: typed }));
+            setInlineAc(a => ({ ...a, [key]: null }));
+            return;
+        }
+        const suggestion = findInlineAc(key, typed, materialDb, { ...vals, [key]: typed });
+        setVals(v => ({ ...v, [key]: typed }));
+        setInlineAc(a => ({ ...a, [key]: suggestion }));
+    };
+
+    const acceptField = (key) => {
+        const raw = inlineAc[key] || vals[key];
+        const value = key === 'manufacturer' ? raw.toUpperCase() : raw;
+        setVals(v => ({ ...v, [key]: value }));
+        setInlineAc(a => ({ ...a, [key]: null }));
+        return value;
+    };
+
+    const focusNext = (key) => {
+        const keys = PROPOSAL_FIELDS.map(f => f.key);
+        const nextKey = keys[keys.indexOf(key) + 1];
+        if (nextKey) { inputRefs.current[nextKey]?.focus(); return true; }
+        return false;
+    };
+
+    const knownProduct = useMemo(() => {
+        if (!materialDb?.length || !vals.manufacturer) return null;
+        const mfr = vals.manufacturer.toLowerCase();
+        const mdl = (vals.model || '').toLowerCase();
+        return materialDb.find(m =>
+            (m.manufacturer || '').toLowerCase() === mfr &&
+            (!mdl || (m.model || '').toLowerCase() === mdl)
+        ) || null;
+    }, [materialDb, vals.manufacturer, vals.model]);
+
+    return (
+        <div className={`flex items-center gap-1 px-2 py-1 rounded border text-[10px] transition-colors ${p.isSelected ? 'bg-green-500/10 border-green-500/30' : 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]'}`}>
+            <button onClick={() => onDelete(p)} title="Usuń" className="flex-shrink-0 text-gray-600 hover:text-red-400 transition-colors mr-0.5">
+                <Trash2 size={11} />
+            </button>
+            {p.imageUrl && <ProposalImage proposalId={p.id} token={token} onDeleted={() => onImageDeleted(p)} />}
+            {knownProduct && (
+                <span title="Produkt znany w bazie materiałów" className="flex-shrink-0 text-cyan-500/70">
+                    <Database size={10} />
+                </span>
+            )}
+            {PROPOSAL_FIELDS.map(({ key, ph, ac }) => (
+                <div key={key} className="flex-1 min-w-0">
+                    <input
+                        ref={el => inputRefs.current[key] = el}
+                        value={ac && inlineAc[key] ? inlineAc[key] : vals[key]}
+                        onChange={e => ac ? handleChange(key, e.target.value) : setVals(v => ({ ...v, [key]: e.target.value }))}
+                        onBlur={e => {
+                            if (ac) { const v = acceptField(key); save(key, v); }
+                            else save(key, e.target.value);
+                        }}
+                        onKeyDown={e => {
+                            if (e.key === 'Tab') {
+                                e.preventDefault();
+                                const v = ac ? acceptField(key) : vals[key];
+                                save(key, v);
+                                focusNext(key);
+                            } else if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const v = ac ? acceptField(key) : vals[key];
+                                save(key, v);
+                                if (!focusNext(key)) e.target.blur();
+                            } else if ((e.key === 'Escape' || e.key === 'Backspace') && inlineAc[key]) {
+                                suppressAcRef.current = true;
+                                setInlineAc(a => ({ ...a, [key]: null }));
+                            }
+                        }}
+                        placeholder={ph}
+                        className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/50 rounded px-1.5 py-0.5 text-white placeholder-gray-700 outline-none transition-colors cursor-pointer focus:cursor-text"
+                    />
+                </div>
+            ))}
+            {p.matchScore != null && (
+                <span className="flex-shrink-0 text-blue-400 text-[9px] w-8 text-right">{Math.round(p.matchScore * 100)}%</span>
+            )}
+            {!p.isSelected ? (
+                <button onClick={() => onSelect(p)}
+                    className="flex-shrink-0 px-2 py-0.5 rounded bg-green-600/20 hover:bg-green-600/40 text-green-400 border border-green-500/20 transition-colors ml-1">
+                    Wybierz
+                </button>
+            ) : (
+                <CheckCircle size={12} className="text-green-400 flex-shrink-0 ml-1" />
+            )}
+        </div>
+    );
+}
+
+function ProposalsSection({ req, token, onRefresh, materialDb }) {
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const [proposals, setProposals] = useState(req.proposals || []);
     const [searching, setSearching] = useState(false);
     const [manualForm, setManualForm] = useState(null);
+    const [manualAc, setManualAc] = useState({});
+    const manualInputRefs = useRef({});
+    const suppressManualAcRef = useRef(false);
+
+    useLayoutEffect(() => {
+        if (!manualForm) return;
+        for (const key of AC_KEYS) {
+            const el = manualInputRefs.current[key];
+            const suggestion = manualAc[key];
+            if (suggestion && el && document.activeElement === el) {
+                el.setSelectionRange((manualForm[key] || '').length, suggestion.length);
+            }
+        }
+    });
+
+    const handleManualChange = (key, typed) => {
+        if (suppressManualAcRef.current) {
+            suppressManualAcRef.current = false;
+            setManualForm(f => ({ ...f, [key]: typed }));
+            setManualAc(a => ({ ...a, [key]: null }));
+            return;
+        }
+        const suggestion = findInlineAc(key, typed, materialDb, { ...manualForm, [key]: typed });
+        setManualForm(f => ({ ...f, [key]: typed }));
+        setManualAc(a => ({ ...a, [key]: suggestion }));
+    };
+
+    const acceptManualField = (key) => {
+        const raw = manualAc[key] || manualForm[key] || '';
+        const value = key === 'manufacturer' ? raw.toUpperCase() : raw;
+        setManualForm(f => ({ ...f, [key]: value }));
+        setManualAc(a => ({ ...a, [key]: null }));
+        return value;
+    };
+
+    const focusManualNext = (key) => {
+        const keys = PROPOSAL_FIELDS.map(f => f.key);
+        const nextKey = keys[keys.indexOf(key) + 1];
+        if (nextKey) { manualInputRefs.current[nextKey]?.focus(); return true; }
+        return false;
+    };
 
     useEffect(() => { setProposals(req.proposals || []); }, [req.id, req.proposals]);
 
@@ -91,69 +336,111 @@ function ProposalsSection({ req, token, onRefresh }) {
         onRefresh();
     };
 
-    const addManual = async () => {
-        if (!manualForm?.productName) return;
-        const res = await fetch(`${API_URL}/material-requirements/${req.id}/proposals`, {
-            method: 'POST', headers, body: JSON.stringify({ ...manualForm, isManual: true }),
+    const deleteProposalImage = async (p) => {
+        await fetch(`${API_URL}/material-requirements/proposals/${p.id}/image`, { method: 'DELETE', headers });
+        setProposals(prev => prev.map(x => x.id === p.id ? { ...x, imageUrl: null } : x));
+        onRefresh();
+    };
+
+    const patchProposal = async (id, data) => {
+        await fetch(`${API_URL}/material-requirements/proposals/${id}`, {
+            method: 'PATCH', headers, body: JSON.stringify(data),
         });
-        if (res.ok) { const p = await res.json(); setProposals(prev => [...prev, p]); setManualForm(null); onRefresh(); }
+        onRefresh();
+    };
+
+    const addManual = async () => {
+        // Merge any pending inline AC suggestions before submitting
+        const form = { ...manualForm };
+        for (const key of AC_KEYS) {
+            if (manualAc[key]) form[key] = key === 'manufacturer' ? manualAc[key].toUpperCase() : manualAc[key];
+        }
+        if (!form.productName) return;
+        const payload = { ...form, isManual: true };
+        const raw = String(form.priceNetto ?? '').trim().replace(',', '.');
+        payload.priceNetto = raw === '' ? null : (parseFloat(raw) || null);
+        const res = await fetch(`${API_URL}/material-requirements/${req.id}/proposals`, {
+            method: 'POST', headers, body: JSON.stringify(payload),
+        });
+        if (res.ok) { setManualForm(null); setManualAc({}); onRefresh(); }
     };
 
     return (
-        <div className="flex flex-col gap-2 mt-2">
+        <div className="flex flex-col gap-1 mt-2">
             <div className="flex items-center gap-2">
                 <span className="text-[10px] italic uppercase tracking-widest text-white font-semibold">Propozycje produktów</span>
                 <button onClick={searchAI} disabled={searching}
                     className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-colors disabled:opacity-40">
                     <Sparkles size={10} /> {searching ? 'Szukam...' : 'Szukaj AI'}
                 </button>
-                <button onClick={() => setManualForm(manualForm ? null : { productName: '', manufacturer: '', model: '' })}
+                <button onClick={() => setManualForm(manualForm ? null : { productName: '', manufacturer: '', model: '', priceNetto: '', availability: '', sourceUrl: '' })}
                     className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 transition-colors">
                     <Plus size={10} /> Dodaj ręcznie
                 </button>
             </div>
 
-            {manualForm && (
-                <div className="flex items-center gap-2 p-2 rounded bg-white/5 border border-white/10">
-                    {['productName', 'manufacturer', 'model'].map(k => (
-                        <input key={k} value={manualForm[k] || ''} onChange={e => setManualForm(p => ({ ...p, [k]: e.target.value }))}
-                            placeholder={{ productName: 'Nazwa handlowa', manufacturer: 'Producent', model: 'Model' }[k]}
-                            className="flex-1 bg-black/30 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-gray-600 outline-none" />
+            {manualForm && (() => {
+                const mfr = (manualAc.manufacturer || manualForm.manufacturer || '').toLowerCase();
+                const mdl = (manualAc.model || manualForm.model || '').toLowerCase();
+                const knownManual = mfr && materialDb?.find(m =>
+                    (m.manufacturer || '').toLowerCase() === mfr &&
+                    (!mdl || (m.model || '').toLowerCase() === mdl)
+                );
+                return (
+                <div className="flex items-center gap-1 px-2 py-1 rounded bg-white/5 border border-white/10">
+                    <div className="w-5 flex-shrink-0 flex items-center justify-center">
+                        {knownManual && <Database size={10} title="Produkt znany w bazie materiałów" className="text-cyan-500/70" />}
+                    </div>
+                    {PROPOSAL_FIELDS.map(({ key, ph, ac }) => (
+                        <div key={key} className="flex-1 min-w-0">
+                            <input
+                                ref={el => manualInputRefs.current[key] = el}
+                                value={ac && manualAc[key] ? manualAc[key] : (manualForm[key] || '')}
+                                onChange={e => ac ? handleManualChange(key, e.target.value) : setManualForm(f => ({ ...f, [key]: e.target.value }))}
+                                onBlur={() => ac && acceptManualField(key)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Tab') {
+                                        e.preventDefault();
+                                        if (ac) acceptManualField(key);
+                                        focusManualNext(key);
+                                    } else if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (ac) acceptManualField(key);
+                                        if (!focusManualNext(key)) addManual();
+                                    } else if (e.key === 'Escape') {
+                                        if (manualAc[key]) { suppressManualAcRef.current = true; setManualAc(a => ({ ...a, [key]: null })); }
+                                        else setManualForm(null);
+                                    } else if (e.key === 'Backspace' && manualAc[key]) {
+                                        suppressManualAcRef.current = true;
+                                        setManualAc(a => ({ ...a, [key]: null }));
+                                    }
+                                }}
+                                placeholder={ph}
+                                className="w-full bg-black/30 border border-white/10 rounded px-1.5 py-0.5 text-[10px] text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
+                            />
+                        </div>
                     ))}
-                    <button onClick={addManual} className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs transition-colors">Dodaj</button>
-                    <button onClick={() => setManualForm(null)} className="text-gray-500 hover:text-gray-300"><XCircle size={14} /></button>
+                    <button onClick={() => setManualForm(null)} className="flex-shrink-0 px-2 py-0.5 text-[10px] text-gray-500 hover:text-white transition-colors ml-1">Anuluj</button>
+                    <button onClick={addManual} className="flex-shrink-0 px-3 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-[10px] text-white transition-colors">Dodaj</button>
                 </div>
-            )}
+                );
+            })()}
 
             {proposals.length === 0 && !manualForm && (
                 <p className="text-[11px] text-gray-600 italic">Brak propozycji — kliknij „Szukaj AI" lub dodaj ręcznie.</p>
             )}
 
             {proposals.map(p => (
-                <div key={p.id} className={`flex items-center gap-3 px-3 py-2 rounded border transition-colors ${p.isSelected ? 'bg-green-500/10 border-green-500/30' : 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]'}`}>
-                    <div className="flex-1 min-w-0">
-                        <div className="text-xs text-white truncate">{p.productName}</div>
-                        <div className="text-[10px] text-gray-400">{[p.manufacturer, p.model].filter(Boolean).join(' · ')}</div>
-                        {p.matchScore != null && (
-                            <div className="text-[10px] text-blue-400 mt-0.5">{Math.round(p.matchScore * 100)}% zgodności</div>
-                        )}
-                    </div>
-                    {p.sourceUrl && (
-                        <a href={p.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">
-                            <LinkIcon size={12} />
-                        </a>
-                    )}
-                    {!p.isSelected && (
-                        <button onClick={() => selectProposal(p)}
-                            className="px-2 py-1 rounded bg-green-600/20 hover:bg-green-600/40 text-green-400 text-[10px] border border-green-500/20 transition-colors">
-                            Wybierz
-                        </button>
-                    )}
-                    {p.isSelected && <CheckCircle size={14} className="text-green-400 flex-shrink-0" />}
-                    <button onClick={() => deleteProposal(p)} className="text-gray-600 hover:text-red-400 transition-colors flex-shrink-0">
-                        <Trash2 size={12} />
-                    </button>
-                </div>
+                <ProposalRow
+                    key={p.id}
+                    p={p}
+                    token={token}
+                    materialDb={materialDb}
+                    onDelete={deleteProposal}
+                    onSelect={selectProposal}
+                    onDeleted={deleteProposalImage}
+                    onPatch={patchProposal}
+                />
             ))}
         </div>
     );
@@ -176,9 +463,34 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     const [comboOpen, setComboOpen] = useState(null);
     const [localImageUrl, setLocalImageUrl] = useState(null);
     const [imageKey, setImageKey] = useState(0);
+    const [fetchedImageUrl, setFetchedImageUrl] = useState(null);
+    const [showCatalogModal, setShowCatalogModal] = useState(false);
+    const [catalogImageUrl, setCatalogImageUrl] = useState(null);
+    const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
+    const pdfBlobUrlRef = useRef(null);
+
+    const openPdfPreview = useCallback(async (type = 'datasheet') => {
+        const res = await fetch(`${API_URL}/material-requirements/${card.id}/${type}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const blob = await res.blob();
+        if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
+        const url = URL.createObjectURL(blob);
+        pdfBlobUrlRef.current = url;
+        setPdfPreviewUrl(url);
+    }, [card?.id, token]);
+
+    const closePdfPreview = useCallback(() => {
+        setPdfPreviewUrl(null);
+        if (pdfBlobUrlRef.current) { URL.revokeObjectURL(pdfBlobUrlRef.current); pdfBlobUrlRef.current = null; }
+    }, []);
     const fileInputRef = useRef(null);
     const pasteInputRef = useRef(null);
     const localImageUrlRef = useRef(null);
+    const fetchedImageUrlRef = useRef(null);
+    const catalogImageUrlRef = useRef(null);
+    const [catalogMaterial, setCatalogMaterial] = useState(null);
 
     useEffect(() => {
         setFields({
@@ -190,11 +502,69 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
             priceNetto: card?.priceNetto ?? '',
             productUrl: card?.productUrl || '',
         });
-    }, [card?.id, card?.manufacturer, card?.model, card?.productName, card?.productUrl]);
+    // Zresetuj formularz tylko przy zmianie karty (nowe id).
+    // Nie reaguj na zmiany pojedynczych pól — każdy blur sam wywołuje patchCard,
+    // a reset po onRefresh kasował niezapisane wartości innych pól.
+    }, [card?.id]);
+
+    // Pobierz obrazek z auth nagłówkiem i stwórz blob URL (img src nie może wysłać Authorization)
+    useEffect(() => {
+        if (!card?.imageUrl || !card?.id) {
+            setFetchedImageUrl(null);
+            return;
+        }
+        let cancelled = false;
+        fetch(`${API_URL}/material-requirements/${card.id}/image?t=${imageKey}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        }).then(async res => {
+            if (!res.ok || cancelled) return;
+            const blob = await res.blob();
+            if (cancelled) return;
+            if (fetchedImageUrlRef.current) URL.revokeObjectURL(fetchedImageUrlRef.current);
+            const url = URL.createObjectURL(blob);
+            fetchedImageUrlRef.current = url;
+            setFetchedImageUrl(url);
+        }).catch(() => { if (!cancelled) setFetchedImageUrl(null); });
+        return () => { cancelled = true; };
+    }, [card?.id, card?.imageUrl, imageKey, token]);
+
+    // Pobierz dane i obrazek karty katalogowej gdy modal otwarty
+    useEffect(() => {
+        if (!showCatalogModal || !card?.materialId) {
+            if (catalogImageUrlRef.current) { URL.revokeObjectURL(catalogImageUrlRef.current); catalogImageUrlRef.current = null; }
+            setCatalogImageUrl(null);
+            setCatalogMaterial(null);
+            return;
+        }
+        let cancelled = false;
+        // Fetch danych materiału
+        fetch(`${API_URL}/material-requirements/${card.materialId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        }).then(async res => {
+            if (!res.ok || cancelled) return;
+            const data = await res.json();
+            if (!cancelled) setCatalogMaterial(data);
+        }).catch(() => {});
+        // Fetch obrazka
+        fetch(`${API_URL}/material-requirements/${card.materialId}/image`, {
+            headers: { Authorization: `Bearer ${token}` },
+        }).then(async res => {
+            if (!res.ok || cancelled) return;
+            const blob = await res.blob();
+            if (cancelled) return;
+            if (catalogImageUrlRef.current) URL.revokeObjectURL(catalogImageUrlRef.current);
+            const url = URL.createObjectURL(blob);
+            catalogImageUrlRef.current = url;
+            setCatalogImageUrl(url);
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [showCatalogModal, card?.materialId, token]);
 
     // Zwolnij objectURL przy odmontowaniu
     useEffect(() => () => {
         if (localImageUrlRef.current) URL.revokeObjectURL(localImageUrlRef.current);
+        if (fetchedImageUrlRef.current) URL.revokeObjectURL(fetchedImageUrlRef.current);
+        if (catalogImageUrlRef.current) URL.revokeObjectURL(catalogImageUrlRef.current);
     }, []);
 
     const uploadBlob = useCallback(async (blob, filename = 'image.png') => {
@@ -265,24 +635,16 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
         }).sort((a, b) => (a[fieldKey] || '').localeCompare(b[fieldKey] || ''));
     }, [materialDb, fields]);
 
-    const selectMaterial = useCallback(async (mat, fromField) => {
+    const selectMaterial = useCallback(async (mat) => {
         const uiFields = {};
-        const updates = {};
-        if (fromField === 'manufacturer') {
-            if (mat.manufacturer) { uiFields.manufacturer = mat.manufacturer; updates.manufacturer = mat.manufacturer; }
-        } else if (fromField === 'model') {
-            if (mat.manufacturer) { uiFields.manufacturer = mat.manufacturer; updates.manufacturer = mat.manufacturer; }
-            if (mat.model) { uiFields.model = mat.model; updates.model = mat.model; }
-        } else {
-            updates.materialId = mat.id;
-            if (mat.manufacturer) { uiFields.manufacturer = mat.manufacturer; updates.manufacturer = mat.manufacturer; }
-            if (mat.model) { uiFields.model = mat.model; updates.model = mat.model; }
-            if (mat.productName) { uiFields.productName = mat.productName; updates.productName = mat.productName; }
-            if (mat.dataSheetUrl) { updates.dataSheetUrl = mat.dataSheetUrl; updates.dataSheetName = mat.dataSheetName || mat.productName || 'karta.pdf'; }
-        }
+        const updates = { materialId: mat.id };
+        if (mat.manufacturer) { uiFields.manufacturer = mat.manufacturer.toUpperCase(); updates.manufacturer = mat.manufacturer.toUpperCase(); }
+        if (mat.model) { uiFields.model = mat.model; updates.model = mat.model; }
+        if (mat.productName) { uiFields.productName = mat.productName; updates.productName = mat.productName; }
+        if (mat.dataSheetUrl) { updates.dataSheetUrl = mat.dataSheetUrl; updates.dataSheetName = mat.dataSheetName || mat.productName || 'karta.pdf'; }
         setFields(prev => ({ ...prev, ...uiFields }));
         setComboOpen(null);
-        if (Object.keys(updates).length > 0) await patchCard(updates);
+        await patchCard(updates);
     }, [patchCard]);
 
     const comboFields = [
@@ -294,6 +656,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     if (!card) return null;
 
     return (
+        <>
         <div className="flex gap-0 p-0">
             {/* Lewa kolumna — pola (zwężona) */}
             <div className="flex flex-col gap-3 p-4 flex-1 min-w-0">
@@ -306,10 +669,30 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                 <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">{label}</label>
                                 <input
                                     value={fields[key]}
-                                    onChange={e => setF(key, e.target.value)}
+                                    onChange={e => setF(key, key === 'manufacturer' ? e.target.value.toUpperCase() : e.target.value)}
                                     onFocus={() => setComboOpen(key)}
-                                    onBlur={() => setTimeout(() => setComboOpen(null), 150)}
-                                    onKeyDown={e => { if (e.key === 'Enter') { setComboOpen(null); patchCard({ [key]: fields[key] }); } }}
+                                    onBlur={() => {
+                                        setTimeout(() => setComboOpen(null), 150);
+                                        if (key === 'manufacturer' && !fields.manufacturer) {
+                                            setF('model', '');
+                                            setF('productName', '');
+                                            patchCard({ manufacturer: '', model: '', productName: '', materialId: null });
+                                        }
+                                    }}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                            setComboOpen(null);
+                                            const updates = { [key]: fields[key] };
+                                            if (key === 'manufacturer' && !fields[key]) {
+                                                updates.model = '';
+                                                updates.productName = '';
+                                                updates.materialId = null;
+                                                setF('model', '');
+                                                setF('productName', '');
+                                            }
+                                            patchCard(updates);
+                                        }
+                                    }}
                                     disabled={readOnly}
                                     className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
                                     placeholder={`Wpisz ${label.toLowerCase()}...`}
@@ -317,7 +700,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                 {comboOpen === key && suggestions.length > 0 && (
                                     <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-gray-900 border border-white/20 rounded shadow-xl max-h-48 overflow-auto custom-scrollbar">
                                         {suggestions.map((m, i) => (
-                                            <button key={i} onMouseDown={() => selectMaterial(m, key)}
+                                            <button key={i} onMouseDown={() => selectMaterial(m)}
                                                 className="w-full text-left px-3 py-1.5 text-xs text-gray-200 hover:bg-white/10 truncate">
                                                 {m[key]}
                                             </button>
@@ -327,10 +710,6 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                             </div>
                         );
                     })}
-                </div>
-
-                {/* Dane ofertowe + URL */}
-                <div className="flex flex-wrap gap-2">
                     <div className="flex-1 min-w-[90px]">
                         <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Cena netto</label>
                         <input value={fields.priceNetto} onChange={e => setF('priceNetto', e.target.value)}
@@ -389,8 +768,21 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                 </div>
 
                 {/* Propozycje */}
-                {!readOnly && <ProposalsSection req={card} token={token} onRefresh={onRefresh} />}
+                {!readOnly && <ProposalsSection req={card} token={token} onRefresh={onRefresh} materialDb={materialDb} />}
             </div>
+
+            {/* Ikona karty katalogowej — widoczna gdy materiał zaciągnięty z bazy */}
+            {card?.materialId && (
+                <div className="flex flex-col items-center justify-start pt-3 w-7 flex-shrink-0 border-l border-white/5">
+                    <button
+                        onClick={() => setShowCatalogModal(true)}
+                        title="Karta katalogowa"
+                        className="p-1.5 rounded hover:bg-white/10 text-blue-400/60 hover:text-blue-300 transition-colors"
+                    >
+                        <BookOpen size={20} />
+                    </button>
+                </div>
+            )}
 
             {/* Prawa kolumna — kliknięcie = file picker, hover+Ctrl+V = schowek */}
             <div
@@ -410,10 +802,10 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                     aria-hidden="true"
                     style={{ position: 'absolute', opacity: 0, width: 0, height: 0, border: 'none', outline: 'none', padding: 0 }}
                 />
-                {(localImageUrl || card.imageUrl) ? (
+                {(localImageUrl || fetchedImageUrl) ? (
                     <img
                         key={imageKey}
-                        src={localImageUrl || `${API_URL}/material-requirements/${card.id}/image?t=${imageKey}`}
+                        src={localImageUrl || fetchedImageUrl}
                         alt="podgląd"
                         className="absolute inset-0 w-full h-full object-contain p-2"
                     />
@@ -425,6 +817,85 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                 )}
             </div>
         </div>
+
+        {/* Modal podglądu PDF */}
+        {pdfPreviewUrl && createPortal(
+            <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80" onClick={closePdfPreview}>
+                <div className="bg-[#0d1520] border border-white/15 rounded-2xl shadow-2xl flex flex-col" style={{ width: '90vw', height: '90vh' }} onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
+                        <div className="flex items-center gap-2 text-[10px] text-teal-400 uppercase tracking-widest font-bold">
+                            <FileText size={12} /> Karta katalogowa (PDF)
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <a href={pdfPreviewUrl} download className="text-gray-400 hover:text-gray-200 text-[10px] uppercase tracking-wider">Pobierz</a>
+                            <button onClick={closePdfPreview} className="text-gray-500 hover:text-gray-300 transition-colors ml-2"><X size={14} /></button>
+                        </div>
+                    </div>
+                    <iframe src={pdfPreviewUrl} className="flex-1 w-full rounded-b-2xl" title="Karta katalogowa" />
+                </div>
+            </div>,
+            document.body
+        )}
+
+        {/* Modal karty katalogowej */}
+        {showCatalogModal && createPortal(
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70" onClick={() => setShowCatalogModal(false)}>
+                <div className="bg-[#0d1520] border border-white/15 rounded-2xl shadow-2xl w-80 overflow-hidden" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                        <div className="flex items-center gap-2 text-[10px] text-blue-400 uppercase tracking-widest font-bold">
+                            <BookOpen size={12} /> Karta katalogowa
+                        </div>
+                        <button onClick={() => setShowCatalogModal(false)} className="text-gray-500 hover:text-gray-300 transition-colors">
+                            <X size={14} />
+                        </button>
+                    </div>
+                    {catalogImageUrl && (
+                        <div className="w-full h-36 bg-black/30 border-b border-white/5">
+                            <img src={catalogImageUrl} alt="produkt" className="w-full h-full object-contain p-2" />
+                        </div>
+                    )}
+                    {!catalogMaterial && (
+                        <div className="p-4 text-xs text-gray-500 text-center">Ładowanie...</div>
+                    )}
+                    {catalogMaterial && (
+                        <>
+                        <div className="p-4 flex flex-col gap-2 text-xs">
+                            {catalogMaterial.manufacturer && (
+                                <div className="flex gap-2"><span className="text-gray-500 w-20 flex-shrink-0">Producent</span><span className="text-white font-semibold">{catalogMaterial.manufacturer.toUpperCase()}</span></div>
+                            )}
+                            {catalogMaterial.model && (
+                                <div className="flex gap-2"><span className="text-gray-500 w-20 flex-shrink-0">Model</span><span className="text-gray-200">{catalogMaterial.model}</span></div>
+                            )}
+                            {catalogMaterial.productName && (
+                                <div className="flex gap-2"><span className="text-gray-500 w-20 flex-shrink-0">Nazwa</span><span className="text-gray-200">{catalogMaterial.productName}</span></div>
+                            )}
+                            {catalogMaterial.stockStatus != null && (
+                                <div className="flex gap-2"><span className="text-gray-500 w-20 flex-shrink-0">Magazyn</span><span className="text-gray-200">{catalogMaterial.stockStatus} szt.</span></div>
+                            )}
+                        </div>
+                        {(catalogMaterial.dataSheetUrl || catalogMaterial.complianceUrl) && (
+                            <div className="px-4 pb-4 flex flex-col gap-2">
+                                {catalogMaterial.dataSheetUrl && (
+                                    <button onClick={() => openPdfPreview('datasheet')}
+                                        className="flex items-center justify-center gap-1.5 px-3 py-2 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 rounded-lg text-teal-300 text-[10px] font-bold uppercase tracking-widest transition-all w-full">
+                                        <FileText size={11} /> Karta katalogowa (PDF)
+                                    </button>
+                                )}
+                                {catalogMaterial.complianceUrl && (
+                                    <button onClick={() => openPdfPreview('compliance')}
+                                        className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all w-full">
+                                        <FileText size={11} /> Deklaracja zgodności
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                        </>
+                    )}
+                </div>
+            </div>,
+            document.body
+        )}
+        </>
     );
 }
 
@@ -501,6 +972,7 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                 {editQty && !readOnly ? (
                     <input autoFocus value={qtyVal}
                         onChange={e => setQtyVal(e.target.value)}
+                        onFocus={e => e.target.select()} onMouseUp={e => e.target.select()}
                         onBlur={handleQtyBlur}
                         onKeyDown={e => { if (e.key === 'Enter') handleQtyBlur(); if (e.key === 'Escape') { setQtyVal(String(node.quantity ?? 1)); setEditQty(false); } }}
                         className="w-16 bg-black/30 border border-blue-500/50 rounded px-2 py-0.5 text-sm text-white outline-none" />
@@ -531,6 +1003,7 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                 {editPrice && !readOnly && card ? (
                     <input autoFocus value={priceVal}
                         onChange={e => setPriceVal(e.target.value)}
+                        onFocus={e => e.target.select()} onMouseUp={e => e.target.select()}
                         onBlur={handlePriceBlur}
                         onKeyDown={e => { if (e.key === 'Enter') handlePriceBlur(); if (e.key === 'Escape') { setPriceVal(card?.priceNetto != null ? String(card.priceNetto) : ''); setEditPrice(false); } }}
                         placeholder="0.00"
@@ -739,7 +1212,7 @@ export default function WbsMaterialsPanel({
             });
             if (res.ok) {
                 const data = await res.json();
-                setMaterialDb(data.map(m => ({ ...m, manufacturer: normalizeName(m.manufacturer) })));
+                setMaterialDb(data.map(m => ({ ...m, manufacturer: m.manufacturer ? m.manufacturer.toUpperCase() : m.manufacturer })));
             }
         } catch {}
     }, [token]);
@@ -1096,49 +1569,63 @@ export default function WbsMaterialsPanel({
         URL.revokeObjectURL(url);
     }, [matNodes, cards, orderName, projectName]);
 
-    const exportToPdf = useCallback(() => {
-        const STATUS_LABELS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
-        const cols = ['Przedmiot projektu', 'Nazwa', 'Wymagania techniczne', 'Ilość', 'Produkt', 'Cena netto', 'Status'];
+    const exportToPdf = useCallback(async () => {
+        const cols = ['Przedmiot projektu', 'Nazwa', 'Wymagania techniczne', 'Ilość', 'Produkt', 'Zdjęcie'];
+
+        const [logoDataUrl] = await Promise.all([fetchLogoDataUrl()]);
+
+        // Pobierz obrazki z auth headerem i zakoduj do base64
+        const imageBase64 = {};
+        await Promise.all(sortedFilteredNodes.map(async node => {
+            const card = cards[node.id];
+            if (!card?.imageUrl || !card?.id) return;
+            try {
+                const res = await fetch(`${API_URL}/material-requirements/${card.id}/image`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!res.ok) return;
+                const blob = await res.blob();
+                const b64 = await new Promise(resolve => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.readAsDataURL(blob);
+                });
+                imageBase64[node.id] = b64;
+            } catch {}
+        }));
+
         const bodyRows = sortedFilteredNodes.map(node => {
             const card = cards[node.id] || null;
             const parent = getParentPath(node.path);
             const product = [card?.manufacturer, card?.model].filter(Boolean).join(' / ') || '—';
-            const price = card?.priceNetto != null ? `${Number(card.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—';
-            const status = STATUS_LABELS[card?.status] || '—';
             const techSpec = (card?.technicalSpec || '—').replace(/\n/g, '<br>');
-            return [parent, node.name || '—', techSpec, `${node.quantity ?? 1} ${node.unit || 'szt'}`, product, price, status];
+            const imgCell = imageBase64[node.id]
+                ? `<img src="${imageBase64[node.id]}" style="max-width:80px;max-height:80px;object-fit:contain;" />`
+                : '—';
+            return [parent, node.name || '—', techSpec, `${node.quantity ?? 1} ${node.unit || 'szt'}`, product, imgCell];
         });
 
         const safeOrderPdf = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'zamowienie';
-        const safeProjectPdf = String(projectName || '').trim().replace(/[\\/:*?"<>|]+/g, '_');
-        const pdfTitle = safeProjectPdf ? `${safeProjectPdf}_${safeOrderPdf}_materialy` : `${safeOrderPdf}_materialy`;
-        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${pdfTitle}</title>
-<style>
-  body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 0; }
-  h1, h2, h3, h4, h5, h6 { break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
-  h2 { font-size: 16px; margin-bottom: 12px; }
-  table { width: 100%; border-collapse: collapse; }
-  th { background: #1a1a2e; color: #fff; text-align: left; padding: 6px 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
-  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
-  tr:nth-child(even) td { background: #f9fafb; }
-  tr { break-inside: avoid; page-break-inside: avoid; }
-  thead { display: table-header-group; }
-  @page { size: A4 landscape; margin: 20mm 14mm; }
-</style></head><body>
-<h2>Pozycje materiałowe dla projektu_${safeOrderPdf}</h2>
-<table>
-  <thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
-  <tbody>${bodyRows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
-</table>
-</body></html>`;
+        const date = new Date().toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' });
 
-        const win = window.open('', '_blank');
-        if (!win) return;
-        win.document.write(html);
-        win.document.close();
-        win.focus();
-        setTimeout(() => { win.print(); }, 400);
-    }, [sortedFilteredNodes, cards]);
+        const bodyHtml = `
+<table>
+  <thead><tr>${cols.map(c => `<th>${escPdf(c)}</th>`).join('')}</tr></thead>
+  <tbody>${bodyRows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
+</table>`;
+
+        const html = buildPdfDocument({
+            logoDataUrl,
+            title: orderName || projectName || 'Zamówienie',
+            subtitle: 'Pozycje materiałowe',
+            date,
+            bodyHtml,
+            extraCss: `@page { size: A4 landscape; margin: 20mm 14mm; }
+  th { background: #1a1a2e; color: #fff; text-align: left; }`,
+        });
+
+        openPdfBlob(html);
+    }, [sortedFilteredNodes, cards, token, orderName, projectName]);
 
     // Notify parent when export functions update
     useEffect(() => { onExportReady?.(exportToExcel); }, [exportToExcel]);

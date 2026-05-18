@@ -77,25 +77,148 @@ export class MaterialRequirementsService {
         });
     }
 
+    /** Wszystkie wymagania pasujące do producenta+modelu — użycie materiału w projektach */
+    async findMaterialUsage(manufacturer: string, model?: string) {
+        const mfWhere: any = { equals: manufacturer, mode: 'insensitive' };
+        const mdWhere: any = model ? { equals: model, mode: 'insensitive' } : undefined;
+
+        // 1. Szukaj wymagań z manufacturer/model ustawionym bezpośrednio
+        const directWhere: any = { manufacturer: mfWhere };
+        if (mdWhere) directWhere.model = mdWhere;
+
+        // 2. Szukaj wymagań, które mają wybraną propozycję z tym manufacturer/model
+        const proposalWhere: any = {
+            manufacturer: mfWhere,
+            isSelected: true,
+        };
+        if (mdWhere) proposalWhere.model = mdWhere;
+
+        const reqSelect = {
+            id: true,
+            name: true,
+            quantity: true,
+            unit: true,
+            priceNetto: true,
+            availability: true,
+            status: true,
+            createdAt: true,
+            node: {
+                select: {
+                    id: true,
+                    name: true,
+                    parent: {
+                        select: {
+                            id: true,
+                            name: true,
+                            parent: { select: { id: true, name: true } },
+                        },
+                    },
+                },
+            },
+        };
+
+        const [direct, viaProposal] = await Promise.all([
+            this.prisma.materialRequirement.findMany({
+                where: directWhere,
+                select: reqSelect,
+                orderBy: { createdAt: 'desc' },
+            }),
+            this.prisma.productProposal.findMany({
+                where: proposalWhere,
+                select: {
+                    priceNetto: true,
+                    availability: true,
+                    materialRequirement: {
+                        select: {
+                            id: true, name: true, quantity: true, unit: true,
+                            priceNetto: true, availability: true, status: true, createdAt: true,
+                            node: {
+                                select: {
+                                    id: true, name: true,
+                                    parent: {
+                                        select: {
+                                            id: true, name: true,
+                                            parent: { select: { id: true, name: true } },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            }),
+        ]);
+
+        // Łącz i deduplikuj po id wymagania
+        const seen = new Set<string>();
+        const results: any[] = [];
+        for (const r of direct) {
+            if (!seen.has(r.id)) { seen.add(r.id); results.push(r); }
+        }
+        for (const p of viaProposal) {
+            const r = p.materialRequirement;
+            if (!r || seen.has(r.id)) continue;
+            seen.add(r.id);
+            // Użyj ceny z wybranej propozycji jeśli wymaganie jej nie ma
+            results.push({
+                ...r,
+                priceNetto: r.priceNetto ?? p.priceNetto,
+                availability: r.availability || p.availability,
+            });
+        }
+        return results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+
     /** All materials with manufacturer filled (no dataSheetUrl requirement) */
     async findAllMaterials() {
-        const items = await this.prisma.materialRequirement.findMany({
-            where: {
-                AND: [
-                    { manufacturer: { not: null } },
-                    { NOT: { manufacturer: '' } },
-                ]
-            },
-            select: {
-                id: true, manufacturer: true, model: true, productName: true,
-                dataSheetUrl: true, dataSheetName: true, complianceUrl: true, complianceName: true,
-                type: true,
-            },
-            orderBy: { createdAt: 'desc' }
-        });
+        const [items, manualProposals] = await Promise.all([
+            this.prisma.materialRequirement.findMany({
+                where: {
+                    AND: [
+                        { manufacturer: { not: null } },
+                        { NOT: { manufacturer: '' } },
+                    ]
+                },
+                select: {
+                    id: true, manufacturer: true, model: true, productName: true,
+                    dataSheetUrl: true, dataSheetName: true, complianceUrl: true, complianceName: true,
+                    type: true, priceNetto: true, availability: true, productUrl: true,
+                },
+                orderBy: { createdAt: 'desc' }
+            }),
+            // Propozycje z wypełnionym producentem (ręczne i wybrane AI)
+            this.prisma.productProposal.findMany({
+                where: {
+                    NOT: { manufacturer: '' },
+                    OR: [{ isManual: true }, { isSelected: true }],
+                },
+                select: {
+                    id: true, manufacturer: true, model: true, productName: true,
+                    priceNetto: true, availability: true, sourceUrl: true,
+                },
+                orderBy: { createdAt: 'desc' }
+            }),
+        ]);
+
+        // Normalizuj propozycje do formatu wymagania
+        const proposalsMapped = manualProposals.map(p => ({
+            id: `proposal:${p.id}`,
+            manufacturer: p.manufacturer,
+            model: p.model,
+            productName: p.productName,
+            dataSheetUrl: null,
+            dataSheetName: null,
+            complianceUrl: null,
+            complianceName: null,
+            type: 'MATERIAL',
+            priceNetto: p.priceNetto,
+            availability: p.availability,
+            productUrl: p.sourceUrl,
+        }));
+
         // Deduplicate by manufacturer+model (case-insensitive), keep first (newest)
-        const seen = new Set();
-        return items.filter(m => {
+        const seen = new Set<string>();
+        return [...items, ...proposalsMapped].filter(m => {
             const key = `${(m.manufacturer || '').toLowerCase()}|${(m.model || '').toLowerCase()}`;
             if (seen.has(key)) return false;
             seen.add(key);
@@ -165,7 +288,7 @@ export class MaterialRequirementsService {
                     quantity: freshQuantity,
                     wbsNodeAllocations: JSON.stringify(allocMap),
                     wbsNodeIds: JSON.stringify(nodeIds),
-                    wbsNodeId: nodeIds[0] || null,
+                    wbsNodeId: normalizedItem.wbsNodeId || nodeIds[0] || null,
                     wbsAllocations: undefined, // nie wysyłaj surowej relacji do frontendu
                 };
             }
@@ -378,6 +501,7 @@ export class MaterialRequirementsService {
         await this.findOne(id);
         const data = { ...dto };
         if (data.productName === null || data.productName === undefined) delete data.productName;
+        if (data.manufacturer) data.manufacturer = data.manufacturer.toUpperCase();
 
         // Jedno źródło prawdy dla quantity: WbsNode.
         // - 1 alokacja → update WbsNode.quantity (cascade: WbsNodeMaterial + MR.quantity + JSON)
@@ -888,11 +1012,23 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
         return { stream, mimeType: mimeMap[ext] || 'application/octet-stream' };
     }
 
-    async addManualProposal(id: string, dto: { productName: string; manufacturer: string; model?: string; sourceUrl?: string }) {
-        await this.findOne(id);
-        return this.prisma.productProposal.create({
+    async addManualProposal(id: string, dto: { productName: string; manufacturer: string; model?: string; sourceUrl?: string; priceNetto?: number | null; availability?: string }) {
+        const req = await this.findOne(id);
+        const proposal = await this.prisma.productProposal.create({
             data: { materialRequirementId: id, isManual: true, ...dto },
         });
+        // Uzupełnij pola wymagania jeśli są puste → wpis trafia do bazy materiałów logistyki
+        const update: any = {};
+        if (!req.manufacturer && dto.manufacturer) update.manufacturer = dto.manufacturer.toUpperCase();
+        if (!req.model && dto.model) update.model = dto.model;
+        if (!req.productName && dto.productName) update.productName = dto.productName;
+        if (!req.productUrl && dto.sourceUrl) update.productUrl = dto.sourceUrl;
+        if (req.priceNetto == null && dto.priceNetto != null) update.priceNetto = dto.priceNetto;
+        if (!req.availability && dto.availability) update.availability = dto.availability;
+        if (Object.keys(update).length > 0) {
+            await this.prisma.materialRequirement.update({ where: { id }, data: update }).catch(() => {});
+        }
+        return proposal;
     }
 
     async updateProposal(proposalId: string, dto: Partial<{ productName: string; manufacturer: string; model: string; sourceUrl: string; priceNetto: number | null; seller: string | null; offerNumber: string | null; availability: string | null; isRejected: boolean; }>) {
@@ -906,6 +1042,15 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
         if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
         fs.writeFileSync(filePath, file.buffer);
         return this.prisma.productProposal.update({ where: { id: proposalId }, data: { imageUrl: filePath } });
+    }
+
+    async deleteProposalImage(proposalId: string) {
+        const proposal = await this.prisma.productProposal.findUnique({ where: { id: proposalId } });
+        if (!proposal) throw new NotFoundException('Proposal not found');
+        if (proposal.imageUrl && fs.existsSync(proposal.imageUrl)) {
+            try { fs.unlinkSync(proposal.imageUrl); } catch {}
+        }
+        return this.prisma.productProposal.update({ where: { id: proposalId }, data: { imageUrl: null } });
     }
 
     async getProposalImageStream(proposalId: string) {
@@ -938,6 +1083,8 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
             if (proposal.model) updateData.model = proposal.model;
             if (proposal.priceNetto != null) updateData.priceNetto = proposal.priceNetto;
             if (proposal.seller) updateData.seller = proposal.seller;
+            if (proposal.availability) updateData.availability = proposal.availability;
+            if (proposal.sourceUrl) updateData.productUrl = proposal.sourceUrl;
             if (Object.keys(updateData).length > 0) {
                 await this.prisma.materialRequirement.update({
                     where: { id: proposal.materialRequirementId },
@@ -1039,7 +1186,7 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
             if (!Array.isArray(items)) return [];
             const mapped = items.map(item => ({
                 productName: String(item.productName || '').slice(0, 300),
-                manufacturer: item.manufacturer ? String(item.manufacturer).slice(0, 200) : null,
+                manufacturer: item.manufacturer ? String(item.manufacturer).slice(0, 200).toUpperCase() : null,
                 model: item.model ? String(item.model).slice(0, 200) : null,
                 type: ['DEVICE', 'MATERIAL', 'CABLE', 'SOFTWARE', 'SERVICE'].includes(item.type) ? item.type : 'DEVICE',
             })).filter(i => i.productName.length > 0);
@@ -1066,7 +1213,7 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
         const results: any[] = [];
         for (const item of items) {
             const productName = String(item.productName).slice(0, 300);
-            const manufacturer = item.manufacturer ? String(item.manufacturer).slice(0, 200) : null;
+            const manufacturer = item.manufacturer ? String(item.manufacturer).slice(0, 200).toUpperCase() : null;
             const model = item.model ? String(item.model).slice(0, 200) : null;
 
             const existing = await this.prisma.materialRequirement.findFirst({

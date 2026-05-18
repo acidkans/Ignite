@@ -37,15 +37,19 @@ export function useCachedSubtasks(token) {
         return () => sub.unsubscribe();
     }, []);
 
-    // Prefetch z sieci (cicho, w tle)
+    // Prefetch z sieci (cicho, w tle) — przy montowaniu i co 60 s
     useEffect(() => {
         if (!token || !isOnline) return;
         let cancelled = false;
-        setSyncing(true);
-        prefetchMobileData(token).finally(() => {
-            if (!cancelled) setSyncing(false);
-        });
-        return () => { cancelled = true; };
+        const run = () => {
+            setSyncing(true);
+            prefetchMobileData(token).finally(() => {
+                if (!cancelled) setSyncing(false);
+            });
+        };
+        run();
+        const id = setInterval(run, 60_000);
+        return () => { cancelled = true; clearInterval(id); };
     }, [token, isOnline]);
 
     // Manual refresh (dla pull-to-refresh w przyszłości)

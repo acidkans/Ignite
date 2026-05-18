@@ -10,6 +10,7 @@ import GanttSection from './GanttSection';
 import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy } from './wbsConstants';
 import { exportProjectPdf } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
+import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
 import WBSHybridTable from './WBSHybridTable';
 import BudgetTable from './BudgetTable';
 
@@ -84,7 +85,14 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         } catch {}
         return DEFAULT_SECTION_ORDER;
     });
-    const [expandedIds, setExpandedIds] = useState(new Set());
+    const wbsExpandedKey = `wbs_expanded_${nodeId}`;
+    const [expandedIds, setExpandedIds] = useState(() => {
+        try {
+            const saved = sessionStorage.getItem(wbsExpandedKey);
+            if (saved) return new Set(JSON.parse(saved));
+        } catch {}
+        return new Set();
+    });
     const [selectedId, setSelectedId] = useState(null);
     const [wbsDescription, setWbsDescription] = useState('');
     const [strategySaving, setStrategySaving] = useState(false);
@@ -95,6 +103,12 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     useEffect(() => {
         localStorage.setItem('unifiedWbsSectionOrder', JSON.stringify(sectionOrder));
     }, [sectionOrder]);
+
+    useEffect(() => {
+        try {
+            sessionStorage.setItem(wbsExpandedKey, JSON.stringify([...expandedIds]));
+        } catch {}
+    }, [expandedIds, wbsExpandedKey]);
 
     const PRESETS_KEY = 'ignite_offer_presets';
     const defaultPresets = [
@@ -125,6 +139,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const offerDateLoadedRef = useRef(false);
     const [projectUsers, setProjectUsers] = useState([]);
     const [nodeTeamIds, setNodeTeamIds] = useState([]);
+    const [nodeContactUsers, setNodeContactUsers] = useState([]);
     const [logistykUsers, setLogistykUsers] = useState([]);
     const [materialCostsByNode, setMaterialCostsByNode] = useState({});
     const [materialMetaByLookupKey, setMaterialMetaByLookupKey] = useState({});
@@ -683,13 +698,20 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                         .map((p) => p.teamId)
                 ));
                 setNodeTeamIds(teamIds);
+                // direct user-level permissions (contacts added via NodeInfoTab)
+                const contactUsers = (permissionsData?.permissions || [])
+                    .filter(p => p.user && !p.teamId)
+                    .map(p => p.user);
+                setNodeContactUsers(contactUsers);
             } else {
                 setNodeTeamIds([]);
+                setNodeContactUsers([]);
             }
         } catch {
             setProjectUsers([]);
             setLogistykUsers([]);
             setNodeTeamIds([]);
+            setNodeContactUsers([]);
         }
     }, [nodeId, userRoles]);
 
@@ -849,10 +871,16 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     }, [nodeId, versionId, authHeaders, onWbsUpdate, fetchData]);
 
     const assignedUsers = useMemo(() => {
-        if (!Array.isArray(projectUsers) || !projectUsers.length) return [];
-        if (!Array.isArray(nodeTeamIds) || !nodeTeamIds.length) return projectUsers;
-        return projectUsers.filter(u => Array.isArray(u?.teams) && u.teams.some(t => nodeTeamIds.includes(t.id)));
-    }, [projectUsers, nodeTeamIds]);
+        const teamMembers = (() => {
+            if (!Array.isArray(projectUsers) || !projectUsers.length) return [];
+            if (!Array.isArray(nodeTeamIds) || !nodeTeamIds.length) return projectUsers;
+            return projectUsers.filter(u => Array.isArray(u?.teams) && u.teams.some(t => nodeTeamIds.includes(t.id)));
+        })();
+        // merge team members + direct contact users (deduplicate by id)
+        const seen = new Set(teamMembers.map(u => u.id));
+        const extras = (nodeContactUsers || []).filter(u => !seen.has(u.id));
+        return [...teamMembers, ...extras];
+    }, [projectUsers, nodeTeamIds, nodeContactUsers]);
 
     const refreshUnified = useCallback(async (listId = null) => {
         await fetchData(listId);
@@ -1111,17 +1139,18 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 <div class="strategy-text">${renderStrategyHtml(getStrategyText() || 'Brak treści strategii')}</div>
             </div>` : '';
 
-        const offerTextForPdf = (() => {
-            let t = getOfferText() || 'Brak treści oferty';
-            t = t.replace(/\{tabela wbs1\}/gi, wbsTablesByDepth[1] || '');
-            t = t.replace(/\{tabela wbs2\}/gi, wbsTablesByDepth[2] || '');
-            t = t.replace(/\{tabela wbs3\}/gi, wbsTablesByDepth[3] || '');
-            t = t.replace(/\{tabela wbs\}/gi, wbsTablesByDepth[2] || '');
-            return t;
+        const offerHtmlContent = (() => {
+            const text = getOfferText() || 'Brak treści oferty';
+            const parts = text.split(/(\{tabela wbs[123]?\})/gi);
+            return parts.map(part => {
+                const m = part.match(/^\{tabela wbs([123]?)\}$/i);
+                if (m) return buildWbsHtmlTable(wbsData, parseInt(m[1]) || 2);
+                return renderStrategyHtml(part);
+            }).join('');
         })();
         const offerHtml = show('oferta') ? `
             <div class="section">
-                <div class="offer-text">${renderStrategyHtml(offerTextForPdf)}</div>
+                <div class="offer-text">${offerHtmlContent}</div>
             </div>` : '';
 
         const wbsHtml = show('wbs') ? `
@@ -1357,15 +1386,20 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
 <meta charset="UTF-8">
 <title>${sectionKey === 'gantt' ? esc((orderName || projectName || 'projekt').replace(/[\\/:*?"<>|]/g, '_')) + '_gantt' : ''}</title>
 <style>
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   html, body { margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 20mm 14mm; }
-  .doc-header { border-bottom: 3px solid #1a1a2e; padding: 18px 0 10px 0; margin: 0 0 18px 0; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; display: flex; align-items: flex-start; gap: 16px; }
+  .doc-wrap { width: 100%; border-collapse: collapse; }
+  .doc-header-cell { padding: 8px 0 12px 0; border: none !important; background: none !important; text-align: left !important; }
+  .doc-header-line { border-bottom: 3px solid #1a1a2e; height: 0; line-height: 0; font-size: 0; }
+  .doc-spacer-cell { height: 20px; padding: 0; border: none; background: none !important; }
+  .doc-header { display: flex; align-items: flex-start; gap: 16px; }
   .doc-header-logo { height: 48px; width: auto; object-fit: contain; flex-shrink: 0; }
   .doc-header-text { flex: 1; }
   .doc-header h1 { font-size: 20px; margin: 0 0 2px 0; }
   .doc-header .sub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: #6b7280; }
   .doc-header .meta { font-size: 10px; color: #9ca3af; margin-top: 4px; }
+  .doc-body-cell { padding-top: 14px; vertical-align: top; }
   .section { margin-bottom: 22px; }
   .section-header { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; background: #1a1a2e; color: #fff; padding: 7px 12px; break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
   h1, h2, h3, h4, h5, h6, .section-header, .table-title, .md-bold,
@@ -1396,7 +1430,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   th { background: #f3f4f6; color: #374151; padding: 7px 8px; text-align: center; font-size: 12px; font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #d1d5db; }
   thead { display: table-header-group; }
   tr { page-break-inside: avoid; break-inside: avoid; }
-  @page { margin: 0; size: ${sectionKey === 'gantt' ? 'A3 landscape' : 'A4 portrait'}; }
+  @page { margin: 14mm; size: ${sectionKey === 'gantt' ? 'A3 landscape' : 'A4 portrait'}; }
   .budget-table { table-layout: fixed; word-wrap: break-word; }
   .gantt-wrap { overflow: hidden; background: #fff; padding: 8px 0; }
   .gantt-wrap svg text { fill: #0b0f17 !important; }
@@ -1414,8 +1448,16 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   .gantt-wrap ._3rUKi { stroke: #dde0e4 !important; }
   .gantt-wrap ._RuwuK { stroke: #dde0e4 !important; }
   .gantt-wrap ._1rLuZ { stroke: #dde0e4 !important; }
+  .wbs-offer-table { margin: 14px 0; }
+  .wbs-offer-table table { width: 100%; border-collapse: collapse; }
+  .wbs-offer-table th { background: #1e3a5f !important; color: #fff !important; font-weight: bold !important; padding: 7px 16px !important; text-align: center !important; border: 1px solid #16304d !important; text-transform: none !important; font-size: 11px !important; }
+  .wbs-offer-table td { border: 1px solid #ccc; padding: 5px 14px; vertical-align: middle; }
+  .wbs-offer-table tr:nth-child(even) td { background: #f7f8f9; }
   .gantt-scale-inner { transform-origin: top left; }
   @media print {
+    body { padding: 0; }
+    thead { display: table-header-group !important; }
+    thead tr { break-inside: avoid !important; break-after: avoid !important; }
     .summary-grid { display: block; }
     .summary-block { margin-bottom: 16px; }
     .summary-section { page-break-before: always; }
@@ -1424,14 +1466,26 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
 ${ganttData ? ganttData.styles : ''}
 </head>
 <body>
-<div class="doc-header">
-  ${logoDataUrl ? `<img class="doc-header-logo" src="${logoDataUrl}" alt="Logo" />` : ''}
-  <div class="doc-header-text">
-    <h1>${esc(orderName || projectName || 'Zamówienie')}</h1>
-    <div class="sub">${{ strategy: 'Jak to chcemy zrobić', oferta: 'Oferta', budget: 'Budżet', 'wbs-hybrid': 'Struktura projektu', wbs: 'Struktura projektu', materials: 'Materiały', gantt: 'Harmonogram (Gantt)' }[sectionKey] || 'Planowanie'}</div>
-    <div class="meta">Przygotowano: ${date}</div>
-  </div>
-</div>
+<table class="doc-wrap">
+  <thead>
+    <tr>
+      <td class="doc-header-cell">
+        <div class="doc-header">
+          ${logoDataUrl ? `<img class="doc-header-logo" src="${logoDataUrl}" alt="Logo" />` : ''}
+          <div class="doc-header-text">
+            <h1>${esc(orderName || projectName || 'Zamówienie')}</h1>
+            <div class="sub">${{ strategy: 'Jak to chcemy zrobić', oferta: 'Oferta', budget: 'Budżet', 'wbs-hybrid': 'Struktura projektu', wbs: 'Struktura projektu', materials: 'Materiały', gantt: 'Harmonogram (Gantt)' }[sectionKey] || 'Planowanie'}</div>
+            <div class="meta">Przygotowano: ${date}</div>
+          </div>
+        </div>
+        <div class="doc-header-line"></div>
+      </td>
+    </tr>
+    <tr><td class="doc-spacer-cell"></td></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="doc-body-cell">
 ${offerHtml}
 ${strategyHtml}
 ${wbsHtml}
@@ -1439,6 +1493,10 @@ ${budgetHtml}
 ${_budgetSummaryHtml}
 ${materialsHtml}
 ${ganttSectionHtml}
+      </td>
+    </tr>
+  </tbody>
+</table>
 </body>
 </html>`;
 
@@ -1863,6 +1921,178 @@ ${ganttSectionHtml}
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `Airtel_oferta_${safeProjectName}.xlsx`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleExportOfertaWbsExcel = async () => {
+        if (!wbsData.length) { alert('Brak danych WBS do eksportu.'); return; }
+
+        const safeProjectName = String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'projekt';
+        const workbook = new ExcelJS.Workbook();
+
+        const navyFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
+        const sumFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF2F7' } };
+        const thinBorder = (color = 'FFCCCCCC') => ({ style: 'thin', color: { argb: color } });
+        const cellBorder = { top: thinBorder(), bottom: thinBorder(), left: thinBorder(), right: thinBorder() };
+        const sumBorder = { top: thinBorder('FFAAAAAA'), bottom: thinBorder('FFAAAAAA'), left: thinBorder('FFAAAAAA'), right: thinBorder('FFAAAAAA') };
+
+        const applyBorder = (row, colCount, border) => {
+            for (let c = 1; c <= colCount; c++) row.getCell(c).border = border;
+        };
+
+        const localById = new Map(wbsData.map(n => [n.id, n]));
+        const localPriceOf = (item) => {
+            const q = Math.max(0, parseFloat(item.quantity) || 0);
+            const uc = Math.max(0, parseFloat(item.unitCost) || 0);
+            const tc = uc * q || parseFloat(item.totalCost) || 0;
+            const m = (item.margin != null && String(item.margin) !== '') ? parseFloat(item.margin) : null;
+            const d = Math.max(0, parseFloat(item.discount) || 0);
+            let p = (m !== null && m !== 0) ? tc * (1 + m / 100) : tc;
+            if (p > 0 && d > 0) p = Math.max(0, p * (1 - d / 100));
+            return p;
+        };
+        const localChain = (id) => {
+            const chain = [];
+            let cur = localById.get(id);
+            while (cur) { chain.unshift(cur); cur = (cur.parentId && localById.has(cur.parentId)) ? localById.get(cur.parentId) : null; }
+            return chain;
+        };
+        const numFmt = '#,##0.00';
+
+        // ── Sheet WBS1 ──
+        {
+            const sheet = workbook.addWorksheet('WBS1 - Zakresy');
+            sheet.columns = [{ width: 45 }, { width: 24 }];
+            const hdr = sheet.addRow(['Zakresy', 'Cena ofertowa (PLN)']);
+            hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            hdr.fill = navyFill;
+            hdr.alignment = { horizontal: 'center', vertical: 'middle' };
+            applyBorder(hdr, 2, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
+
+            const groups = new Map();
+            for (const item of wbsData) {
+                if (!item.parentId) continue;
+                const price = localPriceOf(item);
+                if (price <= 0) continue;
+                const d1 = localChain(item.id)[0];
+                if (!d1) continue;
+                if (!groups.has(d1.id)) groups.set(d1.id, { name: d1.name || '', total: 0 });
+                groups.get(d1.id).total += price;
+            }
+            const entries = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'));
+            const total = entries.reduce((s, e) => s + e.total, 0);
+            for (const e of entries) {
+                const r = sheet.addRow([e.name, e.total]);
+                r.getCell(2).numFmt = numFmt;
+                r.getCell(2).alignment = { horizontal: 'right' };
+                applyBorder(r, 2, cellBorder);
+            }
+            const sumRow = sheet.addRow(['Razem', total]);
+            sumRow.font = { bold: true };
+            sumRow.fill = sumFill;
+            sumRow.getCell(2).numFmt = numFmt;
+            sumRow.getCell(2).alignment = { horizontal: 'right' };
+            applyBorder(sumRow, 2, sumBorder);
+            sheet.views = [{ state: 'frozen', ySplit: 1 }];
+        }
+
+        // ── Sheet WBS2 ──
+        {
+            const sheet = workbook.addWorksheet('WBS2 - Składowe');
+            sheet.columns = [{ width: 35 }, { width: 35 }, { width: 24 }];
+            const hdr = sheet.addRow(['Zakresy', 'Składowe zakresów', 'Cena ofertowa (PLN)']);
+            hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            hdr.fill = navyFill;
+            hdr.alignment = { horizontal: 'center', vertical: 'middle' };
+            applyBorder(hdr, 3, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
+
+            const level1 = new Map();
+            for (const item of wbsData) {
+                if (!item.parentId) continue;
+                const price = localPriceOf(item);
+                if (price <= 0) continue;
+                const chain = localChain(item.id);
+                const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)];
+                if (!d1) continue;
+                if (!level1.has(d1.id)) level1.set(d1.id, { name: d1.name || '', children: new Map() });
+                const g1 = level1.get(d1.id);
+                if (!g1.children.has(d2.id)) g1.children.set(d2.id, { name: d2.name || '', total: 0 });
+                g1.children.get(d2.id).total += price;
+            }
+            const total = [...level1.values()].reduce((s, g) => s + [...g.children.values()].reduce((s2, c) => s2 + c.total, 0), 0);
+            for (const g1 of [...level1.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
+                const children = [...g1.children.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'));
+                for (let i = 0; i < children.length; i++) {
+                    const r = sheet.addRow([g1.name, children[i].name, children[i].total]);
+                    r.getCell(3).numFmt = numFmt;
+                    r.getCell(3).alignment = { horizontal: 'right' };
+                    applyBorder(r, 3, cellBorder);
+                }
+            }
+            const sumRow = sheet.addRow(['Razem', '', total]);
+            sumRow.font = { bold: true };
+            sumRow.fill = sumFill;
+            sumRow.getCell(3).numFmt = numFmt;
+            sumRow.getCell(3).alignment = { horizontal: 'right' };
+            applyBorder(sumRow, 3, sumBorder);
+            sheet.views = [{ state: 'frozen', ySplit: 1 }];
+        }
+
+        // ── Sheet WBS3 ──
+        {
+            const sheet = workbook.addWorksheet('WBS3 - Szczegóły');
+            sheet.columns = [{ width: 28 }, { width: 28 }, { width: 28 }, { width: 24 }];
+            const hdr = sheet.addRow(['Zakresy', 'Składowe zakresów', 'Pozycje', 'Cena ofertowa (PLN)']);
+            hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            hdr.fill = navyFill;
+            hdr.alignment = { horizontal: 'center', vertical: 'middle' };
+            applyBorder(hdr, 4, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
+
+            const level1 = new Map();
+            for (const item of wbsData) {
+                if (!item.parentId) continue;
+                const price = localPriceOf(item);
+                if (price <= 0) continue;
+                const chain = localChain(item.id);
+                const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)], d3 = chain[Math.min(2, chain.length - 1)];
+                if (!d1) continue;
+                if (!level1.has(d1.id)) level1.set(d1.id, { name: d1.name || '', children: new Map() });
+                const g1 = level1.get(d1.id);
+                if (!g1.children.has(d2.id)) g1.children.set(d2.id, { name: d2.name || '', children: new Map() });
+                const g2 = g1.children.get(d2.id);
+                if (!g2.children.has(d3.id)) g2.children.set(d3.id, { name: d3.name || '', total: 0 });
+                g2.children.get(d3.id).total += price;
+            }
+            const total = [...level1.values()].reduce((s, g1) => s + [...g1.children.values()].reduce((s2, g2) => s2 + [...g2.children.values()].reduce((s3, c) => s3 + c.total, 0), 0), 0);
+            for (const g1 of [...level1.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
+                let firstD1 = true;
+                for (const g2 of [...g1.children.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
+                    let firstD2 = true;
+                    for (const d3 of [...g2.children.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
+                        const r = sheet.addRow([g1.name, g2.name, d3.name, d3.total]);
+                        r.getCell(4).numFmt = numFmt;
+                        r.getCell(4).alignment = { horizontal: 'right' };
+                        applyBorder(r, 4, cellBorder);
+                        if (firstD1 && firstD2) firstD1 = false;
+                        firstD2 = false;
+                    }
+                }
+            }
+            const sumRow = sheet.addRow(['Razem', '', '', total]);
+            sumRow.font = { bold: true };
+            sumRow.fill = sumFill;
+            sumRow.getCell(4).numFmt = numFmt;
+            sumRow.getCell(4).alignment = { horizontal: 'right' };
+            applyBorder(sumRow, 4, sumBorder);
+            sheet.views = [{ state: 'frozen', ySplit: 1 }];
+        }
+
+        const buf = await workbook.xlsx.writeBuffer();
+        const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
         const anchor = document.createElement('a');
         anchor.href = url;
         anchor.download = `Airtel_oferta_${safeProjectName}.xlsx`;
@@ -3166,7 +3396,11 @@ ${ganttSectionHtml}
                                 onManagePresets={() => setPresetManagerOpen(true)}
                             />
                         </div>
-                    ), () => handleExportPDF('oferta'));
+                    ), () => handleExportPDF('oferta'), (
+                        <button onClick={(e) => { e.stopPropagation(); handleExportOfertaWbsExcel(); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                            <FileDown size={11} /> Eksport tabel WBS XLS
+                        </button>
+                    ));
                 }
                 if (key === 'strategy') {
                     return renderSection('strategy', 'Jak to chcemy zrobić', HelpCircle, 'blue', (

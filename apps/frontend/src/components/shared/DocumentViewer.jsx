@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
+import 'react-pdf/dist/Page/TextLayer.css';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import { downloadPdfWithHighlights } from '../../utils/downloadPdfWithHighlights';
 import DocViewer, { DocViewerRenderers } from '@cyntler/react-doc-viewer';
 import { Maximize2, Minimize2, Download, X, ZoomIn, ZoomOut, CheckCircle, RotateCcw, FileText, ChevronRight, Link2, AlertCircle, ChevronDown, Sparkles, Trash2 } from 'lucide-react';
 import { API_URL } from '../../config';
@@ -680,6 +683,30 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
             console.error('[DocumentViewer] Błąd zmiany koloru highlightu:', err);
         }
     }, [documentId, authToken]);
+    const [downloading, setDownloading] = useState(false);
+
+    const handleDownload = useCallback(async () => {
+        if (!isPdf) {
+            const a = document.createElement('a');
+            a.href = fileUrl;
+            a.download = fileName;
+            a.click();
+            return;
+        }
+        setDownloading(true);
+        try {
+            await downloadPdfWithHighlights({ fileUrl, fileName, highlights, token: authToken });
+        } catch (err) {
+            console.error('[Download]', err);
+            const a = document.createElement('a');
+            a.href = fileUrl;
+            a.download = fileName;
+            a.click();
+        } finally {
+            setDownloading(false);
+        }
+    }, [isPdf, highlights, fileUrl, fileName, authToken]);
+
     const icon = isPdf ? '📕' : isOffice ? '📘' : isImage ? '🖼️' : isVideo ? '🎬' : isText ? '📄' : '📁';
 
     const viewerContent = (
@@ -696,10 +723,13 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
                     )}
                 </div>
                 <div className="flex items-center gap-2">
-                    <a href={fileUrl} download={fileName} target="_blank" rel="noreferrer"
-                        className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Pobierz dokument">
-                        <Download size={16} />
-                    </a>
+                    <button onClick={handleDownload} disabled={downloading}
+                        className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
+                        title={isPdf && highlights.length > 0 ? 'Pobierz z zaznaczeniami' : 'Pobierz dokument'}>
+                        {downloading
+                            ? <div className="w-4 h-4 border-2 border-gray-400/30 border-t-gray-400 rounded-full animate-spin" />
+                            : <Download size={16} />}
+                    </button>
                     {onClose && (
                         <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors ml-2">
                             <X size={16} />

@@ -4,7 +4,22 @@ export async function importQaFormPdf(fileBuffer, wbsData) {
     const pdfDoc = await PDFDocument.load(fileBuffer, { ignoreEncryption: true });
     const form = pdfDoc.getForm();
 
-    const nodes = (wbsData || []).filter(n => Array.isArray(n.qa) && n.qa.some(p => (p?.question || '').trim()));
+    // Identyczna kolejność DFS jak w eksporcie
+    const treeWalkOrder = (flat) => {
+        const byParent = new Map();
+        for (const n of flat) {
+            const pid = n.parentId || null;
+            if (!byParent.has(pid)) byParent.set(pid, []);
+            byParent.get(pid).push(n);
+        }
+        for (const children of byParent.values()) children.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        const result = [];
+        const walk = (pid) => { for (const n of (byParent.get(pid) || [])) { result.push(n); walk(n.id); } };
+        walk(null);
+        return result;
+    };
+
+    const nodes = treeWalkOrder(wbsData || []).filter(n => Array.isArray(n.qa) && n.qa.some(p => (p?.question || '').trim()));
 
     const updates = [];
     let fieldIdx = 0;

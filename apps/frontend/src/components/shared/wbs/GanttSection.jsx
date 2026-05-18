@@ -252,7 +252,7 @@ const taskDays = (task, branchWorkOnHolidays = {}, taskBranchMap = {}) => {
 
 const GanttTaskListHeader = ({ headerHeight, rowWidth, fontFamily }) => {
     return (
-        <div style={{ display: 'flex', height: headerHeight, fontFamily, borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#0b0f17', boxSizing: 'border-box', width: rowWidth, flexShrink: 0 }}>
+        <div style={{ display: 'flex', height: headerHeight, fontFamily, borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#0b0f17', boxSizing: 'border-box', width: rowWidth, flexShrink: 0, position: 'sticky', top: 0, zIndex: 10 }}>
             <div style={{ flex: '1 1 0', padding: '0 8px', display: 'flex', alignItems: 'flex-end', paddingBottom: 6, color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 Zadanie
             </div>
@@ -283,8 +283,12 @@ const DateCell = ({ taskId, field, date, disabled }) => {
                 <DatePicker
                     selected={dateObj}
                     onChange={(newDate) => {
-                        if (newDate) handleTableDateChange(taskId, field, newDate.toISOString().slice(0, 10));
-                        else setEditCell(null);
+                        if (newDate) {
+                            const y = newDate.getFullYear();
+                            const m = String(newDate.getMonth() + 1).padStart(2, '0');
+                            const d = String(newDate.getDate()).padStart(2, '0');
+                            handleTableDateChange(taskId, field, `${y}-${m}-${d}`);
+                        } else setEditCell(null);
                     }}
                     onClickOutside={() => setEditCell(null)}
                     onKeyDown={(e) => { if (e.key === 'Escape') setEditCell(null); }}
@@ -313,10 +317,11 @@ const GanttTaskListTable = ({ rowHeight, rowWidth, fontFamily, fontSize, tasks, 
                 return (
                     <div
                         key={task.id}
-                        style={{ display: 'flex', height: rowHeight, alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', background: task.id === selectedTaskId ? 'rgba(255,255,255,0.05)' : 'transparent', cursor: isGroup ? 'pointer' : 'default', boxSizing: 'border-box', width: rowWidth }}
+                        title={task.name}
+                        style={{ display: 'flex', height: rowHeight, alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', background: task.id === selectedTaskId ? 'rgba(255,255,255,0.05)' : 'transparent', cursor: isGroup ? 'pointer' : 'default', boxSizing: 'border-box', width: rowWidth, overflow: 'hidden' }}
                         onClick={() => { setSelectedTask(task.id); if (isGroup) onExpanderClick(task); }}
                     >
-                        <div style={{ flex: '1 1 0', paddingLeft: 8, paddingRight: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color, fontWeight: 400 }}>
+                        <div style={{ flex: '1 1 0', paddingLeft: 8, paddingRight: 4, color, fontWeight: 400, wordBreak: 'break-word', lineHeight: 1.35, display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 4, overflow: 'hidden' }}>
                             {task.name}
                         </div>
                         <div style={{ width: COL_DATE, padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -332,7 +337,7 @@ const GanttTaskListTable = ({ rowHeight, rowWidth, fontFamily, fontSize, tasks, 
                 );
             })}
             {/* Wiersz podsumowania */}
-            <div style={{ display: 'flex', height: rowHeight, alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.03)', boxSizing: 'border-box', width: rowWidth }}>
+            <div style={{ display: 'flex', height: 32, alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.03)', boxSizing: 'border-box', width: rowWidth }}>
                 <div style={{ flex: '1 1 0', paddingLeft: 8, color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Razem roboczo dni</div>
                 <div style={{ width: COL_DATE }} />
                 <div style={{ width: COL_DATE }} />
@@ -350,7 +355,7 @@ const VIEW_OPTS = [
     { v: ViewMode.Month, label: 'Miesiąc' },
 ];
 
-export default function GanttSection({ wbsTree, projectName, onNodeDurationChange, onExportReady, onGetHtmlReady, projectStartDate, projectEndDate }) {
+export default function GanttSection({ wbsTree, projectName, onNodeDurationChange, onGanttDateChange, onExportReady, onGetHtmlReady, projectStartDate, projectEndDate }) {
     const items = wbsTree?.items || [];
     const [viewMode, setViewMode] = useState(ViewMode.Day);
     const [projectStart, setProjectStart] = useState(() => {
@@ -375,12 +380,32 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         }
     }, [projectEndDate]);
     const [overrides, setOverrides] = useState({});
+    const prevWbsTreeRef = useRef(null);
+    useEffect(() => {
+        if (wbsTree === prevWbsTreeRef.current) return;
+        prevWbsTreeRef.current = wbsTree;
+        const dbOverrides = {};
+        const walk = (nodes) => {
+            for (const node of nodes) {
+                if (node.ganttStart && node.ganttEnd) {
+                    dbOverrides[node.id] = { start: node.ganttStart, end: node.ganttEnd };
+                }
+                if (Array.isArray(node.children)) walk(node.children);
+            }
+        };
+        walk(items);
+        // DB values jako baza, session overrides (prev) mają priorytet — zapobiega
+        // resetowi po updateNodeField który zmienia referencję wbsTree
+        setOverrides(prev => ({ ...dbOverrides, ...prev }));
+    }, [wbsTree, items]);
     const [editCell, setEditCell] = useState(null); // { taskId, field: 'start'|'end' } | null
+    const [nonWorkingWarn, setNonWorkingWarn] = useState(null); // { taskId, field, dateStr } | null
 
     const [branchWorkOnHolidays, setBranchWorkOnHolidays] = useState({});
     const [popup, setPopup] = useState(null); // { x, y, branchId } | null
     const wrapperRef = useRef(null);
     const popupRef = useRef(null);
+    const isDraggingRef = useRef(false);
 
     const toggleBranch = useCallback((branchId) => {
         setBranchWorkOnHolidays(prev => ({
@@ -389,10 +414,11 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         }));
     }, []);
 
-    const { tasks, taskBranchMap } = useMemo(
-        () => buildTasksFromTree(items, new Date(projectStart), projectName, overrides, branchWorkOnHolidays),
-        [items, projectStart, projectName, overrides, branchWorkOnHolidays]
-    );
+    const { tasks, taskBranchMap } = useMemo(() => {
+        const result = buildTasksFromTree(items, new Date(projectStart), projectName, overrides, branchWorkOnHolidays);
+        result.tasks.sort((a, b) => a.start - b.start);
+        return result;
+    }, [items, projectStart, projectName, overrides, branchWorkOnHolidays]);
 
 
     // Mapa taskId → nazwa (wszystkie taski w harmonogramie)
@@ -404,8 +430,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         return m;
     }, [tasks]);
 
-    const handleTableDateChange = useCallback((taskId, field, dateStr) => {
-        setEditCell(null);
+    const applyDateChange = useCallback((taskId, field, dateStr) => {
         if (!dateStr) return;
         const task = tasks.find(t => t && t.id === taskId);
         if (!task) return;
@@ -420,7 +445,6 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
             newEnd = newDate;
             if (newEnd <= newStart) newStart = new Date(newEnd.getTime() - DAY_MS);
         }
-        // Oblicz liczbę dni roboczych dla onNodeDurationChange
         const branchId = taskBranchMap[taskId];
         const wow = Object.prototype.hasOwnProperty.call(branchWorkOnHolidays, taskId)
             ? branchWorkOnHolidays[taskId]
@@ -445,7 +469,21 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         });
         const origTask = tasks.find(t => t && t.id === taskId);
         if (task.type !== 'project' && origTask?._canUpdateDuration !== false) onNodeDurationChange?.(taskId, notifyDays);
-    }, [tasks, taskBranchMap, branchWorkOnHolidays, onNodeDurationChange]);
+        onGanttDateChange?.(taskId, newStart.toISOString(), newEnd.toISOString());
+    }, [tasks, taskBranchMap, branchWorkOnHolidays, onNodeDurationChange, onGanttDateChange]);
+
+    const handleTableDateChange = useCallback((taskId, field, dateStr) => {
+        setEditCell(null);
+        if (!dateStr) return;
+        const picked = new Date(dateStr);
+        picked.setHours(0, 0, 0, 0);
+        const checkDate = field === 'start' ? picked : picked;
+        if (isNonWorkingDay(checkDate)) {
+            setNonWorkingWarn({ taskId, field, dateStr });
+            return;
+        }
+        applyDateChange(taskId, field, dateStr);
+    }, [applyDateChange]);
 
     const onDateChange = useCallback((task) => {
         if (task.type === 'milestone') return;
@@ -473,6 +511,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
                 }
                 return next;
             });
+            onGanttDateChange?.(task.id, start.toISOString(), end.toISOString());
             return;
         }
 
@@ -525,7 +564,8 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         if (task.id !== '__root__' && task.type !== 'project' && origTask?._canUpdateDuration !== false) {
             onNodeDurationChange?.(task.id, notifyDays);
         }
-    }, [onNodeDurationChange, branchWorkOnHolidays, taskBranchMap, tasks]);
+        onGanttDateChange?.(task.id, start.toISOString(), end.toISOString());
+    }, [onNodeDurationChange, onGanttDateChange, branchWorkOnHolidays, taskBranchMap, tasks]);
 
     const resetOverrides = useCallback(() => setOverrides({}), []);
 
@@ -545,16 +585,18 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
                 const branchId = task.id;
                 const onEnter = () => {
                     const rect = g.getBoundingClientRect();
+                    if (isDraggingRef.current) return;
+                    const POPUP_W = 230;
                     const POPUP_H = 80;
-                    const showAbove = rect.top > POPUP_H + 20;
-                    setPopup({
-                        x: Math.min(rect.left + 4, window.innerWidth - 230),
-                        y: showAbove ? rect.top - POPUP_H - 4 : rect.bottom + 4,
-                        branchId,
-                    });
+                    const spaceRight = window.innerWidth - rect.right;
+                    const x = spaceRight >= POPUP_W + 8 ? rect.right + 8 : rect.left - POPUP_W - 8;
+                    const y = Math.min(rect.top, window.innerHeight - POPUP_H - 8);
+                    setPopup({ x, y, branchId });
                 };
+                const onLeave = () => setPopup(null);
                 g.addEventListener('mouseenter', onEnter);
-                removers.push(() => g.removeEventListener('mouseenter', onEnter));
+                g.addEventListener('mouseleave', onLeave);
+                removers.push(() => { g.removeEventListener('mouseenter', onEnter); g.removeEventListener('mouseleave', onLeave); });
             });
             return removers.length > 0 ? () => removers.forEach(fn => fn()) : false;
         };
@@ -590,6 +632,8 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         const onDown = (e) => {
             if (!e.target.closest('svg')) return;
             dragging = true;
+            isDraggingRef.current = true;
+            setPopup(null);
             if (!scrollEl) {
                 scrollEl = findScroll();
                 if (scrollEl) {
@@ -602,7 +646,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
                 }
             }
         };
-        const onUp = () => { dragging = false; };
+        const onUp = () => { dragging = false; isDraggingRef.current = false; };
 
         document.addEventListener('mousedown', onDown);
         document.addEventListener('mouseup', onUp);
@@ -999,6 +1043,34 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
         [editCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap]
     );
 
+    // Dynamiczna wysokość wiersza — musi być przed early return (Rules of Hooks)
+    const NAME_COL_W = 500 - COL_DATE * 2 - COL_DAYS - 12;
+    const CHAR_W = 6.8;
+    const rowHeight = useMemo(() => {
+        const charsPerLine = Math.max(1, Math.floor(NAME_COL_W / CHAR_W));
+        const countLines = (name) => {
+            if (!name) return 1;
+            const words = name.split(/\s+/);
+            let lines = 1, lineLen = 0;
+            for (const w of words) {
+                // słowo dłuższe niż linia — zawijaj po znakach
+                if (w.length >= charsPerLine) {
+                    if (lineLen > 0) { lines++; lineLen = 0; }
+                    lines += Math.ceil(w.length / charsPerLine) - 1;
+                    lineLen = w.length % charsPerLine || charsPerLine;
+                    continue;
+                }
+                if (lineLen === 0) { lineLen = w.length; continue; }
+                if (lineLen + 1 + w.length > charsPerLine) { lines++; lineLen = w.length; }
+                else { lineLen += 1 + w.length; }
+            }
+            return lines;
+        };
+        const MAX_LINES = 4;
+        const maxLines = tasks.reduce((max, t) => Math.max(max, Math.min(countLines(t?.name), MAX_LINES)), 1);
+        return Math.max(36, maxLines * 18 + 12);
+    }, [tasks]);
+
     if (!items.length || !tasks.length) {
         return (
             <div className="p-6 text-center text-gray-500 text-sm">
@@ -1065,7 +1137,27 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                 </div>
             </div>
 
-            <style>{`.ignite-gantt-print svg g[tabindex] text { fill: #ffffff !important; }`}</style>
+            <style>{`
+.ignite-gantt-print svg g[tabindex] text { fill: #ffffff !important; }
+.ignite-gantt-print ._3_ygE {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 15 !important;
+  background: #0b0f17 !important;
+}
+.ignite-gantt-print ._CZjuD {
+  overflow: clip !important;
+}
+.ignite-gantt-print ._CZjuD > svg:first-child {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10 !important;
+  background: #0b0f17 !important;
+}
+.ignite-gantt-print ._34SS0 {
+  overflow: visible !important;
+}
+`}</style>
             <div className="ignite-gantt-print flex-1 min-h-0 overflow-auto custom-scrollbar bg-white/[0.02]">
                 <Gantt
                     tasks={tasks}
@@ -1073,7 +1165,7 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                     locale="pl"
                     listCellWidth="500px"
                     columnWidth={viewMode === ViewMode.Day ? 50 : viewMode === ViewMode.Week ? 90 : 220}
-                    rowHeight={32}
+                    rowHeight={rowHeight}
                     barCornerRadius={4}
                     fontSize="12px"
                     fontFamily="Inter, system-ui, sans-serif"
@@ -1094,7 +1186,7 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                         position: 'fixed',
                         left: Math.min(popup.x, window.innerWidth - 220),
                         top: Math.min(popup.y, window.innerHeight - 90),
-                        zIndex: 9999,
+                        zIndex: 10,
                     }}
                     className="bg-[#0d1520]/96 border border-white/15 rounded-lg px-3 py-2.5 shadow-2xl backdrop-blur-sm"
                 >
@@ -1114,6 +1206,42 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                     </label>
                 </div>
             )}
+        {nonWorkingWarn && (() => {
+            const d = new Date(nonWorkingWarn.dateStr);
+            const dow = d.getDay();
+            const reason = dow === 0 ? 'niedziela' : dow === 6 ? 'sobota' : 'święto';
+            const label = d.toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' });
+            return (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)' }}
+                    onClick={() => setNonWorkingWarn(null)}>
+                    <div onClick={e => e.stopPropagation()}
+                        className="bg-[#0d1520] border border-amber-500/30 rounded-2xl px-6 py-5 shadow-2xl max-w-sm w-full mx-4">
+                        <div className="text-[10px] text-amber-400 uppercase tracking-widest font-bold mb-2">Dzień wolny od pracy</div>
+                        <p className="text-sm text-gray-200 mb-1">
+                            Wybrana data (<span className="text-amber-300 font-semibold">{label}</span>) to <span className="text-amber-300">{reason}</span>.
+                        </p>
+                        <p className="text-xs text-gray-400 mb-5">Czy zadanie ma być zaplanowane w ten dzień?</p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => { applyDateChange(nonWorkingWarn.taskId, nonWorkingWarn.field, nonWorkingWarn.dateStr); setNonWorkingWarn(null); }}
+                                className="flex-1 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold rounded-xl transition-all"
+                            >Tak, zostaw</button>
+                            <button
+                                onClick={() => {
+                                    const d2 = new Date(nonWorkingWarn.dateStr);
+                                    d2.setHours(0, 0, 0, 0);
+                                    const moved = nonWorkingWarn.field === 'start' ? advanceToWorkingDay(d2) : retreatToWorkingDay(d2);
+                                    const my = moved.getFullYear(), mm = String(moved.getMonth() + 1).padStart(2, '0'), md = String(moved.getDate()).padStart(2, '0');
+                                    applyDateChange(nonWorkingWarn.taskId, nonWorkingWarn.field, `${my}-${mm}-${md}`);
+                                    setNonWorkingWarn(null);
+                                }}
+                                className="flex-1 px-4 py-2 bg-blue-600/80 hover:bg-blue-600 text-white text-xs font-bold rounded-xl transition-all"
+                            >Nie, przesuń na roboczy</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        })()}
         </GanttTableContext.Provider>
     );
 }

@@ -72,6 +72,15 @@ export async function exportQaFormPdf(wbsData, projectName) {
     const fontRegular = await pdfDoc.embedFont(regularBytes, { subset: true });
     const fontBold    = await pdfDoc.embedFont(boldBytes,    { subset: true });
     const fontField   = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+    let logoImg = null;
+    try {
+        const logoRes = await fetch(`${window.location.origin}/airtel-logo-services.png`);
+        if (logoRes.ok) {
+            const logoBytes = await logoRes.arrayBuffer();
+            logoImg = await pdfDoc.embedPng(logoBytes);
+        }
+    } catch (_) {}
     const form = pdfDoc.getForm();
 
     const colorBg      = rgb(0.95, 0.97, 1.0);
@@ -83,8 +92,23 @@ export async function exportQaFormPdf(wbsData, projectName) {
     const colorWhite   = rgb(1, 1, 1);
     const colorField   = rgb(0.97, 0.99, 1.0);
 
-    // Flatten: tylko węzły z pytaniami
-    const nodes = (wbsData || []).filter(n => Array.isArray(n.qa) && n.qa.some(p => (p?.question || '').trim()));
+    // Sortuj węzły w kolejności DFS (tak jak wyświetla UI: sortOrder per poziom)
+    const treeWalkOrder = (flat) => {
+        const byParent = new Map();
+        for (const n of flat) {
+            const pid = n.parentId || null;
+            if (!byParent.has(pid)) byParent.set(pid, []);
+            byParent.get(pid).push(n);
+        }
+        for (const children of byParent.values()) children.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+        const result = [];
+        const walk = (pid) => { for (const n of (byParent.get(pid) || [])) { result.push(n); walk(n.id); } };
+        walk(null);
+        return result;
+    };
+
+    // Węzły z pytaniami w kolejności drzewa
+    const nodes = treeWalkOrder(wbsData || []).filter(n => Array.isArray(n.qa) && n.qa.some(p => (p?.question || '').trim()));
 
     // Buduj mapę id→node (String key — unika mismatch number/string)
     const byId = new Map((wbsData || []).map(n => [String(n.id), n]));
@@ -110,18 +134,26 @@ export async function exportQaFormPdf(wbsData, projectName) {
         }
     };
 
-    // Nagłówek strony
+    const HEADER_H = 44;
     const drawPageHeader = () => {
-        page.drawRectangle({ x: MARGIN, y: PAGE_H - MARGIN - 28, width: CONTENT_W, height: 28, color: colorHeader });
+        const hY = PAGE_H - MARGIN - HEADER_H;
+        page.drawRectangle({ x: MARGIN, y: hY, width: CONTENT_W, height: HEADER_H, color: colorHeader });
+        let textX = MARGIN + 10;
+        if (logoImg) {
+            const logoH = 32;
+            const logoW = Math.round(logoImg.width * logoH / logoImg.height);
+            page.drawImage(logoImg, { x: MARGIN + 8, y: hY + (HEADER_H - logoH) / 2, width: logoW, height: logoH });
+            textX = MARGIN + 8 + logoW + 10;
+        }
         page.drawText('Q&A — ' + (projectName || 'Projekt'), {
-            x: MARGIN + 10, y: PAGE_H - MARGIN - 18,
+            x: textX, y: hY + HEADER_H - 18,
             size: 12, font: fontBold, color: colorWhite,
         });
         page.drawText('Formularz pytań i odpowiedzi', {
-            x: MARGIN + 10, y: PAGE_H - MARGIN - 26,
+            x: textX, y: hY + 8,
             size: 7, font: fontRegular, color: rgb(0.7, 0.8, 0.95),
         });
-        y = PAGE_H - MARGIN - 36;
+        y = hY - 8;
     };
 
     const drawTableHeader = () => {
