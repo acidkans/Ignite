@@ -2245,15 +2245,15 @@ ${ganttSectionHtml}
 
     const updateNodeField = useCallback(async (id, field, value) => {
         try {
-            await fetch(`${API_URL}/wbs-nodes/${id}`, {
-                method: 'PATCH',
-                headers: authHeaders(),
-                body: JSON.stringify({ [field]: value }),
-            });
             setWbsData(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
             setWbsTreeAndRef(prev => {
                 const upd = items => items.map(n => n.id === id ? { ...n, [field]: value } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
                 return { ...prev, items: upd(prev.items || []) };
+            });
+            await fetch(`${API_URL}/wbs-nodes/${id}`, {
+                method: 'PATCH',
+                headers: authHeaders(),
+                body: JSON.stringify({ [field]: value }),
             });
             // Synchronizuj nazwę/jednostkę/typ do powiązanego wymagania materialnego
             if (field === 'name' || field === 'unit' || field === 'type') {
@@ -2965,7 +2965,7 @@ ${ganttSectionHtml}
             traverseWbs('__root__');
 
             return [...wbsData]
-                .filter(item => item.parentId != null)
+                .filter(item => item.parentId != null && item.type !== 'group')
                 .sort((a, b) => (wbsOrderMap.get(a.id) ?? 0) - (wbsOrderMap.get(b.id) ?? 0))
                 .map(item => {
                     const normalizedType = String(item.type || '').toLowerCase();

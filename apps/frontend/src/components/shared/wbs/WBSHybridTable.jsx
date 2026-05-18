@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { TYPE_OPTIONS, TYPE_LABELS } from './wbsConstants';
 
 function AutoResizeTextarea({ value, onChange, onBlur, placeholder, className, style }) {
     const ref = useRef(null);
@@ -1115,12 +1116,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-xs w-full focus:outline-none focus:border-blue-500 transition-colors cursor-pointer ${d.fieldClass}`}
                         >
                             <option value="" className="bg-gray-900">— wybierz typ —</option>
-                            <option value="work" className="bg-gray-900">Praca</option>
-                            <option value="material" className="bg-gray-900">Materiał</option>
-                            <option value="equipment" className="bg-gray-900">Sprzęt</option>
-                            <option value="service" className="bg-gray-900">Usługa</option>
-                            <option value="lodging" className="bg-gray-900">Nocleg</option>
-                            <option value="fuel" className="bg-gray-900">Paliwo</option>
+                            {TYPE_OPTIONS.filter(o => o !== '').map(o => (
+                                <option key={o} value={o} className="bg-gray-900">{TYPE_LABELS[o] || o}</option>
+                            ))}
                         </select>
                     )}
                 </td>
