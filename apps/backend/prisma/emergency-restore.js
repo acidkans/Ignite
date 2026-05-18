@@ -15,7 +15,7 @@ async function main() {
 
     // 2. Create Users
     const hashedPassword = await argon2.hash('admin');
-    const userEmails = ['admin@poz.pl', 'a@poz.pl'];
+    const userEmails = [];
     const users = [];
 
     for (const email of userEmails) {
