@@ -298,6 +298,13 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | buildHierarchy | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor build-hierarchy |
 | ui-funkcja | flattenHierarchy | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor flatten-hierarchy |
 
+### Skrypty narzędziowe (root repo)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-skrypt | sync-obsidian.ps1 | sync-obsidian.ps1 | @anchor sync-obsidian-script |
+| back-skrypt | setup-task-scheduler.ps1 | setup-task-scheduler.ps1 | @anchor setup-task-scheduler-script |
+
 <!-- Następne moduły do dodania:
 - material-requirements (apps/backend/src/material-requirements/)
 - offers (apps/backend/src/offers/)
