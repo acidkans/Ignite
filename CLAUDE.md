@@ -30,9 +30,16 @@ Format wpisu:
 ### architektura / API
 - zmieniono / dodano / usunięto — co i dlaczego
 
+### słownik
+- dodano `SKRÓT` — krótki opis co robi, funkcja, plik, wiersz
+- zmieniono `SKRÓT` — co się zmieniło
+- usunięto `SKRÓT`
+
 ### wytyczne
 - `NazwaModelu.pole` — zasada której należy przestrzegać przy pracy z tym polem/modułem
 ```
+
+Sekcję `### słownik` dopisuj gdy modyfikujesz `SŁOWNIK.md` — dodajesz, zmieniasz lub usuwasz skrót. Pomijaj gdy SŁOWNIK.md nie był dotknięty.
 
 Zasady:
 - Jeden wpis = jeden commit. Dopisuj PRZED wykonaniem commita.
