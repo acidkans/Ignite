@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Pre-commit hook: walidacja @anchor w SLOWNIK.md
+#
+# Skanuje staged pliki (.js, .jsx, .ts, .tsx, .prisma) na obecność
+# NOWO dodanych komentarzy `// @anchor <nazwa>` i blokuje commit, jeśli
+# którykolwiek z nich nie jest udokumentowany w SLOWNIK.md (sekcja
+# `## ZMIENNE — indeks`).
+#
+# Pomijanie (NIE rób tego rutynowo): git commit --no-verify
+
+set -e
+
+SLOWNIK="SLOWNIK.md"
+MISSING=()
+
+# Pliki zmodyfikowane / dodane w staged area
+FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|jsx|ts|tsx|prisma)$' || true)
+
+# Brak plików kodu w commicie — przepuść
+[ -z "$FILES" ] && exit 0
+
+# Dla każdego pliku — wyciągnij anchory z DODANYCH linii w diff staged area
+for FILE in $FILES; do
+  NEW_ANCHORS=$(git diff --cached -U0 -- "$FILE" \
+    | grep -E '^\+[^+]' \
+    | grep -oE '@anchor[[:space:]]+[a-z0-9-]+' \
+    | awk '{print $2}' \
+    | sort -u || true)
+
+  for ANCHOR in $NEW_ANCHORS; do
+    if ! grep -qE "@anchor[[:space:]]+$ANCHOR([[:space:]]|$|\|)" "$SLOWNIK" 2>/dev/null; then
+      MISSING+=("$ANCHOR  (w $FILE)")
+    fi
+  done
+done
+
+if [ ${#MISSING[@]} -gt 0 ]; then
+  echo ""
+  echo "❌ pre-commit: brakuje wpisów w $SLOWNIK"
+  echo ""
+  echo "Następujące @anchor zostały dodane w kodzie, ale nie ma ich"
+  echo "w sekcji '## ZMIENNE — indeks':"
+  echo ""
+  for A in "${MISSING[@]}"; do
+    echo "  • $A"
+  done
+  echo ""
+  echo "Dodaj wpisy w $SLOWNIK w formacie:"
+  echo "  | <tag> | <nazwa> | <ścieżka pliku> | @anchor <nazwa-anchora> |"
+  echo ""
+  echo "Następnie:  git add $SLOWNIK  i ponownie  git commit"
+  echo "Aby pominąć (NIE rób rutynowo):  git commit --no-verify"
+  exit 1
+fi
+
+exit 0

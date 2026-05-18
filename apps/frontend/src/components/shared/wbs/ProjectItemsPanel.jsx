@@ -1,5 +1,6 @@
 import { Plus, Trash2, GripVertical, ChevronDown, Search } from 'lucide-react';
 
+// @anchor project-items-panel
 export default function ProjectItemsPanel({
     categories,
     items,

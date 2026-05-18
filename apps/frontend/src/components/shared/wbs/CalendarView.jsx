@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, X } from 'lucide-react';
 
+// @anchor calendar-view
 export default function CalendarView({ subtasks, categories, onDrop, onDateClick, onTaskClick, onRemoveTask, onUpdateTask }) {
     const [viewDate, setViewDate] = useState(new Date());
     const [viewMode, setViewMode] = useState('month'); // 'month' | 'week'

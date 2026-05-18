@@ -4,6 +4,7 @@
 
 import { Clock } from 'lucide-react';
 
+// @anchor task-categories
 export const TASK_CATEGORIES = [
     { key: 'terminowe',     label: 'Terminowe',     icon: Clock, iconColor: 'text-orange-400', color: 'orange' },
     { key: 'instalacyjne',  label: 'Instalacyjne',  icon: Clock, iconColor: 'text-blue-400',   color: 'blue' },
@@ -15,6 +16,7 @@ export const TASK_CATEGORIES = [
     { key: 'gwarancyjne',   label: 'Gwarancyjne',   icon: Clock, iconColor: 'text-rose-400',   color: 'rose' },
 ];
 
+// @anchor modules
 export const MODULES = [
   'ClientSideRowModelModule',
   'TextEditorModule',
@@ -25,6 +27,7 @@ export const MODULES = [
   'ValidationModule',
 ];
 
+// @anchor dark-theme
 export const darkTheme = {
   accentColor: '#4f9ef5',
   backgroundColor: '#1a1d23',
@@ -37,6 +40,7 @@ export const darkTheme = {
 };
 
 // Type labels
+// @anchor type-labels
 export const TYPE_LABELS = {
   group: 'Grupujący',
   work: 'Praca',
@@ -48,14 +52,17 @@ export const TYPE_LABELS = {
   product: 'Produkt',
 };
 
+// @anchor type-options
 export const TYPE_OPTIONS = ['', 'group', 'work', 'material', 'equipment', 'service', 'lodging', 'fuel'];
 
+// @anchor budget-type-labels
 export const BUDGET_TYPE_LABELS = {
   WORK: 'Praca',
   MATERIAL: 'Materiał',
   EXTERNAL_SERVICE: 'Usługa Obca',
 };
 
+// @anchor unit-options
 export const UNIT_OPTIONS = [
   'sztuki',
   'kilometry',
@@ -76,12 +83,14 @@ export const UNIT_OPTIONS = [
   'pakiet',
 ];
 
+// @anchor default-unit-for-type
 export function defaultUnitForType(type) {
   const t = String(type || '').toLowerCase();
   if (t === 'work' || t === 'praca') return 'dni';
   return 'sztuki';
 }
 
+// @anchor material-status-labels
 export const MATERIAL_STATUS_LABELS = {
   PENDING: 'Oczekuje',
   PROPOSAL: 'Propozycja',
@@ -92,6 +101,7 @@ export const MATERIAL_STATUS_LABELS = {
   ISSUED: 'Wydane',
 };
 
+// @anchor structure-status-meta
 export const STRUCTURE_STATUS_META = {
   '': { label: 'Brak', color: 'text-gray-400' },
   PENDING: { label: 'Oczekuje', color: 'text-amber-400' },
@@ -104,40 +114,50 @@ export const STRUCTURE_STATUS_META = {
   MIXED: { label: 'Mieszany', color: 'text-sky-300' },
 };
 
+// @anchor material-status-label-to-code
 export const MATERIAL_STATUS_LABEL_TO_CODE = Object.fromEntries(
   Object.entries(MATERIAL_STATUS_LABELS).map(([code, label]) => [String(label).toUpperCase(), code])
 );
 
+// @anchor structure-common-cell-class
 export const STRUCTURE_COMMON_CELL_CLASS = 'text-sm leading-6';
 
 // Formatter functions
+// @anchor fmt-pln
 export const fmtPLN = v =>
   v != null && v !== 0
     ? v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : '';
 
+// @anchor fmt-qty
 export const fmtQty = v =>
   v != null && v !== 0
     ? v.toLocaleString('pl-PL', { maximumFractionDigits: 2 })
     : '';
 
+// @anchor fmt-pct
 export const fmtPct = v =>
   v != null && v !== 0
     ? v.toLocaleString('pl-PL', { maximumFractionDigits: 1 }) + '%'
     : '';
 
+// @anchor fmt-pln-full
 export const fmtPLNFull = v =>
   (Number(v) || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// @anchor fmt-pct-full
 export const fmtPctFull = v =>
   (Number(v) || 0).toLocaleString('pl-PL', { maximumFractionDigits: 1 }) + '%';
 
 // Utility functions
+// @anchor norm-key
 export const normKey = value => String(value || '').trim().toLowerCase();
 
+// @anchor make-material-lookup-key
 export const makeMaterialLookupKey = (subjectName, itemName) =>
   `${normKey(subjectName)}::${normKey(itemName)}`;
 
+// @anchor parse-locale-number
 export const parseLocaleNumber = value => {
   if (value == null) return null;
   const normalized = String(value).trim().replace(/\s/g, '').replace(',', '.');
@@ -146,6 +166,7 @@ export const parseLocaleNumber = value => {
   return Number.isFinite(n) ? n : null;
 };
 
+// @anchor normalize-status-code
 export const normalizeStatusCode = value => {
   if (value == null) return '';
   const raw = String(value).trim();
@@ -157,8 +178,10 @@ export const normalizeStatusCode = value => {
   return raw;
 };
 
+// @anchor is-leaf-node
 export const isLeafNode = node => !node || !node.children || node.children.length === 0;
 
+// @anchor build-hierarchy
 export const buildHierarchy = (flat = [], parentId = null) => {
   if (!Array.isArray(flat)) return [];
   return flat
@@ -169,6 +192,7 @@ export const buildHierarchy = (flat = [], parentId = null) => {
     }));
 };
 
+// @anchor flatten-hierarchy
 export const flattenHierarchy = (root, depth = 0) => {
   if (!root) return [];
   const result = [{ ...root, depth }];

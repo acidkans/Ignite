@@ -67,6 +67,7 @@ const COLS = [
     { key: 'comment',     label: 'Komentarz', defW: 220, sortable: true },
 ];
 
+// @anchor budget-table
 export default function BudgetTable({
     rows,
     onFieldChange,

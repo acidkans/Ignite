@@ -69,6 +69,7 @@ const DEFAULT_SECTION_ORDER = ['oferta', 'strategy', 'tasks', 'gantt', 'wbs-hybr
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
+// @anchor unified-wbs-panel
 export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsDataLoad, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible }) {
     const [wbsData, setWbsData] = useState([]);
     const wbsDataRef = useRef(wbsData);
@@ -234,6 +235,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         }
     }, [nodeId, versionId, authHeaders]);
 
+    // @anchor handle-wbs-extract
     const handleWbsExtract = useCallback(async () => {
         if (!nodeId || !isManagerOrAdmin) return;
         setExtractingForWbs(true);
@@ -291,6 +293,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         }));
     }, [budgetImportRows, budgetImportHeaderRow]);
 
+    // @anchor handle-budget-import-file-change
     const handleBudgetImportFileChange = useCallback(async (event) => {
         const file = event.target.files?.[0];
         if (!file) return;
@@ -803,6 +806,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         } catch (_) {}
     }, [nodeId, versionId, authHeaders, onWbsDataLoad]);
 
+    // @anchor handle-save-hybrid-wbs
     const handleSaveHybridWBS = useCallback(async () => {
         if (hybridSaveTimeout.current) clearTimeout(hybridSaveTimeout.current);
         hybridSaveTimeout.current = setTimeout(async () => {
@@ -848,6 +852,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // Po wklejeniu skopiowanej pozycji w WBS — natychmiast zapisz drzewo (omijamy debounce, żeby
     // nowe wbs_nodes powstały w bazie), a następnie sklonuj powiązane wymagania techniczne
     // (productName, technicalSpec, manufacturer, model, dataSheet, status, …).
+    // @anchor handle-paste-cloned
     const handlePasteCloned = useCallback(async (mappings) => {
         if (!Array.isArray(mappings) || mappings.length === 0) return;
         if (hybridSaveTimeout.current) clearTimeout(hybridSaveTimeout.current);
@@ -887,6 +892,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         onWbsUpdate?.();
     }, [fetchData, onWbsUpdate]);
 
+    // @anchor handle-requirement-assign-to-wbs
     const handleRequirementAssignToWbs = useCallback(async (wbsNodeId, reqId) => {
         if (!wbsNodeId || !reqId) return;
         try {
@@ -966,6 +972,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     }, [nodeId, versionId, authHeaders]);
 
     // Zachowane dla zewnętrznych wywołań (np. fetchData). MarkdownEditor zapisuje przez własny onSave.
+    // @anchor handle-strategy-save
     const handleStrategySave = useCallback((immediate = false) => {
         if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
         if (immediate) { saveStrategy(wbsDescription); return; }
@@ -1041,6 +1048,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         return html;
     }, []);
 
+    // @anchor handle-export-pdf
     const handleExportPDF = async (sectionKey = 'all') => {
         if (sectionKey === 'oferta' || sectionKey === 'all') {
             const unanswered = wbsData.filter(n =>
@@ -1508,8 +1516,9 @@ ${ganttSectionHtml}
         setTimeout(() => { win.print(); setTimeout(() => URL.revokeObjectURL(blobUrl), 60000); }, 600);
     };
 
+    // @anchor handle-export-budget-excel
     const handleExportBudgetExcel = async () => {
-        const rawRows = buildRows(VIEWS.BUDGET);
+        const rawRows = buildRows(VIEWS.BUDGET).filter(r => r.type !== 'group');
 
         if (!rawRows.length) {
             alert('Brak danych budżetowych do eksportu.');
@@ -1748,6 +1757,7 @@ ${ganttSectionHtml}
         URL.revokeObjectURL(url);
     };
 
+    // @anchor handle-export-oferta-excel
     const handleExportOfertaExcel = async () => {
         const rows = buildRows(VIEWS.BUDGET).map(r => {
             const q = Math.max(0, parseFloat(r.quantity) || 0);
@@ -1928,6 +1938,7 @@ ${ganttSectionHtml}
         URL.revokeObjectURL(url);
     };
 
+    // @anchor handle-export-oferta-wbs-excel
     const handleExportOfertaWbsExcel = async () => {
         if (!wbsData.length) { alert('Brak danych WBS do eksportu.'); return; }
 
@@ -2121,6 +2132,7 @@ ${ganttSectionHtml}
     }, [nodeId, versionId, authHeaders, refreshUnified]);
 
     // Gdy w HybridWBS zmieni się typ na material/equipment — auto-utwórz MaterialRequirement
+    // @anchor handle-material-node-created
     const handleMaterialNodeCreated = useCallback(async ({ wbsNodeId, name, type }) => {
         if (!wbsNodeId || !name) return;
         const normalizedType = String(type || '').toLowerCase();
@@ -2194,6 +2206,7 @@ ${ganttSectionHtml}
         } catch (e) { console.error('Auto-create material requirement error:', e); }
     }, [nodeId, versionId, authHeaders, wbsData, refreshUnified]);
 
+    // @anchor handle-hybrid-nodes-deleted
     const handleHybridNodesDeleted = useCallback(async (deletedIds) => {
         const rootId = deletedIds?.[0];
         if (!rootId) return;
@@ -2225,6 +2238,7 @@ ${ganttSectionHtml}
     }, [authHeaders, refreshUnified, selectedId, wbsData, fetchUnassignedRequirements]);
     deleteNodeByIdRef.current = deleteNodeById;
 
+    // @anchor handle-material-status-change
     const handleMaterialStatusChange = useCallback(async (reqId, newStatus) => {
         const node = wbsData.find(n => (n.tags || []).some(t => t === `req:${reqId}`));
         if (node) {
@@ -2286,6 +2300,7 @@ ${ganttSectionHtml}
 
     // Drag krawędzi belki w Gantcie → quantity (dni) przez wbs-nodes/{id} (PATCH).
     // Unit zmienia się na 'dni' tylko gdy node ma już dniową jednostkę lub pustą — pakiet/komplet itp. zostają bez zmian.
+    // @anchor handle-gantt-duration-change
     const handleGanttDurationChange = useCallback(async (nodeId, days) => {
         if (!nodeId || !Number.isFinite(days)) return;
         const node = wbsData.find(n => n.id === nodeId);
@@ -2324,6 +2339,7 @@ ${ganttSectionHtml}
         setWbsData(prev => prev.map(item => item.id === wbsNodeId ? { ...item, ...patch } : item));
     }, []);
 
+    // @anchor handle-hybrid-requirements-qty-change
     const handleHybridRequirementsQtyChange = useCallback(async (id, qty, name) => {
         setRequirementsQtyByNode(prev => ({ ...prev, [id]: qty }));
         updateLocalWbsBudgetRow(id, { quantity: qty });
@@ -2333,6 +2349,7 @@ ${ganttSectionHtml}
         await refreshMaterialCosts();
     }, [updateLocalWbsBudgetRow, saveBudgetField, syncMaterialRequirementsFromWbsQuantity, refreshMaterialCosts]);
 
+    // @anchor handle-hybrid-node-status-change
     const handleHybridNodeStatusChange = useCallback(async (_wbsNodeId, status, reqId) => {
         try {
             await fetch(`${API_URL}/material-requirements/${reqId}`, {

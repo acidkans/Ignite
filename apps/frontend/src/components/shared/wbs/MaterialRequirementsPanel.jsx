@@ -984,4 +984,5 @@ function ProposalsSection({ req, token, onRefresh, onPatch }) {
     );
 }
 
+// @anchor material-requirements-panel
 export default MaterialRequirementsPanel;

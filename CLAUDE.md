@@ -47,35 +47,92 @@ Zasady:
 - Używaj prawdziwych nazw pól i modeli z kodu (camelCase jak w Prisma).
 - Sekcję `### wytyczne` dopisuj gdy podczas sesji ustalono nową zasadę. Jeśli sesja nie przyniosła nowych zasad, pomijaj tę sekcję.
 
-Przy każdej zmianie i wytycznej poprzedzaj nazwę zmiennej tagiem typu — to samo co w Obsidianie:
+## Tagi zmiennych — taksonomia `ui- / back- / schema-`
+
+Przy każdej zmianie i wytycznej poprzedzaj nazwę zmiennej tagiem typu — to samo co w Obsidianie i w `SLOWNIK.md` sekcja `## TAGI ZMIENNYCH`.
+
+Trzy prefiksy:
+- `ui-` — frontend (komponenty, stan, elementy UI)
+- `back-` — backend (NestJS, endpointy, serwisy, infra serwera)
+- `schema-` — `schema.prisma` (modele, pola, relacje, enumy DB)
 
 | Tag | Kiedy używać |
-|-----|-------------|
-| `[model]` | model Prisma — ProcessNode, WbsNode |
-| `[pole]` | pole modelu — WbsNode.depth, MaterialRequirement.status |
-| `[relacja]` | relacja między modelami |
-| `[enum]` | enum TypeScript — NodeType, budgetType |
-| `[endpoint]` | endpoint REST — GET /wbs-nodes/unified/:nodeId |
-| `[serwis]` | klasa NestJS Service |
-| `[guard]` | guard / dekorator autoryzacji |
-| `[funkcja]` | funkcja lub metoda — buildDepths() |
-| `[typ]` | interfejs / DTO TypeScript |
-| `[json]` | struktura JSON w polu tekstowym |
-| `[strona]` | komponent strony React |
-| `[sekcja]` | komponent sekcji / panelu — UnifiedWbsPanel |
-| `[zakladka]` | komponent zakładki — OffersTab |
-| `[kolumna]` | kolumna AG Grid |
-| `[wiersz]` | typ wiersza — _isProjectItem, _isRequirementLeaf |
-| `[hook]` | React hook |
-| `[stan]` | zmienna stanu React — expandedIds |
-| `[env]` | zmienna środowiskowa — DATABASE_URL |
-| `[skrypt]` | skrypt shell — deploy.sh |
-| `[kontener]` | serwis Docker |
+|-----|--------------|
+| `ui-input` | pole tekstowe / liczba / data / textarea |
+| `ui-przycisk` | button, link-button |
+| `ui-tabela` | tabela danych, AG Grid, lista wierszy |
+| `ui-widok` | cała strona / route — LoginPage, DashboardPage |
+| `ui-sekcja` | logiczny blok w widoku — UnifiedWbsPanel |
+| `ui-panel` | boczny / kontekstowy panel — DynamicSidebar, NodeInfoTab |
+| `ui-zakladka` | tab w komponencie zakładkowym — OffersTab, RequirementsTab |
+| `ui-modal` | okno dialogowe, popup |
+| `ui-formularz` | grupa inputów z submitem |
+| `ui-dropdown` | select, autocomplete, menu rozwijane |
+| `ui-karta` | card UI — karta produktu, karta węzła |
+| `ui-lista` | `<ul>`/`<ol>` bez tabeli — breadcrumb |
+| `ui-ikona` | klikalna ikona |
+| `ui-kolumna` | kolumna AG Grid (colDef) |
+| `ui-wiersz` | typ wiersza — _isProjectItem, _isRequirementLeaf |
+| `ui-stan` | useState / useRef — expandedIds |
+| `ui-propsy` | props komponentu React |
+| `ui-hook` | custom React hook — useWbsData |
+| `ui-stala` | const modułowa frontend — PDF_BASE_CSS |
+| `ui-funkcja` | helper / handler frontend — buildWbsHtmlTable |
+| `ui-typ` | interface / type TS (frontend) |
+| `back-endpoint` | route NestJS — GET /wbs-nodes/unified/:nodeId |
+| `back-controller` | klasa kontrolera NestJS — WbsNodesController |
+| `back-modul` | klasa modułu NestJS — WbsNodesModule |
+| `back-serwis` | klasa serwisowa NestJS |
+| `back-guard` | guard / dekorator autoryzacji |
+| `back-dto` | DTO request/response |
+| `back-typ` | interface / type TS (backend) |
+| `back-funkcja` | helper / util backend — buildDepths() |
+| `back-stala` | const modułowa backend |
+| `back-enum` | enum TypeScript (backend, np. NodeType) |
+| `back-env` | zmienna środowiskowa — DATABASE_URL |
+| `back-skrypt` | skrypt shell — deploy.sh |
+| `back-kontener` | serwis Docker |
+| `schema-model` | model Prisma — ProcessNode, WbsNode |
+| `schema-pole` | pole modelu — WbsNode.totalPrice |
+| `schema-relacja` | relacja między modelami |
+| `schema-enum` | enum w schema.prisma |
+| `schema-json` | struktura JSON w polu tekstowym DB |
+
+### Rozbudowa taksonomii
+
+Jeśli napotkasz zmienną, której nie pasuje żaden istniejący tag:
+1. Zaproponuj nowy tag w formacie `ui-<nazwa>` / `back-<nazwa>` / `schema-<nazwa>` (małymi literami, po polsku, jedno słowo)
+2. W tym samym commicie dopisz tag do tej tabeli ORAZ do sekcji `## TAGI ZMIENNYCH` w `SLOWNIK.md` z krótkim opisem
+3. Użyj nowego taga we wpisie zmiennej
 
 Przykład wpisu CHANGELOG z tagami:
 ```
 ### wytyczne
-- [pole] `WbsNode.depth` — nie jest kolumną w bazie, obliczany w runtime przez [funkcja] `buildDepths()`
-- [wiersz] `_isProjectItem` — blokuje edycję pól type i requirementsQty na depth=0
-- [skrypt] `deploy.sh` — uruchamiać tylko po potwierdzeniu użytkownika
+- `schema-pole` `WbsNode.depth` — nie jest kolumną w bazie, obliczany w runtime przez `back-funkcja` `buildDepths()`
+- `ui-wiersz` `_isProjectItem` — blokuje edycję pól type i requirementsQty na depth=0
+- `back-skrypt` `deploy.sh` — uruchamiać tylko po potwierdzeniu użytkownika
 ```
+
+## SLOWNIK.md — indeks zmiennych z anchorami
+
+Przed KAŻDYM commitem aktualizuj sekcję `## ZMIENNE — indeks` w `SLOWNIK.md`:
+- dla każdej NOWEJ zmiennej (funkcja, stan, pole modelu, komponent, endpoint, input, przycisk, tabela itd.) dodaj wiersz: `| <tag> | <nazwa> | <ścieżka pliku> | @anchor <kebab-case-name> |`
+- dla każdej PRZEMIANOWANEJ zmiennej zaktualizuj istniejący wiersz (nazwa + anchor)
+- dla każdej USUNIĘTEJ zmiennej usuń wiersz
+
+W kodzie nad każdą zaindeksowaną zmienną dodaj komentarz `// @anchor <nazwa>` (w `schema.prisma` użyj `///` jeśli ma to być doc-komentarz, inaczej `//`).
+
+**Anchor** = stabilna kotwica niezależna od numeru wiersza. Format: kebab-case, unikalny globalnie w projekcie, wyprowadzony z nazwy zmiennej (camelCase → kebab-case, `Model.pole` → `model-pole`).
+
+Przykład w kodzie:
+```javascript
+// @anchor handle-export-pdf
+const handleExportPDF = (type) => { ... }
+```
+
+```prisma
+/// @anchor wbs-node-total-price
+totalPrice Float @default(0)
+```
+
+Walidację wymusza pre-commit hook (`.githooks/pre-commit`). Skanuje staged pliki `.js/.jsx/.ts/.tsx/.prisma` na obecność nowych `@anchor` i blokuje commit jeśli któryś nie jest w `SLOWNIK.md`. Instalacja jednorazowo po klonie: `git config core.hooksPath .githooks` (instrukcja w `.githooks/README.md`).
