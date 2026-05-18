@@ -36,64 +36,8 @@ async function main() {
     });
   }
 
-  // 3. Users
-  for (const user of [
-    {
-      "id": "e2ef3d65-fe7e-40e3-8ace-381386724273",
-      "email": "admin@poz.pl",
-      "password": "$argon2id$v=19$m=65536,t=3,p=4$dlQ0YYBiUE8do7ikHmvnlQ$9aDHirx/KTn5oVNJMe1nq6czHApTMBNEQuWMAtmPgWw",
-      "firstName": "Jan",
-      "lastName": "Kowalski",
-      "isActive": true,
-      "createdAt": "2026-02-22T17:32:48.110Z",
-      "updatedAt": "2026-02-22T18:08:17.864Z",
-      "supervisorId": null
-    },
-    {
-      "id": "4847b560-611e-4a09-ab9f-1dc82c639547",
-      "email": "a@poz.pl",
-      "password": "$argon2id$v=19$m=65536,t=3,p=4$5fZR/lAY7jNXjiLbe4+BFg$JJIUkZwK4lq16S3KlI6WoDgz7ZjPwuf+OloCT6Ef66Y",
-      "firstName": "Anna",
-      "lastName": "Nowak",
-      "isActive": true,
-      "createdAt": "2026-02-22T17:32:48.203Z",
-      "updatedAt": "2026-02-22T18:08:17.963Z",
-      "supervisorId": null
-    },
-    {
-      "id": "b179d38f-e0e3-4ec9-be48-4d5cdb7d6480",
-      "email": "a@kat.pl",
-      "password": "$argon2id$v=19$m=65536,t=3,p=4$TTvBXLYOEv8elvvPrlYK0A$bYCumcOkwFgpAnvUmdtUCs1o69ljatjN78xN018i2ug",
-      "firstName": "Piotr",
-      "lastName": "Z",
-      "isActive": true,
-      "createdAt": "2026-02-22T17:32:48.275Z",
-      "updatedAt": "2026-02-22T18:08:18.032Z",
-      "supervisorId": null
-    },
-    {
-      "id": "4cf65aa2-96ab-471d-9aa1-28db0a9dedfe",
-      "email": "b@chor.pl",
-      "password": "$argon2id$v=19$m=65536,t=3,p=4$FqlP9LWOuTJH2sLo+HiELQ$yFRcwDluRlH7/Suhtlv6gi5AnM5SAAQh1aGKxTrGS54",
-      "firstName": "Piotr",
-      "lastName": "Z",
-      "isActive": true,
-      "createdAt": "2026-02-22T17:32:48.349Z",
-      "updatedAt": "2026-02-22T18:08:18.107Z",
-      "supervisorId": null
-    },
-    {
-      "id": "755c7818-c3f6-49cd-b287-071a54ed5634",
-      "email": "c@gor.pl",
-      "password": "$argon2id$v=19$m=65536,t=3,p=4$MdMZINQve3PdcaXVT9CeIg$kOOjAL2DjFuAlnwajJ9WPrKChsrY4AT20bRlXVLe7kk",
-      "firstName": "Piotr",
-      "lastName": "Z",
-      "isActive": true,
-      "createdAt": "2026-02-22T17:32:48.430Z",
-      "updatedAt": "2026-02-22T18:08:18.173Z",
-      "supervisorId": null
-    }
-  ]) {
+  // 3. Users (tylko produkcyjni — usunięto konta testowe: admin@poz.pl, a@poz.pl, a@kat.pl, b@chor.pl, c@gor.pl)
+  for (const user of []) {
     await prisma.user.upsert({
       where: { email: user.email },
       update: {},
@@ -102,28 +46,7 @@ async function main() {
   }
 
   // 4. User Roles
-  const userRoles = [
-    {
-      "userId": "e2ef3d65-fe7e-40e3-8ace-381386724273",
-      "roleId": "0f50470e-15d1-484b-9f61-7d1160f5adae"
-    },
-    {
-      "userId": "4847b560-611e-4a09-ab9f-1dc82c639547",
-      "roleId": "0f50470e-15d1-484b-9f61-7d1160f5adae"
-    },
-    {
-      "userId": "b179d38f-e0e3-4ec9-be48-4d5cdb7d6480",
-      "roleId": "0f50470e-15d1-484b-9f61-7d1160f5adae"
-    },
-    {
-      "userId": "4cf65aa2-96ab-471d-9aa1-28db0a9dedfe",
-      "roleId": "0f50470e-15d1-484b-9f61-7d1160f5adae"
-    },
-    {
-      "userId": "755c7818-c3f6-49cd-b287-071a54ed5634",
-      "roleId": "0f50470e-15d1-484b-9f61-7d1160f5adae"
-    }
-  ];
+  const userRoles = [];
   for (const ur of userRoles) {
     await prisma.userRole.upsert({
       where: { userId_roleId: { userId: ur.userId, roleId: ur.roleId } },
