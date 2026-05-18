@@ -136,3 +136,24 @@ totalPrice Float @default(0)
 ```
 
 Walidację wymusza pre-commit hook (`.githooks/pre-commit`). Skanuje staged pliki `.js/.jsx/.ts/.tsx/.prisma` na obecność nowych `@anchor` i blokuje commit jeśli któryś nie jest w `SLOWNIK.md`. Instalacja jednorazowo po klonie: `git config core.hooksPath .githooks` (instrukcja w `.githooks/README.md`).
+
+### Szczegóły workflow — pułapki i zasady niejawne
+
+**1. Hook nie pilnuje sprzątania po usunięciu zmiennej.**
+Gdy usuwasz zmienną z kodu (wraz z jej komentarzem `// @anchor xxx`), musisz RĘCZNIE usunąć odpowiadający wiersz z `SLOWNIK.md` sekcja `## ZMIENNE — indeks`. Hook patrzy tylko na nowo DODANE anchory (znak `+` w diff), więc usunięcie nie wywołuje walidacji. Martwe wpisy w SLOWNIK pęcznieją indeks i prowadzą do błędnych wskaźników do nieistniejącego kodu.
+
+**2. Rename = usunięcie starego anchora + dodanie nowego.**
+Renaming zmiennej (np. `handleExportPDF` → `handleExportPdfV2`) wymaga:
+- usunięcia starego `// @anchor handle-export-pdf` z kodu
+- dodania nowego `// @anchor handle-export-pdf-v2`
+- aktualizacji wiersza w SLOWNIK.md (zmiana w istniejącym wierszu, NIE dodawanie nowego obok starego)
+- sprawdzenia wszystkich miejsc w kodzie używających starego anchora w komentarzach/dokumentacji
+
+**3. Refactor logiki BEZ zmiany nazwy — nie ruszaj SLOWNIK ani anchora.**
+Zmiana wnętrza funkcji, dodanie parametru, zmiana implementacji — wszystko to z zachowaniem nazwy zmiennej — NIE wymaga aktualizacji SLOWNIK.md ani anchora. Hook nie odpali walidacji bo w diff nie ma nowo dodanej linii `@anchor`. Nie marnuj cyklu na zbędną edycję SLOWNIK przy zwykłym refaktorze.
+
+**4. Sync z Obsidianem `Ignite — zmienne projektu.md` jest poza repo.**
+Mirror indeksu zmiennych żyje w `G:\Mój dysk\obsidian\vibe_codes\Ignite — zmienne projektu.md` — POZA repo Ignite. Hook tego pliku nie widzi i nie pilnuje. Synchronizuj okresowo (po skończeniu większego modułu lub raz na tydzień) — Claude może to zrobić na życzenie ("zsynchronizuj Obsidian zmienne").
+
+**5. Przy proponowaniu nowego taga — najpierw zapytaj użytkownika.**
+Jeśli zmienna nie pasuje do żadnego istniejącego taga z taksonomii `ui-/back-/schema-`, ZANIM dopiszesz nowy tag do tabel — spytaj użytkownika: "Czy pasuje nowy tag `prefiks-nazwa`, czy wolisz użyć istniejącego `X` z innym znaczeniem?". Decyzja o rozszerzeniu taksonomii jest trwała i propaguje się do CLAUDE.md, SLOWNIK.md i Obsidiana — niech user ją świadomie podejmie.
