@@ -79,4 +79,17 @@ export class ProcessTreeController {
     bulkUpdatePermissions(@Body() dto: any) {
         return this.processTreeService.bulkUpdatePermissions(dto);
     }
+
+    // Project contacts (direct user permissions on node)
+    @Permissions('TREE_EDIT')
+    @Post(':id/contacts')
+    addContact(@Param('id') id: string, @Body() dto: any) {
+        return this.processTreeService.addProjectContact(id, dto);
+    }
+
+    @Permissions('TREE_EDIT')
+    @Delete(':id/contacts/:userId')
+    removeContact(@Param('id') id: string, @Param('userId') userId: string) {
+        return this.processTreeService.removeProjectContact(id, userId);
+    }
 }

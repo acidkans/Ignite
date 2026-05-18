@@ -17,16 +17,26 @@ export class MaterialRequirementsController {
 
     // ─── BAZA GLOBALNA ─────────────────────────────────────────────────────────
 
-    /** Wszystkie materiały z wypełnionym producentem i kartą katalogową */
+    /** Wszystkie materiały z wypełnionym producentem (w tym ręczne, bez karty katalogowej) */
     @Get('database')
     findGlobalDatabase() {
-        return this.service.findGlobalDatabase();
+        return this.service.findAllMaterials();
     }
 
     /** Wszystkie materiały z producentem (bez wymagania karty katalogowej) */
     @Get('all-materials')
     findAllMaterials() {
         return this.service.findAllMaterials();
+    }
+
+    /** Użycie konkretnego materiału (producent+model) we wszystkich projektach z cenami */
+    @Get('usage')
+    findUsage(
+        @Query('manufacturer') manufacturer: string,
+        @Query('model') model?: string,
+    ) {
+        if (!manufacturer) return [];
+        return this.service.findMaterialUsage(manufacturer, model);
     }
 
     /** Wszystkie materiały zaimportowane z kart katalogowych (globalnie) */
@@ -280,9 +290,16 @@ export class MaterialRequirementsController {
     @Post(':id/proposals')
     addProposal(
         @Param('id') id: string,
-        @Body() body: { productName: string; manufacturer: string; model?: string; sourceUrl?: string },
+        @Body() body: { productName: string; manufacturer: string; model?: string; sourceUrl?: string; priceNetto?: number | null; availability?: string },
     ) {
-        return this.service.addManualProposal(id, { productName: body.productName || '', manufacturer: body.manufacturer || '', model: body.model, sourceUrl: body.sourceUrl });
+        return this.service.addManualProposal(id, {
+            productName: body.productName || '',
+            manufacturer: body.manufacturer || '',
+            model: body.model,
+            sourceUrl: body.sourceUrl,
+            priceNetto: body.priceNetto ?? null,
+            availability: body.availability,
+        });
     }
 
     /** Aktualizacja propozycji */
@@ -321,6 +338,12 @@ export class MaterialRequirementsController {
         const { stream, mimeType } = await this.service.getProposalImageStream(proposalId);
         res.set({ 'Content-Type': mimeType });
         stream.pipe(res);
+    }
+
+    /** Usuń obrazek propozycji */
+    @Delete('proposals/:proposalId/image')
+    deleteProposalImage(@Param('proposalId') proposalId: string) {
+        return this.service.deleteProposalImage(proposalId);
     }
 
     /** Usunięcie propozycji */

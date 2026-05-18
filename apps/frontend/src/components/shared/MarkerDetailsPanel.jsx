@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, MapPin, Mic, Camera, FilePlus, Trash2, Save, ChevronDown, Download, Image as ImageIcon, CheckSquare, Square, Layers, Plus, Check } from 'lucide-react';
+import { X, MapPin, Mic, Camera, FilePlus, Trash2, Save, ChevronDown, Download, Image as ImageIcon, CheckSquare, Square, Layers, Plus, Check, Video, Play } from 'lucide-react';
 import { API_URL } from '../../config';
 import { useNetwork } from '../../hooks/useNetwork';
 import { enqueue, updateTempMarkerPayload } from '../../services/repos/outboxRepo';
@@ -19,10 +19,11 @@ function flattenWbsNodes(nodes, prefix = '') {
 export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId, subtaskId, versionId }) {
     const { isOnline } = useNetwork();
     const [uploading, setUploading] = useState(false);
-    const [editName, setEditName] = useState(marker.name || '');
+    const [editName, setEditName] = useState(marker.name || (marker.type === 'TEXT' ? marker.note || '' : ''));
     const [editComment, setEditComment] = useState('');
     const [editQuestion, setEditQuestion] = useState(marker.question || '');
     const [editingAttNote, setEditingAttNote] = useState(null);
+    const [lightboxAtt, setLightboxAtt] = useState(null);
     const [subtasks, setSubtasks] = useState([]);
     const [selectedSubtaskId, setSelectedSubtaskId] = useState(marker.subtaskId || '');
     const [isCameraActive, setIsCameraActive] = useState(false);
@@ -253,7 +254,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                             attachments: [...(marker.attachments || []), {
                                 id: `pending_${outboxId}`,
                                 isPending: true,
-                                fileType: file.type.startsWith('image/') ? 'IMAGE' : 'FILE',
+                                fileType: file.type.startsWith('image/') ? 'IMAGE' : file.type.startsWith('video/') ? 'VIDEO' : 'FILE',
                                 fileUrl: blobUrl,
                                 fileName: file.name,
                             }],
@@ -490,6 +491,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     };
 
     const isTemp = marker.id?.toString().startsWith('temp_');
+    const isVideoAtt = (att) => att.fileType === 'VIDEO' || /\.(mp4|mov|webm|avi|mkv|m4v)$/i.test(att.fileName || '');
 
     const panelClasses = isMobile
         ? "fixed inset-x-0 bottom-0 bg-[#0f172a] border-t border-white/10 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] flex flex-col z-[100] rounded-t-[32px] animate-in slide-in-from-bottom duration-300 max-h-[85vh]"
@@ -617,6 +619,18 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                 <input
                                     type="file"
                                     accept="image/*"
+                                    multiple
+                                    className="hidden"
+                                    onChange={handleCapture}
+                                />
+                            </label>
+
+                            <label className="flex items-center justify-center gap-2 px-4 py-3 w-full bg-[#1e293b] border border-white/5 text-gray-300 rounded-xl text-xs font-bold transition-all shadow-lg active:scale-95 cursor-pointer">
+                                <Video size={16} className="text-purple-400" />
+                                Wideo
+                                <input
+                                    type="file"
+                                    accept="video/*"
                                     multiple
                                     className="hidden"
                                     onChange={handleCapture}
@@ -820,7 +834,29 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                         {att.isPending && <div className="absolute top-2 left-2 z-10 px-1.5 py-0.5 bg-amber-500/80 rounded text-[9px] font-black text-white">⏳</div>}
                                         <div className="aspect-square">
                                             {att.fileType === 'IMAGE' ? (
-                                                <img src={att.isPending ? att.fileUrl : getFileUrl(att.fileUrl)} className="w-full h-full object-cover" alt="attachment" />
+                                                <img
+                                                    src={att.isPending ? att.fileUrl : getFileUrl(att.fileUrl)}
+                                                    className="w-full h-full object-cover cursor-zoom-in"
+                                                    alt="attachment"
+                                                    onClick={(e) => { e.stopPropagation(); setLightboxAtt(att); }}
+                                                />
+                                            ) : isVideoAtt(att) ? (
+                                                <div
+                                                    className="w-full h-full relative cursor-zoom-in bg-black"
+                                                    onClick={(e) => { e.stopPropagation(); setLightboxAtt(att); }}
+                                                >
+                                                    <video
+                                                        src={att.isPending ? att.fileUrl : getFileUrl(att.fileUrl)}
+                                                        className="w-full h-full object-cover"
+                                                        preload="metadata"
+                                                        muted
+                                                    />
+                                                    <div className="absolute inset-0 flex items-center justify-center">
+                                                        <div className="bg-black/60 rounded-full p-2">
+                                                            <Play size={20} className="text-white" fill="white" />
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             ) : (
                                                 <div className="w-full h-full flex flex-col items-center justify-center gap-2 p-2">
                                                     {att.fileType === 'AUDIO' ? <Mic size={24} className="text-purple-400" /> : <Save size={24} className="text-gray-500" />}
@@ -836,6 +872,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                                     autoFocus
                                                     value={editingAttNote.note}
                                                     onChange={e => setEditingAttNote({ ...editingAttNote, note: e.target.value })}
+                                                    onBlur={() => handleUpdateAttachmentNote(att.id, editingAttNote.note)}
                                                     onKeyDown={e => {
                                                         if (e.key === 'Enter') handleUpdateAttachmentNote(att.id, editingAttNote.note);
                                                         if (e.key === 'Escape') setEditingAttNote(null);
@@ -843,7 +880,6 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                                     className="flex-1 bg-transparent text-white text-[11px] outline-none placeholder:text-gray-500 min-w-0"
                                                     placeholder="Wpisz notatkę..."
                                                 />
-                                                <button onClick={() => handleUpdateAttachmentNote(att.id, editingAttNote.note)} className="text-blue-400 shrink-0"><Save size={12}/></button>
                                             </div>
                                         ) : (
                                             <div
@@ -893,6 +929,60 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                     </button>
                 </div>
             </div>
+
+            {/* Lightbox */}
+            {lightboxAtt && (
+                <div
+                    className="fixed inset-0 z-[9999] bg-black/95 flex flex-col items-center justify-center"
+                    onClick={() => setLightboxAtt(null)}
+                >
+                    <button
+                        className="absolute top-4 right-4 p-2 bg-white/10 rounded-full text-white"
+                        onClick={() => setLightboxAtt(null)}
+                    >
+                        <X size={24} />
+                    </button>
+                    <button
+                        className="absolute top-4 left-4 p-2 bg-white/10 rounded-full text-blue-400"
+                        onClick={(e) => { e.stopPropagation(); downloadFile(lightboxAtt); }}
+                    >
+                        <Download size={24} />
+                    </button>
+                    <div
+                        style={{ display: 'grid', gridTemplateRows: '1fr', maxWidth: '90vw', maxHeight: '85vh' }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {isVideoAtt(lightboxAtt) ? (
+                            <video
+                                src={lightboxAtt.isPending ? lightboxAtt.fileUrl : getFileUrl(lightboxAtt.fileUrl)}
+                                controls
+                                autoPlay
+                                style={{ gridRow: 1, gridColumn: 1, maxWidth: '90vw', maxHeight: '85vh', display: 'block', background: '#000' }}
+                            />
+                        ) : (
+                            <img
+                                src={lightboxAtt.isPending ? lightboxAtt.fileUrl : getFileUrl(lightboxAtt.fileUrl)}
+                                alt="podgląd"
+                                style={{ gridRow: 1, gridColumn: 1, maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', display: 'block' }}
+                            />
+                        )}
+                        {lightboxAtt.note && (
+                            <div style={{
+                                gridRow: 1, gridColumn: 1,
+                                alignSelf: 'end',
+                                background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%)',
+                                color: '#fff',
+                                padding: '20px 16px 12px',
+                                fontSize: '13px',
+                                lineHeight: 1.4,
+                                pointerEvents: 'none',
+                            }}>
+                                {lightboxAtt.note}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </>
     );
 }

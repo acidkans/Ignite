@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Save, Clock, Calendar, Target, Package, AlertTriangle, CheckCircle2, Plus, Trash2, GripVertical, Wrench, ClipboardList, ShieldCheck, User, Users, Mail, Phone, PhoneCall, FileDown } from 'lucide-react';
+import { Save, Clock, Calendar, Target, Package, AlertTriangle, CheckCircle2, Plus, Trash2, GripVertical, Wrench, ClipboardList, ShieldCheck, User, Users, Mail, Phone, PhoneCall, FileDown, UserPlus } from 'lucide-react';
 import { API_URL } from '../../config';
 import { exportProjectPdf } from '../../utils/projectPdfExport';
 import { exportRequirementsPdf } from '../../utils/requirementsPdfExport';
@@ -80,7 +80,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
         projectEnd: '',
         projectGoal: '',
         pmName: '',
-        pmSurname: '',
+        pmCompany: '',
         clientProjectManagerPhone: '',
         clientProjectManagerEmail: '',
         clientContacts: [],
@@ -124,6 +124,9 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
     const [resizingPanel, setResizingPanel] = useState(null);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 }); // Offset in pixels inside tile
     const [lastGridPos, setLastGridPos] = useState({ x: -1, y: -1 });
+
+    const [allUsers, setAllUsers] = useState([]);
+    const [contactSuggest, setContactSuggest] = useState({}); // { contactId: { query, results, open } }
 
     const GRID_COLS = 12;
     const ROW_HEIGHT = 40; // piksele per grid unit
@@ -263,10 +266,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                             const d = new Date(iso);
                             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                         };
-                        const fullPM = data.clientProjectManager || '';
-                        const pmParts = fullPM.split(' ');
-                        const pmName = pmParts[0] || '';
-                        const pmSurname = pmParts.slice(1).join(' ') || '';
+                        const pmName = data.clientProjectManager || '';
 
                         setForm({
                             offerDeadlineDate: data.offerDeadline ? data.offerDeadline.split('T')[0] : '',
@@ -275,10 +275,14 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                             projectEnd: toLocalDate(data.projectEnd),
                             projectGoal: data.projectGoal || '',
                             pmName,
-                            pmSurname,
+                            pmCompany: data.clientProjectManagerCompany || '',
                             clientProjectManagerPhone: data.clientProjectManagerPhone || '',
                             clientProjectManagerEmail: data.clientProjectManagerEmail || '',
-                            clientContacts: data.clientContacts ? JSON.parse(data.clientContacts) : [],
+                            clientContacts: data.clientContacts ? JSON.parse(data.clientContacts).map(c => ({
+                                ...c,
+                                name: c.surname ? `${c.name || ''} ${c.surname}`.trim() : (c.name || ''),
+                                surname: undefined,
+                            })) : [],
                             offerStatus: data.offerStatus || '',
                             offerStatusComment: data.offerStatusComment || '',
                         });
@@ -295,6 +299,15 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
 
     useEffect(() => { fetchData(); }, [fetchData, versionId]);
 
+    useEffect(() => {
+        const token = sessionStorage.getItem('token');
+        if (!token) return;
+        fetch(`${API_URL}/users/suggest`, { headers: { Authorization: `Bearer ${token}` } })
+            .then(r => r.ok ? r.json() : [])
+            .then(data => setAllUsers(Array.isArray(data) ? data : []))
+            .catch(() => {});
+    }, []);
+
     const handleSave = async (overrideItems = null) => {
         setSaving(true);
         try {
@@ -307,7 +320,8 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                 projectStart: form.projectStart || null,
                 projectEnd: form.projectEnd || null,
                 projectGoal: form.projectGoal || null,
-                clientProjectManager: `${form.pmName} ${form.pmSurname}`.trim() || null,
+                clientProjectManager: form.pmName || null,
+                clientProjectManagerCompany: form.pmCompany || null,
                 clientProjectManagerPhone: form.clientProjectManagerPhone || null,
                 clientProjectManagerEmail: form.clientProjectManagerEmail || null,
                 clientContacts: JSON.stringify(form.clientContacts),
@@ -338,7 +352,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
     const addContact = () => {
         setForm(prev => ({
             ...prev,
-            clientContacts: [...prev.clientContacts, { id: crypto.randomUUID(), name: '', surname: '', role: '', phone: '', email: '' }]
+            clientContacts: [...prev.clientContacts, { id: crypto.randomUUID(), name: '', company: '', role: '', phone: '', email: '' }]
         }));
     };
 
@@ -354,7 +368,57 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
             ...prev,
             clientContacts: prev.clientContacts.filter(c => c.id !== id)
         }));
-        // Zapiszemy od razu przy usunięciu, chociaż może to poczekać na onBlur
+        setContactSuggest(prev => { const n = { ...prev }; delete n[id]; return n; });
+    };
+
+    const [teamSaving, setTeamSaving] = useState({});
+    const addToTeam = async (email, fullName, company, phone) => {
+        if (!email && !fullName) return;
+        const key = email || fullName;
+        setTeamSaving(p => ({ ...p, [key]: 'saving' }));
+        const parts = (fullName || '').trim().split(/\s+/);
+        const firstName = parts[0] || '';
+        const lastName = parts.slice(1).join(' ') || '';
+        try {
+            const token = sessionStorage.getItem('token');
+            await fetch(`${API_URL}/process-tree/${nodeId}/contacts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ email, firstName, lastName, phone: phone || null, company: company || null }),
+            });
+            setTeamSaving(p => ({ ...p, [key]: 'done' }));
+            setTimeout(() => setTeamSaving(p => { const n = { ...p }; delete n[key]; return n; }), 2500);
+        } catch {
+            setTeamSaving(p => ({ ...p, [key]: 'error' }));
+        }
+    };
+
+    const handleContactNameChange = (contactId, value) => {
+        updateContact(contactId, 'name', value);
+        if (value.length < 2) {
+            setContactSuggest(prev => ({ ...prev, [contactId]: { open: false, results: [] } }));
+            return;
+        }
+        const q = value.toLowerCase();
+        const results = allUsers.filter(u => {
+            const full = `${u.firstName || ''} ${u.lastName || ''} ${u.email}`.toLowerCase();
+            return full.includes(q);
+        }).slice(0, 8);
+        setContactSuggest(prev => ({ ...prev, [contactId]: { open: results.length > 0, results } }));
+    };
+
+    const selectUserForContact = (contactId, user) => {
+        const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
+        setForm(prev => ({
+            ...prev,
+            clientContacts: prev.clientContacts.map(c =>
+                c.id === contactId
+                    ? { ...c, name: fullName, email: user.email || c.email }
+                    : c
+            ),
+        }));
+        setContactSuggest(prev => ({ ...prev, [contactId]: { open: false, results: [] } }));
+        setTimeout(handleSave, 100);
     };
 
     const set = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }));
@@ -596,12 +660,12 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                                     </div>
                                     <div className="grid grid-cols-4 gap-3">
                                         <div>
-                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię</label>
+                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię i Nazwisko</label>
                                             <input type="text" value={form.pmName} onChange={set('pmName')} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
                                         </div>
                                         <div>
-                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Nazwisko</label>
-                                            <input type="text" value={form.pmSurname} onChange={set('pmSurname')} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Firma</label>
+                                            <input type="text" value={form.pmCompany} onChange={set('pmCompany')} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
                                         </div>
                                         <div>
                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Telefon</label>
@@ -618,6 +682,14 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                                             </div>
                                         </div>
                                     </div>
+                                    {(() => { const k = form.clientProjectManagerEmail || form.pmName; const st = teamSaving[k]; return (
+                                        <button onClick={() => addToTeam(form.clientProjectManagerEmail, form.pmName, form.pmCompany, form.clientProjectManagerPhone)}
+                                            disabled={st === 'saving' || (!form.clientProjectManagerEmail && !form.pmName)}
+                                            className="mt-2 self-start flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all disabled:opacity-40 border border-green-500/30 text-green-300 hover:bg-green-500/10 bg-green-500/5">
+                                            {st === 'saving' ? <div className="w-3 h-3 border-2 border-green-400/30 border-t-green-400 rounded-full animate-spin"/> : st === 'done' ? <CheckCircle2 size={13}/> : <UserPlus size={13}/>}
+                                            {st === 'done' ? 'Dodano do zespołu' : 'Zapisz do zespołu'}
+                                        </button>
+                                    ); })()}
                                 </div>
 
                                 <div className="flex-1 flex flex-col min-h-0">
@@ -655,13 +727,40 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                                                         </button>
                                                     </div>
                                                     <div className="grid grid-cols-4 gap-3">
-                                                        <div>
-                                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię</label>
-                                                            <input type="text" value={contact.name} onChange={e => updateContact(contact.id, 'name', e.target.value)} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                                        <div className="relative">
+                                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię i Nazwisko</label>
+                                                            <input
+                                                                type="text"
+                                                                value={contact.name}
+                                                                onChange={e => handleContactNameChange(contact.id, e.target.value)}
+                                                                onBlur={() => {
+                                                                    setTimeout(() => setContactSuggest(prev => ({ ...prev, [contact.id]: { ...prev[contact.id], open: false } })), 150);
+                                                                    handleSave();
+                                                                }}
+                                                                onFocus={() => {
+                                                                    if (contact.name.length >= 2) handleContactNameChange(contact.id, contact.name);
+                                                                }}
+                                                                className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30"
+                                                            />
+                                                            {contactSuggest[contact.id]?.open && (
+                                                                <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-[#1a1a2e] border border-white/10 rounded-lg shadow-xl overflow-hidden">
+                                                                    {contactSuggest[contact.id].results.map(u => (
+                                                                        <button
+                                                                            key={u.id}
+                                                                            type="button"
+                                                                            onMouseDown={() => selectUserForContact(contact.id, u)}
+                                                                            className="w-full text-left px-3 py-2 hover:bg-white/10 transition-colors border-b border-white/5 last:border-0"
+                                                                        >
+                                                                            <div className="text-[13px] text-gray-200">{[u.firstName, u.lastName].filter(Boolean).join(' ')}</div>
+                                                                            <div className="text-[11px] text-gray-500">{u.email}</div>
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                         <div>
-                                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Nazwisko</label>
-                                                            <input type="text" value={contact.surname} onChange={e => updateContact(contact.id, 'surname', e.target.value)} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Firma</label>
+                                                            <input type="text" value={contact.company || ''} onChange={e => updateContact(contact.id, 'company', e.target.value)} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
                                                         </div>
                                                         <div>
                                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Telefon</label>
@@ -678,6 +777,14 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                                                             </div>
                                                         </div>
                                                     </div>
+                                                    {(() => { const k = contact.email || contact.name; const st = teamSaving[k]; return (
+                                                        <button onClick={() => addToTeam(contact.email, contact.name, contact.company, contact.phone)}
+                                                            disabled={st === 'saving' || (!contact.email && !contact.name)}
+                                                            className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all disabled:opacity-40 border border-green-500/30 text-green-300 hover:bg-green-500/10 bg-green-500/5">
+                                                            {st === 'saving' ? <div className="w-3 h-3 border-2 border-green-400/30 border-t-green-400 rounded-full animate-spin"/> : st === 'done' ? <CheckCircle2 size={13}/> : <UserPlus size={13}/>}
+                                                            {st === 'done' ? 'Dodano do zespołu' : 'Zapisz do zespołu'}
+                                                        </button>
+                                                    ); })()}
                                                 </div>
                                             ))
                                         )}

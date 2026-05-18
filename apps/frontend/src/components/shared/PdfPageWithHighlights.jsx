@@ -65,6 +65,7 @@ export default function PdfPageWithHighlights({
         <div
             ref={wrapperRef}
             onMouseUp={handleMouseUp}
+            onTouchEnd={handleMouseUp}
             className="mb-4 shadow-xl border border-white/10 mx-auto bg-white w-fit"
             style={{ position: 'relative' }}
         >

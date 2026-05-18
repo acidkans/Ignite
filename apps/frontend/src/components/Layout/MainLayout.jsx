@@ -4,6 +4,7 @@ import { API_URL } from '../../config';
 import DynamicSidebar from './DynamicSidebar';
 import AIChatSidebar from '../AI/AIChatSidebar';
 import DocumentationSidebar from '../Documentation/DocumentationSidebar';
+import SchematTab from '../shared/SchematTab';
 import DocumentViewer from '../shared/DocumentViewer';
 import AddNodeModal from '../shared/AddNodeModal';
 import NodePermissionsModal from '../shared/NodePermissionsModal';
@@ -22,6 +23,11 @@ export default function MainLayout({ onLogout }) {
     const [docsWidth, setDocsWidth] = useState(() => {
         const saved = parseInt(localStorage.getItem('docsSidebarWidth') || '480', 10);
         return Number.isFinite(saved) ? Math.min(Math.max(saved, 320), Math.floor(window.innerWidth * 0.6)) : 480;
+    });
+    const [schematVisible, setSchematVisible] = useState(false);
+    const [schematWidth, setSchematWidth] = useState(() => {
+        const saved = parseInt(localStorage.getItem('schematSidebarWidth') || '600', 10);
+        return Number.isFinite(saved) ? Math.min(Math.max(saved, 400), Math.floor(window.innerWidth * 0.7)) : 600;
     });
     const [docsFullscreenFile, setDocsFullscreenFile] = useState(null);
     const [flashTick, setFlashTick] = useState(0);
@@ -153,22 +159,35 @@ export default function MainLayout({ onLogout }) {
     // --- Resizing Logic (Opcjonalne, uproszczone) ---
     const isResizingLeft = useRef(false);
     const isResizingDocs = useRef(false);
+    const isResizingSchemat = useRef(false);
     useEffect(() => {
         const handleMove = (e) => {
             if (isResizingLeft.current) {
                 if (e.clientX > 150 && e.clientX < 500) setLeftWidth(e.clientX);
             }
             if (isResizingDocs.current) {
-                // Sidebar po prawej, więc szerokość = (szerokość okna - X kursora) - szerokość AI sidebara (jeśli widoczny)
                 const aiOffset = aiVisible ? rightWidth : 0;
-                const newW = window.innerWidth - e.clientX - aiOffset;
+                const schematOffset = schematVisible ? schematWidth : 0;
+                const newW = window.innerWidth - e.clientX - aiOffset - schematOffset;
                 const clamped = Math.min(Math.max(newW, 320), Math.floor(window.innerWidth * 0.6));
                 setDocsWidth(clamped);
+            }
+            if (isResizingSchemat.current) {
+                const aiOffset = aiVisible ? rightWidth : 0;
+                const docsOffset = docsVisible ? docsWidth : 0;
+                const newW = window.innerWidth - e.clientX - aiOffset - docsOffset;
+                const clamped = Math.min(Math.max(newW, 400), Math.floor(window.innerWidth * 0.7));
+                setSchematWidth(clamped);
             }
         };
         const handleUp = () => {
             if (isResizingDocs.current) {
                 isResizingDocs.current = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+            if (isResizingSchemat.current) {
+                isResizingSchemat.current = false;
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
             }
@@ -180,15 +199,22 @@ export default function MainLayout({ onLogout }) {
             window.removeEventListener('mousemove', handleMove);
             window.removeEventListener('mouseup', handleUp);
         };
-    }, [aiVisible, rightWidth]);
+    }, [aiVisible, rightWidth, schematVisible, schematWidth, docsVisible, docsWidth]);
 
-    // Persist szerokości DocsSidebara w localStorage (debounce ~300ms)
+    // Persist szerokości sidebarsów w localStorage (debounce ~300ms)
     useEffect(() => {
         const id = setTimeout(() => {
             try { localStorage.setItem('docsSidebarWidth', String(docsWidth)); } catch { /* quota */ }
         }, 300);
         return () => clearTimeout(id);
     }, [docsWidth]);
+
+    useEffect(() => {
+        const id = setTimeout(() => {
+            try { localStorage.setItem('schematSidebarWidth', String(schematWidth)); } catch { /* quota */ }
+        }, 300);
+        return () => clearTimeout(id);
+    }, [schematWidth]);
 
     // ESC zamyka fullscreen Docs
     useEffect(() => {
@@ -322,6 +348,48 @@ export default function MainLayout({ onLogout }) {
                         onClose={() => setDocsVisible(false)}
                         onOpenFullscreen={(file) => setDocsFullscreenFile(file)}
                     />
+                </aside>
+            )}
+
+            {/* TOGGLE SCHEMAT BUTTON (teal) */}
+            <div className="flex-shrink-0 hidden md:flex items-center bg-black/20 border-l border-white/5">
+                <button
+                    onClick={() => setSchematVisible(v => !v)}
+                    title={schematVisible ? 'Ukryj schemat' : 'Pokaż schemat'}
+                    className={`w-4 h-24 flex items-center justify-center text-gray-500 hover:text-white hover:bg-teal-500/40 transition-colors border-y border-white/5 rounded-l-md ${schematVisible ? 'bg-teal-500/20 text-teal-200' : ''}`}
+                >
+                    {schematVisible
+                        ? <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+                        : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                    }
+                </button>
+            </div>
+
+            {/* SCHEMAT SIDEBAR */}
+            {schematVisible && (
+                <aside style={{ width: schematWidth }} className="flex-shrink-0 hidden lg:flex flex-col bg-black/30 border-l border-teal-500/20 backdrop-blur-sm relative overflow-hidden">
+                    <div
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            isResizingSchemat.current = true;
+                            document.body.style.cursor = 'col-resize';
+                            document.body.style.userSelect = 'none';
+                        }}
+                        onDoubleClick={() => setSchematWidth(600)}
+                        title="Przeciągnij, aby zmienić szerokość (dbl-klik = reset)"
+                        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-teal-500/60 transition-colors z-50 group"
+                    >
+                        <div className="absolute inset-y-0 left-0 w-px bg-teal-500/30 group-hover:bg-teal-400 transition-colors"></div>
+                    </div>
+                    <div className="h-10 flex items-center justify-between px-4 border-b border-teal-500/20 bg-teal-500/5 flex-shrink-0">
+                        <span className="text-[11px] font-bold text-teal-300 uppercase tracking-widest">Schemat</span>
+                        <button onClick={() => setSchematVisible(false)} className="p-1 text-gray-500 hover:text-white rounded transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+                    <div className="flex-1 min-h-0 overflow-hidden">
+                        <SchematTab nodeId={activeAreaId} />
+                    </div>
                 </aside>
             )}
 

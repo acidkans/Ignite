@@ -4,7 +4,7 @@ import { enqueueUpload, removeFromQueue, flushPendingUploads } from '../../utils
 import {
     Upload, X, MapPin, Image as ImageIcon, Mic, Trash2,
     MousePointer2, Minus, Type, ZoomIn, ZoomOut, Maximize, Minimize2, Hand, Camera, Download, FileText, Save, FileDown,
-    RefreshCw, HardDrive, FolderOpen, List, CheckSquare, Square, Layers, ChevronDown, Plus, Check, Pencil
+    RefreshCw, HardDrive, FolderOpen, List, CheckSquare, Square, Layers, ChevronDown, Plus, Check, Pencil, Video, Play
 } from 'lucide-react';
 
 function flattenWbsNodes(nodes, prefix = '') {
@@ -2041,6 +2041,11 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                             Galeria
                             <input type="file" accept="image/*" multiple onChange={handleUploadAttachment} className="hidden" disabled={uploading}/>
                         </label>
+                        <label className="flex-1 text-[11px] bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 py-1.5 rounded cursor-pointer transition-colors flex items-center justify-center gap-1">
+                            <Video size={11} />
+                            Wideo
+                            <input type="file" accept="video/*" multiple onChange={handleUploadAttachment} className="hidden" disabled={uploading}/>
+                        </label>
                         <label className="flex-1 text-[11px] bg-white/5 hover:bg-white/10 text-white py-1.5 rounded cursor-pointer transition-colors flex items-center justify-center">
                             {uploading ? '...' : '+ Plik'}
                             <input type="file" multiple onChange={handleUploadAttachment} className="hidden" disabled={uploading}/>
@@ -2078,6 +2083,12 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                                     <div className="flex flex-col gap-1">
                                         <div className="flex items-center gap-1 text-[10px] text-purple-300"><Mic size={12} /> Głos</div>
                                         <audio controls className="w-full h-8" src={getFileUrl(att.fileUrl)}/>
+                                    </div>
+                                )}
+                                {att.fileType === 'VIDEO' && (
+                                    <div className="flex flex-col gap-1">
+                                        <div className="flex items-center gap-1 text-[10px] text-purple-300"><Video size={12} /> Wideo</div>
+                                        <video controls className="w-full rounded border border-white/10" src={getFileUrl(att.fileUrl)} />
                                     </div>
                                 )}
                                 {att.fileType === 'FILE' && (

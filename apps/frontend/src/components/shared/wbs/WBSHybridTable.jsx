@@ -681,7 +681,7 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal, on
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null }) {
     const getAllIds = useCallback((items) => {
         const ids = ['root'];
         const walk = (nodes) => nodes?.forEach(n => { ids.push(`node_${n.id}`); walk(n.children); });
@@ -1129,6 +1129,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                     {depth >= 1 && (
                         <input type="text" value={node.quantity || ''} onChange={e => handleField(node.id, 'quantity', e.target.value)}
+                            onFocus={e => e.target.select()} onMouseUp={e => e.target.select()}
                             onBlur={e => { onSave?.(); onRequirementsQtyChange?.(node.id, e.target.value, node.name); }}
                             placeholder="0" className={`bg-transparent border-none focus:outline-none text-xs w-full text-right placeholder-gray-700 ${d.fieldClass}`} />
                     )}
@@ -1165,16 +1166,25 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
                 {/* Właściciel */}
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                    {users.length > 0 ? (
+                    {(users.length > 0 || projectContacts.length > 0) ? (
                         <select
                             value={node.owner || ''}
                             onChange={e => { handleField(node.id, 'owner', e.target.value); onSave?.(); }}
                             className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-xs w-full focus:outline-none focus:border-blue-500 transition-colors cursor-pointer ${d.fieldClass}`}
                         >
                             <option value="" className="bg-gray-900">—</option>
-                            {users.map(u => {
-                                const label = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email;
+                            {users.length > 0 && users.map(u => {
+                                const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email;
+                                const label = u.company ? `${u.company} — ${name}` : name;
                                 return <option key={u.id} value={label} className="bg-gray-900">{label}</option>;
+                            })}
+                            {projectContacts.length > 0 && users.length > 0 && <option disabled className="bg-gray-900">──────────</option>}
+                            {projectContacts.length > 0 && projectContacts.map(c => {
+                                const fullName = [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email;
+                                const label = c.company ? `${c.company} - ${fullName}` : fullName;
+                                const alreadyInUsers = users.some(u => ([u.firstName, u.lastName].filter(Boolean).join(' ') || u.email) === fullName);
+                                if (alreadyInUsers) return null;
+                                return <option key={c.id} value={label} className="bg-gray-900">{label}</option>;
                             })}
                         </select>
                     ) : (

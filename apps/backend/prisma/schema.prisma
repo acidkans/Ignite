@@ -14,6 +14,8 @@ model User {
   password          String
   firstName         String?
   lastName          String?
+  phone             String?
+  company           String?
   isActive          Boolean            @default(true)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
@@ -250,9 +252,10 @@ model OrderRequirements {
   wbsTree                   String?
   budgetNotes               String?
   clientContacts            String?
-  clientProjectManager      String?
-  clientProjectManagerEmail String?
-  clientProjectManagerPhone String?
+  clientProjectManager        String?
+  clientProjectManagerCompany String?
+  clientProjectManagerEmail   String?
+  clientProjectManagerPhone   String?
   offerStatus               String?
   offerStatusComment        String?
   node                      ProcessNode     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
@@ -700,6 +703,8 @@ model WbsNode {
   totalPrice Float   @default(0)
   comment    String?
   phase      String? // PRZED | INSTAL | PO
+  ganttStart DateTime? // data startowa paska na Gantcie (persystowana)
+  ganttEnd   DateTime? // data końcowa paska na Gantcie (persystowana)
 
   parent              WbsNode?          @relation("WbsTree", fields: [parentId], references: [id], onDelete: Cascade)
   children            WbsNode[]         @relation("WbsTree")

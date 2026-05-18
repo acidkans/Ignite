@@ -4,6 +4,7 @@ services:
     image: postgres:15-alpine
     container_name: erp-db
     restart: always
+    mem_limit: 512m
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
@@ -26,11 +27,12 @@ services:
 
   # Backend (Node.js/Express)
   backend:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile.dev
     container_name: erp-backend
     restart: always
+    mem_limit: 512m
     env_file:
       - ./backend/.env
     environment:
@@ -70,6 +72,7 @@ services:
       dockerfile: Dockerfile
     container_name: erp-frontend
     restart: always
+    mem_limit: 256m
     expose:
       - "80"
     depends_on:
@@ -91,6 +94,7 @@ services:
     image: qdrant/qdrant:latest
     container_name: erp-vector-db
     restart: always
+    mem_limit: 512m
     environment:
       - QDRANT__SERVICE__API_KEY=erp_vector_secret_2024
     ports:
@@ -117,6 +121,7 @@ services:
       dockerfile: Dockerfile
     container_name: erp-parser-service
     restart: always
+    mem_limit: 256m
     ports:
       - "8000:8000"
     networks:
