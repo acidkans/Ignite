@@ -2974,8 +2974,7 @@ ${ganttSectionHtml}
                     const subjectName = subject.name;
                     const lookupKey = makeMaterialLookupKey(subjectName, item.name);
                     const inheritedQuantity = parseFloat(materialMetaByLookupKey[lookupKey]?.quantity) || 0;
-                    const inheritedCost = parseFloat(materialMetaByLookupKey[lookupKey]?.cost)
-                        || parseFloat(materialCostsByNode[item.id])
+                    const inheritedCost = parseFloat(materialCostsByNode[item.id])
                         || parseFloat(item.materialsTotalCost)
                         || 0;
                     const persistedQuantity = parseFloat(item.quantity) || 1;
