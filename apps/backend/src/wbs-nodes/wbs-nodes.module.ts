@@ -3,6 +3,7 @@ import { WbsNodesService } from './wbs-nodes.service';
 import { WbsNodesController } from './wbs-nodes.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 
+// @anchor wbs-nodes-module
 @Module({
     imports: [PrismaModule],
     controllers: [WbsNodesController],

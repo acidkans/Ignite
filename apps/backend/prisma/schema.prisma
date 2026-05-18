@@ -674,53 +674,90 @@ model ProductProposal {
   @@map("product_proposals")
 }
 
+/// @anchor wbs-node
 model WbsNode {
+  /// @anchor wbs-node-id
   id        String   @id @default(uuid())
+  /// @anchor wbs-node-parent-id
   parentId  String?
+  /// @anchor wbs-node-node-id
   nodeId    String // ProcessNode — projekt/zlecenie
+  /// @anchor wbs-node-version-id
   versionId String?
+  /// @anchor wbs-node-name
   name      String
+  /// @anchor wbs-node-type
   type      String   @default("") // work | material | equipment | service | ""
+  /// @anchor wbs-node-status
   status    String   @default("")
+  /// @anchor wbs-node-owner
   owner     String   @default("")
+  /// @anchor wbs-node-resources
   resources String   @default("")
+  /// @anchor wbs-node-cost
   cost      String   @default("")
+  /// @anchor wbs-node-tags
   tags      String? // JSON array
+  /// @anchor wbs-node-qa
   qa        String? // JSON array: [{ question, answer }]
+  /// @anchor wbs-node-sort-order
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Pola budżetowe (WORK / EXTERNAL_SERVICE)
+  /// @anchor wbs-node-budget-type
   budgetType String? // WORK | MATERIAL | EXTERNAL_SERVICE
+  /// @anchor wbs-node-unit
   unit       String  @default("szt")
+  /// @anchor wbs-node-unit-cost
   unitCost   Float   @default(0)
+  /// @anchor wbs-node-quantity
   quantity   Float   @default(1)
+  /// @anchor wbs-node-total-cost
   totalCost  Float   @default(0)
+  /// @anchor wbs-node-margin
   margin     Float   @default(0)
+  /// @anchor wbs-node-discount
   discount   Float   @default(0)
+  /// @anchor wbs-node-unit-price
   unitPrice  Float   @default(0)
+  /// @anchor wbs-node-total-price
   totalPrice Float   @default(0)
+  /// @anchor wbs-node-comment
   comment    String?
+  /// @anchor wbs-node-phase
   phase      String? // PRZED | INSTAL | PO
+  /// @anchor wbs-node-gantt-start
   ganttStart DateTime? // data startowa paska na Gantcie (persystowana)
+  /// @anchor wbs-node-gantt-end
   ganttEnd   DateTime? // data końcowa paska na Gantcie (persystowana)
 
+  /// @anchor wbs-node-parent
   parent              WbsNode?          @relation("WbsTree", fields: [parentId], references: [id], onDelete: Cascade)
+  /// @anchor wbs-node-children
   children            WbsNode[]         @relation("WbsTree")
+  /// @anchor wbs-node-node
   node                ProcessNode       @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  /// @anchor wbs-node-version
   version             ProjectVersion?   @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  /// @anchor wbs-node-material-allocations
   materialAllocations WbsNodeMaterial[]
+  /// @anchor wbs-node-material-card
   materialCard        MaterialRequirement? @relation("WbsNodeMaterialCard")
 
   @@index([nodeId, versionId])
   @@map("wbs_nodes")
 }
 
+/// @anchor wbs-node-material
 model WbsNodeMaterial {
   id         String @id @default(uuid())
+  /// @anchor wbs-node-material-wbs-node-id
   wbsNodeId  String
+  /// @anchor wbs-node-material-material-id
   materialId String
+  /// @anchor wbs-node-material-quantity
   quantity   Float  @default(1)
 
   wbsNode  WbsNode             @relation(fields: [wbsNodeId], references: [id], onDelete: Cascade)

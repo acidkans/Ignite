@@ -1,11 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+// @anchor qa-pair
 export interface QaPair {
     question: string;
     answer: string;
 }
 
+// @anchor wbs-tree-item
 export interface WbsTreeItem {
     id: string;
     name: string;
@@ -21,6 +23,7 @@ export interface WbsTreeItem {
     children: WbsTreeItem[];
 }
 
+// @anchor wbs-nodes-service
 @Injectable()
 export class WbsNodesService {
     constructor(private prisma: PrismaService) {}

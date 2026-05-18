@@ -7,6 +7,7 @@ import SubtaskModal from '../SubtaskModal';
 
 const CATEGORIES = TASK_CATEGORIES;
 
+// @anchor tasks-calendar-section
 export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWbsUpdate }) {
     const [subtasks, setSubtasks] = useState([]);
     const [logistykUsers, setLogistykUsers] = useState([]);

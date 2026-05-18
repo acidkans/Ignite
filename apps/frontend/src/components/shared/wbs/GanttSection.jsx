@@ -355,6 +355,7 @@ const VIEW_OPTS = [
     { v: ViewMode.Month, label: 'Miesiąc' },
 ];
 
+// @anchor gantt-section
 export default function GanttSection({ wbsTree, projectName, onNodeDurationChange, onGanttDateChange, onExportReady, onGetHtmlReady, projectStartDate, projectEndDate }) {
     const items = wbsTree?.items || [];
     const [viewMode, setViewMode] = useState(ViewMode.Day);

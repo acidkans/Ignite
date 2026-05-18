@@ -448,6 +448,7 @@ function ProposalsSection({ req, token, onRefresh, materialDb }) {
 
 // ─── ProductCard ──────────────────────────────────────────────────────────────
 
+// @anchor product-card
 export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, onPropagatePrice, readOnly }) {
     const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
 
@@ -1051,6 +1052,7 @@ const COL_DEFS = [
     { key: 'status',   label: 'Status oferty',          defaultW: 148 },
 ];
 
+// @anchor wbs-materials-panel
 export default function WbsMaterialsPanel({
     nodeId,
     versionId,
