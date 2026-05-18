@@ -85,7 +85,14 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         } catch {}
         return DEFAULT_SECTION_ORDER;
     });
-    const [expandedIds, setExpandedIds] = useState(new Set());
+    const wbsExpandedKey = `wbs_expanded_${nodeId}`;
+    const [expandedIds, setExpandedIds] = useState(() => {
+        try {
+            const saved = sessionStorage.getItem(wbsExpandedKey);
+            if (saved) return new Set(JSON.parse(saved));
+        } catch {}
+        return new Set();
+    });
     const [selectedId, setSelectedId] = useState(null);
     const [wbsDescription, setWbsDescription] = useState('');
     const [strategySaving, setStrategySaving] = useState(false);
@@ -96,6 +103,12 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     useEffect(() => {
         localStorage.setItem('unifiedWbsSectionOrder', JSON.stringify(sectionOrder));
     }, [sectionOrder]);
+
+    useEffect(() => {
+        try {
+            sessionStorage.setItem(wbsExpandedKey, JSON.stringify([...expandedIds]));
+        } catch {}
+    }, [expandedIds, wbsExpandedKey]);
 
     const PRESETS_KEY = 'ignite_offer_presets';
     const defaultPresets = [
@@ -126,6 +139,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const offerDateLoadedRef = useRef(false);
     const [projectUsers, setProjectUsers] = useState([]);
     const [nodeTeamIds, setNodeTeamIds] = useState([]);
+    const [nodeContactUsers, setNodeContactUsers] = useState([]);
     const [logistykUsers, setLogistykUsers] = useState([]);
     const [materialCostsByNode, setMaterialCostsByNode] = useState({});
     const [materialMetaByLookupKey, setMaterialMetaByLookupKey] = useState({});
@@ -684,13 +698,20 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                         .map((p) => p.teamId)
                 ));
                 setNodeTeamIds(teamIds);
+                // direct user-level permissions (contacts added via NodeInfoTab)
+                const contactUsers = (permissionsData?.permissions || [])
+                    .filter(p => p.user && !p.teamId)
+                    .map(p => p.user);
+                setNodeContactUsers(contactUsers);
             } else {
                 setNodeTeamIds([]);
+                setNodeContactUsers([]);
             }
         } catch {
             setProjectUsers([]);
             setLogistykUsers([]);
             setNodeTeamIds([]);
+            setNodeContactUsers([]);
         }
     }, [nodeId, userRoles]);
 
@@ -850,10 +871,16 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     }, [nodeId, versionId, authHeaders, onWbsUpdate, fetchData]);
 
     const assignedUsers = useMemo(() => {
-        if (!Array.isArray(projectUsers) || !projectUsers.length) return [];
-        if (!Array.isArray(nodeTeamIds) || !nodeTeamIds.length) return projectUsers;
-        return projectUsers.filter(u => Array.isArray(u?.teams) && u.teams.some(t => nodeTeamIds.includes(t.id)));
-    }, [projectUsers, nodeTeamIds]);
+        const teamMembers = (() => {
+            if (!Array.isArray(projectUsers) || !projectUsers.length) return [];
+            if (!Array.isArray(nodeTeamIds) || !nodeTeamIds.length) return projectUsers;
+            return projectUsers.filter(u => Array.isArray(u?.teams) && u.teams.some(t => nodeTeamIds.includes(t.id)));
+        })();
+        // merge team members + direct contact users (deduplicate by id)
+        const seen = new Set(teamMembers.map(u => u.id));
+        const extras = (nodeContactUsers || []).filter(u => !seen.has(u.id));
+        return [...teamMembers, ...extras];
+    }, [projectUsers, nodeTeamIds, nodeContactUsers]);
 
     const refreshUnified = useCallback(async (listId = null) => {
         await fetchData(listId);

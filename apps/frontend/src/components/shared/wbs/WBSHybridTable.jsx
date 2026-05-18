@@ -1174,7 +1174,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         >
                             <option value="" className="bg-gray-900">—</option>
                             {users.length > 0 && users.map(u => {
-                                const label = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email;
+                                const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email;
+                                const label = u.company ? `${u.company} — ${name}` : name;
                                 return <option key={u.id} value={label} className="bg-gray-900">{label}</option>;
                             })}
                             {projectContacts.length > 0 && users.length > 0 && <option disabled className="bg-gray-900">──────────</option>}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Save, Clock, Calendar, Target, Package, AlertTriangle, CheckCircle2, Plus, Trash2, GripVertical, Wrench, ClipboardList, ShieldCheck, User, Users, Mail, Phone, PhoneCall, FileDown } from 'lucide-react';
+import { Save, Clock, Calendar, Target, Package, AlertTriangle, CheckCircle2, Plus, Trash2, GripVertical, Wrench, ClipboardList, ShieldCheck, User, Users, Mail, Phone, PhoneCall, FileDown, UserPlus } from 'lucide-react';
 import { API_URL } from '../../config';
 import { exportProjectPdf } from '../../utils/projectPdfExport';
 import { exportRequirementsPdf } from '../../utils/requirementsPdfExport';
@@ -371,6 +371,28 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
         setContactSuggest(prev => { const n = { ...prev }; delete n[id]; return n; });
     };
 
+    const [teamSaving, setTeamSaving] = useState({});
+    const addToTeam = async (email, fullName, company, phone) => {
+        if (!email && !fullName) return;
+        const key = email || fullName;
+        setTeamSaving(p => ({ ...p, [key]: 'saving' }));
+        const parts = (fullName || '').trim().split(/\s+/);
+        const firstName = parts[0] || '';
+        const lastName = parts.slice(1).join(' ') || '';
+        try {
+            const token = sessionStorage.getItem('token');
+            await fetch(`${API_URL}/process-tree/${nodeId}/contacts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ email, firstName, lastName, phone: phone || null, company: company || null }),
+            });
+            setTeamSaving(p => ({ ...p, [key]: 'done' }));
+            setTimeout(() => setTeamSaving(p => { const n = { ...p }; delete n[key]; return n; }), 2500);
+        } catch {
+            setTeamSaving(p => ({ ...p, [key]: 'error' }));
+        }
+    };
+
     const handleContactNameChange = (contactId, value) => {
         updateContact(contactId, 'name', value);
         if (value.length < 2) {
@@ -660,6 +682,14 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                                             </div>
                                         </div>
                                     </div>
+                                    {(() => { const k = form.clientProjectManagerEmail || form.pmName; const st = teamSaving[k]; return (
+                                        <button onClick={() => addToTeam(form.clientProjectManagerEmail, form.pmName, form.pmCompany, form.clientProjectManagerPhone)}
+                                            disabled={st === 'saving' || (!form.clientProjectManagerEmail && !form.pmName)}
+                                            className="mt-2 self-start flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all disabled:opacity-40 border border-green-500/30 text-green-300 hover:bg-green-500/10 bg-green-500/5">
+                                            {st === 'saving' ? <div className="w-3 h-3 border-2 border-green-400/30 border-t-green-400 rounded-full animate-spin"/> : st === 'done' ? <CheckCircle2 size={13}/> : <UserPlus size={13}/>}
+                                            {st === 'done' ? 'Dodano do zespołu' : 'Zapisz do zespołu'}
+                                        </button>
+                                    ); })()}
                                 </div>
 
                                 <div className="flex-1 flex flex-col min-h-0">
@@ -747,6 +777,14 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                                                             </div>
                                                         </div>
                                                     </div>
+                                                    {(() => { const k = contact.email || contact.name; const st = teamSaving[k]; return (
+                                                        <button onClick={() => addToTeam(contact.email, contact.name, contact.company, contact.phone)}
+                                                            disabled={st === 'saving' || (!contact.email && !contact.name)}
+                                                            className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all disabled:opacity-40 border border-green-500/30 text-green-300 hover:bg-green-500/10 bg-green-500/5">
+                                                            {st === 'saving' ? <div className="w-3 h-3 border-2 border-green-400/30 border-t-green-400 rounded-full animate-spin"/> : st === 'done' ? <CheckCircle2 size={13}/> : <UserPlus size={13}/>}
+                                                            {st === 'done' ? 'Dodano do zespołu' : 'Zapisz do zespołu'}
+                                                        </button>
+                                                    ); })()}
                                                 </div>
                                             ))
                                         )}
