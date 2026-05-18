@@ -38,6 +38,7 @@ export const darkTheme = {
 
 // Type labels
 export const TYPE_LABELS = {
+  group: 'Grupujący',
   work: 'Praca',
   material: 'Materiał',
   equipment: 'Sprzęt',
@@ -47,7 +48,7 @@ export const TYPE_LABELS = {
   product: 'Produkt',
 };
 
-export const TYPE_OPTIONS = ['', 'work', 'material', 'equipment', 'service', 'lodging', 'fuel'];
+export const TYPE_OPTIONS = ['', 'group', 'work', 'material', 'equipment', 'service', 'lodging', 'fuel'];
 
 export const BUDGET_TYPE_LABELS = {
   WORK: 'Praca',
