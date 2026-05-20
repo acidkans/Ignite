@@ -29,8 +29,8 @@ export const PDF_BASE_CSS = `
   .strategy-text ul, .strategy-text ol, .offer-text ul, .offer-text ol { margin: 4px 0 8px 1.5em; padding-left: 1em; }
   .strategy-text li, .offer-text li { margin: 2px 0; }
   table { border-collapse: collapse; width: 100%; }
-  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; text-align: center; font-weight: normal; }
-  td.num { text-align: center; font-family: monospace; font-size: 10px; }
+  td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; text-align: left; font-weight: normal; }
+  td.num { text-align: right; font-family: monospace; font-size: 10px; }
   table.mat-table { table-layout: fixed; width: 100%; font-size: 10px; }
   table.mat-table th { text-align: left; font-size: 9px; padding: 4px 6px; }
   td.mat-lp, th.mat-lp { text-align: center; color: #6b7280; font-size: 9px; padding: 4px 4px; }

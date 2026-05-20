@@ -151,7 +151,7 @@ $coverage
 - [[Ignite $emDash architektura]]
 - [[Ignite $emDash API]]
 - [[struktura zmiennych oferty]]
-- [[logikaWBS]]
+- [[wytyczne $emDash WBS]]
 "@
 
     # === Zloz calosc ===

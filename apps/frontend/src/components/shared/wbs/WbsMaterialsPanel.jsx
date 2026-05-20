@@ -141,6 +141,7 @@ function ProposalRow({ p, token, onDelete, onSelect, onDeleted: onImageDeleted, 
     const [inlineAc, setInlineAc] = useState({});
     const inputRefs = useRef({});
     const suppressAcRef = useRef(false);
+    const suppressNextBlurRef = useRef(false);
 
     useEffect(() => {
         setVals({
@@ -229,6 +230,7 @@ function ProposalRow({ p, token, onDelete, onSelect, onDeleted: onImageDeleted, 
                         value={ac && inlineAc[key] ? inlineAc[key] : vals[key]}
                         onChange={e => ac ? handleChange(key, e.target.value) : setVals(v => ({ ...v, [key]: e.target.value }))}
                         onBlur={e => {
+                            if (suppressNextBlurRef.current) { suppressNextBlurRef.current = false; return; }
                             if (ac) { const v = acceptField(key); save(key, v); }
                             else save(key, e.target.value);
                         }}
@@ -236,13 +238,15 @@ function ProposalRow({ p, token, onDelete, onSelect, onDeleted: onImageDeleted, 
                             if (e.key === 'Tab') {
                                 e.preventDefault();
                                 const v = ac ? acceptField(key) : vals[key];
+                                suppressNextBlurRef.current = true;
                                 save(key, v);
                                 focusNext(key);
                             } else if (e.key === 'Enter') {
                                 e.preventDefault();
                                 const v = ac ? acceptField(key) : vals[key];
+                                suppressNextBlurRef.current = true;
                                 save(key, v);
-                                if (!focusNext(key)) e.target.blur();
+                                if (!focusNext(key)) { suppressNextBlurRef.current = false; e.target.blur(); }
                             } else if ((e.key === 'Escape' || e.key === 'Backspace') && inlineAc[key]) {
                                 suppressAcRef.current = true;
                                 setInlineAc(a => ({ ...a, [key]: null }));
@@ -449,7 +453,7 @@ function ProposalsSection({ req, token, onRefresh, materialDb }) {
 // ─── ProductCard ──────────────────────────────────────────────────────────────
 
 // @anchor product-card
-export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, onPropagatePrice, readOnly }) {
+export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, onPropagatePrice, readOnly, onPatch }) {
     const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
 
     const [fields, setFields] = useState({
@@ -464,6 +468,8 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     const [comboOpen, setComboOpen] = useState(null);
     const [localImageUrl, setLocalImageUrl] = useState(null);
     const [imageKey, setImageKey] = useState(0);
+    // @anchor product-card-combo-refs
+    const comboRefs = useRef({});
     const [fetchedImageUrl, setFetchedImageUrl] = useState(null);
     const [showCatalogModal, setShowCatalogModal] = useState(false);
     const [catalogImageUrl, setCatalogImageUrl] = useState(null);
@@ -609,11 +615,13 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
 
     const patchCard = useCallback(async (data) => {
         if (!card?.id) return;
+        // Optimistic update — natychmiast, żeby zwinięcie/rozwinięcie nie gubiło wartości
+        onPatch?.(card.id, data);
         await fetch(`${API_URL}/material-requirements/${card.id}`, {
             method: 'PATCH', headers, body: JSON.stringify(data),
         });
         onRefresh();
-    }, [card?.id, headers, onRefresh]);
+    }, [card?.id, headers, onRefresh, onPatch]);
 
     // Cross-filtering comboboxes
     const ciEq = (a, b) => (a || '').toLowerCase() === (b || '').toLowerCase();
@@ -669,6 +677,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                             <div key={key} className="relative flex-1 min-w-[120px]">
                                 <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">{label}</label>
                                 <input
+                                    ref={el => { comboRefs.current[key] = el; }}
                                     value={fields[key]}
                                     onChange={e => setF(key, key === 'manufacturer' ? e.target.value.toUpperCase() : e.target.value)}
                                     onFocus={() => setComboOpen(key)}
@@ -682,6 +691,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                     }}
                                     onKeyDown={e => {
                                         if (e.key === 'Enter') {
+                                            e.preventDefault();
                                             setComboOpen(null);
                                             const updates = { [key]: fields[key] };
                                             if (key === 'manufacturer' && !fields[key]) {
@@ -692,6 +702,10 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                                 setF('productName', '');
                                             }
                                             patchCard(updates);
+                                            const comboKeys = comboFields.map(([k]) => k);
+                                            const nextKey = comboKeys[comboKeys.indexOf(key) + 1];
+                                            if (nextKey) comboRefs.current[nextKey]?.focus();
+                                            else comboRefs.current['priceNetto']?.focus();
                                         }
                                     }}
                                     disabled={readOnly}
@@ -713,11 +727,10 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                     })}
                     <div className="flex-1 min-w-[90px]">
                         <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Cena netto</label>
-                        <input value={fields.priceNetto} onChange={e => setF('priceNetto', e.target.value)}
+                        <input
+                            ref={el => { comboRefs.current['priceNetto'] = el; }}
+                            value={fields.priceNetto} onChange={e => setF('priceNetto', e.target.value)}
                             onBlur={() => {
-                                // Pusty input = wyczyszczenie ceny (null), inaczej parseFloat
-                                // (wcześniej NaN powodował pominięcie PATCH-a → cena "wracała").
-                                // onPropagatePrice realizuje wariant A (ten sam materiał = jedna cena).
                                 const raw = String(fields.priceNetto ?? '').trim().replace(',', '.');
                                 let next;
                                 if (raw === '') next = null;
@@ -725,14 +738,24 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                 if (onPropagatePrice) onPropagatePrice(card, wbsNode, next);
                                 else patchCard({ priceNetto: next });
                             }}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    e.target.blur();
+                                    comboRefs.current['availability']?.focus();
+                                }
+                            }}
                             disabled={readOnly}
                             className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
                             placeholder="0.00" />
                     </div>
                     <div className="flex-1 min-w-[90px]">
                         <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Dostępność</label>
-                        <input value={fields.availability} onChange={e => setF('availability', e.target.value)}
+                        <input
+                            ref={el => { comboRefs.current['availability'] = el; }}
+                            value={fields.availability} onChange={e => setF('availability', e.target.value)}
                             onBlur={() => patchCard({ availability: fields.availability })}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); comboRefs.current['productUrl']?.focus(); } }}
                             disabled={readOnly}
                             className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
                             placeholder="np. 7 dni" />
@@ -741,9 +764,11 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                         <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Adres www</label>
                         <div className="flex items-center gap-1">
                             <input
+                                ref={el => { comboRefs.current['productUrl'] = el; }}
                                 value={fields.productUrl}
                                 onChange={e => setF('productUrl', e.target.value)}
                                 onBlur={() => patchCard({ productUrl: fields.productUrl })}
+                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
                                 disabled={readOnly}
                                 placeholder="https://..."
                                 className="flex-1 min-w-0 bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
@@ -1234,6 +1259,24 @@ export default function WbsMaterialsPanel({
         fetchOffers();
     }, [fetchCards, fetchMaterialDb, fetchOffers, refreshKey]);
 
+    // @anchor wbs-materials-panel-global-update-listener
+    useEffect(() => {
+        const handler = ({ detail: { id, updates } }) => {
+            setMaterialDb(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
+            setCards(prev => {
+                let changed = false;
+                const next = {};
+                for (const [k, v] of Object.entries(prev)) {
+                    if (v?.id === id) { next[k] = { ...v, ...updates }; changed = true; }
+                    else next[k] = v;
+                }
+                return changed ? next : prev;
+            });
+        };
+        window.addEventListener('material-req-updated', handler);
+        return () => window.removeEventListener('material-req-updated', handler);
+    }, []);
+
     const prevExternalRef = useRef(null);
     useEffect(() => {
         if (!externalWbsNodes) return;
@@ -1326,6 +1369,13 @@ export default function WbsMaterialsPanel({
         const nodeNameById = new Map((flatNodes || []).map(n => [n.id, String(n.name || '').trim().toLowerCase()]));
         const targetName = String(sourceWbsNode?.name || sourceCard.name || '').trim().toLowerCase();
         if (!targetName) {
+            // Optimistic update
+            setCards(prev => {
+                const entry = Object.entries(prev).find(([, c]) => c.id === sourceCard.id);
+                if (!entry) return prev;
+                const [nid, c] = entry;
+                return { ...prev, [nid]: { ...c, priceNetto } };
+            });
             await fetch(`${API_URL}/material-requirements/${sourceCard.id}`, {
                 method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ priceNetto }),
             });
@@ -1336,6 +1386,14 @@ export default function WbsMaterialsPanel({
             .filter(([wbsNodeId, c]) => c?.id && nodeNameById.get(wbsNodeId) === targetName)
             .map(([, c]) => c.id);
         const ids = Array.from(new Set(matchingIds.length > 0 ? matchingIds : [sourceCard.id]));
+        // Optimistic update for all affected cards
+        setCards(prev => {
+            const updated = { ...prev };
+            for (const [nid, c] of Object.entries(updated)) {
+                if (c?.id && ids.includes(c.id)) updated[nid] = { ...c, priceNetto };
+            }
+            return updated;
+        });
         await Promise.all(ids.map(id => fetch(`${API_URL}/material-requirements/${id}`, {
             method: 'PATCH',
             headers: authHeaders(),
@@ -1747,6 +1805,12 @@ export default function WbsMaterialsPanel({
                                                     onRefresh={refreshCards}
                                                     onPropagatePrice={propagatePriceNetto}
                                                     readOnly={readOnly}
+                                                    onPatch={(cardId, data) => setCards(prev => {
+                                                        const entry = Object.entries(prev).find(([, c]) => c.id === cardId);
+                                                        if (!entry) return prev;
+                                                        const [nid, c] = entry;
+                                                        return { ...prev, [nid]: { ...c, ...data } };
+                                                    })}
                                                 />
                                             </td>
                                         </tr>

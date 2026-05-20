@@ -329,7 +329,16 @@
       "Bash(findstr \":5173 :5174 :3001\")",
       "Bash(findstr \":5174\")",
       "Bash(Get-Content \"C:\\\\Users\\\\Andrzej\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Andrzej--gemini-antigravity-scratch-Ignite\\\\dddb7386-3ef5-4477-9e12-2e3add074ff1\\\\tasks\\\\bu614xhvs.output\" -Wait)",
-      "Bash(Select-String \"Local|Error|error\")"
+      "Bash(Select-String \"Local|Error|error\")",
+      "PowerShell(Stop-Process -Id 24676 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Id 27944 -Force -ErrorAction SilentlyContinue)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173)",
+      "Bash(curl -s -o /dev/null -w \"\\\\n%{http_code}\" http://localhost:3001)",
+      "PowerShell($pids = \\(netstat -ano | Select-String \":5173 \" | Select-String \"LISTENING\" | ForEach-Object { \\($_ -split \"\\\\s+\"\\)[-1] } | Sort-Object -Unique\\); foreach \\($p in $pids\\) { Stop-Process -Id $p -Force -ErrorAction SilentlyContinue; Write-Host \"Killed $p\" })",
+      "PowerShell(Get-Content \"$env:APPDATA\\\\Docker\\\\log\\\\host\\\\docker-desktop.log\" -Tail 30 -ErrorAction SilentlyContinue)",
+      "Bash(findstr \":5174 \")",
+      "Bash(findstr LISTENING)",
+      "Bash(dir \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\\\\apps\\\\backend\\\\src\")"
     ]
   }
 }

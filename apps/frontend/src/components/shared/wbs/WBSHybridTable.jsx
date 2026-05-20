@@ -207,7 +207,16 @@ function MaterialReqExpandPanel({ node, req, processNodeId, onSaved, onDeleteNod
                     token={token}
                     materialDb={materialDb}
                     offers={offers}
-                    onRefresh={updated => { setCard(updated); onSaved?.(updated); }}
+                    onRefresh={async () => {
+                        const res = await fetch(`${API_URL}/material-requirements/${card.id}`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                        });
+                        if (res.ok) {
+                            const updated = await res.json();
+                            setCard(updated);
+                            onSaved?.(updated);
+                        }
+                    }}
                     onPropagatePrice={() => {}}
                     readOnly={false}
                 />
@@ -683,7 +692,7 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal, on
 
 // ── Component ─────────────────────────────────────────────────────────────────
 // @anchor wbs-hybrid-table
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null }) {
     const getAllIds = useCallback((items) => {
         const ids = ['root'];
         const walk = (nodes) => nodes?.forEach(n => { ids.push(`node_${n.id}`); walk(n.children); });
@@ -721,7 +730,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [selectedNodeId, setSelectedNodeId] = useState(null);
     const [showBasket, setShowBasket] = useState(false);
     const [copyBuffer, setCopyBuffer] = useState(null); // { node, sourceName }
-    const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, status: 128, wlasciciel: 128, komentarz: 200, qa: 260, zalaczniki: 44 });
+    const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, status: 128, wlasciciel: 128, komentarz: 200, qa: 260, zalaczniki: 44 });
     const resizeDrag = useRef(null);
 
     const startColResize = (col, e) => {
@@ -791,7 +800,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
     const toggle = (id, e) => {
         e?.stopPropagation();
-        setExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+        setExpanded(prev => {
+            const s = new Set(prev);
+            const wasOpen = s.has(id);
+            wasOpen ? s.delete(id) : s.add(id);
+            if (!wasOpen) onNodeExpand?.(id);
+            return s;
+        });
     };
     const open = id => setExpanded(prev => new Set([...prev, id]));
     const isOpen = id => expanded.has(id);
@@ -1146,6 +1161,27 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     )}
                 </td>
 
+                {/* Cena netto (tylko manager) */}
+                {/* @anchor wbs-unit-price-input */}
+                {isManager && (
+                    <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                        {depth >= 1 && (
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={node.unitCost ?? ''}
+                                onChange={e => handleField(node.id, 'unitCost', e.target.value)}
+                                onFocus={e => e.target.select()}
+                                onBlur={e => { onNodeFieldSave?.(node.id, 'unitCost', parseFloat(e.target.value) || 0); onSave?.(); }}
+                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onNodeFieldSave?.(node.id, 'unitCost', parseFloat(e.target.value) || 0); onSave?.(); e.target.blur(); } }}
+                                placeholder="0.00"
+                                className={`bg-transparent border-none focus:outline-none text-xs w-full text-right placeholder-gray-700 ${d.fieldClass}`}
+                            />
+                        )}
+                    </td>
+                )}
+
                 {/* Status */}
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                     {(() => {
@@ -1424,6 +1460,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         <col style={{ width: colWidths.typ }} />
                         <col style={{ width: colWidths.ilosc }} />
                         <col style={{ width: colWidths.jednostka }} />
+                        {isManager && <col style={{ width: colWidths.cena_netto }} />}
                         <col style={{ width: colWidths.status }} />
                         <col style={{ width: colWidths.wlasciciel }} />
                         <col style={{ width: colWidths.komentarz }} />
@@ -1434,7 +1471,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
                         <tr className="border-b border-white/10">
                             <th className="px-1 py-2.5 text-base font-bold uppercase tracking-widest text-white" />
-                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jednostka','text-left'],['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['qa','Q&A','text-left'],['zalaczniki','Attach.','text-left']].map(([key, label, align]) => (
+                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jednostka','text-left'],...(isManager ? [['cena_netto','Cena netto','text-right']] : []),['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['qa','Q&A','text-left'],['zalaczniki','Attach.','text-left']].map(([key, label, align]) => (
                                 <th key={key} className={`px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white ${align} relative select-none`}>
                                     {label}
                                     <div onMouseDown={e => startColResize(key, e)} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-500/40 transition-colors" />
