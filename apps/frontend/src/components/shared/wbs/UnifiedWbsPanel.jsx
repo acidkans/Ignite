@@ -174,6 +174,21 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         });
     }, []);
 
+    const patchNodeInTree = useCallback((tree, nodeId, patch) => {
+        if (!tree) return tree;
+        const walk = (items) => items?.map(item => {
+            if (item.id === nodeId) return { ...item, ...patch };
+            if (item.children?.length) return { ...item, children: walk(item.children) };
+            return item;
+        });
+        return { ...tree, items: walk(tree.items) };
+    }, []);
+
+    const handleWbsNodeCostPatched = useCallback((nodeId, fields) => {
+        setWbsData(prev => prev.map(n => n.id === nodeId ? { ...n, ...fields } : n));
+        setWbsTreeAndRef(prev => patchNodeInTree(prev, nodeId, fields));
+    }, [setWbsTreeAndRef, patchNodeInTree]);
+
     const materialRef = useRef();
     const strategyLoadedRef = useRef(false);
     const strategySaveTimeout = useRef(null);
@@ -805,17 +820,28 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             const updated = (data.items || []).map(n => ({ ...n, qa: qaMap[n.id] !== undefined ? qaMap[n.id] : (n.qa || []) }));
             setWbsData(updated);
             onWbsDataLoad?.(updated);
-            // Sync pól budżetowych ze świeżych danych do wbsTree (bez przebudowy struktury drzewa)
-            const budgetById = new Map(updated.map(n => [n.id, n]));
+            // Sync wszystkich edytowalnych pól ze świeżych danych do wbsTree (bez przebudowy struktury drzewa)
+            const freshById = new Map(updated.map(n => [n.id, n]));
             setWbsTreeAndRef(prev => {
-                const patch = n => ({
-                    ...n,
-                    unitCost: budgetById.get(n.id)?.unitCost ?? n.unitCost,
-                    unitPrice: budgetById.get(n.id)?.unitPrice ?? n.unitPrice,
-                    totalCost: budgetById.get(n.id)?.totalCost ?? n.totalCost,
-                    totalPrice: budgetById.get(n.id)?.totalPrice ?? n.totalPrice,
-                    children: n.children?.length ? n.children.map(patch) : n.children,
-                });
+                const patch = n => {
+                    const f = freshById.get(n.id);
+                    if (!f) return { ...n, children: n.children?.length ? n.children.map(patch) : n.children };
+                    return {
+                        ...n,
+                        name: f.name ?? n.name,
+                        type: f.type ?? n.type,
+                        status: f.status ?? n.status,
+                        quantity: f.quantity ?? n.quantity,
+                        unit: f.unit ?? n.unit,
+                        owner: f.owner ?? n.owner,
+                        comment: f.comment ?? n.comment,
+                        unitCost: f.unitCost ?? n.unitCost,
+                        unitPrice: f.unitPrice ?? n.unitPrice,
+                        totalCost: f.totalCost ?? n.totalCost,
+                        totalPrice: f.totalPrice ?? n.totalPrice,
+                        children: n.children?.length ? n.children.map(patch) : n.children,
+                    };
+                };
                 return { ...prev, items: (prev.items || []).map(patch) };
             });
         } catch (_) {}
@@ -825,6 +851,18 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const handleNodeExpand = useCallback(() => {
         if (expandRefreshTimeout.current) clearTimeout(expandRefreshTimeout.current);
         expandRefreshTimeout.current = setTimeout(() => { refreshWbsNodes(); }, 200);
+    }, [refreshWbsNodes]);
+
+    // Odświeżanie danych gdy okno odzyska fokus — synchronizacja między dwoma oknami przeglądarki
+    useEffect(() => {
+        const onFocus = () => { refreshWbsNodes(); };
+        const onVisibility = () => { if (!document.hidden) refreshWbsNodes(); };
+        window.addEventListener('focus', onFocus);
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => {
+            window.removeEventListener('focus', onFocus);
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
     }, [refreshWbsNodes]);
 
     // @anchor handle-save-hybrid-wbs
@@ -2123,6 +2161,155 @@ ${ganttSectionHtml}
             sheet.views = [{ state: 'frozen', ySplit: 1 }];
         }
 
+        // ── Sheet Materiały: pełny eksport szczegółów (logika z WbsMaterialsPanel.exportToExcel) ──
+        {
+            const materialsSheet = workbook.addWorksheet('Materiały');
+            const STATUS_LABELS_XLS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
+            const TYPE_LABELS_XLS = { material: 'Materiał', equipment: 'Sprzęt' };
+            const upperFirstSegment = (path) => {
+                if (!path) return '';
+                const idx = path.indexOf(' › ');
+                if (idx < 0) return path.toUpperCase();
+                return path.slice(0, idx).toUpperCase() + path.slice(idx);
+            };
+            const getParentPath = (nodePath) => {
+                const segs = nodePath ? nodePath.split(' › ') : [];
+                if (segs.length <= 1) return segs[0] || '—';
+                return segs.slice(0, -1).join(' / ');
+            };
+
+            // Mapa nodeId → material requirement: po wbsNodeId, po allokacjach, oraz po tagu req:
+            const reqByNodeId = {};
+            for (const req of allRequirements) {
+                if (req.wbsNodeId) reqByNodeId[req.wbsNodeId] = req;
+                try {
+                    const alloc = JSON.parse(req.wbsNodeAllocations || '{}');
+                    for (const nid of Object.keys(alloc)) {
+                        if (nid && !reqByNodeId[nid]) reqByNodeId[nid] = req;
+                    }
+                } catch {}
+            }
+            for (const node of wbsData) {
+                if (reqByNodeId[node.id]) continue;
+                const reqTag = (node.tags || []).find(t => typeof t === 'string' && t.startsWith('req:'));
+                if (!reqTag) continue;
+                const req = allRequirements.find(r => r.id === reqTag.slice(4));
+                if (req) reqByNodeId[node.id] = req;
+            }
+
+            const matNodes = wbsData.filter(n => n.type === 'material' || n.type === 'equipment');
+            matNodes.sort((a, b) => (a.path || '').localeCompare(b.path || '', 'pl', { numeric: true, sensitivity: 'base' }));
+
+            materialsSheet.columns = [
+                { header: 'Typ', key: 'type', width: 12 },
+                { header: 'Zakres', key: 'parent', width: 24 },
+                { header: 'Pełna ścieżka WBS', key: 'path', width: 40 },
+                { header: 'Sprzęt/Materiał', key: 'name', width: 28 },
+                { header: 'Ilość', key: 'qty', width: 8 },
+                { header: 'Jednostka', key: 'unit', width: 10 },
+                { header: 'Cena ofertowa / ilość', key: 'offerPerQty', width: 18 },
+                { header: 'Cena ofertowa łącznie', key: 'offerTotal', width: 20 },
+                { header: 'Wymagania techniczne', key: 'tech', width: 40 },
+                { header: 'Producent', key: 'manufacturer', width: 18 },
+                { header: 'Model', key: 'model', width: 18 },
+                { header: 'Nazwa handlowa', key: 'productName', width: 22 },
+                { header: 'Status', key: 'status', width: 14 },
+                { header: 'Dostępność', key: 'availability', width: 14 },
+                { header: 'www', key: 'www', width: 36 },
+                { header: 'screenshot', key: 'screenshot', width: 20 },
+            ];
+            const matHeader = materialsSheet.getRow(1);
+            matHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            matHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
+
+            // Pre-fetch screenshotów (auth) → base64 do osadzenia w xlsx.
+            // Obraz z wybranej propozycji, a gdy karta nie ma propozycji — z samej karty materiału.
+            const proposalImages = {};
+            const fetchImageDataUrl = async (url) => {
+                try {
+                    const imgRes = await fetch(url, { headers: { Authorization: `Bearer ${token()}` } });
+                    if (!imgRes.ok) return null;
+                    const blob = await imgRes.blob();
+                    if (!blob.size) return null;
+                    return await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = () => resolve(null);
+                        reader.readAsDataURL(blob);
+                    });
+                } catch { return null; }
+            };
+            await Promise.all(matNodes.map(async (node) => {
+                const card = reqByNodeId[node.id] || null;
+                if (!card) return;
+                const sp = (card.proposals || []).find(p => p.isSelected);
+                const url = sp?.id
+                    ? `${API_URL}/material-requirements/proposals/${sp.id}/image`
+                    : `${API_URL}/material-requirements/${card.id}/image`;
+                const dataUrl = await fetchImageDataUrl(url);
+                if (dataUrl) proposalImages[node.id] = dataUrl;
+            }));
+
+            const screenshotColIdx = materialsSheet.getColumn('screenshot').number - 1;
+            matNodes.forEach((node, i) => {
+                const card = reqByNodeId[node.id] || null;
+                const parent = getParentPath(node.path);
+                const selectedProposal = (card?.proposals || []).find(p => p.isSelected) || null;
+                // Cena ofertowa — wprost z pól WBS węzła (źródło prawdy, te same co tabela WBS):
+                // unitPrice = cena ofertowa jednostkowa, totalPrice = cena ofertowa całej linii
+                const offerPerQty = node.unitPrice != null ? Number(node.unitPrice) : null;
+                const offerTotal = node.totalPrice != null ? Number(node.totalPrice) : null;
+
+                const addedRow = materialsSheet.addRow({
+                    type: TYPE_LABELS_XLS[node.type] || node.type,
+                    parent,
+                    path: upperFirstSegment(node.path || ''),
+                    name: node.name || '',
+                    qty: Number(node.quantity ?? 1),
+                    unit: node.unit || 'szt',
+                    offerPerQty,
+                    offerTotal,
+                    tech: card?.technicalSpec || '',
+                    manufacturer: card?.manufacturer || '',
+                    model: card?.model || '',
+                    productName: card?.productName || '',
+                    status: STATUS_LABELS_XLS[card?.status] || (card ? (card.status || '') : ''),
+                    availability: card?.availability || '',
+                    www: selectedProposal?.sourceUrl || card?.productUrl || '',
+                });
+
+                // Dostępność > 60 → pogrubiona czerwona czcionka
+                const availNum = parseFloat(String(card?.availability ?? '').replace(',', '.'));
+                if (Number.isFinite(availNum) && availNum > 60) {
+                    addedRow.getCell('availability').font = { bold: true, color: { argb: 'FFFF0000' } };
+                }
+
+                const dataUrl = proposalImages[node.id];
+                if (dataUrl) {
+                    const mime = (dataUrl.match(/^data:image\/(\w+)/) || [])[1] || 'png';
+                    const ext = mime === 'jpg' ? 'jpeg' : mime;
+                    try {
+                        const imageId = workbook.addImage({ base64: dataUrl, extension: ext });
+                        const rowIdx = i + 1; // 0-based; wiersz 0 = nagłówek
+                        materialsSheet.addImage(imageId, {
+                            tl: { col: screenshotColIdx, row: rowIdx },
+                            ext: { width: 110, height: 80 },
+                        });
+                        materialsSheet.getRow(rowIdx + 1).height = 64;
+                    } catch {}
+                }
+            });
+
+            materialsSheet.getColumn('qty').numFmt = '#,##0.##';
+            materialsSheet.getColumn('offerPerQty').numFmt = numFmt;
+            materialsSheet.getColumn('offerTotal').numFmt = numFmt;
+            materialsSheet.views = [{ state: 'frozen', ySplit: 1 }];
+            materialsSheet.autoFilter = {
+                from: { row: 1, column: 1 },
+                to: { row: materialsSheet.rowCount, column: materialsSheet.columnCount },
+            };
+        }
+
         const buf = await workbook.xlsx.writeBuffer();
         const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
         const anchor = document.createElement('a');
@@ -2279,6 +2466,11 @@ ${ganttSectionHtml}
     }, [wbsData, authHeaders, refreshMaterialCosts]);
 
     const updateNodeField = useCallback(async (id, field, value) => {
+        // Anuluj pending refresh z handleNodeExpand — mógłby nadpisać nasz optimistic update starymi danymi z API
+        if (expandRefreshTimeout.current) {
+            clearTimeout(expandRefreshTimeout.current);
+            expandRefreshTimeout.current = null;
+        }
         try {
             if (field === 'unitCost') {
                 // Pole budżetowe — zapisujemy przez /budget, nie przez /wbs-nodes (tree)
@@ -2304,11 +2496,16 @@ ${ganttSectionHtml}
                     body: JSON.stringify({ unitCost: uc, quantity: qty, margin, discount }),
                 });
                 // Propagacja priceNetto → material-requirements dla typ=material/equipment
+                // UWAGA: refreshWbsNodes musi być PO tym PATCHu — inaczej fetchCards w WbsMaterialsPanel
+                // odczyta stare dane z DB (race condition)
                 const normalizedType = String(node?.type || '').toLowerCase();
                 if (normalizedType === 'material' || normalizedType === 'equipment') {
-                    const reqTag = (node?.tags || []).find(t => String(t).startsWith('req:'));
-                    if (reqTag) {
-                        await fetch(`${API_URL}/material-requirements/${reqTag.slice(4)}`, {
+                    // Szukaj wymagania przez wbsNodeId (pewniejsze niż req: tag)
+                    const reqByNodeId = allRequirements.find(r => r.wbsNodeId === id);
+                    const reqTagId = (node?.tags || []).find(t => String(t).startsWith('req:'))?.slice(4);
+                    const reqId = reqByNodeId?.id || reqTagId;
+                    if (reqId) {
+                        await fetch(`${API_URL}/material-requirements/${reqId}`, {
                             method: 'PATCH',
                             headers: authHeaders(),
                             body: JSON.stringify({ priceNetto: uc }),
@@ -2317,6 +2514,7 @@ ${ganttSectionHtml}
                     }
                     await refreshMaterialCosts();
                 }
+                await refreshWbsNodes();
             } else {
                 // Pola drzewa WBS — standardowy endpoint
                 setWbsData(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
@@ -2357,7 +2555,7 @@ ${ganttSectionHtml}
                 }
             }
         } catch (e) { console.error('Update node error:', e); }
-    }, [authHeaders, wbsData, refreshMaterialCosts]);
+    }, [authHeaders, wbsData, allRequirements, refreshMaterialCosts, refreshWbsNodes]);
 
     // Drag krawędzi belki w Gantcie → quantity (dni) przez wbs-nodes/{id} (PATCH).
     // Unit zmienia się na 'dni' tylko gdy node ma już dniową jednostkę lub pustą — pakiet/komplet itp. zostają bez zmian.
@@ -3537,9 +3735,10 @@ ${ganttSectionHtml}
                                 unassignedRequirements={isManagerOrAdmin ? unassignedRequirements : []}
                                 onRequirementAssign={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
                                 onNodeFieldSave={updateNodeField}
+                                onProductCardPriceChange={(nodeId, price) => updateNodeField(nodeId, 'unitCost', price)}
                                 materialRefreshKey={reqRefreshKey}
                                 searchQuery={normalizedSearchQuery}
-                                onMaterialReqUpdated={() => setReqRefreshKey(k => k + 1)}
+                                onMaterialReqUpdated={async () => { setReqRefreshKey(k => k + 1); await refreshWbsNodes(); }}
                                 onPasteCloned={handlePasteCloned}
                                 onNodeExpand={handleNodeExpand}
                             />
@@ -3595,7 +3794,8 @@ ${ganttSectionHtml}
                             readOnly={!isManagerOrAdmin && !isLogistyk}
                             externalWbsNodes={wbsData}
                             onPatchNode={(id, data) => setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))}
-                            onWbsUpdate={async () => { await refreshMaterialCosts(); }}
+                            onWbsNodeCostPatched={handleWbsNodeCostPatched}
+                            onWbsUpdate={async () => { setReqRefreshKey(k => k + 1); await refreshMaterialCosts(); await refreshWbsNodes(); }}
                             refreshKey={reqRefreshKey}
                             projectName={projectName}
                             orderName={orderName}
