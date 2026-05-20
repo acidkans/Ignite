@@ -2883,8 +2883,8 @@ ${ganttSectionHtml}
                 comment: row.comment ?? '',
             });
             // Sync WBS-visible fields to wbsTree (WBSHybridTable reads from wbsTree, not wbsData)
-            if (field === 'comment' || field === 'unit' || field === 'unitCost') {
-                const treeValue = field === 'unitCost' ? uc : row[field];
+            if (field === 'comment' || field === 'unit' || field === 'unitCost' || field === 'quantity') {
+                const treeValue = field === 'unitCost' ? uc : field === 'quantity' ? q : row[field];
                 setWbsTreeAndRef(prev => {
                     const upd = items => items.map(n =>
                         n.id === row.id
