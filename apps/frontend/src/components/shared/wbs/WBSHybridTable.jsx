@@ -1070,11 +1070,11 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     <AutoResizeTextarea
                         value={node.name || ''}
                         onChange={e => handleField(node.id, 'name', e.target.value)}
-                        onBlur={() => {
-                            onSave?.();
-                            if (node.name) onNodeFieldSave?.(node.id, 'name', node.name);
-                            if ((node.type === 'equipment' || node.type === 'material') && node.name) {
-                                onMaterialNodeCreated?.({ wbsNodeId: node.id, name: node.name, type: node.type, parentId });
+                        onBlur={e => {
+                            const v = e.target.value;
+                            onNodeFieldSave?.(node.id, 'name', v);
+                            if ((node.type === 'equipment' || node.type === 'material') && v) {
+                                onMaterialNodeCreated?.({ wbsNodeId: node.id, name: v, type: node.type, parentId });
                             }
                         }}
                         placeholder={depth === 0 ? 'Nazwa przedmiotu projektu…' : 'Nazwa elementu…'}
@@ -1124,7 +1124,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     handleField(node.id, 'unit', 'sztuki');
                                     onNodeFieldSave?.(node.id, 'unit', 'sztuki');
                                 }
-                                onSave?.();
                                 if (isMaterial && node.name) {
                                     onMaterialNodeCreated?.({ wbsNodeId: node.id, name: node.name, type: newType, parentId });
                                 }
@@ -1144,7 +1143,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     {depth >= 1 && (
                         <input type="text" value={node.quantity || ''} onChange={e => handleField(node.id, 'quantity', e.target.value)}
                             onFocus={e => e.target.select()} onMouseUp={e => e.target.select()}
-                            onBlur={e => { onSave?.(); onRequirementsQtyChange?.(node.id, e.target.value, node.name); }}
+                            onBlur={e => { onRequirementsQtyChange?.(node.id, e.target.value, node.name); }}
                             placeholder="0" className={`bg-transparent border-none focus:outline-none text-xs w-full text-right placeholder-gray-700 ${d.fieldClass}`} />
                     )}
                 </td>
@@ -1153,7 +1152,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                     {depth >= 1 && (
                         <select value={node.unit || ''}
-                            onChange={e => { handleField(node.id, 'unit', e.target.value); onNodeFieldSave?.(node.id, 'unit', e.target.value); onSave?.(); }}
+                            onChange={e => { handleField(node.id, 'unit', e.target.value); onNodeFieldSave?.(node.id, 'unit', e.target.value); }}
                             className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-xs w-full focus:outline-none focus:border-blue-500 cursor-pointer ${d.fieldClass}`}>
                             <option value="" className="bg-gray-900">—</option>
                             {UNIT_OPTIONS.map(u => <option key={u} value={u} className="bg-gray-900">{u}</option>)}
@@ -1173,8 +1172,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 value={node.unitCost ?? ''}
                                 onChange={e => handleField(node.id, 'unitCost', e.target.value)}
                                 onFocus={e => e.target.select()}
-                                onBlur={e => { onNodeFieldSave?.(node.id, 'unitCost', parseFloat(e.target.value) || 0); onSave?.(); }}
-                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onNodeFieldSave?.(node.id, 'unitCost', parseFloat(e.target.value) || 0); onSave?.(); e.target.blur(); } }}
+                                onBlur={e => { onNodeFieldSave?.(node.id, 'unitCost', parseFloat(e.target.value) || 0); }}
+                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onNodeFieldSave?.(node.id, 'unitCost', parseFloat(e.target.value) || 0); e.target.blur(); } }}
                                 placeholder="0.00"
                                 className={`bg-transparent border-none focus:outline-none text-xs w-full text-right placeholder-gray-700 ${d.fieldClass}`}
                             />
@@ -1191,7 +1190,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 value={node.status}
                                 onChange={v => {
                                     handleField(node.id, 'status', v);
-                                    onSave?.();
+                                    onNodeFieldSave?.(node.id, 'status', v);
                                     if (reqTag) onNodeStatusChange?.(node.id, v, reqTag.slice(4));
                                 }}
                             />
@@ -1204,7 +1203,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     {(users.length > 0 || projectContacts.length > 0) ? (
                         <select
                             value={node.owner || ''}
-                            onChange={e => { handleField(node.id, 'owner', e.target.value); onSave?.(); }}
+                            onChange={e => { handleField(node.id, 'owner', e.target.value); onNodeFieldSave?.(node.id, 'owner', e.target.value); }}
                             className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-xs w-full focus:outline-none focus:border-blue-500 transition-colors cursor-pointer ${d.fieldClass}`}
                         >
                             <option value="" className="bg-gray-900">—</option>
@@ -1223,7 +1222,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             })}
                         </select>
                     ) : (
-                        <input type="text" value={node.owner || ''} onChange={e => handleField(node.id, 'owner', e.target.value)} onBlur={onSave}
+                        <input type="text" value={node.owner || ''} onChange={e => handleField(node.id, 'owner', e.target.value)} onBlur={e => onNodeFieldSave?.(node.id, 'owner', e.target.value)}
                             placeholder="—" className={`bg-transparent border-none focus:outline-none text-xs w-full placeholder-gray-700 ${d.fieldClass}`} />
                     )}
                 </td>
@@ -1233,7 +1232,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     <AutoResizeTextarea
                         value={node.comment || ''}
                         onChange={e => handleField(node.id, 'comment', e.target.value)}
-                        onBlur={e => { onNodeFieldSave?.(node.id, 'comment', e.target.value); onSave?.(); window.dispatchEvent(new CustomEvent('wbs-comment-changed', { detail: { wbsNodeIds: [node.id], comment: e.target.value } })); }}
+                        onBlur={e => { onNodeFieldSave?.(node.id, 'comment', e.target.value); window.dispatchEvent(new CustomEvent('wbs-comment-changed', { detail: { wbsNodeIds: [node.id], comment: e.target.value } })); }}
                         placeholder="—"
                         className={`bg-transparent border-none resize-none focus:outline-none text-xs w-full placeholder-gray-700 leading-snug ${d.fieldClass}`}
                     />
