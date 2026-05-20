@@ -533,91 +533,148 @@ model MarkerAttachment {
 
 // ─── Lista Wymagań Materiałowych ────────────────────────────────────────────
 
+/// @anchor material-requirements-list
 model MaterialRequirementsList {
+  /// @anchor mat-list-id
   id        String    @id @default(uuid())
+  /// @anchor mat-list-node-id
   nodeId    String
+  /// @anchor mat-list-name
   name      String
+  /// @anchor mat-list-version
   version   Int       @default(1)
+  /// @anchor mat-list-is-locked
   isLocked  Boolean   @default(false)
+  /// @anchor mat-list-locked-by
   lockedBy  String?
+  /// @anchor mat-list-locked-at
   lockedAt  DateTime?
+  /// @anchor mat-list-created-by
   createdBy String?
+  /// @anchor mat-list-parent-id
   parentId  String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  /// @anchor mat-list-node
   node         ProcessNode                @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  /// @anchor mat-list-parent
   parent       MaterialRequirementsList?  @relation("ListVersions", fields: [parentId], references: [id])
+  /// @anchor mat-list-children
   children     MaterialRequirementsList[] @relation("ListVersions")
+  /// @anchor mat-list-requirements
   requirements MaterialRequirement[]
 
   @@map("material_requirements_lists")
 }
 
+/// @anchor material-requirement
 model MaterialRequirement {
+  /// @anchor mat-req-id
   id        String  @id @default(uuid())
+  /// @anchor mat-req-node-id
   nodeId    String
+  /// @anchor mat-req-version-id
   versionId String?
+  /// @anchor mat-req-list-id
   listId    String?
 
   // Nazwa wymagania (niezależna od nazwy produktu)
+  /// @anchor mat-req-name
   name String? // nazwa wymagania (np. "Kamera główna", "Zasilacz awaryjny")
 
   // Referencja do materiału z Bazy Materiałów
+  /// @anchor mat-req-material-id
   materialId   String? // FK do innego MaterialRequirement (katalog materiałów)
+  /// @anchor mat-req-material
   material     MaterialRequirement?  @relation("MaterialToRequirement", fields: [materialId], references: [id], onDelete: SetNull)
+  /// @anchor mat-req-requirements
   requirements MaterialRequirement[] @relation("MaterialToRequirement")
 
   // Identyfikacja produktu
+  /// @anchor mat-req-product-name
   productName    String? // nazwa handlowa produktu (nullowalny jeśli materialId ustawiony)
+  /// @anchor mat-req-type
   type           String // DEVICE | MATERIAL | CABLE | SOFTWARE | SERVICE
+  /// @anchor mat-req-quantity
   quantity       Float
+  /// @anchor mat-req-unit
   unit           String // szt, m, kg, kpl
+  /// @anchor mat-req-technical-spec
   technicalSpec  String? // pełne wymagania techniczne z dokumentu
+  /// @anchor mat-req-source-document
   sourceDocument String? // nazwa pliku PDF źródłowego
+  /// @anchor mat-req-manufacturer
   manufacturer   String? // producent
+  /// @anchor mat-req-model
   model          String? // symbol/model
 
   // Stan magazynowy (dla materiałów w Bazie)
+  /// @anchor mat-req-stock-status
   stockStatus Decimal? // ilość na magazynie
 
   // Pliki — karta katalogowa i karta zgodności
+  /// @anchor mat-req-data-sheet-url
   dataSheetUrl   String? // ścieżka do pliku karty katalogowej
+  /// @anchor mat-req-data-sheet-name
   dataSheetName  String? // oryginalna nazwa pliku
+  /// @anchor mat-req-compliance-url
   complianceUrl  String? // ścieżka do pliku karty zgodności
+  /// @anchor mat-req-compliance-name
   complianceName String? // oryginalna nazwa pliku
 
   // Przypisanie do WBS
+  /// @anchor mat-req-assigned-subtask-id
   assignedSubtaskId  String?
+  /// @anchor mat-req-wbs-node-id
   wbsNodeId          String? @unique // FK do wbs_nodes — karta produktowa przypisana do węzła WBS (1:1)
+  /// @anchor mat-req-wbs-node-ids
   wbsNodeIds         String? // @deprecated JSON array UUID węzłów WBS (wielowybór) — zastąpione przez WbsNodeMaterial
+  /// @anchor mat-req-wbs-node-allocations
   wbsNodeAllocations String? // @deprecated JSON: {nodeId: quantity} — zastąpione przez WbsNodeMaterial.quantity
+  /// @anchor mat-req-is-ai-assigned
   isAiAssigned       Boolean @default(false) // true = przypisane przez AI, false = ręcznie
+  /// @anchor mat-req-ai-confidence
   aiConfidence       Float? // pewność AI 0.0–1.0
 
   // Tabela zgodności (JSON): { requirements: string[], products: {id,name}[], matrix: {key: "spełnia"|"nie spełnia"|"częściowo"} }
+  /// @anchor mat-req-compliance-data
   complianceData String?
 
   // Dane ofertowe (wypełniane przez logistyka)
+  /// @anchor mat-req-price-netto
   priceNetto   Float? // cena netto za sztukę
+  /// @anchor mat-req-seller
   seller       String? // sprzedawca / dostawca
+  /// @anchor mat-req-offer-number
   offerNumber  String? // numer oferty
+  /// @anchor mat-req-availability
   availability String? // dostępność (ile / kiedy)
+  /// @anchor mat-req-product-url
   productUrl   String? // link do strony produktu
+  /// @anchor mat-req-image-url
   imageUrl     String? // print screen / zdjęcie urządzenia (ścieżka pliku)
 
   // Status weryfikacji
+  /// @anchor mat-req-status
   status String @default("PENDING") // PENDING | CONFIRMED | REJECTED | PROPOSAL
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// @anchor mat-req-node
   node            ProcessNode               @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  /// @anchor mat-req-version
   version         ProjectVersion?           @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  /// @anchor mat-req-list
   list            MaterialRequirementsList? @relation(fields: [listId], references: [id], onDelete: SetNull)
+  /// @anchor mat-req-assigned-subtask
   assignedSubtask Subtask?                  @relation(fields: [assignedSubtaskId], references: [id], onDelete: SetNull)
+  /// @anchor mat-req-wbs-node
   wbsNode         WbsNode?                  @relation("WbsNodeMaterialCard", fields: [wbsNodeId], references: [id], onDelete: Cascade)
+  /// @anchor mat-req-proposals
   proposals       ProductProposal[]
+  /// @anchor mat-req-wbs-allocations
   wbsAllocations  WbsNodeMaterial[]
 
   @@map("material_requirements")
@@ -636,39 +693,60 @@ model DefaultProjectItem {
   @@map("default_project_items")
 }
 
+/// @anchor product-proposal
 model ProductProposal {
+  /// @anchor product-proposal-id
   id                    String @id @default(uuid())
+  /// @anchor product-proposal-material-requirement-id
   materialRequirementId String
 
   // Dane produktu znalezione przez AI / Google Search lub dodane ręcznie
+  /// @anchor product-proposal-product-name
   productName  String // pełna nazwa handlowa
+  /// @anchor product-proposal-manufacturer
   manufacturer String // producent
+  /// @anchor product-proposal-model
   model        String? // symbol modelu
+  /// @anchor product-proposal-source-url
   sourceUrl    String? // link do strony producenta lub dystrybutora
 
   // Dodatkowe pola ofertowe (ręcznie przez logistyka)
+  /// @anchor product-proposal-price-netto
   priceNetto   Float? // cena netto za sztukę
+  /// @anchor product-proposal-seller
   seller       String? // sprzedawca
+  /// @anchor product-proposal-offer-number
   offerNumber  String? // numer oferty
+  /// @anchor product-proposal-availability
   availability String? // dostępność (ile / kiedy)
+  /// @anchor product-proposal-image-url
   imageUrl     String? // print screen / zdjęcie (ścieżka pliku)
+  /// @anchor product-proposal-is-manual
   isManual     Boolean @default(false) // true = dodane ręcznie, false = AI
 
   // Pliki PDF dla propozycji
+  /// @anchor product-proposal-data-sheet-url
   dataSheetUrl   String?
+  /// @anchor product-proposal-data-sheet-name
   dataSheetName  String?
+  /// @anchor product-proposal-compliance-url
   complianceUrl  String?
+  /// @anchor product-proposal-compliance-name
   complianceName String?
 
   // Ocena dopasowania
+  /// @anchor product-proposal-match-score
   matchScore Float? // 0.0–1.0: jak dobrze pasuje do wymagań technicznych
 
   // Wybór i odrzucenie przez użytkownika
+  /// @anchor product-proposal-is-selected
   isSelected Boolean @default(false)
+  /// @anchor product-proposal-is-rejected
   isRejected Boolean @default(false)
 
   createdAt DateTime @default(now())
 
+  /// @anchor product-proposal-material-requirement
   materialRequirement MaterialRequirement @relation(fields: [materialRequirementId], references: [id], onDelete: Cascade)
 
   @@map("product_proposals")

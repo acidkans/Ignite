@@ -245,6 +245,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-sekcja | ProjectItemsPanel | apps/frontend/src/components/shared/wbs/ProjectItemsPanel.jsx | @anchor project-items-panel |
 | ui-tabela | BudgetTable | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table |
 | ui-tabela | WBSHybridTable | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-table |
+| ui-input | wbs-unit-cost-input | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-unit-price-input |
+| ui-funkcja | handleNodeExpand | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-node-expand-refresh |
 | ui-widok | CalendarView | apps/frontend/src/components/shared/wbs/CalendarView.jsx | @anchor calendar-view |
 | ui-karta | ProductCard | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card |
 
@@ -298,6 +300,18 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | buildHierarchy | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor build-hierarchy |
 | ui-funkcja | flattenHierarchy | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor flatten-hierarchy |
 
+### Moduł Logistyka — Baza materiałów (`apps/frontend/src/components/shared/MaterialDatabaseTab.jsx`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-zakladka | MaterialDatabaseTab | apps/frontend/src/components/shared/MaterialDatabaseTab.jsx | @anchor material-database-tab (brak — komponent domyślny) |
+| ui-input | InlineCell | apps/frontend/src/components/shared/MaterialDatabaseTab.jsx | @anchor material-database-inline-cell |
+| ui-stan | editingCell | apps/frontend/src/components/shared/MaterialDatabaseTab.jsx | @anchor material-database-editing-cell |
+| ui-funkcja | handlePatchField | apps/frontend/src/components/shared/MaterialDatabaseTab.jsx | @anchor material-database-patch-field |
+| ui-hook | mat-req-panel-global-update-listener | apps/frontend/src/components/shared/wbs/MaterialRequirementsPanel.jsx | @anchor mat-req-panel-global-update-listener |
+| ui-hook | wbs-materials-panel-global-update-listener | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-panel-global-update-listener |
+| ui-stan | comboRefs | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card-combo-refs |
+
 ### Skrypty narzędziowe (root repo)
 
 | Tag | Nazwa | Plik | Anchor |
@@ -305,8 +319,141 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-skrypt | sync-obsidian.ps1 | sync-obsidian.ps1 | @anchor sync-obsidian-script |
 | back-skrypt | setup-task-scheduler.ps1 | setup-task-scheduler.ps1 | @anchor setup-task-scheduler-script |
 
+### Moduł Material Requirements
+
+#### Schema (Prisma — `apps/backend/prisma/schema.prisma`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| schema-model | MaterialRequirementsList | apps/backend/prisma/schema.prisma | @anchor material-requirements-list |
+| schema-pole | MaterialRequirementsList.id | apps/backend/prisma/schema.prisma | @anchor mat-list-id |
+| schema-pole | MaterialRequirementsList.nodeId | apps/backend/prisma/schema.prisma | @anchor mat-list-node-id |
+| schema-pole | MaterialRequirementsList.name | apps/backend/prisma/schema.prisma | @anchor mat-list-name |
+| schema-pole | MaterialRequirementsList.version | apps/backend/prisma/schema.prisma | @anchor mat-list-version |
+| schema-pole | MaterialRequirementsList.isLocked | apps/backend/prisma/schema.prisma | @anchor mat-list-is-locked |
+| schema-pole | MaterialRequirementsList.lockedBy | apps/backend/prisma/schema.prisma | @anchor mat-list-locked-by |
+| schema-pole | MaterialRequirementsList.lockedAt | apps/backend/prisma/schema.prisma | @anchor mat-list-locked-at |
+| schema-pole | MaterialRequirementsList.createdBy | apps/backend/prisma/schema.prisma | @anchor mat-list-created-by |
+| schema-pole | MaterialRequirementsList.parentId | apps/backend/prisma/schema.prisma | @anchor mat-list-parent-id |
+| schema-relacja | MaterialRequirementsList.node | apps/backend/prisma/schema.prisma | @anchor mat-list-node |
+| schema-relacja | MaterialRequirementsList.parent | apps/backend/prisma/schema.prisma | @anchor mat-list-parent |
+| schema-relacja | MaterialRequirementsList.children | apps/backend/prisma/schema.prisma | @anchor mat-list-children |
+| schema-relacja | MaterialRequirementsList.requirements | apps/backend/prisma/schema.prisma | @anchor mat-list-requirements |
+| schema-model | MaterialRequirement | apps/backend/prisma/schema.prisma | @anchor material-requirement |
+| schema-pole | MaterialRequirement.id | apps/backend/prisma/schema.prisma | @anchor mat-req-id |
+| schema-pole | MaterialRequirement.nodeId | apps/backend/prisma/schema.prisma | @anchor mat-req-node-id |
+| schema-pole | MaterialRequirement.versionId | apps/backend/prisma/schema.prisma | @anchor mat-req-version-id |
+| schema-pole | MaterialRequirement.listId | apps/backend/prisma/schema.prisma | @anchor mat-req-list-id |
+| schema-pole | MaterialRequirement.name | apps/backend/prisma/schema.prisma | @anchor mat-req-name |
+| schema-pole | MaterialRequirement.materialId | apps/backend/prisma/schema.prisma | @anchor mat-req-material-id |
+| schema-pole | MaterialRequirement.productName | apps/backend/prisma/schema.prisma | @anchor mat-req-product-name |
+| schema-pole | MaterialRequirement.type | apps/backend/prisma/schema.prisma | @anchor mat-req-type |
+| schema-pole | MaterialRequirement.quantity | apps/backend/prisma/schema.prisma | @anchor mat-req-quantity |
+| schema-pole | MaterialRequirement.unit | apps/backend/prisma/schema.prisma | @anchor mat-req-unit |
+| schema-pole | MaterialRequirement.technicalSpec | apps/backend/prisma/schema.prisma | @anchor mat-req-technical-spec |
+| schema-pole | MaterialRequirement.sourceDocument | apps/backend/prisma/schema.prisma | @anchor mat-req-source-document |
+| schema-pole | MaterialRequirement.manufacturer | apps/backend/prisma/schema.prisma | @anchor mat-req-manufacturer |
+| schema-pole | MaterialRequirement.model | apps/backend/prisma/schema.prisma | @anchor mat-req-model |
+| schema-pole | MaterialRequirement.stockStatus | apps/backend/prisma/schema.prisma | @anchor mat-req-stock-status |
+| schema-pole | MaterialRequirement.dataSheetUrl | apps/backend/prisma/schema.prisma | @anchor mat-req-data-sheet-url |
+| schema-pole | MaterialRequirement.dataSheetName | apps/backend/prisma/schema.prisma | @anchor mat-req-data-sheet-name |
+| schema-pole | MaterialRequirement.complianceUrl | apps/backend/prisma/schema.prisma | @anchor mat-req-compliance-url |
+| schema-pole | MaterialRequirement.complianceName | apps/backend/prisma/schema.prisma | @anchor mat-req-compliance-name |
+| schema-pole | MaterialRequirement.assignedSubtaskId | apps/backend/prisma/schema.prisma | @anchor mat-req-assigned-subtask-id |
+| schema-pole | MaterialRequirement.wbsNodeId | apps/backend/prisma/schema.prisma | @anchor mat-req-wbs-node-id |
+| schema-pole | MaterialRequirement.wbsNodeIds | apps/backend/prisma/schema.prisma | @anchor mat-req-wbs-node-ids |
+| schema-pole | MaterialRequirement.wbsNodeAllocations | apps/backend/prisma/schema.prisma | @anchor mat-req-wbs-node-allocations |
+| schema-pole | MaterialRequirement.isAiAssigned | apps/backend/prisma/schema.prisma | @anchor mat-req-is-ai-assigned |
+| schema-pole | MaterialRequirement.aiConfidence | apps/backend/prisma/schema.prisma | @anchor mat-req-ai-confidence |
+| schema-pole | MaterialRequirement.complianceData | apps/backend/prisma/schema.prisma | @anchor mat-req-compliance-data |
+| schema-pole | MaterialRequirement.priceNetto | apps/backend/prisma/schema.prisma | @anchor mat-req-price-netto |
+| schema-pole | MaterialRequirement.seller | apps/backend/prisma/schema.prisma | @anchor mat-req-seller |
+| schema-pole | MaterialRequirement.offerNumber | apps/backend/prisma/schema.prisma | @anchor mat-req-offer-number |
+| schema-pole | MaterialRequirement.availability | apps/backend/prisma/schema.prisma | @anchor mat-req-availability |
+| schema-pole | MaterialRequirement.productUrl | apps/backend/prisma/schema.prisma | @anchor mat-req-product-url |
+| schema-pole | MaterialRequirement.imageUrl | apps/backend/prisma/schema.prisma | @anchor mat-req-image-url |
+| schema-pole | MaterialRequirement.status | apps/backend/prisma/schema.prisma | @anchor mat-req-status |
+| schema-relacja | MaterialRequirement.material | apps/backend/prisma/schema.prisma | @anchor mat-req-material |
+| schema-relacja | MaterialRequirement.requirements | apps/backend/prisma/schema.prisma | @anchor mat-req-requirements |
+| schema-relacja | MaterialRequirement.node | apps/backend/prisma/schema.prisma | @anchor mat-req-node |
+| schema-relacja | MaterialRequirement.version | apps/backend/prisma/schema.prisma | @anchor mat-req-version |
+| schema-relacja | MaterialRequirement.list | apps/backend/prisma/schema.prisma | @anchor mat-req-list |
+| schema-relacja | MaterialRequirement.assignedSubtask | apps/backend/prisma/schema.prisma | @anchor mat-req-assigned-subtask |
+| schema-relacja | MaterialRequirement.wbsNode | apps/backend/prisma/schema.prisma | @anchor mat-req-wbs-node |
+| schema-relacja | MaterialRequirement.proposals | apps/backend/prisma/schema.prisma | @anchor mat-req-proposals |
+| schema-relacja | MaterialRequirement.wbsAllocations | apps/backend/prisma/schema.prisma | @anchor mat-req-wbs-allocations |
+| schema-model | ProductProposal | apps/backend/prisma/schema.prisma | @anchor product-proposal |
+| schema-pole | ProductProposal.id | apps/backend/prisma/schema.prisma | @anchor product-proposal-id |
+| schema-pole | ProductProposal.materialRequirementId | apps/backend/prisma/schema.prisma | @anchor product-proposal-material-requirement-id |
+| schema-pole | ProductProposal.productName | apps/backend/prisma/schema.prisma | @anchor product-proposal-product-name |
+| schema-pole | ProductProposal.manufacturer | apps/backend/prisma/schema.prisma | @anchor product-proposal-manufacturer |
+| schema-pole | ProductProposal.model | apps/backend/prisma/schema.prisma | @anchor product-proposal-model |
+| schema-pole | ProductProposal.sourceUrl | apps/backend/prisma/schema.prisma | @anchor product-proposal-source-url |
+| schema-pole | ProductProposal.priceNetto | apps/backend/prisma/schema.prisma | @anchor product-proposal-price-netto |
+| schema-pole | ProductProposal.seller | apps/backend/prisma/schema.prisma | @anchor product-proposal-seller |
+| schema-pole | ProductProposal.offerNumber | apps/backend/prisma/schema.prisma | @anchor product-proposal-offer-number |
+| schema-pole | ProductProposal.availability | apps/backend/prisma/schema.prisma | @anchor product-proposal-availability |
+| schema-pole | ProductProposal.imageUrl | apps/backend/prisma/schema.prisma | @anchor product-proposal-image-url |
+| schema-pole | ProductProposal.isManual | apps/backend/prisma/schema.prisma | @anchor product-proposal-is-manual |
+| schema-pole | ProductProposal.dataSheetUrl | apps/backend/prisma/schema.prisma | @anchor product-proposal-data-sheet-url |
+| schema-pole | ProductProposal.dataSheetName | apps/backend/prisma/schema.prisma | @anchor product-proposal-data-sheet-name |
+| schema-pole | ProductProposal.complianceUrl | apps/backend/prisma/schema.prisma | @anchor product-proposal-compliance-url |
+| schema-pole | ProductProposal.complianceName | apps/backend/prisma/schema.prisma | @anchor product-proposal-compliance-name |
+| schema-pole | ProductProposal.matchScore | apps/backend/prisma/schema.prisma | @anchor product-proposal-match-score |
+| schema-pole | ProductProposal.isSelected | apps/backend/prisma/schema.prisma | @anchor product-proposal-is-selected |
+| schema-pole | ProductProposal.isRejected | apps/backend/prisma/schema.prisma | @anchor product-proposal-is-rejected |
+| schema-relacja | ProductProposal.materialRequirement | apps/backend/prisma/schema.prisma | @anchor product-proposal-material-requirement |
+
+#### Backend (`apps/backend/src/material-requirements/`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-controller | MaterialRequirementsController | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor material-requirements-controller |
+| back-modul | MaterialRequirementsModule | apps/backend/src/material-requirements/material-requirements.module.ts | @anchor material-requirements-module |
+| back-serwis | MaterialRequirementsService | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor material-requirements-service |
+| back-endpoint | GET /material-requirements/database | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-database |
+| back-endpoint | GET /material-requirements/all-materials | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-all-materials |
+| back-endpoint | GET /material-requirements/usage | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-usage |
+| back-endpoint | GET /material-requirements/datasheets | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-all-datasheets |
+| back-endpoint | GET /material-requirements/datasheets/:nodeId | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-datasheets-by-node |
+| back-endpoint | GET /material-requirements/with-offers | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-with-offers |
+| back-endpoint | GET /material-requirements/node/:nodeId | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-by-node |
+| back-endpoint | GET /material-requirements/lists/node/:nodeId | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-lists |
+| back-endpoint | POST /material-requirements/lists/node/:nodeId/default | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-default-list |
+| back-endpoint | POST /material-requirements/lists | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-list |
+| back-endpoint | PATCH /material-requirements/lists/:listId | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-patch-list |
+| back-endpoint | DELETE /material-requirements/lists/:listId | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-delete-list |
+| back-endpoint | POST /material-requirements/lists/:listId/lock | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-lock-list |
+| back-endpoint | POST /material-requirements/lists/:listId/new-version | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-new-version |
+| back-endpoint | DELETE /material-requirements/node/:nodeId/all | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-delete-by-node |
+| back-endpoint | POST /material-requirements/clear-assignments | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-clear-assignments |
+| back-endpoint | POST /material-requirements/clone-for-wbs | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-clone-for-wbs |
+| back-endpoint | GET /material-requirements/:id | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-one |
+| back-endpoint | POST /material-requirements/ | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-create |
+| back-endpoint | PATCH /material-requirements/:id | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-patch-update |
+| back-endpoint | DELETE /material-requirements/:id | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-delete-one |
+| back-endpoint | POST /material-requirements/extract/:nodeId | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-extract |
+| back-endpoint | POST /material-requirements/:id/evaluate-compliance | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-evaluate-compliance |
+| back-endpoint | POST /material-requirements/:id/search-products | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-search-products |
+| back-endpoint | POST /material-requirements/:id/proposals | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-add-proposal |
+| back-endpoint | PATCH /material-requirements/proposals/:proposalId/select | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-patch-select-proposal |
+| back-endpoint | PATCH /material-requirements/proposals/:proposalId | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-patch-update-proposal |
+| back-endpoint | DELETE /material-requirements/proposals/:proposalId | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-delete-proposal |
+
+#### Frontend (`apps/frontend/src/components/shared/wbs/MaterialRequirementsPanel.jsx`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-sekcja | MaterialRequirementsPanel | apps/frontend/src/components/shared/wbs/MaterialRequirementsPanel.jsx | @anchor material-requirements-panel |
+| ui-sekcja | ExpandedDetail | apps/frontend/src/components/shared/wbs/MaterialRequirementsPanel.jsx | @anchor expanded-detail |
+| ui-sekcja | ProposalsSection | apps/frontend/src/components/shared/wbs/MaterialRequirementsPanel.jsx | @anchor proposals-section |
+| ui-stan | expandedId | apps/frontend/src/components/shared/wbs/MaterialRequirementsPanel.jsx | @anchor expanded-id |
+| ui-stan | fields (ExpandedDetail) | apps/frontend/src/components/shared/wbs/MaterialRequirementsPanel.jsx | @anchor expanded-detail-fields |
+| ui-stan | newProp | apps/frontend/src/components/shared/wbs/MaterialRequirementsPanel.jsx | @anchor new-prop |
+
+> `ui-stan` `newProp.sourceUrl` — pole „Adres www" w formularzu ręcznego dodania propozycji; zapisywane przez `POST /material-requirements/:id/proposals` (`@anchor mat-req-post-add-proposal`). Mapuje na `schema-pole` `ProductProposal.sourceUrl` (`@anchor product-proposal-source-url`).
+
 <!-- Następne moduły do dodania:
-- material-requirements (apps/backend/src/material-requirements/)
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)
 - process-tree (apps/backend/src/process-tree/)

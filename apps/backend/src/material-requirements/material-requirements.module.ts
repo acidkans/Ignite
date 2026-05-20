@@ -12,4 +12,5 @@ import { MaterialRequirementsService } from './material-requirements.service';
     providers: [MaterialRequirementsService],
     exports: [MaterialRequirementsService],
 })
+// @anchor material-requirements-module
 export class MaterialRequirementsModule { }

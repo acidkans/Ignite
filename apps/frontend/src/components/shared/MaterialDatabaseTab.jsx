@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ExternalLink, Package, ChevronDown, ChevronRight, Cpu, Trash2, Building2, Loader2 } from 'lucide-react';
 import { API_URL } from '../../config';
 import PropertyPreview from './PropertyPreview';
@@ -138,6 +138,38 @@ function MaterialUsagePanel({ manufacturer, model }) {
     );
 }
 
+const TYPE_OPTIONS = Object.entries(TYPE_LABELS).map(([value, label]) => ({ value, label }));
+
+// @anchor material-database-inline-cell
+function InlineCell({ value, type = 'text', options, onSave, onCancel, className = '' }) {
+    const [val, setVal] = useState(value ?? '');
+    const ref = useRef(null);
+    useEffect(() => { ref.current?.focus(); ref.current?.select?.(); }, []);
+    const commit = () => onSave(val);
+    const handleKey = (e) => {
+        if (e.key === 'Enter') commit();
+        if (e.key === 'Escape') onCancel();
+    };
+    if (options) {
+        return (
+            <select ref={ref} value={val}
+                onChange={e => { setVal(e.target.value); onSave(e.target.value); }}
+                onBlur={commit} onKeyDown={handleKey}
+                className={`bg-[#1a1f2e] border border-teal-500/40 rounded px-2 py-0.5 text-xs text-gray-200 outline-none focus:border-teal-400 ${className}`}
+            >
+                {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+        );
+    }
+    return (
+        <input ref={ref} type={type} value={val}
+            onChange={e => setVal(e.target.value)}
+            onBlur={commit} onKeyDown={handleKey}
+            className={`bg-[#1a1f2e] border border-teal-500/40 rounded px-2 py-0.5 text-xs text-gray-200 outline-none focus:border-teal-400 w-full min-w-[60px] ${className}`}
+        />
+    );
+}
+
 export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal = false }) {
     const [items, setItems] = useState([]);
     const [datasheetItems, setDatasheetItems] = useState([]);
@@ -150,6 +182,29 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
     const [batchParsing, setBatchParsing] = useState(false);
     const [batchStatus, setBatchStatus] = useState(null);
     const [parsedIds, setParsedIds] = useState(() => new Set());
+    // @anchor material-database-editing-cell
+    const [editingCell, setEditingCell] = useState(null); // { id, field, value }
+
+    // @anchor material-database-patch-field
+    const handlePatchField = async (id, field, value) => {
+        const token = sessionStorage.getItem('token');
+        const parsed = (field === 'priceNetto' || field === 'stockStatus')
+            ? (value === '' ? null : Number(value))
+            : (value === '' ? null : value);
+        try {
+            await fetch(`${API_URL}/material-requirements/${id}`, {
+                method: 'PATCH',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ [field]: parsed }),
+            });
+            const updates = { [field]: parsed };
+            const patch = r => r.id === id ? { ...r, ...updates } : r;
+            setItems(prev => prev.map(patch));
+            setDatasheetItems(prev => prev.map(patch));
+            window.dispatchEvent(new CustomEvent('material-req-updated', { detail: { id, updates } }));
+        } catch {}
+        setEditingCell(null);
+    };
 
     const isDatasheetFile = (fileName) => {
         const n = (fileName || '').toLowerCase();
@@ -371,14 +426,46 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
                                                         {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                                                     </button>
                                                 </td>
-                                                <td className="px-3 py-2 text-gray-200 max-w-[200px]"><span className="line-clamp-2" title={r.productName || '—'}>{r.productName || <span className="text-gray-500">—</span>}</span></td>
-                                                <td className="px-3 py-2"><span className="px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-300 text-[10px] font-semibold">{TYPE_LABELS[r.type] || r.type}</span></td>
-                                                <td className="px-3 py-2 text-gray-300">{r.manufacturer ? r.manufacturer.toUpperCase() : '—'}</td>
-                                                <td className="px-3 py-2 text-gray-400 font-mono">{r.model || '—'}</td>
-                                                <td className="px-3 py-2 text-right text-green-400 font-mono whitespace-nowrap">{r.priceNetto != null ? `${Number(r.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—'}</td>
-                                                <td className="px-3 py-2 text-cyan-400 text-[11px]">{r.availability || '—'}</td>
-                                                <td className="px-3 py-2 text-[11px] max-w-[140px]">{r.productUrl ? <a href={r.productUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 truncate block" title={r.productUrl}>{(() => { try { return new URL(r.productUrl).hostname.replace(/^www\./, ''); } catch { return r.productUrl.slice(0, 20); } })()}</a> : <span className="text-gray-600">—</span>}</td>
-                                                <td className="px-3 py-2 text-right text-gray-600">{r.stockStatus ? `${r.stockStatus} szt` : '—'}</td>
+                                                <td className="px-3 py-2 text-gray-200 max-w-[200px] cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'productName', value: r.productName ?? '' })}>
+                                                    {editingCell?.id === r.id && editingCell?.field === 'productName'
+                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchField(r.id, 'productName', v)} onCancel={() => setEditingCell(null)} />
+                                                        : <span className="line-clamp-2" title={r.productName || '—'}>{r.productName || <span className="text-gray-500">—</span>}</span>}
+                                                </td>
+                                                <td className="px-3 py-2 cursor-pointer" onClick={() => setEditingCell({ id: r.id, field: 'type', value: r.type ?? 'MATERIAL' })}>
+                                                    {editingCell?.id === r.id && editingCell?.field === 'type'
+                                                        ? <InlineCell value={editingCell.value} options={TYPE_OPTIONS} onSave={v => handlePatchField(r.id, 'type', v)} onCancel={() => setEditingCell(null)} />
+                                                        : <span className="px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-300 text-[10px] font-semibold">{TYPE_LABELS[r.type] || r.type}</span>}
+                                                </td>
+                                                <td className="px-3 py-2 text-gray-300 cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'manufacturer', value: r.manufacturer ?? '' })}>
+                                                    {editingCell?.id === r.id && editingCell?.field === 'manufacturer'
+                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchField(r.id, 'manufacturer', v)} onCancel={() => setEditingCell(null)} />
+                                                        : (r.manufacturer ? r.manufacturer.toUpperCase() : <span className="text-gray-600">—</span>)}
+                                                </td>
+                                                <td className="px-3 py-2 text-gray-400 font-mono cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'model', value: r.model ?? '' })}>
+                                                    {editingCell?.id === r.id && editingCell?.field === 'model'
+                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchField(r.id, 'model', v)} onCancel={() => setEditingCell(null)} />
+                                                        : (r.model || <span className="text-gray-600">—</span>)}
+                                                </td>
+                                                <td className="px-3 py-2 text-right text-green-400 font-mono whitespace-nowrap cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'priceNetto', value: r.priceNetto ?? '' })}>
+                                                    {editingCell?.id === r.id && editingCell?.field === 'priceNetto'
+                                                        ? <InlineCell value={editingCell.value} type="number" onSave={v => handlePatchField(r.id, 'priceNetto', v)} onCancel={() => setEditingCell(null)} className="text-right" />
+                                                        : (r.priceNetto != null ? `${Number(r.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : <span className="text-gray-600">—</span>)}
+                                                </td>
+                                                <td className="px-3 py-2 text-cyan-400 text-[11px] cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'availability', value: r.availability ?? '' })}>
+                                                    {editingCell?.id === r.id && editingCell?.field === 'availability'
+                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchField(r.id, 'availability', v)} onCancel={() => setEditingCell(null)} />
+                                                        : (r.availability || <span className="text-gray-600">—</span>)}
+                                                </td>
+                                                <td className="px-3 py-2 text-[11px] max-w-[140px] cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'productUrl', value: r.productUrl ?? '' })}>
+                                                    {editingCell?.id === r.id && editingCell?.field === 'productUrl'
+                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchField(r.id, 'productUrl', v)} onCancel={() => setEditingCell(null)} />
+                                                        : (r.productUrl ? <a href={r.productUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-400 hover:text-blue-300 truncate block" title={r.productUrl}>{(() => { try { return new URL(r.productUrl).hostname.replace(/^www\./, ''); } catch { return r.productUrl.slice(0, 20); } })()}</a> : <span className="text-gray-600">—</span>)}
+                                                </td>
+                                                <td className="px-3 py-2 text-right text-gray-600 cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'stockStatus', value: r.stockStatus ?? '' })}>
+                                                    {editingCell?.id === r.id && editingCell?.field === 'stockStatus'
+                                                        ? <InlineCell value={editingCell.value} type="number" onSave={v => handlePatchField(r.id, 'stockStatus', v)} onCancel={() => setEditingCell(null)} className="text-right" />
+                                                        : (r.stockStatus ? `${r.stockStatus} szt` : <span className="text-gray-600">—</span>)}
+                                                </td>
                                                 <td className="px-3 py-2 text-gray-500 text-[10px] max-w-[180px]"><span className="truncate block" title={r.dataSheetName}>{r.dataSheetName || '—'}</span></td>
                                                 <td className="px-3 py-2 text-center">
                                                     <button onClick={() => openDatasheet(r.id)} className="inline-flex items-center px-2 py-1 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 transition-colors">
@@ -412,14 +499,46 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
                                                         {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                                                     </button>
                                                 </td>
-                                                <td className="px-3 py-2 text-gray-200 max-w-[200px]"><span className="line-clamp-2" title={r.productName || '—'}>{r.productName || <span className="text-gray-500">—</span>}</span></td>
-                                                <td className="px-3 py-2"><span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-300 text-[10px] font-semibold">{TYPE_LABELS[r.type] || r.type}</span></td>
-                                                <td className="px-3 py-2 text-gray-300">{r.manufacturer || '—'}</td>
-                                                <td className="px-3 py-2 text-gray-400">{r.model || '—'}</td>
-                                                <td className="px-3 py-2 text-right text-green-400 font-mono whitespace-nowrap">{r.priceNetto != null ? `${Number(r.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—'}</td>
-                                                <td className="px-3 py-2 text-cyan-400 text-[11px]">{r.availability || '—'}</td>
-                                                <td className="px-3 py-2 text-[11px] max-w-[140px]">{r.productUrl ? <a href={r.productUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 truncate block" title={r.productUrl}>{(() => { try { return new URL(r.productUrl).hostname.replace(/^www\./, ''); } catch { return r.productUrl.slice(0, 20); } })()}</a> : <span className="text-gray-600">—</span>}</td>
-                                                <td className="px-3 py-2 text-right text-gray-300">{r.stockStatus ? `${r.stockStatus} szt` : '—'}</td>
+                                                <td className="px-3 py-2 text-gray-200 max-w-[200px] cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'productName', value: r.productName ?? '' })}>
+                                                    {editingCell?.id === r.id && editingCell?.field === 'productName'
+                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchField(r.id, 'productName', v)} onCancel={() => setEditingCell(null)} />
+                                                        : <span className="line-clamp-2" title={r.productName || '—'}>{r.productName || <span className="text-gray-500">—</span>}</span>}
+                                                </td>
+                                                <td className="px-3 py-2 cursor-pointer" onClick={() => setEditingCell({ id: r.id, field: 'type', value: r.type ?? 'MATERIAL' })}>
+                                                    {editingCell?.id === r.id && editingCell?.field === 'type'
+                                                        ? <InlineCell value={editingCell.value} options={TYPE_OPTIONS} onSave={v => handlePatchField(r.id, 'type', v)} onCancel={() => setEditingCell(null)} />
+                                                        : <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-300 text-[10px] font-semibold">{TYPE_LABELS[r.type] || r.type}</span>}
+                                                </td>
+                                                <td className="px-3 py-2 text-gray-300 cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'manufacturer', value: r.manufacturer ?? '' })}>
+                                                    {editingCell?.id === r.id && editingCell?.field === 'manufacturer'
+                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchField(r.id, 'manufacturer', v)} onCancel={() => setEditingCell(null)} />
+                                                        : (r.manufacturer || <span className="text-gray-600">—</span>)}
+                                                </td>
+                                                <td className="px-3 py-2 text-gray-400 cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'model', value: r.model ?? '' })}>
+                                                    {editingCell?.id === r.id && editingCell?.field === 'model'
+                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchField(r.id, 'model', v)} onCancel={() => setEditingCell(null)} />
+                                                        : (r.model || <span className="text-gray-600">—</span>)}
+                                                </td>
+                                                <td className="px-3 py-2 text-right text-green-400 font-mono whitespace-nowrap cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'priceNetto', value: r.priceNetto ?? '' })}>
+                                                    {editingCell?.id === r.id && editingCell?.field === 'priceNetto'
+                                                        ? <InlineCell value={editingCell.value} type="number" onSave={v => handlePatchField(r.id, 'priceNetto', v)} onCancel={() => setEditingCell(null)} className="text-right" />
+                                                        : (r.priceNetto != null ? `${Number(r.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : <span className="text-gray-600">—</span>)}
+                                                </td>
+                                                <td className="px-3 py-2 text-cyan-400 text-[11px] cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'availability', value: r.availability ?? '' })}>
+                                                    {editingCell?.id === r.id && editingCell?.field === 'availability'
+                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchField(r.id, 'availability', v)} onCancel={() => setEditingCell(null)} />
+                                                        : (r.availability || <span className="text-gray-600">—</span>)}
+                                                </td>
+                                                <td className="px-3 py-2 text-[11px] max-w-[140px] cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'productUrl', value: r.productUrl ?? '' })}>
+                                                    {editingCell?.id === r.id && editingCell?.field === 'productUrl'
+                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchField(r.id, 'productUrl', v)} onCancel={() => setEditingCell(null)} />
+                                                        : (r.productUrl ? <a href={r.productUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-400 hover:text-blue-300 truncate block" title={r.productUrl}>{(() => { try { return new URL(r.productUrl).hostname.replace(/^www\./, ''); } catch { return r.productUrl.slice(0, 20); } })()}</a> : <span className="text-gray-600">—</span>)}
+                                                </td>
+                                                <td className="px-3 py-2 text-right text-gray-300 cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'stockStatus', value: r.stockStatus ?? '' })}>
+                                                    {editingCell?.id === r.id && editingCell?.field === 'stockStatus'
+                                                        ? <InlineCell value={editingCell.value} type="number" onSave={v => handlePatchField(r.id, 'stockStatus', v)} onCancel={() => setEditingCell(null)} className="text-right" />
+                                                        : (r.stockStatus ? `${r.stockStatus} szt` : <span className="text-gray-600">—</span>)}
+                                                </td>
                                                 <td className="px-3 py-2">
                                                     <div className="text-gray-300">{r.node?.name || '—'}</div>
                                                     {r.node?.parent?.name && <div className="text-gray-500 text-[10px]">{r.node.parent.name}</div>}

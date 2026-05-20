@@ -83,7 +83,7 @@ export default function DashboardPage() {
         _setActiveTab(tab);
     };
     const [tabOrder, setTabOrder] = useState(() => {
-        const ALL_TABS = ['files', 'financialFiles', 'unified', 'schematics'];
+        const ALL_TABS = ['files', 'financialFiles', 'unified', 'schematics', 'materialDatabase'];
         try {
             const saved = JSON.parse(localStorage.getItem('tabOrder') || 'null');
             if (!saved) return ALL_TABS;
@@ -511,13 +511,15 @@ export default function DashboardPage() {
                     </button>
                 )}
 
+
                 {/* Reorderable tabs */}
                 {tabOrder.map(tabId => {
                     const TAB_META = {
-                        files:         { label: 'Dokumentacja',    color: 'blue',    activeColor: 'text-blue-400',    bar: 'bg-blue-500',    shadow: '59,130,246',    cond: !isLogistykaArea },
-                        financialFiles:{ label: 'Pliki finansowe', color: 'amber',   activeColor: 'text-amber-400',   bar: 'bg-amber-500',   shadow: '245,158,11',    cond: isOrder && isManagerOrAdmin && !currentRoles.includes('LOGISTYK') },
-                        unified:       { label: 'planowanie',    color: 'cyan',    activeColor: 'text-cyan-400',    bar: 'bg-cyan-500',    shadow: '6,182,212',     cond: isOrder },
-                        schematics:    { label: 'Schemat',         color: 'orange',  activeColor: 'text-orange-400',  bar: 'bg-orange-500',  shadow: '249,115,22',    cond: isOrder },
+                        files:           { label: 'Dokumentacja',    color: 'blue',   activeColor: 'text-blue-400',   bar: 'bg-blue-500',   shadow: '59,130,246',  cond: !isLogistykaArea },
+                        financialFiles:  { label: 'Pliki finansowe', color: 'amber',  activeColor: 'text-amber-400',  bar: 'bg-amber-500',  shadow: '245,158,11',  cond: isOrder && isManagerOrAdmin && !currentRoles.includes('LOGISTYK') },
+                        unified:         { label: 'planowanie',      color: 'cyan',   activeColor: 'text-cyan-400',   bar: 'bg-cyan-500',   shadow: '6,182,212',   cond: isOrder },
+                        schematics:      { label: 'Schemat',          color: 'orange', activeColor: 'text-orange-400', bar: 'bg-orange-500', shadow: '249,115,22',  cond: isOrder },
+                        materialDatabase:{ label: 'Baza Materiałów',  color: 'purple', activeColor: 'text-purple-400', bar: 'bg-purple-500', shadow: '168,85,247',  cond: isOrder },
                     };
                     const meta = TAB_META[tabId];
                     if (!meta || !meta.cond) return null;
@@ -574,6 +576,9 @@ export default function DashboardPage() {
                         )}
                         {activeTab === 'materialDatabase' && isLogistykaArea && (
                             <MaterialDatabaseTab key="materialDatabase" nodeId={activeAreaId} searchQuery={searchQuery} isGlobal={true} />
+                        )}
+                        {activeTab === 'materialDatabase' && isOrder && (
+                            <MaterialDatabaseTab key={`materialDatabase-${activeAreaId}`} nodeId={activeAreaId} searchQuery={searchQuery} isGlobal={false} />
                         )}
                         {activeTab === 'files' && (
                             <PropertyPreview

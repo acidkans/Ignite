@@ -82,6 +82,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     const [localOverrides, setLocalOverrides] = useState({});
     const [localDeleted, setLocalDeleted] = useState(new Set());
     const [loading, setLoading] = useState(true);
+    // @anchor expanded-id
     const [expandedId, setExpandedId] = useState(null);
     const [wbsNodes, setWbsNodes] = useState([]);
     const [activeTypes, setActiveTypes] = useState(['MATERIAL', 'DEVICE']);
@@ -233,9 +234,22 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
         }
     }, [refreshKey, activeListId, fetchRequirements, fetchWbsNodes]);
 
+    // @anchor mat-req-panel-global-update-listener
+    useEffect(() => {
+        const handler = ({ detail: { id, updates } }) => {
+            setRequirements(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+            setMaterialDb(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+        };
+        window.addEventListener('material-req-updated', handler);
+        return () => window.removeEventListener('material-req-updated', handler);
+    }, []);
+
     // ─── Patch ──────────────────────────────────────────────────────────────
 
     const patchItem = useCallback(async (id, data) => {
+        // Optimistic update — natychmiast, żeby zwinięcie/rozwinięcie nie gubiło wartości
+        setRequirements(prev => prev.map(r => r.id === id ? { ...r, ...data } : r));
+        setLocalOverrides(prev => ({ ...prev, [id]: { ...(prev[id] || {}), ...data } }));
         try {
             const res = await fetch(`${API_URL}/material-requirements/${id}`, {
                 method: 'PATCH', headers: jsonHeaders, body: JSON.stringify(data),
@@ -522,12 +536,13 @@ function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMa
 
 // ─── ExpandedDetail ──────────────────────────────────────────────────────────
 
+// @anchor expanded-detail
 function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLocked }) {
     const headers = { Authorization: `Bearer ${token}` };
     const jsonHeaders = { ...headers, 'Content-Type': 'application/json' };
     const readOnly = isLocked;
 
-    // Local editable fields
+    // @anchor expanded-detail-fields
     const [fields, setFields] = useState({
         manufacturer: r.manufacturer || '',
         model: r.model || '',
@@ -670,7 +685,6 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
 
     return (
         <div className="px-4 py-3 space-y-3">
-            {/* Row 1: Producent, Model, Nazwa handlowa — comboboxes */}
             <div className="grid grid-cols-3 gap-3">
                 {comboFields.map(([k, lbl]) => {
                     const suggestions = getFilteredSuggestions(k);
@@ -725,7 +739,6 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
                 })}
             </div>
 
-            {/* Row 2: Nr oferty, Sprzedawca, Dostępność, Cena netto */}
             <div className="grid grid-cols-4 gap-3">
                 <div>
                     <label className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 block">Nr oferty</label>
@@ -774,7 +787,6 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
                 </div>
             </div>
 
-            {/* Row 3: Pozycja z oferty */}
             {allOfferPositions.length > 0 && (
                 <div>
                     <label className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 block">
@@ -811,12 +823,10 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
                 </div>
             )}
 
-            {/* Row 3b: Propozycje AI */}
             {!readOnly && (
                 <ProposalsSection req={r} token={token} onRefresh={onRefresh} onPatch={onPatch} />
             )}
 
-            {/* Row 4: Wymagania techniczne */}
             <div>
                 <label className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 block">
                     Wymagania techniczne
@@ -864,11 +874,13 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
 
 // ─── ProposalsSection (AI + ręcznie) ──────────────────────────────────────────
 
+// @anchor proposals-section
 function ProposalsSection({ req, token, onRefresh, onPatch }) {
     const authHeaders = { Authorization: `Bearer ${token}` };
     const jsonHeaders = { ...authHeaders, 'Content-Type': 'application/json' };
     const [searching, setSearching] = useState(false);
     const [showAddForm, setShowAddForm] = useState(false);
+    // @anchor new-prop
     const [newProp, setNewProp] = useState({ productName: '', manufacturer: '', model: '', sourceUrl: '' });
 
     const proposals = req.proposals || [];

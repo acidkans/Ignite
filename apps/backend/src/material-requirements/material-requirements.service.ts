@@ -12,6 +12,7 @@ const pdfParse = require('pdf-parse');
 const UPLOADS_DIR = '/usr/src/app/uploads';
 
 @Injectable()
+// @anchor material-requirements-service
 export class MaterialRequirementsService {
     private readonly logger = new Logger(MaterialRequirementsService.name);
 

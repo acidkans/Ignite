@@ -777,6 +777,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const hybridSaveRef = useRef(false);
     const hybridSavePending = useRef(false);
     const hybridSaveTimeout = useRef(null);
+    const expandRefreshTimeout = useRef(null);
 
     // Sync Q&A from in-memory tree into wbsData/cache without replacing wbsTree.
     // Called after every tree save to keep SchematTab export up-to-date while
@@ -793,6 +794,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
 
     // Pobiera świeżą płaską listę węzłów WBS z backendu i nakłada live Q&A z wbsTreeRef.
     // Używane po zapisie drzewa — dodaje nowe węzły do wbsData bez ryzyka nadpisania wbsTree.
+    // Patchuje też pola budżetowe (unitCost itp.) w wbsTree żeby WBS "Cena netto" nie pokazywał stałych wartości.
     const refreshWbsNodes = useCallback(async () => {
         try {
             const res = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, { headers: authHeaders() });
@@ -803,8 +805,27 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             const updated = (data.items || []).map(n => ({ ...n, qa: qaMap[n.id] !== undefined ? qaMap[n.id] : (n.qa || []) }));
             setWbsData(updated);
             onWbsDataLoad?.(updated);
+            // Sync pól budżetowych ze świeżych danych do wbsTree (bez przebudowy struktury drzewa)
+            const budgetById = new Map(updated.map(n => [n.id, n]));
+            setWbsTreeAndRef(prev => {
+                const patch = n => ({
+                    ...n,
+                    unitCost: budgetById.get(n.id)?.unitCost ?? n.unitCost,
+                    unitPrice: budgetById.get(n.id)?.unitPrice ?? n.unitPrice,
+                    totalCost: budgetById.get(n.id)?.totalCost ?? n.totalCost,
+                    totalPrice: budgetById.get(n.id)?.totalPrice ?? n.totalPrice,
+                    children: n.children?.length ? n.children.map(patch) : n.children,
+                });
+                return { ...prev, items: (prev.items || []).map(patch) };
+            });
         } catch (_) {}
     }, [nodeId, versionId, authHeaders, onWbsDataLoad]);
+
+    // @anchor handle-node-expand-refresh
+    const handleNodeExpand = useCallback(() => {
+        if (expandRefreshTimeout.current) clearTimeout(expandRefreshTimeout.current);
+        expandRefreshTimeout.current = setTimeout(() => { refreshWbsNodes(); }, 200);
+    }, [refreshWbsNodes]);
 
     // @anchor handle-save-hybrid-wbs
     const handleSaveHybridWBS = useCallback(async () => {
@@ -2259,40 +2280,80 @@ ${ganttSectionHtml}
 
     const updateNodeField = useCallback(async (id, field, value) => {
         try {
-            setWbsData(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
-            setWbsTreeAndRef(prev => {
-                const upd = items => items.map(n => n.id === id ? { ...n, [field]: value } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
-                return { ...prev, items: upd(prev.items || []) };
-            });
-            await fetch(`${API_URL}/wbs-nodes/${id}`, {
-                method: 'PATCH',
-                headers: authHeaders(),
-                body: JSON.stringify({ [field]: value }),
-            });
-            // Synchronizuj nazwę/jednostkę/typ do powiązanego wymagania materialnego
-            if (field === 'name' || field === 'unit' || field === 'type') {
+            if (field === 'unitCost') {
+                // Pole budżetowe — zapisujemy przez /budget, nie przez /wbs-nodes (tree)
                 const node = wbsData.find(n => n.id === id);
-                const reqTag = (node?.tags || []).find(t => String(t).startsWith('req:'));
-                if (reqTag) {
-                    const reqId = reqTag.slice(4);
-                    let body;
-                    if (field === 'type') {
-                        const reqType = value === 'equipment' ? 'DEVICE' : (value === 'material' ? 'MATERIAL' : null);
-                        body = reqType ? { type: reqType } : null;
-                    } else {
-                        body = { [field]: value };
-                    }
-                    if (body) {
-                        await fetch(`${API_URL}/material-requirements/${reqId}`, {
+                const uc = parseFloat(value) || 0;
+                const qty = parseFloat(node?.quantity) || 0;
+                const margin = parseFloat(node?.margin) || 0;
+                const discount = parseFloat(node?.discount) || 0;
+                const up = discount > 0
+                    ? uc * (1 + margin / 100) * (1 - discount / 100)
+                    : uc * (1 + margin / 100);
+                // Optymistyczna aktualizacja łącznie z polami pochodnymi (budżet odświeży się od razu)
+                setWbsData(prev => prev.map(item => item.id === id
+                    ? { ...item, unitCost: uc, unitPrice: up, totalCost: uc * qty, totalPrice: up * qty }
+                    : item));
+                setWbsTreeAndRef(prev => {
+                    const upd = items => items.map(n => n.id === id ? { ...n, unitCost: uc } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
+                    return { ...prev, items: upd(prev.items || []) };
+                });
+                await fetch(`${API_URL}/wbs-nodes/${id}/budget`, {
+                    method: 'PATCH',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ unitCost: uc, quantity: qty, margin, discount }),
+                });
+                // Propagacja priceNetto → material-requirements dla typ=material/equipment
+                const normalizedType = String(node?.type || '').toLowerCase();
+                if (normalizedType === 'material' || normalizedType === 'equipment') {
+                    const reqTag = (node?.tags || []).find(t => String(t).startsWith('req:'));
+                    if (reqTag) {
+                        await fetch(`${API_URL}/material-requirements/${reqTag.slice(4)}`, {
                             method: 'PATCH',
                             headers: authHeaders(),
-                            body: JSON.stringify(body),
+                            body: JSON.stringify({ priceNetto: uc }),
                         }).catch(() => {});
                         setReqRefreshKey(k => k + 1);
                     }
-                }
-                if (field === 'unit' || field === 'type') {
                     await refreshMaterialCosts();
+                }
+            } else {
+                // Pola drzewa WBS — standardowy endpoint
+                setWbsData(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+                setWbsTreeAndRef(prev => {
+                    const upd = items => items.map(n => n.id === id ? { ...n, [field]: value } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
+                    return { ...prev, items: upd(prev.items || []) };
+                });
+                await fetch(`${API_URL}/wbs-nodes/${id}`, {
+                    method: 'PATCH',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ [field]: value }),
+                });
+                // Synchronizuj nazwę/jednostkę/typ do powiązanego wymagania materialnego
+                if (field === 'name' || field === 'unit' || field === 'type') {
+                    const node = wbsData.find(n => n.id === id);
+                    const reqTag = (node?.tags || []).find(t => String(t).startsWith('req:'));
+                    if (reqTag) {
+                        const reqId = reqTag.slice(4);
+                        let body;
+                        if (field === 'type') {
+                            const reqType = value === 'equipment' ? 'DEVICE' : (value === 'material' ? 'MATERIAL' : null);
+                            body = reqType ? { type: reqType } : null;
+                        } else {
+                            body = { [field]: value };
+                        }
+                        if (body) {
+                            await fetch(`${API_URL}/material-requirements/${reqId}`, {
+                                method: 'PATCH',
+                                headers: authHeaders(),
+                                body: JSON.stringify(body),
+                            }).catch(() => {});
+                            setReqRefreshKey(k => k + 1);
+                        }
+                    }
+                    if (field === 'unit' || field === 'type') {
+                        await refreshMaterialCosts();
+                    }
                 }
             }
         } catch (e) { console.error('Update node error:', e); }
@@ -2822,11 +2883,12 @@ ${ganttSectionHtml}
                 comment: row.comment ?? '',
             });
             // Sync WBS-visible fields to wbsTree (WBSHybridTable reads from wbsTree, not wbsData)
-            if (field === 'comment' || field === 'unit') {
+            if (field === 'comment' || field === 'unit' || field === 'unitCost') {
+                const treeValue = field === 'unitCost' ? uc : row[field];
                 setWbsTreeAndRef(prev => {
                     const upd = items => items.map(n =>
                         n.id === row.id
-                            ? { ...n, [field]: row[field] }
+                            ? { ...n, [field]: treeValue }
                             : { ...n, children: n.children?.length ? upd(n.children) : n.children }
                     );
                     return { ...prev, items: upd(prev.items || []) };
@@ -3004,18 +3066,15 @@ ${ganttSectionHtml}
                         ? (wbsReqQty != null ? wbsReqQty : persistedQuantity)
                         : (isWorkType && wbsReqQty != null ? wbsReqQty : persistedQuantity);
                     const persistedUnitCost = parseFloat(item.unitCost) || 0;
+                    // Zawsze czytaj unitCost z bazy (WbsNode.unitCost) — zarówno dla materiałów jak i pracy.
+                    // Poprzednia logika używała inheritedCost/inheritedQuantity z materialMetaByLookupKey,
+                    // co powodowało rozbieżność z kolumną "Cena netto" w WBS (ta czyta z DB).
+                    const unitCost = persistedUnitCost;
                     const totalCost = inheritedFromMaterials
-                        ? (inheritedCost > 0 ? inheritedCost : persistedUnitCost * quantity)
+                        ? persistedUnitCost * quantity
                         : (Number.isFinite(parseFloat(item.totalCost))
                             ? parseFloat(item.totalCost)
                             : persistedUnitCost * quantity);
-                    const unitCost = inheritedFromMaterials
-                        ? (inheritedQuantity > 0 && inheritedCost > 0
-                            ? inheritedCost / inheritedQuantity
-                            : persistedUnitCost)
-                        : (Number.isFinite(persistedUnitCost)
-                            ? persistedUnitCost
-                            : (quantity > 0 ? totalCost / quantity : 0));
                     const clearDerivedFields = inheritedFromMaterials && totalCost <= 0;
                     const margin = clearDerivedFields ? 0 : (parseFloat(item.margin) || 0);
                     const discount = clearDerivedFields ? 0 : (parseFloat(item.discount) || 0);
@@ -3482,6 +3541,7 @@ ${ganttSectionHtml}
                                 searchQuery={normalizedSearchQuery}
                                 onMaterialReqUpdated={() => setReqRefreshKey(k => k + 1)}
                                 onPasteCloned={handlePasteCloned}
+                                onNodeExpand={handleNodeExpand}
                             />
                         </div>
                     ), () => handleExportPDF('wbs'), isManagerOrAdmin ? (

@@ -12,23 +12,27 @@ import { MaterialRequirementsService } from './material-requirements.service';
 
 @Controller('material-requirements')
 @UseGuards(JwtAuthGuard)
+// @anchor material-requirements-controller
 export class MaterialRequirementsController {
     constructor(private readonly service: MaterialRequirementsService) { }
 
     // ─── BAZA GLOBALNA ─────────────────────────────────────────────────────────
 
+    // @anchor mat-req-get-database
     /** Wszystkie materiały z wypełnionym producentem (w tym ręczne, bez karty katalogowej) */
     @Get('database')
     findGlobalDatabase() {
         return this.service.findAllMaterials();
     }
 
+    // @anchor mat-req-get-all-materials
     /** Wszystkie materiały z producentem (bez wymagania karty katalogowej) */
     @Get('all-materials')
     findAllMaterials() {
         return this.service.findAllMaterials();
     }
 
+    // @anchor mat-req-get-usage
     /** Użycie konkretnego materiału (producent+model) we wszystkich projektach z cenami */
     @Get('usage')
     findUsage(
@@ -39,18 +43,21 @@ export class MaterialRequirementsController {
         return this.service.findMaterialUsage(manufacturer, model);
     }
 
+    // @anchor mat-req-get-all-datasheets
     /** Wszystkie materiały zaimportowane z kart katalogowych (globalnie) */
     @Get('datasheets')
     findAllDatasheetItems() {
         return this.service.findAllDatasheetItems();
     }
 
+    // @anchor mat-req-get-datasheets-by-node
     /** Materiały zaimportowane z kart katalogowych dla danego węzła */
     @Get('datasheets/:nodeId')
     findDatasheetItems(@Param('nodeId') nodeId: string) {
         return this.service.findDatasheetItems(nodeId);
     }
 
+    // @anchor mat-req-get-with-offers
     /** Wszystkie materiały z przypisanym numerem oferty */
     @Get('with-offers')
     findAllWithOffers() {
@@ -59,6 +66,7 @@ export class MaterialRequirementsController {
 
     // ─── CRUD ──────────────────────────────────────────────────────────────────
 
+    // @anchor mat-req-get-by-node
     /** Lista wymagań dla węzła (opcjonalnie filtrowana wersją / listą) */
     @Get('node/:nodeId')
     findAll(
@@ -71,18 +79,21 @@ export class MaterialRequirementsController {
 
     // ─── LISTY WYMAGAŃ MATERIAŁOWYCH ─────────────────────────────────────────
 
+    // @anchor mat-req-get-lists
     /** Pobierz wszystkie listy dla węzła */
     @Get('lists/node/:nodeId')
     findLists(@Param('nodeId') nodeId: string) {
         return this.service.findListsByNode(nodeId);
     }
 
+    // @anchor mat-req-post-default-list
     /** Pobierz lub utwórz domyślną listę dla węzła */
     @Post('lists/node/:nodeId/default')
     getOrCreateDefault(@Param('nodeId') nodeId: string, @Req() req: any) {
         return this.service.getOrCreateDefaultList(nodeId, req.user?.email || req.user?.sub);
     }
 
+    // @anchor mat-req-post-list
     /** Utwórz nową listę */
     @Post('lists')
     createList(@Body() body: { nodeId: string; name: string }, @Req() req: any) {
@@ -90,24 +101,28 @@ export class MaterialRequirementsController {
         return this.service.createList(body.nodeId, body.name, req.user?.email || req.user?.sub);
     }
 
+    // @anchor mat-req-patch-list
     /** Zmień nazwę listy */
     @Patch('lists/:listId')
     renameList(@Param('listId') listId: string, @Body() body: { name: string }) {
         return this.service.renameList(listId, body.name);
     }
 
+    // @anchor mat-req-delete-list
     /** Usuń niezatwierdzoną listę wraz z wymaganiami */
     @Delete('lists/:listId')
     deleteList(@Param('listId') listId: string) {
         return this.service.deleteList(listId);
     }
 
+    // @anchor mat-req-post-lock-list
     /** Zatwierdź listę (zablokuj edycję) */
     @Post('lists/:listId/lock')
     lockList(@Param('listId') listId: string, @Req() req: any) {
         return this.service.lockList(listId, req.user?.email || req.user?.sub);
     }
 
+    // @anchor mat-req-post-new-version
     /** Utwórz nową wersję listy (dziedziczącą z bieżącej) */
     @Post('lists/:listId/new-version')
     newVersion(@Param('listId') listId: string, @Body() body: { name: string }) {
@@ -115,12 +130,14 @@ export class MaterialRequirementsController {
         return this.service.createNewVersion(listId, body.name);
     }
 
+    // @anchor mat-req-delete-by-node
     /** Usunięcie wszystkich wymagań dla węzła */
     @Delete('node/:nodeId/all')
     removeAll(@Param('nodeId') nodeId: string) {
         return this.service.removeAllByNode(nodeId);
     }
 
+    // @anchor mat-req-post-clear-assignments
     /** Czyszczenie przypisań do usuniętych węzłów WBS */
     @Post('clear-assignments')
     clearAssignments(@Body() body: { nodeId: string; deletedWbsNodeIds: string[] }) {
@@ -130,6 +147,7 @@ export class MaterialRequirementsController {
         return this.service.clearAssignments(body.nodeId, body.deletedWbsNodeIds);
     }
 
+    // @anchor mat-req-post-clone-for-wbs
     /** Klonuje karty produktowe (wymagania techniczne) z węzłów źródłowych do nowych węzłów WBS.
      *  Używane przy kopiowaniu pozycji w drzewie WBS — nowe wbs_nodes muszą już istnieć w bazie. */
     @Post('clone-for-wbs')
@@ -137,12 +155,14 @@ export class MaterialRequirementsController {
         return this.service.cloneForWbsNodes(body?.mappings || []);
     }
 
+    // @anchor mat-req-get-one
     /** Szczegóły jednego wymagania */
     @Get(':id')
     findOne(@Param('id') id: string) {
         return this.service.findOne(id);
     }
 
+    // @anchor mat-req-post-create
     /** Ręczne dodanie wymagania */
     @Post()
     create(@Body() body: {
@@ -164,12 +184,14 @@ export class MaterialRequirementsController {
         return this.service.create(body);
     }
 
+    // @anchor mat-req-patch-update
     /** Aktualizacja wymagania (dane produktu, przypisanie WBS, status) */
     @Patch(':id')
     update(@Param('id') id: string, @Body() body: any) {
         return this.service.update(id, body);
     }
 
+    // @anchor mat-req-delete-one
     /** Usunięcie wymagania */
     @Delete(':id')
     remove(@Param('id') id: string) {
@@ -248,6 +270,7 @@ export class MaterialRequirementsController {
 
     // ─── EKSTRAKCJA AI ────────────────────────────────────────────────────────
 
+    // @anchor mat-req-post-extract
     /**
      * Wyciąga urządzenia i materiały z dokumentów PDF zaimportowanych do węzła.
      * AI zwraca ustrukturyzowaną listę z wstępnymi przypisaniami do WBS.
@@ -263,6 +286,7 @@ export class MaterialRequirementsController {
 
     // ─── TABELA ZGODNOŚCI ────────────────────────────────────────────────────
 
+    // @anchor mat-req-post-evaluate-compliance
     /** Ocena zgodności produktów z wymaganiami przez AI */
     @Post(':id/evaluate-compliance')
     evaluateCompliance(@Param('id') id: string) {
@@ -271,6 +295,7 @@ export class MaterialRequirementsController {
 
     // ─── PROPOZYCJE PRODUKTÓW ─────────────────────────────────────────────────
 
+    // @anchor mat-req-post-search-products
     /**
      * Wyszukuje propozycje produktów przez Google Search API.
      * Zabezpieczone przed prompt injection — AI dostaje tylko snippety, nie pełny HTML.
@@ -280,12 +305,14 @@ export class MaterialRequirementsController {
         return this.service.searchProducts(id);
     }
 
+    // @anchor mat-req-patch-select-proposal
     /** Zaznacza wybraną propozycję i przepisuje dane produktu do wymagania */
     @Patch('proposals/:proposalId/select')
     selectProposal(@Param('proposalId') proposalId: string) {
         return this.service.selectProposal(proposalId);
     }
 
+    // @anchor mat-req-post-add-proposal
     /** Ręczne dodanie propozycji produktu */
     @Post(':id/proposals')
     addProposal(
@@ -302,6 +329,7 @@ export class MaterialRequirementsController {
         });
     }
 
+    // @anchor mat-req-patch-update-proposal
     /** Aktualizacja propozycji */
     @Patch('proposals/:proposalId')
     updateProposal(@Param('proposalId') proposalId: string, @Body() body: any) {
@@ -346,6 +374,7 @@ export class MaterialRequirementsController {
         return this.service.deleteProposalImage(proposalId);
     }
 
+    // @anchor mat-req-delete-proposal
     /** Usunięcie propozycji */
     @Delete('proposals/:proposalId')
     deleteProposal(@Param('proposalId') proposalId: string) {

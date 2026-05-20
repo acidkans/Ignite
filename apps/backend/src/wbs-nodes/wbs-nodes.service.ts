@@ -453,7 +453,7 @@ export class WbsNodesService {
      */
     async updateNode(id: string, data: any) {
         const allowed: Record<string, any> = {};
-        for (const key of ['name', 'type', 'status', 'owner', 'resources', 'cost', 'parentId', 'sortOrder', 'comment', 'unit']) {
+        for (const key of ['name', 'type', 'status', 'owner', 'resources', 'cost', 'parentId', 'sortOrder', 'comment', 'unit', 'unitPrice']) {
             if (data[key] !== undefined) allowed[key] = data[key];
         }
         if (data.ganttStart !== undefined) {
