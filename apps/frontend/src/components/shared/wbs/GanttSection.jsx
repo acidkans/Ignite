@@ -356,7 +356,7 @@ const VIEW_OPTS = [
 ];
 
 // @anchor gantt-section
-export default function GanttSection({ wbsTree, projectName, onNodeDurationChange, onGanttDateChange, onExportReady, onGetHtmlReady, projectStartDate, projectEndDate }) {
+export default function GanttSection({ wbsTree, projectName, onNodeDurationChange, onGanttDateChange, onExportReady, onGetHtmlReady, onExcelDataReady, projectStartDate, projectEndDate }) {
     const items = wbsTree?.items || [];
     const [viewMode, setViewMode] = useState(ViewMode.Day);
     const [projectStart, setProjectStart] = useState(() => {
@@ -1038,6 +1038,20 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
         return { html, styles, contentWidth };
     }, [tasks, viewMode, projectStart]);
     useEffect(() => { onGetHtmlReady?.(getGanttHtml); }, [getGanttHtml, onGetHtmlReady]);
+
+    // Dane harmonogramu do eksportu Excel — kolejność wierszy = kolejność tasków (po dacie startu).
+    const getExcelData = useCallback(() => {
+        const rows = tasks.map(t => ({
+            name: t.name,
+            start: new Date(t.start),
+            end: t.type === 'milestone' ? new Date(t.start) : new Date(t.end),
+            days: t.type === 'milestone' ? 0 : taskDays(t, branchWorkOnHolidays, taskBranchMap),
+            milestone: t.type === 'milestone',
+        }));
+        const totalDays = rows.reduce((s, r) => s + r.days, 0);
+        return { rows, totalDays, projectName, projectStart, projectEnd };
+    }, [tasks, branchWorkOnHolidays, taskBranchMap, projectName, projectStart, projectEnd]);
+    useEffect(() => { onExcelDataReady?.(getExcelData); }, [getExcelData, onExcelDataReady]);
 
     const ganttTableCtx = useMemo(
         () => ({ editCell, setEditCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap }),
