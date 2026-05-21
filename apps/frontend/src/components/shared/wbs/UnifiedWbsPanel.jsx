@@ -2777,6 +2777,20 @@ ${ganttSectionHtml}
         } catch (e) { console.error('Update node error:', e); }
     }, [authHeaders, wbsData, allRequirements, refreshMaterialCosts, refreshWbsNodes]);
 
+    // Zapis dat startowej/końcowej paska Gantta do bazy — wywoływany przy każdym drag/resize/datepicker.
+    // Bez tego zapisu zmiany długości/pozycji paska nie persystują i wracają do poprzedniej wartości.
+    // @anchor handle-gantt-date-change
+    const handleGanttDateChange = useCallback(async (nodeId, startIso, endIso) => {
+        if (!nodeId || !startIso || !endIso) return;
+        try {
+            await fetch(`${API_URL}/wbs-nodes/${nodeId}`, {
+                method: 'PATCH',
+                headers: authHeaders(),
+                body: JSON.stringify({ ganttStart: startIso, ganttEnd: endIso }),
+            });
+        } catch (e) { console.error('Gantt date save error:', e); }
+    }, [authHeaders]);
+
     // Drag krawędzi belki w Gantcie → quantity (dni) przez wbs-nodes/{id} (PATCH).
     // Unit zmienia się na 'dni' tylko gdy node ma już dniową jednostkę lub pustą — pakiet/komplet itp. zostają bez zmian.
     // @anchor handle-gantt-duration-change
@@ -3928,6 +3942,7 @@ ${ganttSectionHtml}
                             wbsTree={wbsTree}
                             projectName={orderName || projectName || 'Projekt'}
                             onNodeDurationChange={handleGanttDurationChange}
+                            onGanttDateChange={handleGanttDateChange}
                             onExportReady={fn => { ganttExportRef.current = fn; }}
                             onGetHtmlReady={fn => { ganttGetHtmlRef.current = fn; }}
                             onExcelDataReady={fn => { ganttExcelDataRef.current = fn; }}
