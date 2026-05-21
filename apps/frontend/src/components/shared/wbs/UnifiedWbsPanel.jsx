@@ -2175,12 +2175,12 @@ ${ganttSectionHtml}
         // ── Sheet WBS1 ──
         {
             const sheet = workbook.addWorksheet('WBS1 - Zakresy');
-            sheet.columns = [{ width: 45 }, { width: 24 }];
-            const hdr = sheet.addRow(['Zakresy', 'Cena ofertowa (PLN)']);
+            sheet.columns = [{ width: 45 }, { width: 18 }, { width: 24 }];
+            const hdr = sheet.addRow(['Zakresy', 'Typ', 'Cena ofertowa (PLN)']);
             hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
             hdr.fill = navyFill;
             hdr.alignment = { horizontal: 'center', vertical: 'middle' };
-            applyBorder(hdr, 2, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
+            applyBorder(hdr, 3, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
 
             const groups = new Map();
             for (const item of wbsData) {
@@ -2189,63 +2189,16 @@ ${ganttSectionHtml}
                 if (price <= 0) continue;
                 const d1 = localChain(item.id)[0];
                 if (!d1) continue;
-                if (!groups.has(d1.id)) groups.set(d1.id, { id: d1.id, name: d1.name || '', total: 0 });
+                if (!groups.has(d1.id)) groups.set(d1.id, { id: d1.id, name: d1.name || '', type: d1.type || '', total: 0 });
                 groups.get(d1.id).total += price;
             }
             const entries = [...groups.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id));
             const total = entries.reduce((s, e) => s + e.total, 0);
             for (const e of entries) {
-                const r = sheet.addRow([e.name, e.total]);
-                r.getCell(2).numFmt = numFmt;
-                r.getCell(2).alignment = { horizontal: 'right' };
-                applyBorder(r, 2, cellBorder);
-            }
-            const lastDataRow = sheet.rowCount;
-            const sumRow = sheet.addRow(['Razem', total]);
-            sumRow.font = { bold: true };
-            sumRow.fill = sumFill;
-            sumRow.getCell(2).value = lastDataRow >= 2
-                ? { formula: `SUBTOTAL(9,B2:B${lastDataRow})`, result: total }
-                : total;
-            sumRow.getCell(2).numFmt = numFmt;
-            sumRow.getCell(2).alignment = { horizontal: 'right' };
-            applyBorder(sumRow, 2, sumBorder);
-            sheet.views = [{ state: 'frozen', ySplit: 1 }];
-            if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 2 } };
-        }
-
-        // ── Sheet WBS2 ──
-        {
-            const sheet = workbook.addWorksheet('WBS2 - Składowe');
-            sheet.columns = [{ width: 35 }, { width: 35 }, { width: 24 }];
-            const hdr = sheet.addRow(['Zakresy', 'Składowe zakresów', 'Cena ofertowa (PLN)']);
-            hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-            hdr.fill = navyFill;
-            hdr.alignment = { horizontal: 'center', vertical: 'middle' };
-            applyBorder(hdr, 3, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
-
-            const level1 = new Map();
-            for (const item of wbsData) {
-                if (!item.parentId) continue;
-                const price = localPriceOf(item);
-                if (price <= 0) continue;
-                const chain = localChain(item.id);
-                const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)];
-                if (!d1) continue;
-                if (!level1.has(d1.id)) level1.set(d1.id, { id: d1.id, name: d1.name || '', children: new Map() });
-                const g1 = level1.get(d1.id);
-                if (!g1.children.has(d2.id)) g1.children.set(d2.id, { id: d2.id, name: d2.name || '', total: 0 });
-                g1.children.get(d2.id).total += price;
-            }
-            const total = [...level1.values()].reduce((s, g) => s + [...g.children.values()].reduce((s2, c) => s2 + c.total, 0), 0);
-            for (const g1 of [...level1.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
-                const children = [...g1.children.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id));
-                for (let i = 0; i < children.length; i++) {
-                    const r = sheet.addRow([g1.name, children[i].name, children[i].total]);
-                    r.getCell(3).numFmt = numFmt;
-                    r.getCell(3).alignment = { horizontal: 'right' };
-                    applyBorder(r, 3, cellBorder);
-                }
+                const r = sheet.addRow([e.name, TYPE_LABELS[e.type] || e.type || '', e.total]);
+                r.getCell(3).numFmt = numFmt;
+                r.getCell(3).alignment = { horizontal: 'right' };
+                applyBorder(r, 3, cellBorder);
             }
             const lastDataRow = sheet.rowCount;
             const sumRow = sheet.addRow(['Razem', '', total]);
@@ -2261,11 +2214,11 @@ ${ganttSectionHtml}
             if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 3 } };
         }
 
-        // ── Sheet WBS3 ──
+        // ── Sheet WBS2 ──
         {
-            const sheet = workbook.addWorksheet('WBS3 - Szczegóły');
-            sheet.columns = [{ width: 28 }, { width: 28 }, { width: 28 }, { width: 24 }];
-            const hdr = sheet.addRow(['Zakresy', 'Składowe zakresów', 'Pozycje', 'Cena ofertowa (PLN)']);
+            const sheet = workbook.addWorksheet('WBS2 - Składowe');
+            sheet.columns = [{ width: 35 }, { width: 35 }, { width: 18 }, { width: 24 }];
+            const hdr = sheet.addRow(['Zakresy', 'Składowe zakresów', 'Typ', 'Cena ofertowa (PLN)']);
             hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
             hdr.fill = navyFill;
             hdr.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -2277,28 +2230,21 @@ ${ganttSectionHtml}
                 const price = localPriceOf(item);
                 if (price <= 0) continue;
                 const chain = localChain(item.id);
-                const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)], d3 = chain[Math.min(2, chain.length - 1)];
+                const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)];
                 if (!d1) continue;
                 if (!level1.has(d1.id)) level1.set(d1.id, { id: d1.id, name: d1.name || '', children: new Map() });
                 const g1 = level1.get(d1.id);
-                if (!g1.children.has(d2.id)) g1.children.set(d2.id, { id: d2.id, name: d2.name || '', children: new Map() });
-                const g2 = g1.children.get(d2.id);
-                if (!g2.children.has(d3.id)) g2.children.set(d3.id, { id: d3.id, name: d3.name || '', total: 0 });
-                g2.children.get(d3.id).total += price;
+                if (!g1.children.has(d2.id)) g1.children.set(d2.id, { id: d2.id, name: d2.name || '', type: d2.type || '', total: 0 });
+                g1.children.get(d2.id).total += price;
             }
-            const total = [...level1.values()].reduce((s, g1) => s + [...g1.children.values()].reduce((s2, g2) => s2 + [...g2.children.values()].reduce((s3, c) => s3 + c.total, 0), 0), 0);
+            const total = [...level1.values()].reduce((s, g) => s + [...g.children.values()].reduce((s2, c) => s2 + c.total, 0), 0);
             for (const g1 of [...level1.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
-                let firstD1 = true;
-                for (const g2 of [...g1.children.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
-                    let firstD2 = true;
-                    for (const d3 of [...g2.children.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
-                        const r = sheet.addRow([g1.name, g2.name, d3.name, d3.total]);
-                        r.getCell(4).numFmt = numFmt;
-                        r.getCell(4).alignment = { horizontal: 'right' };
-                        applyBorder(r, 4, cellBorder);
-                        if (firstD1 && firstD2) firstD1 = false;
-                        firstD2 = false;
-                    }
+                const children = [...g1.children.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id));
+                for (let i = 0; i < children.length; i++) {
+                    const r = sheet.addRow([g1.name, children[i].name, TYPE_LABELS[children[i].type] || children[i].type || '', children[i].total]);
+                    r.getCell(4).numFmt = numFmt;
+                    r.getCell(4).alignment = { horizontal: 'right' };
+                    applyBorder(r, 4, cellBorder);
                 }
             }
             const lastDataRow = sheet.rowCount;
@@ -2313,6 +2259,60 @@ ${ganttSectionHtml}
             applyBorder(sumRow, 4, sumBorder);
             sheet.views = [{ state: 'frozen', ySplit: 1 }];
             if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 4 } };
+        }
+
+        // ── Sheet WBS3 ──
+        {
+            const sheet = workbook.addWorksheet('WBS3 - Szczegóły');
+            sheet.columns = [{ width: 28 }, { width: 28 }, { width: 28 }, { width: 18 }, { width: 24 }];
+            const hdr = sheet.addRow(['Zakresy', 'Składowe zakresów', 'Pozycje', 'Typ', 'Cena ofertowa (PLN)']);
+            hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            hdr.fill = navyFill;
+            hdr.alignment = { horizontal: 'center', vertical: 'middle' };
+            applyBorder(hdr, 5, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
+
+            const level1 = new Map();
+            for (const item of wbsData) {
+                if (!item.parentId) continue;
+                const price = localPriceOf(item);
+                if (price <= 0) continue;
+                const chain = localChain(item.id);
+                const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)], d3 = chain[Math.min(2, chain.length - 1)];
+                if (!d1) continue;
+                if (!level1.has(d1.id)) level1.set(d1.id, { id: d1.id, name: d1.name || '', children: new Map() });
+                const g1 = level1.get(d1.id);
+                if (!g1.children.has(d2.id)) g1.children.set(d2.id, { id: d2.id, name: d2.name || '', children: new Map() });
+                const g2 = g1.children.get(d2.id);
+                if (!g2.children.has(d3.id)) g2.children.set(d3.id, { id: d3.id, name: d3.name || '', type: d3.type || '', total: 0 });
+                g2.children.get(d3.id).total += price;
+            }
+            const total = [...level1.values()].reduce((s, g1) => s + [...g1.children.values()].reduce((s2, g2) => s2 + [...g2.children.values()].reduce((s3, c) => s3 + c.total, 0), 0), 0);
+            for (const g1 of [...level1.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
+                let firstD1 = true;
+                for (const g2 of [...g1.children.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
+                    let firstD2 = true;
+                    for (const d3 of [...g2.children.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
+                        const r = sheet.addRow([g1.name, g2.name, d3.name, TYPE_LABELS[d3.type] || d3.type || '', d3.total]);
+                        r.getCell(5).numFmt = numFmt;
+                        r.getCell(5).alignment = { horizontal: 'right' };
+                        applyBorder(r, 5, cellBorder);
+                        if (firstD1 && firstD2) firstD1 = false;
+                        firstD2 = false;
+                    }
+                }
+            }
+            const lastDataRow = sheet.rowCount;
+            const sumRow = sheet.addRow(['Razem', '', '', '', total]);
+            sumRow.font = { bold: true };
+            sumRow.fill = sumFill;
+            sumRow.getCell(5).value = lastDataRow >= 2
+                ? { formula: `SUBTOTAL(9,E2:E${lastDataRow})`, result: total }
+                : total;
+            sumRow.getCell(5).numFmt = numFmt;
+            sumRow.getCell(5).alignment = { horizontal: 'right' };
+            applyBorder(sumRow, 5, sumBorder);
+            sheet.views = [{ state: 'frozen', ySplit: 1 }];
+            if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 5 } };
         }
 
         // ── Sheet Materiały: pełny eksport szczegółów (logika z WbsMaterialsPanel.exportToExcel) ──
