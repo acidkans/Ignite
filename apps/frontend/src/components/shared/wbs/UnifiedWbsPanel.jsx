@@ -1561,16 +1561,34 @@ ${ganttSectionHtml}
     };
 
     // @anchor handle-export-budget-excel
-    const handleExportBudgetExcel = async () => {
+    // Buduje arkusz "Budżet" (pozycje WBS: koszt jedn., ilość, marża, cena ofertowa)
+    // w przekazanym workbooku. Waliduje pozycje liściowe — przy zerowym koszcie
+    // jednostkowym lub narzucie zwraca { ok:false, invalidRows }. Współdzielone przez
+    // eksport budżetu i eksport tabel WBS.
+    const appendBudgetSheet = (workbook) => {
         const rawRows = buildRows(VIEWS.BUDGET).filter(r => r.type !== 'group');
+        if (!rawRows.length) return { ok: false, empty: true, invalidRows: [] };
 
-        if (!rawRows.length) {
-            alert('Brak danych budżetowych do eksportu.');
-            return;
-        }
+        // Walidacja: pozycje liściowe (bez podgałęzi) z zerowym kosztem jednostkowym
+        // lub zerowym narzutem blokują eksport — gałęzie zbiorcze pomijamy, ich koszt
+        // jest sumą dzieci.
+        const parentIds = new Set(wbsData.map(n => n.parentId).filter(Boolean));
+        const invalidRows = [];
+        rawRows.forEach(r => {
+            if (parentIds.has(r.id)) return;
+            const uc = Math.max(0, parseFloat(r.unitCost) || 0);
+            const marginVal = parseFloat(r.margin) || 0;
+            const problems = [];
+            if (uc === 0) problems.push('koszt jedn. = 0');
+            if (marginVal === 0) problems.push('narzut = 0');
+            if (problems.length) {
+                const label = String(r.name || r.subjectName || '(bez nazwy)').trim() || '(bez nazwy)';
+                invalidRows.push(`• ${label} — ${problems.join(' i ')}`);
+            }
+        });
+        if (invalidRows.length) return { ok: false, empty: false, invalidRows };
 
-        // Przelicz tak samo jak BudgetTable (calcDerived: uc×qty),
-        // żeby Podsumowanie i arkusz Budżet pokazywały te same wartości po przeliczeniu formuł.
+        // Przelicz tak samo jak BudgetTable (calcDerived: uc×qty).
         const rows = rawRows.map(r => {
             const q = Math.max(0, parseFloat(r.quantity) || 0);
             const uc = Math.max(0, parseFloat(r.unitCost) || 0);
@@ -1582,15 +1600,151 @@ ${ganttSectionHtml}
             return { ...r, totalCost, cost: totalCost, offerPrice };
         });
 
+        const summary = summarizeBudgetRows(rows);
+        const parsedPercentDiscount = Number(String(budgetDiscountPercent).replace(',', '.'));
+        const parsedAmountDiscount = Number(String(budgetDiscountAmount).replace(',', '.'));
+        const discountAmountFromPercent = Number.isFinite(parsedPercentDiscount)
+            ? Math.max(0, parsedPercentDiscount) / 100 * summary.totalRevenue
+            : 0;
+        const discountAmountFromValue = Number.isFinite(parsedAmountDiscount) ? Math.max(0, parsedAmountDiscount) : 0;
+        const exportedRevenueAfterDiscount = Math.max(0, summary.totalRevenue - discountAmountFromPercent - discountAmountFromValue);
+
+        // Mapa WBS nodeId → nazwa wymagania
+        const reqNameByNodeId = {};
+        for (const req of allRequirements) {
+            try {
+                const alloc = JSON.parse(req.wbsNodeAllocations || '{}');
+                for (const nid of Object.keys(alloc)) {
+                    if (nid) reqNameByNodeId[nid] = req.name || req.productName || '';
+                }
+            } catch {}
+        }
+
+        // Columns: A=Lp B=Przedmiot C=Podgałąź D=Nazwa E=Nazwawymagania F=Typ G=KosztJedn H=Ilość I=Jednostka J=KosztCałościowy=G*H K=Marża L=Rabat M=CenaOfertowa=J*(1+K)*(1-L)
+        // Wiersz 1 = pole rabatu całościowego; nagłówek tabeli w wierszu 2, dane od 3.
+        const BUDGET_COLUMNS = [
+            { key: 'index', width: 6, header: 'Lp.' },
+            { key: 'subjectName', width: 28, header: 'Przedmiot' },
+            { key: 'parentName', width: 24, header: 'Podgałąź' },
+            { key: 'name', width: 34, header: 'Nazwa' },
+            { key: 'requirementName', width: 30, header: 'Nazwa wymagania' },
+            { key: 'type', width: 16, header: 'Typ' },
+            { key: 'unitCost', width: 18, header: 'Koszt jednostkowy' },
+            { key: 'quantity', width: 12, header: 'Ilość' },
+            { key: 'unit', width: 14, header: 'Jednostka' },
+            { key: 'totalCost', width: 18, header: 'Koszt całościowy' },
+            { key: 'margin', width: 12, header: 'Marża (%)' },
+            { key: 'discount', width: 12, header: 'Rabat (%)' },
+            { key: 'offerPrice', width: 18, header: 'Cena ofertowa' },
+            { key: 'comment', width: 32, header: 'Komentarz' },
+            { key: 'status', width: 18, header: 'Status' },
+            { key: 'qaCount', width: 14, header: 'Q&A (liczba)' },
+        ];
+        const budgetSheet = workbook.addWorksheet('Budżet');
+        // Kolumny bez nagłówka — nagłówek dodajemy ręcznie w wierszu 2.
+        budgetSheet.columns = BUDGET_COLUMNS.map(c => ({ key: c.key, width: c.width }));
+
+        // Wiersz 1 — pole rabatu całościowego budżetu (osobne od tabeli pozycji).
+        const globalDiscount = summary.totalRevenue - exportedRevenueAfterDiscount;
+        const discountFieldRow = budgetSheet.addRow([
+            'Rabat całościowy', globalDiscount, '',
+            'Cena ofertowa po rabacie całościowym', exportedRevenueAfterDiscount,
+        ]);
+        discountFieldRow.font = { bold: true };
+        budgetSheet.getCell('B1').numFmt = '#,##0.00';
+        budgetSheet.getCell('E1').numFmt = '#,##0.00';
+
+        // Wiersz 2 — nagłówek tabeli.
+        const headerRow = budgetSheet.addRow(BUDGET_COLUMNS.map(c => c.header));
+        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+
+        const qaSheetRows = [];
+        rows.forEach((row, index) => {
+            const excelRow = index + 3; // wiersz 1 = pole rabatu, wiersz 2 = nagłówek
+            const qaList = Array.isArray(row.qa)
+                ? row.qa.filter(p => String(p?.question || '').trim() || String(p?.answer || '').trim())
+                : [];
+            budgetSheet.addRow({
+                index: index + 1,
+                subjectName: row.subjectName || '',
+                parentName: row.parentName || '',
+                name: row.name || '',
+                requirementName: reqNameByNodeId[row.id] || '',
+                type: TYPE_LABELS[row.type] || row.type || '',
+                unitCost: Number(row.unitCost) || 0,
+                quantity: Number(row.quantity) || 0,
+                unit: row.unit || '',
+                totalCost: { formula: `=G${excelRow}*H${excelRow}`, result: Number(row.totalCost) || 0 },
+                margin: (Number(row.margin) || 0) / 100,
+                discount: (Number(row.discount) || 0) / 100,
+                offerPrice: { formula: `=IF(K${excelRow}=0,0,J${excelRow}*(1+K${excelRow})*(1-L${excelRow}))`, result: Number(row.offerPrice) || 0 },
+                comment: row.comment || '',
+                status: row.status || '',
+                qaCount: qaList.length,
+            });
+            qaList.forEach((p) => {
+                qaSheetRows.push({
+                    subjectName: row.subjectName || '',
+                    parentName: row.parentName || '',
+                    name: row.name || '',
+                    question: String(p.question || ''),
+                    answer: String(p.answer || ''),
+                });
+            });
+        });
+
+        // "Razem" = suma cen ofertowych pozycji (rabaty per gałąź już wliczone w wierszach).
+        const totalsRowNum = rows.length + 3;
+        const totalsRow = budgetSheet.addRow({
+            subjectName: 'Razem',
+            totalCost: { formula: `=SUM(J3:J${totalsRowNum - 1})`, result: summary.totalCost },
+            offerPrice: { formula: `=SUM(M3:M${totalsRowNum - 1})`, result: summary.totalRevenue },
+        });
+        totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+
+        ['G', 'J', 'M'].forEach((column) => {
+            budgetSheet.getColumn(column).numFmt = '#,##0.00';
+        });
+        budgetSheet.getColumn('H').numFmt = '#,##0.00';
+        budgetSheet.getColumn('K').numFmt = '0.00%';
+        budgetSheet.getColumn('L').numFmt = '0.00%';
+        budgetSheet.views = [{ state: 'frozen', ySplit: 2 }];
+        // Filtr na nagłówek (wiersz 2) + wiersze danych (bez wiersza „Razem"). Kolejność
+        // wierszy = kolejność gałęzi w WBS (buildRows sortuje po wbsOrderMap).
+        if (rows.length > 0) {
+            budgetSheet.autoFilter = {
+                from: { row: 2, column: 1 },
+                to: { row: rows.length + 2, column: budgetSheet.columnCount },
+            };
+        }
+
+        return { ok: true, empty: false, invalidRows: [], rows, summary, qaSheetRows };
+    };
+
+    const handleExportBudgetExcel = async () => {
         const workbook = new ExcelJS.Workbook();
-        const safeOrderName = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|\[\]]+/g, '_') || 'zamowienie';
         // Konwencja: arkusze nazwane tylko typem (Podsumowanie / Budżet / Q&A) — nazwa projektu jest w nazwie pliku.
         const summarySheet = workbook.addWorksheet('Podsumowanie');
-        const budgetSheet = workbook.addWorksheet('Budżet');
+        const budget = appendBudgetSheet(workbook);
+        if (budget.empty) {
+            alert('Brak danych budżetowych do eksportu.');
+            return;
+        }
+        if (!budget.ok) {
+            alert(
+                `Eksport budżetu wstrzymany — ${budget.invalidRows.length} pozycji wymaga uzupełnienia:\n\n` +
+                budget.invalidRows.join('\n') +
+                `\n\nUzupełnij koszt jednostkowy i narzut tych pozycji, po czym ponów eksport.`
+            );
+            return;
+        }
+        const { rows, summary, qaSheetRows } = budget;
+
         const exportDate = new Date().toLocaleDateString('pl-PL');
         const fileProjectName = String(orderName || projectName || 'projekt').trim() || 'projekt';
         const safeProjectName = fileProjectName.replace(/[\\/:*?"<>|]+/g, '_');
-        const summary = summarizeBudgetRows(rows);
         const parsedPercentDiscount = Number(String(budgetDiscountPercent).replace(',', '.'));
         const parsedAmountDiscount = Number(String(budgetDiscountAmount).replace(',', '.'));
         const discountAmountFromPercent = Number.isFinite(parsedPercentDiscount)
@@ -1603,11 +1757,6 @@ ${ganttSectionHtml}
         const exportedMarginAfterDiscount = exportedRevenueAfterDiscount > 0
             ? (exportedProfitAfterDiscount / exportedRevenueAfterDiscount) * 100
             : 0;
-        const totalQuantity = rows.reduce((sum, row) => sum + (Number(row.quantity) || 0), 0);
-        const averageDiscount = rows.length
-            ? rows.reduce((sum, row) => sum + (Number(row.discount) || 0), 0) / rows.length
-            : 0;
-        const weightedUnitCost = totalQuantity > 0 ? summary.totalCost / totalQuantity : 0;
 
         summarySheet.columns = [
             { width: 28 },
@@ -1685,94 +1834,6 @@ ${ganttSectionHtml}
             summarySheet.getCell(`G${r}`).numFmt = '0.00%';
         }
 
-        // Mapa WBS nodeId → nazwa wymagania
-        const reqNameByNodeId = {};
-        for (const req of allRequirements) {
-            try {
-                const alloc = JSON.parse(req.wbsNodeAllocations || '{}');
-                for (const nid of Object.keys(alloc)) {
-                    if (nid) reqNameByNodeId[nid] = req.name || req.productName || '';
-                }
-            } catch {}
-        }
-
-        // Columns: A=Lp B=Przedmiot C=Podgałąź D=Nazwa E=Nazwawymagania F=Typ G=KosztJedn H=Ilość I=Jednostka J=KosztCałościowy=G*H K=Marża L=Rabat M=CenaOfertowa=J*(1+K)*(1-L)
-        budgetSheet.columns = [
-            { header: 'Lp.', key: 'index', width: 6 },
-            { header: 'Przedmiot', key: 'subjectName', width: 28 },
-            { header: 'Podgałąź', key: 'parentName', width: 24 },
-            { header: 'Nazwa', key: 'name', width: 34 },
-            { header: 'Nazwa wymagania', key: 'requirementName', width: 30 },
-            { header: 'Typ', key: 'type', width: 16 },
-            { header: 'Koszt jednostkowy', key: 'unitCost', width: 18 },
-            { header: 'Ilość', key: 'quantity', width: 12 },
-            { header: 'Jednostka', key: 'unit', width: 14 },
-            { header: 'Koszt całościowy', key: 'totalCost', width: 18 },
-            { header: 'Marża (%)', key: 'margin', width: 12 },
-            { header: 'Rabat (%)', key: 'discount', width: 12 },
-            { header: 'Cena ofertowa', key: 'offerPrice', width: 18 },
-            { header: 'Komentarz', key: 'comment', width: 32 },
-            { header: 'Status', key: 'status', width: 18 },
-            { header: 'Q&A (liczba)', key: 'qaCount', width: 14 },
-        ];
-
-        const headerRow = budgetSheet.getRow(1);
-        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
-
-        const qaSheetRows = [];
-        rows.forEach((row, index) => {
-            const excelRow = index + 2; // row 1 = header
-            const qaList = Array.isArray(row.qa)
-                ? row.qa.filter(p => String(p?.question || '').trim() || String(p?.answer || '').trim())
-                : [];
-            const addedRow = budgetSheet.addRow({
-                index: index + 1,
-                subjectName: row.subjectName || '',
-                parentName: row.parentName || '',
-                name: row.name || '',
-                requirementName: reqNameByNodeId[row.id] || '',
-                type: TYPE_LABELS[row.type] || row.type || '',
-                unitCost: Number(row.unitCost) || 0,
-                quantity: Number(row.quantity) || 0,
-                unit: row.unit || '',
-                totalCost: { formula: `=G${excelRow}*H${excelRow}`, result: Number(row.totalCost) || 0 },
-                margin: (Number(row.margin) || 0) / 100,
-                discount: (Number(row.discount) || 0) / 100,
-                offerPrice: { formula: `=IF(K${excelRow}=0,0,J${excelRow}*(1+K${excelRow})*(1-L${excelRow}))`, result: Number(row.offerPrice) || 0 },
-                comment: row.comment || '',
-                status: row.status || '',
-                qaCount: qaList.length,
-            });
-            void addedRow;
-            qaList.forEach((p) => {
-                qaSheetRows.push({
-                    subjectName: row.subjectName || '',
-                    parentName: row.parentName || '',
-                    name: row.name || '',
-                    question: String(p.question || ''),
-                    answer: String(p.answer || ''),
-                });
-            });
-        });
-
-        const totalsRowNum = rows.length + 2;
-        const totalsRow = budgetSheet.addRow({
-            subjectName: 'Razem',
-            totalCost: { formula: `=SUM(J2:J${totalsRowNum - 1})`, result: summary.totalCost },
-            offerPrice: { formula: `=SUM(M2:M${totalsRowNum - 1})`, result: exportedRevenueAfterDiscount },
-        });
-        totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
-
-        ['G', 'J', 'M'].forEach((column) => {
-            budgetSheet.getColumn(column).numFmt = '#,##0.00';
-        });
-        budgetSheet.getColumn('H').numFmt = '#,##0.00';
-        budgetSheet.getColumn('K').numFmt = '0.00%';
-        budgetSheet.getColumn('L').numFmt = '0.00%';
-        budgetSheet.views = [{ state: 'frozen', ySplit: 1 }];
-
         // Q&A sheet — zagnieżdżona tabela: Pozycja WBS / Pytanie / Odpowiedź
         const qaSheet = workbook.addWorksheet('Q&A');
         qaSheet.columns = [
@@ -1790,6 +1851,12 @@ ${ganttSectionHtml}
             added.alignment = { wrapText: true, vertical: 'top' };
         });
         qaSheet.views = [{ state: 'frozen', ySplit: 1 }];
+        if (qaSheetRows.length > 0) {
+            qaSheet.autoFilter = {
+                from: { row: 1, column: 1 },
+                to: { row: qaSheetRows.length + 1, column: qaSheet.columnCount },
+            };
+        }
 
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -1843,35 +1910,44 @@ ${ganttSectionHtml}
         headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
         headerRow.alignment = { vertical: 'middle' };
 
-        // Rabaty z budżetu — proporcjonalnie rozłożone na pozycje (dopasowanie do PRZYCHÓD w aplikacji)
+        // Suma ofertowa = Σ cen ofertowych pozycji (rabaty per gałąź już wliczone).
+        // Globalny rabat budżetu pokazujemy osobno, jako wiersze pod sumą.
         const rawRevenue = [...aggMap.values()].reduce((s, d) => s + (Number(d.offerPrice) || 0), 0);
         const parsedPct = Number(String(budgetDiscountPercent ?? '').replace(',', '.'));
         const parsedAmt = Number(String(budgetDiscountAmount ?? '').replace(',', '.'));
         const discFromPct = Number.isFinite(parsedPct) ? Math.max(0, parsedPct) / 100 * rawRevenue : 0;
         const discFromAmt = Number.isFinite(parsedAmt) ? Math.max(0, parsedAmt) : 0;
-        const totalRevenue = Math.max(0, rawRevenue - discFromPct - discFromAmt);
-        const discountFactor = rawRevenue > 0 ? totalRevenue / rawRevenue : 1;
+        const globalDiscount = Math.min(rawRevenue, discFromPct + discFromAmt);
+        const revenueAfterGlobalDiscount = Math.max(0, rawRevenue - globalDiscount);
 
         const firstDataRow = 2;
         for (const [, data] of aggMap) {
-            const discounted = (Number(data.offerPrice) || 0) * discountFactor;
+            const offer = Number(data.offerPrice) || 0;
             const added = sheet.addRow({
                 subject: data.label,
-                offerPrice: discounted > 0 ? discounted : null,
+                offerPrice: offer > 0 ? offer : null,
             });
             added.alignment = { wrapText: true, vertical: 'top' };
         }
         const lastDataRow = firstDataRow + aggMap.size - 1;
 
-        // Wiersz sumujący — łączna cena ofertowa (po rabatach)
+        // Wiersz sumujący — suma cen ofertowych pozycji (przed rabatem całościowym)
         const totalsRow = sheet.addRow({
             subject: 'Razem',
             offerPrice: aggMap.size > 0
-                ? { formula: `=SUM(B${firstDataRow}:B${lastDataRow})`, result: totalRevenue }
-                : totalRevenue,
+                ? { formula: `=SUM(B${firstDataRow}:B${lastDataRow})`, result: rawRevenue }
+                : rawRevenue,
         });
         totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+
+        // Globalny rabat budżetu — osobne pozycje pod sumą
+        if (globalDiscount > 0) {
+            const discRow = sheet.addRow({ subject: 'Rabat całościowy', offerPrice: -globalDiscount });
+            discRow.font = { italic: true };
+            const finalRow = sheet.addRow({ subject: 'Cena ofertowa po rabacie całościowym', offerPrice: revenueAfterGlobalDiscount });
+            finalRow.font = { bold: true };
+        }
 
         // Szacowana ilość dni pracy — suma quantity dla type=work/praca, unit=dni
         const workDays = rows.reduce((sum, r) => {
@@ -1889,6 +1965,9 @@ ${ganttSectionHtml}
 
         sheet.getColumn('offerPrice').numFmt = '#,##0.00';
         sheet.views = [{ state: 'frozen', ySplit: 1 }];
+        if (aggMap.size > 0) {
+            sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: sheet.columnCount } };
+        }
 
         // ── Sheet Materiały: płaska lista (bez agregacji, bez cen, z komentarzami) ──
         const materialsSheet = workbook.addWorksheet('Materiały');
@@ -1989,6 +2068,17 @@ ${ganttSectionHtml}
         const safeProjectName = String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'projekt';
         const workbook = new ExcelJS.Workbook();
 
+        // Arkusz "Budżet" (logika eksportu budżetu) — z walidacją pozycji liściowych.
+        const budget = appendBudgetSheet(workbook);
+        if (!budget.ok && !budget.empty) {
+            alert(
+                `Eksport wstrzymany — ${budget.invalidRows.length} pozycji budżetu wymaga uzupełnienia:\n\n` +
+                budget.invalidRows.join('\n') +
+                `\n\nUzupełnij koszt jednostkowy i narzut tych pozycji, po czym ponów eksport.`
+            );
+            return;
+        }
+
         const navyFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
         const sumFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF2F7' } };
         const thinBorder = (color = 'FFCCCCCC') => ({ style: 'thin', color: { argb: color } });
@@ -2000,13 +2090,31 @@ ${ganttSectionHtml}
         };
 
         const localById = new Map(wbsData.map(n => [n.id, n]));
+        // Kolejność gałęzi w eksporcie = kolejność w panelu WBS (DFS od korzenia po sortOrder).
+        const wbsOrderIndex = (() => {
+            const byParent = new Map();
+            for (const it of wbsData) {
+                const pid = it.parentId || '__root__';
+                if (!byParent.has(pid)) byParent.set(pid, []);
+                byParent.get(pid).push(it);
+            }
+            for (const sibs of byParent.values()) sibs.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+            const idx = new Map();
+            let i = 0;
+            const walk = (pid) => { for (const ch of (byParent.get(pid) || [])) { idx.set(ch.id, i++); walk(ch.id); } };
+            walk('__root__');
+            return idx;
+        })();
+        const wbsOrd = (id) => wbsOrderIndex.has(id) ? wbsOrderIndex.get(id) : Number.MAX_SAFE_INTEGER;
+        // Cena ofertowa pozycji — formuła IDENTYCZNA z appendBudgetSheet / offerRevenueTotal
+        // / BudgetTable.calcDerived: brak narzutu ⇒ cena ofertowa 0 (nie koszt).
         const localPriceOf = (item) => {
             const q = Math.max(0, parseFloat(item.quantity) || 0);
             const uc = Math.max(0, parseFloat(item.unitCost) || 0);
-            const tc = uc * q || parseFloat(item.totalCost) || 0;
+            const tc = uc * q;
             const m = (item.margin != null && String(item.margin) !== '') ? parseFloat(item.margin) : null;
             const d = Math.max(0, parseFloat(item.discount) || 0);
-            let p = (m !== null && m !== 0) ? tc * (1 + m / 100) : tc;
+            let p = (m !== null && m !== 0) ? tc * (1 + m / 100) : 0;
             if (p > 0 && d > 0) p = Math.max(0, p * (1 - d / 100));
             return p;
         };
@@ -2035,10 +2143,10 @@ ${ganttSectionHtml}
                 if (price <= 0) continue;
                 const d1 = localChain(item.id)[0];
                 if (!d1) continue;
-                if (!groups.has(d1.id)) groups.set(d1.id, { name: d1.name || '', total: 0 });
+                if (!groups.has(d1.id)) groups.set(d1.id, { id: d1.id, name: d1.name || '', total: 0 });
                 groups.get(d1.id).total += price;
             }
-            const entries = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'));
+            const entries = [...groups.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id));
             const total = entries.reduce((s, e) => s + e.total, 0);
             for (const e of entries) {
                 const r = sheet.addRow([e.name, e.total]);
@@ -2046,6 +2154,7 @@ ${ganttSectionHtml}
                 r.getCell(2).alignment = { horizontal: 'right' };
                 applyBorder(r, 2, cellBorder);
             }
+            const lastDataRow = sheet.rowCount;
             const sumRow = sheet.addRow(['Razem', total]);
             sumRow.font = { bold: true };
             sumRow.fill = sumFill;
@@ -2053,6 +2162,7 @@ ${ganttSectionHtml}
             sumRow.getCell(2).alignment = { horizontal: 'right' };
             applyBorder(sumRow, 2, sumBorder);
             sheet.views = [{ state: 'frozen', ySplit: 1 }];
+            if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 2 } };
         }
 
         // ── Sheet WBS2 ──
@@ -2073,14 +2183,14 @@ ${ganttSectionHtml}
                 const chain = localChain(item.id);
                 const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)];
                 if (!d1) continue;
-                if (!level1.has(d1.id)) level1.set(d1.id, { name: d1.name || '', children: new Map() });
+                if (!level1.has(d1.id)) level1.set(d1.id, { id: d1.id, name: d1.name || '', children: new Map() });
                 const g1 = level1.get(d1.id);
-                if (!g1.children.has(d2.id)) g1.children.set(d2.id, { name: d2.name || '', total: 0 });
+                if (!g1.children.has(d2.id)) g1.children.set(d2.id, { id: d2.id, name: d2.name || '', total: 0 });
                 g1.children.get(d2.id).total += price;
             }
             const total = [...level1.values()].reduce((s, g) => s + [...g.children.values()].reduce((s2, c) => s2 + c.total, 0), 0);
-            for (const g1 of [...level1.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
-                const children = [...g1.children.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'));
+            for (const g1 of [...level1.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
+                const children = [...g1.children.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id));
                 for (let i = 0; i < children.length; i++) {
                     const r = sheet.addRow([g1.name, children[i].name, children[i].total]);
                     r.getCell(3).numFmt = numFmt;
@@ -2088,6 +2198,7 @@ ${ganttSectionHtml}
                     applyBorder(r, 3, cellBorder);
                 }
             }
+            const lastDataRow = sheet.rowCount;
             const sumRow = sheet.addRow(['Razem', '', total]);
             sumRow.font = { bold: true };
             sumRow.fill = sumFill;
@@ -2095,6 +2206,7 @@ ${ganttSectionHtml}
             sumRow.getCell(3).alignment = { horizontal: 'right' };
             applyBorder(sumRow, 3, sumBorder);
             sheet.views = [{ state: 'frozen', ySplit: 1 }];
+            if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 3 } };
         }
 
         // ── Sheet WBS3 ──
@@ -2115,19 +2227,19 @@ ${ganttSectionHtml}
                 const chain = localChain(item.id);
                 const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)], d3 = chain[Math.min(2, chain.length - 1)];
                 if (!d1) continue;
-                if (!level1.has(d1.id)) level1.set(d1.id, { name: d1.name || '', children: new Map() });
+                if (!level1.has(d1.id)) level1.set(d1.id, { id: d1.id, name: d1.name || '', children: new Map() });
                 const g1 = level1.get(d1.id);
-                if (!g1.children.has(d2.id)) g1.children.set(d2.id, { name: d2.name || '', children: new Map() });
+                if (!g1.children.has(d2.id)) g1.children.set(d2.id, { id: d2.id, name: d2.name || '', children: new Map() });
                 const g2 = g1.children.get(d2.id);
-                if (!g2.children.has(d3.id)) g2.children.set(d3.id, { name: d3.name || '', total: 0 });
+                if (!g2.children.has(d3.id)) g2.children.set(d3.id, { id: d3.id, name: d3.name || '', total: 0 });
                 g2.children.get(d3.id).total += price;
             }
             const total = [...level1.values()].reduce((s, g1) => s + [...g1.children.values()].reduce((s2, g2) => s2 + [...g2.children.values()].reduce((s3, c) => s3 + c.total, 0), 0), 0);
-            for (const g1 of [...level1.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
+            for (const g1 of [...level1.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
                 let firstD1 = true;
-                for (const g2 of [...g1.children.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
+                for (const g2 of [...g1.children.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
                     let firstD2 = true;
-                    for (const d3 of [...g2.children.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'))) {
+                    for (const d3 of [...g2.children.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
                         const r = sheet.addRow([g1.name, g2.name, d3.name, d3.total]);
                         r.getCell(4).numFmt = numFmt;
                         r.getCell(4).alignment = { horizontal: 'right' };
@@ -2137,6 +2249,7 @@ ${ganttSectionHtml}
                     }
                 }
             }
+            const lastDataRow = sheet.rowCount;
             const sumRow = sheet.addRow(['Razem', '', '', total]);
             sumRow.font = { bold: true };
             sumRow.fill = sumFill;
@@ -2144,6 +2257,7 @@ ${ganttSectionHtml}
             sumRow.getCell(4).alignment = { horizontal: 'right' };
             applyBorder(sumRow, 4, sumBorder);
             sheet.views = [{ state: 'frozen', ySplit: 1 }];
+            if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 4 } };
         }
 
         // ── Sheet Materiały: pełny eksport szczegółów (logika z WbsMaterialsPanel.exportToExcel) ──
