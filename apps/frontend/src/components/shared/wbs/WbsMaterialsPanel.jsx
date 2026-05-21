@@ -107,7 +107,7 @@ const PROPOSAL_FIELDS = [
     { key: 'manufacturer', ph: 'Producent',     ac: true  },
     { key: 'model',        ph: 'Model',          ac: true  },
     { key: 'productName',  ph: 'Nazwa handlowa', ac: true  },
-    { key: 'priceNetto',   ph: 'Cena netto',     ac: false },
+    { key: 'priceNetto',   ph: 'Koszt jedn.',     ac: false },
     { key: 'availability', ph: 'Dostępność',     ac: false },
     { key: 'sourceUrl',    ph: 'https://...',    ac: false },
 ];
@@ -726,7 +726,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                         );
                     })}
                     <div className="flex-1 min-w-[90px]">
-                        <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Cena netto</label>
+                        <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Koszt jedn.</label>
                         <input
                             ref={el => { comboRefs.current['priceNetto'] = el; }}
                             value={fields.priceNetto} onChange={e => setF('priceNetto', e.target.value)}
@@ -1073,7 +1073,7 @@ const COL_DEFS = [
     { key: 'techSpec', label: 'Wymagania techniczne',   defaultW: 200 },
     { key: 'qty',      label: 'Ilość',                  defaultW: 88  },
     { key: 'product',  label: 'Produkt',                defaultW: 160 },
-    { key: 'price',    label: 'Cena netto',             defaultW: 112 },
+    { key: 'price',    label: 'Koszt jedn.',            defaultW: 112 },
     { key: 'status',   label: 'Status oferty',          defaultW: 148 },
 ];
 
@@ -1083,6 +1083,7 @@ export default function WbsMaterialsPanel({
     versionId,
     readOnly = false,
     onWbsUpdate,
+    onWbsNodeUnitCostChange,
     onPatchNode,
     externalWbsNodes,
     refreshKey = 0,
@@ -1368,39 +1369,35 @@ export default function WbsMaterialsPanel({
         const flatNodes = externalWbsNodes ?? internalWbsNodes;
         const nodeNameById = new Map((flatNodes || []).map(n => [n.id, String(n.name || '').trim().toLowerCase()]));
         const targetName = String(sourceWbsNode?.name || sourceCard.name || '').trim().toLowerCase();
-        if (!targetName) {
-            // Optimistic update
-            setCards(prev => {
-                const entry = Object.entries(prev).find(([, c]) => c.id === sourceCard.id);
-                if (!entry) return prev;
-                const [nid, c] = entry;
-                return { ...prev, [nid]: { ...c, priceNetto } };
-            });
-            await fetch(`${API_URL}/material-requirements/${sourceCard.id}`, {
-                method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ priceNetto }),
-            });
-            await refreshCards();
-            return;
-        }
-        const matchingIds = Object.entries(cards)
-            .filter(([wbsNodeId, c]) => c?.id && nodeNameById.get(wbsNodeId) === targetName)
-            .map(([, c]) => c.id);
-        const ids = Array.from(new Set(matchingIds.length > 0 ? matchingIds : [sourceCard.id]));
-        // Optimistic update for all affected cards
+
+        // Zbierz wszystkie pozycje tego samego materiału (Wariant A: dopasowanie po nazwie
+        // węzła WBS). Bez nazwy — tylko karta źródłowa.
+        const affected = Object.entries(cards).filter(([wbsNodeId, c]) =>
+            c?.id && (targetName ? nodeNameById.get(wbsNodeId) === targetName : c.id === sourceCard.id));
+        const entries = affected.length > 0 ? affected : [[sourceWbsNode?.id, sourceCard]];
+        const cardIds = Array.from(new Set(entries.map(([, c]) => c?.id).filter(Boolean)));
+        const wbsNodeIds = Array.from(new Set(entries.map(([nid]) => nid).filter(Boolean)));
+
+        // Optimistic update wszystkich dotkniętych kart
         setCards(prev => {
             const updated = { ...prev };
             for (const [nid, c] of Object.entries(updated)) {
-                if (c?.id && ids.includes(c.id)) updated[nid] = { ...c, priceNetto };
+                if (c?.id && cardIds.includes(c.id)) updated[nid] = { ...c, priceNetto };
             }
             return updated;
         });
-        await Promise.all(ids.map(id => fetch(`${API_URL}/material-requirements/${id}`, {
+        // Zapis priceNetto w material-requirements (źródło prawdy materiałów)
+        await Promise.all(cardIds.map(id => fetch(`${API_URL}/material-requirements/${id}`, {
             method: 'PATCH',
             headers: authHeaders(),
             body: JSON.stringify({ priceNetto }),
         })));
+        // Propagacja w drugą stronę: priceNetto → WbsNode.unitCost (budżet WBS)
+        for (const nid of wbsNodeIds) {
+            await onWbsNodeUnitCostChange?.(nid, priceNetto);
+        }
         await refreshCards();
-    }, [cards, externalWbsNodes, internalWbsNodes, refreshCards]);
+    }, [cards, externalWbsNodes, internalWbsNodes, refreshCards, onWbsNodeUnitCostChange]);
 
     // ─ Column resize ─────────────────────────────────────────────────────────
 
@@ -1456,7 +1453,7 @@ export default function WbsMaterialsPanel({
             { header: 'Producent', key: 'manufacturer', width: 18 },
             { header: 'Model', key: 'model', width: 18 },
             { header: 'Nazwa handlowa', key: 'productName', width: 22 },
-            { header: 'Cena netto', key: 'price', width: 12 },
+            { header: 'Koszt jednostkowy', key: 'price', width: 12 },
             { header: 'Status', key: 'status', width: 14 },
             { header: 'Dostępność', key: 'availability', width: 14 },
             { header: 'Prop. producent', key: 'pManufacturer', width: 18 },
@@ -1568,7 +1565,7 @@ export default function WbsMaterialsPanel({
             { header: 'Wymagania techniczne', key: 'tech', width: 48 },
             { header: 'Liczba pozycji WBS', key: 'positions', width: 14 },
             { header: 'Proponowany produkt', key: 'product', width: 28 },
-            { header: 'Średnia cena netto', key: 'price', width: 16 },
+            { header: 'Średni koszt jednostkowy', key: 'price', width: 16 },
             { header: 'Szac. wartość netto', key: 'value', width: 16 },
             { header: 'Statusy', key: 'statuses', width: 28 },
         ];

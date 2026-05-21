@@ -340,7 +340,10 @@
       "Bash(findstr LISTENING)",
       "Bash(dir \"C:\\\\Users\\\\Andrzej\\\\.gemini\\\\antigravity\\\\scratch\\\\Ignite\\\\apps\\\\backend\\\\src\")",
       "Bash(grep -v \"//\")",
-      "Bash(psql postgresql://postgres:changeme@localhost:5433/erp_db -c ' *)"
+      "Bash(psql postgresql://postgres:changeme@localhost:5433/erp_db -c ' *)",
+      "Bash(node -e \"console.log\\(JSON.stringify\\(require\\('./package.json'\\).scripts\\)\\)\")",
+      "Bash(git -C \"C:/Users/Andrzej/.gemini/antigravity/scratch/Ignite\" diff --stat)",
+      "Bash(git -C \"C:/Users/Andrzej/.gemini/antigravity/scratch/Ignite\" diff .claude/settings.local.json)"
     ]
   }
 }
