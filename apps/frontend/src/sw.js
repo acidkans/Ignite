@@ -4,7 +4,11 @@ import { registerRoute, NavigationRoute } from 'workbox-routing';
 import { CacheFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 
-self.skipWaiting();
+// SW NIE aktywuje się automatycznie — czeka, aż aplikacja wyśle SKIP_WAITING
+// (po kliknięciu „Odśwież" w banerze nowej wersji). Eliminuje niespójny cache.
+self.addEventListener('message', (event) => {
+    if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});
 
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST || []);
@@ -97,11 +101,7 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-    event.waitUntil(
-        self.clients.claim().then(() =>
-            self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-                clients.forEach((c) => c.postMessage({ type: 'SW_UPDATED' }));
-            })
-        )
-    );
+    // Po aktywacji nowy SW przejmuje kontrolę nad otwartymi kartami → w aplikacji
+    // zdarzenie `controllerchange` wymusi jednorazowy reload na świeży kod.
+    event.waitUntil(self.clients.claim());
 });

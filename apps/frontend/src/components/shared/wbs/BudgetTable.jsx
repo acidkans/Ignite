@@ -90,6 +90,9 @@ export default function BudgetTable({
     const blurTimer = useRef(null);
     const tableRef = useRef(null);
     const displayedRowsRef = useRef([]);
+    // Zamrożona kolejność wierszy na czas edycji — żeby wiersze nie skakały przy
+    // zmianie wartości w sortowanej kolumnie. Zwalniana po opuszczeniu pola.
+    const frozenOrderRef = useRef(null);
 
     const startResize = useCallback((colKey, e) => {
         e.preventDefault();
@@ -164,6 +167,14 @@ export default function BudgetTable({
     }, [localRows, colFilters, focusedRowId]);
 
     const displayedRows = useMemo(() => {
+        // Podczas edycji (wiersz w focusie) trzymamy zamrożoną kolejność — wiersze
+        // nie przeskakują przy zmianie wartości. Sortowanie wraca po opuszczeniu pola.
+        if (focusedRowId && frozenOrderRef.current) {
+            const idx = new Map(frozenOrderRef.current.map((id, i) => [id, i]));
+            return [...filteredRows].sort((a, b) =>
+                (idx.has(a.id) ? idx.get(a.id) : Infinity) - (idx.has(b.id) ? idx.get(b.id) : Infinity)
+            );
+        }
         if (!sort.key || !sort.dir) return filteredRows;
         const dir = sort.dir === 'asc' ? 1 : -1;
         const isNum = NUMERIC_COLS.has(sort.key);
@@ -177,9 +188,19 @@ export default function BudgetTable({
             }
             return String(av ?? '').localeCompare(String(bv ?? ''), 'pl') * dir;
         });
-    }, [filteredRows, sort]);
+    }, [filteredRows, sort, focusedRowId]);
 
     useEffect(() => { displayedRowsRef.current = displayedRows; }, [displayedRows]);
+
+    // Wejście w edycję → zamroź bieżącą kolejność; wyjście (focus off / Enter
+    // opuszczający wiersz) → zwolnij, tabela przesortuje się raz.
+    useEffect(() => {
+        if (focusedRowId) {
+            if (!frozenOrderRef.current) frozenOrderRef.current = displayedRowsRef.current.map(r => r.id);
+        } else {
+            frozenOrderRef.current = null;
+        }
+    }, [focusedRowId]);
 
     const calcSummary = useCallback((rows) => {
         let totalCost = 0, rawRevenue = 0;
