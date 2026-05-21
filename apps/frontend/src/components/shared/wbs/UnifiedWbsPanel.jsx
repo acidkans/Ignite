@@ -2331,6 +2331,13 @@ ${ganttSectionHtml}
                 if (segs.length <= 1) return segs[0] || '—';
                 return segs.slice(0, -1).join(' / ');
             };
+            // Ścieżka podgałęzi: wszystkie gałęzie POMIĘDZY przedmiotem (depth=0) a samym
+            // wierszem — bez depth=0 i bez własnego segmentu. Umożliwia filtrowanie po
+            // dowolnym poziomie gałęzi w kolumnie C.
+            const getMidBranchPath = (nodePath) => {
+                const segs = nodePath ? nodePath.split(' › ') : [];
+                return segs.slice(1, -1).join(' › ');
+            };
 
             // Mapa nodeId → material requirement: po wbsNodeId, po allokacjach, oraz po tagu req:
             const reqByNodeId = {};
@@ -2358,7 +2365,7 @@ ${ganttSectionHtml}
             materialsSheet.columns = [
                 { header: 'Typ', key: 'type', width: 12 },
                 { header: 'Zakres', key: 'parent', width: 24 },
-                { header: 'Pełna ścieżka WBS', key: 'path', width: 40 },
+                { header: 'Podgałąź', key: 'path', width: 40 },
                 { header: 'Sprzęt/Materiał', key: 'name', width: 28 },
                 { header: 'Ilość', key: 'qty', width: 8 },
                 { header: 'Jednostka', key: 'unit', width: 10 },
@@ -2418,7 +2425,7 @@ ${ganttSectionHtml}
                 const addedRow = materialsSheet.addRow({
                     type: TYPE_LABELS_XLS[node.type] || node.type,
                     parent,
-                    path: upperFirstSegment(node.path || ''),
+                    path: getMidBranchPath(node.path || ''),
                     name: node.name || '',
                     qty: Number(node.quantity ?? 1),
                     unit: node.unit || 'szt',
