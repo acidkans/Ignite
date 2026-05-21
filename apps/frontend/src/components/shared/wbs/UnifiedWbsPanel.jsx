@@ -194,6 +194,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const materialsPdfExportFn = useRef(null);
     const ganttExportRef = useRef(null);
     const ganttGetHtmlRef = useRef(null);
+    const ganttExcelDataRef = useRef(null);
 
     const assignableProjectUsers = useMemo(() => {
         if (!Array.isArray(projectUsers) || projectUsers.length === 0) return [];
@@ -2489,6 +2490,55 @@ ${ganttSectionHtml}
         URL.revokeObjectURL(url);
     };
 
+    // @anchor handle-export-gantt-excel
+    const handleExportGanttExcel = async () => {
+        const data = ganttExcelDataRef.current?.();
+        if (!data || !data.rows.length) { alert('Brak danych harmonogramu do eksportu.'); return; }
+
+        const safeProjectName = String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'projekt';
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet('Harmonogram');
+        sheet.columns = [
+            { header: 'Zadanie', key: 'name', width: 48 },
+            { header: 'Data od', key: 'start', width: 16 },
+            { header: 'Data do', key: 'end', width: 16 },
+            { header: 'Dni robocze', key: 'days', width: 14 },
+        ];
+        const hdr = sheet.getRow(1);
+        hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        hdr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0E7490' } };
+        hdr.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        for (const r of data.rows) {
+            const row = sheet.addRow({
+                name: r.name,
+                start: r.start,
+                end: r.end,
+                days: r.milestone ? '—' : r.days,
+            });
+            row.getCell('start').numFmt = 'dd.mm.yyyy';
+            row.getCell('end').numFmt = 'dd.mm.yyyy';
+        }
+        const lastDataRow = sheet.rowCount;
+        const sumRow = sheet.addRow({ name: 'Razem roboczo dni', days: data.totalDays });
+        sumRow.font = { bold: true };
+        sumRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF2F7' } };
+        if (lastDataRow >= 2) {
+            sumRow.getCell('days').value = { formula: `SUBTOTAL(9,D2:D${lastDataRow})`, result: data.totalDays };
+        }
+        sheet.getColumn('days').alignment = { horizontal: 'center' };
+        sheet.views = [{ state: 'frozen', ySplit: 1 }];
+        if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 4 } };
+
+        const buf = await workbook.xlsx.writeBuffer();
+        const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Harmonogram_${safeProjectName}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
     const addNode = useCallback(async (parentId = null) => {
         try {
             const res = await fetch(`${API_URL}/wbs-nodes`, {
@@ -3880,10 +3930,15 @@ ${ganttSectionHtml}
                             onNodeDurationChange={handleGanttDurationChange}
                             onExportReady={fn => { ganttExportRef.current = fn; }}
                             onGetHtmlReady={fn => { ganttGetHtmlRef.current = fn; }}
+                            onExcelDataReady={fn => { ganttExcelDataRef.current = fn; }}
                             projectStartDate={ganttProjectStart}
                             projectEndDate={ganttProjectEnd}
                         />
-                    ), () => handleExportPDF('gantt'));
+                    ), () => handleExportPDF('gantt'), (
+                        <button onClick={(e) => { e.stopPropagation(); handleExportGanttExcel(); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                            <FileDown size={11} /> Eksport do Excel
+                        </button>
+                    ));
                 }
                 if (key === 'wbs-hybrid') {
                     return renderSection('wbs-hybrid', `Struktura projektu: ${orderName || projectName || '—'}`, ListTree, 'violet', (
