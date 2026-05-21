@@ -1622,15 +1622,16 @@ ${ganttSectionHtml}
             } catch {}
         }
 
-        // Columns: A=Lp B=Przedmiot C=Podgałąź D=Nazwa E=Nazwawymagania F=Typ G=KosztJedn H=Ilość I=Jednostka J=KosztCałościowy=G*H K=Marża L=Rabat M=CenaOfertowa=J*(1+K)*(1-L)
+        // Columns: A=Lp B=Przedmiot C=Podgałąź D=Nazwa E=NazwaWymagania F=Typ G=OsobaOdp H=KosztJedn I=Ilość J=Jednostka K=KosztCałościowy=H*I L=Marża M=Rabat N=CenaOfertowa=K*(1+L)*(1-M)
         // Wiersz 1 = pole rabatu całościowego; nagłówek tabeli w wierszu 2, dane od 3.
         const BUDGET_COLUMNS = [
             { key: 'index', width: 6, header: 'Lp.' },
             { key: 'subjectName', width: 28, header: 'Przedmiot' },
             { key: 'parentName', width: 24, header: 'Podgałąź' },
             { key: 'name', width: 34, header: 'Nazwa' },
-            { key: 'requirementName', width: 30, header: 'Nazwa wymagania' },
+            { key: 'requirementName', width: 36, header: 'Nazwa wymagania technicznego' },
             { key: 'type', width: 16, header: 'Typ' },
+            { key: 'owner', width: 22, header: 'Osoba odpowiedzialna' },
             { key: 'unitCost', width: 18, header: 'Koszt jednostkowy' },
             { key: 'quantity', width: 12, header: 'Ilość' },
             { key: 'unit', width: 14, header: 'Jednostka' },
@@ -1670,17 +1671,18 @@ ${ganttSectionHtml}
             budgetSheet.addRow({
                 index: index + 1,
                 subjectName: row.subjectName || '',
-                parentName: row.parentName || '',
+                parentName: row.parentName || row.name || '',
                 name: row.name || '',
                 requirementName: reqNameByNodeId[row.id] || '',
                 type: TYPE_LABELS[row.type] || row.type || '',
+                owner: String(row.owner || '').trim(),
                 unitCost: Number(row.unitCost) || 0,
                 quantity: Number(row.quantity) || 0,
                 unit: row.unit || '',
-                totalCost: { formula: `=G${excelRow}*H${excelRow}`, result: Number(row.totalCost) || 0 },
+                totalCost: { formula: `=H${excelRow}*I${excelRow}`, result: Number(row.totalCost) || 0 },
                 margin: (Number(row.margin) || 0) / 100,
                 discount: (Number(row.discount) || 0) / 100,
-                offerPrice: { formula: `=IF(K${excelRow}=0,0,J${excelRow}*(1+K${excelRow})*(1-L${excelRow}))`, result: Number(row.offerPrice) || 0 },
+                offerPrice: { formula: `=IF(L${excelRow}=0,0,K${excelRow}*(1+L${excelRow})*(1-M${excelRow}))`, result: Number(row.offerPrice) || 0 },
                 comment: row.comment || '',
                 status: row.status || '',
                 qaCount: qaList.length,
@@ -1700,18 +1702,18 @@ ${ganttSectionHtml}
         const totalsRowNum = rows.length + 3;
         const totalsRow = budgetSheet.addRow({
             subjectName: 'Razem',
-            totalCost: { formula: `=SUBTOTAL(9,J3:J${totalsRowNum - 1})`, result: summary.totalCost },
-            offerPrice: { formula: `=SUBTOTAL(9,M3:M${totalsRowNum - 1})`, result: summary.totalRevenue },
+            totalCost: { formula: `=SUBTOTAL(9,K3:K${totalsRowNum - 1})`, result: summary.totalCost },
+            offerPrice: { formula: `=SUBTOTAL(9,N3:N${totalsRowNum - 1})`, result: summary.totalRevenue },
         });
         totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
 
-        ['G', 'J', 'M'].forEach((column) => {
+        ['H', 'K', 'N'].forEach((column) => {
             budgetSheet.getColumn(column).numFmt = '#,##0.00';
         });
-        budgetSheet.getColumn('H').numFmt = '#,##0.00';
-        budgetSheet.getColumn('K').numFmt = '0.00%';
+        budgetSheet.getColumn('I').numFmt = '#,##0.00';
         budgetSheet.getColumn('L').numFmt = '0.00%';
+        budgetSheet.getColumn('M').numFmt = '0.00%';
         budgetSheet.views = [{ state: 'frozen', ySplit: 2 }];
         // Filtr na nagłówek (wiersz 2) + wiersze danych (bez wiersza „Razem"). Kolejność
         // wierszy = kolejność gałęzi w WBS (buildRows sortuje po wbsOrderMap).
