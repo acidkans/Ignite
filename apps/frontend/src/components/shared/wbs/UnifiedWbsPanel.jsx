@@ -1461,7 +1461,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   }
   p { orphans: 3; widows: 3; }
   .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.6; }
-  .offer-text { padding: 0; background: none; border: none; line-height: 1.6; }
+  .offer-text { padding: 0; background: none; border: none; line-height: 1.6; text-align: justify; }
+  .offer-text p, .offer-text li, .offer-text h1, .offer-text h2, .offer-text h3, .offer-text h4 { text-align: justify; }
   .strategy-text p, .offer-text p { margin: 0 0 4px 0; orphans: 3; widows: 3; }
   .strategy-text p:empty, .offer-text p:empty { display: none; margin: 0; }
   .strategy-text h1:first-child, .strategy-text h2:first-child, .strategy-text h3:first-child,
@@ -1698,8 +1699,8 @@ ${ganttSectionHtml}
         const totalsRowNum = rows.length + 3;
         const totalsRow = budgetSheet.addRow({
             subjectName: 'Razem',
-            totalCost: { formula: `=SUM(J3:J${totalsRowNum - 1})`, result: summary.totalCost },
-            offerPrice: { formula: `=SUM(M3:M${totalsRowNum - 1})`, result: summary.totalRevenue },
+            totalCost: { formula: `=SUBTOTAL(9,J3:J${totalsRowNum - 1})`, result: summary.totalCost },
+            offerPrice: { formula: `=SUBTOTAL(9,M3:M${totalsRowNum - 1})`, result: summary.totalRevenue },
         });
         totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
@@ -2069,6 +2070,8 @@ ${ganttSectionHtml}
         const workbook = new ExcelJS.Workbook();
 
         // Arkusz "Budżet" (logika eksportu budżetu) — z walidacją pozycji liściowych.
+        // appendBudgetSheet służy tu wyłącznie do walidacji pozycji — sam arkusz
+        // "Budżet" usuwamy z tego eksportu (oferta nie pokazuje kosztów).
         const budget = appendBudgetSheet(workbook);
         if (!budget.ok && !budget.empty) {
             alert(
@@ -2078,6 +2081,7 @@ ${ganttSectionHtml}
             );
             return;
         }
+        if (workbook.getWorksheet('Budżet')) workbook.removeWorksheet('Budżet');
 
         const navyFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
         const sumFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF2F7' } };
@@ -2126,6 +2130,47 @@ ${ganttSectionHtml}
         };
         const numFmt = '#,##0.00';
 
+        // ── Sheet Podsumowanie: ceny ofertowe agregowane wg typu gałęzi ──
+        {
+            const sheet = workbook.addWorksheet('Podsumowanie');
+            sheet.columns = [{ width: 32 }, { width: 24 }];
+            const hdr = sheet.addRow(['Typ gałęzi', 'Cena ofertowa (PLN)']);
+            hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            hdr.fill = navyFill;
+            hdr.alignment = { horizontal: 'center', vertical: 'middle' };
+            applyBorder(hdr, 2, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
+
+            const byType = new Map();
+            for (const item of wbsData) {
+                if (!item.parentId) continue;
+                const price = localPriceOf(item);
+                if (price <= 0) continue;
+                const t = item.type || '—';
+                if (!byType.has(t)) byType.set(t, { label: TYPE_LABELS[t] || t, total: 0 });
+                byType.get(t).total += price;
+            }
+            const entries = [...byType.values()].sort((a, b) => b.total - a.total);
+            const total = entries.reduce((s, e) => s + e.total, 0);
+            for (const e of entries) {
+                const r = sheet.addRow([e.label, e.total]);
+                r.getCell(2).numFmt = numFmt;
+                r.getCell(2).alignment = { horizontal: 'right' };
+                applyBorder(r, 2, cellBorder);
+            }
+            const lastDataRow = sheet.rowCount;
+            const sumRow = sheet.addRow(['Razem', total]);
+            sumRow.font = { bold: true };
+            sumRow.fill = sumFill;
+            sumRow.getCell(2).value = lastDataRow >= 2
+                ? { formula: `SUBTOTAL(9,B2:B${lastDataRow})`, result: total }
+                : total;
+            sumRow.getCell(2).numFmt = numFmt;
+            sumRow.getCell(2).alignment = { horizontal: 'right' };
+            applyBorder(sumRow, 2, sumBorder);
+            sheet.views = [{ state: 'frozen', ySplit: 1 }];
+            if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 2 } };
+        }
+
         // ── Sheet WBS1 ──
         {
             const sheet = workbook.addWorksheet('WBS1 - Zakresy');
@@ -2158,6 +2203,9 @@ ${ganttSectionHtml}
             const sumRow = sheet.addRow(['Razem', total]);
             sumRow.font = { bold: true };
             sumRow.fill = sumFill;
+            sumRow.getCell(2).value = lastDataRow >= 2
+                ? { formula: `SUBTOTAL(9,B2:B${lastDataRow})`, result: total }
+                : total;
             sumRow.getCell(2).numFmt = numFmt;
             sumRow.getCell(2).alignment = { horizontal: 'right' };
             applyBorder(sumRow, 2, sumBorder);
@@ -2202,6 +2250,9 @@ ${ganttSectionHtml}
             const sumRow = sheet.addRow(['Razem', '', total]);
             sumRow.font = { bold: true };
             sumRow.fill = sumFill;
+            sumRow.getCell(3).value = lastDataRow >= 2
+                ? { formula: `SUBTOTAL(9,C2:C${lastDataRow})`, result: total }
+                : total;
             sumRow.getCell(3).numFmt = numFmt;
             sumRow.getCell(3).alignment = { horizontal: 'right' };
             applyBorder(sumRow, 3, sumBorder);
@@ -2253,6 +2304,9 @@ ${ganttSectionHtml}
             const sumRow = sheet.addRow(['Razem', '', '', total]);
             sumRow.font = { bold: true };
             sumRow.fill = sumFill;
+            sumRow.getCell(4).value = lastDataRow >= 2
+                ? { formula: `SUBTOTAL(9,D2:D${lastDataRow})`, result: total }
+                : total;
             sumRow.getCell(4).numFmt = numFmt;
             sumRow.getCell(4).alignment = { horizontal: 'right' };
             applyBorder(sumRow, 4, sumBorder);
@@ -2297,7 +2351,8 @@ ${ganttSectionHtml}
             }
 
             const matNodes = wbsData.filter(n => n.type === 'material' || n.type === 'equipment');
-            matNodes.sort((a, b) => (a.path || '').localeCompare(b.path || '', 'pl', { numeric: true, sensitivity: 'base' }));
+            // Kolejność = kolejność w drzewie WBS (DFS po sortOrder), spójnie z arkuszami WBS1-3.
+            matNodes.sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id));
 
             materialsSheet.columns = [
                 { header: 'Typ', key: 'type', width: 12 },
@@ -2306,7 +2361,7 @@ ${ganttSectionHtml}
                 { header: 'Sprzęt/Materiał', key: 'name', width: 28 },
                 { header: 'Ilość', key: 'qty', width: 8 },
                 { header: 'Jednostka', key: 'unit', width: 10 },
-                { header: 'Cena ofertowa / ilość', key: 'offerPerQty', width: 18 },
+                { header: 'Cena jedn.', key: 'offerPerQty', width: 18 },
                 { header: 'Cena ofertowa łącznie', key: 'offerTotal', width: 20 },
                 { header: 'Wymagania techniczne', key: 'tech', width: 40 },
                 { header: 'Producent', key: 'manufacturer', width: 18 },
@@ -2399,14 +2454,30 @@ ${ganttSectionHtml}
                 }
             });
 
+            const matLastDataRow = materialsSheet.rowCount;
+            // Wiersz podsumowujący — SUBTOTAL(9) na kolumnie "Cena ofertowa łącznie".
+            const offerTotalCol = materialsSheet.getColumn('offerTotal').letter;
+            const matSumRow = materialsSheet.addRow({ type: 'Razem' });
+            matSumRow.font = { bold: true };
+            matSumRow.fill = sumFill;
+            if (matLastDataRow >= 2) {
+                const staticTotal = matNodes.reduce((s, n) => s + (n.totalPrice != null ? Number(n.totalPrice) : 0), 0);
+                matSumRow.getCell('offerTotal').value = {
+                    formula: `SUBTOTAL(9,${offerTotalCol}2:${offerTotalCol}${matLastDataRow})`,
+                    result: staticTotal,
+                };
+            }
+
             materialsSheet.getColumn('qty').numFmt = '#,##0.##';
             materialsSheet.getColumn('offerPerQty').numFmt = numFmt;
             materialsSheet.getColumn('offerTotal').numFmt = numFmt;
             materialsSheet.views = [{ state: 'frozen', ySplit: 1 }];
-            materialsSheet.autoFilter = {
-                from: { row: 1, column: 1 },
-                to: { row: materialsSheet.rowCount, column: materialsSheet.columnCount },
-            };
+            if (matLastDataRow >= 2) {
+                materialsSheet.autoFilter = {
+                    from: { row: 1, column: 1 },
+                    to: { row: matLastDataRow, column: materialsSheet.columnCount },
+                };
+            }
         }
 
         const buf = await workbook.xlsx.writeBuffer();
@@ -3770,7 +3841,7 @@ ${ganttSectionHtml}
                         </div>
                     ), () => handleExportPDF('oferta'), (
                         <button onClick={(e) => { e.stopPropagation(); handleExportOfertaWbsExcel(); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
-                            <FileDown size={11} /> Eksport tabel WBS XLS
+                            <FileDown size={11} /> Eksport tabel oferty
                         </button>
                     ));
                 }

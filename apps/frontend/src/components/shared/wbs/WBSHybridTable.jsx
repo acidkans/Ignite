@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { TYPE_OPTIONS, TYPE_LABELS } from './wbsConstants';
+import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN } from './wbsConstants';
 
 function AutoResizeTextarea({ value, onChange, onBlur, placeholder, className, style }) {
     const ref = useRef(null);
@@ -71,7 +71,7 @@ function QaPairRow({ p, idx, fieldClass, onUpdate, onRemove, onPersist }) {
                     onBlur={() => onPersist?.()}
                     onFocus={syncHeights}
                     placeholder="Pytanie…"
-                    className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[11px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
+                    className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[15px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
                     style={{ overflow: 'hidden', minHeight: '1.4em', resize: 'none' }}
                 />
             </td>
@@ -84,7 +84,7 @@ function QaPairRow({ p, idx, fieldClass, onUpdate, onRemove, onPersist }) {
                     onBlur={() => onPersist?.()}
                     onFocus={syncHeights}
                     placeholder="Odpowiedź…"
-                    className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[11px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
+                    className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[15px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
                     style={{ overflow: 'hidden', minHeight: '1.4em', resize: 'none' }}
                 />
             </td>
@@ -112,7 +112,7 @@ function QaCell({ pairs, fieldClass, onChange, onPersist }) {
     return (
         <div className="flex flex-col gap-1">
             {list.length > 0 && (
-                <table className="w-full text-[11px] border-collapse">
+                <table className="w-full text-[15px] border-collapse">
                     <thead>
                         <tr>
                             <th className="text-left font-semibold uppercase tracking-wider text-gray-500 pb-0.5 w-1/2">Pytanie</th>
@@ -137,7 +137,7 @@ function QaCell({ pairs, fieldClass, onChange, onPersist }) {
             )}
             <button
                 onClick={add}
-                className="self-start flex items-center gap-1 text-[10px] text-gray-600 hover:text-blue-400 transition-all"
+                className="self-start flex items-center gap-1 text-[14px] text-gray-600 hover:text-blue-400 transition-all"
             >
                 <HelpCircle size={9} />
                 <span>+ pytanie</span>
@@ -192,10 +192,10 @@ function MaterialReqExpandPanel({ node, req, processNodeId, onSaved, onDeleteNod
     return (
         <div className="border-l-2 border-amber-500/30 ml-8">
             <div className="flex items-center gap-3 px-4 pt-3 pb-1">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400/80">Wymagania materiałowe</span>
+                <span className="text-[14px] font-bold uppercase tracking-widest text-amber-400/80">Wymagania materiałowe</span>
                 <button
                     onClick={handleDelete}
-                    className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-red-400 hover:bg-red-500/10 border border-red-500/20 transition-colors"
+                    className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-[14px] text-red-400 hover:bg-red-500/10 border border-red-500/20 transition-colors"
                 >
                     <Trash2 size={10} /> Usuń z WBS
                 </button>
@@ -221,7 +221,7 @@ function MaterialReqExpandPanel({ node, req, processNodeId, onSaved, onDeleteNod
                     readOnly={false}
                 />
             ) : (
-                <div className="px-4 py-3 text-[10px] text-gray-600">Tworzenie karty materiałowej…</div>
+                <div className="px-4 py-3 text-[14px] text-gray-600">Tworzenie karty materiałowej…</div>
             )}
         </div>
     );
@@ -245,7 +245,7 @@ function StatusSelect({ value, onChange }) {
         <select
             value={value || ''}
             onChange={e => onChange(e.target.value)}
-            className={`text-[10px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 cursor-pointer focus:outline-none focus:ring-0 transition-colors ${meta.style}`}
+            className={`text-[14px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 cursor-pointer focus:outline-none focus:ring-0 transition-colors ${meta.style}`}
             onClick={e => e.stopPropagation()}
         >
             {Object.entries(STRUCT_STATUS_META).map(([code, { label }]) => (
@@ -257,8 +257,8 @@ function StatusSelect({ value, onChange }) {
 
 function InheritedStatusBadge({ status }) {
     const meta = STRUCT_STATUS_META[status];
-    if (!meta) return <span className="text-[10px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 text-gray-500 border-gray-600/30 flex items-center gap-1 w-max"><Link size={8}/> {status}</span>;
-    return <span title="Status dziedziczony z zapotrzebowania" className={`text-[10px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 flex items-center gap-1 w-max cursor-default ${meta.style}`}><Link size={8}/> {meta.label}</span>;
+    if (!meta) return <span className="text-[14px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 text-gray-500 border-gray-600/30 flex items-center gap-1 w-max"><Link size={8}/> {status}</span>;
+    return <span title="Status dziedziczony z zapotrzebowania" className={`text-[14px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 flex items-center gap-1 w-max cursor-default ${meta.style}`}><Link size={8}/> {meta.label}</span>;
 }
 
 function QtyInput({ value, onChange }) {
@@ -274,7 +274,7 @@ function QtyInput({ value, onChange }) {
                 if (!isNaN(v) && v >= 0) onChange(v);
             }}
             placeholder="1"
-            className="bg-transparent border-none focus:outline-none text-xs w-full text-right placeholder-gray-700"
+            className="bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700"
         />
     );
 }
@@ -390,6 +390,14 @@ const insertNode = (nodes, targetId, node, position) => {
 };
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
+// @anchor sum-children-cost
+// Koszt gałęzi grupującej = suma kosztów dzieci. Liść = unitCost × quantity.
+const sumChildrenCost = node => {
+    const kids = node.children || [];
+    if (!kids.length) return (parseFloat(node.unitCost) || 0) * (parseFloat(node.quantity) || 0);
+    return kids.reduce((a, c) => a + sumChildrenCost(c), 0);
+};
+
 const nodeTotal = node => {
     const base = { res: parseFloat(node.resources) || 0, cost: parseFloat(node.cost) || 0 };
     return (node.children || []).reduce((a, c) => {
@@ -403,10 +411,10 @@ const fmt = v => v ? new Intl.NumberFormat('pl-PL').format(Math.round(v)) : '';
 // ── Depth visual config ───────────────────────────────────────────────────────
 // Depth-only: font size/weight, no color
 const DEPTH_SIZE = [
-    'text-sm font-bold uppercase text-white',
-    'text-sm',
-    'text-sm',
-    'text-xs',
+    'text-base font-bold uppercase text-white',
+    'text-base',
+    'text-base',
+    'text-base',
 ];
 const MAX_DEPTH = DEPTH_SIZE.length - 1;
 
@@ -438,7 +446,7 @@ function TagChips({ tags = [], tagColor, onRemove, onTagClick }) {
     return (
         <div className="flex flex-nowrap gap-1 overflow-hidden max-w-full">
             {visible.map(({ tag, idx }) => (
-                <span key={idx} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium border ${tagColor}`}>
+                <span key={idx} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[14px] font-medium border ${tagColor}`}>
                     <Tag size={8} className="flex-shrink-0" />
                     <span>{tag}</span>
                     {onTagClick && (
@@ -538,12 +546,12 @@ function MarkerAttachmentsModal({ wbsNodeId, wbsNodeName, processNodeId, onClose
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
                     <div>
-                        <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Znaczniki WBS</p>
-                        <h2 className="text-sm font-semibold text-white mt-0.5">{wbsNodeName || 'Element WBS'}</h2>
+                        <p className="text-[14px] uppercase tracking-widest text-gray-500 font-bold">Znaczniki WBS</p>
+                        <h2 className="text-base font-semibold text-white mt-0.5">{wbsNodeName || 'Element WBS'}</h2>
                     </div>
                     <div className="flex items-center gap-2">
                         <button onClick={openPicker}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-[11px] font-medium transition-all">
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-[15px] font-medium transition-all">
                             <Link size={11} /> Przypisz znacznik
                         </button>
                         <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-500 hover:text-white transition-all">
@@ -556,10 +564,10 @@ function MarkerAttachmentsModal({ wbsNodeId, wbsNodeName, processNodeId, onClose
                     {/* Picker */}
                     {showPicker && (
                         <div className="border border-white/10 rounded-xl bg-white/[0.02] p-4">
-                            <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-3">Dostępne znaczniki schematu</p>
-                            {loadingPicker && <p className="text-xs text-gray-600">Ładowanie...</p>}
+                            <p className="text-[14px] uppercase tracking-widest text-gray-500 font-bold mb-3">Dostępne znaczniki schematu</p>
+                            {loadingPicker && <p className="text-base text-gray-600">Ładowanie...</p>}
                             {!loadingPicker && allMarkers.length === 0 && (
-                                <p className="text-xs text-gray-600 italic">Brak znaczników w schematach tego węzła</p>
+                                <p className="text-base text-gray-600 italic">Brak znaczników w schematach tego węzła</p>
                             )}
                             <div className="space-y-2">
                                 {allMarkers.map(m => {
@@ -567,8 +575,8 @@ function MarkerAttachmentsModal({ wbsNodeId, wbsNodeName, processNodeId, onClose
                                     return (
                                         <div key={m.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/[0.03] border border-white/5">
                                             <div className="flex-1 min-w-0">
-                                                <p className="text-xs text-white font-medium truncate">{m.name || m.note || `Znacznik (${m.type})`}</p>
-                                                <p className="text-[10px] text-gray-600 truncate">{m.schematicName} · str. {m.pageNumber}</p>
+                                                <p className="text-base text-white font-medium truncate">{m.name || m.note || `Znacznik (${m.type})`}</p>
+                                                <p className="text-[14px] text-gray-600 truncate">{m.schematicName} · str. {m.pageNumber}</p>
                                             </div>
                                             <div className="flex gap-1">
                                                 {(m.attachments || []).slice(0, 3).map(att => (
@@ -578,7 +586,7 @@ function MarkerAttachmentsModal({ wbsNodeId, wbsNodeName, processNodeId, onClose
                                             <button
                                                 onClick={() => isLinked ? null : assign(m.id)}
                                                 disabled={isLinked}
-                                                className={`px-2 py-1 rounded-lg text-[10px] font-medium transition-all flex items-center gap-1 ${
+                                                className={`px-2 py-1 rounded-lg text-[14px] font-medium transition-all flex items-center gap-1 ${
                                                     isLinked
                                                         ? 'bg-green-500/10 text-green-400 border border-green-500/20 cursor-default'
                                                         : 'bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30'
@@ -594,9 +602,9 @@ function MarkerAttachmentsModal({ wbsNodeId, wbsNodeName, processNodeId, onClose
                     )}
 
                     {/* Current links */}
-                    {loading && <p className="text-xs text-gray-600">Ładowanie...</p>}
+                    {loading && <p className="text-base text-gray-600">Ładowanie...</p>}
                     {!loading && links.length === 0 && !showPicker && (
-                        <p className="text-xs text-gray-600 italic text-center py-6">
+                        <p className="text-base text-gray-600 italic text-center py-6">
                             Brak przypisanych znaczników. Kliknij „Przypisz znacznik" aby dodać.
                         </p>
                     )}
@@ -607,8 +615,8 @@ function MarkerAttachmentsModal({ wbsNodeId, wbsNodeName, processNodeId, onClose
                             <div key={link.id} className="border border-white/10 rounded-xl bg-white/[0.02] p-4">
                                 <div className="flex items-start justify-between gap-3 mb-3">
                                     <div>
-                                        <p className="text-xs font-semibold text-white">{m?.name || m?.note || `Znacznik (${m?.type})`}</p>
-                                        <p className="text-[10px] text-gray-500 mt-0.5">{m?.schematic?.fileName} · str. {m?.pageNumber}</p>
+                                        <p className="text-base font-semibold text-white">{m?.name || m?.note || `Znacznik (${m?.type})`}</p>
+                                        <p className="text-[14px] text-gray-500 mt-0.5">{m?.schematic?.fileName} · str. {m?.pageNumber}</p>
                                     </div>
                                     <button onClick={() => unlink(link.id)}
                                         className="p-1 rounded hover:bg-red-500/10 text-gray-600 hover:text-red-400 transition-all flex-shrink-0" title="Odepnij">
@@ -616,7 +624,7 @@ function MarkerAttachmentsModal({ wbsNodeId, wbsNodeName, processNodeId, onClose
                                     </button>
                                 </div>
                                 {atts.length === 0 && (
-                                    <p className="text-[10px] text-gray-700 italic">Brak załączników do tego znacznika</p>
+                                    <p className="text-[14px] text-gray-700 italic">Brak załączników do tego znacznika</p>
                                 )}
                                 <div className="flex flex-wrap gap-2">
                                     {atts.map(att => (
@@ -652,13 +660,13 @@ function MarkerAttachmentsModal({ wbsNodeId, wbsNodeName, processNodeId, onClose
                     ) : (
                         <div className="bg-gray-900 rounded-xl p-10 text-center">
                             <FileText size={56} className="text-gray-500 mx-auto mb-4" />
-                            <p className="text-white text-sm">{previewAtt.fileName}</p>
+                            <p className="text-white text-base">{previewAtt.fileName}</p>
                             <a href={`${API_URL}/schematics/file/${previewAtt.fileUrl}`} target="_blank" rel="noreferrer"
-                                className="mt-3 inline-block text-blue-400 text-sm hover:underline">Otwórz plik</a>
+                                className="mt-3 inline-block text-blue-400 text-base hover:underline">Otwórz plik</a>
                         </div>
                     )}
                     {previewAtt.note && (
-                        <p className="absolute bottom-6 left-0 right-0 text-xs text-gray-400 text-center">{previewAtt.note}</p>
+                        <p className="absolute bottom-6 left-0 right-0 text-base text-gray-400 text-center">{previewAtt.note}</p>
                     )}
                 </div>
             </div>
@@ -728,6 +736,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [expandedMaterialIds, setExpandedMaterialIds] = useState(new Set());
     const [reqDragOverNode, setReqDragOverNode] = useState(null);
     const [selectedNodeId, setSelectedNodeId] = useState(null);
+    const [costFocusId, setCostFocusId] = useState(null);
     const [showBasket, setShowBasket] = useState(false);
     const [copyBuffer, setCopyBuffer] = useState(null); // { node, sourceName }
     const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, status: 128, wlasciciel: 128, komentarz: 200, qa: 260, zalaczniki: 44 });
@@ -1124,11 +1133,15 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     handleField(node.id, 'unit', 'sztuki');
                                     onNodeFieldSave?.(node.id, 'unit', 'sztuki');
                                 }
+                                if (newType === 'group') {
+                                    handleField(node.id, 'unit', 'pakiet');
+                                    onNodeFieldSave?.(node.id, 'unit', 'pakiet');
+                                }
                                 if (isMaterial && node.name) {
                                     onMaterialNodeCreated?.({ wbsNodeId: node.id, name: node.name, type: newType, parentId });
                                 }
                             }}
-                            className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-xs w-full focus:outline-none focus:border-blue-500 transition-colors cursor-pointer ${d.fieldClass}`}
+                            className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-base w-full focus:outline-none focus:border-blue-500 transition-colors cursor-pointer ${d.fieldClass}`}
                         >
                             <option value="" className="bg-gray-900">— wybierz typ —</option>
                             {TYPE_OPTIONS.filter(o => o !== '').map(o => (
@@ -1144,19 +1157,23 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         <input type="text" value={node.quantity || ''} onChange={e => handleField(node.id, 'quantity', e.target.value)}
                             onFocus={e => e.target.select()} onMouseUp={e => e.target.select()}
                             onBlur={e => { onRequirementsQtyChange?.(node.id, e.target.value, node.name); }}
-                            placeholder="0" className={`bg-transparent border-none focus:outline-none text-xs w-full text-right placeholder-gray-700 ${d.fieldClass}`} />
+                            placeholder="0" className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}`} />
                     )}
                 </td>
 
                 {/* Jednostka */}
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                     {depth >= 1 && (
-                        <select value={node.unit || ''}
-                            onChange={e => { handleField(node.id, 'unit', e.target.value); onNodeFieldSave?.(node.id, 'unit', e.target.value); }}
-                            className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-xs w-full focus:outline-none focus:border-blue-500 cursor-pointer ${d.fieldClass}`}>
-                            <option value="" className="bg-gray-900">—</option>
-                            {UNIT_OPTIONS.map(u => <option key={u} value={u} className="bg-gray-900">{u}</option>)}
-                        </select>
+                        node.type === 'group' ? (
+                            <div className={`text-base w-full ${d.fieldClass}`}>pakiet</div>
+                        ) : (
+                            <select value={node.unit || ''}
+                                onChange={e => { handleField(node.id, 'unit', e.target.value); onNodeFieldSave?.(node.id, 'unit', e.target.value); }}
+                                className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-base w-full focus:outline-none focus:border-blue-500 cursor-pointer ${d.fieldClass}`}>
+                                <option value="" className="bg-gray-900">—</option>
+                                {UNIT_OPTIONS.map(u => <option key={u} value={u} className="bg-gray-900">{u}</option>)}
+                            </select>
+                        )
                     )}
                 </td>
 
@@ -1165,18 +1182,28 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 {isManager && (
                     <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                         {depth >= 1 && (
-                            <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={node.unitCost ?? ''}
-                                onChange={e => handleField(node.id, 'unitCost', e.target.value)}
-                                onFocus={e => e.target.select()}
-                                onBlur={e => { onNodeFieldSave?.(node.id, 'unitCost', parseFloat(e.target.value) || 0); }}
-                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onNodeFieldSave?.(node.id, 'unitCost', parseFloat(e.target.value) || 0); e.target.blur(); } }}
-                                placeholder="0.00"
-                                className={`bg-transparent border-none focus:outline-none text-xs w-full text-right placeholder-gray-700 ${d.fieldClass}`}
-                            />
+                            node.type === 'group' ? (
+                                <div
+                                    title="Suma kosztów dzieci"
+                                    className={`text-base w-full text-right text-gray-400 ${d.fieldClass}`}
+                                >
+                                    {fmtPLN(sumChildrenCost(node)) || '0,00'}
+                                </div>
+                            ) : (
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={costFocusId === node.id
+                                        ? (node.unitCost ?? '')
+                                        : (node.unitCost != null && node.unitCost !== '' ? fmtPLN(Number(node.unitCost)) : '')}
+                                    onChange={e => handleField(node.id, 'unitCost', e.target.value)}
+                                    onFocus={e => { setCostFocusId(node.id); e.target.select(); }}
+                                    onBlur={e => { setCostFocusId(null); onNodeFieldSave?.(node.id, 'unitCost', Math.round((parseFloat(String(e.target.value).replace(',', '.')) || 0) * 100) / 100); }}
+                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+                                    placeholder="0,00"
+                                    className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}`}
+                                />
+                            )
                         )}
                     </td>
                 )}
@@ -1204,7 +1231,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         <select
                             value={node.owner || ''}
                             onChange={e => { handleField(node.id, 'owner', e.target.value); onNodeFieldSave?.(node.id, 'owner', e.target.value); }}
-                            className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-xs w-full focus:outline-none focus:border-blue-500 transition-colors cursor-pointer ${d.fieldClass}`}
+                            className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-base w-full focus:outline-none focus:border-blue-500 transition-colors cursor-pointer ${d.fieldClass}`}
                         >
                             <option value="" className="bg-gray-900">—</option>
                             {users.length > 0 && users.map(u => {
@@ -1223,7 +1250,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         </select>
                     ) : (
                         <input type="text" value={node.owner || ''} onChange={e => handleField(node.id, 'owner', e.target.value)} onBlur={e => onNodeFieldSave?.(node.id, 'owner', e.target.value)}
-                            placeholder="—" className={`bg-transparent border-none focus:outline-none text-xs w-full placeholder-gray-700 ${d.fieldClass}`} />
+                            placeholder="—" className={`bg-transparent border-none focus:outline-none text-base w-full placeholder-gray-700 ${d.fieldClass}`} />
                     )}
                 </td>
 
@@ -1234,7 +1261,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         onChange={e => handleField(node.id, 'comment', e.target.value)}
                         onBlur={e => { onNodeFieldSave?.(node.id, 'comment', e.target.value); window.dispatchEvent(new CustomEvent('wbs-comment-changed', { detail: { wbsNodeIds: [node.id], comment: e.target.value } })); }}
                         placeholder="—"
-                        className={`bg-transparent border-none resize-none focus:outline-none text-xs w-full placeholder-gray-700 leading-snug ${d.fieldClass}`}
+                        className={`bg-transparent border-none resize-none focus:outline-none text-base w-full placeholder-gray-700 leading-snug ${d.fieldClass}`}
                     />
                 </td>
 
@@ -1297,7 +1324,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         if (items.length === 0) {
             rows.push(
                 <tr key="empty">
-                    <td colSpan={10} className="px-3 py-3 pl-16 text-[10px] text-gray-700 italic">
+                    <td colSpan={10} className="px-3 py-3 pl-16 text-[14px] text-gray-700 italic">
                         Brak przedmiotów — kliknij <span className="text-gray-500">+</span> przy projekcie, aby dodać
                     </td>
                 </tr>
@@ -1445,7 +1472,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     return (
         <div className="flex flex-col flex-1 min-h-0">
             {copyBuffer && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-900/30 border-b border-blue-500/20 text-[11px] text-blue-300">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-900/30 border-b border-blue-500/20 text-[15px] text-blue-300">
                     <Clipboard size={12} className="flex-shrink-0" />
                     <span>Kopiujesz: <strong>{copyBuffer.sourceName || '—'}</strong> — najedź na wiersz i kliknij <Clipboard size={10} className="inline" /> by wkleić jako dziecko</span>
                     <button onClick={() => setCopyBuffer(null)} className="ml-auto p-0.5 rounded hover:bg-white/10 text-gray-500 hover:text-white"><X size={12} /></button>
@@ -1453,7 +1480,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             )}
             <div className="flex-1 min-h-0 overflow-auto overflow-x-auto custom-scrollbar">
             <div className="w-full">
-                <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: '100%' }}>
+                <table className="text-base border-collapse" style={{ tableLayout: 'fixed', width: '100%' }}>
                     <colgroup>
                         <col style={{ width: 32 }} />
                         <col style={{ width: colWidths.nazwa }} />
@@ -1492,7 +1519,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         onClick={() => setShowBasket(v => !v)}
                         className="w-full flex items-center justify-between px-4 py-2 hover:bg-white/5 transition-colors"
                     >
-                        <span className="text-[10px] uppercase tracking-widest text-amber-500/70 font-bold flex items-center gap-1.5">
+                        <span className="text-[14px] uppercase tracking-widest text-amber-500/70 font-bold flex items-center gap-1.5">
                             <Package size={10} />
                             Koszyk — nieprzypisane ({unassignedRequirements.length})
                             {selectedNodeId && !showBasket && <span className="ml-2 text-gray-600 normal-case tracking-normal font-normal text-[9px]">rozwiń, by przypisać</span>}
@@ -1502,7 +1529,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     {showBasket && (
                         <div className="px-4 pb-3 max-h-48 overflow-y-auto custom-scrollbar">
                             {selectedNodeId && (
-                                <p className="text-[10px] text-gray-600 mb-2">przeciągnij na wiersz lub kliknij → Przypisz</p>
+                                <p className="text-[14px] text-gray-600 mb-2">przeciągnij na wiersz lub kliknij → Przypisz</p>
                             )}
                             <div className="flex flex-wrap gap-2">
                                 {unassignedRequirements.map(req => (
@@ -1513,10 +1540,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                             e.dataTransfer.setData('application/requirement-id', req.id);
                                             e.dataTransfer.effectAllowed = 'copy';
                                         }}
-                                        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-900/30 border border-emerald-500/20 rounded-lg text-emerald-300 text-[11px] cursor-grab select-none"
+                                        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-900/30 border border-emerald-500/20 rounded-lg text-emerald-300 text-[15px] cursor-grab select-none"
                                     >
                                         <span>{req.name || req.productName || '—'}</span>
-                                        {req.quantity > 0 && <span className="text-emerald-500/60 text-[10px]">×{req.quantity}{req.unit ? ` ${req.unit}` : ''}</span>}
+                                        {req.quantity > 0 && <span className="text-emerald-500/60 text-[14px]">×{req.quantity}{req.unit ? ` ${req.unit}` : ''}</span>}
                                         {selectedNodeId && (
                                             <button
                                                 onClick={e => { e.stopPropagation(); onRequirementAssign?.(selectedNodeId, req.id); }}
@@ -1549,13 +1576,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         ) : (
                             <div className="bg-gray-900 rounded-xl p-10 text-center">
                                 <FileText size={56} className="text-gray-500 mx-auto mb-4" />
-                                <p className="text-white text-sm">{lightboxAtt.fileName}</p>
+                                <p className="text-white text-base">{lightboxAtt.fileName}</p>
                                 <a href={`${API_URL}/schematics/file/${lightboxAtt.fileUrl}`} target="_blank" rel="noreferrer"
-                                    className="mt-3 inline-block text-blue-400 text-sm hover:underline">Otwórz plik</a>
+                                    className="mt-3 inline-block text-blue-400 text-base hover:underline">Otwórz plik</a>
                             </div>
                         )}
                         {lightboxAtt.note && (
-                            <p className="absolute bottom-6 left-0 right-0 text-xs text-gray-400 text-center">{lightboxAtt.note}</p>
+                            <p className="absolute bottom-6 left-0 right-0 text-base text-gray-400 text-center">{lightboxAtt.note}</p>
                         )}
                     </div>
                 </div>
