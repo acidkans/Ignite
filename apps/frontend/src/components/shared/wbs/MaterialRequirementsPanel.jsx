@@ -351,7 +351,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
                                 <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold">Nazwa</th>
                                 <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-32">Gałąź WBS</th>
                                 <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-20">Ilość</th>
-                                <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-28">Cena netto</th>
+                                <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-28">Koszt jedn.</th>
                                 <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-36">Produkt</th>
                                 <th className="px-3 py-2 text-left text-[10px] uppercase tracking-widest text-gray-500 font-semibold w-32">Status</th>
                                 {!isLocked && <th className="w-10" />}
@@ -767,7 +767,7 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
                     />
                 </div>
                 <div>
-                    <label className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 block">Cena netto</label>
+                    <label className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 block">Koszt jedn.</label>
                     <div className="relative">
                         <input
                             type="number"

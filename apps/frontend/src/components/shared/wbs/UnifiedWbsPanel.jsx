@@ -45,7 +45,7 @@ const BUDGET_IMPORT_FIELD_DEFS = [
     { key: 'type', label: 'Typ (praca/materiał/sprzęt...)' },
     { key: 'quantity', label: 'Ilość' },
     { key: 'unit', label: 'Jednostka' },
-    { key: 'unitCost', label: 'Koszt jednostkowy' },
+    { key: 'unitCost', label: 'Koszt jedn.' },
     { key: 'totalCost', label: 'Wartość całkowita' },
     { key: 'margin', label: 'Marża (%)' },
     { key: 'discount', label: 'Rabat (%)' },
@@ -173,21 +173,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             return next;
         });
     }, []);
-
-    const patchNodeInTree = useCallback((tree, nodeId, patch) => {
-        if (!tree) return tree;
-        const walk = (items) => items?.map(item => {
-            if (item.id === nodeId) return { ...item, ...patch };
-            if (item.children?.length) return { ...item, children: walk(item.children) };
-            return item;
-        });
-        return { ...tree, items: walk(tree.items) };
-    }, []);
-
-    const handleWbsNodeCostPatched = useCallback((nodeId, fields) => {
-        setWbsData(prev => prev.map(n => n.id === nodeId ? { ...n, ...fields } : n));
-        setWbsTreeAndRef(prev => patchNodeInTree(prev, nodeId, fields));
-    }, [setWbsTreeAndRef, patchNodeInTree]);
 
     const materialRef = useRef();
     const strategyLoadedRef = useRef(false);
@@ -3735,7 +3720,6 @@ ${ganttSectionHtml}
                                 unassignedRequirements={isManagerOrAdmin ? unassignedRequirements : []}
                                 onRequirementAssign={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
                                 onNodeFieldSave={updateNodeField}
-                                onProductCardPriceChange={(nodeId, price) => updateNodeField(nodeId, 'unitCost', price)}
                                 materialRefreshKey={reqRefreshKey}
                                 searchQuery={normalizedSearchQuery}
                                 onMaterialReqUpdated={async () => { setReqRefreshKey(k => k + 1); await refreshWbsNodes(); }}
@@ -3794,7 +3778,7 @@ ${ganttSectionHtml}
                             readOnly={!isManagerOrAdmin && !isLogistyk}
                             externalWbsNodes={wbsData}
                             onPatchNode={(id, data) => setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))}
-                            onWbsNodeCostPatched={handleWbsNodeCostPatched}
+                            onWbsNodeUnitCostChange={(nid, price) => updateNodeField(nid, 'unitCost', price)}
                             onWbsUpdate={async () => { setReqRefreshKey(k => k + 1); await refreshMaterialCosts(); await refreshWbsNodes(); }}
                             refreshKey={reqRefreshKey}
                             projectName={projectName}

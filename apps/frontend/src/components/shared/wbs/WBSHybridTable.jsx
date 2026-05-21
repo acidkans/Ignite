@@ -152,7 +152,7 @@ const API_URL = '/api';
 
 // ─── MaterialReqExpandPanel ───────────────────────────────────────────────────
 
-function MaterialReqExpandPanel({ node, req, processNodeId, onSaved, onDeleteNode }) {
+function MaterialReqExpandPanel({ node, req, processNodeId, onSaved, onDeleteNode, onNodeFieldSave }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     const headers = React.useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
 
@@ -217,7 +217,7 @@ function MaterialReqExpandPanel({ node, req, processNodeId, onSaved, onDeleteNod
                             onSaved?.(updated);
                         }
                     }}
-                    onPropagatePrice={() => {}}
+                    onPropagatePrice={(c, w, price) => onNodeFieldSave?.(node.id, 'unitCost', price)}
                     readOnly={false}
                 />
             ) : (
@@ -1160,7 +1160,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     )}
                 </td>
 
-                {/* Cena netto (tylko manager) */}
+                {/* Koszt jednostkowy (tylko manager) */}
                 {/* @anchor wbs-unit-price-input */}
                 {isManager && (
                     <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
@@ -1272,6 +1272,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             node={node}
                             req={matReqByWbsId[node.id] || null}
                             processNodeId={processNodeId}
+                            onNodeFieldSave={onNodeFieldSave}
                             onSaved={updated => { setMatReqByWbsId(prev => ({ ...prev, [node.id]: updated })); onMaterialReqUpdated?.(); }}
                             onDeleteNode={() => {
                                 const deletedIds = collectIds(items, node.id);
@@ -1470,7 +1471,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
                         <tr className="border-b border-white/10">
                             <th className="px-1 py-2.5 text-base font-bold uppercase tracking-widest text-white" />
-                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jednostka','text-left'],...(isManager ? [['cena_netto','Cena netto','text-right']] : []),['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['qa','Q&A','text-left'],['zalaczniki','Attach.','text-left']].map(([key, label, align]) => (
+                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jednostka','text-left'],...(isManager ? [['cena_netto','Koszt jedn.','text-right']] : []),['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['qa','Q&A','text-left'],['zalaczniki','Attach.','text-left']].map(([key, label, align]) => (
                                 <th key={key} className={`px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white ${align} relative select-none`}>
                                     {label}
                                     <div onMouseDown={e => startColResize(key, e)} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-500/40 transition-colors" />
