@@ -177,7 +177,7 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
                 if (ovr?.start && ovr?.end) {
                     start = new Date(ovr.start);
                     end = pureService ? new Date(start.getTime() + DAY_MS) : new Date(ovr.end);
-                    type = pureService ? 'task' : ((end - start) <= DAY_MS / 2 ? 'milestone' : 'task');
+                    type = 'task';
                 } else if (dur > 0 && !pureService) {
                     start = defaultStart;
                     end = effectiveWow
@@ -185,9 +185,11 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
                         : addWorkingDays(start, dur);
                     type = 'task';
                 } else {
+                    // Praca z jednostką inną niż dni (sztuki, kpl, usługa…) — pasek 1-dniowy,
+                    // rozciągalny; resize zmienia tylko ganttStart/ganttEnd, nie quantity/unit.
                     start = defaultStart;
                     end = new Date(start.getTime() + DAY_MS);
-                    type = pureService ? 'task' : 'milestone';
+                    type = 'task';
                 }
                 tasks.push({
                     id: node.id,
