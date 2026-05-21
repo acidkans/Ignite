@@ -87,6 +87,7 @@ export const UNIT_OPTIONS = [
 export function defaultUnitForType(type) {
   const t = String(type || '').toLowerCase();
   if (t === 'work' || t === 'praca') return 'dni';
+  if (t === 'fuel' || t === 'paliwo') return 'kilometry';
   return 'sztuki';
 }
 

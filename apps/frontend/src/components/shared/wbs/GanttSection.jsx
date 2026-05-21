@@ -602,6 +602,68 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         return () => { cancelled = true; timers.forEach(clearTimeout); cleanup?.(); };
     }, [tasks, taskBranchMap, branchInfoMap]);
 
+    // Własny przyklejony suwak poziomy zsynchronizowany z timeline (_CZjuD) oraz
+    // sticky-klon nagłówka dat zamrożony u góry przy przewijaniu pionowym.
+    // Używamy własnego suwaka, NIE wbudowanego _2k9Ys — sterowanie _2k9Ys wywołuje
+    // setState gantt-task-react i powoduje pętlę renderów.
+    useEffect(() => {
+        const wrapper = wrapperRef.current;
+        if (!wrapper) return;
+        let cleanup = null;
+        const attach = () => {
+            const printDiv = wrapper.querySelector('.ignite-gantt-print');
+            const bar = wrapper.querySelector('.ignite-gantt-hscroll');
+            const spacer = wrapper.querySelector('.ignite-gantt-hscroll-spacer');
+            const chart = wrapper.querySelector('._CZjuD');
+            if (!printDiv || !bar || !spacer || !chart) return null;
+            const headerSvg = chart.querySelector('svg');
+            const taskListEl = chart.parentElement?.children?.[0];
+            if (!headerSvg || !taskListEl) return null;
+            // Szerokość wewnętrznej rozpórki = szerokość treści timeline → suwak ma
+            // taki sam zakres przewijania jak _CZjuD.
+            spacer.style.width = chart.scrollWidth + 'px';
+
+            // Sticky-klon nagłówka dat — nakładka zamrożona u góry widoku. Kontener
+            // (.ignite-gantt-sticky-header) renderuje React jako pusty div; tutaj tylko
+            // wypełniamy go treścią, więc nie kolidujemy z rekoncyliacją Reacta.
+            const stick = printDiv.querySelector('.ignite-gantt-sticky-header');
+            if (!stick) return null;
+            stick.innerHTML = '';
+            const headerH = Math.min(headerSvg.getBoundingClientRect().height || 60, 90);
+            const taskListW = Math.round(taskListEl.getBoundingClientRect().width || 500);
+            const inner = document.createElement('div');
+            inner.style.cssText = `position:absolute;top:0;left:${taskListW}px;height:${headerH}px;`
+                + `width:calc(100% - ${taskListW}px);overflow:hidden;background:#0b0f17;`;
+            const svgClone = headerSvg.cloneNode(true);
+            svgClone.style.transform = `translateX(${-chart.scrollLeft}px)`;
+            inner.appendChild(svgClone);
+            stick.appendChild(inner);
+
+            // Lock zwalniany dopiero w następnej klatce — odbity event scroll
+            // (echo) trafia w lock i jest ignorowany, więc nie ma pętli.
+            let lock = false;
+            const sync = (src, dst) => {
+                if (lock) return;
+                if (dst.scrollLeft === src.scrollLeft) return;
+                lock = true;
+                dst.scrollLeft = src.scrollLeft;
+                requestAnimationFrame(() => { lock = false; });
+            };
+            const updateHeader = () => { svgClone.style.transform = `translateX(${-chart.scrollLeft}px)`; };
+            const fromBar = () => { sync(bar, chart); updateHeader(); };
+            const fromChart = () => { sync(chart, bar); updateHeader(); };
+            bar.addEventListener('scroll', fromBar);
+            chart.addEventListener('scroll', fromChart);
+            return () => {
+                bar.removeEventListener('scroll', fromBar);
+                chart.removeEventListener('scroll', fromChart);
+                stick.innerHTML = '';
+            };
+        };
+        const timers = [50, 200, 600, 1200].map(ms => setTimeout(() => { if (!cleanup) cleanup = attach(); }, ms));
+        return () => { timers.forEach(clearTimeout); cleanup?.(); };
+    }, [tasks, viewMode]);
+
     // Blokuj auto-scroll timeline podczas przeciągania tasków
     useEffect(() => {
         const wrapper = wrapperRef.current;
@@ -933,6 +995,9 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         if (!node) return;
 
         const clone = node.cloneNode(true);
+        // Nakładki tylko dla widoku (sticky nagłówek, własny suwak) — w eksporcie zbędne.
+        clone.querySelector('.ignite-gantt-sticky-header')?.remove();
+        clone.querySelector('.ignite-gantt-hscroll')?.remove();
         const NS = 'http://www.w3.org/2000/svg';
         // Timeline SVG siedzi w pionowym kontenerze (children[1]) — taki sam selektor jak live app
         const liveVc = node.querySelector('[class*="CZjuD"], [class*="ganttVerticalContainer"]');
@@ -1020,7 +1085,11 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
         const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
             .map(s => s.outerHTML)
             .join('\n');
-        const html = node.outerHTML;
+        // Nakładki tylko dla widoku — usuń z serializacji.
+        const exportClone = node.cloneNode(true);
+        exportClone.querySelector('.ignite-gantt-sticky-header')?.remove();
+        exportClone.querySelector('.ignite-gantt-hscroll')?.remove();
+        const html = exportClone.outerHTML;
 
         // Przywróć stan live view
         if (innerSvg && savedTransform !== null) innerSvg.style.transform = savedTransform;
@@ -1151,8 +1220,15 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
   z-index: 15 !important;
   background: #0b0f17 !important;
 }
+/* Timeline (_CZjuD) jest własnym kontenerem przewijania poziomego — dzięki temu
+   tabela zadań (lewa kolumna) zostaje zamrożona przy przewijaniu, a poziomy suwak
+   jest tylko pod timeline. flex:1 zwęża _CZjuD do dostępnej szerokości. */
 .ignite-gantt-print ._CZjuD {
-  overflow: clip !important;
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  width: auto !important;
+  overflow-x: auto !important;
+  overflow-y: clip !important;
 }
 .ignite-gantt-print ._CZjuD > svg:first-child {
   position: sticky !important;
@@ -1163,8 +1239,31 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
 .ignite-gantt-print ._34SS0 {
   overflow: visible !important;
 }
+/* Wbudowany poziomy suwak gantt-task-react ukryty — sterowanie nim wywołuje
+   setState biblioteki i pętlę renderów. Zamiast niego używamy własnego suwaka. */
+.ignite-gantt-print ._2k9Ys {
+  display: none !important;
+}
+/* Własny poziomy suwak — przyklejony do dołu widoku (widoczny bez przewijania
+   w dół), przesunięty o szerokość tabeli zadań, więc leży tylko pod timeline. */
+.ignite-gantt-print .ignite-gantt-hscroll {
+  position: sticky;
+  bottom: 0;
+  margin-left: 500px;
+  height: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  z-index: 25;
+  background: #0b0f17;
+}
+.ignite-gantt-print .ignite-gantt-hscroll-spacer {
+  height: 1px;
+}
 `}</style>
-            <div className="ignite-gantt-print flex-1 min-h-0 overflow-auto custom-scrollbar bg-white/[0.02]">
+            <div className="ignite-gantt-print flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar bg-white/[0.02]">
+                {/* Pusty kontener na sticky-klon nagłówka dat — wypełniany imperatywnie
+                    w useEffect; React renderuje go pustym, więc nie ma kolizji. */}
+                <div className="ignite-gantt-sticky-header" style={{ position: 'sticky', top: 0, height: 0, zIndex: 30 }} />
                 <Gantt
                     tasks={tasks}
                     viewMode={viewMode}
@@ -1182,6 +1281,10 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                     TaskListHeader={GanttTaskListHeader}
                     TaskListTable={GanttTaskListTable}
                 />
+                {/* Własny poziomy suwak — szerokość rozpórki ustawia useEffect. */}
+                <div className="ignite-gantt-hscroll">
+                    <div className="ignite-gantt-hscroll-spacer" />
+                </div>
             </div>
 
         </div>

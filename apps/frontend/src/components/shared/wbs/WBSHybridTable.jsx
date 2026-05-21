@@ -739,6 +739,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [costFocusId, setCostFocusId] = useState(null);
     const [showBasket, setShowBasket] = useState(false);
     const [copyBuffer, setCopyBuffer] = useState(null); // { node, sourceName }
+    const [expandedQaIds, setExpandedQaIds] = useState(new Set());
     const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, status: 128, wlasciciel: 128, komentarz: 200, qa: 260, zalaczniki: 44 });
     const resizeDrag = useRef(null);
 
@@ -1034,7 +1035,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     onDragStart={e => onDragStart(e, node.id)}
                     onDragEnd={onDragEnd}
                 >
-                    <div className="flex items-center gap-1.5">
+                    <div className="relative flex items-center gap-1.5">
                         <GripVertical
                             size={11}
                             className="text-gray-700 group-hover/node:text-gray-500 flex-shrink-0"
@@ -1043,39 +1044,11 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             ? <ChevronRight size={12} className={`text-gray-400 transition-transform flex-shrink-0 ${isOpen(rowId) ? 'rotate-90' : ''}`} />
                             : <span className="w-[12px] flex-shrink-0" />
                         }
-                        <div className="relative z-20 flex flex-col gap-1 opacity-0 group-hover/node:opacity-100 transition-opacity" draggable={false} onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
-                            <button
-                                title="Kopiuj pozycję"
-                                onMouseDown={e => e.stopPropagation()}
-                                onPointerDown={e => e.stopPropagation()}
-                                onClick={e => { e.stopPropagation(); setCopyBuffer({ node: findNode(items, node.id), sourceName: node.name }); }}
-                                className="p-1.5 rounded bg-black/40 hover:bg-blue-500/40 text-gray-300 hover:text-white transition-all"
-                            >
-                                <Copy size={16} />
-                            </button>
-                            {copyBuffer && !subtreeContains(copyBuffer.node, node.id) && copyBuffer.node.id !== node.id && (
-                                <button
-                                    title={`Wklej „${copyBuffer.sourceName}" jako dziecko (z wymaganiami technicznymi, typem i statusem)`}
-                                    onMouseDown={e => e.stopPropagation()}
-                                    onPointerDown={e => e.stopPropagation()}
-                                    onClick={e => {
-                                        e.stopPropagation();
-                                        const { clone, mappings } = deepCloneNodeWithMappings(copyBuffer.node);
-                                        save({ ...wbsTree, items: addChildTo(items, node.id, clone) });
-                                        setCopyBuffer(null);
-                                        if (mappings.length > 0) onPasteCloned?.(mappings);
-                                    }}
-                                    className="p-1.5 rounded bg-black/40 hover:bg-emerald-500/40 text-gray-300 hover:text-emerald-200 transition-all"
-                                >
-                                    <Clipboard size={16} />
-                                </button>
-                            )}
-                        </div>
                     </div>
                 </td>
 
                 {/* Nazwa */}
-                <td className="px-3 py-1.5 select-text relative" style={{ paddingLeft: `calc(0.75rem + ${depth * 14}px)`, paddingRight: '3.5rem' }} onClick={e => e.stopPropagation()}>
+                <td className="px-3 py-1.5 select-text relative" style={{ paddingLeft: `calc(0.75rem + ${depth * 14}px)`, paddingRight: '7rem' }} onClick={e => e.stopPropagation()}>
                     <AutoResizeTextarea
                         value={node.name || ''}
                         onChange={e => handleField(node.id, 'name', e.target.value)}
@@ -1090,6 +1063,28 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         className={`w-full bg-transparent border-none resize-none focus:outline-none placeholder-gray-700 min-w-[60px] select-text leading-snug ${d.nameClass}`}
                     />
                     <div className="absolute top-1/2 -translate-y-1/2 right-1 flex items-center gap-1">
+                        <button
+                            onClick={e => { e.stopPropagation(); setCopyBuffer({ node: findNode(items, node.id), sourceName: node.name }); }}
+                            title="Kopiuj pozycję"
+                            className="p-1 rounded text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 transition-all"
+                        >
+                            <Copy size={14} />
+                        </button>
+                        {copyBuffer && !subtreeContains(copyBuffer.node, node.id) && copyBuffer.node.id !== node.id && (
+                            <button
+                                onClick={e => {
+                                    e.stopPropagation();
+                                    const { clone, mappings } = deepCloneNodeWithMappings(copyBuffer.node);
+                                    save({ ...wbsTree, items: addChildTo(items, node.id, clone) });
+                                    setCopyBuffer(null);
+                                    if (mappings.length > 0) onPasteCloned?.(mappings);
+                                }}
+                                title={`Wklej „${copyBuffer.sourceName}" jako dziecko (z wymaganiami technicznymi, typem i statusem)`}
+                                className="p-1 rounded text-emerald-500/60 hover:text-emerald-300 hover:bg-emerald-500/10 transition-all"
+                            >
+                                <Clipboard size={14} />
+                            </button>
+                        )}
                         {(node.type === 'material' || node.type === 'equipment') && (
                             <button
                                 onClick={e => { e.stopPropagation(); setExpandedMaterialIds(prev => { const n = new Set(prev); n.has(node.id) ? n.delete(node.id) : n.add(node.id); return n; }); }}
@@ -1136,6 +1131,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 if (newType === 'group') {
                                     handleField(node.id, 'unit', 'pakiet');
                                     onNodeFieldSave?.(node.id, 'unit', 'pakiet');
+                                }
+                                if (newType === 'fuel') {
+                                    handleField(node.id, 'unit', 'kilometry');
+                                    onNodeFieldSave?.(node.id, 'unit', 'kilometry');
+                                    handleField(node.id, 'unitCost', 0.7);
+                                    onNodeFieldSave?.(node.id, 'unitCost', 0.7);
                                 }
                                 if (isMaterial && node.name) {
                                     onMaterialNodeCreated?.({ wbsNodeId: node.id, name: node.name, type: newType, parentId });
@@ -1265,14 +1266,32 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     />
                 </td>
 
-                {/* Q&A — zagnieżdżona tabela Pytanie / Odpowiedź */}
+                {/* Q&A — badge (zwinięty) lub pełny edytor (rozwinięty) */}
                 <td className="px-3 py-2.5 min-w-[200px]" onClick={e => e.stopPropagation()}>
-                    <QaCell
-                        pairs={Array.isArray(node.qa) ? node.qa : []}
-                        fieldClass={d.fieldClass}
-                        onChange={(next) => handleField(node.id, 'qa', next)}
-                        onPersist={() => onSave?.()}
-                    />
+                    {expandedQaIds.has(node.id) ? (
+                        <div className="flex flex-col gap-1">
+                            <button
+                                onClick={() => setExpandedQaIds(prev => { const s = new Set(prev); s.delete(node.id); return s; })}
+                                className="self-start flex items-center gap-1 text-[11px] text-gray-500 hover:text-blue-400 transition-all mb-0.5"
+                            >
+                                <ChevronDown size={9} className="rotate-180" /> zwiń
+                            </button>
+                            <QaCell
+                                pairs={Array.isArray(node.qa) ? node.qa : []}
+                                fieldClass={d.fieldClass}
+                                onChange={(next) => handleField(node.id, 'qa', next)}
+                                onPersist={() => onSave?.()}
+                            />
+                        </div>
+                    ) : (
+                        <button
+                            onClick={() => setExpandedQaIds(prev => new Set([...prev, node.id]))}
+                            className="flex items-center gap-1.5 text-[48px] text-gray-500 hover:text-blue-400 transition-all"
+                        >
+                            <HelpCircle size={44} />
+                            <span>{(Array.isArray(node.qa) ? node.qa : []).filter(p => p?.question || p?.answer).length || '+'}</span>
+                        </button>
+                    )}
                 </td>
 
                 {/* Załączniki — miniatury zdjęć z markerów */}

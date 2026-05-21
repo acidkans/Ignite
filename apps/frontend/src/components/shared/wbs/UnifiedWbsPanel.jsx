@@ -1836,6 +1836,85 @@ ${ganttSectionHtml}
             summarySheet.getCell(`G${r}`).numFmt = '0.00%';
         }
 
+        // Podział liści (tylko typ Materiał / Sprzęt — bez podgałęzi) pogrupowany po osobie (owner).
+        const leafParentIds = new Set(wbsData.map(n => n.parentId).filter(Boolean));
+        const ownerLeafRows = rows.filter(r =>
+            !leafParentIds.has(r.id) && (r.type === 'material' || r.type === 'equipment')
+        );
+        if (ownerLeafRows.length) {
+            const byOwner = {};
+            for (const row of ownerLeafRows) {
+                const ownerKey = String(row.owner || '').trim() || '(nieprzypisane)';
+                if (!byOwner[ownerKey]) byOwner[ownerKey] = { material: [], equipment: [] };
+                byOwner[ownerKey][row.type].push(row);
+            }
+            summarySheet.addRow([]);
+            const leafTitleRow = summarySheet.addRow(['Podział liści — materiały i sprzęt wg osób']);
+            leafTitleRow.font = { bold: true, size: 12 };
+
+            const ownerKeys = Object.keys(byOwner).sort((a, b) => a.localeCompare(b, 'pl'));
+            for (const ownerKey of ownerKeys) {
+                summarySheet.addRow([]);
+                const ownerRow = summarySheet.addRow([`Osoba: ${ownerKey}`]);
+                ownerRow.font = { bold: true, size: 11 };
+                ownerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
+
+                const blocks = [
+                    { type: 'material', label: 'Materiały' },
+                    { type: 'equipment', label: 'Sprzęt' },
+                ];
+                let ownerTotalCost = 0;
+                let ownerTotalOffer = 0;
+                for (const block of blocks) {
+                    const blockRows = byOwner[ownerKey][block.type];
+                    if (!blockRows.length) continue;
+                    const blockTitleRow = summarySheet.addRow([block.label]);
+                    blockTitleRow.font = { bold: true };
+                    const blockHeaderRow = summarySheet.addRow(['Podgałąź', 'Nazwa', 'Ilość', 'Jednostka', 'Koszt całościowy', 'Cena ofertowa', 'Zysk']);
+                    blockHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                    blockHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+                    const blockFirstRow = blockHeaderRow.number + 1;
+                    let blockTotalCost = 0;
+                    let blockTotalOffer = 0;
+                    for (const row of blockRows) {
+                        const cost = Number(row.totalCost) || 0;
+                        const offer = Number(row.offerPrice) || 0;
+                        blockTotalCost += cost;
+                        blockTotalOffer += offer;
+                        summarySheet.addRow([
+                            row.parentName || '',
+                            row.name || '',
+                            Number(row.quantity) || 0,
+                            row.unit || '',
+                            cost,
+                            offer,
+                            offer - cost,
+                        ]);
+                    }
+                    ownerTotalCost += blockTotalCost;
+                    ownerTotalOffer += blockTotalOffer;
+                    const blockTotalsRow = summarySheet.addRow([`Razem ${block.label.toLowerCase()}`, '', '', '', blockTotalCost, blockTotalOffer, blockTotalOffer - blockTotalCost]);
+                    blockTotalsRow.font = { bold: true };
+                    for (let r = blockFirstRow; r <= blockTotalsRow.number; r++) {
+                        summarySheet.getCell(`C${r}`).numFmt = '#,##0.##';
+                        summarySheet.getCell(`E${r}`).numFmt = '#,##0.00';
+                        summarySheet.getCell(`F${r}`).numFmt = '#,##0.00';
+                        summarySheet.getCell(`G${r}`).numFmt = '#,##0.00';
+                    }
+                }
+                // Zbiorczo dla osoby: koszt (ile kosztuje), cena ofertowa, zysk (ile zarabiam).
+                const ownerTotalsRow = summarySheet.addRow([
+                    `Razem osoba: ${ownerKey}`, '', '', '',
+                    ownerTotalCost, ownerTotalOffer, ownerTotalOffer - ownerTotalCost,
+                ]);
+                ownerTotalsRow.font = { bold: true };
+                ownerTotalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
+                ['E', 'F', 'G'].forEach((col) => {
+                    summarySheet.getCell(`${col}${ownerTotalsRow.number}`).numFmt = '#,##0.00';
+                });
+            }
+        }
+
         // Q&A sheet — zagnieżdżona tabela: Pozycja WBS / Pytanie / Odpowiedź
         const qaSheet = workbook.addWorksheet('Q&A');
         qaSheet.columns = [
@@ -1866,199 +1945,6 @@ ${ganttSectionHtml}
         const anchor = document.createElement('a');
         anchor.href = url;
         anchor.download = `${safeProjectName}_budzet.xlsx`;
-        anchor.click();
-        URL.revokeObjectURL(url);
-    };
-
-    // @anchor handle-export-oferta-excel
-    const handleExportOfertaExcel = async () => {
-        const rows = buildRows(VIEWS.BUDGET).map(r => {
-            const q = Math.max(0, parseFloat(r.quantity) || 0);
-            const uc = Math.max(0, parseFloat(r.unitCost) || 0);
-            const marginRaw = (r.margin != null && String(r.margin) !== '') ? parseFloat(r.margin) : null;
-            const d = Math.max(0, parseFloat(r.discount) || 0);
-            const totalCost = uc * q;
-            let offerPrice = (marginRaw !== null && marginRaw !== 0) ? totalCost * (1 + marginRaw / 100) : 0;
-            if (offerPrice > 0 && d > 0) offerPrice = Math.max(0, offerPrice * (1 - d / 100));
-            return { ...r, totalCost, offerPrice };
-        });
-        if (!rows.length) {
-            alert('Brak danych budżetowych do eksportu.');
-            return;
-        }
-
-        // Agregacja po najwyższej gałęzi WBS (subjectName = root branch)
-        const aggMap = new Map();
-        for (const row of rows) {
-            const label = (row.subjectName || '—').trim().toUpperCase();
-            const key = row.subjectId || `__noid__${label}`;
-            if (!aggMap.has(key)) aggMap.set(key, { label, offerPrice: 0, comments: [] });
-            const entry = aggMap.get(key);
-            entry.offerPrice += Number(row.offerPrice) || 0;
-            const c = String(row.comment || '').trim();
-            if (c && !entry.comments.includes(c)) entry.comments.push(c);
-        }
-
-        const workbook = new ExcelJS.Workbook();
-        const sheet = workbook.addWorksheet('Oferta');
-
-        sheet.columns = [
-            { header: 'Pozycja', key: 'subject', width: 48 },
-            { header: 'Cena ofertowa (PLN)', key: 'offerPrice', width: 22 },
-        ];
-
-        const headerRow = sheet.getRow(1);
-        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
-        headerRow.alignment = { vertical: 'middle' };
-
-        // Suma ofertowa = Σ cen ofertowych pozycji (rabaty per gałąź już wliczone).
-        // Globalny rabat budżetu pokazujemy osobno, jako wiersze pod sumą.
-        const rawRevenue = [...aggMap.values()].reduce((s, d) => s + (Number(d.offerPrice) || 0), 0);
-        const parsedPct = Number(String(budgetDiscountPercent ?? '').replace(',', '.'));
-        const parsedAmt = Number(String(budgetDiscountAmount ?? '').replace(',', '.'));
-        const discFromPct = Number.isFinite(parsedPct) ? Math.max(0, parsedPct) / 100 * rawRevenue : 0;
-        const discFromAmt = Number.isFinite(parsedAmt) ? Math.max(0, parsedAmt) : 0;
-        const globalDiscount = Math.min(rawRevenue, discFromPct + discFromAmt);
-        const revenueAfterGlobalDiscount = Math.max(0, rawRevenue - globalDiscount);
-
-        const firstDataRow = 2;
-        for (const [, data] of aggMap) {
-            const offer = Number(data.offerPrice) || 0;
-            const added = sheet.addRow({
-                subject: data.label,
-                offerPrice: offer > 0 ? offer : null,
-            });
-            added.alignment = { wrapText: true, vertical: 'top' };
-        }
-        const lastDataRow = firstDataRow + aggMap.size - 1;
-
-        // Wiersz sumujący — suma cen ofertowych pozycji (przed rabatem całościowym)
-        const totalsRow = sheet.addRow({
-            subject: 'Razem',
-            offerPrice: aggMap.size > 0
-                ? { formula: `=SUM(B${firstDataRow}:B${lastDataRow})`, result: rawRevenue }
-                : rawRevenue,
-        });
-        totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
-
-        // Globalny rabat budżetu — osobne pozycje pod sumą
-        if (globalDiscount > 0) {
-            const discRow = sheet.addRow({ subject: 'Rabat całościowy', offerPrice: -globalDiscount });
-            discRow.font = { italic: true };
-            const finalRow = sheet.addRow({ subject: 'Cena ofertowa po rabacie całościowym', offerPrice: revenueAfterGlobalDiscount });
-            finalRow.font = { bold: true };
-        }
-
-        // Szacowana ilość dni pracy — suma quantity dla type=work/praca, unit=dni
-        const workDays = rows.reduce((sum, r) => {
-            const t = String(r.type || '').toLowerCase();
-            const isWork = t === 'work' || t === 'praca' || String(r.budgetType || '').toUpperCase() === 'WORK';
-            const u = String(r.unit || '').toLowerCase().trim();
-            const isDni = u === 'dni' || u === 'dzień' || u === 'dzien' || u === 'd';
-            return isWork && isDni ? sum + (Number(r.quantity) || 0) : sum;
-        }, 0);
-
-        sheet.addRow([]);
-        sheet.addRow([]);
-        sheet.addRow({ subject: 'szacowana ilość dni pracy', offerPrice: `${workDays} dni` });
-        sheet.addRow({ subject: 'ważność oferty', offerPrice: '14 dni' });
-
-        sheet.getColumn('offerPrice').numFmt = '#,##0.00';
-        sheet.views = [{ state: 'frozen', ySplit: 1 }];
-        if (aggMap.size > 0) {
-            sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: sheet.columnCount } };
-        }
-
-        // ── Sheet Materiały: płaska lista (bez agregacji, bez cen, z komentarzami) ──
-        const materialsSheet = workbook.addWorksheet('Materiały');
-        const STATUS_LABELS_XLS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
-        const upperFirstSegment = (path) => {
-            if (!path) return '';
-            const idx = path.indexOf(' › ');
-            if (idx < 0) return path.toUpperCase();
-            return path.slice(0, idx).toUpperCase() + path.slice(idx);
-        };
-
-        // Mapa nodeId → material requirement: po wbsNodeId, po allokacjach, oraz po tagu req:
-        const reqByNodeId = {};
-        for (const req of allRequirements) {
-            if (req.wbsNodeId) reqByNodeId[req.wbsNodeId] = req;
-            try {
-                const alloc = JSON.parse(req.wbsNodeAllocations || '{}');
-                for (const nid of Object.keys(alloc)) {
-                    if (nid && !reqByNodeId[nid]) reqByNodeId[nid] = req;
-                }
-            } catch {}
-        }
-        for (const node of wbsData) {
-            if (reqByNodeId[node.id]) continue;
-            const reqTag = (node.tags || []).find(t => typeof t === 'string' && t.startsWith('req:'));
-            if (!reqTag) continue;
-            const req = allRequirements.find(r => r.id === reqTag.slice(4));
-            if (req) reqByNodeId[node.id] = req;
-        }
-
-        const matNodes = wbsData.filter(n => n.type === 'material' || n.type === 'equipment');
-        matNodes.sort((a, b) => (a.path || '').localeCompare(b.path || '', 'pl', { numeric: true, sensitivity: 'base' }));
-
-        materialsSheet.columns = [
-            { header: 'Lp.', key: 'idx', width: 5 },
-            { header: 'Pełna ścieżka WBS', key: 'path', width: 56 },
-            { header: 'Pozycja', key: 'name', width: 32 },
-            { header: 'Ilość', key: 'qty', width: 10 },
-            { header: 'Jednostka', key: 'unit', width: 12 },
-            { header: 'Wymagania techniczne', key: 'tech', width: 48 },
-            { header: 'Producent', key: 'manufacturer', width: 18 },
-            { header: 'Model', key: 'model', width: 18 },
-            { header: 'Nazwa handlowa', key: 'productName', width: 24 },
-            { header: 'Status', key: 'status', width: 14 },
-            { header: 'Komentarz', key: 'comment', width: 40 },
-        ];
-        const matHeader = materialsSheet.getRow(1);
-        matHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        matHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
-
-        matNodes.forEach((node, i) => {
-            const card = reqByNodeId[node.id] || null;
-            const segs = node.path ? node.path.split(' › ') : [];
-            // Ścieżka bez ostatniego segmentu (sam węzeł jest w kolumnie "Pozycja")
-            const pathWithoutSelf = segs.length > 1 ? segs.slice(0, -1).join(' › ') : '';
-            const selectedProposal = (card?.proposals || []).find(p => p.isSelected);
-            const chosen = selectedProposal || card || null;
-            const added = materialsSheet.addRow({
-                idx: i + 1,
-                path: upperFirstSegment(pathWithoutSelf),
-                name: node.name || '',
-                qty: Number(node.quantity ?? 1),
-                unit: node.unit || 'szt',
-                tech: card?.technicalSpec || '',
-                manufacturer: chosen?.manufacturer || '',
-                model: chosen?.model || '',
-                productName: chosen?.productName || '',
-                status: STATUS_LABELS_XLS[card?.status] || (card?.status || ''),
-                comment: node.comment || '',
-            });
-            added.alignment = { vertical: 'top', wrapText: true };
-        });
-
-        materialsSheet.getColumn('qty').numFmt = '#,##0.##';
-        materialsSheet.views = [{ state: 'frozen', ySplit: 1 }];
-        if (matNodes.length > 0) {
-            materialsSheet.autoFilter = {
-                from: { row: 1, column: 1 },
-                to: { row: matNodes.length + 1, column: materialsSheet.columnCount },
-            };
-        }
-
-        const safeProjectName = String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'projekt';
-        const buffer = await workbook.xlsx.writeBuffer();
-        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = `Airtel_oferta_${safeProjectName}.xlsx`;
         anchor.click();
         URL.revokeObjectURL(url);
     };
@@ -2277,7 +2163,9 @@ ${ganttSectionHtml}
                 const price = localPriceOf(item);
                 if (price <= 0) continue;
                 const chain = localChain(item.id);
-                const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)], d3 = chain[Math.min(2, chain.length - 1)];
+                // Pozycja = realny liść (item) — żeby kolumna Typ pokazywała typ liścia
+                // (praca, materiał, sprzęt…), a nie typ gałęzi grupującej.
+                const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)], d3 = item;
                 if (!d1) continue;
                 if (!level1.has(d1.id)) level1.set(d1.id, { id: d1.id, name: d1.name || '', children: new Map() });
                 const g1 = level1.get(d1.id);
@@ -2333,10 +2221,13 @@ ${ganttSectionHtml}
             };
             // Ścieżka podgałęzi: wszystkie gałęzie POMIĘDZY przedmiotem (depth=0) a samym
             // wierszem — bez depth=0 i bez własnego segmentu. Umożliwia filtrowanie po
-            // dowolnym poziomie gałęzi w kolumnie C.
+            // dowolnym poziomie gałęzi w kolumnie C. Gdy liść leży bezpośrednio pod
+            // przedmiotem (brak podgałęzi) — powtarzamy jego własną nazwę zamiast pustej.
             const getMidBranchPath = (nodePath) => {
                 const segs = nodePath ? nodePath.split(' › ') : [];
-                return segs.slice(1, -1).join(' › ');
+                const mid = segs.slice(1, -1);
+                if (mid.length > 0) return mid.join(' › ');
+                return segs.length ? segs[segs.length - 1] : '';
             };
 
             // Mapa nodeId → material requirement: po wbsNodeId, po allokacjach, oraz po tagu req:
@@ -2405,9 +2296,12 @@ ${ganttSectionHtml}
                 const card = reqByNodeId[node.id] || null;
                 if (!card) return;
                 const sp = (card.proposals || []).find(p => p.isSelected);
+                // Pobieramy obraz tylko gdy faktycznie istnieje (imageUrl ustawiony) —
+                // inaczej endpoint zwraca 404 i zaśmieca konsolę.
                 const url = sp?.id
-                    ? `${API_URL}/material-requirements/proposals/${sp.id}/image`
-                    : `${API_URL}/material-requirements/${card.id}/image`;
+                    ? (sp.imageUrl ? `${API_URL}/material-requirements/proposals/${sp.id}/image` : null)
+                    : (card.imageUrl ? `${API_URL}/material-requirements/${card.id}/image` : null);
+                if (!url) return;
                 const dataUrl = await fetchImageDataUrl(url);
                 if (dataUrl) proposalImages[node.id] = dataUrl;
             }));
@@ -4014,11 +3908,8 @@ ${ganttSectionHtml}
                         />
                     ), () => handleExportPDF('budget'), (
                         <div className="flex items-center gap-2">
-                            <button onClick={(e) => { e.stopPropagation(); handleExportOfertaExcel(); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
-                                <FileDown size={11} /> Eksport oferty
-                            </button>
                             <button onClick={(e) => { e.stopPropagation(); handleExportBudgetExcel(); }} className="flex items-center gap-1.5 px-3 py-1 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-lg text-green-300 text-[10px] font-bold uppercase tracking-widest transition-all">
-                                <FileDown size={11} /> Eksport budżetu do Excel
+                                <FileDown size={11} /> Analiza projektu do Excel
                             </button>
                             <button onClick={(e) => { e.stopPropagation(); budgetImportFileInputRef.current?.click(); }} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                                 <FileDown size={11} /> Import budżetu z Excel
