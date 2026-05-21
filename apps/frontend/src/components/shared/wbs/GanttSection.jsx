@@ -131,10 +131,11 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
     let rootMaxEnd = new Date(cursor);
 
     const hasWorkOrServiceLeaf = (node) => {
+        if (isWorkType(node.type) || isServiceType(node.type)) return true;
         if (Array.isArray(node.children) && node.children.length > 0) {
             return node.children.some(hasWorkOrServiceLeaf);
         }
-        return isWorkType(node.type) || isServiceType(node.type);
+        return false;
     };
 
     const walk = (nodes, parentId, depth, branchWow, currentBranchId) => {
@@ -143,8 +144,11 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
 
         for (const node of nodes) {
             const hasChildren = Array.isArray(node.children) && node.children.length > 0;
-            if (!hasChildren && !isWorkType(node.type) && !isServiceType(node.type)) continue;
-            if (hasChildren && !hasWorkOrServiceLeaf(node)) continue;
+            // Węzeł typu praca/usługa jest zadaniem (pasek) — niezależnie od tego czy ma dzieci.
+            // Tylko węzeł innego typu z dziećmi jest czysto grupującą gałęzią (bez paska).
+            const isTaskNode = isWorkType(node.type) || isServiceType(node.type);
+            if (!hasChildren && !isTaskNode) continue;
+            if (hasChildren && !isTaskNode && !hasWorkOrServiceLeaf(node)) continue;
 
             const colors = colorForNode(node.id);
             const niceName = String(node.name || '').trim() || '(bez nazwy)';
@@ -152,7 +156,8 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
             const wow = depth === 0 ? (branchWorkOnHolidays[node.id] ?? false) : branchWow;
             const thisBranchId = depth === 0 ? node.id : currentBranchId;
 
-            if (hasChildren) {
+            // Czysto grupująca gałąź (nie-zadanie z dziećmi) — bez paska, schodzimy w dzieci.
+            if (hasChildren && !isTaskNode) {
                 if (depth === 0 && !wow) cursor = advanceToWorkingDay(cursor);
                 walk(node.children, parentId, depth + 1, wow, thisBranchId);
                 continue;
@@ -169,16 +174,14 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
                 const dur = nodeDurationDays(node);
                 const ovr = overrides?.[node.id];
                 let start, end, type;
-                // pureService (usługa/service, nie pakiet/komplet): 1-dniowy bar, tylko przesuwany
-                const pureService = isServiceType(node.type) && !isPacketType(node.type);
                 // tylko praca z jednostką dni może aktualizować ilość przez timeline
                 const canUpdateDuration = isWorkType(node.type) && isDayUnit(node.unit);
                 const defaultStart = effectiveWow ? new Date(projectStart) : advanceToWorkingDay(new Date(projectStart));
                 if (ovr?.start && ovr?.end) {
                     start = new Date(ovr.start);
-                    end = pureService ? new Date(start.getTime() + DAY_MS) : new Date(ovr.end);
+                    end = new Date(ovr.end);
                     type = 'task';
-                } else if (dur > 0 && !pureService) {
+                } else if (dur > 0) {
                     start = defaultStart;
                     end = effectiveWow
                         ? new Date(start.getTime() + dur * DAY_MS)
@@ -201,7 +204,6 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
                     project: parentId || undefined,
                     _color: colors.bg,
                     _textColor: colors.text,
-                    _pureService: pureService,
                     _canUpdateDuration: canUpdateDuration,
                     styles: {
                         backgroundColor: colors.bg,
@@ -213,6 +215,12 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
                 cursor = new Date(end);
                 if (!groupStart || start < groupStart) groupStart = start;
                 if (!groupEnd || end > groupEnd) groupEnd = end;
+            }
+
+            // Zadanie może mieć też dzieci (np. praca z pod-usługą) — po dodaniu własnego
+            // paska schodzimy w dzieci, żeby i one dostały swoje paski.
+            if (hasChildren) {
+                walk(node.children, parentId, depth + 1, wow, thisBranchId);
             }
         }
         if (groupEnd && groupEnd > rootMaxEnd) rootMaxEnd = new Date(groupEnd);
@@ -498,25 +506,6 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         const origTask = tasks.find(t => t && t.id === task.id);
         const origStart = origTask ? new Date(origTask.start) : null;
         if (origStart) origStart.setHours(0, 0, 0, 0);
-
-        // pureService: tylko przesunięcie, zawsze 1-dniowy bar, bez zmiany długości
-        if (origTask?._pureService) {
-            const goingLeft = origStart && start.getTime() < origStart.getTime();
-            start = goingLeft ? retreatToWorkingDay(start) : advanceToWorkingDay(start);
-            end = new Date(start.getTime() + DAY_MS);
-            setOverrides(prev => {
-                const next = { ...prev, [task.id]: { start: start.toISOString(), end: end.toISOString() } };
-                for (const t of tasks) {
-                    if (!t || next[t.id] || t.type === 'project') continue;
-                    const ts = new Date(t.start); ts.setHours(0, 0, 0, 0);
-                    const te = new Date(t.end);   te.setHours(0, 0, 0, 0);
-                    next[t.id] = { start: ts.toISOString(), end: te.toISOString() };
-                }
-                return next;
-            });
-            onGanttDateChange?.(task.id, start.toISOString(), end.toISOString());
-            return;
-        }
 
         const branchId   = taskBranchMap[task.id];
         const effectiveWow = Object.prototype.hasOwnProperty.call(branchWorkOnHolidays, task.id)
