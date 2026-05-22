@@ -2460,15 +2460,15 @@ ${ganttSectionHtml}
             row.getCell('start').numFmt = 'dd.mm.yyyy';
             row.getCell('end').numFmt = 'dd.mm.yyyy';
             // Kolumna D liczona dynamicznie z dat — przelicza się po edycji B/C w Excelu.
-            // Data do jest wykluczająca (C-1 = ostatni dzień zadania).
+            // Daty od/do są włączne (oba dni należą do zadania).
             const n = row.number;
             const daysCell = row.getCell('days');
             if (r.milestone) {
                 daysCell.value = '—';
             } else if (r.wow) {
-                daysCell.value = { formula: `C${n}-B${n}`, result: r.days };
+                daysCell.value = { formula: `C${n}-B${n}+1`, result: r.days };
             } else {
-                daysCell.value = { formula: `NETWORKDAYS(B${n},C${n}-1${holidaysRef})`, result: r.days };
+                daysCell.value = { formula: `NETWORKDAYS(B${n},C${n}${holidaysRef})`, result: r.days };
             }
             const cells = tl.rowCells[ri] || [];
             tl.columns.forEach((c, i) => {
