@@ -2445,10 +2445,12 @@ ${ganttSectionHtml}
                 const card = reqByNodeId[node.id] || null;
                 const parent = getParentPath(node.path);
                 const selectedProposal = (card?.proposals || []).find(p => p.isSelected) || null;
-                // Cena ofertowa — wprost z pól WBS węzła (źródło prawdy, te same co tabela WBS):
-                // unitPrice = cena ofertowa jednostkowa, totalPrice = cena ofertowa całej linii
-                const offerPerQty = node.unitPrice != null ? Number(node.unitPrice) : null;
-                const offerTotal = node.totalPrice != null ? Number(node.totalPrice) : null;
+                // Cena ofertowa — przeliczana wzorem localPriceOf (koszt×ilość×narzut×rabat),
+                // spójnie z arkuszami WBS1-3 i budżetem. Pola unitPrice/totalPrice z bazy
+                // bywają nieaktualne po zmianie ilości i NIE są źródłem prawdy.
+                const matQty = Math.max(0, parseFloat(node.quantity) || 0);
+                const offerTotal = localPriceOf(node);
+                const offerPerQty = matQty > 0 ? offerTotal / matQty : offerTotal;
 
                 const addedRow = materialsSheet.addRow({
                     type: TYPE_LABELS_XLS[node.type] || node.type,
@@ -2497,7 +2499,7 @@ ${ganttSectionHtml}
             matSumRow.font = { bold: true };
             matSumRow.fill = sumFill;
             if (matLastDataRow >= 2) {
-                const staticTotal = matNodes.reduce((s, n) => s + (n.totalPrice != null ? Number(n.totalPrice) : 0), 0);
+                const staticTotal = matNodes.reduce((s, n) => s + localPriceOf(n), 0);
                 matSumRow.getCell('offerTotal').value = {
                     formula: `SUBTOTAL(9,${offerTotalCol}2:${offerTotalCol}${matLastDataRow})`,
                     result: staticTotal,
@@ -3771,6 +3773,9 @@ ${ganttSectionHtml}
     const offerRevenueTotal = useMemo(() => {
         return wbsData.reduce((sum, item) => {
             if (!item.parentId) return sum;
+            // Gałęzie grupujące pomijamy — ich wartość to suma dzieci, spójnie
+            // z buildRows(VIEWS.BUDGET) i eksportami oferty/budżetu.
+            if (item.type === 'group') return sum;
             const q = Math.max(0, parseFloat(item.quantity) || 0);
             const uc = Math.max(0, parseFloat(item.unitCost) || 0);
             const totalCost = uc * q;
