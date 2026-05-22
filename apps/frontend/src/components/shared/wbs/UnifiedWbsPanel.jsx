@@ -1923,82 +1923,50 @@ ${ganttSectionHtml}
             summarySheet.getCell(`G${r}`).numFmt = '0.00%';
         }
 
-        // Podział liści (tylko typ Materiał / Sprzęt — bez podgałęzi) pogrupowany po osobie (owner).
-        const leafParentIds = new Set(wbsData.map(n => n.parentId).filter(Boolean));
-        const ownerLeafRows = rows.filter(r =>
-            !leafParentIds.has(r.id) && (r.type === 'material' || r.type === 'equipment')
-        );
-        if (ownerLeafRows.length) {
+        // Podsumowanie per osoba odpowiedzialna — jeden wiersz na właściciela,
+        // zagregowany koszt / cena ofertowa / zysk / marża. Liczone po wszystkich
+        // gałęziach budżetu. Wiersze bez właściciela trafiają do „(puste)".
+        const ownerRows = rows;
+        if (ownerRows.length) {
             const byOwner = {};
-            for (const row of ownerLeafRows) {
-                const ownerKey = String(row.owner || '').trim() || '(nieprzypisane)';
-                if (!byOwner[ownerKey]) byOwner[ownerKey] = { material: [], equipment: [] };
-                byOwner[ownerKey][row.type].push(row);
+            for (const row of ownerRows) {
+                const ownerKey = String(row.owner || '').trim() || '(puste)';
+                if (!byOwner[ownerKey]) byOwner[ownerKey] = { cost: 0, revenue: 0 };
+                byOwner[ownerKey].cost += Number(row.totalCost) || 0;
+                byOwner[ownerKey].revenue += Number(row.offerPrice) || 0;
             }
             summarySheet.addRow([]);
-            const leafTitleRow = summarySheet.addRow(['Podział liści — materiały i sprzęt wg osób']);
-            leafTitleRow.font = { bold: true, size: 12 };
+            const ownerTitleRow = summarySheet.addRow(['Podsumowanie per osoba odpowiedzialna']);
+            ownerTitleRow.font = { bold: true, size: 12 };
+            const ownerHeaderRow = summarySheet.addRow(['Osoba odpowiedzialna', 'Koszt', 'Cena ofertowa', 'Zysk', 'Marża %']);
+            ownerHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            ownerHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+            const ownerFirstRow = ownerHeaderRow.number + 1;
 
-            const ownerKeys = Object.keys(byOwner).sort((a, b) => a.localeCompare(b, 'pl'));
+            // Właściciele alfabetycznie, „(puste)" zawsze na końcu.
+            const ownerKeys = Object.keys(byOwner).sort((a, b) => {
+                if (a === '(puste)') return 1;
+                if (b === '(puste)') return -1;
+                return a.localeCompare(b, 'pl');
+            });
             for (const ownerKey of ownerKeys) {
-                summarySheet.addRow([]);
-                const ownerRow = summarySheet.addRow([`Osoba: ${ownerKey}`]);
-                ownerRow.font = { bold: true, size: 11 };
-                ownerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
-
-                const blocks = [
-                    { type: 'material', label: 'Materiały' },
-                    { type: 'equipment', label: 'Sprzęt' },
-                ];
-                let ownerTotalCost = 0;
-                let ownerTotalOffer = 0;
-                for (const block of blocks) {
-                    const blockRows = byOwner[ownerKey][block.type];
-                    if (!blockRows.length) continue;
-                    const blockTitleRow = summarySheet.addRow([block.label]);
-                    blockTitleRow.font = { bold: true };
-                    const blockHeaderRow = summarySheet.addRow(['Podgałąź', 'Nazwa', 'Ilość', 'Jednostka', 'Koszt całościowy', 'Cena ofertowa', 'Zysk']);
-                    blockHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                    blockHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
-                    const blockFirstRow = blockHeaderRow.number + 1;
-                    let blockTotalCost = 0;
-                    let blockTotalOffer = 0;
-                    for (const row of blockRows) {
-                        const cost = Number(row.totalCost) || 0;
-                        const offer = Number(row.offerPrice) || 0;
-                        blockTotalCost += cost;
-                        blockTotalOffer += offer;
-                        summarySheet.addRow([
-                            row.parentName || '',
-                            row.name || '',
-                            Number(row.quantity) || 0,
-                            row.unit || '',
-                            cost,
-                            offer,
-                            offer - cost,
-                        ]);
-                    }
-                    ownerTotalCost += blockTotalCost;
-                    ownerTotalOffer += blockTotalOffer;
-                    const blockTotalsRow = summarySheet.addRow([`Razem ${block.label.toLowerCase()}`, '', '', '', blockTotalCost, blockTotalOffer, blockTotalOffer - blockTotalCost]);
-                    blockTotalsRow.font = { bold: true };
-                    for (let r = blockFirstRow; r <= blockTotalsRow.number; r++) {
-                        summarySheet.getCell(`C${r}`).numFmt = '#,##0.##';
-                        summarySheet.getCell(`E${r}`).numFmt = '#,##0.00';
-                        summarySheet.getCell(`F${r}`).numFmt = '#,##0.00';
-                        summarySheet.getCell(`G${r}`).numFmt = '#,##0.00';
-                    }
-                }
-                // Zbiorczo dla osoby: koszt (ile kosztuje), cena ofertowa, zysk (ile zarabiam).
-                const ownerTotalsRow = summarySheet.addRow([
-                    `Razem osoba: ${ownerKey}`, '', '', '',
-                    ownerTotalCost, ownerTotalOffer, ownerTotalOffer - ownerTotalCost,
-                ]);
-                ownerTotalsRow.font = { bold: true };
-                ownerTotalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
-                ['E', 'F', 'G'].forEach((col) => {
-                    summarySheet.getCell(`${col}${ownerTotalsRow.number}`).numFmt = '#,##0.00';
-                });
+                const agg = byOwner[ownerKey];
+                const profit = agg.revenue - agg.cost;
+                const margin = agg.revenue > 0 ? profit / agg.revenue : 0;
+                summarySheet.addRow([ownerKey, agg.cost, agg.revenue, profit, margin]);
+            }
+            const ownerTotalCost = ownerKeys.reduce((s, k) => s + byOwner[k].cost, 0);
+            const ownerTotalRevenue = ownerKeys.reduce((s, k) => s + byOwner[k].revenue, 0);
+            const ownerTotalProfit = ownerTotalRevenue - ownerTotalCost;
+            const ownerTotalMargin = ownerTotalRevenue > 0 ? ownerTotalProfit / ownerTotalRevenue : 0;
+            const ownerTotalsRow = summarySheet.addRow(['Razem', ownerTotalCost, ownerTotalRevenue, ownerTotalProfit, ownerTotalMargin]);
+            ownerTotalsRow.font = { bold: true };
+            ownerTotalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
+            for (let r = ownerFirstRow; r <= ownerTotalsRow.number; r++) {
+                summarySheet.getCell(`B${r}`).numFmt = '#,##0.00';
+                summarySheet.getCell(`C${r}`).numFmt = '#,##0.00';
+                summarySheet.getCell(`D${r}`).numFmt = '#,##0.00';
+                summarySheet.getCell(`E${r}`).numFmt = '0.00%';
             }
         }
 
@@ -2335,6 +2303,58 @@ ${ganttSectionHtml}
             applyBorder(sumRow, 5, sumBorder);
             sheet.views = [{ state: 'frozen', ySplit: 1 }];
             if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 5 } };
+        }
+
+        // ── Sheet Gałęzie grupujące: suma cen ofertowych poddrzewa każdej gałęzi type='group' ──
+        {
+            const sheet = workbook.addWorksheet('Gałęzie grupujące');
+            sheet.columns = [{ width: 40 }, { width: 50 }, { width: 24 }];
+            const hdr = sheet.addRow(['Gałąź grupująca', 'Ścieżka', 'Cena ofertowa (PLN)']);
+            hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            hdr.fill = navyFill;
+            hdr.alignment = { horizontal: 'center', vertical: 'middle' };
+            applyBorder(hdr, 3, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
+
+            const childrenByParent = new Map();
+            for (const it of wbsData) {
+                if (!it.parentId) continue;
+                if (!childrenByParent.has(it.parentId)) childrenByParent.set(it.parentId, []);
+                childrenByParent.get(it.parentId).push(it);
+            }
+            // Suma cen ofertowych całego poddrzewa węzła (DFS). localPriceOf zwraca 0
+            // dla gałęzi grupujących, więc sumowane są tylko wycenione liście.
+            const subtreeOfferTotal = (id) => {
+                let sum = 0;
+                for (const ch of (childrenByParent.get(id) || [])) {
+                    sum += localPriceOf(ch) + subtreeOfferTotal(ch.id);
+                }
+                return sum;
+            };
+            const groupNodes = wbsData
+                .filter(n => n.type === 'group')
+                .sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id));
+            for (const g of groupNodes) {
+                const chain = localChain(g.id);
+                const path = chain.slice(0, -1).map(n => String(n.name || '').trim()).filter(Boolean).join(' › ');
+                const r = sheet.addRow([g.name || '', path, subtreeOfferTotal(g.id)]);
+                r.getCell(3).numFmt = numFmt;
+                r.getCell(3).alignment = { horizontal: 'right' };
+                applyBorder(r, 3, cellBorder);
+            }
+            const lastDataRow = sheet.rowCount;
+            // Razem = suma poddrzew tylko gałęzi grupujących najwyższego poziomu —
+            // gałęzie zagnieżdżone w innej grupującej są już wliczone w jej poddrzewo.
+            const total = groupNodes
+                .filter(g => !localChain(g.id).slice(0, -1).some(a => a.type === 'group'))
+                .reduce((s, g) => s + subtreeOfferTotal(g.id), 0);
+            const sumRow = sheet.addRow(['Razem (gałęzie najwyższego poziomu)', '', total]);
+            sumRow.font = { bold: true };
+            sumRow.fill = sumFill;
+            sumRow.getCell(3).numFmt = numFmt;
+            sumRow.getCell(3).alignment = { horizontal: 'right' };
+            applyBorder(sumRow, 3, sumBorder);
+            sheet.views = [{ state: 'frozen', ySplit: 1 }];
+            if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 3 } };
         }
 
         // ── Sheet Materiały: pełny eksport szczegółów (logika z WbsMaterialsPanel.exportToExcel) ──
