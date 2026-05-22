@@ -263,6 +263,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | handleStrategySave | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-strategy-save |
 | ui-funkcja | handleExportPDF | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-pdf |
 | ui-funkcja | handleExportBudgetExcel | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-budget-excel |
+| ui-funkcja | buildWbsTreeDump | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor build-wbs-tree-dump |
 | ui-funkcja | handleExportOfertaWbsExcel | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-oferta-wbs-excel |
 | ui-funkcja | handleExportGanttExcel | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-gantt-excel |
 | ui-funkcja | buildExcelTimeline | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor build-excel-timeline |
