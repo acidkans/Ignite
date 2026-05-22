@@ -235,6 +235,13 @@ const toInputDate = (d) => d ? new Date(d).toISOString().slice(0, 10) : '';
 // Data "Do" jest domknięta (= ostatni dzień zadania). Wewnętrznie task.end jest
 // wykluczające (dzień po ostatnim), więc do wyświetlenia odejmujemy 1 dzień.
 const inclusiveEnd = (d) => new Date(new Date(d).getTime() - DAY_MS);
+// ExcelJS serializuje daty wg składowych UTC — daty z aplikacji są o północy
+// lokalnej, więc bez konwersji plik cofa dzień o dobę. Budujemy północ UTC
+// z lokalnego dnia kalendarzowego.
+const toExcelUtcDate = (d) => {
+    const x = new Date(d);
+    return new Date(Date.UTC(x.getFullYear(), x.getMonth(), x.getDate()));
+};
 
 const GanttTableContext = createContext(null);
 
@@ -350,7 +357,7 @@ const buildExcelTimeline = (tasks, viewMode, branchWorkOnHolidays, taskBranchMap
     });
 
     const rowCells = fillByTask.map(fill => groups.map(idxs => idxs.some(i => fill[i])));
-    const holidays = days.filter(d => isPolishHoliday(d));
+    const holidays = days.filter(d => isPolishHoliday(d)).map(toExcelUtcDate);
 
     return { mode: viewMode, columns, rowCells, holidays };
 };
@@ -1214,8 +1221,8 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
             }
             return {
                 name: t.name,
-                start: new Date(t.start),
-                end: endInclusive,
+                start: toExcelUtcDate(t.start),
+                end: toExcelUtcDate(endInclusive),
                 days: t.type === 'milestone' ? 0 : taskDays(t, branchWorkOnHolidays, taskBranchMap),
                 milestone: t.type === 'milestone',
                 wow,
