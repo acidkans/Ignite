@@ -2038,6 +2038,165 @@ ${ganttSectionHtml}
             };
         }
 
+        // ── Arkusz "Cash flow": płatności w czasie wg harmonogramu Gantta ──
+        // Data płatności = ostatni dzień zadania + 1 dzień + 30 dni terminu = +31 dni.
+        // Materiały (bez własnego paska na Gantcie) dziedziczą datę zakończenia
+        // najbliższego zadania-przodka typu praca/usługa.
+        {
+            const ganttData = ganttExcelDataRef.current?.();
+            const ganttRows = Array.isArray(ganttData?.rows) ? ganttData.rows : [];
+            // Mapa taskId → ostatni dzień zadania (Date UTC, włącznie).
+            const taskEndById = {};
+            for (const gr of ganttRows) {
+                if (gr.milestone || !gr.id || !gr.end) continue;
+                taskEndById[gr.id] = gr.end instanceof Date ? gr.end : new Date(gr.end);
+            }
+            // Najbliższy przodek (lub sam węzeł) mający pasek na Gantcie.
+            const nodeByIdCF = {};
+            for (const n of wbsData) nodeByIdCF[n.id] = n;
+            const resolveTaskEnd = (id) => {
+                let cur = id, guard = 0;
+                while (cur && guard++ < 50) {
+                    if (taskEndById[cur]) return taskEndById[cur];
+                    cur = nodeByIdCF[cur]?.parentId || null;
+                }
+                return null;
+            };
+            const PAY_OFFSET_DAYS = 31; // +1 dzień po zakończeniu + 30 dni terminu płatności
+            const addDaysUtc = (d, n) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + n));
+            const monthKey = (d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+            const isLaborType = (t) => ['work', 'praca', 'service', 'usługa', 'usluga'].includes(String(t || '').toLowerCase());
+
+            // Pozycje cash flow — z budżetowych wierszy liściowych (koszt netto > 0).
+            const cfItems = rows.map(row => {
+                const taskEnd = resolveTaskEnd(row.id);
+                return {
+                    name: row.name || '',
+                    subjectName: row.subjectName || '',
+                    costKind: isLaborType(row.type) ? 'osobowy' : 'materiałowy',
+                    owner: String(row.owner || '').trim(),
+                    taskEnd,
+                    payDate: taskEnd ? addDaysUtc(taskEnd, PAY_OFFSET_DAYS) : null,
+                    amount: Number(row.totalCost) || 0,
+                };
+            }).filter(it => it.amount > 0);
+
+            // Pozycje bez przypisania do zadania w harmonogramie — wypadają z osi
+            // czasu (np. luźne materiały pod gałęzią bez zadania pracy/usługi).
+            const cfLoose = cfItems.filter(it => !it.payDate);
+            const cfLooseCost = cfLoose.reduce((s, it) => s + it.amount, 0);
+            const cfTotalCost = cfItems.reduce((s, it) => s + it.amount, 0);
+
+            const cfSheet = workbook.addWorksheet('Cash flow');
+            const cfHeaderFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+            const cfTotalFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
+            const cfWarnFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4E4' } };
+
+            // Wiersz ostrzegawczy — luźne pozycje bez przypisania do zadania.
+            const cfWarnRow = cfSheet.addRow([cfLoose.length
+                ? `⚠ Pozycje bez przypisania do zadania w harmonogramie: ${cfLoose.length} — koszt ${cfLooseCost.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN wypada z osi czasu`
+                : '✓ Wszystkie pozycje przypisane do zadań w harmonogramie — brak dziur w osi czasu']);
+            cfWarnRow.font = { bold: true, color: { argb: cfLoose.length ? 'FFB91C1C' : 'FF166534' } };
+            if (cfLoose.length) cfWarnRow.fill = cfWarnFill;
+            cfSheet.addRow([]);
+
+            // Sekcja A — oś czasu (agregacja miesięczna płatności).
+            const cfTitleA = cfSheet.addRow(['Oś czasu — płatności wg miesięcy']);
+            cfTitleA.font = { bold: true, size: 12 };
+            const cfHdrA = cfSheet.addRow(['Miesiąc płatności', 'Koszty materiałowe', 'Koszty osobowe', 'Razem w miesiącu', 'Skumulowane']);
+            cfHdrA.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cfHdrA.fill = cfHeaderFill;
+
+            const byMonth = {};
+            for (const it of cfItems) {
+                const key = it.payDate ? monthKey(it.payDate) : '(brak daty w harmonogramie)';
+                if (!byMonth[key]) byMonth[key] = { material: 0, labor: 0 };
+                if (it.costKind === 'materiałowy') byMonth[key].material += it.amount;
+                else byMonth[key].labor += it.amount;
+            }
+            const monthKeys = Object.keys(byMonth).sort((a, b) => {
+                if (a.startsWith('(brak')) return 1;
+                if (b.startsWith('(brak')) return -1;
+                return a.localeCompare(b);
+            });
+            let cumulative = 0;
+            for (const key of monthKeys) {
+                const m = byMonth[key];
+                const total = m.material + m.labor;
+                cumulative += total;
+                const r = cfSheet.addRow([key, m.material, m.labor, total, cumulative]);
+                for (let c = 2; c <= 5; c++) r.getCell(c).numFmt = '#,##0.00';
+            }
+            const cfTotMaterial = monthKeys.reduce((s, k) => s + byMonth[k].material, 0);
+            const cfTotLabor = monthKeys.reduce((s, k) => s + byMonth[k].labor, 0);
+            const cfTotalRowA = cfSheet.addRow(['Razem', cfTotMaterial, cfTotLabor, cfTotMaterial + cfTotLabor, '']);
+            cfTotalRowA.font = { bold: true };
+            cfTotalRowA.fill = cfTotalFill;
+            for (let c = 2; c <= 4; c++) cfTotalRowA.getCell(c).numFmt = '#,##0.00';
+
+            cfSheet.addRow([]);
+            cfSheet.addRow([]);
+
+            // Sekcja B — lista pozycji (źródło), posortowana wg daty płatności.
+            const cfTitleB = cfSheet.addRow(['Lista pozycji — źródło']);
+            cfTitleB.font = { bold: true, size: 12 };
+            const cfHdrB = cfSheet.addRow(['Lp.', 'Przedmiot', 'Zadanie / Pozycja', 'Typ kosztu', 'Osoba odpowiedzialna', 'Data zakończenia zadania', 'Data płatności', 'Kwota netto (PLN)']);
+            cfHdrB.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cfHdrB.fill = cfHeaderFill;
+
+            const cfSorted = [...cfItems].sort((a, b) => {
+                if (!a.payDate && !b.payDate) return 0;
+                if (!a.payDate) return 1;
+                if (!b.payDate) return -1;
+                return a.payDate - b.payDate;
+            });
+            cfSorted.forEach((it, i) => {
+                const r = cfSheet.addRow([
+                    i + 1,
+                    it.subjectName,
+                    it.name,
+                    it.costKind,
+                    it.owner,
+                    it.taskEnd || '(brak w harmonogramie)',
+                    it.payDate || '(brak w harmonogramie)',
+                    it.amount,
+                ]);
+                if (it.taskEnd) r.getCell(6).numFmt = 'dd.mm.yyyy';
+                if (it.payDate) r.getCell(7).numFmt = 'dd.mm.yyyy';
+                r.getCell(8).numFmt = '#,##0.00';
+                // Luźne pozycje (bez daty płatności) — czerwone tło na całym wierszu.
+                if (!it.payDate) { for (let c = 1; c <= 8; c++) r.getCell(c).fill = cfWarnFill; }
+            });
+            const cfTotalRowB = cfSheet.addRow(['', '', '', '', '', '', 'Razem', cfSorted.reduce((s, it) => s + it.amount, 0)]);
+            cfTotalRowB.font = { bold: true };
+            cfTotalRowB.fill = cfTotalFill;
+            cfTotalRowB.getCell(8).numFmt = '#,##0.00';
+
+            // Sekcja kontrolna — gwarancja braku dziur: koszt całkowity budżetu
+            // rozbity na część rozłożoną w czasie i część poza osią czasu.
+            cfSheet.addRow([]);
+            cfSheet.addRow([]);
+            const cfCtrlTitle = cfSheet.addRow(['Kontrola spójności']);
+            cfCtrlTitle.font = { bold: true, size: 12 };
+            const cfCtrlRows = [
+                ['Koszt całkowity budżetu', summary.totalCost],
+                ['W tym rozłożone w czasie (z datą płatności)', cfTotalCost - cfLooseCost],
+                ['Poza osią czasu (bez przypisania do zadania)', cfLooseCost],
+            ];
+            cfCtrlRows.forEach(([label, val], i) => {
+                const r = cfSheet.addRow([label, val]);
+                r.getCell(2).numFmt = '#,##0.00';
+                if (i === 0) r.font = { bold: true };
+                if (i === 2 && cfLooseCost > 0) {
+                    r.font = { bold: true, color: { argb: 'FFB91C1C' } };
+                    r.getCell(1).fill = cfWarnFill;
+                    r.getCell(2).fill = cfWarnFill;
+                }
+            });
+
+            [6, 26, 36, 16, 24, 24, 18, 18].forEach((w, i) => { cfSheet.getColumn(i + 1).width = w; });
+        }
+
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = URL.createObjectURL(blob);
@@ -2559,6 +2718,7 @@ ${ganttSectionHtml}
         const tl = data.timeline || { mode: 'Day', columns: [], rowCells: [] };
         const tlColWidth = tl.mode === 'Month' ? 11 : tl.mode === 'Week' ? 8 : 3.6;
         const baseCols = [
+            { header: 'Gałąź (przedmiot)', key: 'branch', width: 32 },
             { header: 'Zadanie', key: 'name', width: 48 },
             { header: 'Data od', key: 'start', width: 16 },
             { header: 'Data do', key: 'end', width: 16 },
@@ -2568,6 +2728,23 @@ ${ganttSectionHtml}
         const tlCols = tl.columns.map((c, i) => ({ header: c.label, key: `tl${i}`, width: tlColWidth }));
         sheet.columns = [...baseCols, ...tlCols];
         const TL_OFFSET = baseCols.length;
+        // Litery kolumn dat/dni wyznaczane dynamicznie — formuły NETWORKDAYS / SUBTOTAL
+        // odporne na zmianę układu kolumn bazowych.
+        const COL_START = sheet.getColumn('start').letter;
+        const COL_END = sheet.getColumn('end').letter;
+        const COL_DAYS = sheet.getColumn('days').letter;
+
+        // Gałąź depth=0 (przedmiot) zadania — najwyższy przodek bez parentId.
+        // Pozwala filtrować liście tej samej gałęzi w eksportowanym arkuszu.
+        const ganttNodeById = {};
+        for (const n of wbsData) ganttNodeById[n.id] = n;
+        const depth0BranchName = (id) => {
+            let cur = ganttNodeById[id], guard = 0;
+            while (cur && cur.parentId && ganttNodeById[cur.parentId] && guard++ < 50) {
+                cur = ganttNodeById[cur.parentId];
+            }
+            return cur ? String(cur.name || '').trim() : '';
+        };
 
         // Arkusz ze świętami — referencja dla NETWORKDAYS w kolumnie D
         const holidays = Array.isArray(tl.holidays) ? tl.holidays : [];
@@ -2608,21 +2785,22 @@ ${ganttSectionHtml}
         data.rows.forEach((r, ri) => {
             const row = sheet.addRow({
                 name: r.name,
+                branch: depth0BranchName(r.id),
                 start: r.start,
                 end: r.end,
             });
             row.getCell('start').numFmt = 'dd.mm.yyyy';
             row.getCell('end').numFmt = 'dd.mm.yyyy';
-            // Kolumna D liczona dynamicznie z dat — przelicza się po edycji B/C w Excelu.
+            // Kolumna dni liczona dynamicznie z dat — przelicza się po edycji w Excelu.
             // Daty od/do są włączne (oba dni należą do zadania).
             const n = row.number;
             const daysCell = row.getCell('days');
             if (r.milestone) {
                 daysCell.value = '—';
             } else if (r.wow) {
-                daysCell.value = { formula: `C${n}-B${n}+1`, result: r.days };
+                daysCell.value = { formula: `${COL_END}${n}-${COL_START}${n}+1`, result: r.days };
             } else {
-                daysCell.value = { formula: `NETWORKDAYS(B${n},C${n}${holidaysRef})`, result: r.days };
+                daysCell.value = { formula: `NETWORKDAYS(${COL_START}${n},${COL_END}${n}${holidaysRef})`, result: r.days };
             }
             const cells = tl.rowCells[ri] || [];
             tl.columns.forEach((c, i) => {
@@ -2638,7 +2816,7 @@ ${ganttSectionHtml}
             sumRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF2F7' } };
         }
         if (lastDataRow >= 2) {
-            sumRow.getCell('days').value = { formula: `SUBTOTAL(9,D2:D${lastDataRow})`, result: data.totalDays };
+            sumRow.getCell('days').value = { formula: `SUBTOTAL(9,${COL_DAYS}2:${COL_DAYS}${lastDataRow})`, result: data.totalDays };
         }
         sheet.getColumn('days').alignment = { horizontal: 'center' };
         sheet.views = [{ state: 'frozen', xSplit: baseCols.length, ySplit: 1 }];
