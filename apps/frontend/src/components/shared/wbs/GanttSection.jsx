@@ -232,6 +232,9 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
 const toInputDate = (d) => d ? new Date(d).toISOString().slice(0, 10) : '';
+// Data "Do" jest domknięta (= ostatni dzień zadania). Wewnętrznie task.end jest
+// wykluczające (dzień po ostatnim), więc do wyświetlenia odejmujemy 1 dzień.
+const inclusiveEnd = (d) => new Date(new Date(d).getTime() - DAY_MS);
 
 const GanttTableContext = createContext(null);
 
@@ -430,7 +433,7 @@ const GanttTaskListTable = ({ rowHeight, rowWidth, fontFamily, fontSize, tasks, 
                             <DateCell taskId={task.id} field="start" date={task.start} disabled={false} />
                         </div>
                         <div style={{ width: COL_DATE, padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <DateCell taskId={task.id} field="end" date={isMilestone ? task.start : task.end} disabled={isMilestone} />
+                            <DateCell taskId={task.id} field="end" date={isMilestone ? task.start : inclusiveEnd(task.end)} disabled={isMilestone} />
                         </div>
                         <div style={{ width: COL_DAYS, padding: '0 6px', textAlign: 'center', color: isMilestone ? '#334155' : '#94a3b8', fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
                             {isMilestone ? '—' : days}
@@ -545,7 +548,9 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
             newStart = newDate;
             if (newStart >= newEnd) newEnd = new Date(newStart.getTime() + DAY_MS);
         } else {
-            newEnd = newDate;
+            // Użytkownik wskazuje ostatni dzień zadania (data domknięta) — task.end
+            // jest wykluczające, więc do środka modelu zapisujemy dzień+1.
+            newEnd = new Date(newDate.getTime() + DAY_MS);
             if (newEnd <= newStart) newStart = new Date(newEnd.getTime() - DAY_MS);
         }
         const branchId = taskBranchMap[taskId];
@@ -1198,10 +1203,19 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
             const wow = Object.prototype.hasOwnProperty.call(branchWorkOnHolidays, t.id)
                 ? branchWorkOnHolidays[t.id]
                 : (branchWorkOnHolidays[branchId] ?? false);
+            // task.end jest wykluczające (dzień po ostatnim dniu zadania) — do eksportu
+            // pokazujemy datę włączną: rzeczywisty ostatni dzień = task.end − 1.
+            let endInclusive;
+            if (t.type === 'milestone') {
+                endInclusive = new Date(t.start);
+            } else {
+                endInclusive = new Date(t.end);
+                endInclusive.setDate(endInclusive.getDate() - 1);
+            }
             return {
                 name: t.name,
                 start: new Date(t.start),
-                end: t.type === 'milestone' ? new Date(t.start) : new Date(t.end),
+                end: endInclusive,
                 days: t.type === 'milestone' ? 0 : taskDays(t, branchWorkOnHolidays, taskBranchMap),
                 milestone: t.type === 'milestone',
                 wow,

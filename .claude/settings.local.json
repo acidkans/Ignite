@@ -357,7 +357,9 @@
       "Bash(curl -s -w \"\\\\n[%{http_code}]\\\\n\" -X POST http://127.0.0.1:5174/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"andrzej@gigatel.app\",\"password\":\"wrong\"}')",
       "Bash(curl -s -w \"\\\\n[%{http_code}]\\\\n\" -X POST http://127.0.0.1:5174/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"andrzej@gigatel.app\",\"password\":\"dev12345\"}')",
       "Bash(git config *)",
-      "Bash(git update-index *)"
+      "Bash(git update-index *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://erp.gigatel.org/api/health)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://erp.gigatel.org)"
     ]
   }
 }
