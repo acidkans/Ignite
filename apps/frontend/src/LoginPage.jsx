@@ -206,7 +206,7 @@ export default function LoginPage({ onLogin }) {
                     )}
                 </div>
 
-					<p className="mt-6 text-[10px] text-gray-600 tracking-widest">v2026.05.21.519</p>
+					<p className="mt-6 text-[10px] text-gray-600 tracking-widest">v2026.05.22.522</p>
             </div>
         </div>
     );

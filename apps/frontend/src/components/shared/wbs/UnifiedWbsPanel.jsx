@@ -2401,37 +2401,94 @@ ${ganttSectionHtml}
         const safeProjectName = String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'projekt';
         const workbook = new ExcelJS.Workbook();
         const sheet = workbook.addWorksheet('Harmonogram');
-        sheet.columns = [
+
+        const tl = data.timeline || { mode: 'Day', columns: [], rowCells: [] };
+        const tlColWidth = tl.mode === 'Month' ? 11 : tl.mode === 'Week' ? 8 : 3.6;
+        const baseCols = [
             { header: 'Zadanie', key: 'name', width: 48 },
             { header: 'Data od', key: 'start', width: 16 },
             { header: 'Data do', key: 'end', width: 16 },
             { header: 'Dni robocze', key: 'days', width: 14 },
+            { header: 'Komentarz', key: 'comment', width: 36 },
         ];
-        const hdr = sheet.getRow(1);
-        hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        hdr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0E7490' } };
-        hdr.alignment = { horizontal: 'center', vertical: 'middle' };
+        const tlCols = tl.columns.map((c, i) => ({ header: c.label, key: `tl${i}`, width: tlColWidth }));
+        sheet.columns = [...baseCols, ...tlCols];
+        const TL_OFFSET = baseCols.length;
 
-        for (const r of data.rows) {
+        // Ukryty arkusz ze świętami — referencja dla NETWORKDAYS w kolumnie D
+        const holidays = Array.isArray(tl.holidays) ? tl.holidays : [];
+        let holidaysRef = '';
+        if (holidays.length) {
+            const hSheet = workbook.addWorksheet('Dni_wolne');
+            hSheet.state = 'veryHidden';
+            holidays.forEach((d, i) => {
+                const cell = hSheet.getCell(`A${i + 1}`);
+                cell.value = d instanceof Date ? d : new Date(d);
+                cell.numFmt = 'dd.mm.yyyy';
+            });
+            holidaysRef = `,Dni_wolne!$A$1:$A$${holidays.length}`;
+        }
+
+        const FILL_TASK = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D4ED8' } };
+        const FILL_WEEKEND = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E5E9' } };
+        const FILL_START = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF22C55E' } };
+        const FILL_END = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEF4444' } };
+
+        const hdr = sheet.getRow(1);
+        hdr.height = tl.mode === 'Day' ? 56 : 20;
+        for (let c = 1; c <= baseCols.length; c++) {
+            const cell = hdr.getCell(c);
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0E7490' } };
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+        tl.columns.forEach((c, i) => {
+            const cell = hdr.getCell(TL_OFFSET + 1 + i);
+            cell.font = { bold: true, size: 8, color: { argb: c.marker ? 'FFFFFFFF' : 'FF334155' } };
+            cell.alignment = { horizontal: 'center', vertical: 'middle', textRotation: tl.mode === 'Day' ? 90 : 0 };
+            if (c.marker === 'start') cell.fill = FILL_START;
+            else if (c.marker === 'end' || c.marker === 'both') cell.fill = FILL_END;
+            else cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF2F7' } };
+        });
+
+        data.rows.forEach((r, ri) => {
             const row = sheet.addRow({
                 name: r.name,
                 start: r.start,
                 end: r.end,
-                days: r.milestone ? '—' : r.days,
             });
             row.getCell('start').numFmt = 'dd.mm.yyyy';
             row.getCell('end').numFmt = 'dd.mm.yyyy';
-        }
+            // Kolumna D liczona dynamicznie z dat — przelicza się po edycji B/C w Excelu.
+            // Data do jest wykluczająca (C-1 = ostatni dzień zadania).
+            const n = row.number;
+            const daysCell = row.getCell('days');
+            if (r.milestone) {
+                daysCell.value = '—';
+            } else if (r.wow) {
+                daysCell.value = { formula: `C${n}-B${n}`, result: r.days };
+            } else {
+                daysCell.value = { formula: `NETWORKDAYS(B${n},C${n}-1${holidaysRef})`, result: r.days };
+            }
+            const cells = tl.rowCells[ri] || [];
+            tl.columns.forEach((c, i) => {
+                const cell = row.getCell(TL_OFFSET + 1 + i);
+                if (cells[i]) cell.fill = FILL_TASK;
+                else if (c.nonWorking) cell.fill = FILL_WEEKEND;
+            });
+        });
         const lastDataRow = sheet.rowCount;
         const sumRow = sheet.addRow({ name: 'Razem roboczo dni', days: data.totalDays });
         sumRow.font = { bold: true };
-        sumRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF2F7' } };
+        for (let c = 1; c <= baseCols.length; c++) {
+            sumRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF2F7' } };
+        }
         if (lastDataRow >= 2) {
             sumRow.getCell('days').value = { formula: `SUBTOTAL(9,D2:D${lastDataRow})`, result: data.totalDays };
         }
         sheet.getColumn('days').alignment = { horizontal: 'center' };
-        sheet.views = [{ state: 'frozen', ySplit: 1 }];
-        if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 4 } };
+        sheet.views = [{ state: 'frozen', xSplit: baseCols.length, ySplit: 1 }];
+        if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: baseCols.length } };
 
         const buf = await workbook.xlsx.writeBuffer();
         const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));

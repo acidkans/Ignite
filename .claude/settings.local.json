@@ -355,7 +355,9 @@
       "Bash(curl -s -w \"\\\\nlogin=%{http_code}\\\\n\" -X POST http://127.0.0.1:3005/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"x\",\"password\":\"y\"}')",
       "Bash(curl -s -w \"\\\\n[%{http_code}]\\\\n\" -X POST http://127.0.0.1:3005/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"andrzej@gigatel.app\",\"password\":\"wrong\"}')",
       "Bash(curl -s -w \"\\\\n[%{http_code}]\\\\n\" -X POST http://127.0.0.1:5174/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"andrzej@gigatel.app\",\"password\":\"wrong\"}')",
-      "Bash(curl -s -w \"\\\\n[%{http_code}]\\\\n\" -X POST http://127.0.0.1:5174/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"andrzej@gigatel.app\",\"password\":\"dev12345\"}')"
+      "Bash(curl -s -w \"\\\\n[%{http_code}]\\\\n\" -X POST http://127.0.0.1:5174/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"andrzej@gigatel.app\",\"password\":\"dev12345\"}')",
+      "Bash(git config *)",
+      "Bash(git update-index *)"
     ]
   }
 }
