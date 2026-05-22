@@ -1093,8 +1093,43 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         return html;
     }, []);
 
+    // @anchor validate-budget-pricing
+    // Waliduje pozycje liściowe WBS przed eksportem ofertowym/budżetowym: zerowy
+    // koszt jednostkowy lub zerowy narzut blokują eksport. Gałęzie zbiorcze
+    // (mają dzieci) i grupujące pomijamy — ich wartość to suma dzieci. Zwraca
+    // listę etykiet niepoprawnych pozycji (pusta = OK).
+    const validateBudgetPricing = () => {
+        const rawRows = buildRows(VIEWS.BUDGET).filter(r => r.type !== 'group');
+        const parentIds = new Set(wbsData.map(n => n.parentId).filter(Boolean));
+        const invalidRows = [];
+        rawRows.forEach(r => {
+            if (parentIds.has(r.id)) return;
+            const uc = Math.max(0, parseFloat(r.unitCost) || 0);
+            const marginVal = parseFloat(r.margin) || 0;
+            const problems = [];
+            if (uc === 0) problems.push('koszt jedn. = 0');
+            if (marginVal === 0) problems.push('narzut = 0');
+            if (problems.length) {
+                const label = String(r.name || r.subjectName || '(bez nazwy)').trim() || '(bez nazwy)';
+                invalidRows.push(`• ${label} — ${problems.join(' i ')}`);
+            }
+        });
+        return invalidRows;
+    };
+
     // @anchor handle-export-pdf
     const handleExportPDF = async (sectionKey = 'all') => {
+        if (sectionKey === 'oferta' || sectionKey === 'budget' || sectionKey === 'all') {
+            const invalidPricing = validateBudgetPricing();
+            if (invalidPricing.length > 0) {
+                alert(
+                    `Eksport wstrzymany — ${invalidPricing.length} pozycji wymaga uzupełnienia:\n\n` +
+                    invalidPricing.join('\n') +
+                    `\n\nUzupełnij koszt jednostkowy i narzut tych pozycji, po czym ponów eksport.`
+                );
+                return;
+            }
+        }
         if (sectionKey === 'oferta' || sectionKey === 'all') {
             const unanswered = wbsData.filter(n =>
                 Array.isArray(n.qa) && n.qa.some(p => (p?.question || '').trim() && !(p?.answer || '').trim())
@@ -1571,23 +1606,9 @@ ${ganttSectionHtml}
         const rawRows = buildRows(VIEWS.BUDGET).filter(r => r.type !== 'group');
         if (!rawRows.length) return { ok: false, empty: true, invalidRows: [] };
 
-        // Walidacja: pozycje liściowe (bez podgałęzi) z zerowym kosztem jednostkowym
-        // lub zerowym narzutem blokują eksport — gałęzie zbiorcze pomijamy, ich koszt
-        // jest sumą dzieci.
-        const parentIds = new Set(wbsData.map(n => n.parentId).filter(Boolean));
-        const invalidRows = [];
-        rawRows.forEach(r => {
-            if (parentIds.has(r.id)) return;
-            const uc = Math.max(0, parseFloat(r.unitCost) || 0);
-            const marginVal = parseFloat(r.margin) || 0;
-            const problems = [];
-            if (uc === 0) problems.push('koszt jedn. = 0');
-            if (marginVal === 0) problems.push('narzut = 0');
-            if (problems.length) {
-                const label = String(r.name || r.subjectName || '(bez nazwy)').trim() || '(bez nazwy)';
-                invalidRows.push(`• ${label} — ${problems.join(' i ')}`);
-            }
-        });
+        // Walidacja pozycji liściowych — zerowy koszt jednostkowy lub narzut
+        // blokują eksport (wspólna logika z eksportem PDF: validateBudgetPricing).
+        const invalidRows = validateBudgetPricing();
         if (invalidRows.length) return { ok: false, empty: false, invalidRows };
 
         // Przelicz tak samo jak BudgetTable (calcDerived: uc×qty).
@@ -2109,7 +2130,10 @@ ${ganttSectionHtml}
         const wbsOrd = (id) => wbsOrderIndex.has(id) ? wbsOrderIndex.get(id) : Number.MAX_SAFE_INTEGER;
         // Cena ofertowa pozycji — formuła IDENTYCZNA z appendBudgetSheet / offerRevenueTotal
         // / BudgetTable.calcDerived: brak narzutu ⇒ cena ofertowa 0 (nie koszt).
+        // Gałęzie grupujące (type='group') mają cenę 0 — ich wartość to suma dzieci,
+        // spójnie z appendBudgetSheet, który filtruje r.type !== 'group'.
         const localPriceOf = (item) => {
+            if (item.type === 'group') return 0;
             const q = Math.max(0, parseFloat(item.quantity) || 0);
             const uc = Math.max(0, parseFloat(item.unitCost) || 0);
             const tc = uc * q;

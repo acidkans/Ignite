@@ -141,13 +141,17 @@ export async function fetchLogoDataUrl() {
  */
 export function buildWbsHtmlTable(wbsData, depth) {
     const localById = new Map(wbsData.map(n => [n.id, n]));
+    // Cena ofertowa pozycji — formuła IDENTYCZNA z handleExportOfertaWbsExcel /
+    // appendBudgetSheet: brak narzutu ⇒ cena ofertowa 0 (nie koszt); gałęzie
+    // grupujące (type='group') mają cenę 0 — ich wartość to suma dzieci.
     const localPriceOf = (item) => {
+        if (item.type === 'group') return 0;
         const q = Math.max(0, parseFloat(item.quantity) || 0);
         const uc = Math.max(0, parseFloat(item.unitCost) || 0);
-        const tc = uc * q || parseFloat(item.totalCost) || 0;
+        const tc = uc * q;
         const m = (item.margin != null && String(item.margin) !== '') ? parseFloat(item.margin) : null;
         const d = Math.max(0, parseFloat(item.discount) || 0);
-        let p = (m !== null && m !== 0) ? tc * (1 + m / 100) : tc;
+        let p = (m !== null && m !== 0) ? tc * (1 + m / 100) : 0;
         if (p > 0 && d > 0) p = Math.max(0, p * (1 - d / 100));
         return p;
     };
