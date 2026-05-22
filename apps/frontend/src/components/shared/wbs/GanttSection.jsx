@@ -1220,6 +1220,7 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                 endInclusive.setDate(endInclusive.getDate() - 1);
             }
             return {
+                id: t.id,
                 name: t.name,
                 start: toExcelUtcDate(t.start),
                 end: toExcelUtcDate(endInclusive),
