@@ -1659,8 +1659,10 @@ ${ganttSectionHtml}
             return chain.reverse().map(n => String(n.name || '').trim()).filter(Boolean).join(' › ');
         };
 
-        // Columns: A=Lp B=Przedmiot C=Podgałąź D=Nazwa E=NazwaWymagania F=Typ G=OsobaOdp H=KosztJedn I=Ilość J=Jednostka K=KosztCałościowy=H*I L=Marża M=Rabat N=CenaOfertowa=K*(1+L)*(1-M)
+        // Kolejność kolumn: Ilość/Jednostka przed Kosztem jednostkowym; przed
+        // „Cena ofertowa" kolumna „Jednostkowa cena ofertowa" (koszt jedn. × narzut).
         // Wiersz 1 = pole rabatu całościowego; nagłówek tabeli w wierszu 2, dane od 3.
+        // Formuły używają liter z sheet.getColumn(key).letter — odporne na zmianę układu.
         const BUDGET_COLUMNS = [
             { key: 'index', width: 6, header: 'Lp.' },
             { key: 'subjectName', width: 28, header: 'Przedmiot' },
@@ -1669,12 +1671,13 @@ ${ganttSectionHtml}
             { key: 'requirementName', width: 36, header: 'Nazwa wymagania technicznego' },
             { key: 'type', width: 16, header: 'Typ' },
             { key: 'owner', width: 22, header: 'Osoba odpowiedzialna' },
-            { key: 'unitCost', width: 18, header: 'Koszt jednostkowy' },
             { key: 'quantity', width: 12, header: 'Ilość' },
             { key: 'unit', width: 14, header: 'Jednostka' },
+            { key: 'unitCost', width: 18, header: 'Koszt jednostkowy' },
             { key: 'totalCost', width: 18, header: 'Koszt całościowy' },
             { key: 'margin', width: 12, header: 'Marża (%)' },
             { key: 'discount', width: 12, header: 'Rabat (%)' },
+            { key: 'unitOfferPrice', width: 20, header: 'Jednostkowa cena ofertowa' },
             { key: 'offerPrice', width: 18, header: 'Cena ofertowa' },
             { key: 'comment', width: 32, header: 'Komentarz' },
             { key: 'status', width: 18, header: 'Status' },
@@ -1683,6 +1686,7 @@ ${ganttSectionHtml}
         const budgetSheet = workbook.addWorksheet('Budżet');
         // Kolumny bez nagłówka — nagłówek dodajemy ręcznie w wierszu 2.
         budgetSheet.columns = BUDGET_COLUMNS.map(c => ({ key: c.key, width: c.width }));
+        const budgetColLetter = (key) => budgetSheet.getColumn(key).letter;
 
         // Wiersz 1 — pole rabatu całościowego budżetu (osobne od tabeli pozycji).
         const globalDiscount = summary.totalRevenue - exportedRevenueAfterDiscount;
@@ -1699,12 +1703,27 @@ ${ganttSectionHtml}
         headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
 
+        // Litery kolumn użyte w formułach Excela.
+        const cUnitCost = budgetColLetter('unitCost');
+        const cQuantity = budgetColLetter('quantity');
+        const cTotalCost = budgetColLetter('totalCost');
+        const cMargin = budgetColLetter('margin');
+        const cDiscount = budgetColLetter('discount');
+        const cOfferPrice = budgetColLetter('offerPrice');
+
         const qaSheetRows = [];
         rows.forEach((row, index) => {
             const excelRow = index + 3; // wiersz 1 = pole rabatu, wiersz 2 = nagłówek
+            const r = excelRow;
             const qaList = Array.isArray(row.qa)
                 ? row.qa.filter(p => String(p?.question || '').trim() || String(p?.answer || '').trim())
                 : [];
+            const m = Number(row.margin) || 0;
+            const d = Number(row.discount) || 0;
+            const uc = Number(row.unitCost) || 0;
+            // Jednostkowa cena ofertowa = koszt jedn. × narzut × (1 − rabat).
+            // Brak narzutu ⇒ 0 (spójnie z formułą „Cena ofertowa").
+            const unitOffer = m === 0 ? 0 : uc * (1 + m / 100) * (1 - d / 100);
             budgetSheet.addRow({
                 index: index + 1,
                 subjectName: row.subjectName || '',
@@ -1713,13 +1732,14 @@ ${ganttSectionHtml}
                 requirementName: reqNameByNodeId[row.id] || '',
                 type: TYPE_LABELS[row.type] || row.type || '',
                 owner: String(row.owner || '').trim(),
-                unitCost: Number(row.unitCost) || 0,
                 quantity: Number(row.quantity) || 0,
                 unit: row.unit || '',
-                totalCost: { formula: `=H${excelRow}*I${excelRow}`, result: Number(row.totalCost) || 0 },
-                margin: (Number(row.margin) || 0) / 100,
-                discount: (Number(row.discount) || 0) / 100,
-                offerPrice: { formula: `=IF(L${excelRow}=0,0,K${excelRow}*(1+L${excelRow})*(1-M${excelRow}))`, result: Number(row.offerPrice) || 0 },
+                unitCost: uc,
+                totalCost: { formula: `=${cUnitCost}${r}*${cQuantity}${r}`, result: Number(row.totalCost) || 0 },
+                margin: m / 100,
+                discount: d / 100,
+                unitOfferPrice: { formula: `=IF(${cMargin}${r}=0,0,${cUnitCost}${r}*(1+${cMargin}${r})*(1-${cDiscount}${r}))`, result: unitOffer },
+                offerPrice: { formula: `=IF(${cMargin}${r}=0,0,${cTotalCost}${r}*(1+${cMargin}${r})*(1-${cDiscount}${r}))`, result: Number(row.offerPrice) || 0 },
                 comment: row.comment || '',
                 status: row.status || '',
                 qaCount: qaList.length,
@@ -1739,18 +1759,17 @@ ${ganttSectionHtml}
         const totalsRowNum = rows.length + 3;
         const totalsRow = budgetSheet.addRow({
             subjectName: 'Razem',
-            totalCost: { formula: `=SUBTOTAL(9,K3:K${totalsRowNum - 1})`, result: summary.totalCost },
-            offerPrice: { formula: `=SUBTOTAL(9,N3:N${totalsRowNum - 1})`, result: summary.totalRevenue },
+            totalCost: { formula: `=SUBTOTAL(9,${cTotalCost}3:${cTotalCost}${totalsRowNum - 1})`, result: summary.totalCost },
+            offerPrice: { formula: `=SUBTOTAL(9,${cOfferPrice}3:${cOfferPrice}${totalsRowNum - 1})`, result: summary.totalRevenue },
         });
         totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
 
-        ['H', 'K', 'N'].forEach((column) => {
-            budgetSheet.getColumn(column).numFmt = '#,##0.00';
+        ['quantity', 'unitCost', 'totalCost', 'unitOfferPrice', 'offerPrice'].forEach((key) => {
+            budgetSheet.getColumn(key).numFmt = '#,##0.00';
         });
-        budgetSheet.getColumn('I').numFmt = '#,##0.00';
-        budgetSheet.getColumn('L').numFmt = '0.00%';
-        budgetSheet.getColumn('M').numFmt = '0.00%';
+        budgetSheet.getColumn('margin').numFmt = '0.00%';
+        budgetSheet.getColumn('discount').numFmt = '0.00%';
         budgetSheet.views = [{ state: 'frozen', ySplit: 2 }];
         // Filtr na nagłówek (wiersz 2) + wiersze danych (bez wiersza „Razem"). Kolejność
         // wierszy = kolejność gałęzi w WBS (buildRows sortuje po wbsOrderMap).
@@ -3065,6 +3084,11 @@ ${ganttSectionHtml}
                         await refreshMaterialCosts();
                     }
                 }
+                // Zmiana nazwy węzła zmienia `path` wszystkich potomków — kolumna
+                // „Przedmiot" w widoku Budżet czyta z `path`. Optimistic update
+                // patchuje tylko własną nazwę węzła, więc odśwież dane z backendu,
+                // by przebudować `path` potomków.
+                if (field === 'name') await refreshWbsNodes();
             }
         } catch (e) { console.error('Update node error:', e); }
     }, [authHeaders, wbsData, allRequirements, refreshMaterialCosts, refreshWbsNodes]);

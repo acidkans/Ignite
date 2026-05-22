@@ -80,7 +80,9 @@ export default function BudgetTable({
     const [localRows, setLocalRows] = useState(() => rows.map(calcDerived));
     const [syncVersion, setSyncVersion] = useState(0);
     const [colFilters, setColFilters] = useState({});
-    const [sort, setSort] = useState({ key: 'subjectName', dir: 'asc' });
+    // Domyślnie bez sortowania — wiersze przychodzą w kolejności drzewa WBS
+    // (DFS po sortOrder), tej samej co render WBSHybridTable. Klik nagłówka sortuje.
+    const [sort, setSort] = useState({ key: null, dir: null });
     const [focusedRowId, setFocusedRowId] = useState(null);
 
     const [colWidths, setColWidths] = useState(
