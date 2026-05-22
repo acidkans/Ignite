@@ -1622,6 +1622,22 @@ ${ganttSectionHtml}
             } catch {}
         }
 
+        // Pełna ścieżka gałęzi pośrednich dla kolumny „Podgałąź": przodkowie węzła
+        // bez depth=0 (przedmiotu) i bez samego węzła, top-down, złączeni „ › ".
+        const nodeById = {};
+        for (const n of wbsData) nodeById[n.id] = n;
+        const branchPath = (id) => {
+            const chain = [];
+            let p = nodeById[id]?.parentId ? nodeById[nodeById[id].parentId] : null;
+            let guard = 0;
+            while (p && guard++ < 50) {
+                chain.push(p);
+                p = p.parentId ? nodeById[p.parentId] : null;
+            }
+            chain.pop(); // usuń depth=0 (przedmiot)
+            return chain.reverse().map(n => String(n.name || '').trim()).filter(Boolean).join(' › ');
+        };
+
         // Columns: A=Lp B=Przedmiot C=Podgałąź D=Nazwa E=NazwaWymagania F=Typ G=OsobaOdp H=KosztJedn I=Ilość J=Jednostka K=KosztCałościowy=H*I L=Marża M=Rabat N=CenaOfertowa=K*(1+L)*(1-M)
         // Wiersz 1 = pole rabatu całościowego; nagłówek tabeli w wierszu 2, dane od 3.
         const BUDGET_COLUMNS = [
@@ -1671,7 +1687,7 @@ ${ganttSectionHtml}
             budgetSheet.addRow({
                 index: index + 1,
                 subjectName: row.subjectName || '',
-                parentName: row.parentName || row.name || '',
+                parentName: branchPath(row.id),
                 name: row.name || '',
                 requirementName: reqNameByNodeId[row.id] || '',
                 type: TYPE_LABELS[row.type] || row.type || '',
@@ -1725,6 +1741,54 @@ ${ganttSectionHtml}
         }
 
         return { ok: true, empty: false, invalidRows: [], rows, summary, qaSheetRows };
+    };
+
+    // @anchor build-wbs-tree-dump
+    // Pełny zrzut drzewa WBS: wszystkie węzły w kolejności hierarchii; koszt i cena
+    // ofertowa gałęzi = suma zrolowana z dzieci, liście biorą totalCost/totalPrice.
+    const buildWbsTreeDump = () => {
+        const byParent = {};
+        for (const n of wbsData) {
+            const key = n.parentId || '__root__';
+            (byParent[key] = byParent[key] || []).push(n);
+        }
+        Object.values(byParent).forEach(list =>
+            list.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+        );
+        const out = [];
+        const walk = (parentId, depth) => {
+            const children = byParent[parentId || '__root__'] || [];
+            let cost = 0, price = 0;
+            for (const n of children) {
+                const kids = byParent[n.id];
+                const isGroup = !!(kids && kids.length);
+                const entry = {
+                    depth,
+                    name: String(n.name || '(bez nazwy)').trim() || '(bez nazwy)',
+                    type: n.type || '',
+                    quantity: Number(n.quantity) || 0,
+                    unit: n.unit || '',
+                    unitCost: Number(n.unitCost) || 0,
+                    isGroup,
+                    cost: 0,
+                    price: 0,
+                };
+                out.push(entry);
+                if (isGroup) {
+                    const sub = walk(n.id, depth + 1);
+                    entry.cost = sub.cost;
+                    entry.price = sub.price;
+                } else {
+                    entry.cost = Number(n.totalCost) || 0;
+                    entry.price = Number(n.totalPrice) || 0;
+                }
+                cost += entry.cost;
+                price += entry.price;
+            }
+            return { cost, price };
+        };
+        const totals = walk(null, 0);
+        return { rows: out, totals };
     };
 
     const handleExportBudgetExcel = async () => {
@@ -1916,6 +1980,50 @@ ${ganttSectionHtml}
                 });
             }
         }
+
+        // Drzewo WBS — pełny zrzut hierarchii z kosztami i cenami ofertowymi.
+        const treeDump = buildWbsTreeDump();
+        const treeSheet = workbook.addWorksheet('Drzewo WBS');
+        treeSheet.columns = [
+            { header: 'Nazwa', key: 'name', width: 52 },
+            { header: 'Typ', key: 'type', width: 16 },
+            { header: 'Ilość', key: 'quantity', width: 10 },
+            { header: 'Jednostka', key: 'unit', width: 12 },
+            { header: 'Koszt jednostkowy', key: 'unitCost', width: 16 },
+            { header: 'Koszt całkowity', key: 'cost', width: 16 },
+            { header: 'Cena ofertowa', key: 'price', width: 16 },
+            { header: 'Zysk', key: 'profit', width: 14 },
+        ];
+        const treeHdr = treeSheet.getRow(1);
+        treeHdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        treeHdr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+        treeDump.rows.forEach((r) => {
+            const row = treeSheet.addRow({
+                name: r.name,
+                type: TYPE_LABELS[r.type] || r.type || '',
+                quantity: r.isGroup ? null : r.quantity,
+                unit: r.isGroup ? '' : r.unit,
+                unitCost: r.isGroup ? null : r.unitCost,
+                cost: r.cost,
+                price: r.price,
+                profit: r.price - r.cost,
+            });
+            row.getCell('name').alignment = { indent: r.depth };
+            if (r.isGroup || r.depth === 0) row.getCell('name').font = { bold: true };
+        });
+        const treeTotalRow = treeSheet.addRow({
+            name: 'Razem',
+            cost: treeDump.totals.cost,
+            price: treeDump.totals.price,
+            profit: treeDump.totals.price - treeDump.totals.cost,
+        });
+        treeTotalRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        treeTotalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+        treeSheet.getColumn('quantity').numFmt = '#,##0.##';
+        ['unitCost', 'cost', 'price', 'profit'].forEach((k) => {
+            treeSheet.getColumn(k).numFmt = '#,##0.00';
+        });
+        treeSheet.views = [{ state: 'frozen', ySplit: 1 }];
 
         // Q&A sheet — zagnieżdżona tabela: Pozycja WBS / Pytanie / Odpowiedź
         const qaSheet = workbook.addWorksheet('Q&A');
@@ -2415,12 +2523,12 @@ ${ganttSectionHtml}
         sheet.columns = [...baseCols, ...tlCols];
         const TL_OFFSET = baseCols.length;
 
-        // Ukryty arkusz ze świętami — referencja dla NETWORKDAYS w kolumnie D
+        // Arkusz ze świętami — referencja dla NETWORKDAYS w kolumnie D
         const holidays = Array.isArray(tl.holidays) ? tl.holidays : [];
         let holidaysRef = '';
         if (holidays.length) {
             const hSheet = workbook.addWorksheet('Dni_wolne');
-            hSheet.state = 'veryHidden';
+            hSheet.state = 'visible';
             holidays.forEach((d, i) => {
                 const cell = hSheet.getCell(`A${i + 1}`);
                 cell.value = d instanceof Date ? d : new Date(d);
