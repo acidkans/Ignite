@@ -260,6 +260,98 @@ const taskDays = (task, branchWorkOnHolidays = {}, taskBranchMap = {}) => {
 };
 
 
+// Buduje siatkę timeline do eksportu Excel — kolumny grupowane wg widoku Gantta
+// (dzień/tydzień/miesiąc). Kolory komórek odwzorowują wykres: niebieski = dzień
+// roboczy zadania, szary = weekend/święto, marker start/koniec projektu.
+// @anchor build-excel-timeline
+const buildExcelTimeline = (tasks, viewMode, branchWorkOnHolidays, taskBranchMap, projectStart, projectEnd) => {
+    const empty = { mode: viewMode, columns: [], rowCells: tasks.map(() => []) };
+    if (!tasks.length) return empty;
+
+    let earliest = tasks[0].start, latest = tasks[0].end;
+    for (const t of tasks) {
+        if (t.start < earliest) earliest = t.start;
+        if (t.end > latest) latest = t.end;
+    }
+    const lo = new Date(earliest); lo.setHours(0, 0, 0, 0);
+    const hi = new Date(latest); hi.setHours(0, 0, 0, 0);
+    const ps = projectStart ? new Date(`${projectStart}T00:00:00`) : null;
+    const pe = projectEnd ? new Date(`${projectEnd}T00:00:00`) : null;
+    let loMs = lo.getTime();
+    let hiMs = hi.getTime(); // task.end jest wykluczające
+    if (ps) loMs = Math.min(loMs, ps.getTime());
+    if (pe) hiMs = Math.max(hiMs, pe.getTime() + DAY_MS);
+
+    const days = [];
+    for (let ms = loMs; ms < hiMs; ms += DAY_MS) days.push(new Date(ms));
+    if (!days.length) return empty;
+
+    // Wypełnienie per zadanie per dzień — dzień roboczy w zakresie zadania = niebieski
+    const fillByTask = tasks.map(t => {
+        const ts = new Date(t.start); ts.setHours(0, 0, 0, 0);
+        const te = new Date(t.end); te.setHours(0, 0, 0, 0);
+        const branchId = taskBranchMap[t.id];
+        const wow = Object.prototype.hasOwnProperty.call(branchWorkOnHolidays, t.id)
+            ? branchWorkOnHolidays[t.id]
+            : (branchWorkOnHolidays[branchId] ?? false);
+        return days.map(d => {
+            if (t.type === 'milestone') return d.getTime() === ts.getTime();
+            if (d < ts || d >= te) return false;
+            return wow || !isNonWorkingDay(d);
+        });
+    });
+
+    // Grupowanie dni w kolumny wg widoku
+    const groups = [];
+    if (viewMode === ViewMode.Day) {
+        days.forEach((_, i) => groups.push([i]));
+    } else if (viewMode === ViewMode.Week) {
+        let cur = [];
+        days.forEach((d, i) => {
+            if (cur.length && d.getDay() === 1) { groups.push(cur); cur = []; }
+            cur.push(i);
+        });
+        if (cur.length) groups.push(cur);
+    } else {
+        let cur = [], curKey = null;
+        days.forEach((d, i) => {
+            const key = `${d.getFullYear()}-${d.getMonth()}`;
+            if (cur.length && key !== curKey) { groups.push(cur); cur = []; }
+            cur.push(i); curKey = key;
+        });
+        if (cur.length) groups.push(cur);
+    }
+
+    const psMs = ps ? ps.getTime() : null;
+    const peMs = pe ? pe.getTime() : null;
+    const MONTHS = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
+    const dd = (d) => `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+    const columns = groups.map(idxs => {
+        const first = days[idxs[0]];
+        const last = days[idxs[idxs.length - 1]];
+        let label, nonWorking = false;
+        if (viewMode === ViewMode.Day) {
+            label = dd(first);
+            nonWorking = isNonWorkingDay(first);
+        } else if (viewMode === ViewMode.Week) {
+            label = dd(first);
+        } else {
+            label = `${MONTHS[first.getMonth()]} ${String(first.getFullYear()).slice(2)}`;
+        }
+        const inRange = (ms) => ms != null && ms >= first.getTime() && ms <= last.getTime();
+        let marker = null;
+        if (inRange(psMs)) marker = 'start';
+        if (inRange(peMs)) marker = marker === 'start' ? 'both' : 'end';
+        return { label, nonWorking, marker };
+    });
+
+    const rowCells = fillByTask.map(fill => groups.map(idxs => idxs.some(i => fill[i])));
+    const holidays = days.filter(d => isPolishHoliday(d));
+
+    return { mode: viewMode, columns, rowCells, holidays };
+};
+
 const GanttTaskListHeader = ({ headerHeight, rowWidth, fontFamily }) => {
     return (
         <div style={{ display: 'flex', height: headerHeight, fontFamily, borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#0b0f17', boxSizing: 'border-box', width: rowWidth, flexShrink: 0, position: 'sticky', top: 0, zIndex: 10 }}>
@@ -1101,16 +1193,24 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
 
     // Dane harmonogramu do eksportu Excel — kolejność wierszy = kolejność tasków (po dacie startu).
     const getExcelData = useCallback(() => {
-        const rows = tasks.map(t => ({
-            name: t.name,
-            start: new Date(t.start),
-            end: t.type === 'milestone' ? new Date(t.start) : new Date(t.end),
-            days: t.type === 'milestone' ? 0 : taskDays(t, branchWorkOnHolidays, taskBranchMap),
-            milestone: t.type === 'milestone',
-        }));
+        const rows = tasks.map(t => {
+            const branchId = taskBranchMap[t.id];
+            const wow = Object.prototype.hasOwnProperty.call(branchWorkOnHolidays, t.id)
+                ? branchWorkOnHolidays[t.id]
+                : (branchWorkOnHolidays[branchId] ?? false);
+            return {
+                name: t.name,
+                start: new Date(t.start),
+                end: t.type === 'milestone' ? new Date(t.start) : new Date(t.end),
+                days: t.type === 'milestone' ? 0 : taskDays(t, branchWorkOnHolidays, taskBranchMap),
+                milestone: t.type === 'milestone',
+                wow,
+            };
+        });
         const totalDays = rows.reduce((s, r) => s + r.days, 0);
-        return { rows, totalDays, projectName, projectStart, projectEnd };
-    }, [tasks, branchWorkOnHolidays, taskBranchMap, projectName, projectStart, projectEnd]);
+        const timeline = buildExcelTimeline(tasks, viewMode, branchWorkOnHolidays, taskBranchMap, projectStart, projectEnd);
+        return { rows, totalDays, projectName, projectStart, projectEnd, timeline };
+    }, [tasks, viewMode, branchWorkOnHolidays, taskBranchMap, projectName, projectStart, projectEnd]);
     useEffect(() => { onExcelDataReady?.(getExcelData); }, [getExcelData, onExcelDataReady]);
 
     const ganttTableCtx = useMemo(
