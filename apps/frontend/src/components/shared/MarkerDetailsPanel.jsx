@@ -418,8 +418,11 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         setAddWbsMode(mode);
         setAddWbsName('');
         if (mode === 'requirement') {
-            const rootNodes = wbsNodes.filter(n => n.path.split('.').length === 1);
-            setAddWbsParentId(rootNodes[0]?.id || '');
+            // Domyślnie: gałąź zaznaczona w drzewie (pierwszy linked węzeł).
+            // Gdy brak zaznaczenia — pozostaw puste, aby wymusić wybór z dropdown.
+            const linkedId = wbsLinks[0]?.wbsNodeId;
+            const selected = linkedId && wbsNodes.find(n => n.id === linkedId);
+            setAddWbsParentId(selected?.id || '');
         } else {
             setAddWbsParentId('');
         }
@@ -737,16 +740,31 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                     <p className="text-[10px] text-gray-400 uppercase font-black tracking-[0.15em]">
                                         {addWbsMode === 'item' ? '+ Nowy przedmiot' : '+ Nowe wymaganie'}
                                     </p>
-                                    {addWbsMode === 'requirement' && wbsNodes.filter(n => n.path.split('.').length === 1).length > 0 && (
-                                        <select
-                                            value={addWbsParentId}
-                                            onChange={e => setAddWbsParentId(e.target.value)}
-                                            className="w-full bg-[#1e293b] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500/50"
-                                        >
-                                            {wbsNodes.filter(n => n.path.split('.').length === 1).map(n => (
-                                                <option key={n.id} value={n.id}>{n.path} {n.name}</option>
-                                            ))}
-                                        </select>
+                                    {addWbsMode === 'requirement' && wbsNodes.length > 0 && (
+                                        <>
+                                            <select
+                                                value={addWbsParentId}
+                                                onChange={e => setAddWbsParentId(e.target.value)}
+                                                className={`w-full bg-[#1e293b] border rounded-xl px-3 py-2.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500/50 ${
+                                                    addWbsParentId ? 'border-white/10' : 'border-amber-500/50'
+                                                }`}
+                                            >
+                                                <option value="" disabled>— wybierz gałąź —</option>
+                                                {wbsNodes.map(n => (
+                                                    <option key={n.id} value={n.id}>{n.path} {n.name}</option>
+                                                ))}
+                                            </select>
+                                            {!addWbsParentId && (
+                                                <p className="text-[11px] text-amber-400/80 px-1">
+                                                    Wybierz gałąź, do której dodać wymaganie — lub utwórz nowy przedmiot.
+                                                </p>
+                                            )}
+                                        </>
+                                    )}
+                                    {addWbsMode === 'requirement' && wbsNodes.length === 0 && (
+                                        <p className="text-[11px] text-amber-400/80 px-1">
+                                            Brak gałęzi w drzewie — najpierw utwórz przedmiot.
+                                        </p>
                                     )}
                                     <input
                                         ref={addWbsInputRef}
@@ -759,7 +777,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                     <div className="flex gap-2">
                                         <button
                                             onClick={createWbsNode}
-                                            disabled={!addWbsName.trim() || addWbsSaving}
+                                            disabled={!addWbsName.trim() || addWbsSaving || (addWbsMode === 'requirement' && !addWbsParentId)}
                                             className="flex-1 flex items-center justify-center gap-2 py-3 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 rounded-xl text-sm font-bold transition-colors disabled:opacity-40 active:scale-95"
                                         >
                                             <Check size={15} />
