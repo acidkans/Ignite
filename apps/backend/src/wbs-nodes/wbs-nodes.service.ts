@@ -202,6 +202,11 @@ export class WbsNodesService {
             const status = item.name === 'PYTANIA OGÓLNE'
                 ? this.computeQaStatus(qaArr)
                 : (item.status || '');
+            // unitCost przenoszony z drzewa tylko dla NOWYCH węzłów (ścieżka create).
+            // Aktualizacja istniejących węzłów używa jawnych pól i nie rusza budżetu.
+            const ucRaw = (item as any).unitCost;
+            const ucNum = (ucRaw === '' || ucRaw == null) ? undefined : Number(ucRaw);
+            const unitCost = Number.isFinite(ucNum) ? ucNum : undefined;
             rows.push({
                 id: item.id,
                 parentId,
@@ -217,6 +222,7 @@ export class WbsNodesService {
                 comment: item.comment || '',
                 tags: Array.isArray(item.tags) && item.tags.length > 0 ? JSON.stringify(item.tags) : null,
                 qa: Array.isArray(item.qa) && item.qa.length > 0 ? JSON.stringify(item.qa) : null,
+                unitCost,
                 sortOrder: i,
             });
             if (item.children?.length) {
