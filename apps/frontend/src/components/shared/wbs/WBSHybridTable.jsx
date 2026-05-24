@@ -842,6 +842,20 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         setTimeout(() => onSave?.(), 0);
     };
 
+    // @anchor ensure-fuel-leaf
+    // Każda gałąź typ=praca dostaje automatycznie liść Paliwo z domyślnymi
+    // wartościami (kilometry, 0,70 zł/km). Pomija gdy liść Paliwo już istnieje.
+    const ensureFuelLeaf = (parentId) => {
+        setWbsTree(t => {
+            const parent = findNode(t.items || [], parentId);
+            if (!parent || (parent.children || []).some(c => c.type === 'fuel')) return t;
+            const fuel = { ...mkNode(false), name: 'Paliwo', type: 'fuel', unit: 'kilometry', unitCost: 0.7, comment: 'utworzony automatycznie' };
+            return { ...t, items: addChildTo(t.items || [], parentId, fuel) };
+        });
+        open(`node_${parentId}`);
+        setTimeout(() => onSave?.(), 0);
+    };
+
     const handleAddTopLevel = e => {
         e?.stopPropagation();
         const item = mkNode(true);
@@ -1137,6 +1151,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     onNodeFieldSave?.(node.id, 'unit', 'kilometry');
                                     handleField(node.id, 'unitCost', 0.7);
                                     onNodeFieldSave?.(node.id, 'unitCost', 0.7);
+                                }
+                                if (newType === 'work') {
+                                    ensureFuelLeaf(node.id);
                                 }
                                 if (isMaterial && node.name) {
                                     onMaterialNodeCreated?.({ wbsNodeId: node.id, name: node.name, type: newType, parentId });

@@ -72,26 +72,88 @@ export class ProcessTreeService {
                     },
                 });
 
-                // Utwórz OrderRequirements z wbsTree żeby gałąź pojawiła się w panelu struktury
+                // Gałąź "Zarządzanie projektem" z liściem "Zarządzanie" — tworzona
+                // dla każdego nowego zlecenia, analogicznie do "PYTANIA OGÓLNE".
+                // Właściciel liścia pobierany z istniejącego użytkownika Michał Ranik.
+                const mgmtOwner = await tx.user.findFirst({
+                    where: { firstName: 'Michał', lastName: 'Ranik' },
+                });
+                const mgmtOwnerName = mgmtOwner
+                    ? `${mgmtOwner.firstName ?? ''} ${mgmtOwner.lastName ?? ''}`.trim()
+                    : 'Michał Ranik';
+                const mgmtBranch = await tx.wbsNode.create({
+                    data: {
+                        nodeId: node.id,
+                        versionId: null,
+                        name: 'Zarządzanie projektem',
+                        status: '',
+                        sortOrder: 1,
+                    },
+                });
+                const mgmtLeaf = await tx.wbsNode.create({
+                    data: {
+                        nodeId: node.id,
+                        versionId: null,
+                        parentId: mgmtBranch.id,
+                        name: 'Zarządzanie',
+                        type: 'work',
+                        status: '',
+                        unit: 'pakiet',
+                        owner: mgmtOwnerName,
+                        comment: 'utworzony automatycznie',
+                        sortOrder: 0,
+                    },
+                });
+
+                // Utwórz OrderRequirements z wbsTree żeby gałęzie pojawiły się w panelu struktury
                 await tx.orderRequirements.create({
                     data: {
                         nodeId: node.id,
                         versionId: null,
                         wbsTree: JSON.stringify({
-                            items: [{
-                                id: pytaniaNode.id,
-                                name: 'PYTANIA OGÓLNE',
-                                type: '',
-                                status: '',
-                                unit: '',
-                                owner: '',
-                                resources: '',
-                                cost: '',
-                                comment: '',
-                                tags: [],
-                                qa: [],
-                                children: [],
-                            }],
+                            items: [
+                                {
+                                    id: pytaniaNode.id,
+                                    name: 'PYTANIA OGÓLNE',
+                                    type: '',
+                                    status: '',
+                                    unit: '',
+                                    owner: '',
+                                    resources: '',
+                                    cost: '',
+                                    comment: '',
+                                    tags: [],
+                                    qa: [],
+                                    children: [],
+                                },
+                                {
+                                    id: mgmtBranch.id,
+                                    name: 'Zarządzanie projektem',
+                                    type: '',
+                                    status: '',
+                                    unit: '',
+                                    owner: '',
+                                    resources: '',
+                                    cost: '',
+                                    comment: '',
+                                    tags: [],
+                                    qa: [],
+                                    children: [{
+                                        id: mgmtLeaf.id,
+                                        name: 'Zarządzanie',
+                                        type: 'work',
+                                        status: '',
+                                        unit: 'pakiet',
+                                        owner: mgmtOwnerName,
+                                        resources: '',
+                                        cost: '',
+                                        comment: 'utworzony automatycznie',
+                                        tags: [],
+                                        qa: [],
+                                        children: [],
+                                    }],
+                                },
+                            ],
                         }),
                     },
                 });
