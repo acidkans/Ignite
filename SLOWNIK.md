@@ -494,6 +494,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | CompanyService.update | apps/backend/src/company/company.service.ts | @anchor company-service-update |
 | back-endpoint | GET/PATCH /company | apps/backend/src/company/company.controller.ts | @anchor back-endpoint-company |
 | ui-widok | FirmaPage | apps/frontend/src/FirmaPage.jsx | @anchor firma-page |
+| ui-zakladka | tab-site-info-order | apps/frontend/src/DashboardPage.jsx | @anchor tab-site-info-order |
 
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)

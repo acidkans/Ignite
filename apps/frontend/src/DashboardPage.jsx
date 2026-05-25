@@ -496,6 +496,18 @@ export default function DashboardPage() {
                     </>
                 )}
 
+                {/* @anchor tab-site-info-order
+                    „Informacje o lokalizacji" dla węzła type=order — JAKO PIERWSZA zakładka.
+                    Komponent SiteInfoTab współdzielony z węzłami type=site (backend auto-create site row). */}
+                {activeNode && activeNode.type === 'order' && !isWorker && !isLogistykaArea && (
+                    <button onClick={() => handleTabChange('siteInfo')}
+                        className={`px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all relative ${activeTab === 'siteInfo' ? 'text-blue-400' : 'text-gray-500 hover:text-gray-300'}`}>
+                        <span className="md:hidden">Lokalizacja</span>
+                        <span className="hidden md:inline">Informacje o Lokalizacji</span>
+                        {activeTab === 'siteInfo' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" />}
+                    </button>
+                )}
+
                 {/* Informacje o węźle — niewidoczna dla pracownika i obszaru Logistyka */}
                 {activeNode && !isWorker && !isLogistykaArea && (
                     <button onClick={() => handleTabChange('requirements')}
@@ -623,6 +635,13 @@ export default function DashboardPage() {
                                    orderName={activeNode?.name || ''}
                                />
                            </div>
+                        )}
+                        {activeTab === 'siteInfo' && activeNode?.type === 'order' && (
+                            <SiteInfoTab
+                                key={`site-info-order-${activeAreaId}`}
+                                nodeId={activeAreaId}
+                                nodeName={activeNode.name}
+                            />
                         )}
                         {activeTab === 'requirements' && activeNode && (
                             activeNode.type === 'site' ? (
