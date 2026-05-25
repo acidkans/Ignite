@@ -247,6 +247,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-tabela | WBSHybridTable | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-table |
 | ui-funkcja | sumChildrenCost | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor sum-children-cost |
 | ui-funkcja | ensureFuelLeaf | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor ensure-fuel-leaf |
+| ui-funkcja | buildDefaultWarrantyBranch | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor build-default-warranty-branch |
 | ui-input | wbs-unit-cost-input | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-unit-price-input |
 | ui-funkcja | handleNodeExpand | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-node-expand-refresh |
 | ui-widok | CalendarView | apps/frontend/src/components/shared/wbs/CalendarView.jsx | @anchor calendar-view |

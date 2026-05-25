@@ -391,7 +391,8 @@
       "Bash(python graphify-out/.gvite.py)",
       "Bash(python graphify-out/.gfix2.py)",
       "Bash(python graphify-out/.gfix3.py)",
-      "Bash(curl -s -m 5 http://localhost:5173/)"
+      "Bash(curl -s -m 5 http://localhost:5173/)",
+      "Bash(findstr :5174)"
     ]
   }
 }
