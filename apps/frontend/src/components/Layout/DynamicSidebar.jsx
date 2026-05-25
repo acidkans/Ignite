@@ -136,6 +136,19 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
                     >
                         Użytkownicy
                     </button>
+                    {/* @anchor sidebar-firma-button */}
+                    <button
+                        onClick={() => navigate('/firma')}
+                        title="Firma"
+                        className={`w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md
+                            ${location.pathname === '/firma'
+                                ? 'text-blue-400 bg-blue-500/10'
+                                : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                            }
+                        `}
+                    >
+                        Firma
+                    </button>
                     {canManageTree && (
                         <button
                             onClick={() => navigate('/process-tree')}
