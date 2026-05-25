@@ -14,11 +14,36 @@ function filterNode(node, query) {
     return null;
 }
 
-export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, loading, userRoles = [] }) {
+export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, loading, userRoles = [], onReloadTree }) {
     const canManageTree = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
     const navigate = useNavigate();
     const location = useLocation();
     const [filter, setFilter] = useState('');
+    // @anchor sidebar-drag-id
+    const [dragId, setDragId] = useState(null);
+    // @anchor sidebar-drag-over-id
+    const [dragOverId, setDragOverId] = useState(null);
+
+    // @anchor handle-sidebar-move
+    const handleSidebarMove = async (sourceId, targetId) => {
+        if (!sourceId || sourceId === targetId) return;
+        const token = sessionStorage.getItem('token');
+        try {
+            const res = await fetch(`${API_URL}/process-tree/${sourceId}/move`, {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ newParentId: targetId }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                alert(`Nie udało się przenieść: ${err.message || res.statusText}`);
+                return;
+            }
+            onReloadTree?.();
+        } catch (e) {
+            alert(`Błąd sieci podczas przenoszenia: ${e.message}`);
+        }
+    };
     const [unreadOrderIds, setUnreadOrderIds] = useState(new Set());
 
     useEffect(() => {
@@ -82,6 +107,12 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
                                     forceExpanded={!!query}
                                     unreadOrderIds={unreadOrderIds}
                                     isLogistykArea={!isLogistyk && area.name === 'Logistyka'}
+                                    canManageTree={canManageTree}
+                                    dragId={dragId}
+                                    setDragId={setDragId}
+                                    dragOverId={dragOverId}
+                                    setDragOverId={setDragOverId}
+                                    onSidebarMove={handleSidebarMove}
                                 />
                             ))
                         }
@@ -130,7 +161,7 @@ function nodeContainsId(node, id) {
     return (node.children || []).some(c => nodeContainsId(c, id));
 }
 
-function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, level = 0, forceExpanded = false, unreadOrderIds = new Set(), isLogistykArea = false }) {
+function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, level = 0, forceExpanded = false, unreadOrderIds = new Set(), isLogistykArea = false, canManageTree = false, dragId = null, setDragId = () => {}, dragOverId = null, setDragOverId = () => {}, onSidebarMove }) {
     const [expanded, setExpanded] = useState(true);
     const [editing, setEditing] = useState(false);
     const [editName, setEditName] = useState(node.name);
@@ -189,6 +220,33 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                 <div
                     onClick={handleItemClick}
                     title={editing ? undefined : node.name}
+                    draggable={canManageTree && !editing}
+                    onDragStart={canManageTree ? (e) => {
+                        e.stopPropagation();
+                        setDragId(node.id);
+                        e.dataTransfer.effectAllowed = 'move';
+                        try { e.dataTransfer.setData('application/process-node-id', String(node.id)); } catch {}
+                    } : undefined}
+                    onDragOver={canManageTree ? (e) => {
+                        if (!dragId || dragId === node.id) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.dataTransfer.dropEffect = 'move';
+                        if (dragOverId !== node.id) setDragOverId(node.id);
+                    } : undefined}
+                    onDragLeave={canManageTree ? (e) => {
+                        if (e.currentTarget.contains(e.relatedTarget)) return;
+                        if (dragOverId === node.id) setDragOverId(null);
+                    } : undefined}
+                    onDrop={canManageTree ? (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const src = dragId;
+                        setDragId(null);
+                        setDragOverId(null);
+                        if (src && src !== node.id) onSidebarMove?.(src, node.id);
+                    } : undefined}
+                    onDragEnd={canManageTree ? () => { setDragId(null); setDragOverId(null); } : undefined}
                     className={`w-full text-left px-2 py-1.5 rounded-md flex items-center gap-1.5 transition-all duration-200 cursor-pointer
                         ${isActive && !editing
                             ? 'bg-blue-600/30 text-white border border-blue-500/40 shadow-lg'
@@ -196,6 +254,8 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                                 ? 'text-amber-500/70 hover:bg-white/5 hover:text-amber-400'
                                 : 'text-gray-400 hover:bg-white/5 hover:text-white'
                         }
+                        ${dragOverId === node.id && dragId && dragId !== node.id ? 'ring-2 ring-blue-400 ring-inset bg-blue-500/10' : ''}
+                        ${dragId === node.id ? 'opacity-40' : ''}
                     `}
                     style={{ paddingLeft: `${level * 10 + 8}px` }}
                 >
@@ -266,6 +326,12 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                             level={level + 1}
                             forceExpanded={forceExpanded}
                             unreadOrderIds={unreadOrderIds}
+                            canManageTree={canManageTree}
+                            dragId={dragId}
+                            setDragId={setDragId}
+                            dragOverId={dragOverId}
+                            setDragOverId={setDragOverId}
+                            onSidebarMove={onSidebarMove}
                         />
                     ))}
                 </div>
