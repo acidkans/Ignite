@@ -162,7 +162,7 @@ function nodeContainsId(node, id) {
 }
 
 function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, level = 0, forceExpanded = false, unreadOrderIds = new Set(), isLogistykArea = false, canManageTree = false, dragId = null, setDragId = () => {}, dragOverId = null, setDragOverId = () => {}, onSidebarMove }) {
-    const [expanded, setExpanded] = useState(true);
+    const [expanded, setExpanded] = useState(false);
     const [editing, setEditing] = useState(false);
     const [editName, setEditName] = useState(node.name);
     const inputRef = useRef(null);
