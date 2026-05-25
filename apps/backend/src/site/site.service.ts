@@ -23,8 +23,10 @@ export class SiteService {
     if (!site) {
       // Check if node exists and is a site
       const node = await this.prisma.processNode.findUnique({ where: { id } });
-      if (node && node.type === 'site') {
-        // Auto-create empty site entry
+      // Auto-create empty site entry również dla węzłów `order` — zakładka
+      // „Informacje o lokalizacji" pojawia się jako pierwsza w zamówieniach
+      // i musi mieć rekord do edycji.
+      if (node && (node.type === 'site' || node.type === 'order')) {
         return this.prisma.site.create({
           data: { id },
           include: { processNode: true },
