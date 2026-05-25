@@ -856,9 +856,23 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         setTimeout(() => onSave?.(), 0);
     };
 
+    // @anchor build-default-warranty-branch
+    // Każdy nowy projekt (przedmiot projektu w WBS) dostaje automatycznie gałąź
+    // „Gwarancja 24m" z dwiema podgałęziami: wizyta gwarancyjna (praca, 2 dni)
+    // oraz Paliwo (fuel, bez ilości). Wymóg biznesowy — wszystkie projekty
+    // muszą mieć budżet gwarancyjny zarezerwowany od razu.
+    const buildDefaultWarrantyBranch = () => {
+        const warranty = { ...mkNode(false), name: 'Gwarancja 24m', type: 'group' };
+        const visit = { ...mkNode(false), name: 'Wizyta gwarancyjna', type: 'work', unit: 'dni', quantity: 2 };
+        const fuel = { ...mkNode(false), name: 'Paliwo', type: 'fuel', unit: 'kilometry', unitCost: 0.7 };
+        warranty.children = [visit, fuel];
+        return warranty;
+    };
+
     const handleAddTopLevel = e => {
         e?.stopPropagation();
         const item = mkNode(true);
+        item.children = [buildDefaultWarrantyBranch()];
         setWbsTree(t => ({ ...t, items: [...(t.items || []), item] }));
         open('root');
         open(`node_${item.id}`);
