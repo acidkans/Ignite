@@ -460,13 +460,20 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 
 > `ui-stan` `newProp.sourceUrl` — pole „Adres www" w formularzu ręcznego dodania propozycji; zapisywane przez `POST /material-requirements/:id/proposals` (`@anchor mat-req-post-add-proposal`). Mapuje na `schema-pole` `ProductProposal.sourceUrl` (`@anchor product-proposal-source-url`).
 
+### Moduł Layout — DynamicSidebar (`apps/frontend/src/components/Layout/DynamicSidebar.jsx`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-stan | dragId | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-drag-id |
+| ui-stan | dragOverId | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-drag-over-id |
+| ui-funkcja | handleSidebarMove | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor handle-sidebar-move |
+
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)
 - process-tree (apps/backend/src/process-tree/)
 - subtasks (apps/backend/src/subtasks/)
 - frontend pages (LoginPage, Dashboard, itd.)
-- frontend layout (DynamicSidebar)
 - frontend tabs (RequirementsTab, OffersTab, NodeInfoTab)
 - utils/wbsPdfExport.js (buildPdfDocument, openPdfBlob, fetchLogoDataUrl, buildWbsHtmlTable, PDF_BASE_CSS)
 - utils/projectPdfExport.js (exportProjectPdf)

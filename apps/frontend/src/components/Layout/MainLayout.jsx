@@ -247,6 +247,7 @@ export default function MainLayout({ onLogout }) {
                         onDeleteNode={handleDeleteNode}
                         onPermissions={(node) => setSelectedNodePermissions(node)}
                         userRoles={userRoles}
+                        onReloadTree={fetchTree}
                     />
                 </div>
 
