@@ -445,6 +445,45 @@ model Site {
   @@map("sites")
 }
 
+/// Singleton — dane „mojej firmy" do wyliczeń (jeden wiersz, id = "singleton").
+/// Pola 1:1 z `Site` (oprócz relacji do ProcessNode i pól specyficznych dla lokalizacji
+/// terenowej — Company nie ma `structureType/accessDesc/drivingDesc/shelterType/greenfield`,
+/// bo to atrybuty obiektu w terenie, nie firmy macierzystej).
+model Company {
+  /// @anchor company-id
+  id               String  @id @default("singleton")
+  /// @anchor company-name
+  name             String?
+  /// @anchor company-number
+  number           String?
+  /// @anchor company-additional-desc
+  additionalDesc   String?
+  /// @anchor company-address-street
+  addressStreet    String?
+  /// @anchor company-address-city
+  addressCity      String?
+  /// @anchor company-address-zip-code
+  addressZipCode   String?
+  /// @anchor company-address-country
+  addressCountry   String?
+  /// @anchor company-address-latitude
+  addressLatitude  Float?
+  /// @anchor company-address-longitude
+  addressLongitude Float?
+  /// @anchor company-custom-data
+  customData       Json    @default("{}")
+  /// @anchor company-contact-email
+  contactEmail     String?
+  /// @anchor company-contact-first-name
+  contactFirstName String?
+  /// @anchor company-contact-last-name
+  contactLastName  String?
+  /// @anchor company-contact-phone
+  contactPhone     String?
+
+  @@map("companies")
+}
+
 model UserEntityConfig {
   id         String @id @default(uuid())
   userId     String

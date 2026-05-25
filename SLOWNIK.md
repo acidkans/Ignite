@@ -468,6 +468,32 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | dragId | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-drag-id |
 | ui-stan | dragOverId | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-drag-over-id |
 | ui-funkcja | handleSidebarMove | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor handle-sidebar-move |
+| ui-przycisk | sidebar-firma-button | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-firma-button |
+
+### Moduł Company — „Moja firma" (singleton)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| schema-model | Company | apps/backend/prisma/schema.prisma | @anchor company-id |
+| schema-pole | Company.name | apps/backend/prisma/schema.prisma | @anchor company-name |
+| schema-pole | Company.number | apps/backend/prisma/schema.prisma | @anchor company-number |
+| schema-pole | Company.additionalDesc | apps/backend/prisma/schema.prisma | @anchor company-additional-desc |
+| schema-pole | Company.addressStreet | apps/backend/prisma/schema.prisma | @anchor company-address-street |
+| schema-pole | Company.addressCity | apps/backend/prisma/schema.prisma | @anchor company-address-city |
+| schema-pole | Company.addressZipCode | apps/backend/prisma/schema.prisma | @anchor company-address-zip-code |
+| schema-pole | Company.addressCountry | apps/backend/prisma/schema.prisma | @anchor company-address-country |
+| schema-pole | Company.addressLatitude | apps/backend/prisma/schema.prisma | @anchor company-address-latitude |
+| schema-pole | Company.addressLongitude | apps/backend/prisma/schema.prisma | @anchor company-address-longitude |
+| schema-pole | Company.customData | apps/backend/prisma/schema.prisma | @anchor company-custom-data |
+| schema-pole | Company.contactEmail | apps/backend/prisma/schema.prisma | @anchor company-contact-email |
+| schema-pole | Company.contactFirstName | apps/backend/prisma/schema.prisma | @anchor company-contact-first-name |
+| schema-pole | Company.contactLastName | apps/backend/prisma/schema.prisma | @anchor company-contact-last-name |
+| schema-pole | Company.contactPhone | apps/backend/prisma/schema.prisma | @anchor company-contact-phone |
+| back-stala | SINGLETON_ID | apps/backend/src/company/company.service.ts | @anchor company-singleton-id |
+| back-funkcja | CompanyService.get | apps/backend/src/company/company.service.ts | @anchor company-service-get |
+| back-funkcja | CompanyService.update | apps/backend/src/company/company.service.ts | @anchor company-service-update |
+| back-endpoint | GET/PATCH /company | apps/backend/src/company/company.controller.ts | @anchor back-endpoint-company |
+| ui-widok | FirmaPage | apps/frontend/src/FirmaPage.jsx | @anchor firma-page |
 
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)

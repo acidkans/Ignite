@@ -16,6 +16,7 @@ import { AiModule } from './ai/ai.module';
 import { DocumentsModule } from './documents/documents.module';
 import { HardwareModule } from './hardware/hardware.module';
 import { SiteModule } from './site/site.module';
+import { CompanyModule } from './company/company.module';
 import { TeamModule } from './team/team.module';
 import { SubtasksModule } from './subtasks/subtasks.module';
 import { OrderRequirementsModule } from './order-requirements/order-requirements.module';
@@ -49,6 +50,7 @@ import { WbsNodesModule } from './wbs-nodes/wbs-nodes.module';
     DocumentsModule,
     HardwareModule,
     SiteModule,
+    CompanyModule,
     TeamModule,
     SubtasksModule,
     OrderRequirementsModule,
