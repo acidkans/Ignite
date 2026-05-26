@@ -393,7 +393,12 @@
       "Bash(python graphify-out/.gfix3.py)",
       "Bash(curl -s -m 5 http://localhost:5173/)",
       "Bash(findstr :5174)",
-      "Bash(ssh -o StrictHostKeyChecking=no andrzej@gigatel.app \"bash -s\")"
+      "Bash(ssh -o StrictHostKeyChecking=no andrzej@gigatel.app \"bash -s\")",
+      "Bash(ls \"C:/Users/Andrzej/.gemini/antigravity/scratch/data/erp/\" 2>&1; echo \"---\"; df -h \"C:/Users/Andrzej/.gemini/antigravity/scratch/data/\" 2>&1 | tail -3)",
+      "Bash(ls \"C:/Users/Andrzej/.gemini/antigravity/scratch/\" 2>&1)",
+      "Bash(curl -L -o poland-latest.osm.pbf \"https://download.geofabrik.de/europe/poland-latest.osm.pbf\")",
+      "Bash(docker rmi *)",
+      "Bash(tasklist /FI \"PID eq 31340\")"
     ]
   }
 }
