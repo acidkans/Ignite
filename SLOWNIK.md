@@ -504,6 +504,12 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | hasRendered | apps/frontend/src/components/shared/PdfPageWithHighlights.jsx | @anchor pdf-page-has-rendered |
 | ui-stala | placeholderHeight | apps/frontend/src/components/shared/PdfPageWithHighlights.jsx | @anchor pdf-page-placeholder-height |
 
+### Wersja aplikacji
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-stala | APP_VERSION | apps/frontend/src/version.js | @anchor app-version |
+
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)

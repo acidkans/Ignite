@@ -12,6 +12,7 @@ import UnifiedWbsPanel from './components/shared/wbs/UnifiedWbsPanel';
 import CommentsSlideOver from './components/shared/CommentsSlideOver';
 import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check } from 'lucide-react';
 import { API_URL } from './config';
+import { APP_VERSION } from './version';
 
 function getWeekNumber(date) {
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -321,6 +322,7 @@ export default function DashboardPage() {
                     <div className="flex flex-col leading-tight">
                         <span className="text-[11px] text-gray-200 font-medium capitalize">{dateLabel}</span>
                         <span className="text-[10px] text-gray-500 font-mono uppercase tracking-wider">Tydzień {weekNumber}</span>
+                        <span className="text-[9px] text-gray-600 font-mono tracking-wider">{APP_VERSION}</span>
                     </div>
                 </div>
 
