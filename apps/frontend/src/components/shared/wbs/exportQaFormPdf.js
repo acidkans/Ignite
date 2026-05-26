@@ -229,34 +229,18 @@ export async function exportQaFormPdf(wbsData, projectName) {
 
             page.drawRectangle({ x: fieldX, y: fieldY, width: fieldW, height: fieldH, color: colorField });
 
-            // Istniejącą odpowiedź rysujemy jako statyczny tekst (LiberationSans — pełne UTF-8,
-            // viewery często nie renderują prefillu form fielda z subset-font, więc tu jest pewne)
-            if (aText) {
-                const aLines = wrapText(aText, fieldW - 6, fontRegular, FONT_SIZE);
-                aLines.forEach((line, li) => {
-                    page.drawText(line, {
-                        x: fieldX + 3,
-                        y: y - 10 - li * LINE_H,
-                        size: FONT_SIZE,
-                        font: fontRegular,
-                        color: colorText,
-                    });
-                });
-            }
-
-            // Pole formularza zawsze PUSTE — służy do wpisania nowej/zmienionej odpowiedzi.
-            // Przy imporcie puste pole = brak zmiany (zachowuje istniejącą odpowiedź).
-            // BEZ backgroundColor — inaczej widget rysuje nieprzezroczyste tło NA statycznym tekście.
-            // Tło wizualne mamy już z drawRectangle wyżej na warstwie strony.
+            // Pole formularza pre-fillowane bieżącą odpowiedzią — edytowalne w viewerze
             const tf = form.createTextField(fieldName);
             tf.enableMultiline();
+            tf.setText(aText);
             tf.addToPage(page, {
                 x: fieldX, y: fieldY, width: fieldW, height: fieldH,
                 borderWidth: 0,
+                backgroundColor: colorField,
                 textColor: colorText,
+                font: fontRegular,
             });
 
-            // Zapamiętaj metadane do dopasowania przy imporcie
             metaFields.push({
                 name: fieldName,
                 nodeId: node.id,
@@ -285,6 +269,15 @@ export async function exportQaFormPdf(wbsData, projectName) {
             size: 7, font: fontRegular, color: colorLabel,
         });
     });
+
+    // Wymuś regenerację appearance pól z embedded LiberationSans —
+    // bez tego prefillowane odpowiedzi z polskimi znakami nie renderują się w wielu viewerach.
+    if (metaFields.length > 0) {
+        form.updateFieldAppearances(fontRegular);
+        // NeedAppearances=true — instrukcja dla viewerów żeby same regenerowały appearance,
+        // gdy nasz strumień appearance nie zostanie uznany (Chrome PDF, Firefox PDF.js)
+        form.acroForm.dict.set(PDFName.of('NeedAppearances'), pdfDoc.context.obj(true));
+    }
 
     // Zapisz metadane w info dict PDF — odporny match przy imporcie nawet po zmianach WBS
     if (metaFields.length > 0) {
