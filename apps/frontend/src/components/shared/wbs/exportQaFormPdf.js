@@ -232,6 +232,7 @@ export async function exportQaFormPdf(wbsData, projectName) {
             // Pole formularza pre-fillowane bieżącą odpowiedzią — edytowalne w viewerze
             const tf = form.createTextField(fieldName);
             tf.enableMultiline();
+            tf.setFontSize(FONT_SIZE);
             tf.setText(aText);
             tf.addToPage(page, {
                 x: fieldX, y: fieldY, width: fieldW, height: fieldH,
