@@ -496,6 +496,14 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-widok | FirmaPage | apps/frontend/src/FirmaPage.jsx | @anchor firma-page |
 | ui-zakladka | tab-site-info-order | apps/frontend/src/DashboardPage.jsx | @anchor tab-site-info-order |
 
+### Moduł Dokumentacja — podgląd PDF z highlightami
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-sekcja | PdfPageWithHighlights | apps/frontend/src/components/shared/PdfPageWithHighlights.jsx | @anchor pdf-page-with-highlights |
+| ui-stan | hasRendered | apps/frontend/src/components/shared/PdfPageWithHighlights.jsx | @anchor pdf-page-has-rendered |
+| ui-stala | placeholderHeight | apps/frontend/src/components/shared/PdfPageWithHighlights.jsx | @anchor pdf-page-placeholder-height |
+
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)
