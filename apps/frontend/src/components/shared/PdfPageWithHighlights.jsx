@@ -12,6 +12,7 @@ export const HL_COLORS = {
 };
 
 // Strona PDF z warstwą highlightów + toolbarem zaznaczenia
+// @anchor pdf-page-with-highlights
 export default function PdfPageWithHighlights({
     pageNumber,
     width,
@@ -25,7 +26,31 @@ export default function PdfPageWithHighlights({
     const wrapperRef = useRef(null);
     const [selToolbar, setSelToolbar] = useState(null);
 
+    // Wirtualizacja: renderuj <Page> dopiero gdy wrapper zbliża się do viewportu.
+    // Raz wyrenderowana strona zostaje (hasRendered=true) — scroll w górę nie powoduje re-rendera,
+    // canvas/text-layer pozostają w DOM. Bufor 500px po obu stronach maskuje opóźnienie przy szybkim scrollu.
+    // @anchor pdf-page-has-rendered
+    const [hasRendered, setHasRendered] = useState(false);
+
+    useEffect(() => {
+        if (hasRendered) return;
+        const el = wrapperRef.current;
+        if (!el) return;
+        const io = new IntersectionObserver(
+            ([entry]) => { if (entry.isIntersecting) setHasRendered(true); },
+            { rootMargin: '500px 0px' }
+        );
+        io.observe(el);
+        return () => io.disconnect();
+    }, [hasRendered]);
+
     useEffect(() => { setSelToolbar(null); }, [width]);
+
+    // Placeholder A4 (sqrt(2) ≈ 1.414 × width) gdy strona poza viewportem — rezerwuje wysokość scrolla,
+    // bez tego wszystkie wrapery byłyby wysokości 0 i IntersectionObserver odpaliłby się dla wszystkich
+    // 93 stron jednocześnie, niwecząc całą wirtualizację.
+    // @anchor pdf-page-placeholder-height
+    const placeholderHeight = Math.round((width || 420) * 1.414);
 
     const handleMouseUp = useCallback(() => {
         const wrapper = wrapperRef.current;
@@ -66,10 +91,19 @@ export default function PdfPageWithHighlights({
             ref={wrapperRef}
             onMouseUp={handleMouseUp}
             onTouchEnd={handleMouseUp}
-            className="mb-4 shadow-xl border border-white/10 mx-auto bg-white w-fit"
-            style={{ position: 'relative' }}
+            className="mb-4 shadow-xl border border-white/10 mx-auto bg-white"
+            style={{ position: 'relative', width, minHeight: hasRendered ? undefined : placeholderHeight }}
         >
-            <Page pageNumber={pageNumber} renderTextLayer renderAnnotationLayer width={width} />
+            {hasRendered ? (
+                <Page pageNumber={pageNumber} renderTextLayer renderAnnotationLayer width={width} />
+            ) : (
+                <div
+                    className="flex items-center justify-center text-gray-300 text-[10px] select-none"
+                    style={{ width, height: placeholderHeight }}
+                >
+                    Strona {pageNumber}
+                </div>
+            )}
 
             {/* Highlight overlay - zIndex 10 by toolbary (z-40/z-50) były zawsze nad nim, inaczej kliknięcia w toolbar trafiają w highlight pod spodem */}
             <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 10 }}>
