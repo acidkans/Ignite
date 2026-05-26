@@ -246,12 +246,13 @@ export async function exportQaFormPdf(wbsData, projectName) {
 
             // Pole formularza zawsze PUSTE — służy do wpisania nowej/zmienionej odpowiedzi.
             // Przy imporcie puste pole = brak zmiany (zachowuje istniejącą odpowiedź).
+            // BEZ backgroundColor — inaczej widget rysuje nieprzezroczyste tło NA statycznym tekście.
+            // Tło wizualne mamy już z drawRectangle wyżej na warstwie strony.
             const tf = form.createTextField(fieldName);
             tf.enableMultiline();
             tf.addToPage(page, {
                 x: fieldX, y: fieldY, width: fieldW, height: fieldH,
                 borderWidth: 0,
-                backgroundColor: colorField,
                 textColor: colorText,
             });
 
