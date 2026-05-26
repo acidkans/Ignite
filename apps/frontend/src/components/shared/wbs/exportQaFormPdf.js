@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, StandardFonts, PDFName, PDFString } from 'pdf-lib';
+import { PDFDocument, rgb, PDFName, PDFHexString } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import fontRegularUrl from 'pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf?url';
 import fontBoldUrl from 'pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf?url';
@@ -71,7 +71,6 @@ export async function exportQaFormPdf(wbsData, projectName) {
     const [regularBytes, boldBytes] = await Promise.all([fetchFont(fontRegularUrl), fetchFont(fontBoldUrl)]);
     const fontRegular = await pdfDoc.embedFont(regularBytes, { subset: true });
     const fontBold    = await pdfDoc.embedFont(boldBytes,    { subset: true });
-    const fontField   = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
     let logoImg = null;
     try {
@@ -126,6 +125,9 @@ export async function exportQaFormPdf(wbsData, projectName) {
     let y = PAGE_H - MARGIN;
     let fieldIdx = 0;
 
+    // Metadane dla importu — odporne na zmiany WBS między eksportem a importem
+    const metaFields = [];
+
     const ensureSpace = (needed) => {
         if (y - needed < MARGIN) {
             page = pdfDoc.addPage([PAGE_W, PAGE_H]);
@@ -167,7 +169,9 @@ export async function exportQaFormPdf(wbsData, projectName) {
     drawPageHeader();
 
     for (const node of nodes) {
-        const pairs = node.qa.filter(p => (p?.question || '').trim());
+        const pairs = node.qa
+            .map((p, i) => ({ p, i }))
+            .filter(({ p }) => (p?.question || '').trim());
         if (!pairs.length) continue;
 
         // Nazwa węzła
@@ -183,7 +187,7 @@ export async function exportQaFormPdf(wbsData, projectName) {
 
         drawTableHeader();
 
-        pairs.forEach((pair, pairIdx) => {
+        pairs.forEach(({ p: pair, i: origQaIdx }, displayIdx) => {
             const qText = pair.question || '';
             const aText = pair.answer || '';
 
@@ -194,7 +198,7 @@ export async function exportQaFormPdf(wbsData, projectName) {
 
             ensureSpace(rowH);
 
-            const rowBg = pairIdx % 2 === 0 ? colorWhite : colorRowAlt;
+            const rowBg = displayIdx % 2 === 0 ? colorWhite : colorRowAlt;
             // Tło całego wiersza
             page.drawRectangle({ x: MARGIN, y: y - rowH, width: CONTENT_W, height: rowH, color: rowBg });
             // Pionowa linia podziału
@@ -216,7 +220,7 @@ export async function exportQaFormPdf(wbsData, projectName) {
                 });
             });
 
-            // Pole formularza dla odpowiedzi
+            // Pole formularza dla odpowiedzi — pre-fillowane bieżącą odpowiedzią, edytowalne
             const fieldName = `answer_${fieldIdx++}`;
             const fieldX = MARGIN + COL_Q + 1;
             const fieldY = y - rowH + 1;
@@ -225,7 +229,8 @@ export async function exportQaFormPdf(wbsData, projectName) {
 
             page.drawRectangle({ x: fieldX, y: fieldY, width: fieldW, height: fieldH, color: colorField });
 
-            // Istniejącą odpowiedź rysujemy jako statyczny tekst (LiberationSans — pełne UTF-8, bez WinAnsi)
+            // Istniejącą odpowiedź rysujemy jako statyczny tekst (LiberationSans — pełne UTF-8,
+            // viewery często nie renderują prefillu form fielda z subset-font, więc tu jest pewne)
             if (aText) {
                 const aLines = wrapText(aText, fieldW - 6, fontRegular, FONT_SIZE);
                 aLines.forEach((line, li) => {
@@ -239,21 +244,25 @@ export async function exportQaFormPdf(wbsData, projectName) {
                 });
             }
 
-            // Pole formularza zawsze puste — służy do wpisania nowej/zmienionej odpowiedzi
+            // Pole formularza zawsze PUSTE — służy do wpisania nowej/zmienionej odpowiedzi.
+            // Przy imporcie puste pole = brak zmiany (zachowuje istniejącą odpowiedź).
             const tf = form.createTextField(fieldName);
-            tf.acroField.dict.set(PDFName.of('DA'), PDFString.of(`/Helv ${FONT_SIZE} Tf 0 g`));
             tf.enableMultiline();
             tf.addToPage(page, {
                 x: fieldX, y: fieldY, width: fieldW, height: fieldH,
                 borderWidth: 0,
-                backgroundColor: aText ? rgb(1, 1, 1) : rgb(0.97, 0.99, 1.0),
+                backgroundColor: colorField,
                 textColor: colorText,
             });
-            // Lekka przezroczystość gdy jest już odpowiedź — wizualnie odróżnia
-            if (aText) {
-                page.drawRectangle({ x: fieldX, y: fieldY, width: fieldW, height: fieldH,
-                    color: rgb(1, 1, 1), opacity: 0 });
-            }
+
+            // Zapamiętaj metadane do dopasowania przy imporcie
+            metaFields.push({
+                name: fieldName,
+                nodeId: node.id,
+                branchPath: nodePath,
+                qaIdx: origQaIdx,
+                question: qText,
+            });
 
             y -= rowH;
         });
@@ -275,6 +284,14 @@ export async function exportQaFormPdf(wbsData, projectName) {
             size: 7, font: fontRegular, color: colorLabel,
         });
     });
+
+    // Zapisz metadane w info dict PDF — odporny match przy imporcie nawet po zmianach WBS
+    if (metaFields.length > 0) {
+        pdfDoc.getInfoDict().set(
+            PDFName.of('QaMeta'),
+            PDFHexString.fromText(JSON.stringify({ version: 1, fields: metaFields })),
+        );
+    }
 
     const bytes = await pdfDoc.save();
     const blob = new Blob([bytes], { type: 'application/pdf' });
