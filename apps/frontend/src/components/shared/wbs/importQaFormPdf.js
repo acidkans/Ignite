@@ -107,14 +107,12 @@ export async function importQaFormPdf(fileBuffer, wbsData) {
     const meta = readQaMeta(pdfDoc);
 
     if (meta) {
-        // Tryb metadanych — puste pole = brak zmiany (zachowuje istniejącą odpowiedź).
-        // Eksport rysuje istniejące odpowiedzi jako statyczny tekst, a pole formularza pozostaje
-        // puste — wpisanie czegokolwiek przez użytkownika to świadomy edit, który nadpisze.
+        // Tryb metadanych — PDF z pre-fillowanymi polami = źródło prawdy round-tripu.
+        // Brak edycji → fieldValue === existing → filtr `changed` na końcu wykluczy z updates.
         for (const entry of meta.fields) {
             const target = findTarget(entry);
             if (!target) continue;
             const fieldValue = readFieldValue(entry.name);
-            if (!fieldValue.trim()) continue;
             const qa = getMutable(target.node);
             qa[target.qaIdx] = { ...qa[target.qaIdx], answer: fieldValue };
         }
