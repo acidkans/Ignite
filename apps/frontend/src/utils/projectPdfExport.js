@@ -340,8 +340,8 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
     break-inside: avoid; page-break-inside: avoid;
   }
   p { orphans: 3; widows: 3; }
-  .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.6; text-align: justify; }
-  .strategy-text p { margin: 0 0 4px 0; text-align: justify; orphans: 3; widows: 3; }
+  .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.6; text-align: left; }
+  .strategy-text p { margin: 0 0 4px 0; text-align: left; orphans: 3; widows: 3; }
   .strategy-text p:empty { display: none; margin: 0; }
   .strategy-text h2, .strategy-text h3, .strategy-text h4, .strategy-text .md-bold { font-size: 11px; font-weight: bold; margin: 16px 0 2px 0; text-align: left; }
   .strategy-text h3:first-child, .strategy-text h2:first-child, .strategy-text .md-bold:first-child { margin-top: 0; }
