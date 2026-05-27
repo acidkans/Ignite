@@ -173,6 +173,17 @@ Indeks wszystkich zaindeksowanych zmiennych projektu. Aktualizowany przed każdy
 Format wiersza: `| tag | nazwa | plik | @anchor <kebab-case-name> |`
 Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 
+### Moduł MarkerDetailsPanel
+
+#### Frontend (`apps/frontend/src/components/shared/MarkerDetailsPanel.jsx`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-stan | extraQuestions | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor extra-questions |
+| ui-funkcja | handleAddExtraQuestion | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor handle-add-extra-question |
+| ui-funkcja | handleExtraQuestionChange | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor handle-extra-question-change |
+| ui-funkcja | handleSaveExtraQuestion | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor handle-save-extra-question |
+
 ### Moduł WBS
 
 #### Schema (Prisma — `apps/backend/prisma/schema.prisma`)

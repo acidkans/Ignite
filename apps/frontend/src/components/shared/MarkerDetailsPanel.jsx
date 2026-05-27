@@ -40,6 +40,8 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     const [addWbsParentId, setAddWbsParentId] = useState('');
     const [addWbsName, setAddWbsName] = useState('');
     const [addWbsSaving, setAddWbsSaving] = useState(false);
+    // @anchor extra-questions
+    const [extraQuestions, setExtraQuestions] = useState([]);
     const addWbsInputRef = useRef(null);
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
@@ -370,6 +372,42 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         }
         window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
         onRefresh(true);
+    };
+
+    // @anchor handle-add-extra-question
+    const handleAddExtraQuestion = () => {
+        setExtraQuestions(prev => [...prev, { id: Date.now(), text: '' }]);
+    };
+
+    // @anchor handle-extra-question-change
+    const handleExtraQuestionChange = (id, text, el) => {
+        setExtraQuestions(prev => prev.map(q => q.id === id ? { ...q, text } : q));
+        if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
+    };
+
+    // @anchor handle-save-extra-question
+    const handleSaveExtraQuestion = async (id) => {
+        const q = extraQuestions.find(q => q.id === id);
+        if (!q || !q.text.trim()) return;
+        const trimmed = q.text.trim();
+        const token = sessionStorage.getItem('token');
+        for (const link of wbsLinksRef.current) {
+            const node = wbsItemsRef.current.find(n => n.id === link.wbsNodeId);
+            if (!node) continue;
+            const qa = Array.isArray(node.qa) ? [...node.qa] : [];
+            if (!qa.find(item => item.question === trimmed)) {
+                const updated = [...qa, { question: trimmed, answer: '' }];
+                node.qa = updated;
+                try {
+                    await fetch(`${API_URL}/wbs-nodes/${link.wbsNodeId}`, {
+                        method: 'PATCH',
+                        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ qa: updated })
+                    });
+                } catch(err) { console.error('[extra qa]', err); }
+            }
+        }
+        window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
     };
 
     const handleDeleteMarker = async () => {
@@ -812,9 +850,19 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
 
                     {/* Pytanie – aktywne tylko gdy przypisany do przedmiotu */}
                     <div className="space-y-2">
-                        <label className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em] px-1">
-                            PYTANIE
-                        </label>
+                        <div className="flex items-center justify-between px-1">
+                            <label className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em]">
+                                PYTANIE
+                            </label>
+                            {wbsLinks.length > 0 && (
+                                <button
+                                    onClick={handleAddExtraQuestion}
+                                    className="w-5 h-5 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 active:bg-white/30 text-gray-400 hover:text-gray-200 transition-colors"
+                                >
+                                    <Plus size={10} />
+                                </button>
+                            )}
+                        </div>
                         <div className="relative">
                             <textarea
                                 value={editQuestion}
@@ -840,6 +888,19 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                 </div>
                             )}
                         </div>
+                        {extraQuestions.map(q => (
+                            <textarea
+                                key={q.id}
+                                value={q.text}
+                                autoFocus
+                                rows={1}
+                                placeholder="Wpisz pytanie…"
+                                onChange={e => handleExtraQuestionChange(q.id, e.target.value, e.target)}
+                                onBlur={() => handleSaveExtraQuestion(q.id)}
+                                className="w-full resize-none overflow-hidden rounded-xl px-4 py-3 text-sm leading-snug transition-colors outline-none bg-white/5 border border-blue-500/30 text-gray-200 placeholder-gray-600 focus:border-blue-500/40 focus:bg-white/8"
+                                style={{ minHeight: '48px' }}
+                            />
+                        ))}
                     </div>
 
                     {/* Podgląd wszystkich załączników na dole */}
