@@ -42,6 +42,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     const [addWbsSaving, setAddWbsSaving] = useState(false);
     // @anchor extra-questions
     const [extraQuestions, setExtraQuestions] = useState([]);
+    const extraQsInitializedRef = useRef(false);
     const addWbsInputRef = useRef(null);
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
@@ -49,6 +50,20 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
 
     // Sync wbsLinksRef i inicjalizacja komentarza z pierwszego węzła WBS
     useEffect(() => { wbsLinksRef.current = wbsLinks; }, [wbsLinks]);
+
+    // Wczytaj extra pytania z qa węzła WBS (jednorazowo przy pierwszym załadowaniu linków)
+    useEffect(() => {
+        if (!wbsLinks.length || extraQsInitializedRef.current) return;
+        extraQsInitializedRef.current = true;
+        const firstNode = wbsItemsRef.current.find(n => n.id === wbsLinks[0].wbsNodeId);
+        if (!firstNode) return;
+        const qa = Array.isArray(firstNode.qa) ? firstNode.qa : [];
+        const mainQ = (marker.question || '').trim();
+        const extras = qa
+            .filter(item => item.question && item.question.trim() !== mainQ)
+            .map((item, i) => ({ id: Date.now() + i, text: item.question }));
+        if (extras.length) setExtraQuestions(extras);
+    }, [wbsLinks, marker.question]);
     useEffect(() => {
         if (!wbsLinks.length) return;
         const node = wbsItemsRef.current.find(n => n.id === wbsLinks[0].wbsNodeId);
