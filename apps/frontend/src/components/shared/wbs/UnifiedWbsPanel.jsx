@@ -1496,9 +1496,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     break-inside: avoid; page-break-inside: avoid;
   }
   p { orphans: 3; widows: 3; }
-  .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.6; }
-  .offer-text { padding: 0; background: none; border: none; line-height: 1.6; text-align: justify; }
-  .offer-text p, .offer-text li, .offer-text h1, .offer-text h2, .offer-text h3, .offer-text h4 { text-align: justify; }
+  .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.6; text-align: left; }
+  .strategy-text p, .strategy-text li, .strategy-text h1, .strategy-text h2, .strategy-text h3, .strategy-text h4, .strategy-text div { text-align: left; }
+  .offer-text { padding: 0; background: none; border: none; line-height: 1.6; text-align: left; }
+  .offer-text p, .offer-text li, .offer-text h1, .offer-text h2, .offer-text h3, .offer-text h4 { text-align: left; }
   .strategy-text p, .offer-text p { margin: 0 0 4px 0; orphans: 3; widows: 3; }
   .strategy-text p:empty, .offer-text p:empty { display: none; margin: 0; }
   .strategy-text h1:first-child, .strategy-text h2:first-child, .strategy-text h3:first-child,

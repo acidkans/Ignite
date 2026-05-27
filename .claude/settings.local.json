@@ -398,7 +398,8 @@
       "Bash(ls \"C:/Users/Andrzej/.gemini/antigravity/scratch/\" 2>&1)",
       "Bash(curl -L -o poland-latest.osm.pbf \"https://download.geofabrik.de/europe/poland-latest.osm.pbf\")",
       "Bash(docker rmi *)",
-      "Bash(tasklist /FI \"PID eq 31340\")"
+      "Bash(tasklist /FI \"PID eq 31340\")",
+      "Bash(powershell -NoProfile -Command \"Get-ChildItem graphify-out -ErrorAction SilentlyContinue | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize\")"
     ]
   }
 }

@@ -20,8 +20,8 @@ export const PDF_BASE_CSS = `
     break-inside: avoid; page-break-inside: avoid;
   }
   p { orphans: 3; widows: 3; }
-  .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.6; font-size: 14px; }
-  .offer-text { padding: 0; background: none; border: none; line-height: 1.6; font-size: 13px; }
+  .strategy-text { padding: 14px; background: #f9fafb; border: 1px solid #e5e7eb; line-height: 1.6; font-size: 14px; text-align: left; }
+  .offer-text { padding: 0; background: none; border: none; line-height: 1.6; font-size: 13px; text-align: left; }
   .strategy-text p, .offer-text p { margin: 0 0 4px 0; orphans: 3; widows: 3; }
   .strategy-text p:empty, .offer-text p:empty { display: none; margin: 0; }
   .strategy-text h1:first-child, .strategy-text h2:first-child, .strategy-text h3:first-child,
