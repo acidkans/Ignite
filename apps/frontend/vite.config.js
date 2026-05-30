@@ -46,7 +46,7 @@ export default defineConfig({
         host: true,
         port: 5173,
         strictPort: true,
-        allowedHosts: ['erp.gigatel.org', 'localhost'],
+        allowedHosts: 'all',
         watch: {
             usePolling: true,
             interval: 300,

@@ -22,7 +22,7 @@ export default function MobileDashboard({ onLogout }) {
     const token = typeof window !== 'undefined'
         ? (localStorage.getItem('token') || sessionStorage.getItem('token'))
         : null;
-    const { subtasks, loading } = useCachedSubtasks(token);
+    const { subtasks, loading, syncing, refresh } = useCachedSubtasks(token);
     const { isOnline } = useNetwork();
     const [lastSync, setLastSync] = useState(null);
     const [pendingCount, setPendingCount] = useState(0);
@@ -82,7 +82,7 @@ export default function MobileDashboard({ onLogout }) {
         return subtasks.filter(t => {
             const start = t.plannedStart ? toDateStr(new Date(t.plannedStart)) : null;
             const end = t.plannedEnd ? toDateStr(new Date(t.plannedEnd)) : null;
-            if (!start) return false;
+            if (!start) return true; // brak daty → zawsze widoczne
             return selectedDate >= start && selectedDate <= (end || start);
         });
     }, [subtasks, selectedDate]);
@@ -308,12 +308,17 @@ export default function MobileDashboard({ onLogout }) {
                                 <span className="text-[9px] text-amber-400 font-black">{pendingCount}</span>
                             </div>
                         )}
-                        {lastSync && (
-                            <div className="flex items-center gap-1 text-[9px] text-gray-600">
-                                <RefreshCw size={9} />
-                                <span>{new Date(lastSync).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}</span>
-                            </div>
-                        )}
+                        <button
+                            onClick={refresh}
+                            disabled={syncing || !isOnline}
+                            className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all active:scale-90 ${syncing ? 'text-blue-400' : 'text-gray-600 active:text-gray-300'} disabled:cursor-not-allowed`}
+                            title={lastSync ? `Ostatnia sync: ${new Date(lastSync).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}` : 'Odśwież'}
+                        >
+                            <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
+                            {lastSync && (
+                                <span className="text-[9px]">{new Date(lastSync).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}</span>
+                            )}
+                        </button>
                         <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{filteredSubtasks.length}/{subtasks.length}</span>
                     </div>
                 </div>

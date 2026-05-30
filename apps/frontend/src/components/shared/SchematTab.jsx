@@ -1930,17 +1930,15 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                             </label>
                         </div>
                         <div className="space-y-1 max-h-52 overflow-y-auto">
-                            {wbsNodes.map(node => {
+                            {wbsNodes.filter(n => !n.path.includes('.')).map(node => {
                                 const linked = wbsLinks.some(l => l.wbsNodeId === node.id);
                                 const toggling = wbsToggling === node.id;
-                                const indent = (node.path.split('.').length - 1) * 10;
                                 return (
                                     <button
                                         key={node.id}
                                         onClick={() => toggleWbsLink(node.id)}
                                         disabled={toggling}
-                                        style={{ paddingLeft: `${8 + indent}px` }}
-                                        className={`w-full flex items-center gap-2 py-1.5 pr-2 rounded-lg text-left text-xs transition-all ${
+                                        className={`w-full flex items-center gap-2 py-1.5 px-2 rounded-lg text-left text-xs transition-all ${
                                             linked
                                                 ? 'bg-blue-500/15 border border-blue-500/30 text-blue-300'
                                                 : 'bg-black/20 border border-white/5 text-gray-400 hover:bg-white/5 hover:text-gray-200'

@@ -57,7 +57,7 @@ export class SchematicsService {
 
     async getSchematicsByNode(nodeId: string) {
         const docs = await this.prisma.schematicDocument.findMany({
-            where: { nodeId, subtaskId: null },
+            where: { nodeId },
             include: {
                 markers: {
                     include: {
