@@ -472,6 +472,17 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 
 > `ui-stan` `newProp.sourceUrl` — pole „Adres www" w formularzu ręcznego dodania propozycji; zapisywane przez `POST /material-requirements/:id/proposals` (`@anchor mat-req-post-add-proposal`). Mapuje na `schema-pole` `ProductProposal.sourceUrl` (`@anchor product-proposal-source-url`).
 
+### Moduł Mobile (`apps/frontend/src/components/Mobile/`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-stan | mobileView | apps/frontend/src/App.jsx | @anchor mobile-view-state |
+| ui-widok | MobileHome | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor mobile-home |
+| ui-przycisk | mobile-home-tile-tasks | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor mobile-home-tile-tasks |
+| ui-przycisk | mobile-home-tile-tree | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor mobile-home-tile-tree |
+| ui-widok | MobileOrdersTree | apps/frontend/src/components/Mobile/MobileOrdersTree.jsx | @anchor mobile-orders-tree |
+| ui-sekcja | TreeNode | apps/frontend/src/components/Mobile/MobileOrdersTree.jsx | @anchor mobile-tree-node |
+
 ### Moduł Layout — DynamicSidebar (`apps/frontend/src/components/Layout/DynamicSidebar.jsx`)
 
 | Tag | Nazwa | Plik | Anchor |

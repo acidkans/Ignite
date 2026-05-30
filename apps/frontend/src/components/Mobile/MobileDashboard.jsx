@@ -3,7 +3,7 @@ import {
     Clock, CheckCircle, AlertCircle, ChevronRight,
     LogOut, Briefcase, ChevronLeft, Info, Map as MapIcon,
     Calendar, User, FileText, ExternalLink, MapPin, Play, Flag, PauseCircle,
-    RefreshCw, UploadCloud
+    RefreshCw, UploadCloud, Home
 } from 'lucide-react';
 import SchematicViewer from '../shared/SchematicViewer';
 import { useCachedSubtasks } from '../../hooks/useCachedSubtasks';
@@ -14,7 +14,7 @@ import { API_URL } from '../../config';
 
 const toDateStr = (d) => d.toISOString().slice(0, 10);
 
-export default function MobileDashboard({ onLogout }) {
+export default function MobileDashboard({ onLogout, onGoHome }) {
     const [selectedSubtask, setSelectedSubtask] = useState(null);
     const [activeTab, setActiveTab] = useState('details');
     const [selectedDate, setSelectedDate] = useState(toDateStr(new Date()));
@@ -397,8 +397,14 @@ export default function MobileDashboard({ onLogout }) {
                 )}
             </main>
 
-            {/* Bottom Nav Placeholder */}
+            {/* Bottom Nav */}
             <nav className="h-20 pb-4 border-t border-white/5 bg-gray-950/80 backdrop-blur-2xl flex items-center justify-around px-8 flex-shrink-0 z-10">
+                {onGoHome && (
+                    <button onClick={onGoHome} className="flex flex-col items-center gap-1.5 text-gray-600 active:text-gray-300 transition-colors">
+                        <Home size={22} />
+                        <span className="text-[10px] font-black uppercase tracking-widest">Menu</span>
+                    </button>
+                )}
                 <div className="flex flex-col items-center gap-1.5 text-blue-500 relative">
                     <div className="w-1.5 h-1.5 bg-blue-500 rounded-full absolute -top-3 shadow-[0_0_10px_rgba(59,130,246,0.8)]" />
                     <Briefcase size={22} className="drop-shadow-[0_0_8px_rgba(59,130,246,0.3)]" />

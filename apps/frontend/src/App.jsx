@@ -7,6 +7,8 @@ import ProcessTreePage from './ProcessTreePage';
 import DashboardPage from './DashboardPage';
 import MainLayout from './components/Layout/MainLayout';
 import MobileDashboard from './components/Mobile/MobileDashboard';
+import MobileHome from './components/Mobile/MobileHome';
+import MobileOrdersTree from './components/Mobile/MobileOrdersTree';
 import OfflineBanner from './components/shared/OfflineBanner';
 import { useDevice } from './hooks/useDevice';
 import { useNetwork } from './hooks/useNetwork';
@@ -65,6 +67,8 @@ window.fetch = async (...args) => {
 
 function App() {
   const [token, setToken] = useState(loadValidToken);
+  // @anchor mobile-view-state
+  const [mobileView, setMobileView] = useState('home'); // 'home' | 'tasks' | 'tree'
   const navigate = useNavigate();
   const location = useLocation();
   const { isMobile, isTablet } = useDevice();
@@ -157,7 +161,9 @@ function App() {
       <div className="flex flex-col h-[100dvh]">
         <OfflineBanner />
         <div className="flex-1 min-h-0">
-          <MobileDashboard onLogout={handleLogout} />
+          {mobileView === 'home' && <MobileHome onNavigate={setMobileView} />}
+          {mobileView === 'tasks' && <MobileDashboard onLogout={handleLogout} onGoHome={() => setMobileView('home')} />}
+          {mobileView === 'tree' && <MobileOrdersTree onBack={() => setMobileView('home')} />}
         </div>
       </div>
     );
