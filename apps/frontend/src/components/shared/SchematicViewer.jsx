@@ -39,6 +39,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
     const [pageNumber, setPageNumber] = useState(1);
 
     const [selectedMarker, setSelectedMarker] = useState(null);
+    const [isNewMarker, setIsNewMarker] = useState(false);
     const [isAddingMarker, setIsAddingMarker] = useState(false);
     const [activeTool, setActiveTool] = useState('POINT');
     const [lineStart, setLineStart] = useState(null);
@@ -339,6 +340,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                 nodeId,
                 tempId,
             });
+            setIsNewMarker(true);
             return;
         }
 
@@ -359,6 +361,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                 const markers = updatedSchematic.markers;
                 if (markers.length > 0) {
                     const newest = [...markers].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+                    setIsNewMarker(true);
                     setSelectedMarker(newest);
                 }
             }
@@ -699,10 +702,11 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
             {selectedMarker && (
                 <MarkerDetailsPanel
                     marker={selectedMarker}
-                    onClose={() => setSelectedMarker(null)}
+                    onClose={() => { setSelectedMarker(null); setIsNewMarker(false); }}
                     onRefresh={fetchSchematics}
                     nodeId={nodeId}
                     subtaskId={subtaskId}
+                    isNew={isNewMarker}
                 />
             )}
         </div>
