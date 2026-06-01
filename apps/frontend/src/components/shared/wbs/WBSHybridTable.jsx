@@ -813,8 +813,19 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         setExpanded(prev => {
             const s = new Set(prev);
             const wasOpen = s.has(id);
-            wasOpen ? s.delete(id) : s.add(id);
-            if (!wasOpen) onNodeExpand?.(id);
+            if (wasOpen) {
+                s.delete(id);
+            } else {
+                // Accordion: rozwinięcie gałęzi top-level zamyka pozostałe
+                const topLevelIds = new Set(items.map(n => `node_${n.id}`));
+                if (topLevelIds.has(id)) {
+                    for (const tid of topLevelIds) {
+                        if (tid !== id) s.delete(tid);
+                    }
+                }
+                s.add(id);
+                onNodeExpand?.(id);
+            }
             return s;
         });
     };
