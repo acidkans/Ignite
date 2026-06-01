@@ -1,4 +1,4 @@
-﻿{
+{
   "permissions": {
     "allow": [
       "Bash(git init:*)",
@@ -42,7 +42,7 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(grep -rn \"MateriaĹ‚y\\\\|MaterialRequirements\" /c/Users/Andrzej/.gemini/antigravity/scratch/Ignite/apps/frontend/src --include=*.jsx --include=*.tsx)",
+      "Bash(grep -rn \"Materiały\\\\|MaterialRequirements\" /c/Users/Andrzej/.gemini/antigravity/scratch/Ignite/apps/frontend/src --include=*.jsx --include=*.tsx)",
       "Bash(bash -c 'for port in 5173 3001; do pid=$\\(netstat -ano 2>/dev/null | grep \"\":${port} \"\" | grep LISTENING | head -1 | awk \"\"{print \\\\$NF}\"\"\\); if [ -n \"\"$pid\"\" ]; then taskkill //PID \"\"$pid\"\" //F 2>/dev/null; fi; done; echo done')",
       "Bash(grep -r \"praca\\\\|PRACA\" C:/Users/Andrzej/.gemini/antigravity/scratch/Ignite/apps --include=*.ts --include=*.tsx --include=*.js --include=*.jsx)",
       "Bash(find /c/Users/Andrzej/.gemini/antigravity/scratch/Ignite -type f -name *memory* -o -name *MEMORY*)",
@@ -145,7 +145,7 @@
       "Bash(ssh -T git@github.com)",
       "Read(//c/Users/Andrzej/.ssh/**)",
       "Bash(find /c/Users/Andrzej/.gemini/antigravity/scratch/Ignite/apps/frontend/src/components -type f \\\\\\( -name \"*.tsx\" -o -name \"*.jsx\" \\\\\\) -exec grep -l \"delete\\\\|remove\" {} \\\\;)",
-      "Bash(find /c/Users/Andrzej/.gemini/antigravity/scratch/Ignite/apps/frontend/src -type f \\\\\\( -name \"*.tsx\" -o -name \"*.jsx\" \\\\\\) -exec grep -l \"budget\\\\|budĹĽet\" {} \\\\;)",
+      "Bash(find /c/Users/Andrzej/.gemini/antigravity/scratch/Ignite/apps/frontend/src -type f \\\\\\( -name \"*.tsx\" -o -name \"*.jsx\" \\\\\\) -exec grep -l \"budget\\\\|budżet\" {} \\\\;)",
       "Bash(xargs basename *)",
       "Bash(findstr \":3005 \")",
       "Bash(docker stop *)",
@@ -399,13 +399,9 @@
       "Bash(curl -L -o poland-latest.osm.pbf \"https://download.geofabrik.de/europe/poland-latest.osm.pbf\")",
       "Bash(docker rmi *)",
       "Bash(tasklist /FI \"PID eq 31340\")",
-
-    param($m)
-    $ours   = $m.Groups[1].Value.TrimEnd(',')
-    $theirs = $m.Groups[2].Value
-    "$ours,`r`n      $theirs"
-
+      "Bash(powershell -NoProfile -Command \"Get-ChildItem graphify-out -ErrorAction SilentlyContinue | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize\")",
+      "Bash(cat memory/reference_server_access.md 2>/dev/null || ls \"C:/Users/Andrzej/.claude/projects/\" 2>&1 | head)",
+      "Bash(git rebase *)"
     ]
   }
 }
-
