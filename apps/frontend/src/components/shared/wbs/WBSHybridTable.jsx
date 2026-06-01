@@ -809,6 +809,16 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         return () => { clearInterval(iv); window.removeEventListener('wbs-link-changed', fetchMarkerLinks); };
     }, [fetchMarkerLinks]);
 
+    // Zwraca listę id węzłów będących rodzeństwem targetId (na tym samym poziomie w drzewie)
+    const findSiblingIds = (nodes, targetId) => {
+        for (const n of nodes) {
+            if (n.id === targetId) return nodes.map(c => c.id);
+            const found = findSiblingIds(n.children || [], targetId);
+            if (found !== null) return found;
+        }
+        return null;
+    };
+
     const toggle = (id, e) => {
         e?.stopPropagation();
         setExpanded(prev => {
@@ -817,11 +827,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             if (wasOpen) {
                 s.delete(id);
             } else {
-                // Accordion: rozwinięcie gałęzi top-level zamyka pozostałe
-                const topLevelIds = new Set(items.map(n => `node_${n.id}`));
-                if (topLevelIds.has(id)) {
-                    for (const tid of topLevelIds) {
-                        if (tid !== id) s.delete(tid);
+                // Accordion: zamknij rodzeństwo na tym samym poziomie drzewa
+                const nodeId = id.startsWith('node_') ? id.slice(5) : null;
+                if (nodeId) {
+                    const siblings = findSiblingIds(items, nodeId);
+                    if (siblings) {
+                        for (const sibId of siblings) {
+                            if (sibId !== nodeId) s.delete(`node_${sibId}`);
+                        }
                     }
                 }
                 s.add(id);
