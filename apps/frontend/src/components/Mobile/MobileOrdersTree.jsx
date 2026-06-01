@@ -17,8 +17,11 @@ function TreeNode({ node, onSelectNode, level }) {
                 className="w-full text-left flex items-center gap-2 py-2.5 rounded-xl active:bg-white/5 transition-colors"
                 style={{ paddingLeft: `${12 + level * 16}px`, paddingRight: '12px' }}
                 onClick={() => {
-                    if (hasChildren) setExpanded(e => !e);
-                    onSelectNode(node);
+                    if (hasChildren) {
+                        setExpanded(e => !e);
+                    } else {
+                        onSelectNode(node);
+                    }
                 }}
             >
                 <span className="w-4 flex-shrink-0 flex items-center justify-center">
