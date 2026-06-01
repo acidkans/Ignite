@@ -1246,7 +1246,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                         {depth === 0 ? (
                             <div title="Suma kosztów gałęzi" className={`text-base w-full text-right font-semibold ${d.fieldClass}`}>
-                                {fmtPLN(sumChildrenCost(node))}
+                                {fmtPLN(sumChildrenCost(node)) || '0,00'}
                             </div>
                         ) : node.type === 'group' ? (
                             <div
