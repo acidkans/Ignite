@@ -391,11 +391,13 @@ const insertNode = (nodes, targetId, node, position) => {
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 // @anchor sum-children-cost
-// Koszt gałęzi grupującej = suma kosztów dzieci. Liść = unitCost × quantity.
+// Koszt węzła = własny Q×unitCost + suma dzieci.
+// Węzły grupujące bez unitCost (type=group) mają unitCost=0, więc dodają tylko dzieci.
 const sumChildrenCost = node => {
+    const own = (parseFloat(node.unitCost) || 0) * (parseFloat(node.quantity) || 0);
     const kids = node.children || [];
-    if (!kids.length) return (parseFloat(node.unitCost) || 0) * (parseFloat(node.quantity) || 0);
-    return kids.reduce((a, c) => a + sumChildrenCost(c), 0);
+    if (!kids.length) return own;
+    return own + kids.reduce((a, c) => a + sumChildrenCost(c), 0);
 };
 
 const nodeTotal = node => {
@@ -1043,7 +1045,11 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
-            <td className="px-3 py-3" />
+            {isManager && (
+                <td className="px-3 py-3 text-right font-bold text-white text-base" onClick={e => e.stopPropagation()}>
+                    {fmtPLN(items.reduce((a, n) => a + sumChildrenCost(n), 0))}
+                </td>
+            )}
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
@@ -1238,29 +1244,31 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 {/* @anchor wbs-unit-price-input */}
                 {isManager && (
                     <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                        {depth >= 1 && (
-                            node.type === 'group' ? (
-                                <div
-                                    title="Suma kosztów dzieci"
-                                    className={`text-base w-full text-right text-gray-400 ${d.fieldClass}`}
-                                >
-                                    {fmtPLN(sumChildrenCost(node)) || '0,00'}
-                                </div>
-                            ) : (
-                                <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    value={costFocusId === node.id
-                                        ? (node.unitCost ?? '')
-                                        : (node.unitCost != null && node.unitCost !== '' ? fmtPLN(Number(node.unitCost)) : '')}
-                                    onChange={e => handleField(node.id, 'unitCost', e.target.value)}
-                                    onFocus={e => { setCostFocusId(node.id); e.target.select(); }}
-                                    onBlur={e => { setCostFocusId(null); onNodeFieldSave?.(node.id, 'unitCost', Math.round((parseFloat(String(e.target.value).replace(',', '.')) || 0) * 100) / 100); }}
-                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
-                                    placeholder="0,00"
-                                    className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}`}
-                                />
-                            )
+                        {depth === 0 ? (
+                            <div title="Suma kosztów gałęzi" className={`text-base w-full text-right font-semibold ${d.fieldClass}`}>
+                                {fmtPLN(sumChildrenCost(node))}
+                            </div>
+                        ) : node.type === 'group' ? (
+                            <div
+                                title="Suma kosztów dzieci"
+                                className={`text-base w-full text-right text-gray-400 ${d.fieldClass}`}
+                            >
+                                {fmtPLN(sumChildrenCost(node)) || '0,00'}
+                            </div>
+                        ) : (
+                            <input
+                                type="text"
+                                inputMode="decimal"
+                                value={costFocusId === node.id
+                                    ? (node.unitCost ?? '')
+                                    : (node.unitCost != null && node.unitCost !== '' ? fmtPLN(Number(node.unitCost)) : '')}
+                                onChange={e => handleField(node.id, 'unitCost', e.target.value)}
+                                onFocus={e => { setCostFocusId(node.id); e.target.select(); }}
+                                onBlur={e => { setCostFocusId(null); onNodeFieldSave?.(node.id, 'unitCost', Math.round((parseFloat(String(e.target.value).replace(',', '.')) || 0) * 100) / 100); }}
+                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+                                placeholder="0,00"
+                                className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}`}
+                            />
                         )}
                     </td>
                 )}
@@ -1405,7 +1413,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 </tr>
             );
         }
-        items.forEach((item, i) => renderNode(item, 0, `${i + 1}`, null, i));
+        // Akordeon: jeśli jakaś gałąź top-level jest otwarta — renderuj tylko ją
+        const openTopLevel = items.find(n => expanded.has(`node_${n.id}`));
+        const toRender = openTopLevel ? [openTopLevel] : items;
+        toRender.forEach((item, i) => {
+            const idx = items.indexOf(item);
+            renderNode(item, 0, `${idx + 1}`, null, idx);
+        });
     }
 
     const closeAttachmentModal = async () => {
