@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, ChevronDown, ArrowLeft, Network } from 'lucide-react';
+import { ChevronRight, ChevronDown, ArrowLeft, Network, X } from 'lucide-react';
 import SchematicViewer from '../shared/SchematicViewer';
 import { API_URL } from '../../config';
 
@@ -54,26 +54,6 @@ export default function MobileOrdersTree({ onBack }) {
             .finally(() => setLoading(false));
     }, []);
 
-    // Widok schematu wybranego węzła
-    if (selectedNode) {
-        return (
-            <div className="flex flex-col h-full bg-gray-950 text-white">
-                <header className="px-4 py-3 border-b border-white/5 bg-gray-900/50 backdrop-blur-xl flex items-center gap-3 flex-shrink-0">
-                    <button
-                        onClick={() => setSelectedNode(null)}
-                        className="p-2 rounded-xl bg-white/5 active:scale-90 transition-transform flex-shrink-0"
-                    >
-                        <ArrowLeft size={18} className="text-gray-400" />
-                    </button>
-                    <span className="text-sm font-bold truncate text-gray-100">{selectedNode.name}</span>
-                </header>
-                <div className="flex-1 min-h-0">
-                    <SchematicViewer nodeId={selectedNode.id} />
-                </div>
-            </div>
-        );
-    }
-
     const rootAreas = tree.filter(n => n.type === 'area');
 
     return (
@@ -113,6 +93,30 @@ export default function MobileOrdersTree({ onBack }) {
                     <span className="text-[10px] font-black uppercase tracking-widest">Drzewo</span>
                 </div>
             </nav>
+
+            {/* @anchor mobile-tree-schematic-panel */}
+            {selectedNode && (
+                <>
+                    <div className="fixed inset-0 bg-black/80 z-[99]" onClick={() => setSelectedNode(null)} />
+                    <div className="fixed inset-x-0 bottom-0 top-16 bg-gray-950 border-t border-white/10 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] flex flex-col z-[100] rounded-t-[32px] overflow-hidden">
+                        <div className="flex justify-center pt-3 pb-1 flex-shrink-0 cursor-pointer" onClick={() => setSelectedNode(null)}>
+                            <div className="w-12 h-1.5 bg-white/20 rounded-full" />
+                        </div>
+                        <header className="px-4 py-2.5 flex items-center gap-3 border-b border-white/5 flex-shrink-0">
+                            <div className="p-2 bg-teal-500/20 rounded-xl flex-shrink-0">
+                                <Network size={16} className="text-teal-400" />
+                            </div>
+                            <h3 className="font-black text-sm text-white flex-1 truncate">{selectedNode.name}</h3>
+                            <button onClick={() => setSelectedNode(null)} className="p-2 bg-white/10 rounded-full text-white active:scale-90 transition-all flex-shrink-0">
+                                <X size={18} />
+                            </button>
+                        </header>
+                        <div className="flex-1 min-h-0">
+                            <SchematicViewer nodeId={selectedNode.id} />
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     );
 }

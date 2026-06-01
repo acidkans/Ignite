@@ -180,6 +180,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | Tag | Nazwa | Plik | Anchor |
 |-----|-------|------|--------|
 | ui-stan | extraQuestions | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor extra-questions |
+| ui-stan | qaRefreshTick | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor qa-refresh-tick |
 | ui-funkcja | handleAddExtraQuestion | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor handle-add-extra-question |
 | ui-funkcja | handleExtraQuestionChange | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor handle-extra-question-change |
 | ui-funkcja | handleSaveExtraQuestion | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor handle-save-extra-question |
@@ -482,6 +483,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-przycisk | mobile-home-tile-tree | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor mobile-home-tile-tree |
 | ui-widok | MobileOrdersTree | apps/frontend/src/components/Mobile/MobileOrdersTree.jsx | @anchor mobile-orders-tree |
 | ui-sekcja | TreeNode | apps/frontend/src/components/Mobile/MobileOrdersTree.jsx | @anchor mobile-tree-node |
+| ui-panel | mobile-tree-schematic-panel | apps/frontend/src/components/Mobile/MobileOrdersTree.jsx | @anchor mobile-tree-schematic-panel |
 
 ### Moduł Layout — DynamicSidebar (`apps/frontend/src/components/Layout/DynamicSidebar.jsx`)
 

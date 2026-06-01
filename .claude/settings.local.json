@@ -401,7 +401,8 @@
       "Bash(tasklist /FI \"PID eq 31340\")",
       "Bash(powershell -NoProfile -Command \"Get-ChildItem graphify-out -ErrorAction SilentlyContinue | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize\")",
       "Bash(cat memory/reference_server_access.md 2>/dev/null || ls \"C:/Users/Andrzej/.claude/projects/\" 2>&1 | head)",
-      "Bash(git rebase *)"
+      "Bash(git rebase *)",
+      "Bash(ssh -o ConnectTimeout=15 gigatel \"bash /srv/apps/erp/deploy.sh\")"
     ]
   }
 }

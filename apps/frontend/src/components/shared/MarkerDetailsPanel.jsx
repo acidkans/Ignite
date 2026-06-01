@@ -43,6 +43,8 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     const extraQsInitializedRef = useRef(false);
     // Pytania z przypisanych węzłów WBS (mobile — zawsze aktualne)
     const [linkedQuestions, setLinkedQuestions] = useState([]);
+    // @anchor qa-refresh-tick
+    const [qaRefreshTick, setQaRefreshTick] = useState(0);
     const addWbsInputRef = useRef(null);
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
@@ -141,7 +143,14 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
             }
         }
         setLinkedQuestions(questions);
-    }, [wbsLinks]);
+    }, [wbsLinks, qaRefreshTick]);
+
+    // Odświeżenie licznika pytań po zapisie qa (extra-question / edit question)
+    useEffect(() => {
+        const handler = () => setQaRefreshTick(t => t + 1);
+        window.addEventListener('wbs-qa-imported', handler);
+        return () => window.removeEventListener('wbs-qa-imported', handler);
+    }, []);
     useEffect(() => {
         if (!wbsLinks.length) return;
         const node = wbsItemsRef.current.find(n => n.id === wbsLinks[0].wbsNodeId);
