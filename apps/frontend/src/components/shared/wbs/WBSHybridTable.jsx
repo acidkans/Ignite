@@ -715,8 +715,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         if (initialExpandDoneRef.current) return;
         const items = wbsTree?.items || [];
         if (items.length === 0) return;
+        // Akordeon: otwórz tylko pierwszą gałąź top-level
         const ids = new Set(['root']);
-        for (const n of items) ids.add(`node_${n.id}`);
+        if (items[0]) ids.add(`node_${items[0].id}`);
         setExpanded(ids);
         initialExpandDoneRef.current = true;
     }, [wbsTree]);
