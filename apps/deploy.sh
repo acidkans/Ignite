@@ -38,25 +38,9 @@ log "Rozpoczynam wdrożenie aplikacji ERP..."
 
 # 1. Sprawdź czy plik .env istnieje
 if [ ! -f ".env" ]; then
-    warn "Brak pliku .env - tworzę z domyślnymi wartościami"
-    cat > .env << 'EOF'
-# Database
-DB_USER=erp_user
-DB_PASSWORD=changeme_erp_password
-DB_NAME=erp_db
-DATABASE_URL=postgresql://erp_user:changeme_erp_password@db:5432/erp_db
-
-# JWT
-JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
-
-# Node
-NODE_ENV=production
-PORT=3000
-
-# Frontend
-VITE_API_URL=https://erp.gigatel.org/api
-EOF
-    warn "UWAGA: Zmień hasła i JWT_SECRET w pliku .env przed uruchomieniem produkcyjnym!"
+    error "Brak pliku .env. Utwórz go ręcznie na podstawie ENV_README.md (DB_USER, DB_PASSWORD, DB_NAME, DATABASE_URL, JWT_SECRET, NODE_ENV, PORT, VITE_API_URL)."
+    error "Nie tworzę pliku automatycznie — nie umieszczamy domyślnych sekretów w repo."
+    exit 1
 fi
 
 success "Plik .env gotowy"

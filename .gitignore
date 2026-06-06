@@ -30,6 +30,13 @@ out/
 logs/
 *.log.*
 
+# Database dumps & one-off password scripts (never commit)
+*.sql.dump
+*dump*.sql
+local_dump*.sql
+prod_dump*.sql
+reset-passwords*.js
+
 # OS files
 .DS_Store
 .DS_Store?

@@ -402,7 +402,12 @@
       "Bash(powershell -NoProfile -Command \"Get-ChildItem graphify-out -ErrorAction SilentlyContinue | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize\")",
       "Bash(cat memory/reference_server_access.md 2>/dev/null || ls \"C:/Users/Andrzej/.claude/projects/\" 2>&1 | head)",
       "Bash(git rebase *)",
-      "Bash(ssh -o ConnectTimeout=15 gigatel \"bash /srv/apps/erp/deploy.sh\")"
+      "Bash(ssh -o ConnectTimeout=15 gigatel \"bash /srv/apps/erp/deploy.sh\")",
+      "Bash(ssh root@gigatel.app 'bash -s')",
+      "Bash(node -e \"const p=require\\('./apps/backend/package.json'\\); console.log\\(p.name, p.version\\); console.log\\(Object.keys\\(p.dependencies||{}\\).slice\\(0,20\\).join\\(', '\\)\\)\")",
+      "Bash(grep -iE '\\\\.\\(env|pem|key|crt|p12|pfx\\)$|secret|credential|password')",
+      "Bash(grep -iE 'fix_role\\\\.sql|fix_db|prod_dump|dump\\\\.sql|backup|\\\\.sql$')",
+      "Bash(git grep *)"
     ]
   }
 }

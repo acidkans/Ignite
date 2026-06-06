@@ -1,11 +1,14 @@
 #!/bin/bash
 set -e
 
-DB_URL="postgres://erp_user:***REMOVED-DB-PASSWORD***@db:5432/erp_db"
+if [ -z "$DATABASE_URL" ]; then
+  echo "ERROR: DATABASE_URL env var is required (e.g. export DATABASE_URL=postgres://user:pass@db:5432/erp_db)" >&2
+  exit 1
+fi
 
 echo "Running prisma db push --accept-data-loss..."
 docker run --rm --network apps_internal \
-  -e DATABASE_URL="$DB_URL" \
+  -e DATABASE_URL="$DATABASE_URL" \
   apps-backend \
   sh -c "npx prisma db push --accept-data-loss"
 
