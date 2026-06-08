@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Page } from 'react-pdf';
 import { Highlighter, Trash2, X, Copy, Check } from 'lucide-react';
+import { API_URL } from '../../config';
 
 // Paleta highlightów PDF
 export const HL_COLORS = {
@@ -22,6 +23,8 @@ export default function PdfPageWithHighlights({
     onCreate,
     onDelete,
     onUpdateColor,
+    documentId = null,
+    token = null,
 }) {
     const wrapperRef = useRef(null);
     const [selToolbar, setSelToolbar] = useState(null);
@@ -186,17 +189,31 @@ export default function PdfPageWithHighlights({
                         />
                     ))}
                     <button
-                        onClick={() => {
-                            const text = window.getSelection()?.toString() || '';
-                            if (text) navigator.clipboard.writeText(text).then(() => {
-                                setCopied(true);
-                                setTimeout(() => setCopied(false), 1500);
-                            });
+                        onClick={async () => {
                             window.getSelection()?.removeAllRanges();
                             setSelToolbar(null);
+                            if (documentId) {
+                                try {
+                                    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+                                    const res = await fetch(`${API_URL}/documents/${documentId}/text?page=${pageNumber}`, { headers });
+                                    const data = await res.json();
+                                    await navigator.clipboard.writeText(data.text || '');
+                                    setCopied(true);
+                                    setTimeout(() => setCopied(false), 1500);
+                                } catch {
+                                    // fallback do browser selection
+                                }
+                            } else {
+                                const text = window.getSelection()?.toString() || '';
+                                if (text) {
+                                    await navigator.clipboard.writeText(text);
+                                    setCopied(true);
+                                    setTimeout(() => setCopied(false), 1500);
+                                }
+                            }
                         }}
                         className="p-1 text-gray-400 hover:text-teal-300 hover:bg-teal-500/10 rounded"
-                        title="Kopiuj zaznaczony tekst"
+                        title={documentId ? 'Kopiuj tekst strony (serwer — poprawne polskie znaki)' : 'Kopiuj zaznaczony tekst'}
                     >
                         {copied ? <Check size={10} className="text-teal-400" /> : <Copy size={10} />}
                     </button>

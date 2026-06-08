@@ -547,6 +547,26 @@ export class DocumentsService {
         return { ok: true };
     }
 
+    async extractPageText(documentId: string, page: number): Promise<{ text: string; pageNum: number }> {
+        const doc = await this.prisma.processNode.findUnique({ where: { id: documentId } });
+        if (!doc || !doc.storagePath) throw new BadRequestException('Document not found');
+
+        const filePath = path.join(process.cwd(), 'uploads', doc.storagePath);
+        if (!fs.existsSync(filePath)) throw new BadRequestException('Physical file not found');
+
+        const fileBuffer = fs.readFileSync(filePath);
+        const parserUrl = this.configService.get<string>('PARSER_SERVICE_URL') || 'http://parser-service:8000';
+
+        const formData = new FormData();
+        const blob = new Blob([fileBuffer as any], { type: 'application/pdf' });
+        formData.append('file', blob, doc.name || 'document.pdf');
+        formData.append('mode', 'text');
+        formData.append('page', String(page - 1)); // UI is 1-indexed, parser is 0-indexed
+
+        const response = await firstValueFrom(this.httpService.post(`${parserUrl}/parse`, formData));
+        return { text: response.data.text || '', pageNum: page };
+    }
+
     async resetDatabase() {
         try {
             console.log('[DOCS] Resetting Qdrant database...');

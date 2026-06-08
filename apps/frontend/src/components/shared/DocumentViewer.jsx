@@ -793,6 +793,8 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
                                             onCreate={createHighlight}
                                             onDelete={deleteHighlight}
                                             onUpdateColor={updateHighlightColor}
+                                            documentId={documentId}
+                                            token={authToken}
                                         />
                                     );
                                 })}

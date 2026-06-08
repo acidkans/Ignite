@@ -71,6 +71,11 @@ export class DocumentsController {
         return this.documentsService.resetDatabase();
     }
 
+    @Get(':id/text')
+    async getPageText(@Param('id') id: string, @Query('page') page: string) {
+        return this.documentsService.extractPageText(id, parseInt(page, 10) || 1);
+    }
+
     @Get(':id/parsed-positions')
     async getParsedPositions(@Param('id') id: string) {
         return this.documentsService.getParsedPositions(id);
