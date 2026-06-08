@@ -619,9 +619,13 @@ export class VectorService implements OnModuleInit {
      * Synchronizuje dane strukturalne z bazy PostgreSQL do Qdrant
      * Indeksuje: węzły drzewa, stacje (Site), sprzęt (Hardware), użytkowników, zespoły
      */
-    @Cron(CronExpression.EVERY_5_MINUTES, { name: 'sync-db-to-vector' })
-    @Cron(CronExpression.EVERY_5_MINUTES, { name: 'sync-db-to-vector' })
+    @Cron(CronExpression.EVERY_HOUR, { name: 'sync-db-to-vector' })
     async syncDatabaseToVector(): Promise<{ indexed: number; errors: number }> {
+        const hour = new Date().getHours();
+        if (hour >= 18 || hour < 9) {
+            this.logger.log('[Sync] Skipped — outside working hours (9:00–18:00)');
+            return { indexed: 0, errors: 0 };
+        }
         this.logger.log('[Sync] Starting database → vector sync...');
         const items: Array<{ id: string; text: string; metadata: any }> = [];
 

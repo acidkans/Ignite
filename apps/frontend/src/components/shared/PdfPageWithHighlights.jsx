@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Page } from 'react-pdf';
-import { Highlighter, Trash2, X } from 'lucide-react';
+import { Highlighter, Trash2, X, Copy, Check } from 'lucide-react';
 
 // Paleta highlightów PDF
 export const HL_COLORS = {
@@ -25,6 +25,7 @@ export default function PdfPageWithHighlights({
 }) {
     const wrapperRef = useRef(null);
     const [selToolbar, setSelToolbar] = useState(null);
+    const [copied, setCopied] = useState(false);
 
     // Wirtualizacja: renderuj <Page> dopiero gdy wrapper zbliża się do viewportu.
     // Raz wyrenderowana strona zostaje (hasRendered=true) — scroll w górę nie powoduje re-rendera,
@@ -184,6 +185,21 @@ export default function PdfPageWithHighlights({
                             title={`Zaznacz ${k}`}
                         />
                     ))}
+                    <button
+                        onClick={() => {
+                            const text = window.getSelection()?.toString() || '';
+                            if (text) navigator.clipboard.writeText(text).then(() => {
+                                setCopied(true);
+                                setTimeout(() => setCopied(false), 1500);
+                            });
+                            window.getSelection()?.removeAllRanges();
+                            setSelToolbar(null);
+                        }}
+                        className="p-1 text-gray-400 hover:text-teal-300 hover:bg-teal-500/10 rounded"
+                        title="Kopiuj zaznaczony tekst"
+                    >
+                        {copied ? <Check size={10} className="text-teal-400" /> : <Copy size={10} />}
+                    </button>
                     <button
                         onClick={() => { window.getSelection()?.removeAllRanges(); setSelToolbar(null); }}
                         className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded"

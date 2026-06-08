@@ -407,7 +407,11 @@
       "Bash(node -e \"const p=require\\('./apps/backend/package.json'\\); console.log\\(p.name, p.version\\); console.log\\(Object.keys\\(p.dependencies||{}\\).slice\\(0,20\\).join\\(', '\\)\\)\")",
       "Bash(grep -iE '\\\\.\\(env|pem|key|crt|p12|pfx\\)$|secret|credential|password')",
       "Bash(grep -iE 'fix_role\\\\.sql|fix_db|prod_dump|dump\\\\.sql|backup|\\\\.sql$')",
-      "Bash(git grep *)"
+      "Bash(git grep *)",
+      "Bash(bash deploy.sh)",
+      "Bash(./deploy.sh)",
+      "Bash(bash deploy.sh *)",
+      "Bash(./deploy.sh *)"
     ]
   }
 }

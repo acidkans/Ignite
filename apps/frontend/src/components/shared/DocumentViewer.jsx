@@ -9,13 +9,13 @@ import { Maximize2, Minimize2, Download, X, ZoomIn, ZoomOut, CheckCircle, Rotate
 import { API_URL } from '../../config';
 import PdfPageWithHighlights from './PdfPageWithHighlights';
 
-// Set up worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+// Set up worker — served locally (no CDN dependency)
+pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
 
 const pdfOptions = {
-    cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
+    cMapUrl: '/pdfjs/cmaps/',
     cMapPacked: true,
-    standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/standard_fonts/`,
+    standardFontDataUrl: '/pdfjs/standard_fonts/',
     disableXFA: true,
 };
 

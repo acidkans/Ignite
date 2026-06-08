@@ -86,7 +86,7 @@ export class DocumentsService {
 
         if (fileNode) {
             console.log(`[DOCS] Found existing file node: ${fileNode.id}, deleting its old chunks.`);
-            await this.vectorService.deleteDocumentChunks(fileNode.id);
+            try { await this.vectorService.deleteDocumentChunks(fileNode.id); } catch (e) { console.warn(`[DOCS] Vector delete (re-upload) non-fatal: ${e.message}`); }
             // Update storage path, mime, size and category in case they changed
             await this.prisma.processNode.update({
                 where: { id: fileNode.id },
@@ -248,8 +248,12 @@ export class DocumentsService {
         }));
 
         console.log(`[DOCS] Upserting ${documentsPayload.length} chunks to Qdrant...`);
-        await this.vectorService.upsertDocuments(documentsPayload);
-        console.log(`[DOCS] All chunks indexed successfully.`);
+        try {
+            await this.vectorService.upsertDocuments(documentsPayload);
+            console.log(`[DOCS] All chunks indexed successfully.`);
+        } catch (e) {
+            console.warn(`[DOCS] Vector indexing failed (non-fatal): ${e.message}`);
+        }
 
         return {
             success: true,
@@ -491,7 +495,11 @@ export class DocumentsService {
     async deleteDocument(documentId: string) {
         try {
             // 1. Delete from Qdrant (all chunks)
-            await this.vectorService.deleteDocumentChunks(documentId);
+            try {
+                await this.vectorService.deleteDocumentChunks(documentId);
+            } catch (e) {
+                console.warn(`[DOCS] Vector delete failed (non-fatal): ${e.message}`);
+            }
 
             // 2. Delete from closure table (foreign key constraint)
             await this.prisma.processNodeClosure.deleteMany({
