@@ -1,28 +1,47 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
-import { viteStaticCopy } from 'vite-plugin-static-copy'
+import fs from 'fs'
+import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
     plugins: [
         react(),
-        viteStaticCopy({
-            targets: [
-                {
-                    src: 'node_modules/pdfjs-dist/cmaps/*',
-                    dest: 'pdfjs/cmaps',
-                },
-                {
-                    src: 'node_modules/pdfjs-dist/standard_fonts/*',
-                    dest: 'pdfjs/standard_fonts',
-                },
-                {
-                    src: 'node_modules/pdfjs-dist/build/pdf.worker.min.mjs',
-                    dest: 'pdfjs',
-                },
-            ],
-        }),
+        {
+            name: 'serve-pdfjs-assets',
+            configureServer(server) {
+                // dev: serwuj pliki pdfjs z node_modules pod /pdfjs/
+                const root = path.resolve(__dirname, 'node_modules/pdfjs-dist');
+                server.middlewares.use('/pdfjs', (req, res, next) => {
+                    const filePath = path.join(root, req.url);
+                    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+                        res.setHeader('Content-Type', filePath.endsWith('.mjs') ? 'application/javascript' : 'application/octet-stream');
+                        fs.createReadStream(filePath).pipe(res);
+                    } else {
+                        next();
+                    }
+                });
+            },
+            closeBundle() {
+                // build: skopiuj pliki do dist/pdfjs/
+                const root = path.resolve(__dirname, 'node_modules/pdfjs-dist');
+                const dest = path.resolve(__dirname, 'dist/pdfjs');
+                const copyDir = (src, dst) => {
+                    fs.mkdirSync(dst, { recursive: true });
+                    for (const f of fs.readdirSync(src)) {
+                        fs.copyFileSync(path.join(src, f), path.join(dst, f));
+                    }
+                };
+                copyDir(path.join(root, 'cmaps'), path.join(dest, 'cmaps'));
+                copyDir(path.join(root, 'standard_fonts'), path.join(dest, 'standard_fonts'));
+                fs.mkdirSync(path.join(dest, 'build'), { recursive: true });
+                fs.copyFileSync(
+                    path.join(root, 'build/pdf.worker.min.mjs'),
+                    path.join(dest, 'build/pdf.worker.min.mjs')
+                );
+            },
+        },
         VitePWA({
             strategies: 'injectManifest',
             srcDir: 'src',

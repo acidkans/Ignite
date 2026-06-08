@@ -10,7 +10,7 @@ import { API_URL } from '../../config';
 import PdfPageWithHighlights from './PdfPageWithHighlights';
 
 // Set up worker — served locally (no CDN dependency)
-pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
+pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/build/pdf.worker.min.mjs';
 
 const pdfOptions = {
     cMapUrl: '/pdfjs/cmaps/',
