@@ -702,7 +702,7 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal, on
 
 // ── Component ─────────────────────────────────────────────────────────────────
 // @anchor wbs-hybrid-table
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null }) {
     const getAllIds = useCallback((items) => {
         const ids = ['root'];
         const walk = (nodes) => nodes?.forEach(n => { ids.push(`node_${n.id}`); walk(n.children); });
@@ -743,6 +743,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [selectedNodeId, setSelectedNodeId] = useState(null);
     const [costFocusId, setCostFocusId] = useState(null);
     const [showBasket, setShowBasket] = useState(false);
+    // Koszyk: id wymagań, dla których rozwinięto podgląd wymagań technicznych (przed przypisaniem).
+    const [expandedBasketIds, setExpandedBasketIds] = useState(new Set());
+    // Koszyk: id chipa-celu podświetlonego podczas przeciągania innego chipa (scalanie duplikatów).
+    const [mergeOverId, setMergeOverId] = useState(null);
     const [copyBuffer, setCopyBuffer] = useState(null); // { node, sourceName }
     const [expandedQaIds, setExpandedQaIds] = useState(new Set());
     const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, status: 128, wlasciciel: 128, komentarz: 200, qa: 260, zalaczniki: 44 });
@@ -1632,7 +1636,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 <p className="text-[14px] text-gray-600 mb-2">przeciągnij na wiersz lub kliknij → Przypisz</p>
                             )}
                             <div className="flex flex-wrap gap-2">
-                                {unassignedRequirements.map(req => (
+                                {unassignedRequirements.map(req => {
+                                    const isOpen = expandedBasketIds.has(req.id);
+                                    const spec = String(req.technicalSpec || '').trim();
+                                    return (
                                     <div
                                         key={req.id}
                                         draggable
@@ -1640,19 +1647,38 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                             e.dataTransfer.setData('application/requirement-id', req.id);
                                             e.dataTransfer.effectAllowed = 'copy';
                                         }}
-                                        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-900/30 border border-emerald-500/20 rounded-lg text-emerald-300 text-[15px] cursor-grab select-none"
+                                        onDragOver={e => { if ((e.dataTransfer.types || []).includes('application/requirement-id')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setMergeOverId(req.id); } }}
+                                        onDragLeave={() => setMergeOverId(prev => (prev === req.id ? null : prev))}
+                                        onDrop={e => { e.preventDefault(); e.stopPropagation(); const src = e.dataTransfer.getData('application/requirement-id'); setMergeOverId(null); if (src && src !== req.id) onRequirementMerge?.(src, req.id); }}
+                                        title={onRequirementMerge ? 'Przeciągnij inny liść tutaj, aby scalić jego wymagania' : undefined}
+                                        className={`flex gap-1.5 px-2.5 py-1.5 bg-emerald-900/30 border rounded-lg text-emerald-300 text-[15px] cursor-grab select-none ${mergeOverId === req.id ? 'border-amber-400/70 ring-2 ring-amber-400/50' : 'border-emerald-500/20'} ${isOpen ? 'w-full flex-col items-start' : 'items-center'}`}
                                     >
-                                        <span>{req.name || req.productName || '—'}</span>
-                                        {req.quantity > 0 && <span className="text-emerald-500/60 text-[14px]">×{req.quantity}{req.unit ? ` ${req.unit}` : ''}</span>}
-                                        {selectedNodeId && (
+                                        <div className="flex items-center gap-1.5 w-full">
                                             <button
-                                                onClick={e => { e.stopPropagation(); onRequirementAssign?.(selectedNodeId, req.id); }}
-                                                className="ml-1 px-1.5 py-0.5 bg-emerald-600/40 hover:bg-emerald-600/70 rounded text-[9px] font-bold text-emerald-200 cursor-pointer"
-                                                title="Przypisz do zaznaczonej gałęzi"
-                                            >→ Przypisz</button>
+                                                onClick={e => { e.stopPropagation(); setExpandedBasketIds(prev => { const n = new Set(prev); n.has(req.id) ? n.delete(req.id) : n.add(req.id); return n; }); }}
+                                                className="flex items-center gap-1.5 cursor-pointer hover:text-emerald-200 text-left min-w-0"
+                                                title="Pokaż wymagania techniczne"
+                                            >
+                                                <ChevronDown size={11} className={`text-emerald-500/60 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                                                <span className="truncate">{req.name || req.productName || '—'}</span>
+                                            </button>
+                                            {req.quantity > 0 && <span className="text-emerald-500/60 text-[14px] flex-shrink-0">×{req.quantity}{req.unit ? ` ${req.unit}` : ''}</span>}
+                                            {selectedNodeId && (
+                                                <button
+                                                    onClick={e => { e.stopPropagation(); onRequirementAssign?.(selectedNodeId, req.id); }}
+                                                    className="ml-auto px-1.5 py-0.5 bg-emerald-600/40 hover:bg-emerald-600/70 rounded text-[9px] font-bold text-emerald-200 cursor-pointer flex-shrink-0"
+                                                    title="Przypisz do zaznaczonej gałęzi"
+                                                >→ Przypisz</button>
+                                            )}
+                                        </div>
+                                        {isOpen && (
+                                            <div className="w-full mt-1 px-2 py-1.5 bg-black/30 border border-emerald-500/10 rounded text-[13px] text-emerald-100/80 whitespace-pre-wrap break-words cursor-text">
+                                                {spec || <span className="text-gray-500 italic">(brak wymagań technicznych)</span>}
+                                            </div>
                                         )}
                                     </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

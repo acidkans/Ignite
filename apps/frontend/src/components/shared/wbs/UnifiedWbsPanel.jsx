@@ -987,6 +987,35 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         }
     }, [authHeaders, refreshUnified, unassignedRequirements, wbsData, nodeId, versionId]);
 
+    // @anchor handle-requirement-merge
+    // Scalanie duplikatów w koszyku: przeciągnięcie liścia źródłowego na docelowy dopisuje
+    // wymagania techniczne źródła do celu (unikalne linie). Cel zachowuje nazwę i ilość, źródło jest usuwane.
+    const handleRequirementMerge = useCallback(async (sourceId, targetId) => {
+        if (!sourceId || !targetId || sourceId === targetId) return;
+        const source = unassignedRequirements.find(r => r.id === sourceId);
+        const target = unassignedRequirements.find(r => r.id === targetId);
+        if (!source || !target) return;
+        const toLines = s => String(s || '').split(/\n/).map(x => x.trim()).filter(Boolean);
+        const mergedSpec = Array.from(new Set([...toLines(target.technicalSpec), ...toLines(source.technicalSpec)])).join('\n');
+        try {
+            const res = await fetch(`${API_URL}/material-requirements/${targetId}`, {
+                method: 'PATCH', headers: authHeaders(),
+                body: JSON.stringify({ technicalSpec: mergedSpec }),
+            });
+            if (!res.ok) throw new Error('Merge patch failed');
+            await fetch(`${API_URL}/material-requirements/${sourceId}`, { method: 'DELETE', headers: authHeaders() });
+            setUnassignedRequirements(prev => prev
+                .map(r => (r.id === targetId ? { ...r, technicalSpec: mergedSpec } : r))
+                .filter(r => r.id !== sourceId));
+            setAllRequirements(prev => prev
+                .map(r => (r.id === targetId ? { ...r, technicalSpec: mergedSpec } : r))
+                .filter(r => r.id !== sourceId));
+            setReqRefreshKey(k => k + 1);
+        } catch (err) {
+            console.error('[WBS req merge]', err);
+        }
+    }, [authHeaders, unassignedRequirements]);
+
     const saveStrategy = useCallback(async (desc) => {
         setStrategySaving(true);
         try {
@@ -4445,6 +4474,7 @@ ${ganttSectionHtml}
                                 onNodeStatusChange={handleHybridNodeStatusChange}
                                 unassignedRequirements={isManagerOrAdmin ? unassignedRequirements : []}
                                 onRequirementAssign={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
+                                onRequirementMerge={isManagerOrAdmin ? handleRequirementMerge : null}
                                 onNodeFieldSave={updateNodeField}
                                 materialRefreshKey={reqRefreshKey}
                                 searchQuery={normalizedSearchQuery}
