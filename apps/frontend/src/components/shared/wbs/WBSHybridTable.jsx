@@ -735,6 +735,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [lightboxAtt, setLightboxAtt] = useState(null); // attachment for fullscreen preview
     const tagInputRef = useRef(null);
     const [materialStatuses, setMaterialStatuses] = useState({});
+    // @anchor mat-req-by-wbs-id
+    // Mapa node→wymaganie. Klucze: wbsNodeId ORAZ MaterialRequirement.id (dla rozwiązywania liścia po tagu req:).
     const [matReqByWbsId, setMatReqByWbsId] = useState({});
     const [expandedMaterialIds, setExpandedMaterialIds] = useState(new Set());
     const [reqDragOverNode, setReqDragOverNode] = useState(null);
@@ -777,6 +779,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     data.forEach(r => {
                         if (r.name) map[r.name.toLowerCase()] = r.status;
                         if (r.wbsNodeId) reqMap[r.wbsNodeId] = r;
+                        // Indeks też po ID wymagania: liść WBS łączy się z wymaganiem tagiem `req:<id>`,
+                        // a wbsNodeId wskazuje gałąź-rodzica (cel dropa), nie liść. Bez tego klucza
+                        // ProductCard liścia nie znajdował wymagania i pokazywał puste „Wymagania techniczne".
+                        reqMap[r.id] = r;
                     });
                     setMaterialStatuses(map);
                     setMatReqByWbsId(reqMap);
@@ -1380,10 +1386,15 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     <td colSpan={11} className="p-0 border-b border-amber-500/10 bg-amber-500/[0.02]">
                         <MaterialReqExpandPanel
                             node={node}
-                            req={matReqByWbsId[node.id] || null}
+                            req={(() => {
+                                // Najpierw po tagu `req:<id>` (prawdziwe połączenie liść↔wymaganie),
+                                // potem fallback po wbsNodeId (węzły bez tagu, np. ręczne pozycje materiałowe).
+                                const reqTag = (node.tags || []).find(t => String(t).startsWith('req:'));
+                                return (reqTag && matReqByWbsId[reqTag.slice(4)]) || matReqByWbsId[node.id] || null;
+                            })()}
                             processNodeId={processNodeId}
                             onNodeFieldSave={onNodeFieldSave}
-                            onSaved={updated => { setMatReqByWbsId(prev => ({ ...prev, [node.id]: updated })); onMaterialReqUpdated?.(); }}
+                            onSaved={updated => { setMatReqByWbsId(prev => ({ ...prev, [node.id]: updated, ...(updated?.id ? { [updated.id]: updated } : {}) })); onMaterialReqUpdated?.(); }}
                             onDeleteNode={() => {
                                 const deletedIds = collectIds(items, node.id);
                                 save({ ...wbsTree, items: deleteNode(items, node.id) });
