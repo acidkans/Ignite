@@ -48,13 +48,18 @@ export class ProcessTreeService {
 
             // Auto-create "Wizja lokalna" subtask for every new order
             if (dto.type === NodeType.ORDER) {
-                const activeVersion = await tx.projectVersion.findFirst({
-                    where: { nodeId: node.id, isActive: true },
+                // Eager: każde zamówienie rodzi się z realną wersją "pierwszy" (aktywną).
+                // Cała treść (WBS, subtaski) idzie na tę wersję zamiast na baseline null.
+                // OrderRequirements pozostaje globalny (versionId=null) — pola wspólne dla
+                // wszystkich wersji (offerStatus, projectGoal, projectItems, clientContacts).
+                const firstVersion = await tx.projectVersion.create({
+                    data: { nodeId: node.id, label: 'pierwszy', isActive: true },
                 });
+                const versionId = firstVersion.id;
                 await tx.subtask.create({
                     data: {
                         nodeId: node.id,
-                        versionId: activeVersion?.id ?? null,
+                        versionId: versionId,
                         name: 'Wizja lokalna',
                         assignedUserId: node.ownerId || null,
                         plannedStart: node.createdAt,
@@ -65,7 +70,7 @@ export class ProcessTreeService {
                 const pytaniaNode = await tx.wbsNode.create({
                     data: {
                         nodeId: node.id,
-                        versionId: null,
+                        versionId: versionId,
                         name: 'PYTANIA OGÓLNE',
                         status: '',
                         sortOrder: 0,
@@ -84,7 +89,7 @@ export class ProcessTreeService {
                 const mgmtBranch = await tx.wbsNode.create({
                     data: {
                         nodeId: node.id,
-                        versionId: null,
+                        versionId: versionId,
                         name: 'Zarządzanie projektem',
                         status: '',
                         sortOrder: 1,
@@ -93,7 +98,7 @@ export class ProcessTreeService {
                 const mgmtLeaf = await tx.wbsNode.create({
                     data: {
                         nodeId: node.id,
-                        versionId: null,
+                        versionId: versionId,
                         parentId: mgmtBranch.id,
                         name: 'Zarządzanie projektem',
                         type: 'work',
@@ -108,7 +113,7 @@ export class ProcessTreeService {
                 const wizjaLeaf = await tx.wbsNode.create({
                     data: {
                         nodeId: node.id,
-                        versionId: null,
+                        versionId: versionId,
                         parentId: mgmtBranch.id,
                         name: 'Wizja lokalna',
                         type: 'work',
@@ -124,7 +129,7 @@ export class ProcessTreeService {
                 const paliwoLeaf = await tx.wbsNode.create({
                     data: {
                         nodeId: node.id,
-                        versionId: null,
+                        versionId: versionId,
                         parentId: mgmtBranch.id,
                         name: 'Paliwo',
                         type: 'fuel',

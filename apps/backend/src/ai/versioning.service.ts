@@ -1,4 +1,5 @@
-﻿import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -18,6 +19,21 @@ export class VersioningService {
 
             if (!node) throw new NotFoundException('Node not found');
 
+            // 1b. Materializacja baseline jako realna wersja "pierwszy".
+            // Dopóki nie istnieje żadna ProjectVersion, dane WBS żyją na baseline
+            // (versionId=null), a UI pokazuje je jako fantomową wersję "pierwszy"
+            // (fallback `|| 'pierwszy'` w DashboardPage). Bez tego utworzenie pierwszej
+            // wersji wygląda jak ZMIANA NAZWY "pierwszy" → "drugi" — bo baseline znika
+            // z listy, gdy pojawia się pierwszy realny wiersz ProjectVersion.
+            // Zamieniamy fantom w prawdziwy wiersz, więc nowa wersja DODAJE się obok.
+            const existingVersionCount = await tx.projectVersion.count({ where: { nodeId } });
+            if (existingVersionCount === 0) {
+                const baselineVersion = await tx.projectVersion.create({
+                    data: { nodeId, label: 'pierwszy', isActive: false, notes: null },
+                });
+                await this.cloneVersionData(tx, nodeId, null, baselineVersion.id);
+            }
+
             // 2. Determine source version to clone from
             let sourceVId: string | null = null;
             let sourceNotes: string | null = null;
@@ -31,18 +47,6 @@ export class VersioningService {
                 sourceNotes = activeVersion?.notes ?? null;
             }
 
-            // Snapshot to pełny freeze: jeśli źródło to wersja i ma własne wiersze,
-            // klonujemy WYŁĄCZNIE jej wiersze (nie scalamy z baseline). Pusta wersja → baseline.
-            // Spójne z `getUnifiedTree`.
-            const loadSourceRows = async <T extends { id: string }>(
-                findMany: (where: any) => Promise<T[]>,
-            ): Promise<T[]> => {
-                if (sourceVId == null) return findMany({ versionId: null });
-                const versioned = await findMany({ versionId: sourceVId });
-                if (versioned.length > 0) return versioned;
-                return findMany({ versionId: null });
-            };
-
             // 3. Create ProjectVersion
             const newVersion = await tx.projectVersion.create({
                 data: {
@@ -53,231 +57,10 @@ export class VersioningService {
                 }
             });
 
-            // 4. Clone Subtasks (WBS) with ID mapping
-            const subtasks = await loadSourceRows((extra) => tx.subtask.findMany({
-                where: { nodeId, ...extra }
-            }));
+            // 4-10. Klonowanie pełnego freeze danych ze źródła do nowej wersji
+            await this.cloneVersionData(tx, nodeId, sourceVId, newVersion.id);
 
-            const subtaskIdMap = new Map<string, string>();
-
-            for (const subtask of subtasks) {
-                const newSubtask = await tx.subtask.create({
-                    data: {
-                        nodeId,
-                        versionId: newVersion.id,
-                        name: subtask.name,
-                        description: subtask.description,
-                        plannedStart: subtask.plannedStart,
-                        plannedEnd: subtask.plannedEnd,
-                        assignedUserId: subtask.assignedUserId,
-                        status: subtask.status,
-                        visibilityType: subtask.visibilityType,
-                        category: subtask.category,
-                        phase: subtask.phase,
-                        requirementItemId: subtask.requirementItemId,
-                        isAiGenerated: subtask.isAiGenerated,
-                        isApproved: subtask.isApproved,
-                    }
-                });
-                subtaskIdMap.set(subtask.id, newSubtask.id);
-            }
-
-            // 4b. Clone SubtaskMarkerLinks dla sklonowanych subtasków
-            for (const [oldSubtaskId, newSubtaskId] of subtaskIdMap.entries()) {
-                const links = await tx.subtaskMarkerLink.findMany({ where: { subtaskId: oldSubtaskId } });
-                for (const link of links) {
-                    await tx.subtaskMarkerLink.upsert({
-                        where: { subtaskId_markerId: { subtaskId: newSubtaskId, markerId: link.markerId } },
-                        update: {},
-                        create: { subtaskId: newSubtaskId, markerId: link.markerId },
-                    });
-                }
-            }
-
-            // 5. Clone WBS Nodes with ID mapping (must happen before BudgetLineItem
-            //    so wbsNodeId can be remapped to the new tree)
-            const wbsRaw = await loadSourceRows((extra) => tx.wbsNode.findMany({
-                where: { nodeId, ...extra },
-                orderBy: { sortOrder: 'asc' },
-            }));
-            const wbsNodes = wbsRaw.sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-
-            const wbsIdMap = new Map<string, string>();
-
-            // First pass: create all nodes without parentId
-            for (const wn of wbsNodes) {
-                const newId = require('crypto').randomUUID();
-                wbsIdMap.set(wn.id, newId);
-                await tx.wbsNode.create({
-                    data: {
-                        id: newId,
-                        nodeId,
-                        versionId: newVersion.id,
-                        parentId: null, // set in second pass
-                        name: wn.name,
-                        type: wn.type,
-                        status: wn.status,
-                        owner: wn.owner,
-                        resources: wn.resources,
-                        cost: wn.cost,
-                        tags: wn.tags,
-                        qa: wn.qa,
-                        sortOrder: wn.sortOrder,
-                        budgetType: wn.budgetType,
-                        unit: wn.unit,
-                        unitCost: wn.unitCost,
-                        quantity: wn.quantity,
-                        totalCost: wn.totalCost,
-                        margin: wn.margin,
-                        discount: wn.discount,
-                        unitPrice: wn.unitPrice,
-                        totalPrice: wn.totalPrice,
-                        comment: wn.comment,
-                        phase: wn.phase,
-                        ganttStart: (wn as any).ganttStart ?? null,
-                        ganttEnd: (wn as any).ganttEnd ?? null,
-                    },
-                });
-            }
-
-            // Second pass: set parentId references
-            for (const wn of wbsNodes) {
-                if (wn.parentId && wbsIdMap.has(wn.parentId)) {
-                    await tx.wbsNode.update({
-                        where: { id: wbsIdMap.get(wn.id)! },
-                        data: { parentId: wbsIdMap.get(wn.parentId)! },
-                    });
-                }
-            }
-
-            // 6. Clone Budget Line Items (with subtaskId + wbsNodeId remap)
-            const budgetItems = await loadSourceRows((extra) => tx.budgetLineItem.findMany({
-                where: { nodeId, ...extra }
-            }));
-
-            for (const item of budgetItems) {
-                await tx.budgetLineItem.create({
-                    data: {
-                        nodeId,
-                        versionId: newVersion.id,
-                        subtaskId: item.subtaskId ? subtaskIdMap.get(item.subtaskId) || null : null,
-                        wbsNodeId: item.wbsNodeId ? wbsIdMap.get(item.wbsNodeId) || null : null,
-                        type: item.type,
-                        description: item.description,
-                        unit: item.unit,
-                        unitCost: item.unitCost,
-                        quantity: item.quantity,
-                        totalCost: item.totalCost,
-                        margin: item.margin,
-                        discount: item.discount,
-                        unitPrice: item.unitPrice,
-                        totalPrice: item.totalPrice,
-                        comment: item.comment,
-                    }
-                });
-            }
-
-            // 7. Clone WBS Node Material allocations
-            const wbsMaterials = await tx.wbsNodeMaterial.findMany({
-                where: { wbsNodeId: { in: wbsNodes.map(n => n.id) } },
-            });
-
-            for (const wm of wbsMaterials) {
-                const newWbsId = wbsIdMap.get(wm.wbsNodeId);
-                if (newWbsId) {
-                    await tx.wbsNodeMaterial.create({
-                        data: {
-                            wbsNodeId: newWbsId,
-                            materialId: wm.materialId,
-                            quantity: wm.quantity,
-                        },
-                    });
-                }
-            }
-
-            // 8. Clone WbsMarkerLink (powiązania węzłów WBS ze schematicznymi markerami/załącznikami)
-            const wbsLinks = await tx.wbsMarkerLink.findMany({
-                where: { wbsNodeId: { in: wbsNodes.map(n => n.id) } },
-            });
-
-            for (const link of wbsLinks) {
-                const newWbsId = wbsIdMap.get(link.wbsNodeId);
-                if (!newWbsId) continue;
-                try {
-                    await tx.wbsMarkerLink.create({
-                        data: {
-                            wbsNodeId: newWbsId,
-                            markerId: link.markerId,
-                        },
-                    });
-                } catch {
-                    // Unique (wbsNodeId, markerId) — ignoruj duplikaty
-                }
-            }
-
-            // 9. Clone Material Requirements (with wbsNodeId + subtaskId remap)
-            const matReqs = await loadSourceRows((extra) => tx.materialRequirement.findMany({
-                where: { nodeId, ...extra }
-            }));
-
-            const matReqIdMap = new Map<string, string>();
-
-            // First pass: create without materialId (self-ref parent)
-            for (const mr of matReqs) {
-                const newId = require('crypto').randomUUID();
-                matReqIdMap.set(mr.id, newId);
-                const newWbsNodeId = mr.wbsNodeId ? (wbsIdMap.get(mr.wbsNodeId) ?? null) : null;
-                const newSubtaskId = mr.assignedSubtaskId ? (subtaskIdMap.get(mr.assignedSubtaskId) ?? null) : null;
-                await tx.materialRequirement.create({
-                    data: {
-                        id: newId,
-                        nodeId,
-                        versionId: newVersion.id,
-                        type: mr.type,
-                        quantity: mr.quantity,
-                        unit: mr.unit,
-                        name: mr.name,
-                        technicalSpec: mr.technicalSpec,
-                        sourceDocument: mr.sourceDocument,
-                        productName: mr.productName,
-                        manufacturer: mr.manufacturer,
-                        model: mr.model,
-                        dataSheetUrl: mr.dataSheetUrl,
-                        dataSheetName: mr.dataSheetName,
-                        complianceUrl: mr.complianceUrl,
-                        complianceName: mr.complianceName,
-                        complianceData: mr.complianceData,
-                        imageUrl: mr.imageUrl,
-                        productUrl: mr.productUrl,
-                        seller: mr.seller,
-                        offerNumber: mr.offerNumber,
-                        priceNetto: mr.priceNetto,
-                        availability: mr.availability,
-                        stockStatus: mr.stockStatus,
-                        wbsNodeIds: mr.wbsNodeIds,
-                        wbsNodeAllocations: mr.wbsNodeAllocations,
-                        wbsNodeId: newWbsNodeId,
-                        assignedSubtaskId: newSubtaskId,
-                        isAiAssigned: mr.isAiAssigned,
-                        aiConfidence: mr.aiConfidence,
-                        status: mr.status,
-                        listId: null,
-                        materialId: null,
-                    }
-                });
-            }
-
-            // Second pass: remap materialId (self-ref parent)
-            for (const mr of matReqs) {
-                if (mr.materialId && matReqIdMap.has(mr.materialId)) {
-                    await tx.materialRequirement.update({
-                        where: { id: matReqIdMap.get(mr.id)! },
-                        data: { materialId: matReqIdMap.get(mr.materialId)! },
-                    });
-                }
-            }
-
-            // 10. Deactivate other versions
+            // 11. Deactivate other versions
             await tx.projectVersion.updateMany({
                 where: {
                     nodeId,
@@ -286,42 +69,290 @@ export class VersioningService {
                 data: { isActive: false }
             });
 
-            // 10. Clone Order Requirements (full carry-over — w tym status oferty).
-            // OrderRequirements ma unique (nodeId, versionId), więc bierzemy dokładnie
-            // jeden wiersz źródłowy — preferowana wersja, fallback baseline.
-            let sourceReq = sourceVId
-                ? await tx.orderRequirements.findFirst({ where: { nodeId, versionId: sourceVId } })
-                : null;
-            if (!sourceReq) {
-                sourceReq = await tx.orderRequirements.findFirst({ where: { nodeId, versionId: null } });
-            }
-
-            if (sourceReq) {
-                await tx.orderRequirements.create({
-                    data: {
-                        nodeId,
-                        versionId: newVersion.id,
-                        offerDeadline: sourceReq.offerDeadline,
-                        projectStart: sourceReq.projectStart,
-                        projectEnd: sourceReq.projectEnd,
-                        projectGoal: sourceReq.projectGoal,
-                        projectItems: sourceReq.projectItems,
-                        wbsDescription: sourceReq.wbsDescription,
-                        wbsTree: sourceReq.wbsTree,
-                        budgetNotes: sourceReq.budgetNotes,
-                        clientContacts: sourceReq.clientContacts,
-                        clientProjectManager: sourceReq.clientProjectManager,
-                        clientProjectManagerEmail: sourceReq.clientProjectManagerEmail,
-                        clientProjectManagerPhone: sourceReq.clientProjectManagerPhone,
-                        offerStatus: sourceReq.offerStatus,
-                        offerStatusComment: sourceReq.offerStatusComment,
-                        offerText: sourceReq.offerText,
-                    }
-                });
-            }
-
             return newVersion;
         });
+    }
+
+    // @anchor clone-version-data
+    // Klonuje pełny "freeze" danych (subtaski, WBS, budżet, materiały, wymagania,
+    // order requirements) ze źródła (sourceVId; null = baseline) do wersji docelowej
+    // targetVersionId. Wydzielone z createVersion, aby móc zmaterializować baseline
+    // jako "pierwszy" i zaraz potem sklonować właściwą nową wersję w jednej transakcji.
+    private async cloneVersionData(
+        tx: Prisma.TransactionClient,
+        nodeId: string,
+        sourceVId: string | null,
+        targetVersionId: string,
+    ) {
+        // Snapshot to pełny freeze: jeśli źródło to wersja i ma własne wiersze,
+        // klonujemy WYŁĄCZNIE jej wiersze (nie scalamy z baseline). Pusta wersja → baseline.
+        // Spójne z `getUnifiedTree`.
+        const loadSourceRows = async <T extends { id: string }>(
+            findMany: (where: any) => Promise<T[]>,
+        ): Promise<T[]> => {
+            if (sourceVId == null) return findMany({ versionId: null });
+            const versioned = await findMany({ versionId: sourceVId });
+            if (versioned.length > 0) return versioned;
+            return findMany({ versionId: null });
+        };
+
+        // 4. Clone Subtasks (WBS) with ID mapping
+        const subtasks = await loadSourceRows((extra) => tx.subtask.findMany({
+            where: { nodeId, ...extra }
+        }));
+
+        const subtaskIdMap = new Map<string, string>();
+
+        for (const subtask of subtasks) {
+            const newSubtask = await tx.subtask.create({
+                data: {
+                    nodeId,
+                    versionId: targetVersionId,
+                    name: subtask.name,
+                    description: subtask.description,
+                    plannedStart: subtask.plannedStart,
+                    plannedEnd: subtask.plannedEnd,
+                    assignedUserId: subtask.assignedUserId,
+                    status: subtask.status,
+                    visibilityType: subtask.visibilityType,
+                    category: subtask.category,
+                    phase: subtask.phase,
+                    requirementItemId: subtask.requirementItemId,
+                    isAiGenerated: subtask.isAiGenerated,
+                    isApproved: subtask.isApproved,
+                }
+            });
+            subtaskIdMap.set(subtask.id, newSubtask.id);
+        }
+
+        // 4b. Clone SubtaskMarkerLinks dla sklonowanych subtasków
+        for (const [oldSubtaskId, newSubtaskId] of subtaskIdMap.entries()) {
+            const links = await tx.subtaskMarkerLink.findMany({ where: { subtaskId: oldSubtaskId } });
+            for (const link of links) {
+                await tx.subtaskMarkerLink.upsert({
+                    where: { subtaskId_markerId: { subtaskId: newSubtaskId, markerId: link.markerId } },
+                    update: {},
+                    create: { subtaskId: newSubtaskId, markerId: link.markerId },
+                });
+            }
+        }
+
+        // 5. Clone WBS Nodes with ID mapping (must happen before BudgetLineItem
+        //    so wbsNodeId can be remapped to the new tree)
+        const wbsRaw = await loadSourceRows((extra) => tx.wbsNode.findMany({
+            where: { nodeId, ...extra },
+            orderBy: { sortOrder: 'asc' },
+        }));
+        const wbsNodes = wbsRaw.sort((a: any, b: any) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
+        const wbsIdMap = new Map<string, string>();
+
+        // First pass: create all nodes without parentId
+        for (const wn of wbsNodes) {
+            const newId = require('crypto').randomUUID();
+            wbsIdMap.set(wn.id, newId);
+            await tx.wbsNode.create({
+                data: {
+                    id: newId,
+                    nodeId,
+                    versionId: targetVersionId,
+                    parentId: null, // set in second pass
+                    name: wn.name,
+                    type: wn.type,
+                    status: wn.status,
+                    owner: wn.owner,
+                    resources: wn.resources,
+                    cost: wn.cost,
+                    tags: wn.tags,
+                    qa: wn.qa,
+                    sortOrder: wn.sortOrder,
+                    budgetType: wn.budgetType,
+                    unit: wn.unit,
+                    unitCost: wn.unitCost,
+                    quantity: wn.quantity,
+                    totalCost: wn.totalCost,
+                    margin: wn.margin,
+                    discount: wn.discount,
+                    unitPrice: wn.unitPrice,
+                    totalPrice: wn.totalPrice,
+                    comment: wn.comment,
+                    phase: wn.phase,
+                    ganttStart: (wn as any).ganttStart ?? null,
+                    ganttEnd: (wn as any).ganttEnd ?? null,
+                },
+            });
+        }
+
+        // Second pass: set parentId references
+        for (const wn of wbsNodes) {
+            if (wn.parentId && wbsIdMap.has(wn.parentId)) {
+                await tx.wbsNode.update({
+                    where: { id: wbsIdMap.get(wn.id)! },
+                    data: { parentId: wbsIdMap.get(wn.parentId)! },
+                });
+            }
+        }
+
+        // 6. Clone Budget Line Items (with subtaskId + wbsNodeId remap)
+        const budgetItems = await loadSourceRows((extra) => tx.budgetLineItem.findMany({
+            where: { nodeId, ...extra }
+        }));
+
+        for (const item of budgetItems) {
+            await tx.budgetLineItem.create({
+                data: {
+                    nodeId,
+                    versionId: targetVersionId,
+                    subtaskId: item.subtaskId ? subtaskIdMap.get(item.subtaskId) || null : null,
+                    wbsNodeId: item.wbsNodeId ? wbsIdMap.get(item.wbsNodeId) || null : null,
+                    type: item.type,
+                    description: item.description,
+                    unit: item.unit,
+                    unitCost: item.unitCost,
+                    quantity: item.quantity,
+                    totalCost: item.totalCost,
+                    margin: item.margin,
+                    discount: item.discount,
+                    unitPrice: item.unitPrice,
+                    totalPrice: item.totalPrice,
+                    comment: item.comment,
+                }
+            });
+        }
+
+        // 7. Clone WBS Node Material allocations
+        const wbsMaterials = await tx.wbsNodeMaterial.findMany({
+            where: { wbsNodeId: { in: wbsNodes.map(n => n.id) } },
+        });
+
+        for (const wm of wbsMaterials) {
+            const newWbsId = wbsIdMap.get(wm.wbsNodeId);
+            if (newWbsId) {
+                await tx.wbsNodeMaterial.create({
+                    data: {
+                        wbsNodeId: newWbsId,
+                        materialId: wm.materialId,
+                        quantity: wm.quantity,
+                    },
+                });
+            }
+        }
+
+        // 8. Clone WbsMarkerLink (powiązania węzłów WBS ze schematicznymi markerami/załącznikami)
+        const wbsLinks = await tx.wbsMarkerLink.findMany({
+            where: { wbsNodeId: { in: wbsNodes.map(n => n.id) } },
+        });
+
+        for (const link of wbsLinks) {
+            const newWbsId = wbsIdMap.get(link.wbsNodeId);
+            if (!newWbsId) continue;
+            try {
+                await tx.wbsMarkerLink.create({
+                    data: {
+                        wbsNodeId: newWbsId,
+                        markerId: link.markerId,
+                    },
+                });
+            } catch {
+                // Unique (wbsNodeId, markerId) — ignoruj duplikaty
+            }
+        }
+
+        // 9. Clone Material Requirements (with wbsNodeId + subtaskId remap)
+        const matReqs = await loadSourceRows((extra) => tx.materialRequirement.findMany({
+            where: { nodeId, ...extra }
+        }));
+
+        const matReqIdMap = new Map<string, string>();
+
+        // First pass: create without materialId (self-ref parent)
+        for (const mr of matReqs) {
+            const newId = require('crypto').randomUUID();
+            matReqIdMap.set(mr.id, newId);
+            const newWbsNodeId = mr.wbsNodeId ? (wbsIdMap.get(mr.wbsNodeId) ?? null) : null;
+            const newSubtaskId = mr.assignedSubtaskId ? (subtaskIdMap.get(mr.assignedSubtaskId) ?? null) : null;
+            await tx.materialRequirement.create({
+                data: {
+                    id: newId,
+                    nodeId,
+                    versionId: targetVersionId,
+                    type: mr.type,
+                    quantity: mr.quantity,
+                    unit: mr.unit,
+                    name: mr.name,
+                    technicalSpec: mr.technicalSpec,
+                    sourceDocument: mr.sourceDocument,
+                    productName: mr.productName,
+                    manufacturer: mr.manufacturer,
+                    model: mr.model,
+                    dataSheetUrl: mr.dataSheetUrl,
+                    dataSheetName: mr.dataSheetName,
+                    complianceUrl: mr.complianceUrl,
+                    complianceName: mr.complianceName,
+                    complianceData: mr.complianceData,
+                    imageUrl: mr.imageUrl,
+                    productUrl: mr.productUrl,
+                    seller: mr.seller,
+                    offerNumber: mr.offerNumber,
+                    priceNetto: mr.priceNetto,
+                    availability: mr.availability,
+                    stockStatus: mr.stockStatus,
+                    wbsNodeIds: mr.wbsNodeIds,
+                    wbsNodeAllocations: mr.wbsNodeAllocations,
+                    wbsNodeId: newWbsNodeId,
+                    assignedSubtaskId: newSubtaskId,
+                    isAiAssigned: mr.isAiAssigned,
+                    aiConfidence: mr.aiConfidence,
+                    status: mr.status,
+                    listId: null,
+                    materialId: null,
+                }
+            });
+        }
+
+        // Second pass: remap materialId (self-ref parent)
+        for (const mr of matReqs) {
+            if (mr.materialId && matReqIdMap.has(mr.materialId)) {
+                await tx.materialRequirement.update({
+                    where: { id: matReqIdMap.get(mr.id)! },
+                    data: { materialId: matReqIdMap.get(mr.materialId)! },
+                });
+            }
+        }
+
+        // 10. Clone Order Requirements (full carry-over — w tym status oferty).
+        // OrderRequirements ma unique (nodeId, versionId), więc bierzemy dokładnie
+        // jeden wiersz źródłowy — preferowana wersja, fallback baseline.
+        let sourceReq = sourceVId
+            ? await tx.orderRequirements.findFirst({ where: { nodeId, versionId: sourceVId } })
+            : null;
+        if (!sourceReq) {
+            sourceReq = await tx.orderRequirements.findFirst({ where: { nodeId, versionId: null } });
+        }
+
+        if (sourceReq) {
+            await tx.orderRequirements.create({
+                data: {
+                    nodeId,
+                    versionId: targetVersionId,
+                    offerDeadline: sourceReq.offerDeadline,
+                    projectStart: sourceReq.projectStart,
+                    projectEnd: sourceReq.projectEnd,
+                    projectGoal: sourceReq.projectGoal,
+                    projectItems: sourceReq.projectItems,
+                    wbsDescription: sourceReq.wbsDescription,
+                    wbsTree: sourceReq.wbsTree,
+                    budgetNotes: sourceReq.budgetNotes,
+                    clientContacts: sourceReq.clientContacts,
+                    clientProjectManager: sourceReq.clientProjectManager,
+                    clientProjectManagerEmail: sourceReq.clientProjectManagerEmail,
+                    clientProjectManagerPhone: sourceReq.clientProjectManagerPhone,
+                    offerStatus: sourceReq.offerStatus,
+                    offerStatusComment: sourceReq.offerStatusComment,
+                    offerText: sourceReq.offerText,
+                }
+            });
+        }
     }
 
     async getVersions(nodeId: string) {

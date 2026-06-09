@@ -245,6 +245,14 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-endpoint | PATCH /wbs-nodes/:id/budget | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-update-budget |
 | back-endpoint | DELETE /wbs-nodes/:id | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-delete |
 
+#### Backend — wersjonowanie (`common/`, `ai/`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-funkcja | normalizeVersionId | apps/backend/src/common/version.util.ts | @anchor normalize-version-id |
+| back-funkcja | resolveVersionId | apps/backend/src/common/version.util.ts | @anchor resolve-version-id |
+| back-funkcja | cloneVersionData | apps/backend/src/ai/versioning.service.ts | @anchor clone-version-data |
+
 #### Frontend — komponenty (`apps/frontend/src/components/shared/wbs/`)
 
 | Tag | Nazwa | Plik | Anchor |

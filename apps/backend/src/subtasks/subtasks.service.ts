@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveVersionId } from '../common/version.util';
 import { CreateSubtaskDto, UpdateSubtaskDto, CreateTemplateDto, VisibilityType } from './dto/subtask.dto';
 
 @Injectable()
@@ -93,7 +94,7 @@ export class SubtasksService {
     }
 
     async findAllByNode(nodeId: string, user: any, versionId?: string) {
-        const vId = (versionId === 'null' || versionId === 'undefined' || !versionId) ? null : versionId;
+        const vId = await resolveVersionId(this.prisma, nodeId, versionId);
 
         const isManager = user.roles.some((r: string) => ['ADMIN', 'MANAGER'].includes(r));
         const isLogistyk = user.roles.some((r: string) => r === 'LOGISTYK');
@@ -133,7 +134,7 @@ export class SubtasksService {
     }
 
     async batchUpsert(nodeId: string, versionId: string, tasks: any[]) {
-        const vId = (versionId === 'null' || versionId === 'undefined' || !versionId) ? null : versionId;
+        const vId = await resolveVersionId(this.prisma, nodeId, versionId);
 
         return this.prisma.$transaction(async (tx) => {
             // 1. Fetch current state

@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveVersionId } from '../common/version.util';
 import { VectorService } from '../ai/vector.service';
 import { ProcessTreeService } from '../process-tree/process-tree.service';
 import { ConfigService } from '@nestjs/config';
@@ -228,8 +229,8 @@ export class MaterialRequirementsService {
     }
 
     async findAllByNode(nodeId: string, versionId?: string, listId?: string) {
-        const where: any = { nodeId };
-        if (versionId) where.versionId = versionId;
+        const vId = await resolveVersionId(this.prisma, nodeId, versionId);
+        const where: any = { nodeId, versionId: vId };
         if (listId) where.OR = [{ listId }, { listId: null }];
         const items = await this.prisma.materialRequirement.findMany({
             where,
@@ -715,6 +716,7 @@ export class MaterialRequirementsService {
 
     async extractFromDocuments(nodeId: string, versionId?: string, listId?: string): Promise<{ extracted: number; items: any[] }> {
         this.logger.log(`[Extract] Rozpoczynam ekstrakcję dla nodeId: ${nodeId}`);
+        const vId = await resolveVersionId(this.prisma, nodeId, versionId);
 
         // 1. Pobierz nodeId + wszyscy potomkowie (dokumenty są pod węzłami-dziećmi)
         const descendants = await this.processTreeService.getAllDescendantIds(nodeId);
@@ -837,7 +839,7 @@ ${context}`;
                 this.prisma.materialRequirement.create({
                     data: {
                         nodeId,
-                        versionId: versionId || null,
+                        versionId: vId,
                         listId: listId || null,
                         name: item.name,
                         productName: null,

@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveVersionId } from '../common/version.util';
 
 // @anchor qa-pair
 export interface QaPair {
@@ -34,7 +35,7 @@ export class WbsNodesService {
      * Zwraca null jeśli brak węzłów — caller powinien użyć fallbacku z OrderRequirements.wbsTree.
      */
     async getTree(nodeId: string, versionId?: string): Promise<{ items: WbsTreeItem[] } | null> {
-        const vId = this.normalizeVersionId(versionId);
+        const vId = await resolveVersionId(this.prisma, nodeId, versionId);
 
         const nodes = await this.prisma.wbsNode.findMany({
             where: { nodeId, versionId: vId },
@@ -52,7 +53,7 @@ export class WbsNodesService {
      * Zachowuje oryginalne UUID z frontendu.
      */
     async saveTree(nodeId: string, versionId: string | undefined, tree: { items: WbsTreeItem[] }): Promise<void> {
-        const vId = this.normalizeVersionId(versionId);
+        const vId = await resolveVersionId(this.prisma, nodeId, versionId);
         const items = tree?.items || [];
 
         await this.prisma.$transaction(async (tx) => {
@@ -129,7 +130,7 @@ export class WbsNodesService {
      * Zastępuje parsowanie JSON blob w budget.service.ts.
      */
     async getNodeMap(nodeId: string, versionId?: string): Promise<Record<string, { name: string; path: string }>> {
-        const vId = this.normalizeVersionId(versionId);
+        const vId = await resolveVersionId(this.prisma, nodeId, versionId);
         const nodes = await this.prisma.wbsNode.findMany({
             where: { nodeId, versionId: vId },
             orderBy: { sortOrder: 'asc' },
@@ -144,10 +145,6 @@ export class WbsNodesService {
     }
 
     // ─── Private helpers ────────────────────────────────────────────────
-
-    private normalizeVersionId(versionId?: string): string | null {
-        return (!versionId || versionId === 'null' || versionId === 'undefined') ? null : versionId;
-    }
 
     private async resolveOrderNodeId(nodeId: string): Promise<string> {
         let currentId = nodeId;
@@ -274,10 +271,9 @@ export class WbsNodesService {
      * - ścieżka w drzewie
      */
     async getUnifiedTree(nodeId: string, versionId?: string) {
-        const vId = this.normalizeVersionId(versionId);
-
         const requestedNodeId = nodeId;
         const fallbackOrderNodeId = await this.resolveOrderNodeId(requestedNodeId);
+        const vId = await resolveVersionId(this.prisma, fallbackOrderNodeId, versionId);
 
         try {
             const fetchNodesForCandidate = async (candidateNodeId: string) => {
@@ -429,7 +425,7 @@ export class WbsNodesService {
      * Tworzy nowy węzeł WBS.
      */
     async createNode(data: { nodeId: string; parentId?: string; versionId?: string; name: string; type?: string; tags?: string[] }) {
-        const vId = this.normalizeVersionId(data.versionId);
+        const vId = await resolveVersionId(this.prisma, data.nodeId, data.versionId);
 
         // Oblicz sortOrder — ostatni wśród rodzeństwa
         const siblings = await this.prisma.wbsNode.findMany({
