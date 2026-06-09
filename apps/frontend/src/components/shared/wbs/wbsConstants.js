@@ -55,6 +55,24 @@ export const TYPE_LABELS = {
 // @anchor type-options
 export const TYPE_OPTIONS = ['', 'group', 'work', 'material', 'equipment', 'service', 'lodging', 'fuel'];
 
+// @anchor wbs-type-from-any
+// Normalizuje dowolny typ pozycji do kanonicznego typu z drzewa WBS.
+// Obsługuje legacy enum wymagań (DEVICE/MATERIAL/CABLE/SOFTWARE/SERVICE) oraz typy WBS.
+// Pusty string gdy typ nieznany. Mapowanie MUSI być spójne z migracją backendu.
+const LEGACY_REQ_TYPE_MAP = {
+  device: 'equipment',
+  material: 'material',
+  cable: 'material',
+  software: 'service',
+  service: 'service',
+};
+export const wbsTypeFromAny = (type) => {
+  const t = String(type || '').toLowerCase().trim();
+  if (!t) return '';
+  const mapped = LEGACY_REQ_TYPE_MAP[t] || t;
+  return TYPE_OPTIONS.includes(mapped) ? mapped : '';
+};
+
 // @anchor budget-type-labels
 export const BUDGET_TYPE_LABELS = {
   WORK: 'Praca',

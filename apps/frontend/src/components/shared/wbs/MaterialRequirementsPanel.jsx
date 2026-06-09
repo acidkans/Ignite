@@ -6,16 +6,18 @@ import {
     FileText, Search, Sparkles, Link as LinkIcon,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
-import { UNIT_OPTIONS } from './wbsConstants';
+import { UNIT_OPTIONS, wbsTypeFromAny } from './wbsConstants';
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
 
+// Keyed po typach z drzewa WBS (legacy enum normalizowany przez wbsTypeFromAny przy lookup)
 const TYPE_META = {
-    DEVICE:   { label: 'Sprzęt',    icon: Package, color: 'text-blue-300' },
-    MATERIAL: { label: 'Materiał',   icon: Wrench,  color: 'text-amber-300' },
-    CABLE:    { label: 'Kabel',      icon: Wrench,  color: 'text-orange-300' },
-    SOFTWARE: { label: 'Software',   icon: Package, color: 'text-violet-300' },
-    SERVICE:  { label: 'Usługa',     icon: Wrench,  color: 'text-pink-300' },
+    material:  { label: 'Materiał', icon: Wrench,  color: 'text-amber-300' },
+    equipment: { label: 'Sprzęt',   icon: Package, color: 'text-blue-300' },
+    service:   { label: 'Usługa',   icon: Wrench,  color: 'text-pink-300' },
+    work:      { label: 'Praca',    icon: Wrench,  color: 'text-cyan-300' },
+    fuel:      { label: 'Paliwo',   icon: Wrench,  color: 'text-yellow-300' },
+    lodging:   { label: 'Nocleg',   icon: Package, color: 'text-indigo-300' },
 };
 
 const STATUS_META = {
@@ -85,7 +87,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
     // @anchor expanded-id
     const [expandedId, setExpandedId] = useState(null);
     const [wbsNodes, setWbsNodes] = useState([]);
-    const [activeTypes, setActiveTypes] = useState(['MATERIAL', 'DEVICE']);
+    const [activeTypes, setActiveTypes] = useState(['material', 'equipment', 'service']);
     const [materialDb, setMaterialDb] = useState([]);
     const [offers, setOffers] = useState([]);
 
@@ -136,7 +138,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
 
     // Etap 2: dodatkowo filtr typów (to co widać w tabeli)
     const filtered = useMemo(() =>
-        wbsFiltered.filter(r => activeTypes.includes(r.type)),
+        wbsFiltered.filter(r => activeTypes.includes(wbsTypeFromAny(r.type))),
     [wbsFiltered, activeTypes]);
 
     // ─── Fetch ──────────────────────────────────────────────────────────────
@@ -313,7 +315,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
             <div className="flex items-center gap-2 px-3 py-1.5 border-b border-white/5 flex-shrink-0">
                 <Filter size={12} className="text-gray-500" />
                 {Object.entries(TYPE_META).map(([key, meta]) => {
-                    const count = wbsFiltered.filter(r => r.type === key).length;
+                    const count = wbsFiltered.filter(r => wbsTypeFromAny(r.type) === key).length;
                     const active = activeTypes.includes(key);
                     return (
                         <button key={key} onClick={() => setActiveTypes(prev =>
@@ -387,7 +389,7 @@ const MaterialRequirementsPanel = forwardRef(function MaterialRequirementsPanel(
 // ─── Row ─────────────────────────────────────────────────────────────────────
 
 function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMap }) {
-    const TypeIcon = TYPE_META[r.type]?.icon || Package;
+    const TypeIcon = TYPE_META[wbsTypeFromAny(r.type)]?.icon || Package;
     const StatusIcon = STATUS_META[r.status]?.icon || Clock;
 
     // Resolve WBS branch names
@@ -418,9 +420,9 @@ function Row({ r, isExpanded, onToggleExpand, onPatch, onDelete, isLocked, wbsMa
 
             {/* Typ */}
             <td className="px-3 py-1">
-                <span className={`inline-flex items-center gap-1 text-xs font-semibold ${TYPE_META[r.type]?.color || 'text-gray-400'}`}>
+                <span className={`inline-flex items-center gap-1 text-xs font-semibold ${TYPE_META[wbsTypeFromAny(r.type)]?.color || 'text-gray-400'}`}>
                     <TypeIcon size={12} />
-                    {TYPE_META[r.type]?.label || r.type}
+                    {TYPE_META[wbsTypeFromAny(r.type)]?.label || r.type}
                 </span>
             </td>
 

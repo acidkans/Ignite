@@ -8,16 +8,14 @@ import {
     FileText, Link as LinkIcon, Download, BookOpen, X, Database,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
-import { UNIT_OPTIONS } from './wbsConstants';
+import { UNIT_OPTIONS, wbsTypeFromAny } from './wbsConstants';
 import { buildPdfDocument, openPdfBlob, fetchLogoDataUrl, esc as escPdf } from '../../../utils/wbsPdfExport';
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
 
-const WBS_TYPE_TO_REQ = { material: 'MATERIAL', equipment: 'DEVICE' };
-
 const TYPE_META = {
-    material:  { label: 'Materiał', icon: Wrench,  color: 'text-amber-300',  reqType: 'MATERIAL' },
-    equipment: { label: 'Sprzęt',   icon: Package, color: 'text-blue-300',   reqType: 'DEVICE' },
+    material:  { label: 'Materiał', icon: Wrench,  color: 'text-amber-300',  reqType: 'material' },
+    equipment: { label: 'Sprzęt',   icon: Package, color: 'text-blue-300',   reqType: 'equipment' },
 };
 
 const STATUS_META = {
@@ -1303,7 +1301,7 @@ export default function WbsMaterialsPanel({
     }, [onWbsUpdate, onPatchNode, externalWbsNodes]);
 
     const createCard = useCallback(async (node) => {
-        const reqType = WBS_TYPE_TO_REQ[node.type] || 'MATERIAL';
+        const reqType = wbsTypeFromAny(node.type) === 'equipment' ? 'equipment' : 'material';
         const res = await fetch(`${API_URL}/material-requirements`, {
             method: 'POST',
             headers: authHeaders(),

@@ -2,11 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ExternalLink, Package, ChevronDown, ChevronRight, Cpu, Trash2, Building2, Loader2 } from 'lucide-react';
 import { API_URL } from '../../config';
 import PropertyPreview from './PropertyPreview';
-
-const TYPE_LABELS = {
-    DEVICE: 'Urządzenie', MATERIAL: 'Materiał', CABLE: 'Kabel',
-    SOFTWARE: 'Oprogramowanie', SERVICE: 'Usługa',
-};
+import { TYPE_LABELS, TYPE_OPTIONS as WBS_TYPE_OPTIONS, wbsTypeFromAny } from './wbs/wbsConstants';
 
 // ─── Sekcja zwijalna ──────────────────────────────────────────────────────────
 function CollapsibleSection({ title, open, onToggle, children, accent = 'teal', headerRight, fullBleed = false, fill = false }) {
@@ -138,7 +134,7 @@ function MaterialUsagePanel({ manufacturer, model }) {
     );
 }
 
-const TYPE_OPTIONS = Object.entries(TYPE_LABELS).map(([value, label]) => ({ value, label }));
+const TYPE_OPTIONS = WBS_TYPE_OPTIONS.filter(Boolean).map(value => ({ value, label: TYPE_LABELS[value] || value }));
 
 // @anchor material-database-inline-cell
 function InlineCell({ value, type = 'text', options, onSave, onCancel, className = '' }) {
@@ -434,7 +430,7 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
                                                 <td className="px-3 py-2 cursor-pointer" onClick={() => setEditingCell({ id: r.id, field: 'type', value: r.type ?? 'MATERIAL' })}>
                                                     {editingCell?.id === r.id && editingCell?.field === 'type'
                                                         ? <InlineCell value={editingCell.value} options={TYPE_OPTIONS} onSave={v => handlePatchField(r.id, 'type', v)} onCancel={() => setEditingCell(null)} />
-                                                        : <span className="px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-300 text-[10px] font-semibold">{TYPE_LABELS[r.type] || r.type}</span>}
+                                                        : <span className="px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-300 text-[10px] font-semibold">{TYPE_LABELS[wbsTypeFromAny(r.type)] || r.type}</span>}
                                                 </td>
                                                 <td className="px-3 py-2 text-gray-300 cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'manufacturer', value: r.manufacturer ?? '' })}>
                                                     {editingCell?.id === r.id && editingCell?.field === 'manufacturer'
@@ -507,7 +503,7 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
                                                 <td className="px-3 py-2 cursor-pointer" onClick={() => setEditingCell({ id: r.id, field: 'type', value: r.type ?? 'MATERIAL' })}>
                                                     {editingCell?.id === r.id && editingCell?.field === 'type'
                                                         ? <InlineCell value={editingCell.value} options={TYPE_OPTIONS} onSave={v => handlePatchField(r.id, 'type', v)} onCancel={() => setEditingCell(null)} />
-                                                        : <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-300 text-[10px] font-semibold">{TYPE_LABELS[r.type] || r.type}</span>}
+                                                        : <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-300 text-[10px] font-semibold">{TYPE_LABELS[wbsTypeFromAny(r.type)] || r.type}</span>}
                                                 </td>
                                                 <td className="px-3 py-2 text-gray-300 cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'manufacturer', value: r.manufacturer ?? '' })}>
                                                     {editingCell?.id === r.id && editingCell?.field === 'manufacturer'

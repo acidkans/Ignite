@@ -7,7 +7,7 @@ import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import GanttSection from './GanttSection';
-import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy } from './wbsConstants';
+import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny } from './wbsConstants';
 import { exportProjectPdf } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
@@ -568,7 +568,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
 
             const normalizedNodeName = normKey(wbsNodeName);
             const linked = (requirements || []).filter((req) => {
-                if (!req || !['MATERIAL', 'DEVICE'].includes(String(req.type || '').toUpperCase())) return false;
+                if (!req || !['material', 'equipment'].includes(wbsTypeFromAny(req.type))) return false;
                 let alloc = {};
                 try { alloc = req.wbsNodeAllocations ? JSON.parse(req.wbsNodeAllocations) : {}; } catch { alloc = {}; }
                 let ids = [];
@@ -589,7 +589,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             } else if (normalizedNodeName) {
                 // Tylko orphan requirements (bez wbsNodeId) — nie kradnij reqów innych węzłów o tej samej nazwie
                 targetReq = requirements.find(req =>
-                    ['MATERIAL', 'DEVICE'].includes(String(req.type || '').toUpperCase()) &&
+                    ['material', 'equipment'].includes(wbsTypeFromAny(req.type)) &&
                     normKey(req.name) === normalizedNodeName &&
                     !req.wbsNodeId
                 ) || null;
@@ -956,8 +956,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
 
             // Utwórz węzeł WBS pod docelową gałęzią (tag req: do synchronizacji z Materiały)
             const reqName = String(req?.name || req?.productName || '').trim();
-            const typeMap = { DEVICE: 'equipment', MATERIAL: 'material', CABLE: 'material', SOFTWARE: 'service', SERVICE: 'service' };
-            const nodeType = typeMap[String(req?.type || '').toUpperCase()] || '';
+            const nodeType = wbsTypeFromAny(req?.type);
             if (reqName) {
                 // Sprawdź czy węzeł z tagiem req: już istnieje
                 const existing = wbsData.find(n =>
@@ -1352,8 +1351,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             return labels[code] || code || '—';
         };
         const matTypeLabel = (code) => {
-            const labels = { DEVICE: 'Urządzenie', MATERIAL: 'Materiał', CABLE: 'Kabel', SOFTWARE: 'Oprogramowanie', SERVICE: 'Usługa' };
-            return labels[String(code || '').toUpperCase()] || code || '—';
+            return TYPE_LABELS[wbsTypeFromAny(code)] || code || '—';
         };
         const materialsHtml = (show('materials') || show('oferta')) ? (() => {
             const wbsNodeIdSet = new Set((wbsData || []).map(n => n.id));
@@ -3061,7 +3059,7 @@ ${ganttSectionHtml}
             setWbsData(prev => prev.map(n => n.id === wbsNodeId ? { ...n, tags: cleanedTags } : n));
         }
         try {
-            const reqType = normalizedType === 'equipment' ? 'DEVICE' : 'MATERIAL';
+            const reqType = wbsTypeFromAny(normalizedType) === 'equipment' ? 'equipment' : 'material';
             const res = await fetch(`${API_URL}/material-requirements`, {
                 method: 'POST',
                 headers: authHeaders(),
@@ -3220,7 +3218,7 @@ ${ganttSectionHtml}
                         const reqId = reqTag.slice(4);
                         let body;
                         if (field === 'type') {
-                            const reqType = value === 'equipment' ? 'DEVICE' : (value === 'material' ? 'MATERIAL' : null);
+                            const reqType = ['equipment', 'material'].includes(wbsTypeFromAny(value)) ? wbsTypeFromAny(value) : null;
                             body = reqType ? { type: reqType } : null;
                         } else {
                             body = { [field]: value };
@@ -3548,7 +3546,7 @@ ${ganttSectionHtml}
                             for (const { wbsNodeId, quantity: nextQty, name: wbsNodeName } of qtyChanges) {
                                 const normName = normKey(wbsNodeName);
                                 const linked = allReqs.filter(req => {
-                                    if (!['MATERIAL', 'DEVICE'].includes(String(req.type || '').toUpperCase())) return false;
+                                    if (!['material', 'equipment'].includes(wbsTypeFromAny(req.type))) return false;
                                     let alloc = {};
                                     try { alloc = JSON.parse(req.wbsNodeAllocations || '{}'); } catch {}
                                     let ids = [];
@@ -3556,7 +3554,7 @@ ${ganttSectionHtml}
                                     return req.wbsNodeId === wbsNodeId || ids.includes(wbsNodeId) || Object.prototype.hasOwnProperty.call(alloc, wbsNodeId);
                                 });
                                 let targetReq = linked.find(r => normName && normKey(r.name) === normName) || linked[0]
-                                    || (normName ? allReqs.find(r => ['MATERIAL', 'DEVICE'].includes(String(r.type || '').toUpperCase()) && normKey(r.name) === normName) : null);
+                                    || (normName ? allReqs.find(r => ['material', 'equipment'].includes(wbsTypeFromAny(r.type)) && normKey(r.name) === normName) : null);
                                 if (!targetReq) continue;
                                 let curAlloc = {};
                                 try { curAlloc = JSON.parse(targetReq.wbsNodeAllocations || '{}'); } catch {}

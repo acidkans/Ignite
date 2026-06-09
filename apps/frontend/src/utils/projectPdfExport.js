@@ -3,6 +3,7 @@
 // Includes: Informacje o projekcie + Strategia + WBS + Materiały. NO budget.
 
 import { API_URL } from '../config';
+import { TYPE_LABELS as WBS_TYPE_LABELS, wbsTypeFromAny } from '../components/shared/wbs/wbsConstants';
 
 const flattenWbsItems = (items) => {
     const result = [];
@@ -27,10 +28,7 @@ const MAT_STATUS = {
     PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone',
     REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane',
 };
-const MAT_TYPE = {
-    DEVICE: 'Urządzenie', MATERIAL: 'Materiał', CABLE: 'Kabel',
-    SOFTWARE: 'Oprogramowanie', SERVICE: 'Usługa',
-};
+// Etykiety typów materiału — z wbsConstants (WBS_TYPE_LABELS) + normalizacja legacy przez wbsTypeFromAny
 
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -299,7 +297,7 @@ export async function exportProjectPdf({ nodeId, versionId, projectName, orderNa
         `<tr><td colspan="6" style="background:#1a1a2e;color:#fff;font-size:9px;font-weight:bold;padding:4px 8px;text-align:left;letter-spacing:0.05em">${esc(g.label)}</td></tr>`,
         ...g.rows.map(r => `<tr>
             <td style="padding-left:16px">${esc(r.name || r.productName || '—')}</td>
-            <td>${esc(MAT_TYPE[String(r.type || '').toUpperCase()] || r.type || '—')}</td>
+            <td>${esc(WBS_TYPE_LABELS[wbsTypeFromAny(r.type)] || r.type || '—')}</td>
             <td class="num">${esc(r.quantity != null ? r.quantity : '—')}</td>
             <td>${esc(r.unit || '')}</td>
             <td>${esc(MAT_STATUS[r.status] || r.status || '—')}</td>

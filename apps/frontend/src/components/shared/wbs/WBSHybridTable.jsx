@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN } from './wbsConstants';
+import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny } from './wbsConstants';
 
 function AutoResizeTextarea({ value, onChange, onBlur, placeholder, className, style }) {
     const ref = useRef(null);
@@ -164,7 +164,7 @@ function MaterialReqExpandPanel({ node, req, processNodeId, onSaved, onDeleteNod
     React.useEffect(() => {
         if (card) { setCard(req); return; }
         if (!node.id) return;
-        const reqType = node.type === 'equipment' ? 'DEVICE' : 'MATERIAL';
+        const reqType = wbsTypeFromAny(node.type) === 'equipment' ? 'equipment' : 'material';
         fetch(`${API_URL}/material-requirements`, {
             method: 'POST', headers,
             body: JSON.stringify({
