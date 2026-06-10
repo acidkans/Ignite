@@ -186,7 +186,7 @@ export class UsersService {
     const term = q.trim().toLowerCase();
     const users = await this.prisma.user.findMany({
       where: { isActive: true },
-      select: { id: true, firstName: true, lastName: true, email: true },
+      select: { id: true, firstName: true, lastName: true, email: true, phone: true, company: true },
       orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
       take: 50,
     });
