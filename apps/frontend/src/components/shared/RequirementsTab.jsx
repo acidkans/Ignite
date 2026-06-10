@@ -308,7 +308,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
             .catch(() => {});
     }, []);
 
-    const handleSave = async (overrideItems = null) => {
+    const handleSave = async (overrideItems = null, overrideContacts = null) => {
         setSaving(true);
         try {
             const token = sessionStorage.getItem('token');
@@ -324,7 +324,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                 clientProjectManagerCompany: form.pmCompany || null,
                 clientProjectManagerPhone: form.clientProjectManagerPhone || null,
                 clientProjectManagerEmail: form.clientProjectManagerEmail || null,
-                clientContacts: JSON.stringify(form.clientContacts),
+                clientContacts: JSON.stringify(overrideContacts ?? form.clientContacts),
                 projectItems: JSON.stringify(dataItems),
                 offerStatus: form.offerStatus || null,
                 offerStatusComment: form.offerStatusComment || null,
@@ -394,6 +394,11 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
     };
 
     const handleContactNameChange = (contactId, value) => {
+        if (!value.trim()) {
+            removeContact(contactId);
+            setTimeout(handleSave, 50);
+            return;
+        }
         updateContact(contactId, 'name', value);
         if (value.length < 2) {
             setContactSuggest(prev => ({ ...prev, [contactId]: { open: false, results: [] } }));
@@ -409,22 +414,20 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
 
     const selectUserForContact = (contactId, user) => {
         const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
-        setForm(prev => ({
-            ...prev,
-            clientContacts: prev.clientContacts.map(c =>
-                c.id === contactId
-                    ? {
-                        ...c,
-                        name: fullName,
-                        email: user.email || c.email,
-                        company: user.company || c.company,
-                        phone: user.phone || c.phone,
-                    }
-                    : c
-            ),
-        }));
+        const updatedContacts = form.clientContacts.map(c =>
+            c.id === contactId
+                ? {
+                    ...c,
+                    name: fullName,
+                    email: user.email || c.email,
+                    company: user.company ?? c.company,
+                    phone: user.phone ?? c.phone,
+                }
+                : c
+        );
+        setForm(prev => ({ ...prev, clientContacts: updatedContacts }));
         setContactSuggest(prev => ({ ...prev, [contactId]: { open: false, results: [] } }));
-        setTimeout(handleSave, 100);
+        handleSave(null, updatedContacts);
     };
 
     const set = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }));

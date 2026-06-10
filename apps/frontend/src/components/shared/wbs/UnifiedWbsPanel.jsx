@@ -2512,6 +2512,33 @@ ${ganttSectionHtml}
         URL.revokeObjectURL(url);
     };
 
+    // @anchor kwota-slownie
+    const kwotaSlownie = (amount) => {
+        const n = Math.round(amount * 100) / 100;
+        const zlote = Math.floor(n);
+        const grosze = Math.round((n - zlote) * 100);
+        const j  = ['', 'jeden', 'dwa', 'trzy', 'cztery', 'pięć', 'sześć', 'siedem', 'osiem', 'dziewięć'];
+        const jf = ['', 'jedna', 'dwie', 'trzy', 'cztery', 'pięć', 'sześć', 'siedem', 'osiem', 'dziewięć'];
+        const t10 = ['dziesięć','jedenaście','dwanaście','trzynaście','czternaście','piętnaście','szesnaście','siedemnaście','osiemnaście','dziewiętnaście'];
+        const d  = ['','dziesięć','dwadzieścia','trzydzieści','czterdzieści','pięćdziesiąt','sześćdziesiąt','siedemdziesiąt','osiemdziesiąt','dziewięćdziesiąt'];
+        const s  = ['','sto','dwieście','trzysta','czterysta','pięćset','sześćset','siedemset','osiemset','dziewięćset'];
+        const seg = (num, fem = false) => {
+            if (!num) return '';
+            const h = Math.floor(num / 100), rem = num % 100;
+            let r = s[h] || '';
+            if (rem >= 10 && rem <= 19) { r += (r ? ' ' : '') + t10[rem - 10]; }
+            else { const t = Math.floor(rem / 10), u = rem % 10; if (t) r += (r ? ' ' : '') + d[t]; if (u) r += (r ? ' ' : '') + (fem ? jf[u] : j[u]); }
+            return r;
+        };
+        const pl = (n, f) => { const v = n % 100; if (v >= 11 && v <= 14) return f[2]; const u = n % 10; return u === 1 ? f[0] : (u >= 2 && u <= 4) ? f[1] : f[2]; };
+        const mln = Math.floor(zlote / 1000000), tys = Math.floor((zlote % 1000000) / 1000), jed = zlote % 1000;
+        const parts = [];
+        if (mln) { parts.push(seg(mln)); parts.push(pl(mln, ['milion', 'miliony', 'milionów'])); }
+        if (tys) { parts.push(seg(tys, true)); parts.push(pl(tys, ['tysiąc', 'tysiące', 'tysięcy'])); }
+        if (jed || zlote === 0) parts.push(seg(jed) || 'zero');
+        return `${parts.filter(Boolean).join(' ')} ${pl(zlote, ['złoty', 'złote', 'złotych'])} ${String(grosze).padStart(2, '0')}/100`;
+    };
+
     // @anchor handle-export-oferta-wbs-excel
     const handleExportOfertaWbsExcel = async () => {
         if (!wbsData.length) { alert('Brak danych WBS do eksportu.'); return; }
@@ -2620,6 +2647,9 @@ ${ganttSectionHtml}
             sumRow.getCell(2).numFmt = numFmt;
             sumRow.getCell(2).alignment = { horizontal: 'right' };
             applyBorder(sumRow, 2, sumBorder);
+            const wordsRow = sheet.addRow(['Kwota słownie (netto):', kwotaSlownie(total)]);
+            wordsRow.getCell(1).font = { bold: true, italic: true };
+            wordsRow.getCell(2).font = { italic: true };
             sheet.views = [{ state: 'frozen', ySplit: 1 }];
             if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 2 } };
         }
@@ -2716,12 +2746,12 @@ ${ganttSectionHtml}
         // ── Sheet WBS3 ──
         {
             const sheet = workbook.addWorksheet('WBS3 - Szczegóły');
-            sheet.columns = [{ width: 28 }, { width: 28 }, { width: 28 }, { width: 18 }, { width: 24 }];
-            const hdr = sheet.addRow(['Zakresy', 'Składowe zakresów', 'Pozycje', 'Typ', 'Cena ofertowa (PLN)']);
+            sheet.columns = [{ width: 28 }, { width: 28 }, { width: 28 }, { width: 18 }, { width: 24 }, { width: 10 }, { width: 24 }, { width: 24 }];
+            const hdr = sheet.addRow(['Zakresy', 'Składowe zakresów', 'Pozycje', 'Typ', 'Cena netto (PLN)', 'VAT', 'Wartość brutto (PLN)', 'Kwota podatku VAT (PLN)']);
             hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
             hdr.fill = navyFill;
             hdr.alignment = { horizontal: 'center', vertical: 'middle' };
-            applyBorder(hdr, 5, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
+            applyBorder(hdr, 8, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
 
             const level1 = new Map();
             for (const item of wbsData) {
@@ -2746,27 +2776,31 @@ ${ganttSectionHtml}
                 for (const g2 of [...g1.children.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
                     let firstD2 = true;
                     for (const d3 of [...g2.children.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
-                        const r = sheet.addRow([g1.name, g2.name, d3.name, TYPE_LABELS[d3.type] || d3.type || '', d3.total]);
-                        r.getCell(5).numFmt = numFmt;
-                        r.getCell(5).alignment = { horizontal: 'right' };
-                        applyBorder(r, 5, cellBorder);
+                        const r = sheet.addRow([g1.name, g2.name, d3.name, TYPE_LABELS[d3.type] || d3.type || '', d3.total, 0.23, d3.total * 1.23, d3.total * 0.23]);
+                        r.getCell(5).numFmt = numFmt; r.getCell(5).alignment = { horizontal: 'right' };
+                        r.getCell(6).numFmt = '0%';   r.getCell(6).alignment = { horizontal: 'center' };
+                        r.getCell(7).numFmt = numFmt; r.getCell(7).alignment = { horizontal: 'right' };
+                        r.getCell(8).numFmt = numFmt; r.getCell(8).alignment = { horizontal: 'right' };
+                        applyBorder(r, 8, cellBorder);
                         if (firstD1 && firstD2) firstD1 = false;
                         firstD2 = false;
                     }
                 }
             }
             const lastDataRow = sheet.rowCount;
-            const sumRow = sheet.addRow(['Razem', '', '', '', total]);
+            const sumRow = sheet.addRow(['Razem', '', '', '', total, 0.23, total * 1.23, total * 0.23]);
             sumRow.font = { bold: true };
             sumRow.fill = sumFill;
-            sumRow.getCell(5).value = lastDataRow >= 2
-                ? { formula: `SUBTOTAL(9,E2:E${lastDataRow})`, result: total }
-                : total;
-            sumRow.getCell(5).numFmt = numFmt;
-            sumRow.getCell(5).alignment = { horizontal: 'right' };
-            applyBorder(sumRow, 5, sumBorder);
+            sumRow.getCell(5).value = lastDataRow >= 2 ? { formula: `SUBTOTAL(9,E2:E${lastDataRow})`, result: total } : total;
+            sumRow.getCell(5).numFmt = numFmt; sumRow.getCell(5).alignment = { horizontal: 'right' };
+            sumRow.getCell(6).value = 0.23; sumRow.getCell(6).numFmt = '0%'; sumRow.getCell(6).alignment = { horizontal: 'center' };
+            sumRow.getCell(7).value = lastDataRow >= 2 ? { formula: `SUBTOTAL(9,G2:G${lastDataRow})`, result: total * 1.23 } : total * 1.23;
+            sumRow.getCell(7).numFmt = numFmt; sumRow.getCell(7).alignment = { horizontal: 'right' };
+            sumRow.getCell(8).value = lastDataRow >= 2 ? { formula: `SUBTOTAL(9,H2:H${lastDataRow})`, result: total * 0.23 } : total * 0.23;
+            sumRow.getCell(8).numFmt = numFmt; sumRow.getCell(8).alignment = { horizontal: 'right' };
+            applyBorder(sumRow, 8, sumBorder);
             sheet.views = [{ state: 'frozen', ySplit: 1 }];
-            if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 5 } };
+            if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 8 } };
         }
 
         // ── Sheet Gałęzie grupujące: suma cen ofertowych poddrzewa każdej gałęzi type='group' ──
