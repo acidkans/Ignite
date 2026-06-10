@@ -413,7 +413,13 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
             ...prev,
             clientContacts: prev.clientContacts.map(c =>
                 c.id === contactId
-                    ? { ...c, name: fullName, email: user.email || c.email }
+                    ? {
+                        ...c,
+                        name: fullName,
+                        email: user.email || c.email,
+                        company: user.company || c.company,
+                        phone: user.phone || c.phone,
+                    }
                     : c
             ),
         }));
@@ -496,12 +502,12 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                     const panelProps = {
                         style: {
                             gridColumn: `${pos.x + 1} / span ${pos.w}`,
-                            gridRow: `${pos.y + 1} / span ${pos.h}`,
+                            gridRow: panelId === 'contacts' ? `${pos.y + 1}` : `${pos.y + 1} / span ${pos.h}`,
                             zIndex: isDragged || isResizing ? 50 : 1,
                             transition: isDragged || isResizing ? 'none' : 'grid-column 0.3s ease, grid-row 0.3s ease, all 0.2s ease-out',
                             userSelect: isDragged || isResizing ? 'none' : 'auto'
                         },
-                        className: `group glass-panel p-3 rounded-xl border border-white/5 bg-white/[0.02] flex flex-col overflow-hidden ${isDragged ? 'opacity-60 shadow-2xl border-blue-500' : 'hover:border-white/10'}`
+                        className: `group glass-panel p-3 rounded-xl border border-white/5 bg-white/[0.02] flex flex-col ${panelId === 'contacts' ? '' : 'overflow-hidden'} ${isDragged ? 'opacity-60 shadow-2xl border-blue-500' : 'hover:border-white/10'}`
                     };
 
                     const resizeHandle = (
@@ -661,7 +667,13 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                                     <div className="grid grid-cols-4 gap-3">
                                         <div>
                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię i Nazwisko</label>
-                                            <input type="text" value={form.pmName} onChange={set('pmName')} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                            <input type="text" value={form.pmName} onChange={e => {
+                                            if (!e.target.value) {
+                                                setForm(prev => ({ ...prev, pmName: '', pmCompany: '', clientProjectManagerPhone: '', clientProjectManagerEmail: '' }));
+                                            } else {
+                                                setForm(prev => ({ ...prev, pmName: e.target.value }));
+                                            }
+                                        }} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
                                         </div>
                                         <div>
                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Firma</label>
@@ -699,15 +711,15 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                                             <Plus size={14} />
                                         </button>
                                     </div>
-                                    <div className="flex-1 overflow-y-auto pr-1 space-y-2 min-h-0 fancy-scrollbar">
+                                    <div className="flex flex-col gap-2 pr-1">
                                         {form.clientContacts.length === 0 ? (
                                             <div className="text-center py-4 text-[10px] text-gray-500 italic">Brak kontaktów.</div>
                                         ) : (
                                             form.clientContacts.map((contact) => (
                                                 <div key={contact.id} className="relative p-2 rounded-lg border border-white/5 bg-black/20 group animate-slide-in">
                                                     <div className="flex items-center justify-between mb-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center">
+                                                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                            <div className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
                                                                 <User size={10} className="text-blue-400" />
                                                             </div>
                                                             <input
