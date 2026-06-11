@@ -202,8 +202,9 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
         setEditingCell(null);
     };
 
-    const isDatasheetFile = (fileName) => {
-        const n = (fileName || '').toLowerCase();
+    const isDatasheetFile = (file) => {
+        if (file?.documentCategory === 'datasheet') return true;
+        const n = (file?.fileName || (typeof file === 'string' ? file : '') || '').toLowerCase();
         return n.includes('karta materiałowa') || n.includes('karta techniczna') || n.includes('data sheet') || n.includes('datasheet');
     };
 
@@ -220,8 +221,8 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
 
             const newFiles = files.filter(f => !parsedIds.has(f.id));
             if (newFiles.length === 0) { setBatchStatus('Już sparsowano'); setBatchParsing(false); return; }
-            const datasheetFiles = newFiles.filter(f => isDatasheetFile(f.fileName));
-            const otherFiles = newFiles.filter(f => !isDatasheetFile(f.fileName));
+            const datasheetFiles = newFiles.filter(f => isDatasheetFile(f));
+            const otherFiles = newFiles.filter(f => !isDatasheetFile(f));
 
             let saved = 0;
             for (const file of datasheetFiles) {
@@ -237,7 +238,7 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
                     if (!parseRes.ok) { console.warn(`Parse failed for ${file.fileName}:`, parseRes.status); continue; }
                     const parsed = await parseRes.json();
                     if (!parsed.length) continue;
-                    await fetch(`${API_URL}/material-requirements/save-datasheet-items`, {
+                    await fetch(`${API_URL}/materials/from-datasheet`, {
                         method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ documentId: file.id, nodeId, items: parsed }),
                     });
@@ -269,7 +270,7 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
     const handleDatasheetApprove = async (items, documentId) => {
         if (!items?.length || !nodeId) return;
         const token = sessionStorage.getItem('token');
-        await fetch(`${API_URL}/material-requirements/save-datasheet-items`, {
+        await fetch(`${API_URL}/materials/from-datasheet`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ documentId, nodeId, items }),
@@ -286,7 +287,7 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
             : nodeId ? `${API_URL}/material-requirements/datasheets/${nodeId}` : null;
 
         Promise.all([
-            fetch(`${API_URL}/material-requirements/database`, { headers }).then(r => r.ok ? r.json() : []),
+            fetch(`${API_URL}/materials`, { headers }).then(r => r.ok ? r.json() : []),
             dsUrl ? fetch(dsUrl, { headers }).then(r => r.ok ? r.json() : []) : Promise.resolve([]),
         ])
             .then(([db, ds]) => { setItems(Array.isArray(db) ? db : []); setDatasheetItems(Array.isArray(ds) ? ds : []); })
