@@ -22,6 +22,7 @@ import { SubtasksModule } from './subtasks/subtasks.module';
 import { OrderRequirementsModule } from './order-requirements/order-requirements.module';
 import { SchematicsModule } from './schematics/schematics.module';
 import { MaterialRequirementsModule } from './material-requirements/material-requirements.module';
+import { MaterialsModule } from './materials/materials.module';
 import { DefaultProjectItemsModule } from './default-project-items/default-project-items.module';
 import { CommentsModule } from './comments/comments.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -56,6 +57,7 @@ import { WbsNodesModule } from './wbs-nodes/wbs-nodes.module';
     OrderRequirementsModule,
     SchematicsModule,
     MaterialRequirementsModule,
+    MaterialsModule,
     DefaultProjectItemsModule,
     CommentsModule,
     NotificationsModule,

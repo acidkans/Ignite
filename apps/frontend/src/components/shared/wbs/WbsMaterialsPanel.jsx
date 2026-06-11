@@ -1242,7 +1242,7 @@ export default function WbsMaterialsPanel({
 
     const fetchMaterialDb = useCallback(async () => {
         try {
-            const res = await fetch(`${API_URL}/material-requirements/all-materials`, {
+            const res = await fetch(`${API_URL}/materials`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {

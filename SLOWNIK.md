@@ -486,6 +486,34 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-endpoint | PATCH /material-requirements/proposals/:proposalId | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-patch-update-proposal |
 | back-endpoint | DELETE /material-requirements/proposals/:proposalId | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-delete-proposal |
 
+#### Backend (`apps/backend/src/materials/`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-controller | MaterialsController | apps/backend/src/materials/materials.controller.ts | @anchor materials-controller |
+| back-modul | MaterialsModule | apps/backend/src/materials/materials.module.ts | @anchor materials-module |
+| back-serwis | MaterialsService | apps/backend/src/materials/materials.service.ts | @anchor materials-service |
+| back-funkcja | MaterialsService.findAll | apps/backend/src/materials/materials.service.ts | @anchor materials-find-all |
+| back-funkcja | MaterialsService.findDatabase | apps/backend/src/materials/materials.service.ts | @anchor materials-find-database |
+| back-funkcja | MaterialsService.findOne | apps/backend/src/materials/materials.service.ts | @anchor materials-find-one |
+| back-funkcja | MaterialsService.create | apps/backend/src/materials/materials.service.ts | @anchor materials-create |
+| back-funkcja | MaterialsService.update | apps/backend/src/materials/materials.service.ts | @anchor materials-update |
+| back-funkcja | MaterialsService.remove | apps/backend/src/materials/materials.service.ts | @anchor materials-remove |
+| back-funkcja | MaterialsService.findStock | apps/backend/src/materials/materials.service.ts | @anchor materials-find-stock |
+| back-funkcja | MaterialsService.updateStock | apps/backend/src/materials/materials.service.ts | @anchor materials-update-stock |
+| back-funkcja | MaterialsService.findProposalHistory | apps/backend/src/materials/materials.service.ts | @anchor materials-find-proposal-history |
+| back-funkcja | MaterialsService.createFromDatasheet | apps/backend/src/materials/materials.service.ts | @anchor materials-from-datasheet |
+| back-endpoint | GET /materials | apps/backend/src/materials/materials.controller.ts | @anchor materials-get-all |
+| back-endpoint | GET /materials/database | apps/backend/src/materials/materials.controller.ts | @anchor materials-get-database |
+| back-endpoint | GET /materials/:id | apps/backend/src/materials/materials.controller.ts | @anchor materials-get-one |
+| back-endpoint | POST /materials | apps/backend/src/materials/materials.controller.ts | @anchor materials-post-create |
+| back-endpoint | PATCH /materials/:id | apps/backend/src/materials/materials.controller.ts | @anchor materials-patch-update |
+| back-endpoint | DELETE /materials/:id | apps/backend/src/materials/materials.controller.ts | @anchor materials-delete-one |
+| back-endpoint | GET /materials/:id/stock | apps/backend/src/materials/materials.controller.ts | @anchor materials-get-stock |
+| back-endpoint | PATCH /materials/:id/stock | apps/backend/src/materials/materials.controller.ts | @anchor materials-patch-stock |
+| back-endpoint | GET /materials/:id/proposals | apps/backend/src/materials/materials.controller.ts | @anchor materials-get-proposals |
+| back-endpoint | POST /materials/from-datasheet | apps/backend/src/materials/materials.controller.ts | @anchor materials-post-from-datasheet |
+
 #### Frontend (`apps/frontend/src/components/shared/wbs/MaterialRequirementsPanel.jsx`)
 
 | Tag | Nazwa | Plik | Anchor |
