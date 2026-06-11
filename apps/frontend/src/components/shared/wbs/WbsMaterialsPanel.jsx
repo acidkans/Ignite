@@ -1095,6 +1095,26 @@ const COL_DEFS = [
     { key: 'status',   label: 'Status oferty',          defaultW: 148 },
 ];
 
+// Spłaszcza zagnieżdżony obiekt material na wymaganie — po migracji katalog jest w relacji,
+// ale reszta frontendu nadal czyta card.manufacturer / card.priceNetto (stary schemat).
+function flattenReq(r) {
+    const selected = r.proposals?.find(p => p.isSelected) || null;
+    return {
+        ...r,
+        manufacturer: r.material?.manufacturer || r.manufacturer || '',
+        model:        r.material?.model        || r.model        || '',
+        productName:  r.material?.productName  || r.productName  || '',
+        priceNetto:   r.budgetedPriceNetto ?? r.priceNetto ?? null,
+        productUrl:   r.material?.productUrl   || r.productUrl   || '',
+        seller:       r.material?.seller       || r.seller       || '',
+        availability: selected?.availability   || r.availability || '',
+        dataSheetUrl:  r.material?.dataSheetUrl  || r.dataSheetUrl  || null,
+        dataSheetName: r.material?.dataSheetName || r.dataSheetName || null,
+        complianceUrl: r.material?.complianceUrl || r.complianceUrl || null,
+        imageUrl:      r.material?.imageUrl      || r.imageUrl      || null,
+    };
+}
+
 // @anchor wbs-materials-panel
 export default function WbsMaterialsPanel({
     nodeId,
@@ -1231,7 +1251,7 @@ export default function WbsMaterialsPanel({
                 const reqs = await reqRes.json();
                 const map = {};
                 const reqById = Object.fromEntries(reqs.map(r => [r.id, r]));
-                for (const r of reqs) { if (r.wbsNodeId) map[r.wbsNodeId] = r; }
+                for (const r of reqs) { if (r.wbsNodeId) map[r.wbsNodeId] = flattenReq(r); }
                 // Fallback: match via req: tag on WBS node (safer than name-matching)
                 const matNodeList = flatNodes.filter(n => n.type === 'material' || n.type === 'equipment');
                 for (const node of matNodeList) {
@@ -1240,7 +1260,7 @@ export default function WbsMaterialsPanel({
                     if (!reqTag) continue;
                     const reqId = reqTag.slice(4);
                     const req = reqById[reqId];
-                    if (req) map[node.id] = req;
+                    if (req) map[node.id] = flattenReq(req);
                 }
                 setCards(map);
             }
@@ -1350,7 +1370,7 @@ export default function WbsMaterialsPanel({
         if (res.ok) {
             const reqs = await res.json();
             const map = {};
-            for (const r of reqs) { if (r.wbsNodeId) map[r.wbsNodeId] = r; }
+            for (const r of reqs) { if (r.wbsNodeId) map[r.wbsNodeId] = flattenReq(r); }
             // Fallback: match by name
             const flatNodes = externalWbsNodes ?? internalWbsNodes;
             const matNodeList = flatNodes.filter(n => n.type === 'material' || n.type === 'equipment');
@@ -1361,7 +1381,7 @@ export default function WbsMaterialsPanel({
                 const match = matNodeList.find(n =>
                     (n.name || '').toLowerCase().trim() === reqName && !map[n.id]
                 );
-                if (match) map[match.id] = r;
+                if (match) map[match.id] = flattenReq(r);
             }
             setCards(map);
             onWbsUpdate?.();
