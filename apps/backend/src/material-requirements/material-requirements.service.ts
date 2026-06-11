@@ -494,6 +494,38 @@ export class MaterialRequirementsService {
                 });
             }
             data.materialId = material.id;
+        } else {
+            // Brak manufacturer+model — forward pól katalogowych do wybranej propozycji i materiału
+            const catalogPatch: any = {};
+            if (productName !== undefined) catalogPatch.productName = productName;
+            if (seller     !== undefined) catalogPatch.seller      = seller;
+            if (offerNumber!== undefined) catalogPatch.offerNumber = offerNumber;
+            if (productUrl !== undefined) catalogPatch.sourceUrl   = productUrl;
+            if (availability!== undefined) catalogPatch.availability = availability;
+            if (priceNetto !== undefined) catalogPatch.priceNetto  = priceNetto;
+            if (dataSheetUrl !== undefined) { catalogPatch.dataSheetUrl = dataSheetUrl; catalogPatch.dataSheetName = dataSheetName ?? null; }
+            if (complianceUrl !== undefined) { catalogPatch.complianceUrl = complianceUrl; catalogPatch.complianceName = complianceName ?? null; }
+
+            if (Object.keys(catalogPatch).length > 0) {
+                await this.prisma.productProposal.updateMany({
+                    where: { materialRequirementId: id, isSelected: true },
+                    data: catalogPatch,
+                });
+                // Sync do materiału (pola które materiał ma)
+                const req = await this.prisma.materialRequirement.findUnique({ where: { id }, select: { materialId: true } });
+                if (req?.materialId) {
+                    const matPatch: any = {};
+                    if (productName !== undefined) matPatch.productName = productName;
+                    if (seller      !== undefined) matPatch.seller      = seller;
+                    if (productUrl  !== undefined) matPatch.productUrl  = productUrl;
+                    if (priceNetto  !== undefined) matPatch.priceNetto  = priceNetto;
+                    if (dataSheetUrl !== undefined) { matPatch.dataSheetUrl = dataSheetUrl; matPatch.dataSheetName = dataSheetName ?? null; }
+                    if (complianceUrl !== undefined) { matPatch.complianceUrl = complianceUrl; matPatch.complianceName = complianceName ?? null; }
+                    if (Object.keys(matPatch).length > 0) {
+                        await this.prisma.material.update({ where: { id: req.materialId }, data: matPatch }).catch(() => {});
+                    }
+                }
+            }
         }
 
         if (data.wbsNodeId) {

@@ -8,50 +8,20 @@ export class MaterialsService {
 
     // ─── KATALOG ──────────────────────────────────────────────────────────────
 
-    /** Wszystkie materiały z katalogu (+ propozycje ręczne / wybrane AI bez wpisu w materials) */
+    /** Wszystkie materiały z katalogu (tylko tabela materials — propozycje nie zaśmiecają katalogu) */
     // @anchor materials-find-all
     async findAll() {
-        const [items, manualProposals] = await Promise.all([
-            this.prisma.material.findMany({
-                select: {
-                    id: true, manufacturer: true, model: true, productName: true,
-                    dataSheetUrl: true, dataSheetName: true, complianceUrl: true, complianceName: true,
-                    type: true, priceNetto: true, productUrl: true, seller: true, imageUrl: true,
-                },
-                orderBy: { createdAt: 'desc' },
-            }),
-            this.prisma.productProposal.findMany({
-                where: {
-                    NOT: { manufacturer: '' },
-                    OR: [{ isManual: true }, { isSelected: true }],
-                },
-                select: {
-                    id: true, manufacturer: true, model: true, productName: true,
-                    priceNetto: true, availability: true, sourceUrl: true,
-                },
-                orderBy: { createdAt: 'desc' },
-            }),
-        ]);
-
-        const proposalsMapped = manualProposals.map(p => ({
-            id: `proposal:${p.id}`,
-            manufacturer: p.manufacturer,
-            model: p.model,
-            productName: p.productName,
-            dataSheetUrl: null,
-            dataSheetName: null,
-            complianceUrl: null,
-            complianceName: null,
-            type: 'MATERIAL',
-            priceNetto: p.priceNetto,
-            seller: null,
-            imageUrl: null,
-            availability: p.availability,
-            productUrl: p.sourceUrl,
-        }));
-
+        const items = await this.prisma.material.findMany({
+            select: {
+                id: true, manufacturer: true, model: true, productName: true,
+                dataSheetUrl: true, dataSheetName: true, complianceUrl: true, complianceName: true,
+                type: true, priceNetto: true, productUrl: true, seller: true, imageUrl: true,
+            },
+            where: { manufacturer: { not: '' } },
+            orderBy: { createdAt: 'desc' },
+        });
         const seen = new Set<string>();
-        return [...items, ...proposalsMapped].filter(m => {
+        return items.filter(m => {
             const key = `${(m.manufacturer || '').toLowerCase()}|${(m.model || '').toLowerCase()}`;
             if (seen.has(key)) return false;
             seen.add(key);

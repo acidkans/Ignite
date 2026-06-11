@@ -4,6 +4,14 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-06-11 — fix(materials): forward availability/productUrl do propozycji; dedup katalogu z proposals
+
+### architektura / API
+- zmieniono `back-endpoint` `GET /materials` — usunięto propozycje z listy sugestii (tylko tabela `materials`); dodano dedup po `manufacturer|model`
+- zmieniono `back-endpoint` `PATCH /material-requirements/:id` — gdy brak manufacturer+model: availability, productUrl, seller, priceNetto, dataSheetUrl, complianceUrl forward do wybranej propozycji i powiązanego materiału
+
+---
+
 ## 2026-06-11 — fix(materials): Krok 7b — auto-upsert Material+Proposal przy wypełnieniu producent+model w ProductCard
 
 ### architektura / API
