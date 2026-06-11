@@ -717,9 +717,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         if (initialExpandDoneRef.current) return;
         const items = wbsTree?.items || [];
         if (items.length === 0) return;
-        // Akordeon: otwórz tylko pierwszą gałąź top-level
+        // Inicjalnie wszystkie gałęzie top-level zwinięte — żeby były wszystkie widoczne.
+        // (Akordeon i tak ukrywa rodzeństwo gdy któraś jest rozwinięta — auto-expand pierwszej
+        // ukrywał resztę domyślnych gałęzi: Zarządzanie projektem, Paliwo itd.)
         const ids = new Set(['root']);
-        if (items[0]) ids.add(`node_${items[0].id}`);
         setExpanded(ids);
         initialExpandDoneRef.current = true;
     }, [wbsTree]);

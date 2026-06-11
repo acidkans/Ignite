@@ -408,10 +408,21 @@
       "Bash(grep -iE '\\\\.\\(env|pem|key|crt|p12|pfx\\)$|secret|credential|password')",
       "Bash(grep -iE 'fix_role\\\\.sql|fix_db|prod_dump|dump\\\\.sql|backup|\\\\.sql$')",
       "Bash(git grep *)",
+      "Bash(git remote *)",
+      "PowerShell(if \\(Test-Path $env:USERPROFILE\\\\.ssh\\\\id_ed25519.pub\\) { Get-Content $env:USERPROFILE\\\\.ssh\\\\id_ed25519.pub } else { \"BRAK: $env:USERPROFILE\\\\.ssh\\\\id_ed25519.pub\" })",
+      "PowerShell(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new airtel@172.20.11.190 \"whoami; hostname\")",
+      "Bash(until grep *)",
       "Bash(bash deploy.sh)",
       "Bash(./deploy.sh)",
       "Bash(bash deploy.sh *)",
-      "Bash(./deploy.sh *)"
+      "Bash(./deploy.sh *)",
+      "Bash(curl -sS http://localhost:3001/api/process-tree)",
+      "Bash(curl -sS -o /dev/null -w \"status=%{http_code}\\\\n\" http://localhost:3001/api/process-tree)",
+      "Bash(curl -s -o /dev/null -w \"3005=%{http_code}\\\\n\" http://localhost:3005/api/process-tree)",
+      "Bash(curl -s -o /dev/null -w \"3001=%{http_code}\\\\n\" http://localhost:3001/api/process-tree)",
+      "Bash(powershell -Command \"Get-NetTCPConnection -State Listen -LocalPort 3001,3005,3002,3000 -ErrorAction SilentlyContinue | Select LocalPort,OwningProcess\")",
+      "Bash(powershell -Command \"Get-Process -Id 30444,26956 -ErrorAction SilentlyContinue | Select-Object Id,ProcessName,Path,StartTime\")",
+      "Bash(curl -s -X POST http://localhost:3005/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"andrzej@gigatel.app\",\"password\":\"\"}')"
     ]
   }
 }
