@@ -125,6 +125,7 @@ function App() {
     if (!token) { window.__devTracker?.setContext({ userId: null, userName: null }); return; }
     try {
       const p = JSON.parse(atob(token.split('.')[1]));
+      window.__devTracker?.setUser({ login: p.email, email: p.email, name: p.email });
       window.__devTracker?.setContext({ userId: p.sub || p.id, userName: p.email, role: p.role });
     } catch {}
   }, [token]);

@@ -282,21 +282,7 @@ export class VersioningService {
                     name: mr.name,
                     technicalSpec: mr.technicalSpec,
                     sourceDocument: mr.sourceDocument,
-                    productName: mr.productName,
-                    manufacturer: mr.manufacturer,
-                    model: mr.model,
-                    dataSheetUrl: mr.dataSheetUrl,
-                    dataSheetName: mr.dataSheetName,
-                    complianceUrl: mr.complianceUrl,
-                    complianceName: mr.complianceName,
                     complianceData: mr.complianceData,
-                    imageUrl: mr.imageUrl,
-                    productUrl: mr.productUrl,
-                    seller: mr.seller,
-                    offerNumber: mr.offerNumber,
-                    priceNetto: mr.priceNetto,
-                    availability: mr.availability,
-                    stockStatus: mr.stockStatus,
                     wbsNodeIds: mr.wbsNodeIds,
                     wbsNodeAllocations: mr.wbsNodeAllocations,
                     wbsNodeId: newWbsNodeId,
@@ -305,19 +291,9 @@ export class VersioningService {
                     aiConfidence: mr.aiConfidence,
                     status: mr.status,
                     listId: null,
-                    materialId: null,
+                    materialId: mr.materialId ?? null,
                 }
             });
-        }
-
-        // Second pass: remap materialId (self-ref parent)
-        for (const mr of matReqs) {
-            if (mr.materialId && matReqIdMap.has(mr.materialId)) {
-                await tx.materialRequirement.update({
-                    where: { id: matReqIdMap.get(mr.id)! },
-                    data: { materialId: matReqIdMap.get(mr.materialId)! },
-                });
-            }
         }
 
         // 10. Clone Order Requirements (full carry-over — w tym status oferty).

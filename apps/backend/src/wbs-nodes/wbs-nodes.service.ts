@@ -313,15 +313,9 @@ export class WbsNodesService {
                     material: {
                         select: {
                             id: true, productName: true, manufacturer: true, model: true,
-                            unit: true, priceNetto: true, quantity: true, status: true,
-                        technicalSpec: true,
-                        proposals: {
-                            where: { isSelected: true },
-                            select: { priceNetto: true, productName: true, manufacturer: true, model: true },
-                            take: 1,
+                            priceNetto: true, productUrl: true, imageUrl: true,
                         },
                     },
-                },
             },
         });
         const allocByNodeId = new Map();

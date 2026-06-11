@@ -28,14 +28,8 @@ CREATE TABLE IF NOT EXISTS materials (
     "updatedAt"             TIMESTAMP(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Unikalność: dwa indeksy żeby obsłużyć NULL model
-CREATE UNIQUE INDEX IF NOT EXISTS "materials_manufacturer_model_key"
-    ON materials (manufacturer, model)
-    WHERE model IS NOT NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS "materials_manufacturer_null_model_key"
-    ON materials (manufacturer)
-    WHERE model IS NULL;
+-- Unikalność zgodna z Prisma @@unique([manufacturer, model])
+ALTER TABLE materials ADD CONSTRAINT "materials_manufacturer_model_key" UNIQUE (manufacturer, model);
 
 -- ─── CREATE TABLE material_stock ──────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS material_stock (

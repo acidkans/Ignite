@@ -29,15 +29,12 @@ export class MaterialRequirementsService {
     async findAllWithOffers() {
         return this.prisma.materialRequirement.findMany({
             where: {
-                AND: [
-                    { offerNumber: { not: null } },
-                    { NOT: { offerNumber: '' } },
-                ]
+                proposals: { some: { isSelected: true } },
             },
             include: {
                 node: { select: { id: true, name: true, parent: { select: { id: true, name: true } } } }
             },
-            orderBy: [{ offerNumber: 'asc' }, { createdAt: 'asc' }]
+            orderBy: [{ createdAt: 'asc' }]
         });
     }
 
@@ -45,9 +42,9 @@ export class MaterialRequirementsService {
         return this.prisma.materialRequirement.findMany({
             where: {
                 nodeId,
-                dataSheetUrl: { not: null },
-                NOT: { dataSheetUrl: '' },
+                material: { dataSheetUrl: { not: null }, NOT: { dataSheetUrl: '' } },
             },
+            include: { material: true },
             orderBy: { createdAt: 'desc' },
         });
     }
@@ -55,25 +52,18 @@ export class MaterialRequirementsService {
     async findAllDatasheetItems() {
         return this.prisma.materialRequirement.findMany({
             where: {
-                dataSheetUrl: { not: null },
-                NOT: { dataSheetUrl: '' },
+                material: { dataSheetUrl: { not: null }, NOT: { dataSheetUrl: '' } },
             },
+            include: { material: true },
             orderBy: { createdAt: 'desc' },
         });
     }
 
     async findGlobalDatabase() {
-        return this.prisma.materialRequirement.findMany({
+        return this.prisma.material.findMany({
             where: {
-                AND: [
-                    { manufacturer: { not: null } },
-                    { NOT: { manufacturer: '' } },
-                    { dataSheetUrl: { not: null } },
-                    { NOT: { dataSheetUrl: '' } },
-                ]
-            },
-            include: {
-                node: { select: { id: true, name: true, parent: { select: { id: true, name: true } } } }
+                dataSheetUrl: { not: null },
+                NOT: { dataSheetUrl: '' },
             },
             orderBy: { createdAt: 'desc' }
         });
@@ -84,9 +74,10 @@ export class MaterialRequirementsService {
         const mfWhere: any = { equals: manufacturer, mode: 'insensitive' };
         const mdWhere: any = model ? { equals: model, mode: 'insensitive' } : undefined;
 
-        // 1. Szukaj wymagań z manufacturer/model ustawionym bezpośrednio
-        const directWhere: any = { manufacturer: mfWhere };
-        if (mdWhere) directWhere.model = mdWhere;
+        // 1. Szukaj wymagań powiązanych z materiałem o danym producencie/modelu
+        const materialFilter: any = { manufacturer: mfWhere };
+        if (mdWhere) materialFilter.model = mdWhere;
+        const directWhere: any = { material: materialFilter };
 
         // 2. Szukaj wymagań, które mają wybraną propozycję z tym manufacturer/model
         const proposalWhere: any = {
@@ -100,8 +91,7 @@ export class MaterialRequirementsService {
             name: true,
             quantity: true,
             unit: true,
-            priceNetto: true,
-            availability: true,
+            budgetedPriceNetto: true,
             status: true,
             createdAt: true,
             node: {
@@ -133,7 +123,7 @@ export class MaterialRequirementsService {
                     materialRequirement: {
                         select: {
                             id: true, name: true, quantity: true, unit: true,
-                            priceNetto: true, availability: true, status: true, createdAt: true,
+                            budgetedPriceNetto: true, status: true, createdAt: true,
                             node: {
                                 select: {
                                     id: true, name: true,
@@ -164,8 +154,8 @@ export class MaterialRequirementsService {
             // Użyj ceny z wybranej propozycji jeśli wymaganie jej nie ma
             results.push({
                 ...r,
-                priceNetto: r.priceNetto ?? p.priceNetto,
-                availability: r.availability || p.availability,
+                priceNetto: r.budgetedPriceNetto ?? p.priceNetto,
+                availability: p.availability ?? null,
             });
         }
         return results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -174,17 +164,11 @@ export class MaterialRequirementsService {
     /** All materials with manufacturer filled (no dataSheetUrl requirement) */
     async findAllMaterials() {
         const [items, manualProposals] = await Promise.all([
-            this.prisma.materialRequirement.findMany({
-                where: {
-                    AND: [
-                        { manufacturer: { not: null } },
-                        { NOT: { manufacturer: '' } },
-                    ]
-                },
+            this.prisma.material.findMany({
                 select: {
                     id: true, manufacturer: true, model: true, productName: true,
                     dataSheetUrl: true, dataSheetName: true, complianceUrl: true, complianceName: true,
-                    type: true, priceNetto: true, availability: true, productUrl: true,
+                    type: true, priceNetto: true, productUrl: true,
                 },
                 orderBy: { createdAt: 'desc' }
             }),
@@ -237,67 +221,25 @@ export class MaterialRequirementsService {
             include: {
                 proposals: true,
                 assignedSubtask: { select: { id: true, name: true } },
-                material: { select: { id: true, productName: true, manufacturer: true, model: true, stockStatus: true, dataSheetUrl: true, dataSheetName: true } },
-                wbsAllocations: { select: { wbsNodeId: true, quantity: true } },
+                material: { select: { id: true, productName: true, manufacturer: true, model: true, dataSheetUrl: true, dataSheetName: true, complianceUrl: true, imageUrl: true, priceNetto: true, productUrl: true, seller: true } },
             },
             orderBy: { createdAt: 'asc' },
         });
 
-        const staleAiRows = items.filter((item) => {
-            const hasName = String(item.name || '').trim().length > 0;
-            const hasProductName = String(item.productName || '').trim().length > 0;
-            const hasSelectedProposal = (item.proposals || []).some((proposal) => proposal.isSelected);
-            const comesFromDocument = String(item.sourceDocument || '').trim().length > 0;
-            return !hasName && hasProductName && !item.materialId && !hasSelectedProposal && comesFromDocument;
-        });
-
-        if (staleAiRows.length > 0) {
-            await Promise.all(staleAiRows.map((item) =>
-                this.prisma.materialRequirement.update({
-                    where: { id: item.id },
-                    data: {
-                        name: item.productName,
-                        productName: null,
-                    },
-                }).catch(() => null)
-            ));
-        }
-
-        // Dual-read: jeśli tabela relacyjna ma dane, nadpisz JSON blob
-        return items.map(item => {
-            const hasSelectedProposal = (item.proposals || []).some((proposal) => proposal.isSelected);
-            const comesFromDocument = !!String(item.sourceDocument || '').trim();
-            const isStaleAiRow = !String(item.name || '').trim()
-                && !!String(item.productName || '').trim()
-                && !item.materialId
-                && !hasSelectedProposal
-                && comesFromDocument;
-
-            const normalizedItem = isStaleAiRow
-                ? { ...item, name: item.productName, productName: null }
-                : item;
-            const allocs = (item as any).wbsAllocations;
-            if (allocs && allocs.length > 0) {
-                const allocMap: Record<string, number> = {};
-                const nodeIds: string[] = [];
-                for (const a of allocs) {
-                    allocMap[a.wbsNodeId] = a.quantity;
-                    nodeIds.push(a.wbsNodeId);
-                }
-                const freshQuantity = allocs.reduce((sum: number, a: any) => sum + (a.quantity || 0), 0);
-                return {
-                    ...normalizedItem,
-                    quantity: freshQuantity,
-                    wbsNodeAllocations: JSON.stringify(allocMap),
-                    wbsNodeIds: JSON.stringify(nodeIds),
-                    wbsNodeId: normalizedItem.wbsNodeId || nodeIds[0] || null,
-                    wbsAllocations: undefined, // nie wysyłaj surowej relacji do frontendu
-                };
-            }
-            // Fallback: zwróć oryginalne pola JSON
-            const { wbsAllocations: _, ...rest } = normalizedItem as any;
-            return rest;
-        });
+        // Spłaszcz pola Material na poziom wymagania (backward compat)
+        return items.map(item => ({
+            ...item,
+            productName: item.material?.productName ?? null,
+            manufacturer: item.material?.manufacturer ?? null,
+            model: item.material?.model ?? null,
+            dataSheetUrl: item.material?.dataSheetUrl ?? null,
+            dataSheetName: item.material?.dataSheetName ?? null,
+            complianceUrl: item.material?.complianceUrl ?? null,
+            imageUrl: item.material?.imageUrl ?? null,
+            priceNetto: item.budgetedPriceNetto ?? null,
+            productUrl: item.material?.productUrl ?? null,
+            seller: item.material?.seller ?? null,
+        }));
     }
 
     // ─── LISTY WYMAGAŃ MATERIAŁOWYCH ──────────────────────────────────────────
@@ -379,14 +321,11 @@ export class MaterialRequirementsService {
                     versionId: r.versionId,
                     listId: newList.id,
                     name: r.name,
-                    productName: r.productName,
                     type: r.type,
                     quantity: r.quantity,
                     unit: r.unit,
                     technicalSpec: r.technicalSpec,
                     sourceDocument: r.sourceDocument,
-                    manufacturer: r.manufacturer,
-                    model: r.model,
                     assignedSubtaskId: r.assignedSubtaskId,
                     isAiAssigned: r.isAiAssigned,
                     status: 'PENDING',
@@ -403,18 +342,33 @@ export class MaterialRequirementsService {
             include: {
                 proposals: true,
                 assignedSubtask: { select: { id: true, name: true } },
-                material: { select: { id: true, productName: true, manufacturer: true, model: true, stockStatus: true, dataSheetUrl: true, dataSheetName: true } },
+                material: { select: { id: true, productName: true, manufacturer: true, model: true, dataSheetUrl: true, dataSheetName: true, complianceUrl: true, complianceName: true, imageUrl: true, priceNetto: true, productUrl: true, seller: true } },
             },
         });
         if (!item) throw new NotFoundException(`MaterialRequirement ${id} not found`);
-        return item;
+        // Flatten catalog fields from Material onto the req for backwards compatibility
+        return {
+            ...item,
+            productName: item.material?.productName ?? null,
+            manufacturer: item.material?.manufacturer ?? null,
+            model: item.material?.model ?? null,
+            dataSheetUrl: item.material?.dataSheetUrl ?? null,
+            dataSheetName: item.material?.dataSheetName ?? null,
+            complianceUrl: item.material?.complianceUrl ?? null,
+            complianceName: item.material?.complianceName ?? null,
+            imageUrl: item.material?.imageUrl ?? null,
+            priceNetto: item.budgetedPriceNetto ?? null,
+            productUrl: item.material?.productUrl ?? null,
+            seller: item.material?.seller ?? null,
+            availability: null as string | null,
+            stockStatus: null as number | null,
+        };
     }
 
     async create(dto: {
         nodeId: string;
         versionId?: string;
         listId?: string;
-        productName?: string;
         type: string;
         quantity: number;
         unit: string;
@@ -422,16 +376,12 @@ export class MaterialRequirementsService {
         sourceDocument?: string;
         name?: string;
         materialId?: string;
-        stockStatus?: number;
         wbsNodeId?: string;
     }) {
-        const created = await this.prisma.materialRequirement.create({ data: dto });
-        // Gdy tworzony jest karta dla węzła WBS, utwórz wpis relacyjny WbsNodeMaterial
-        if (dto.wbsNodeId) {
-            await this.prisma.wbsNodeMaterial.create({
-                data: { wbsNodeId: dto.wbsNodeId, materialId: created.id, quantity: dto.quantity || 1 },
-            }).catch(() => {});
-        }
+        const { wbsNodeId, ...prismaData } = dto;
+        const created = await this.prisma.materialRequirement.create({ data: { ...prismaData, wbsNodeId: wbsNodeId ?? null } });
+        // WbsNodeMaterial.materialId teraz → materials.id (nie material_requirements.id)
+        // Auto-tworzenie pominięte — WbsNodeMaterial powstaje przy selectProposal()
         return created;
     }
 
@@ -459,28 +409,17 @@ export class MaterialRequirementsService {
             const clone = await this.prisma.materialRequirement.create({
                 data: { ...rest, wbsNodeId: mapping.targetWbsNodeId },
             });
-            try {
-                await this.prisma.wbsNodeMaterial.create({
-                    data: {
-                        wbsNodeId: mapping.targetWbsNodeId,
-                        materialId: clone.id,
-                        quantity: clone.quantity || 1,
-                    }
-                });
-            } catch { /* unikalność (wbsNodeId, materialId) — ignoruj */ }
+            // WbsNodeMaterial.materialId → materials.id; auto-tworzenie pominięte (powstaje przy selectProposal)
             created.push(clone);
         }
         return created;
     }
 
     async update(id: string, dto: Partial<{
-        productName: string;
         type: string;
         quantity: number;
         unit: string;
         technicalSpec: string;
-        manufacturer: string;
-        model: string;
         assignedSubtaskId: string | null;
         wbsNodeId: string | null;
         wbsNodeIds: string | null;
@@ -488,22 +427,22 @@ export class MaterialRequirementsService {
         isAiAssigned: boolean;
         status: string;
         complianceData: string;
-        priceNetto: number | null;
-        seller: string | null;
-        offerNumber: string | null;
-        productUrl: string | null;
+        priceNetto: number | null;       // przyjmowany z frontendu → mapowany na budgetedPriceNetto
         name: string | null;
         materialId: string | null;
-        stockStatus: number | null;
-        dataSheetUrl: string | null;
-        dataSheetName: string | null;
-        complianceUrl: string | null;
-        complianceName: string | null;
+        // pola katalogowe (legacy) — ignorowane w update MaterialRequirement, routowane do Material osobno
+        productName?: string; manufacturer?: string; model?: string; seller?: string | null;
+        offerNumber?: string | null; productUrl?: string | null; stockStatus?: number | null;
+        dataSheetUrl?: string | null; dataSheetName?: string | null;
+        complianceUrl?: string | null; complianceName?: string | null; availability?: string | null;
     }>) {
         await this.findOne(id);
-        const data = { ...dto };
-        if (data.productName === null || data.productName === undefined) delete data.productName;
-        if (data.manufacturer) data.manufacturer = data.manufacturer.toUpperCase();
+        // Strip pól katalogowych usuniętych z MaterialRequirement; mapuj priceNetto → budgetedPriceNetto
+        const { productName, manufacturer, model, seller, offerNumber, productUrl, stockStatus,
+            dataSheetUrl, dataSheetName, complianceUrl, complianceName, availability,
+            priceNetto, ...rest } = dto as any;
+        const data: any = { ...rest };
+        if (priceNetto !== undefined) data.budgetedPriceNetto = priceNetto;
 
         if (data.wbsNodeId) {
             const conflicting = await this.prisma.materialRequirement.findFirst({
@@ -694,7 +633,7 @@ export class MaterialRequirementsService {
     // ─── UPLOAD PLIKÓW ─────────────────────────────────────────────────────────
 
     async uploadFile(id: string, file: Express.Multer.File, fileType: 'datasheet' | 'compliance') {
-        await this.findOne(id);
+        const req = await this.findOne(id);
 
         const ext = path.extname(file.originalname) || '.pdf';
         const fileName = `${randomUUID()}${ext}`;
@@ -705,11 +644,14 @@ export class MaterialRequirementsService {
 
         const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
 
-        const data = fileType === 'datasheet'
-            ? { dataSheetUrl: fileName, dataSheetName: originalName }
-            : { complianceUrl: fileName, complianceName: originalName };
-
-        return this.prisma.materialRequirement.update({ where: { id }, data });
+        // Plik katalogowy trafia do Material (nie do MaterialRequirement — te pola tam już nie istnieją)
+        if (req.materialId) {
+            const data = fileType === 'datasheet'
+                ? { dataSheetUrl: fileName, dataSheetName: originalName }
+                : { complianceUrl: fileName, complianceName: originalName };
+            return this.prisma.material.update({ where: { id: req.materialId }, data });
+        }
+        throw new BadRequestException('Brak przypisanego materiału — najpierw zaakceptuj propozycję produktu');
     }
 
     // ─── EKSTRAKCJA AI Z DOKUMENTÓW ───────────────────────────────────────────
@@ -821,10 +763,10 @@ ${context}`;
         // 7. Pobierz istniejące wymagania dla deduplikacji
         const existing = await this.prisma.materialRequirement.findMany({
             where: { nodeId },
-            select: { name: true, productName: true, manufacturer: true, model: true },
+            select: { name: true, material: { select: { productName: true, manufacturer: true, model: true } } },
         });
         const existingKeys = new Set(existing.map(e =>
-            `${(e.name ?? e.productName ?? '').toLowerCase().trim()}|${e.manufacturer?.toLowerCase().trim() ?? ''}|${e.model?.toLowerCase().trim() ?? ''}`
+            `${(e.name ?? e.material?.productName ?? '').toLowerCase().trim()}|${e.material?.manufacturer?.toLowerCase().trim() ?? ''}|${e.material?.model?.toLowerCase().trim() ?? ''}`
         ));
 
         const newItems = items.filter(item => {
@@ -842,7 +784,6 @@ ${context}`;
                         versionId: vId,
                         listId: listId || null,
                         name: item.name,
-                        productName: null,
                         type: item.type || 'material',
                         quantity: Number(item.quantity) || 0,
                         unit: item.unit || 'sztuki',
@@ -990,13 +931,16 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
     }
 
     async uploadImage(id: string, file: Express.Multer.File) {
-        await this.findOne(id);
+        const req = await this.findOne(id);
         const ext = path.extname(file.originalname) || '.jpg';
         const fileName = `${randomUUID()}${ext}`;
         const filePath = path.join(UPLOADS_DIR, fileName);
         if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
         fs.writeFileSync(filePath, file.buffer);
-        return this.prisma.materialRequirement.update({ where: { id }, data: { imageUrl: fileName } });
+        if (req.materialId) {
+            return this.prisma.material.update({ where: { id: req.materialId }, data: { imageUrl: fileName } });
+        }
+        throw new BadRequestException('Brak przypisanego materiału — najpierw zaakceptuj propozycję produktu');
     }
 
     // @anchor resolve-upload-path
@@ -1039,22 +983,10 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
     }
 
     async addManualProposal(id: string, dto: { productName: string; manufacturer: string; model?: string; sourceUrl?: string; priceNetto?: number | null; availability?: string }) {
-        const req = await this.findOne(id);
-        const proposal = await this.prisma.productProposal.create({
+        await this.findOne(id);
+        return this.prisma.productProposal.create({
             data: { materialRequirementId: id, isManual: true, ...dto },
         });
-        // Uzupełnij pola wymagania jeśli są puste → wpis trafia do bazy materiałów logistyki
-        const update: any = {};
-        if (!req.manufacturer && dto.manufacturer) update.manufacturer = dto.manufacturer.toUpperCase();
-        if (!req.model && dto.model) update.model = dto.model;
-        if (!req.productName && dto.productName) update.productName = dto.productName;
-        if (!req.productUrl && dto.sourceUrl) update.productUrl = dto.sourceUrl;
-        if (req.priceNetto == null && dto.priceNetto != null) update.priceNetto = dto.priceNetto;
-        if (!req.availability && dto.availability) update.availability = dto.availability;
-        if (Object.keys(update).length > 0) {
-            await this.prisma.materialRequirement.update({ where: { id }, data: update }).catch(() => {});
-        }
-        return proposal;
     }
 
     async updateProposal(proposalId: string, dto: Partial<{ productName: string; manufacturer: string; model: string; sourceUrl: string; priceNetto: number | null; seller: string | null; offerNumber: string | null; availability: string | null; isRejected: boolean; }>) {
@@ -1102,21 +1034,34 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
                 where: { materialRequirementId: proposal.materialRequirementId, id: { not: proposalId } },
                 data: { isSelected: false },
             });
-            // Przepisz dane produktu z propozycji do wymagania
-            const updateData: any = {};
-            if (proposal.productName) updateData.productName = proposal.productName;
-            if (proposal.manufacturer) updateData.manufacturer = proposal.manufacturer;
-            if (proposal.model) updateData.model = proposal.model;
-            if (proposal.priceNetto != null) updateData.priceNetto = proposal.priceNetto;
-            if (proposal.seller) updateData.seller = proposal.seller;
-            if (proposal.availability) updateData.availability = proposal.availability;
-            if (proposal.sourceUrl) updateData.productUrl = proposal.sourceUrl;
-            if (Object.keys(updateData).length > 0) {
-                await this.prisma.materialRequirement.update({
-                    where: { id: proposal.materialRequirementId },
-                    data: updateData,
-                }).catch(() => {});
-            }
+            // Upsert do tabeli materials — zaakceptowany produkt trafia do katalogu
+            const existingMaterial = await this.prisma.material.findFirst({
+                where: { manufacturer: proposal.manufacturer, model: proposal.model ?? null },
+            });
+            const material = existingMaterial
+                ? existingMaterial
+                : await this.prisma.material.create({
+                    data: {
+                        manufacturer: proposal.manufacturer,
+                        model: proposal.model ?? null,
+                        productName: proposal.productName,
+                        type: 'DEVICE',
+                        priceNetto: proposal.priceNetto ?? undefined,
+                        seller: proposal.seller ?? undefined,
+                        productUrl: proposal.sourceUrl ?? undefined,
+                        dataSheetUrl: proposal.dataSheetUrl ?? undefined,
+                        dataSheetName: proposal.dataSheetName ?? undefined,
+                        imageUrl: proposal.imageUrl ?? undefined,
+                    },
+                });
+            // Połącz wymaganie z materiałem + zapisz zabudżetowaną cenę
+            await this.prisma.materialRequirement.update({
+                where: { id: proposal.materialRequirementId },
+                data: {
+                    materialId: material.id,
+                    ...(proposal.priceNetto != null ? { budgetedPriceNetto: proposal.priceNetto } : {}),
+                },
+            });
         }
         return this.prisma.productProposal.update({
             where: { id: proposalId },
@@ -1235,46 +1180,35 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
 
         const dataSheetUrl = doc.storagePath;
         const dataSheetName = doc.name;
+        const type_valid = (t: string) => ['DEVICE', 'MATERIAL', 'CABLE', 'SOFTWARE', 'SERVICE'].includes(t) ? t : 'DEVICE';
 
         const results: any[] = [];
         for (const item of items) {
-            const productName = String(item.productName).slice(0, 300);
-            const manufacturer = item.manufacturer ? String(item.manufacturer).slice(0, 200).toUpperCase() : null;
+            if (!item.manufacturer) continue; // bez producenta nie możemy upsertować do materials
+            const productName = String(item.productName || '').slice(0, 300) || null;
+            const manufacturer = String(item.manufacturer).slice(0, 200).toUpperCase();
             const model = item.model ? String(item.model).slice(0, 200) : null;
 
-            const existing = await this.prisma.materialRequirement.findFirst({
-                where: {
-                    nodeId,
-                    productName,
-                    ...(manufacturer ? { manufacturer } : { manufacturer: null }),
-                    ...(model ? { model } : { model: null }),
-                },
+            // Upsert do tabeli materials (katalog produktów)
+            const existing = await this.prisma.material.findFirst({
+                where: { manufacturer, model: model ?? null },
             });
-            if (existing) {
-                if (!existing.dataSheetUrl) {
-                    await this.prisma.materialRequirement.update({
-                        where: { id: existing.id },
-                        data: { dataSheetUrl, dataSheetName },
-                    });
-                }
-                continue;
-            }
-
-            const created = await this.prisma.materialRequirement.create({
-                data: {
-                    nodeId,
-                    productName,
-                    manufacturer,
-                    model,
-                    type: ['DEVICE', 'MATERIAL', 'CABLE', 'SOFTWARE', 'SERVICE'].includes(item.type) ? item.type : 'DEVICE',
-                    quantity: 1,
-                    unit: 'sztuki',
-                    dataSheetUrl,
-                    dataSheetName,
-                    status: 'PENDING',
-                },
-            });
-            results.push(created);
+            const material = existing
+                ? await this.prisma.material.update({
+                    where: { id: existing.id },
+                    data: { productName: productName ?? undefined, dataSheetUrl, dataSheetName },
+                })
+                : await this.prisma.material.create({
+                    data: {
+                        manufacturer,
+                        model,
+                        productName,
+                        type: type_valid(item.type),
+                        dataSheetUrl,
+                        dataSheetName,
+                    },
+                });
+            results.push(material);
         }
         return results;
     }
