@@ -270,7 +270,7 @@ function ProposalRow({ p, token, onDelete, onSelect, onDeleted: onImageDeleted, 
     );
 }
 
-function ProposalsSection({ req, token, onRefresh, materialDb }) {
+function ProposalsSection({ req, token, onRefresh, onPatch, materialDb }) {
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const [proposals, setProposals] = useState(req.proposals || []);
     const [searching, setSearching] = useState(false);
@@ -329,6 +329,9 @@ function ProposalsSection({ req, token, onRefresh, materialDb }) {
 
     const selectProposal = async (p) => {
         await fetch(`${API_URL}/material-requirements/proposals/${p.id}/select`, { method: 'PATCH', headers });
+        // Optimistic: zaznacz checkmark natychmiast i zaktualizuj cenę w rodzicu
+        setProposals(prev => prev.map(x => ({ ...x, isSelected: x.id === p.id })));
+        if (p.priceNetto != null) onPatch?.(req.id, { priceNetto: p.priceNetto });
         onRefresh();
     };
 
@@ -364,7 +367,13 @@ function ProposalsSection({ req, token, onRefresh, materialDb }) {
         const res = await fetch(`${API_URL}/material-requirements/${req.id}/proposals`, {
             method: 'POST', headers, body: JSON.stringify(payload),
         });
-        if (res.ok) { setManualForm(null); setManualAc({}); onRefresh(); }
+        if (res.ok) {
+            const created = await res.json();
+            setManualForm(null);
+            setManualAc({});
+            setProposals(prev => [...prev, created]);
+            onRefresh();
+        }
     };
 
     return (
@@ -792,7 +801,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                 </div>
 
                 {/* Propozycje */}
-                {!readOnly && <ProposalsSection req={card} token={token} onRefresh={onRefresh} materialDb={materialDb} />}
+                {!readOnly && <ProposalsSection req={card} token={token} onRefresh={onRefresh} onPatch={onPatch} materialDb={materialDb} />}
             </div>
 
             {/* Ikona karty katalogowej — widoczna gdy materiał zaciągnięty z bazy */}
