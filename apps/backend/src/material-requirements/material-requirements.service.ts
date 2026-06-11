@@ -475,7 +475,7 @@ export class MaterialRequirementsService {
                 data: { isSelected: false },
             });
             const existingProp = await this.prisma.productProposal.findFirst({
-                where: { materialRequirementId: id, manufacturer: mfr, model: mdl },
+                where: { materialRequirementId: id, manufacturer: { equals: mfr, mode: 'insensitive' }, model: { equals: mdl, mode: 'insensitive' } },
             });
             if (existingProp) {
                 await this.prisma.productProposal.update({
