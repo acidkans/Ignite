@@ -202,8 +202,9 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
         setEditingCell(null);
     };
 
-    const isDatasheetFile = (fileName) => {
-        const n = (fileName || '').toLowerCase();
+    const isDatasheetFile = (file) => {
+        if (file?.documentCategory === 'datasheet') return true;
+        const n = (file?.fileName || (typeof file === 'string' ? file : '') || '').toLowerCase();
         return n.includes('karta materiałowa') || n.includes('karta techniczna') || n.includes('data sheet') || n.includes('datasheet');
     };
 
@@ -220,8 +221,8 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
 
             const newFiles = files.filter(f => !parsedIds.has(f.id));
             if (newFiles.length === 0) { setBatchStatus('Już sparsowano'); setBatchParsing(false); return; }
-            const datasheetFiles = newFiles.filter(f => isDatasheetFile(f.fileName));
-            const otherFiles = newFiles.filter(f => !isDatasheetFile(f.fileName));
+            const datasheetFiles = newFiles.filter(f => isDatasheetFile(f));
+            const otherFiles = newFiles.filter(f => !isDatasheetFile(f));
 
             let saved = 0;
             for (const file of datasheetFiles) {

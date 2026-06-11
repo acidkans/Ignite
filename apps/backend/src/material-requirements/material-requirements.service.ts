@@ -706,8 +706,8 @@ export class MaterialRequirementsService {
         const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
 
         const data = fileType === 'datasheet'
-            ? { dataSheetUrl: filePath, dataSheetName: originalName }
-            : { complianceUrl: filePath, complianceName: originalName };
+            ? { dataSheetUrl: fileName, dataSheetName: originalName }
+            : { complianceUrl: fileName, complianceName: originalName };
 
         return this.prisma.materialRequirement.update({ where: { id }, data });
     }
@@ -996,7 +996,13 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
         const filePath = path.join(UPLOADS_DIR, fileName);
         if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
         fs.writeFileSync(filePath, file.buffer);
-        return this.prisma.materialRequirement.update({ where: { id }, data: { imageUrl: filePath } });
+        return this.prisma.materialRequirement.update({ where: { id }, data: { imageUrl: fileName } });
+    }
+
+    // @anchor resolve-upload-path
+    private resolveUploadPath(stored: string): string {
+        if (path.isAbsolute(stored)) return stored; // legacy: absolutna ścieżka Docker
+        return path.join(process.cwd(), 'uploads', stored);
     }
 
     async getDatasheetStream(id: string) {
@@ -1005,16 +1011,18 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
         const url = req.dataSheetUrl || req.material?.dataSheetUrl;
         const name = req.dataSheetName || req.material?.dataSheetName || 'karta_katalogowa.pdf';
         if (!url) throw new NotFoundException('No datasheet for this requirement');
-        if (!fs.existsSync(url)) throw new NotFoundException('Datasheet file not found');
-        const stream = fs.createReadStream(url);
+        const filePath = this.resolveUploadPath(url);
+        if (!fs.existsSync(filePath)) throw new NotFoundException('Datasheet file not found');
+        const stream = fs.createReadStream(filePath);
         return { stream, name };
     }
 
     async getComplianceStream(id: string) {
         const req = await this.findOne(id);
         if (!req.complianceUrl) throw new NotFoundException('No compliance card for this requirement');
-        if (!fs.existsSync(req.complianceUrl)) throw new NotFoundException('Compliance file not found');
-        const stream = fs.createReadStream(req.complianceUrl);
+        const filePath = this.resolveUploadPath(req.complianceUrl);
+        if (!fs.existsSync(filePath)) throw new NotFoundException('Compliance file not found');
+        const stream = fs.createReadStream(filePath);
         const name = req.complianceName || 'karta_zgodnosci.pdf';
         return { stream, name };
     }
@@ -1022,8 +1030,9 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
     async getImageStream(id: string) {
         const req = await this.findOne(id);
         if (!req.imageUrl) throw new NotFoundException('No image for this requirement');
-        if (!fs.existsSync(req.imageUrl)) throw new NotFoundException('Image file not found');
-        const stream = fs.createReadStream(req.imageUrl);
+        const filePath = this.resolveUploadPath(req.imageUrl);
+        if (!fs.existsSync(filePath)) throw new NotFoundException('Image file not found');
+        const stream = fs.createReadStream(filePath);
         const ext = path.extname(req.imageUrl).toLowerCase();
         const mimeMap: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' };
         return { stream, mimeType: mimeMap[ext] || 'application/octet-stream' };
@@ -1224,7 +1233,7 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
         const doc = await this.prisma.processNode.findUnique({ where: { id: documentId } });
         if (!doc) throw new NotFoundException('Dokument nie znaleziony');
 
-        const dataSheetUrl = path.join(UPLOADS_DIR, doc.storagePath);
+        const dataSheetUrl = doc.storagePath;
         const dataSheetName = doc.name;
 
         const results: any[] = [];

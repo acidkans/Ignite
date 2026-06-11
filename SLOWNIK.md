@@ -357,6 +357,33 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 
 | Tag | Nazwa | Plik | Anchor |
 |-----|-------|------|--------|
+| schema-model | Material | apps/backend/prisma/schema.prisma | @anchor material |
+| schema-pole | Material.id | apps/backend/prisma/schema.prisma | @anchor material-id |
+| schema-pole | Material.manufacturer | apps/backend/prisma/schema.prisma | @anchor material-manufacturer |
+| schema-pole | Material.model | apps/backend/prisma/schema.prisma | @anchor material-model |
+| schema-pole | Material.productName | apps/backend/prisma/schema.prisma | @anchor material-product-name |
+| schema-pole | Material.type | apps/backend/prisma/schema.prisma | @anchor material-type |
+| schema-pole | Material.dataSheetUrl | apps/backend/prisma/schema.prisma | @anchor material-data-sheet-url |
+| schema-pole | Material.dataSheetName | apps/backend/prisma/schema.prisma | @anchor material-data-sheet-name |
+| schema-pole | Material.complianceUrl | apps/backend/prisma/schema.prisma | @anchor material-compliance-url |
+| schema-pole | Material.complianceName | apps/backend/prisma/schema.prisma | @anchor material-compliance-name |
+| schema-pole | Material.imageUrl | apps/backend/prisma/schema.prisma | @anchor material-image-url |
+| schema-pole | Material.priceNetto | apps/backend/prisma/schema.prisma | @anchor material-price-netto |
+| schema-pole | Material.productUrl | apps/backend/prisma/schema.prisma | @anchor material-product-url |
+| schema-pole | Material.seller | apps/backend/prisma/schema.prisma | @anchor material-seller |
+| schema-pole | Material.dataSheetDocumentId | apps/backend/prisma/schema.prisma | @anchor material-data-sheet-document-id |
+| schema-pole | Material.complianceDocumentId | apps/backend/prisma/schema.prisma | @anchor material-compliance-document-id |
+| schema-relacja | Material.dataSheetDocument | apps/backend/prisma/schema.prisma | @anchor material-data-sheet-document |
+| schema-relacja | Material.complianceDocument | apps/backend/prisma/schema.prisma | @anchor material-compliance-document |
+| schema-relacja | Material.requirements | apps/backend/prisma/schema.prisma | @anchor material-requirements |
+| schema-relacja | Material.wbsAllocations | apps/backend/prisma/schema.prisma | @anchor material-wbs-allocations |
+| schema-relacja | Material.stock | apps/backend/prisma/schema.prisma | @anchor material-stock |
+| schema-model | MaterialStock | apps/backend/prisma/schema.prisma | @anchor material-stock |
+| schema-pole | MaterialStock.id | apps/backend/prisma/schema.prisma | @anchor material-stock-id |
+| schema-pole | MaterialStock.materialId | apps/backend/prisma/schema.prisma | @anchor material-stock-material-id |
+| schema-pole | MaterialStock.quantity | apps/backend/prisma/schema.prisma | @anchor material-stock-quantity |
+| schema-pole | MaterialStock.location | apps/backend/prisma/schema.prisma | @anchor material-stock-location |
+| schema-relacja | MaterialStock.material | apps/backend/prisma/schema.prisma | @anchor material-stock-material |
 | schema-model | MaterialRequirementsList | apps/backend/prisma/schema.prisma | @anchor material-requirements-list |
 | schema-pole | MaterialRequirementsList.id | apps/backend/prisma/schema.prisma | @anchor mat-list-id |
 | schema-pole | MaterialRequirementsList.nodeId | apps/backend/prisma/schema.prisma | @anchor mat-list-node-id |
@@ -378,19 +405,11 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | MaterialRequirement.listId | apps/backend/prisma/schema.prisma | @anchor mat-req-list-id |
 | schema-pole | MaterialRequirement.name | apps/backend/prisma/schema.prisma | @anchor mat-req-name |
 | schema-pole | MaterialRequirement.materialId | apps/backend/prisma/schema.prisma | @anchor mat-req-material-id |
-| schema-pole | MaterialRequirement.productName | apps/backend/prisma/schema.prisma | @anchor mat-req-product-name |
 | schema-pole | MaterialRequirement.type | apps/backend/prisma/schema.prisma | @anchor mat-req-type |
 | schema-pole | MaterialRequirement.quantity | apps/backend/prisma/schema.prisma | @anchor mat-req-quantity |
 | schema-pole | MaterialRequirement.unit | apps/backend/prisma/schema.prisma | @anchor mat-req-unit |
 | schema-pole | MaterialRequirement.technicalSpec | apps/backend/prisma/schema.prisma | @anchor mat-req-technical-spec |
 | schema-pole | MaterialRequirement.sourceDocument | apps/backend/prisma/schema.prisma | @anchor mat-req-source-document |
-| schema-pole | MaterialRequirement.manufacturer | apps/backend/prisma/schema.prisma | @anchor mat-req-manufacturer |
-| schema-pole | MaterialRequirement.model | apps/backend/prisma/schema.prisma | @anchor mat-req-model |
-| schema-pole | MaterialRequirement.stockStatus | apps/backend/prisma/schema.prisma | @anchor mat-req-stock-status |
-| schema-pole | MaterialRequirement.dataSheetUrl | apps/backend/prisma/schema.prisma | @anchor mat-req-data-sheet-url |
-| schema-pole | MaterialRequirement.dataSheetName | apps/backend/prisma/schema.prisma | @anchor mat-req-data-sheet-name |
-| schema-pole | MaterialRequirement.complianceUrl | apps/backend/prisma/schema.prisma | @anchor mat-req-compliance-url |
-| schema-pole | MaterialRequirement.complianceName | apps/backend/prisma/schema.prisma | @anchor mat-req-compliance-name |
 | schema-pole | MaterialRequirement.assignedSubtaskId | apps/backend/prisma/schema.prisma | @anchor mat-req-assigned-subtask-id |
 | schema-pole | MaterialRequirement.wbsNodeId | apps/backend/prisma/schema.prisma | @anchor mat-req-wbs-node-id |
 | schema-pole | MaterialRequirement.wbsNodeIds | apps/backend/prisma/schema.prisma | @anchor mat-req-wbs-node-ids |
@@ -398,22 +417,15 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | MaterialRequirement.isAiAssigned | apps/backend/prisma/schema.prisma | @anchor mat-req-is-ai-assigned |
 | schema-pole | MaterialRequirement.aiConfidence | apps/backend/prisma/schema.prisma | @anchor mat-req-ai-confidence |
 | schema-pole | MaterialRequirement.complianceData | apps/backend/prisma/schema.prisma | @anchor mat-req-compliance-data |
-| schema-pole | MaterialRequirement.priceNetto | apps/backend/prisma/schema.prisma | @anchor mat-req-price-netto |
-| schema-pole | MaterialRequirement.seller | apps/backend/prisma/schema.prisma | @anchor mat-req-seller |
-| schema-pole | MaterialRequirement.offerNumber | apps/backend/prisma/schema.prisma | @anchor mat-req-offer-number |
-| schema-pole | MaterialRequirement.availability | apps/backend/prisma/schema.prisma | @anchor mat-req-availability |
-| schema-pole | MaterialRequirement.productUrl | apps/backend/prisma/schema.prisma | @anchor mat-req-product-url |
-| schema-pole | MaterialRequirement.imageUrl | apps/backend/prisma/schema.prisma | @anchor mat-req-image-url |
+| schema-pole | MaterialRequirement.budgetedPriceNetto | apps/backend/prisma/schema.prisma | @anchor mat-req-budgeted-price-netto |
 | schema-pole | MaterialRequirement.status | apps/backend/prisma/schema.prisma | @anchor mat-req-status |
 | schema-relacja | MaterialRequirement.material | apps/backend/prisma/schema.prisma | @anchor mat-req-material |
-| schema-relacja | MaterialRequirement.requirements | apps/backend/prisma/schema.prisma | @anchor mat-req-requirements |
 | schema-relacja | MaterialRequirement.node | apps/backend/prisma/schema.prisma | @anchor mat-req-node |
 | schema-relacja | MaterialRequirement.version | apps/backend/prisma/schema.prisma | @anchor mat-req-version |
 | schema-relacja | MaterialRequirement.list | apps/backend/prisma/schema.prisma | @anchor mat-req-list |
 | schema-relacja | MaterialRequirement.assignedSubtask | apps/backend/prisma/schema.prisma | @anchor mat-req-assigned-subtask |
 | schema-relacja | MaterialRequirement.wbsNode | apps/backend/prisma/schema.prisma | @anchor mat-req-wbs-node |
 | schema-relacja | MaterialRequirement.proposals | apps/backend/prisma/schema.prisma | @anchor mat-req-proposals |
-| schema-relacja | MaterialRequirement.wbsAllocations | apps/backend/prisma/schema.prisma | @anchor mat-req-wbs-allocations |
 | schema-model | ProductProposal | apps/backend/prisma/schema.prisma | @anchor product-proposal |
 | schema-pole | ProductProposal.id | apps/backend/prisma/schema.prisma | @anchor product-proposal-id |
 | schema-pole | ProductProposal.materialRequirementId | apps/backend/prisma/schema.prisma | @anchor product-proposal-material-requirement-id |
@@ -444,6 +456,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-modul | MaterialRequirementsModule | apps/backend/src/material-requirements/material-requirements.module.ts | @anchor material-requirements-module |
 | back-serwis | MaterialRequirementsService | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor material-requirements-service |
 | back-funkcja | getWbsNodeTypes | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor get-wbs-node-types |
+| back-funkcja | resolveUploadPath | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor resolve-upload-path |
 | back-endpoint | GET /material-requirements/database | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-database |
 | back-endpoint | GET /material-requirements/all-materials | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-all-materials |
 | back-endpoint | GET /material-requirements/usage | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-usage |

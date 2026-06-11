@@ -193,6 +193,8 @@ model ProcessNode {
   subtasks                  Subtask[]
   schematicDocuments        SchematicDocument[]
   materialRequirements      MaterialRequirement[]
+  materialDataSheets        Material[] @relation("MaterialDataSheet")
+  materialCompliances       Material[] @relation("MaterialCompliance")
   wbsNodes                  WbsNode[]
   materialRequirementsLists MaterialRequirementsList[]
   documentHighlights        DocumentHighlight[]
@@ -607,6 +609,75 @@ model MaterialRequirementsList {
   @@map("material_requirements_lists")
 }
 
+/// @anchor material
+model Material {
+  /// @anchor material-id
+  id             String   @id @default(uuid())
+  /// @anchor material-manufacturer
+  manufacturer   String
+  /// @anchor material-model
+  model          String?
+  /// @anchor material-product-name
+  productName    String?
+  /// @anchor material-type
+  type           String   // DEVICE | MATERIAL | CABLE | SOFTWARE | SERVICE
+  /// @anchor material-data-sheet-url
+  dataSheetUrl   String?  // legacy: relatywna nazwa pliku (fallback gdy brak FK)
+  /// @anchor material-data-sheet-name
+  dataSheetName  String?
+  /// @anchor material-compliance-url
+  complianceUrl  String?
+  /// @anchor material-compliance-name
+  complianceName String?
+  /// @anchor material-image-url
+  imageUrl       String?
+  /// @anchor material-price-netto
+  priceNetto     Float?
+  /// @anchor material-product-url
+  productUrl     String?
+  /// @anchor material-seller
+  seller         String?
+  /// @anchor material-data-sheet-document-id
+  dataSheetDocumentId String?
+  /// @anchor material-compliance-document-id
+  complianceDocumentId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  /// @anchor material-data-sheet-document
+  dataSheetDocument    ProcessNode? @relation("MaterialDataSheet", fields: [dataSheetDocumentId], references: [id], onDelete: SetNull)
+  /// @anchor material-compliance-document
+  complianceDocument   ProcessNode? @relation("MaterialCompliance", fields: [complianceDocumentId], references: [id], onDelete: SetNull)
+  /// @anchor material-requirements
+  requirements         MaterialRequirement[]
+  /// @anchor material-wbs-allocations
+  wbsAllocations       WbsNodeMaterial[]
+  /// @anchor material-stock
+  stock                MaterialStock[]
+
+  @@unique([manufacturer, model])
+  @@map("materials")
+}
+
+/// @anchor material-stock
+model MaterialStock {
+  /// @anchor material-stock-id
+  id         String   @id @default(uuid())
+  /// @anchor material-stock-material-id
+  materialId String
+  /// @anchor material-stock-quantity
+  quantity   Decimal
+  /// @anchor material-stock-location
+  location   String?
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  /// @anchor material-stock-material
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@map("material_stock")
+}
+
 /// @anchor material-requirement
 model MaterialRequirement {
   /// @anchor mat-req-id
@@ -622,17 +693,12 @@ model MaterialRequirement {
   /// @anchor mat-req-name
   name String? // nazwa wymagania (np. "Kamera główna", "Zasilacz awaryjny")
 
-  // Referencja do materiału z Bazy Materiałów
+  // Referencja do zaakceptowanego produktu z tabeli materials
   /// @anchor mat-req-material-id
-  materialId   String? // FK do innego MaterialRequirement (katalog materiałów)
+  materialId   String? // FK do Material (baza katalogowa)
   /// @anchor mat-req-material
-  material     MaterialRequirement?  @relation("MaterialToRequirement", fields: [materialId], references: [id], onDelete: SetNull)
-  /// @anchor mat-req-requirements
-  requirements MaterialRequirement[] @relation("MaterialToRequirement")
+  material     Material? @relation(fields: [materialId], references: [id], onDelete: SetNull)
 
-  // Identyfikacja produktu
-  /// @anchor mat-req-product-name
-  productName    String? // nazwa handlowa produktu (nullowalny jeśli materialId ustawiony)
   /// @anchor mat-req-type
   type           String // DEVICE | MATERIAL | CABLE | SOFTWARE | SERVICE
   /// @anchor mat-req-quantity
@@ -643,24 +709,6 @@ model MaterialRequirement {
   technicalSpec  String? // pełne wymagania techniczne z dokumentu
   /// @anchor mat-req-source-document
   sourceDocument String? // nazwa pliku PDF źródłowego
-  /// @anchor mat-req-manufacturer
-  manufacturer   String? // producent
-  /// @anchor mat-req-model
-  model          String? // symbol/model
-
-  // Stan magazynowy (dla materiałów w Bazie)
-  /// @anchor mat-req-stock-status
-  stockStatus Decimal? // ilość na magazynie
-
-  // Pliki — karta katalogowa i karta zgodności
-  /// @anchor mat-req-data-sheet-url
-  dataSheetUrl   String? // ścieżka do pliku karty katalogowej
-  /// @anchor mat-req-data-sheet-name
-  dataSheetName  String? // oryginalna nazwa pliku
-  /// @anchor mat-req-compliance-url
-  complianceUrl  String? // ścieżka do pliku karty zgodności
-  /// @anchor mat-req-compliance-name
-  complianceName String? // oryginalna nazwa pliku
 
   // Przypisanie do WBS
   /// @anchor mat-req-assigned-subtask-id
@@ -680,19 +728,9 @@ model MaterialRequirement {
   /// @anchor mat-req-compliance-data
   complianceData String?
 
-  // Dane ofertowe (wypełniane przez logistyka)
-  /// @anchor mat-req-price-netto
-  priceNetto   Float? // cena netto za sztukę
-  /// @anchor mat-req-seller
-  seller       String? // sprzedawca / dostawca
-  /// @anchor mat-req-offer-number
-  offerNumber  String? // numer oferty
-  /// @anchor mat-req-availability
-  availability String? // dostępność (ile / kiedy)
-  /// @anchor mat-req-product-url
-  productUrl   String? // link do strony produktu
-  /// @anchor mat-req-image-url
-  imageUrl     String? // print screen / zdjęcie urządzenia (ścieżka pliku)
+  // Budżet wymagania (niezależny od ceny referencyjnej w materials)
+  /// @anchor mat-req-budgeted-price-netto
+  budgetedPriceNetto Float? // zabudżetowana cena netto za sztukę (do kalkulacji kosztów WBS)
 
   // Status weryfikacji
   /// @anchor mat-req-status
@@ -713,8 +751,6 @@ model MaterialRequirement {
   wbsNode         WbsNode?                  @relation("WbsNodeMaterialCard", fields: [wbsNodeId], references: [id], onDelete: Cascade)
   /// @anchor mat-req-proposals
   proposals       ProductProposal[]
-  /// @anchor mat-req-wbs-allocations
-  wbsAllocations  WbsNodeMaterial[]
 
   @@map("material_requirements")
 }
@@ -877,8 +913,8 @@ model WbsNodeMaterial {
   /// @anchor wbs-node-material-quantity
   quantity   Float  @default(1)
 
-  wbsNode  WbsNode             @relation(fields: [wbsNodeId], references: [id], onDelete: Cascade)
-  material MaterialRequirement @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  wbsNode  WbsNode  @relation(fields: [wbsNodeId], references: [id], onDelete: Cascade)
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
 
   @@unique([wbsNodeId, materialId])
   @@map("wbs_node_materials")
