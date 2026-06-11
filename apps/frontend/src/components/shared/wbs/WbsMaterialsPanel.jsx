@@ -694,21 +694,32 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                             setF('model', '');
                                             setF('productName', '');
                                             patchCard({ manufacturer: '', model: '', productName: '', materialId: null });
+                                        } else if (fields[key]) {
+                                            // Wyślij wszystkie wypełnione pola katalogowe razem — backend
+                                            // auto-upsertuje Material+Proposal gdy manufacturer+model oba obecne
+                                            const all = {};
+                                            if (fields.manufacturer) all.manufacturer = fields.manufacturer;
+                                            if (fields.model) all.model = fields.model;
+                                            if (fields.productName) all.productName = fields.productName;
+                                            if (Object.keys(all).length) patchCard(all);
                                         }
                                     }}
                                     onKeyDown={e => {
                                         if (e.key === 'Enter') {
                                             e.preventDefault();
                                             setComboOpen(null);
-                                            const updates = { [key]: fields[key] };
                                             if (key === 'manufacturer' && !fields[key]) {
-                                                updates.model = '';
-                                                updates.productName = '';
-                                                updates.materialId = null;
                                                 setF('model', '');
                                                 setF('productName', '');
+                                                patchCard({ manufacturer: '', model: '', productName: '', materialId: null });
+                                            } else {
+                                                const all = {};
+                                                if (fields.manufacturer) all.manufacturer = fields.manufacturer;
+                                                if (fields.model) all.model = fields.model;
+                                                if (fields.productName) all.productName = fields.productName;
+                                                all[key] = fields[key];
+                                                if (Object.keys(all).length) patchCard(all);
                                             }
-                                            patchCard(updates);
                                             const comboKeys = comboFields.map(([k]) => k);
                                             const nextKey = comboKeys[comboKeys.indexOf(key) + 1];
                                             if (nextKey) comboRefs.current[nextKey]?.focus();

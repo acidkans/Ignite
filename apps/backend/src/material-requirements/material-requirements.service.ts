@@ -444,6 +444,58 @@ export class MaterialRequirementsService {
         const data: any = { ...rest };
         if (priceNetto !== undefined) data.budgetedPriceNetto = priceNetto;
 
+        // Krok 7b: gdy manufacturer I model są podane → auto-upsert Material + twórz wybraną propozycję
+        if (manufacturer && model) {
+            const mfr = String(manufacturer).slice(0, 200).toUpperCase();
+            const mdl = String(model).slice(0, 200);
+            const pn = productName ? String(productName).slice(0, 300) : null;
+            const existingMat = await this.prisma.material.findFirst({ where: { manufacturer: mfr, model: mdl } });
+            const material = existingMat
+                ? await this.prisma.material.update({
+                    where: { id: existingMat.id },
+                    data: {
+                        ...(pn ? { productName: pn } : {}),
+                        ...(priceNetto != null ? { priceNetto } : {}),
+                        ...(seller ? { seller } : {}),
+                        ...(productUrl ? { productUrl } : {}),
+                        ...(dataSheetUrl ? { dataSheetUrl, dataSheetName: dataSheetName ?? null } : {}),
+                    },
+                })
+                : await this.prisma.material.create({
+                    data: {
+                        manufacturer: mfr, model: mdl, productName: pn, type: 'DEVICE',
+                        ...(priceNetto != null ? { priceNetto } : {}),
+                        ...(seller ? { seller } : {}),
+                        ...(productUrl ? { productUrl } : {}),
+                        ...(dataSheetUrl ? { dataSheetUrl, dataSheetName: dataSheetName ?? null } : {}),
+                    },
+                });
+            await this.prisma.productProposal.updateMany({
+                where: { materialRequirementId: id },
+                data: { isSelected: false },
+            });
+            const existingProp = await this.prisma.productProposal.findFirst({
+                where: { materialRequirementId: id, manufacturer: mfr, model: mdl },
+            });
+            if (existingProp) {
+                await this.prisma.productProposal.update({
+                    where: { id: existingProp.id },
+                    data: { isSelected: true, isManual: true, ...(pn ? { productName: pn } : {}), ...(priceNetto != null ? { priceNetto } : {}) },
+                });
+            } else {
+                await this.prisma.productProposal.create({
+                    data: {
+                        materialRequirementId: id,
+                        manufacturer: mfr, model: mdl,
+                        productName: pn ?? undefined,
+                        isManual: true, isSelected: true,
+                        ...(priceNetto != null ? { priceNetto } : {}),
+                    },
+                });
+            }
+            data.materialId = material.id;
+        }
+
         if (data.wbsNodeId) {
             const conflicting = await this.prisma.materialRequirement.findFirst({
                 where: { wbsNodeId: data.wbsNodeId, id: { not: id } },
