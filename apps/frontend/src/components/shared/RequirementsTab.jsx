@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Save, Clock, Calendar, Target, Package, AlertTriangle, CheckCircle2, Plus, Trash2, GripVertical, Wrench, ClipboardList, ShieldCheck, User, Users, Mail, Phone, PhoneCall, FileDown, UserPlus } from 'lucide-react';
+import { Clock, Calendar, Target, Package, AlertTriangle, CheckCircle2, Plus, Trash2, GripVertical, Wrench, ClipboardList, ShieldCheck, User, Users, Mail, Phone, PhoneCall, FileDown, UserPlus } from 'lucide-react';
 import { API_URL } from '../../config';
 import { exportProjectPdf } from '../../utils/projectPdfExport';
 import { exportRequirementsPdf } from '../../utils/requirementsPdfExport';
@@ -812,24 +812,6 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
 
                     return null;
                 })}
-            </div>
-
-            {/* Actions Footer */}
-            <div className="flex items-center justify-end gap-4 pt-4 pb-2 border-t border-white/5 mt-4">
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold rounded-xl shadow-lg transition-all disabled:opacity-50 active:scale-95"
-                >
-                    {saving ? (
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : saved ? (
-                        <CheckCircle2 size={16} />
-                    ) : (
-                        <Save size={16} />
-                    )}
-                    <span>{saving ? 'Zapisywanie…' : saved ? 'Zapisano!' : 'Zapisz informacje'}</span>
-                </button>
             </div>
         </div>
     );
