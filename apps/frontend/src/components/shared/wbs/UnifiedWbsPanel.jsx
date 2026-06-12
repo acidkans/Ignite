@@ -702,7 +702,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                         .map((p) => p.teamId)
                 ));
                 setNodeTeamIds(teamIds);
-                // direct user-level permissions (contacts added via NodeInfoTab)
+                // direct user-level permissions (contacts added via NodeInfoTab/RequirementsTab)
                 const contactUsers = (permissionsData?.permissions || [])
                     .filter(p => p.user && !p.teamId)
                     .map(p => p.user);
@@ -922,8 +922,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
 
     const assignedUsers = useMemo(() => {
         const teamMembers = (() => {
+            if (!Array.isArray(nodeTeamIds) || !nodeTeamIds.length) return [];
             if (!Array.isArray(projectUsers) || !projectUsers.length) return [];
-            if (!Array.isArray(nodeTeamIds) || !nodeTeamIds.length) return projectUsers;
             return projectUsers.filter(u => Array.isArray(u?.teams) && u.teams.some(t => nodeTeamIds.includes(t.id)));
         })();
         // merge team members + direct contact users (deduplicate by id)
