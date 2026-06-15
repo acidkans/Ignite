@@ -121,13 +121,13 @@ function App() {
     return () => window.removeEventListener('auth-expired', doLogout);
   }, [doLogout]);
 
-  // Dev-Tracker — podpina zalogowanego użytkownika jako kontekst zgłoszenia
+  // Dev-Tracker — tożsamość użytkownika (setUser) + dodatkowy kontekst (rola)
   useEffect(() => {
-    if (!token) { window.__devTracker?.setContext({ userId: null, userName: null }); return; }
+    if (!token) { window.__devTracker?.clearUser(); window.__devTracker?.clearContext(); return; }
     try {
       const p = JSON.parse(atob(token.split('.')[1]));
-      window.__devTracker?.setUser({ login: p.email, email: p.email, name: p.email });
-      window.__devTracker?.setContext({ userId: p.sub || p.id, userName: p.email, role: p.role });
+      window.__devTracker?.setUser({ login: p.email, name: p.email, email: p.email });
+      window.__devTracker?.setContext({ userId: p.sub || p.id, role: p.role });
     } catch {}
   }, [token]);
 

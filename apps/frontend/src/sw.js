@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import { precacheAndRoute, cleanupOutdatedCaches, createHandlerBoundToURL } from 'workbox-precaching';
 import { registerRoute, NavigationRoute } from 'workbox-routing';
-import { CacheFirst } from 'workbox-strategies';
+import { CacheFirst, NetworkFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 
 // SW NIE aktywuje się automatycznie — czeka, aż aplikacja wyśle SKIP_WAITING
@@ -12,6 +12,12 @@ self.addEventListener('message', (event) => {
 
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST || []);
+
+// Dev-Tracker widget — network-first, żeby PWA nie serwowało starego widget.js po deployu.
+registerRoute(
+    ({ url }) => url.hostname === 'dev-tracker.gigatel.org',
+    new NetworkFirst({ cacheName: 'dev-tracker', networkTimeoutSeconds: 3 }),
+);
 
 // SPA navigation fallback: KAŻDA nawigacja (np. /login, /process-tree, /users)
 // serwowana jest z precachowanego /index.html. React Router przejmuje routing.
