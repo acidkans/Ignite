@@ -610,45 +610,75 @@ export class WbsNodesService {
      * Aktualizuje pola budżetowe na pojedynczym węźle WBS.
      */
     async updateBudgetFields(id: string, data: any) {
-        const unitCost = parseFloat(data.unitCost) || 0;
-        const quantity = parseFloat(data.quantity) || 0;
-        let margin = parseFloat(data.margin) || 0;
-        let discount = parseFloat(data.discount) || 0;
-        let unitPrice = parseFloat(data.unitPrice) || 0;
+        // Partial update: gdy caller przysyła tylko część pól (np. samą `quantity`
+        // z edycji ilości w WBS), pozostałe pola budżetu (unit, unitCost, margin,
+        // discount, comment, phase) NIE są zerowane — czytamy je z istniejącego wiersza.
+        // Wcześniej był pełny replace, m.in. `unit: data.unit || 'sztuki'` resetował
+        // jednostkę na 'sztuki' przy zapisie samej ilości (bug: jednostki same się zmieniały).
+        const existing = await this.prisma.wbsNode.findUnique({ where: { id } });
+        if (!existing) throw new NotFoundException(`WbsNode ${id} not found`);
 
-        const totalCost = unitCost * quantity;
+        const has = (k: string) => data[k] !== undefined && data[k] !== null && data[k] !== '';
+        const sentPricing = has('unitCost') || has('margin') || has('discount') || has('unitPrice');
 
-        if (unitCost > 0) {
-            if (unitPrice > 0 && margin === 0) {
-                margin = ((unitPrice / unitCost) - 1) * 100;
+        const quantity = has('quantity') ? (parseFloat(data.quantity) || 0) : (existing.quantity ?? 0);
+
+        let unitCost: number;
+        let margin: number;
+        let discount: number;
+        let unitPrice: number;
+
+        if (sentPricing) {
+            // Pełny zestaw pól cenowych — przeliczanie zachowane 1:1 jak wcześniej.
+            unitCost = parseFloat(data.unitCost) || 0;
+            margin = parseFloat(data.margin) || 0;
+            discount = parseFloat(data.discount) || 0;
+            unitPrice = parseFloat(data.unitPrice) || 0;
+
+            if (unitCost > 0) {
+                if (unitPrice > 0 && margin === 0) {
+                    margin = ((unitPrice / unitCost) - 1) * 100;
+                } else if (margin !== 0) {
+                    unitPrice = unitCost * (1 + margin / 100);
+                }
             } else if (margin !== 0) {
                 unitPrice = unitCost * (1 + margin / 100);
             }
-        } else if (margin !== 0) {
-            unitPrice = unitCost * (1 + margin / 100);
+
+            if (discount > 0) {
+                unitPrice = unitPrice * (1 - discount / 100);
+            }
+        } else {
+            // Zapis bez pól cenowych (np. sama ilość) — zachowaj istniejące ceny,
+            // tylko przeskaluj totale nową ilością.
+            unitCost = existing.unitCost ?? 0;
+            margin = existing.margin ?? 0;
+            discount = existing.discount ?? 0;
+            unitPrice = existing.unitPrice ?? 0;
         }
 
-        if (discount > 0) {
-            unitPrice = unitPrice * (1 - discount / 100);
-        }
-
+        const totalCost = unitCost * quantity;
         const totalPrice = unitPrice * quantity;
+
+        const updateData: any = {
+            unitCost,
+            quantity,
+            totalCost,
+            margin,
+            discount,
+            unitPrice,
+            totalPrice,
+        };
+        if (data.budgetType !== undefined || data.type !== undefined) {
+            updateData.budgetType = data.budgetType || data.type || null;
+        }
+        if (has('unit')) updateData.unit = data.unit;
+        if (data.comment !== undefined) updateData.comment = data.comment ?? null;
+        if (data.phase !== undefined) updateData.phase = data.phase ?? null;
 
         const updated = await this.prisma.wbsNode.update({
             where: { id },
-            data: {
-                budgetType: data.budgetType || data.type || null,
-                unit: data.unit || 'sztuki',
-                unitCost,
-                quantity,
-                totalCost,
-                margin,
-                discount,
-                unitPrice,
-                totalPrice,
-                comment: data.comment ?? null,
-                phase: data.phase ?? null,
-            },
+            data: updateData,
         });
 
         // Sync: WbsNode.quantity → WbsNodeMaterial → MaterialRequirement

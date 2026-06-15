@@ -145,7 +145,7 @@ function QaCell({ pairs, fieldClass, onChange, onPersist }) {
         </div>
     );
 }
-import { UNIT_OPTIONS } from './wbsConstants';
+import { UNIT_OPTIONS, sanitizeQtyInput } from './wbsConstants';
 import { ProductCard } from './WbsMaterialsPanel';
 
 const API_URL = '/api';
@@ -743,6 +743,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [reqDragOverNode, setReqDragOverNode] = useState(null);
     const [selectedNodeId, setSelectedNodeId] = useState(null);
     const [costFocusId, setCostFocusId] = useState(null);
+    const [qtyFocusId, setQtyFocusId] = useState(null);
+    const [warnKey, setWarnKey] = useState(null);
+    const warnTimer = useRef(null);
     const [showBasket, setShowBasket] = useState(false);
     // Koszyk: id wymagań, dla których rozwinięto podgląd wymagań technicznych (przed przypisaniem).
     const [expandedBasketIds, setExpandedBasketIds] = useState(new Set());
@@ -863,6 +866,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
     const handleField = (id, field, value) =>
         setWbsTree(t => ({ ...t, items: updateField(t.items || [], id, field, value) }));
+
+    // Pokaż na chwilę ostrzeżenie "tylko cyfry" przy komórce liczbowej (klucz = `${id}:${field}`).
+    const flashWarn = (id, field) => {
+        setWarnKey(`${id}:${field}`);
+        if (warnTimer.current) clearTimeout(warnTimer.current);
+        warnTimer.current = setTimeout(() => setWarnKey(null), 2500);
+    };
 
     const handleDelete = (id, e) => {
         e?.stopPropagation();
@@ -1228,10 +1238,30 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 {/* Ilość */}
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                     {depth >= 1 && (
-                        <input type="text" value={node.quantity || ''} onChange={e => handleField(node.id, 'quantity', e.target.value)}
-                            onFocus={e => e.target.select()} onMouseUp={e => e.target.select()}
-                            onBlur={e => { onRequirementsQtyChange?.(node.id, e.target.value, node.name); }}
-                            placeholder="0" className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}`} />
+                        <div className="relative">
+                            <input type="text" inputMode="decimal"
+                                value={qtyFocusId === node.id
+                                    ? (node.quantity ?? '')
+                                    : (parseFloat(String(node.quantity).replace(',', '.')) ? node.quantity : '')}
+                                onChange={e => {
+                                    const clean = sanitizeQtyInput(e.target.value);
+                                    if (clean !== e.target.value) flashWarn(node.id, 'quantity');
+                                    handleField(node.id, 'quantity', clean);
+                                }}
+                                onFocus={e => { setQtyFocusId(node.id); if (!parseFloat(String(node.quantity).replace(',', '.'))) handleField(node.id, 'quantity', ''); e.target.select(); }}
+                                onMouseUp={e => e.target.select()}
+                                onBlur={e => {
+                                    setQtyFocusId(null);
+                                    const n = parseFloat(String(e.target.value).replace(',', '.'));
+                                    const clean = Number.isFinite(n) && n >= 0 ? String(n) : '0';
+                                    handleField(node.id, 'quantity', clean);
+                                    onRequirementsQtyChange?.(node.id, clean, node.name);
+                                }}
+                                placeholder="0" className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}`} />
+                            {warnKey === `${node.id}:quantity` && (
+                                <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
+                            )}
+                        </div>
                     )}
                 </td>
 
@@ -1267,19 +1297,28 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 {fmtPLN(sumChildrenCost(node)) || '0,00'}
                             </div>
                         ) : (
-                            <input
-                                type="text"
-                                inputMode="decimal"
-                                value={costFocusId === node.id
-                                    ? (node.unitCost ?? '')
-                                    : (node.unitCost != null && node.unitCost !== '' ? fmtPLN(Number(node.unitCost)) : '')}
-                                onChange={e => handleField(node.id, 'unitCost', e.target.value)}
-                                onFocus={e => { setCostFocusId(node.id); e.target.select(); }}
-                                onBlur={e => { setCostFocusId(null); onNodeFieldSave?.(node.id, 'unitCost', Math.round((parseFloat(String(e.target.value).replace(',', '.')) || 0) * 100) / 100); }}
-                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
-                                placeholder="0,00"
-                                className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}`}
-                            />
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={costFocusId === node.id
+                                        ? (node.unitCost ?? '')
+                                        : (Number(node.unitCost) ? fmtPLN(Number(node.unitCost)) : '')}
+                                    onChange={e => {
+                                        const clean = sanitizeQtyInput(e.target.value);
+                                        if (clean !== e.target.value) flashWarn(node.id, 'unitCost');
+                                        handleField(node.id, 'unitCost', clean);
+                                    }}
+                                    onFocus={e => { setCostFocusId(node.id); if (!Number(node.unitCost)) handleField(node.id, 'unitCost', ''); e.target.select(); }}
+                                    onBlur={e => { setCostFocusId(null); onNodeFieldSave?.(node.id, 'unitCost', Math.round((parseFloat(String(e.target.value).replace(',', '.')) || 0) * 100) / 100); }}
+                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+                                    placeholder="0,00"
+                                    className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}`}
+                                />
+                                {warnKey === `${node.id}:unitCost` && (
+                                    <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
+                                )}
+                            </div>
                         )}
                     </td>
                 )}

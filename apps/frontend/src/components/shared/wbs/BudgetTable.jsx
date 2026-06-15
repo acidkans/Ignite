@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { Trash2, ArrowUp, ArrowDown } from 'lucide-react';
-import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, TYPE_OPTIONS, TYPE_LABELS, UNIT_OPTIONS, parseLocaleNumber } from './wbsConstants';
+import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, TYPE_OPTIONS, TYPE_LABELS, UNIT_OPTIONS, parseLocaleNumber, sanitizeQtyInput } from './wbsConstants';
 
 const TH_BASE = 'text-left px-3 py-2.5 text-[17px] font-bold uppercase tracking-widest text-white whitespace-normal break-words select-none relative align-bottom';
 const TD = 'px-2 py-1.5 align-top break-words';
@@ -13,7 +13,7 @@ const NUMERIC_COLS = new Set(['unitCost', 'quantity', 'totalCost', 'margin', 'di
 const EDITABLE_COLS = ['name', 'type', 'unitCost', 'quantity', 'unit', 'margin', 'discount', 'comment'];
 
 function calcDerived(r) {
-    const q = Math.max(0, parseLocaleNumber(String(r.quantity ?? '')) ?? 1);
+    const q = Math.max(0, parseLocaleNumber(String(r.quantity ?? '')) ?? 0);
     const uc = Math.max(0, parseLocaleNumber(String(r.unitCost ?? '')) ?? 0);
     const marginRaw = r.margin != null && r.margin !== '' ? parseLocaleNumber(String(r.margin)) : null;
     const d = Math.max(0, parseLocaleNumber(String(r.discount ?? '')) ?? 0);
@@ -84,6 +84,14 @@ export default function BudgetTable({
     // (DFS po sortOrder), tej samej co render WBSHybridTable. Klik nagłówka sortuje.
     const [sort, setSort] = useState({ key: null, dir: null });
     const [focusedRowId, setFocusedRowId] = useState(null);
+    // Transientne ostrzeżenie "tylko cyfry" przy komórce liczbowej (klucz = `${rowId}:${col}`).
+    const [warnCell, setWarnCell] = useState(null);
+    const warnTimer = useRef(null);
+    const flashWarn = (rowId, col) => {
+        setWarnCell(`${rowId}:${col}`);
+        if (warnTimer.current) clearTimeout(warnTimer.current);
+        warnTimer.current = setTimeout(() => setWarnCell(null), 2500);
+    };
 
     const [colWidths, setColWidths] = useState(
         () => Object.fromEntries(COLS.map(c => [c.key, c.defW]))
@@ -494,41 +502,64 @@ export default function BudgetTable({
                                 </td>
 
                                 <td className={TD}>
-                                    <input
-                                        key={`${row.id}-unitCost-${syncVersion}`}
-                                        defaultValue={row.unitCost != null && row.unitCost !== 0 ? Number(row.unitCost).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
-                                        onChange={e => handleChange(row.id, 'unitCost', e.target.value)}
-                                        onBlur={e => {
-                                            handleCellBlur();
-                                            const n = parseLocaleNumber(e.target.value);
-                                            if (n != null) e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                            onFieldChange(row, 'unitCost', e.target.value);
-                                        }}
-                                        onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
-                                        onKeyDown={e => handleKeyDown(e, row.id, 'unitCost')}
-                                        data-row-id={row.id}
-                                        data-col="unitCost"
-                                        className={`${INPUT} text-center tabular-nums font-mono ${row.inheritedFromMaterials ? 'text-amber-300' : 'text-red-400'}`}
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            key={`${row.id}-unitCost-${syncVersion}`}
+                                            defaultValue={row.unitCost != null && row.unitCost !== 0 ? Number(row.unitCost).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
+                                            onChange={e => {
+                                                const clean = sanitizeQtyInput(e.target.value);
+                                                if (clean !== e.target.value) { e.target.value = clean; flashWarn(row.id, 'unitCost'); }
+                                                handleChange(row.id, 'unitCost', clean);
+                                            }}
+                                            onBlur={e => {
+                                                handleCellBlur();
+                                                const n = parseLocaleNumber(e.target.value);
+                                                if (n != null) e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                                onFieldChange(row, 'unitCost', e.target.value);
+                                            }}
+                                            onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
+                                            onKeyDown={e => handleKeyDown(e, row.id, 'unitCost')}
+                                            data-row-id={row.id}
+                                            data-col="unitCost"
+                                            className={`${INPUT} text-center tabular-nums font-mono ${row.inheritedFromMaterials ? 'text-amber-300' : 'text-red-400'}`}
+                                        />
+                                        {warnCell === `${row.id}:unitCost` && (
+                                            <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
+                                        )}
+                                    </div>
                                 </td>
 
                                 <td className={TD}>
-                                    <input
-                                        key={`${row.id}-quantity-${syncVersion}`}
-                                        defaultValue={row.quantity != null && row.quantity !== 0 ? Number(row.quantity).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
-                                        onChange={e => handleChange(row.id, 'quantity', e.target.value)}
-                                        onBlur={e => {
-                                            handleCellBlur();
-                                            const n = parseLocaleNumber(e.target.value);
-                                            if (n != null) e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                            onFieldChange(row, 'quantity', e.target.value);
-                                        }}
-                                        onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
-                                        onKeyDown={e => handleKeyDown(e, row.id, 'quantity')}
-                                        data-row-id={row.id}
-                                        data-col="quantity"
-                                        className={`${INPUT} text-center tabular-nums`}
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            key={`${row.id}-quantity-${syncVersion}`}
+                                            defaultValue={row.quantity != null && row.quantity !== 0 ? Number(row.quantity).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
+                                            onChange={e => {
+                                                const clean = sanitizeQtyInput(e.target.value);
+                                                if (clean !== e.target.value) { e.target.value = clean; flashWarn(row.id, 'quantity'); }
+                                                handleChange(row.id, 'quantity', clean);
+                                            }}
+                                            onBlur={e => {
+                                                handleCellBlur();
+                                                const n = parseLocaleNumber(e.target.value);
+                                                if (n != null && n >= 0) {
+                                                    e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                                    onFieldChange(row, 'quantity', e.target.value);
+                                                } else {
+                                                    e.target.value = '';
+                                                    onFieldChange(row, 'quantity', '0');
+                                                }
+                                            }}
+                                            onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
+                                            onKeyDown={e => handleKeyDown(e, row.id, 'quantity')}
+                                            data-row-id={row.id}
+                                            data-col="quantity"
+                                            className={`${INPUT} text-center tabular-nums`}
+                                        />
+                                        {warnCell === `${row.id}:quantity` && (
+                                            <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
+                                        )}
+                                    </div>
                                 </td>
 
                                 <td className={TD}>
@@ -552,31 +583,49 @@ export default function BudgetTable({
                                 </td>
 
                                 <td className={TD}>
-                                    <input
-                                        key={`${row.id}-margin-${syncVersion}`}
-                                        defaultValue={row.margin != null && row.margin !== 0 ? String(row.margin).replace('.', ',') : ''}
-                                        onChange={e => handleChange(row.id, 'margin', e.target.value)}
-                                        onBlur={e => { handleCellBlur(); onFieldChange(row, 'margin', e.target.value); }}
-                                        onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
-                                        onKeyDown={e => handleKeyDown(e, row.id, 'margin')}
-                                        data-row-id={row.id}
-                                        data-col="margin"
-                                        className={`${INPUT} text-center tabular-nums text-green-300`}
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            key={`${row.id}-margin-${syncVersion}`}
+                                            defaultValue={row.margin != null && row.margin !== 0 ? String(row.margin).replace('.', ',') : ''}
+                                            onChange={e => {
+                                                const clean = sanitizeQtyInput(e.target.value);
+                                                if (clean !== e.target.value) { e.target.value = clean; flashWarn(row.id, 'margin'); }
+                                                handleChange(row.id, 'margin', clean);
+                                            }}
+                                            onBlur={e => { handleCellBlur(); onFieldChange(row, 'margin', e.target.value); }}
+                                            onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
+                                            onKeyDown={e => handleKeyDown(e, row.id, 'margin')}
+                                            data-row-id={row.id}
+                                            data-col="margin"
+                                            className={`${INPUT} text-center tabular-nums text-green-300`}
+                                        />
+                                        {warnCell === `${row.id}:margin` && (
+                                            <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
+                                        )}
+                                    </div>
                                 </td>
 
                                 <td className={TD}>
-                                    <input
-                                        key={`${row.id}-discount-${syncVersion}`}
-                                        defaultValue={row.discount != null && row.discount !== 0 ? String(row.discount).replace('.', ',') : ''}
-                                        onChange={e => handleChange(row.id, 'discount', e.target.value)}
-                                        onBlur={e => { handleCellBlur(); onFieldChange(row, 'discount', e.target.value); }}
-                                        onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
-                                        onKeyDown={e => handleKeyDown(e, row.id, 'discount')}
-                                        data-row-id={row.id}
-                                        data-col="discount"
-                                        className={`${INPUT} text-center tabular-nums text-orange-300`}
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            key={`${row.id}-discount-${syncVersion}`}
+                                            defaultValue={row.discount != null && row.discount !== 0 ? String(row.discount).replace('.', ',') : ''}
+                                            onChange={e => {
+                                                const clean = sanitizeQtyInput(e.target.value);
+                                                if (clean !== e.target.value) { e.target.value = clean; flashWarn(row.id, 'discount'); }
+                                                handleChange(row.id, 'discount', clean);
+                                            }}
+                                            onBlur={e => { handleCellBlur(); onFieldChange(row, 'discount', e.target.value); }}
+                                            onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
+                                            onKeyDown={e => handleKeyDown(e, row.id, 'discount')}
+                                            data-row-id={row.id}
+                                            data-col="discount"
+                                            className={`${INPUT} text-center tabular-nums text-orange-300`}
+                                        />
+                                        {warnCell === `${row.id}:discount` && (
+                                            <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
+                                        )}
+                                    </div>
                                 </td>
 
                                 <td className={`${TD} text-center text-sm tabular-nums font-mono font-semibold rounded bg-white/[0.03] ${row.offerPrice > 0 ? 'text-green-400' : 'text-gray-600'}`}>

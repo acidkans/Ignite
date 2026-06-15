@@ -779,6 +779,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const hybridSavePending = useRef(false);
     const hybridSaveTimeout = useRef(null);
     const expandRefreshTimeout = useRef(null);
+    // Pola z zapisem w toku (Map<nodeId, Set<field>>). refreshWbsNodes NIE nadpisuje
+    // takiego pola świeżym (potencjalnie nieaktualnym) odczytem z API zanim PATCH się
+    // zakończy — inaczej focus/visibilitychange/expand-refresh cofa świeżo wybraną jednostkę.
+    const pendingFieldSaves = useRef(new Map());
 
     // Sync Q&A from in-memory tree into wbsData/cache without replacing wbsTree.
     // Called after every tree save to keep SchematTab export up-to-date while
@@ -812,17 +816,21 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 const patch = n => {
                     const f = freshById.get(n.id);
                     if (!f) return { ...n, children: n.children?.length ? n.children.map(patch) : n.children };
+                    // Pole z zapisem w toku zachowuje lokalną wartość — świeży odczyt z API
+                    // mógłby wyprzedzić jeszcze niezakończony PATCH i cofnąć edycję.
+                    const pend = pendingFieldSaves.current.get(n.id);
+                    const keep = (field, freshVal) => (pend?.has(field) ? n[field] : (freshVal ?? n[field]));
                     return {
                         ...n,
-                        name: f.name ?? n.name,
-                        type: f.type ?? n.type,
-                        status: f.status ?? n.status,
-                        quantity: f.quantity ?? n.quantity,
-                        unit: f.unit ?? n.unit,
-                        owner: f.owner ?? n.owner,
-                        comment: f.comment ?? n.comment,
-                        unitCost: f.unitCost ?? n.unitCost,
-                        unitPrice: f.unitPrice ?? n.unitPrice,
+                        name: keep('name', f.name),
+                        type: keep('type', f.type),
+                        status: keep('status', f.status),
+                        quantity: keep('quantity', f.quantity),
+                        unit: keep('unit', f.unit),
+                        owner: keep('owner', f.owner),
+                        comment: keep('comment', f.comment),
+                        unitCost: keep('unitCost', f.unitCost),
+                        unitPrice: keep('unitPrice', f.unitPrice),
                         totalCost: f.totalCost ?? n.totalCost,
                         totalPrice: f.totalPrice ?? n.totalPrice,
                         children: n.children?.length ? n.children.map(patch) : n.children,
@@ -3217,6 +3225,10 @@ ${ganttSectionHtml}
             clearTimeout(expandRefreshTimeout.current);
             expandRefreshTimeout.current = null;
         }
+        // Zarejestruj zapis pola w toku — refreshWbsNodes nie cofnie go stałym odczytem z API.
+        const pend = pendingFieldSaves.current.get(id) || new Set();
+        pend.add(field);
+        pendingFieldSaves.current.set(id, pend);
         try {
             if (field === 'unitCost') {
                 // Pole budżetowe — zapisujemy przez /budget, nie przez /wbs-nodes (tree)
@@ -3306,6 +3318,10 @@ ${ganttSectionHtml}
                 if (field === 'name') await refreshWbsNodes();
             }
         } catch (e) { console.error('Update node error:', e); }
+        finally {
+            const s = pendingFieldSaves.current.get(id);
+            if (s) { s.delete(field); if (s.size === 0) pendingFieldSaves.current.delete(id); }
+        }
     }, [authHeaders, wbsData, allRequirements, refreshMaterialCosts, refreshWbsNodes]);
 
     // Zapis dat startowej/końcowej paska Gantta do bazy — wywoływany przy każdym drag/resize/datepicker.
@@ -3751,7 +3767,7 @@ ${ganttSectionHtml}
             if (field === 'type') {
                 const normalizedType = String(row.type || '').toLowerCase();
                 const inheritedFromMaterials = normalizedType === 'material' || normalizedType === 'equipment';
-                const quantity = parseFloat(row.quantity) || 1;
+                const quantity = Number.isFinite(parseFloat(row.quantity)) ? parseFloat(row.quantity) : 0;
                 const lookupKey = makeMaterialLookupKey(row.subjectName || row.name, row.name);
                 const inheritedQuantity = parseFloat(materialMetaByLookupKey[lookupKey]?.quantity) || 0;
                 const inheritedCost = parseFloat(materialMetaByLookupKey[lookupKey]?.cost)
@@ -3818,7 +3834,7 @@ ${ganttSectionHtml}
                 // (przycisk "Utwórz kartę" przy węźle) — nie auto-tworzymy tutaj
             }
         } else {
-            const q = parseLocaleNumber(row.quantity) ?? 1;
+            const q = parseLocaleNumber(row.quantity) ?? 0;
             const uc = parseLocaleNumber(row.unitCost) ?? 0;
             const totalCost = uc * q;
             const m = parseFloat(row.margin) || 0;
@@ -4019,7 +4035,7 @@ ${ganttSectionHtml}
                     const inheritedCost = parseFloat(materialCostsByNode[item.id])
                         || parseFloat(item.materialsTotalCost)
                         || 0;
-                    const persistedQuantity = parseFloat(item.quantity) || 1;
+                    const persistedQuantity = Number.isFinite(parseFloat(item.quantity)) ? parseFloat(item.quantity) : 0;
                     const isWorkType = normalizedType === 'work' || normalizedType === 'praca'
                         || String(item.budgetType || '').toUpperCase() === 'WORK';
                     const wbsReqQty = Object.prototype.hasOwnProperty.call(requirementsQtyByNode, item.id)
@@ -4239,7 +4255,7 @@ ${ganttSectionHtml}
         let totalCost = 0;
         let totalRevenue = 0;
         for (const row of rows) {
-            const q = parseFloat(row.quantity) || 1;
+            const q = Number.isFinite(parseFloat(row.quantity)) ? parseFloat(row.quantity) : 0;
             const cost = parseFloat(row.cost);
             const revenue = parseFloat(row.offerPrice);
             const fallbackCost = Number.isFinite(parseFloat(row.totalCost)) ? parseFloat(row.totalCost) : (parseFloat(row.unitCost) || 0) * q;

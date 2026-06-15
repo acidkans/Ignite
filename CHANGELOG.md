@@ -4,6 +4,17 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-06-15 — fix(wbs): jednostka węzła nie resetuje się sama przy edycji ilości / przeładowaniu
+
+### architektura / API
+- zmieniono `back-endpoint` `PATCH /wbs-nodes/:id/budget` (`back-serwis` `updateBudgetFields`) — z pełnego replace na **partial merge**: pola nieprzysłane przez callera (`unit`, `unitCost`, `margin`, `discount`, `unitPrice`, `comment`, `phase`, `budgetType`) są czytane z istniejącego wiersza zamiast zerowane/defaultowane. Usunięto `unit: data.unit || 'sztuki'`, które przy zapisie samej ilości resetowało jednostkę na 'sztuki'.
+
+### wytyczne
+- `back-serwis` `updateBudgetFields` — endpoint jest teraz odporny na zapisy częściowe: bez pól cenowych (np. sama `quantity`) zachowuje istniejące ceny i tylko przeskalowuje totale; pola cenowe przeliczane 1:1 jak wcześniej tylko gdy przysłane. Nie trzeba już wysyłać kompletu pól.
+- `ui-funkcja` `refreshWbsNodes` — nie nadpisuje pola węzła, którego PATCH jest w toku (`pendingFieldSaves` Map<nodeId,Set<field>> rejestrowana w `updateNodeField`); zapobiega cofaniu świeżo wybranej jednostki przez focus/visibilitychange/expand-refresh ścigający się z zapisem.
+
+---
+
 ## 2026-06-11 — fix(materials): forward availability/productUrl do propozycji; dedup katalogu z proposals
 
 ### architektura / API

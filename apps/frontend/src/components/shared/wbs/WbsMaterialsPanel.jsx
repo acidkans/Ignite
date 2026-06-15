@@ -8,7 +8,7 @@ import {
     FileText, Link as LinkIcon, Download, BookOpen, X, Database,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
-import { UNIT_OPTIONS, wbsTypeFromAny } from './wbsConstants';
+import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput } from './wbsConstants';
 import { buildPdfDocument, openPdfBlob, fetchLogoDataUrl, esc as escPdf } from '../../../utils/wbsPdfExport';
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
@@ -469,10 +469,13 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
         productName: card?.productName || '',
         availability: card?.availability || '',
         technicalSpec: card?.technicalSpec || '',
-        priceNetto: card?.priceNetto ?? '',
+        priceNetto: card?.priceNetto ? String(card.priceNetto) : '',
         productUrl: card?.productUrl || '',
     });
     const [comboOpen, setComboOpen] = useState(null);
+    const [priceWarn, setPriceWarn] = useState(false);
+    const priceWarnTimer = useRef(null);
+    useEffect(() => () => { if (priceWarnTimer.current) clearTimeout(priceWarnTimer.current); }, []);
     const [localImageUrl, setLocalImageUrl] = useState(null);
     const [imageKey, setImageKey] = useState(0);
     // @anchor product-card-combo-refs
@@ -513,7 +516,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
             productName: card?.productName || '',
             availability: card?.availability || '',
             technicalSpec: card?.technicalSpec || '',
-            priceNetto: card?.priceNetto ?? '',
+            priceNetto: card?.priceNetto ? String(card.priceNetto) : '',
             productUrl: card?.productUrl || '',
         });
     // Zresetuj formularz tylko przy zmianie karty (nowe id).
@@ -619,6 +622,12 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     }, [uploadBlob, readOnly, card?.id]);
 
     const setF = (k, v) => setFields(prev => ({ ...prev, [k]: v }));
+    // Ostrzeżenie "tylko cyfry" przy polu Koszt jedn. po odrzuceniu znaku.
+    const flashPriceWarn = () => {
+        setPriceWarn(true);
+        if (priceWarnTimer.current) clearTimeout(priceWarnTimer.current);
+        priceWarnTimer.current = setTimeout(() => setPriceWarn(false), 2500);
+    };
 
     const patchCard = useCallback(async (data) => {
         if (!card?.id) return;
@@ -745,27 +754,39 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                     })}
                     <div className="flex-1 min-w-[90px]">
                         <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Koszt jedn.</label>
-                        <input
-                            ref={el => { comboRefs.current['priceNetto'] = el; }}
-                            value={fields.priceNetto} onChange={e => setF('priceNetto', e.target.value)}
-                            onBlur={() => {
-                                const raw = String(fields.priceNetto ?? '').trim().replace(',', '.');
-                                let next;
-                                if (raw === '') next = null;
-                                else { const v = parseFloat(raw); if (isNaN(v)) return; next = v; }
-                                if (onPropagatePrice) onPropagatePrice(card, wbsNode, next);
-                                else patchCard({ priceNetto: next });
-                            }}
-                            onKeyDown={e => {
-                                if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    e.target.blur();
-                                    comboRefs.current['availability']?.focus();
-                                }
-                            }}
-                            disabled={readOnly}
-                            className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
-                            placeholder="0.00" />
+                        <div className="relative">
+                            <input
+                                ref={el => { comboRefs.current['priceNetto'] = el; }}
+                                type="text" inputMode="decimal"
+                                value={fields.priceNetto}
+                                onChange={e => {
+                                    const clean = sanitizeQtyInput(e.target.value);
+                                    if (clean !== e.target.value) flashPriceWarn();
+                                    setF('priceNetto', clean);
+                                }}
+                                onFocus={e => { if (!parseFloat(String(fields.priceNetto).replace(',', '.'))) setF('priceNetto', ''); e.target.select(); }}
+                                onBlur={() => {
+                                    const raw = String(fields.priceNetto ?? '').trim().replace(',', '.');
+                                    let next;
+                                    if (raw === '') next = null;
+                                    else { const v = parseFloat(raw); if (isNaN(v)) return; next = v; }
+                                    if (onPropagatePrice) onPropagatePrice(card, wbsNode, next);
+                                    else patchCard({ priceNetto: next });
+                                }}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        e.target.blur();
+                                        comboRefs.current['availability']?.focus();
+                                    }
+                                }}
+                                disabled={readOnly}
+                                className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
+                                placeholder="0.00" />
+                            {priceWarn && (
+                                <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
+                            )}
+                        </div>
                     </div>
                     <div className="flex-1 min-w-[90px]">
                         <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Dostępność</label>
@@ -952,23 +973,38 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
     const StatusMeta = STATUS_META[reqStatus];
 
     const [editQty, setEditQty] = useState(false);
-    const [qtyVal, setQtyVal] = useState(String(node.quantity ?? 1));
+    // Prefill: pokaż realną wartość; 0/null/puste → '' (zero znika przy edycji, nie magiczna 1).
+    const qtyPrefill = (q) => (parseFloat(String(q).replace(',', '.')) ? String(q) : '');
+    const [qtyVal, setQtyVal] = useState(qtyPrefill(node.quantity));
+    const [warnField, setWarnField] = useState(null);
+    const warnTimer = useRef(null);
+    // Pokaż na chwilę ostrzeżenie "tylko cyfry" przy komórce liczbowej ('qty' | 'price').
+    const flashWarn = (field) => {
+        setWarnField(field);
+        if (warnTimer.current) clearTimeout(warnTimer.current);
+        warnTimer.current = setTimeout(() => setWarnField(null), 2500);
+    };
+    useEffect(() => () => { if (warnTimer.current) clearTimeout(warnTimer.current); }, []);
     useEffect(() => {
-        if (!editQty) setQtyVal(String(node.quantity ?? 1));
+        if (!editQty) setQtyVal(qtyPrefill(node.quantity));
     }, [node.quantity, editQty]);
 
     const [editPrice, setEditPrice] = useState(false);
-    const [priceVal, setPriceVal] = useState(card?.priceNetto != null ? String(card.priceNetto) : '');
+    // Prefill ceny: realna wartość; 0/null/puste → '' (zero znika przy wejściu w edycję).
+    const pricePrefill = (p) => (parseFloat(String(p).replace(',', '.')) ? String(p) : '');
+    const [priceVal, setPriceVal] = useState(pricePrefill(card?.priceNetto));
     useEffect(() => {
-        if (!editPrice) setPriceVal(card?.priceNetto != null ? String(card.priceNetto) : '');
+        if (!editPrice) setPriceVal(pricePrefill(card?.priceNetto));
     }, [card?.priceNetto, editPrice]);
 
     const [creating, setCreating] = useState(false);
 
     const handleQtyBlur = () => {
         setEditQty(false);
-        const v = parseFloat(qtyVal.replace(',', '.'));
-        if (!isNaN(v) && v !== node.quantity) onPatchNode(node.id, { quantity: v });
+        // Puste/niepoprawne → jawne 0 (nigdy magiczna 1). 0 jest poprawną wartością.
+        const parsed = parseFloat(String(qtyVal).replace(',', '.'));
+        const v = Number.isFinite(parsed) ? parsed : 0;
+        if (v !== node.quantity) onPatchNode(node.id, { quantity: v });
     };
 
     const handlePriceBlur = () => {
@@ -1014,16 +1050,26 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
             {/* Ilość */}
             <td className="px-3 py-2.5">
                 {editQty && !readOnly ? (
-                    <input autoFocus value={qtyVal}
-                        onChange={e => setQtyVal(e.target.value)}
-                        onFocus={e => e.target.select()} onMouseUp={e => e.target.select()}
-                        onBlur={handleQtyBlur}
-                        onKeyDown={e => { if (e.key === 'Enter') handleQtyBlur(); if (e.key === 'Escape') { setQtyVal(String(node.quantity ?? 1)); setEditQty(false); } }}
-                        className="w-16 bg-black/30 border border-blue-500/50 rounded px-2 py-0.5 text-sm text-white outline-none" />
+                    <div className="relative inline-block">
+                        <input autoFocus type="text" inputMode="decimal" value={qtyVal}
+                            onChange={e => {
+                                const clean = sanitizeQtyInput(e.target.value);
+                                if (clean !== e.target.value) flashWarn('qty');
+                                setQtyVal(clean);
+                            }}
+                            onFocus={e => e.target.select()} onMouseUp={e => e.target.select()}
+                            onBlur={handleQtyBlur}
+                            onKeyDown={e => { if (e.key === 'Enter') handleQtyBlur(); if (e.key === 'Escape') { setQtyVal(qtyPrefill(node.quantity)); setEditQty(false); } }}
+                            placeholder="0"
+                            className="w-16 bg-black/30 border border-blue-500/50 rounded px-2 py-0.5 text-sm text-white outline-none placeholder-gray-600" />
+                        {warnField === 'qty' && (
+                            <span className="absolute left-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
+                        )}
+                    </div>
                 ) : (
                     <span onClick={() => !readOnly && setEditQty(true)}
                         className={`text-sm text-gray-200 whitespace-nowrap ${!readOnly ? 'cursor-pointer hover:text-white' : ''}`}>
-                        {node.quantity ?? 1} <span className="text-xs text-gray-500">{node.unit || 'szt'}</span>
+                        {node.quantity ?? 0} <span className="text-xs text-gray-500">{node.unit || 'szt'}</span>
                     </span>
                 )}
             </td>
@@ -1043,15 +1089,24 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                 )}
             </td>
             {/* Cena - inline edit (klik aby edytować, Enter/blur zapisuje, propaguje na duplikaty wariant A) */}
-            <td className="px-3 py-2.5 text-sm font-mono whitespace-nowrap">
+            <td className="px-3 py-2.5 text-sm font-mono whitespace-nowrap text-right">
                 {editPrice && !readOnly && card ? (
-                    <input autoFocus value={priceVal}
-                        onChange={e => setPriceVal(e.target.value)}
-                        onFocus={e => e.target.select()} onMouseUp={e => e.target.select()}
-                        onBlur={handlePriceBlur}
-                        onKeyDown={e => { if (e.key === 'Enter') handlePriceBlur(); if (e.key === 'Escape') { setPriceVal(card?.priceNetto != null ? String(card.priceNetto) : ''); setEditPrice(false); } }}
-                        placeholder="0.00"
-                        className="w-24 bg-black/30 border border-blue-500/50 rounded px-2 py-0.5 text-sm text-white outline-none" />
+                    <div className="relative inline-block">
+                        <input autoFocus type="text" inputMode="decimal" value={priceVal}
+                            onChange={e => {
+                                const clean = sanitizeQtyInput(e.target.value);
+                                if (clean !== e.target.value) flashWarn('price');
+                                setPriceVal(clean);
+                            }}
+                            onFocus={e => e.target.select()} onMouseUp={e => e.target.select()}
+                            onBlur={handlePriceBlur}
+                            onKeyDown={e => { if (e.key === 'Enter') handlePriceBlur(); if (e.key === 'Escape') { setPriceVal(pricePrefill(card?.priceNetto)); setEditPrice(false); } }}
+                            placeholder="0.00"
+                            className="w-24 bg-black/30 border border-blue-500/50 rounded px-2 py-0.5 text-sm text-white outline-none placeholder-gray-600" />
+                        {warnField === 'price' && (
+                            <span className="absolute left-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
+                        )}
+                    </div>
                 ) : (
                     <span onClick={() => !readOnly && card && setEditPrice(true)}
                         className={`text-green-400 ${!readOnly && card ? 'cursor-pointer hover:text-green-300' : ''}`}>
@@ -1766,10 +1821,10 @@ export default function WbsMaterialsPanel({
                         <tr className="border-b border-white/10 bg-gray-950">
                             <th className="w-9 bg-gray-950" />
                             {COL_DEFS.map(c => (
-                                <th key={c.key} className="px-3 py-2 text-left bg-gray-950 select-none relative">
+                                <th key={c.key} className={`px-3 py-2 ${c.key === 'price' ? 'text-right' : 'text-left'} bg-gray-950 select-none relative`}>
                                     <button
                                         onClick={() => toggleSort(c.key)}
-                                        className="inline-flex items-center gap-1 text-base font-bold uppercase tracking-widest text-white hover:text-gray-200 transition-colors w-full"
+                                        className={`inline-flex items-center gap-1 text-base font-bold uppercase tracking-widest text-white hover:text-gray-200 transition-colors w-full ${c.key === 'price' ? 'justify-end' : ''}`}
                                     >
                                         <span className="truncate">{c.label}</span>
                                         <span className={sortConfig.key === c.key ? 'text-blue-400 flex-shrink-0' : 'text-gray-600 flex-shrink-0'}>

@@ -101,6 +101,20 @@ export const UNIT_OPTIONS = [
   'pakiet',
 ];
 
+// @anchor sanitize-qty-input
+// Ilość: dopuszcza tylko cyfry + jeden separator dziesiętny (',' lub '.').
+// Znaki spoza tego zbioru oraz kolejne separatory są odrzucane — UI pokazuje
+// ostrzeżenie "tylko cyfry", a wartość nigdy nie jest podmieniana na domyślną.
+export function sanitizeQtyInput(raw) {
+  let seenSep = false;
+  let out = '';
+  for (const ch of String(raw)) {
+    if (ch >= '0' && ch <= '9') { out += ch; continue; }
+    if ((ch === '.' || ch === ',') && !seenSep) { seenSep = true; out += ch; }
+  }
+  return out;
+}
+
 // @anchor default-unit-for-type
 export function defaultUnitForType(type) {
   const t = String(type || '').toLowerCase();
