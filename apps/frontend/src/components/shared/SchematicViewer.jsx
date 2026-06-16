@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../../config';
 import {
     Upload, X, MapPin, Map as MapIcon, Image as ImageIcon, Mic, Trash2,
-    Minus, Type, ZoomIn, ZoomOut, Maximize, Minimize2, Hand, Camera, Save, List
+    Minus, Type, ZoomIn, ZoomOut, Maximize, Minimize2, Hand, Camera, Save, List, Network
 } from 'lucide-react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import MarkerDetailsPanel from './MarkerDetailsPanel';
@@ -29,7 +29,7 @@ const pdfOptions = {
     stopAtErrors: false,
 };
 
-export default function SchematicViewer({ nodeId, subtaskId, initialSchematics = [] }) {
+export default function SchematicViewer({ nodeId, subtaskId, initialSchematics = [], nodeName, onClose }) {
     const { isOnline } = useNetwork();
     const [schematics, setSchematics] = useState(initialSchematics);
     const [loading, setLoading] = useState(false);
@@ -418,16 +418,23 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
     return (
         <div className={`flex flex-col bg-[#020617] relative h-full min-h-0 ${isFullscreen ? 'fixed inset-0 z-[200]' : ''}`}>
             {/* Toolbar */}
-            <div ref={toolbarRef} className={`border-b border-white/5 bg-slate-900/50 backdrop-blur-2xl z-40 flex-shrink-0 ${isMobile ? 'order-1 px-2 py-2' : 'p-4 flex flex-row gap-3 items-center justify-between'}`}>
+            <div ref={toolbarRef} className={`border-b border-white/5 bg-slate-900/50 backdrop-blur-2xl z-40 flex-shrink-0 ${isFullscreen ? 'hidden' : ''} ${isMobile ? 'order-1 px-2 py-1.5' : 'p-4 flex flex-row gap-3 items-center justify-between'}`}>
 
-                {/* Mobile: jeden kompaktowy rząd */}
+                {/* Mobile: jeden wiersz (flex-wrap) — w poziomie wszystko obok siebie, w pionie zawija; nazwa gałęzi + X w pasku */}
                 {isMobile ? (
-                    <div className="flex items-center gap-1.5 w-full overflow-x-auto no-scrollbar">
+                    <div className="flex flex-wrap items-center gap-1.5 w-full">
+                        {/* Nazwa gałęzi (gdy podana z MobileOrdersTree) — w jednym wierszu z resztą */}
+                        {nodeName && (
+                            <div className="flex items-center gap-1.5 shrink-0 min-w-0 max-w-[45%]">
+                                <Network size={15} className="text-teal-400 shrink-0" />
+                                <span className="font-black text-xs text-white truncate">{nodeName}</span>
+                            </div>
+                        )}
                         {/* Wybór pliku */}
                         <select
                             value={selectedSchematic?.id || ''}
                             onChange={(e) => { const sch = schematics.find(s => s.id === e.target.value); setSelectedSchematic(sch); setPageNumber(1); }}
-                            className="flex-1 min-w-0 bg-black/40 border border-white/10 rounded-xl px-2 py-2 text-xs text-gray-200 focus:outline-none"
+                            className="flex-1 min-w-[150px] bg-black/40 border border-white/10 rounded-xl px-2 py-1.5 text-xs text-gray-200 focus:outline-none"
                         >
                             {schematics.map(s => <option key={s.id} value={s.id}>{s.fileName}</option>)}
                             {schematics.length === 0 && <option value="">Brak</option>}
@@ -471,6 +478,13 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                                 </button>
                             )}
                         </>)}
+
+                        {/* Zamknij (gdy podane onClose z MobileOrdersTree) — wypycha na prawy koniec wiersza */}
+                        {onClose && (
+                            <button onClick={onClose} className="p-2 bg-white/10 rounded-xl text-white active:scale-90 transition-all shrink-0 ml-auto">
+                                <X size={16} />
+                            </button>
+                        )}
                     </div>
                 ) : (
                     /* Desktop: oryginalny layout */
