@@ -15,6 +15,7 @@ import {
 } from '../../services/repos/schematicsRepo';
 import { useNetwork } from '../../hooks/useNetwork';
 import { enqueue } from '../../services/repos/outboxRepo';
+import { enqueueSchematicUpload, removeFromQueue, flushPendingUploads } from '../../utils/uploadQueue';
 
 // Configure worker for react-pdf
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -105,6 +106,14 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
         fetchSchematics(true).catch(() => {});
         return () => { cancelled = true; };
     }, [nodeId, subtaskId]);
+
+    // Po reloadzie karty mobilnej (np. powrót z pickera plików) — doślij zaległy upload
+    // pliku schematu z IndexedDB. Dzięki temu upload przerwany reloadem nie ginie.
+    useEffect(() => {
+        flushPendingUploads(API_URL, () => fetchSchematics(true)).then(sent => {
+            if (sent > 0) console.log(`[UploadQueue] Dosłano ${sent} zaległych plików schematu`);
+        }).catch(() => {});
+    }, []);
 
     useEffect(() => {
         setPan({ x: 0, y: 0 });
@@ -219,8 +228,22 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
 
     const handleUpload = async (e) => {
         const file = e.target.files?.[0];
+        // Reset inputa — inaczej ponowny wybór TEGO SAMEGO pliku nie odpali onChange
+        e.target.value = '';
         if (!file) return;
         setUploading(true);
+
+        // Zapis do IndexedDB PRZED wysłaniem — przetrwa reload karty mobilnej (powrót z pickera
+        // plików potrafi przeładować stronę). flushPendingUploads przy montowaniu dośle plik.
+        let queueId = null;
+        try {
+            queueId = await enqueueSchematicUpload({
+                nodeId, subtaskId, fileName: file.name, fileType: file.type, blob: file,
+            });
+        } catch (qe) {
+            console.warn('[UploadQueue] Nie udało się zapisać pliku schematu do kolejki:', qe);
+        }
+
         const formData = new FormData();
         formData.append('file', file);
         formData.append('nodeId', nodeId);
@@ -233,8 +256,28 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                 body: formData
             });
             if (!res.ok) throw new Error('Błąd wgrywania');
-            await fetchSchematics();
-        } catch (err) { alert(err.message); } finally { setUploading(false); }
+            // Sukces — usuń z kolejki retry
+            if (queueId) await removeFromQueue(queueId).catch(() => {});
+            // Backend zwraca utworzony dokument (markers: []). Aktualizujemy stan optymistycznie
+            // z odpowiedzi zamiast polegać na osobnym fetchu — ten przy błędzie sieci/reloadzie
+            // zostawiał stary widok (stąd „plik widoczny dopiero po ponownym logowaniu").
+            const created = await res.json();
+            if (created?.id) {
+                setSchematics(prev => [created, ...prev.filter(s => s.id !== created.id)]);
+                setSelectedSchematic(created);
+                setPageNumber(1);
+                setShowTable(false);
+                upsertSchematics([created], { subtaskId, nodeId }).catch(() => {});
+            } else {
+                await fetchSchematics();
+            }
+        } catch (err) {
+            // Nie usuwamy z kolejki — plik zostaje w IndexedDB i zostanie dosłany po reloadzie/remount.
+            console.warn('[Upload] Nie wysłano pliku schematu, w kolejce do retry:', err.message);
+            alert('Nie udało się wgrać teraz — plik zostanie dosłany automatycznie po odzyskaniu połączenia.');
+        } finally {
+            setUploading(false);
+        }
     };
 
     const handleMouseMove = (e) => {
@@ -531,8 +574,13 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                         {selectedSchematic.markers.filter(m => m.pageNumber === pageNumber && m.type === 'TEXT').map(m => (
                             <div
                                 key={m.id}
-                                className="absolute cursor-pointer z-10 select-none transform -translate-x-1/2 -translate-y-1/2"
-                                style={{ left: `${m.x}%`, top: `${m.y}%` }}
+                                className="absolute cursor-pointer z-10 select-none"
+                                style={{
+                                    left: `${m.x}%`,
+                                    top: `${m.y}%`,
+                                    // Na mobile kontener jest skalowany CSS-em — kontr-skala 1/scale utrzymuje stały rozmiar etykiety
+                                    transform: isMobile ? `translate(-50%, -50%) scale(${1 / scale})` : 'translate(-50%, -50%)',
+                                }}
                                 onClick={(e) => { e.stopPropagation(); setSelectedMarker(m); }}
                             >
                                 <div className="bg-orange-500/90 text-white text-[11px] font-bold px-1.5 py-0.5 rounded shadow-sm border border-orange-400 whitespace-nowrap">
@@ -547,8 +595,13 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                             return (
                                 <div
                                     key={m.id}
-                                    className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer z-20"
-                                    style={{ left: `${m.x}%`, top: `${m.y}%` }}
+                                    className="absolute cursor-pointer z-20"
+                                    style={{
+                                        left: `${m.x}%`,
+                                        top: `${m.y}%`,
+                                        // Na mobile kontener jest skalowany CSS-em — kontr-skala 1/scale utrzymuje stały rozmiar pinezki
+                                        transform: isMobile ? `translate(-50%, -50%) scale(${1 / scale})` : 'translate(-50%, -50%)',
+                                    }}
                                     onClick={(e) => { e.stopPropagation(); setSelectedMarker(m); }}
                                     onMouseEnter={() => setHoveredMarkerId(m.id)}
                                     onMouseLeave={() => setHoveredMarkerId(null)}

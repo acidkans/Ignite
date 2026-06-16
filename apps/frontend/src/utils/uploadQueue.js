@@ -1,5 +1,9 @@
 // Persistent upload queue using IndexedDB.
-// Survives page reloads / mobile camera returns.
+// Survives page reloads / mobile camera returns / powrót z pickera plików.
+// Obsługuje dwa typy (kind):
+//   'attachment' — załącznik markera  → POST /schematics/markers/:markerId/attachments
+//   'schematic'  — plik schematu PDF/JPG → POST /schematics/upload (nodeId + opcj. subtaskId)
+// Wsteczna zgodność: stare wpisy bez `kind` traktujemy jak 'attachment'.
 
 const DB_NAME = 'erp_upload_queue';
 const STORE = 'pending';
@@ -19,22 +23,43 @@ function openDB() {
     });
 }
 
-export async function enqueueUpload({ markerId, fileName, fileType, blob }) {
-    const db = await openDB();
-    const id = `${markerId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const arrayBuffer = await blob.arrayBuffer();
-    return new Promise((resolve, reject) => {
+function genId(prefix) {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function putItem(record) {
+    return openDB().then(db => new Promise((resolve, reject) => {
         const tx = db.transaction(STORE, 'readwrite');
-        tx.objectStore(STORE).put({
-            id,
-            markerId,
-            fileName,
-            fileType,
-            data: arrayBuffer,
-            createdAt: Date.now(),
-        });
-        tx.oncomplete = () => resolve(id);
+        tx.objectStore(STORE).put(record);
+        tx.oncomplete = () => resolve(record.id);
         tx.onerror = () => reject(tx.error);
+    }));
+}
+
+export async function enqueueUpload({ markerId, fileName, fileType, blob }) {
+    const data = await blob.arrayBuffer();
+    return putItem({
+        id: genId(markerId),
+        kind: 'attachment',
+        markerId,
+        fileName,
+        fileType,
+        data,
+        createdAt: Date.now(),
+    });
+}
+
+export async function enqueueSchematicUpload({ nodeId, subtaskId, fileName, fileType, blob }) {
+    const data = await blob.arrayBuffer();
+    return putItem({
+        id: genId(`schematic_${nodeId}`),
+        kind: 'schematic',
+        nodeId,
+        subtaskId: subtaskId || null,
+        fileName,
+        fileType,
+        data,
+        createdAt: Date.now(),
     });
 }
 
@@ -78,7 +103,17 @@ export async function flushPendingUploads(apiUrl, onUploaded) {
             const formData = new FormData();
             formData.append('file', file);
 
-            const res = await fetch(`${apiUrl}/schematics/markers/${item.markerId}/attachments`, {
+            let url;
+            if (item.kind === 'schematic') {
+                formData.append('nodeId', item.nodeId);
+                if (item.subtaskId) formData.append('subtaskId', item.subtaskId);
+                url = `${apiUrl}/schematics/upload`;
+            } else {
+                // 'attachment' (lub stary wpis bez kind)
+                url = `${apiUrl}/schematics/markers/${item.markerId}/attachments`;
+            }
+
+            const res = await fetch(url, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}` },
                 body: formData,
@@ -87,7 +122,9 @@ export async function flushPendingUploads(apiUrl, onUploaded) {
             if (res.ok) {
                 await removeFromQueue(item.id);
                 sent++;
-                onUploaded?.();
+                let result = null;
+                try { result = await res.json(); } catch (_) {}
+                onUploaded?.(result, item);
             }
         } catch (e) {
             console.warn('[UploadQueue] retry failed for', item.id, e);

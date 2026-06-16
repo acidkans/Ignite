@@ -16,6 +16,14 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-    <script src="https://dev-tracker.gigatel.org/widget.js" data-project="ignite"></script>
+    <!-- Dev-tracker tylko na desktopie (>=1024px) — na mobile/tablet widget nie da się przenieść i zasłania UI -->
+    <script>
+      if (window.innerWidth >= 1024) {
+        var dt = document.createElement('script');
+        dt.src = 'https://dev-tracker.gigatel.org/widget.js';
+        dt.setAttribute('data-project', 'ignite');
+        document.body.appendChild(dt);
+      }
+    </script>
   </body>
 </html>

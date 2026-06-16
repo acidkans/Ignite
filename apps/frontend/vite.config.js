@@ -80,7 +80,8 @@ export default defineConfig({
     },
     server: {
         host: true,
-        port: 5173,
+        // Vite dev Ignite = 5174 (5173 omijamy — kolizje z innymi apkami; schemat 517x: ignite 5174 / kpricer 5175 / task-tracker 5176)
+        port: 5174,
         strictPort: true,
         allowedHosts: 'all',
         watch: {
