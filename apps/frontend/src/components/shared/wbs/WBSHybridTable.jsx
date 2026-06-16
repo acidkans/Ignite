@@ -145,6 +145,40 @@ function QaCell({ pairs, fieldClass, onChange, onPersist }) {
         </div>
     );
 }
+
+// ── Q&A modal — pełnoekranowy edytor pytań/odpowiedzi (3/4 szerokości) ─────────
+// Wąska kolumna w tabeli zawężała długie pytania do nieczytelności. Badge w
+// kolumnie otwiera ten modal, w którym Pytanie/Odpowiedź mają pełną szerokość.
+// @anchor qa-modal
+function QaModal({ node, fieldClass, onChange, onPersist, onClose }) {
+    useEffect(() => {
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [onClose]);
+    const list = Array.isArray(node?.qa) ? node.qa : [];
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+            <div className="relative bg-gray-950 border border-white/10 rounded-2xl shadow-2xl w-3/4 max-h-[85vh] flex flex-col overflow-hidden"
+                onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+                    <div>
+                        <p className="text-[14px] uppercase tracking-widest text-gray-500 font-bold flex items-center gap-1.5">
+                            <HelpCircle size={12} /> Pytania i odpowiedzi
+                        </p>
+                        <h2 className="text-base font-semibold text-white mt-0.5">{node?.name || 'Element WBS'}</h2>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-500 hover:text-white transition-all" title="Zamknij (Esc)">
+                        <X size={14} />
+                    </button>
+                </div>
+                <div className="overflow-y-auto flex-1 p-5">
+                    <QaCell pairs={list} fieldClass={fieldClass} onChange={onChange} onPersist={onPersist} />
+                </div>
+            </div>
+        </div>
+    );
+}
 import { UNIT_OPTIONS, sanitizeQtyInput } from './wbsConstants';
 import { ProductCard } from './WbsMaterialsPanel';
 
@@ -752,8 +786,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // Koszyk: id chipa-celu podświetlonego podczas przeciągania innego chipa (scalanie duplikatów).
     const [mergeOverId, setMergeOverId] = useState(null);
     const [copyBuffer, setCopyBuffer] = useState(null); // { node, sourceName }
-    const [expandedQaIds, setExpandedQaIds] = useState(new Set());
-    const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, status: 128, wlasciciel: 128, komentarz: 200, qa: 260, zalaczniki: 44 });
+    // @anchor qa-modal-node
+    const [qaModalNode, setQaModalNode] = useState(null); // { id, name, fieldClass } — węzeł z otwartym modalem Q&A
+    const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, status: 128, wlasciciel: 128, komentarz: 200, qa: 140, zalaczniki: 44 });
     const resizeDrag = useRef(null);
 
     const startColResize = (col, e) => {
@@ -1380,32 +1415,16 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     />
                 </td>
 
-                {/* Q&A — badge (zwinięty) lub pełny edytor (rozwinięty) */}
-                <td className="px-3 py-2.5 min-w-[200px]" onClick={e => e.stopPropagation()}>
-                    {expandedQaIds.has(node.id) ? (
-                        <div className="flex flex-col gap-1">
-                            <button
-                                onClick={() => setExpandedQaIds(prev => { const s = new Set(prev); s.delete(node.id); return s; })}
-                                className="self-start flex items-center gap-1 text-[11px] text-gray-500 hover:text-blue-400 transition-all mb-0.5"
-                            >
-                                <ChevronDown size={9} className="rotate-180" /> zwiń
-                            </button>
-                            <QaCell
-                                pairs={Array.isArray(node.qa) ? node.qa : []}
-                                fieldClass={d.fieldClass}
-                                onChange={(next) => handleField(node.id, 'qa', next)}
-                                onPersist={() => onSave?.()}
-                            />
-                        </div>
-                    ) : (
-                        <button
-                            onClick={() => setExpandedQaIds(prev => new Set([...prev, node.id]))}
-                            className="flex items-center gap-1.5 text-[48px] text-gray-500 hover:text-blue-400 transition-all"
-                        >
-                            <HelpCircle size={44} />
-                            <span>{(Array.isArray(node.qa) ? node.qa : []).filter(p => p?.question || p?.answer).length || '+'}</span>
-                        </button>
-                    )}
+                {/* Q&A — badge otwiera modal 3/4 ekranu (długie pytania czytelne) */}
+                <td className="px-3 py-2.5 min-w-[90px]" onClick={e => e.stopPropagation()}>
+                    <button
+                        onClick={() => setQaModalNode({ id: node.id, name: node.name, fieldClass: d.fieldClass })}
+                        className="flex items-center gap-1.5 text-[48px] text-gray-500 hover:text-blue-400 transition-all"
+                        title="Otwórz pytania i odpowiedzi"
+                    >
+                        <HelpCircle size={44} />
+                        <span>{(Array.isArray(node.qa) ? node.qa : []).filter(p => p?.question || p?.answer).length || '+'}</span>
+                    </button>
                 </td>
 
                 {/* Załączniki — miniatury zdjęć z markerów */}
@@ -1760,6 +1779,16 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     wbsNodeName={attachmentModal.wbsNodeName}
                     processNodeId={processNodeId}
                     onClose={closeAttachmentModal}
+                />
+            )}
+
+            {qaModalNode && (
+                <QaModal
+                    node={findNode(items, qaModalNode.id) || { name: qaModalNode.name, qa: [] }}
+                    fieldClass={qaModalNode.fieldClass}
+                    onChange={(next) => handleField(qaModalNode.id, 'qa', next)}
+                    onPersist={() => onSave?.()}
+                    onClose={() => setQaModalNode(null)}
                 />
             )}
         </div>
