@@ -8,16 +8,20 @@ const HL_RGB = {
     orange: rgb(0.996, 0.843, 0.667),
 };
 
-export async function downloadPdfWithHighlights({ fileUrl, fileName, highlights = [], token = null }) {
-    if (highlights.length === 0) {
-        const a = document.createElement('a');
-        a.href = fileUrl;
-        a.download = fileName;
-        a.click();
-        return;
-    }
+// @anchor build-download-artifact
+// Zwraca { blob, filename } dokumentu (PDF z opcjonalnymi podświetleniami) — wspólne dla
+// pobrania na dysk oraz wysyłki mailem (przez ExportChoiceModal).
+export async function buildDownloadArtifact({ fileUrl, fileName, highlights = [], token = null }) {
     const res = await fetch(fileUrl, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new Error(`Nie udało się pobrać pliku (${res.status})`);
     const buffer = await res.arrayBuffer();
+    const isPdf = (fileName || '').toLowerCase().endsWith('.pdf');
+    if (!highlights.length || !isPdf) {
+        return {
+            blob: new Blob([buffer], { type: res.headers.get('content-type') || 'application/octet-stream' }),
+            filename: fileName || 'dokument',
+        };
+    }
     const pdfDoc = await PDFDocument.load(buffer);
     const pages = pdfDoc.getPages();
     for (const h of highlights) {
@@ -37,11 +41,23 @@ export async function downloadPdfWithHighlights({ fileUrl, fileName, highlights 
         }
     }
     const bytes = await pdfDoc.save();
-    const blob = new Blob([bytes], { type: 'application/pdf' });
+    return { blob: new Blob([bytes], { type: 'application/pdf' }), filename: fileName || 'dokument.pdf' };
+}
+
+// Back-compat: bezpośrednie pobranie (bez modala).
+export async function downloadPdfWithHighlights({ fileUrl, fileName, highlights = [], token = null }) {
+    if (highlights.length === 0) {
+        const a = document.createElement('a');
+        a.href = fileUrl;
+        a.download = fileName;
+        a.click();
+        return;
+    }
+    const { blob, filename } = await buildDownloadArtifact({ fileUrl, fileName, highlights, token });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = fileName;
+    a.download = filename;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
 }

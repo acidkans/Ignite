@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
-import { downloadPdfWithHighlights } from '../../utils/downloadPdfWithHighlights';
+import { buildDownloadArtifact } from '../../utils/downloadPdfWithHighlights';
+import ExportChoiceModal from './ExportChoiceModal';
 import DocViewer, { DocViewerRenderers } from '@cyntler/react-doc-viewer';
 import { Maximize2, Minimize2, Download, X, ZoomIn, ZoomOut, CheckCircle, RotateCcw, FileText, ChevronRight, Link2, AlertCircle, ChevronDown, Sparkles, Trash2 } from 'lucide-react';
 import { API_URL } from '../../config';
@@ -684,27 +685,15 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
         }
     }, [documentId, authToken]);
     const [downloading, setDownloading] = useState(false);
+    // @anchor document-viewer-pending-export
+    const [pendingExport, setPendingExport] = useState(null);
 
-    const handleDownload = useCallback(async () => {
-        if (!isPdf) {
-            const a = document.createElement('a');
-            a.href = fileUrl;
-            a.download = fileName;
-            a.click();
-            return;
-        }
-        setDownloading(true);
-        try {
-            await downloadPdfWithHighlights({ fileUrl, fileName, highlights, token: authToken });
-        } catch (err) {
-            console.error('[Download]', err);
-            const a = document.createElement('a');
-            a.href = fileUrl;
-            a.download = fileName;
-            a.click();
-        } finally {
-            setDownloading(false);
-        }
+    const handleDownload = useCallback(() => {
+        setPendingExport({
+            title: fileName || 'Dokument',
+            defaultFilename: fileName || 'dokument',
+            makeArtifact: () => buildDownloadArtifact({ fileUrl, fileName, highlights: isPdf ? highlights : [], token: authToken }),
+        });
     }, [isPdf, highlights, fileUrl, fileName, authToken]);
 
     const icon = isPdf ? '📕' : isOffice ? '📘' : isImage ? '🖼️' : isVideo ? '🎬' : isText ? '📄' : '📁';
@@ -839,6 +828,16 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
                 {/* Datasheet parse panel */}
                 {showDatasheetPanel && <DatasheetParsePanel documentId={documentId} fileName={fileName} nodeId={nodeId} token={token} onApprove={(items) => onDatasheetApprove?.(items, documentId)} />}
             </div>
+            {pendingExport && (
+                <ExportChoiceModal
+                    open={!!pendingExport}
+                    onClose={() => setPendingExport(null)}
+                    nodeId={nodeId}
+                    title={pendingExport.title}
+                    defaultFilename={pendingExport.defaultFilename}
+                    makeArtifact={pendingExport.makeArtifact}
+                />
+            )}
         </div>
     );
 

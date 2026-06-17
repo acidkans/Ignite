@@ -115,15 +115,10 @@ const fetchJson = async (url, token) => {
     }
 };
 
-export async function exportProjectPdf({ nodeId, versionId, projectName, orderName, ganttHtml = null }) {
-    if (!nodeId) { alert('Brak nodeId — nie można wygenerować PDF.'); return; }
+export async function buildProjectPdfArtifact({ nodeId, versionId, projectName, orderName, ganttHtml = null }) {
+    if (!nodeId) throw new Error('Brak nodeId — nie można wygenerować PDF.');
     const token = sessionStorage.getItem('token');
-    if (!token) { alert('Brak sesji — zaloguj się ponownie.'); return; }
-
-    // Open the window IMMEDIATELY (synchronously) so popup blockers don't trip.
-    const win = window.open('', '_blank');
-    if (!win) { alert('Zezwól na otwieranie pop-upów aby eksportować PDF'); return; }
-    win.document.write('<html><body style="font-family:sans-serif;padding:40px;color:#444">Generowanie PDF…</body></html>');
+    if (!token) throw new Error('Brak sesji — zaloguj się ponownie.');
 
     const date = new Date().toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' });
     const versionQuery = versionId ? `?versionId=${versionId}` : '';
@@ -386,14 +381,26 @@ ${strategyHtml}
 ${wbsHtml}
 ${ganttSectionHtml}
 ${materialsHtml}
-<script>
-window.addEventListener('load', function() { setTimeout(function() { try { window.print(); } catch(e) {} }, 400); });
-</script>
 </body>
 </html>`;
 
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-    win.focus();
+    const filename = `${String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|\s]+/g, '_') || 'projekt'}_projekt.pdf`;
+    return { html, filename };
+}
+
+// Back-compat: otwiera okno i drukuje (popup-safe). Buduje ten sam HTML co ścieżka modalna.
+export async function exportProjectPdf(opts) {
+    const win = window.open('', '_blank');
+    if (!win) { alert('Zezwól na otwieranie pop-upów aby eksportować PDF'); return; }
+    win.document.write('<html><body style="font-family:sans-serif;padding:40px;color:#444">Generowanie PDF…</body></html>');
+    try {
+        const { html } = await buildProjectPdfArtifact(opts);
+        const withPrint = html.replace('</body>', `<script>window.addEventListener('load',function(){setTimeout(function(){try{window.print();}catch(e){}},400);});</script></body>`);
+        win.document.open();
+        win.document.write(withPrint);
+        win.document.close();
+        win.focus();
+    } catch (e) {
+        try { win.document.body.innerHTML = '<p style="font-family:sans-serif;padding:40px;color:#b00020">Błąd generowania PDF: ' + (e.message || e) + '</p>'; } catch (_) {}
+    }
 }

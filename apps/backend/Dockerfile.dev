@@ -2,10 +2,15 @@ FROM node:18-alpine
 
 WORKDIR /usr/src/app
 
+# Chromium dla Puppeteera (eksport PDF mailem/pobranie). Nie pobieramy Chromium przez puppeteer
+# (PUPPETEER_SKIP_DOWNLOAD) — używamy systemowego z apk. ENV przed npm install, by install nie ciągnął Chromium.
+ENV PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
 COPY package*.json ./
 COPY prisma ./prisma/
 
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl chromium nss freetype harfbuzz ca-certificates ttf-freefont
 RUN npm install
 RUN npx prisma generate
 

@@ -29,6 +29,9 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { PushModule } from './push/push.module';
 import { OffersModule } from './offers/offers.module';
 import { WbsNodesModule } from './wbs-nodes/wbs-nodes.module';
+import { SmtpModule } from './smtp/smtp.module';
+import { MailModule } from './mail/mail.module';
+import { PdfModule } from './pdf/pdf.module';
 
 @Module({
   imports: [
@@ -64,6 +67,9 @@ import { WbsNodesModule } from './wbs-nodes/wbs-nodes.module';
     PushModule,
     OffersModule,
     WbsNodesModule,
+    SmtpModule,
+    MailModule,
+    PdfModule,
   ],
   controllers: [AppController],
   providers: [

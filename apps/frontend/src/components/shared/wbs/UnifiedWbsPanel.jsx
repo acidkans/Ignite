@@ -8,9 +8,10 @@ import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import GanttSection from './GanttSection';
 import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny } from './wbsConstants';
-import { exportProjectPdf } from '../../../utils/projectPdfExport';
+import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
+import ExportChoiceModal from '../ExportChoiceModal';
 import WBSHybridTable from './WBSHybridTable';
 import BudgetTable from './BudgetTable';
 
@@ -192,6 +193,11 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const [reqRefreshKey, setReqRefreshKey] = useState(0);
     const materialsExportFn = useRef(null);
     const materialsPdfExportFn = useRef(null);
+    // @anchor pending-export
+    // Wspólny modal wyboru „Pobierz / Wyślij mailem" dla wszystkich eksportów panelu.
+    const [pendingExport, setPendingExport] = useState(null);
+    const openExport = useCallback((cfg) => setPendingExport(cfg), []);
+    const safeFileBase = () => String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|\s]+/g, '_') || 'projekt';
     const ganttExportRef = useRef(null);
     const ganttGetHtmlRef = useRef(null);
     const ganttExcelDataRef = useRef(null);
@@ -1625,12 +1631,9 @@ ${ganttSectionHtml}
 </body>
 </html>`;
 
-        const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
-        const blobUrl = URL.createObjectURL(blob);
-        const win = window.open(blobUrl, '_blank');
-        if (!win) { alert('Zezwól na otwieranie pop-upów aby eksportować PDF'); URL.revokeObjectURL(blobUrl); return; }
-        win.focus();
-        setTimeout(() => { win.print(); setTimeout(() => URL.revokeObjectURL(blobUrl), 60000); }, 600);
+        const labels = { oferta: 'Oferta', strategy: 'Jak to chcemy zrobić', wbs: 'Struktura projektu', budget: 'Budżet', gantt: 'Harmonogram', materials: 'Materiały', all: 'Pełny projekt' };
+        const filename = `${safeFileBase()}_${sectionKey}.pdf`;
+        openExport({ title: `Eksport PDF: ${labels[sectionKey] || sectionKey}`, defaultFilename: filename, makeArtifact: async () => ({ html, filename }) });
     };
 
     // @anchor handle-export-budget-excel
@@ -2512,12 +2515,7 @@ ${ganttSectionHtml}
 
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = `${safeProjectName}_budzet.xlsx`;
-        anchor.click();
-        URL.revokeObjectURL(url);
+        return { blob, filename: `${safeProjectName}_budzet.xlsx` };
     };
 
     // @anchor kwota-slownie
@@ -3049,12 +3047,8 @@ ${ganttSectionHtml}
         appendGanttSheet(workbook);
 
         const buf = await workbook.xlsx.writeBuffer();
-        const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = `Airtel_oferta_${safeProjectName}.xlsx`;
-        anchor.click();
-        URL.revokeObjectURL(url);
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        return { blob, filename: `Airtel_oferta_${safeProjectName}.xlsx` };
     };
 
     // @anchor handle-export-gantt-excel
@@ -3065,12 +3059,8 @@ ${ganttSectionHtml}
         if (!res.added) { alert('Brak danych harmonogramu do eksportu.'); return; }
 
         const buf = await workbook.xlsx.writeBuffer();
-        const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Harmonogram_${safeProjectName}.xlsx`;
-        a.click();
-        URL.revokeObjectURL(url);
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        return { blob, filename: `Harmonogram_${safeProjectName}.xlsx` };
     };
 
     const addNode = useCallback(async (parentId = null) => {
@@ -4350,14 +4340,14 @@ ${ganttSectionHtml}
                             <>
                                 {(key === 'wbs' || key === 'wbs-hybrid') && (
                                     <button
-                                        onClick={(e) => { e.stopPropagation(); exportQaFormPdf(wbsData, orderName || projectName || 'Projekt').catch(err => { console.error('[Q&A PDF]', err); alert('Błąd generowania PDF: ' + err.message); }); }}
+                                        onClick={(e) => { e.stopPropagation(); openExport({ title: 'Q&A PDF', defaultFilename: `Q&A_${safeFileBase()}.pdf`, makeArtifact: () => exportQaFormPdf(wbsData, orderName || projectName || 'Projekt') }); }}
                                         className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                                     >
                                         <FileDown size={11} /> Q&A PDF
                                     </button>
                                 )}
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); exportProjectPdf({ nodeId, versionId, projectName, orderName, ganttHtml: ganttGetHtmlRef.current?.() || null }); }}
+                                    onClick={(e) => { e.stopPropagation(); openExport({ title: 'PDF — wszystkie sekcje', defaultFilename: `${safeFileBase()}_projekt.pdf`, makeArtifact: () => buildProjectPdfArtifact({ nodeId, versionId, projectName, orderName, ganttHtml: ganttGetHtmlRef.current?.() || null }) }); }}
                                     className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                                 >
                                     <FileDown size={11} /> PDF wszystkie sekcje
@@ -4454,7 +4444,7 @@ ${ganttSectionHtml}
                             />
                         </div>
                     ), () => handleExportPDF('oferta'), (
-                        <button onClick={(e) => { e.stopPropagation(); handleExportOfertaWbsExcel(); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                        <button onClick={(e) => { e.stopPropagation(); const invalid = validateBudgetPricing(); if (invalid.length) { alert(`Eksport wstrzymany — ${invalid.length} pozycji wymaga uzupełnienia:\n\n${invalid.join('\n')}\n\nUzupełnij koszt jednostkowy i narzut tych pozycji, po czym ponów eksport.`); return; } openExport({ title: 'Tabele oferty (Excel)', defaultFilename: `Airtel_oferta_${safeFileBase()}.xlsx`, makeArtifact: handleExportOfertaWbsExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                             <FileDown size={11} /> Eksport tabel oferty
                         </button>
                     ));
@@ -4500,7 +4490,7 @@ ${ganttSectionHtml}
                             projectEndDate={ganttProjectEnd}
                         />
                     ), () => handleExportPDF('gantt'), (
-                        <button onClick={(e) => { e.stopPropagation(); handleExportGanttExcel(); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                        <button onClick={(e) => { e.stopPropagation(); openExport({ title: 'Harmonogram (Excel)', defaultFilename: `Harmonogram_${safeFileBase()}.xlsx`, makeArtifact: handleExportGanttExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                             <FileDown size={11} /> Eksport do Excel
                         </button>
                     ));
@@ -4558,7 +4548,7 @@ ${ganttSectionHtml}
                         />
                     ), () => handleExportPDF('budget'), (
                         <div className="flex items-center gap-2">
-                            <button onClick={(e) => { e.stopPropagation(); handleExportBudgetExcel(); }} className="flex items-center gap-1.5 px-3 py-1 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-lg text-green-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                            <button onClick={(e) => { e.stopPropagation(); const invalid = validateBudgetPricing(); if (invalid.length) { alert(`Eksport wstrzymany — ${invalid.length} pozycji wymaga uzupełnienia:\n\n${invalid.join('\n')}\n\nUzupełnij koszt jednostkowy i narzut tych pozycji, po czym ponów eksport.`); return; } openExport({ title: 'Analiza projektu (Excel)', defaultFilename: `${safeFileBase()}_budzet.xlsx`, makeArtifact: handleExportBudgetExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-lg text-green-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                                 <FileDown size={11} /> Analiza projektu do Excel
                             </button>
                             <button onClick={(e) => { e.stopPropagation(); budgetImportFileInputRef.current?.click(); }} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all">
@@ -4591,10 +4581,10 @@ ${ganttSectionHtml}
                         />
                     ), null, (
                         <>
-                            <button onClick={e => { e.stopPropagation(); materialsPdfExportFn.current?.(); }} className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
+                            <button onClick={e => { e.stopPropagation(); openExport({ title: 'Materiały PDF', defaultFilename: `${safeFileBase()}_materialy.pdf`, makeArtifact: () => materialsPdfExportFn.current?.() }); }} className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
                                 <FileDown size={11} /> PDF
                             </button>
-                            <button onClick={e => { e.stopPropagation(); materialsExportFn.current?.(); }} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
+                            <button onClick={e => { e.stopPropagation(); openExport({ title: 'Materiały (Excel)', defaultFilename: `${safeFileBase()}_materialy.xlsx`, makeArtifact: () => materialsExportFn.current?.() }); }} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
                                 <FileDown size={11} /> Excel
                             </button>
                         </>
@@ -4602,6 +4592,17 @@ ${ganttSectionHtml}
                 }
                 return null;
             })}
+
+            {pendingExport && (
+                <ExportChoiceModal
+                    open={!!pendingExport}
+                    onClose={() => setPendingExport(null)}
+                    nodeId={nodeId}
+                    title={pendingExport.title}
+                    defaultFilename={pendingExport.defaultFilename}
+                    makeArtifact={pendingExport.makeArtifact}
+                />
+            )}
 
             {presetManagerOpen && (
                 <div className="fixed inset-0 z-[130] bg-[#05070bcc] backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPresetManagerOpen(false)}>

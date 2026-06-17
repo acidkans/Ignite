@@ -422,7 +422,17 @@
       "Bash(curl -s -o /dev/null -w \"3001=%{http_code}\\\\n\" http://localhost:3001/api/process-tree)",
       "Bash(powershell -Command \"Get-NetTCPConnection -State Listen -LocalPort 3001,3005,3002,3000 -ErrorAction SilentlyContinue | Select LocalPort,OwningProcess\")",
       "Bash(powershell -Command \"Get-Process -Id 30444,26956 -ErrorAction SilentlyContinue | Select-Object Id,ProcessName,Path,StartTime\")",
-      "Bash(curl -s -X POST http://localhost:3005/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"andrzej@gigatel.app\",\"password\":\"\"}')"
+      "Bash(curl -s -X POST http://localhost:3005/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"andrzej@gigatel.app\",\"password\":\"\"}')",
+      "PowerShell(Push-Location apps\\\\backend; npx tsc --noEmit -p tsconfig.json; $code=$LASTEXITCODE; Pop-Location; \"TSC exit: $code\")",
+      "PowerShell(Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { try { Stop-Process -Id $_.OwningProcess -Force -ErrorAction Stop; \"killed PID $\\($_.OwningProcess\\) on 3001\" } catch {} }; \"port 3001 cleared\")",
+      "PowerShell(Push-Location apps\\\\backend; $env:PORT='3001'; npm run start:dev; Pop-Location)",
+      "Bash(node \"C:\\\\Users\\\\Cosinus\\\\Documents\\\\programiki\\\\ignite\\\\test\\\\smoke-smtp.js\")",
+      "Bash(UPDATE smtp_settings SET host=NULL, port=587, secure=false, username=NULL, password=NULL, \\\\\"fromEmail\\\\\"=NULL, \\\\\"fromName\\\\\"=NULL, \\\\\"replyTo\\\\\"=NULL WHERE id='singleton')",
+      "Bash(node -e 'const B='\\\\''C:/Users/Cosinus/Documents/programiki/ignite/apps/backend/node_modules'\\\\'';const {PrismaClient}=require\\(B+'\\\\''/@prisma/client'\\\\''\\);const p=new PrismaClient\\({datasources:{db:{url:'\\\\''postgres://postgres:changeme@localhost:5433/erp_db'\\\\''}}}\\);p.$executeRawUnsafe\\(__CMDSUB_OUTPUT__\\).then\\(n=>{console.log\\('\\\\''reset rows:'\\\\'',n\\);return p.$disconnect\\(\\);}\\)')",
+      "PowerShell(git -C \"C:\\\\Users\\\\Cosinus\\\\Documents\\\\programiki\\\\ignite\" config core.hooksPath)",
+      "PowerShell(git -C \"C:\\\\Users\\\\Cosinus\\\\Documents\\\\programiki\\\\ignite\" status --short)",
+      "PowerShell(\"---dockerignore---\")",
+      "PowerShell(\"---status---\")"
     ]
   }
 }

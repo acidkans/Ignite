@@ -291,10 +291,6 @@ export async function exportQaFormPdf(wbsData, projectName) {
 
     const bytes = await pdfDoc.save();
     const blob = new Blob([bytes], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Q&A_${(projectName || 'projekt').replace(/\s+/g, '_')}.pdf`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    // Zwraca artefakt (zamiast pobierać) — wybór pobierz/wyślij robi ExportChoiceModal.
+    return { blob, filename: `Q&A_${(projectName || 'projekt').replace(/\s+/g, '_')}.pdf` };
 }

@@ -4,6 +4,33 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-06-16 — feat(mail): konfiguracja SMTP w panelu + eksporty „wyślij mailem / pobierz" z podpowiedziami adresów
+
+### schema.prisma
+- dodano `schema-model` `SmtpSettings` (singleton `id="singleton"`, `@@map("smtp_settings")`) — konfiguracja serwera poczty wychodzącej z panelu admina. Pola `schema-pole`: `host`, `port` (Int? @default 587), `secure` (Bool), `username`, `password`, `fromEmail`, `fromName`, `replyTo`, `updatedAt`. Źródło prawdy dla wysyłki maili (fallback do env `SMTP_*`).
+
+### architektura / API
+- dodano `back-modul` `SmtpModule` (Global) + `back-serwis` `SmtpService` (transport nodemailer z DB, fallback env) + `back-controller` `SmtpController`:
+  - `back-endpoint` `GET /smtp` (ADMIN) — zwraca ustawienia BEZ hasła (`hasPassword: bool`)
+  - `back-endpoint` `PATCH /smtp` (ADMIN) — upsert; puste `password` zachowuje istniejące
+  - `back-endpoint` `POST /smtp/test` (ADMIN) — wysyłka testowa
+- aktywowano `back-modul` `MailModule` (wcześniej nieimportowany — martwy kod); `back-serwis` `MailService` wysyła przez `SmtpService` zamiast env `MailerModule`:
+  - `back-endpoint` `POST /mail/send-export` (multipart, multer) — wysyła przesłany plik jako załącznik maila
+  - `back-endpoint` `GET /mail/recipients/:nodeId` — zagregowane adresy: owner, uprawnieni (użytkownicy+zespoły), kontakt klienta (`OrderRequirements`), lokalizacja (`Site`), firma (`Company`), aktywny zespół
+- dodano `back-modul` `PdfModule` + `back-serwis` `PdfService` (Puppeteer/Chromium) + `back-endpoint` `POST /pdf/render` — HTML→PDF tym samym silnikiem co druk przeglądarki
+
+### zmiana układu eksportu PDF
+- wszystkie eksporty (Oferta/Budżet/Wymagania/Pełny projekt/Materiały/Q&A/Excel/dokumenty) przechodzą przez `ui-modal` `ExportChoiceModal` — wybór „Pobierz na urządzenie / Wyślij mailem" + `ui-input` `RecipientInput` z podpowiedziami adresów. Raporty-wydruki HTML renderowane do PDF przez `POST /pdf/render` (identyczny plik dla pobrania i maila); generatory zwracają artefakt (`{blob}`/`{html}`) zamiast pobierać/drukować bezpośrednio.
+- infra: Chromium (apk) dodany do `back-skrypt` `Dockerfile`/`Dockerfile.dev` backendu (+ `PUPPETEER_*` env); `mem_limit` backendu 512m→1g.
+
+### wytyczne
+- `schema-pole` `SmtpSettings.password` — write-only: `GET /smtp` nigdy nie zwraca hasła (tylko `hasPassword`), a puste pole przy `PATCH` zachowuje dotychczasowe.
+- `back-serwis` `SmtpService.buildTransport` — jedyne źródło transportu maili w aplikacji; DB ma priorytet, env to fallback.
+- `ui-funkcja` `resolveArtifact` (`exportMail.js`) — normalizuje wynik generatora eksportu: `{html}` renderuje na PDF przez backend (po `inlineImages`), `{blob}` zwraca wprost. Każdy nowy przycisk eksportu ma zwracać artefakt i przechodzić przez `ExportChoiceModal`, nie pobierać/drukować samodzielnie.
+- `back-serwis` `PdfService.render` — świeża instancja Chromium na render (sporadyczne eksporty); NIE używać flagi `--single-process` (wywala `page.pdf()` → TargetCloseError). Raporty HTML zależą od backendu (eksport tych raportów nie działa offline).
+
+---
+
 ## 2026-06-15 — fix(wbs): jednostka węzła nie resetuje się sama przy edycji ilości / przeładowaniu
 
 ### architektura / API

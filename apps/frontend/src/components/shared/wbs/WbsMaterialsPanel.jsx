@@ -1712,11 +1712,9 @@ export default function WbsMaterialsPanel({
 
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
         const safeOrder = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'zamowienie';
-        a.href = url; a.download = `${safeOrder}_materialy.xlsx`; a.click();
-        URL.revokeObjectURL(url);
+        // Zwraca artefakt (zamiast pobierać) — wybór pobierz/wyślij robi ExportChoiceModal w rodzicu.
+        return { blob, filename: `${safeOrder}_materialy.xlsx` };
     }, [matNodes, cards, orderName, projectName]);
 
     const exportToPdf = useCallback(async () => {
@@ -1774,7 +1772,9 @@ export default function WbsMaterialsPanel({
   th { background: #1a1a2e; color: #fff; text-align: left; }`,
         });
 
-        openPdfBlob(html);
+        const safeOrder = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'zamowienie';
+        // Zwraca HTML — render PDF i wybór pobierz/wyślij robi ExportChoiceModal (przez /pdf/render).
+        return { html, filename: `${safeOrder}_materialy.pdf` };
     }, [sortedFilteredNodes, cards, token, orderName, projectName]);
 
     // Notify parent when export functions update

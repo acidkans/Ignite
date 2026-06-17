@@ -18,8 +18,8 @@ const renderGoalHtml = (text) => (text || '')
     .replace(/(<\/h[2-4]>)<\/p>/g, '$1')
     .replace(/<p><\/p>/g, '');
 
-export async function exportRequirementsPdf({ form, countdown, workingDays, orderName }) {
-    if (!form) { alert('Brak danych formularza.'); return; }
+export async function buildRequirementsArtifact({ form, countdown, workingDays, orderName }) {
+    if (!form) throw new Error('Brak danych formularza.');
 
     const logoDataUrl = await fetchLogoDataUrl();
     const date = new Date().toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -101,5 +101,12 @@ export async function exportRequirementsPdf({ form, countdown, workingDays, orde
         `,
     });
 
+    const filename = `${String(orderName || 'zamowienie').trim().replace(/[\\/:*?"<>|\s]+/g, '_') || 'zamowienie'}_informacje.pdf`;
+    return { html, filename };
+}
+
+// Back-compat: bezpośredni wydruk (gdyby stara funkcja była gdzieś jeszcze wołana).
+export async function exportRequirementsPdf(opts) {
+    const { html } = await buildRequirementsArtifact(opts);
     openPdfBlob(html);
 }

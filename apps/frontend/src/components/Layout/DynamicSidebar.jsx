@@ -16,6 +16,8 @@ function filterNode(node, query) {
 
 export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, loading, userRoles = [], onReloadTree }) {
     const canManageTree = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
+    // @anchor sidebar-is-admin
+    const isAdmin = userRoles.includes('ADMIN');
     const navigate = useNavigate();
     const location = useLocation();
     const [filter, setFilter] = useState('');
@@ -161,6 +163,21 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
                             `}
                         >
                             Zarządzanie Drzewem
+                        </button>
+                    )}
+                    {/* @anchor sidebar-smtp-button */}
+                    {isAdmin && (
+                        <button
+                            onClick={() => navigate('/smtp')}
+                            title="Konfiguracja poczty wychodzącej (SMTP)"
+                            className={`w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md
+                                ${location.pathname === '/smtp'
+                                    ? 'text-blue-400 bg-blue-500/10'
+                                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                                }
+                            `}
+                        >
+                            Poczta SMTP
                         </button>
                     )}
                 </div>

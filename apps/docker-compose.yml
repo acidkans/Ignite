@@ -32,7 +32,8 @@ services:
       dockerfile: Dockerfile.dev
     container_name: erp-backend
     restart: always
-    mem_limit: 512m
+    # 1g (z 512m) — Chromium/Puppeteer (eksport PDF) potrafi przekroczyć 512MB i paść OOM
+    mem_limit: 1g
     env_file:
       - ./backend/.env
     environment:

@@ -590,6 +590,50 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | Tag | Nazwa | Plik | Anchor |
 |-----|-------|------|--------|
 | ui-stala | APP_VERSION | apps/frontend/src/version.js | @anchor app-version |
+| schema-model | SmtpSettings | apps/backend/prisma/schema.prisma | @anchor smtp-settings-id |
+| schema-pole | SmtpSettings.host | apps/backend/prisma/schema.prisma | @anchor smtp-settings-host |
+| schema-pole | SmtpSettings.port | apps/backend/prisma/schema.prisma | @anchor smtp-settings-port |
+| schema-pole | SmtpSettings.secure | apps/backend/prisma/schema.prisma | @anchor smtp-settings-secure |
+| schema-pole | SmtpSettings.username | apps/backend/prisma/schema.prisma | @anchor smtp-settings-username |
+| schema-pole | SmtpSettings.password | apps/backend/prisma/schema.prisma | @anchor smtp-settings-password |
+| schema-pole | SmtpSettings.fromEmail | apps/backend/prisma/schema.prisma | @anchor smtp-settings-from-email |
+| schema-pole | SmtpSettings.fromName | apps/backend/prisma/schema.prisma | @anchor smtp-settings-from-name |
+| schema-pole | SmtpSettings.replyTo | apps/backend/prisma/schema.prisma | @anchor smtp-settings-reply-to |
+| schema-pole | SmtpSettings.updatedAt | apps/backend/prisma/schema.prisma | @anchor smtp-settings-updated-at |
+| back-stala | SINGLETON_ID (smtp) | apps/backend/src/smtp/smtp.service.ts | @anchor smtp-singleton-id |
+| back-funkcja | SmtpService.getRaw | apps/backend/src/smtp/smtp.service.ts | @anchor smtp-service-get-raw |
+| back-funkcja | SmtpService.get | apps/backend/src/smtp/smtp.service.ts | @anchor smtp-service-get |
+| back-funkcja | SmtpService.update | apps/backend/src/smtp/smtp.service.ts | @anchor smtp-service-update |
+| back-funkcja | SmtpService.buildTransport | apps/backend/src/smtp/smtp.service.ts | @anchor smtp-build-transport |
+| back-funkcja | SmtpService.sendMail | apps/backend/src/smtp/smtp.service.ts | @anchor smtp-send-mail |
+| back-funkcja | SmtpService.sendTest | apps/backend/src/smtp/smtp.service.ts | @anchor smtp-send-test |
+| back-controller | SmtpController | apps/backend/src/smtp/smtp.controller.ts | @anchor smtp-controller |
+| back-modul | SmtpModule | apps/backend/src/smtp/smtp.module.ts | @anchor smtp-module |
+| back-funkcja | PdfService.render | apps/backend/src/pdf/pdf.service.ts | @anchor pdf-render |
+| back-controller | PdfController | apps/backend/src/pdf/pdf.controller.ts | @anchor pdf-controller |
+| back-modul | PdfModule | apps/backend/src/pdf/pdf.module.ts | @anchor pdf-module |
+| back-funkcja | MailService.sendUserConfirmation | apps/backend/src/mail/mail.service.ts | @anchor mail-send-user-confirmation |
+| back-funkcja | MailService.sendExport | apps/backend/src/mail/mail.service.ts | @anchor mail-send-export |
+| back-funkcja | MailService.getRecipients | apps/backend/src/mail/mail.service.ts | @anchor mail-get-recipients |
+| back-controller | MailController | apps/backend/src/mail/mail.controller.ts | @anchor mail-controller |
+| back-modul | MailModule | apps/backend/src/mail/mail.module.ts | @anchor mail-module |
+| ui-funkcja | exportMail (moduł) | apps/frontend/src/utils/exportMail.js | @anchor export-mail-util |
+| ui-funkcja | downloadBlob | apps/frontend/src/utils/exportMail.js | @anchor download-blob |
+| ui-funkcja | renderHtmlToPdf | apps/frontend/src/utils/exportMail.js | @anchor render-html-to-pdf |
+| ui-funkcja | resolveArtifact | apps/frontend/src/utils/exportMail.js | @anchor resolve-artifact |
+| ui-funkcja | inlineImages | apps/frontend/src/utils/exportMail.js | @anchor inline-images |
+| ui-funkcja | fetchRecipients | apps/frontend/src/utils/exportMail.js | @anchor fetch-recipients |
+| ui-funkcja | sendExport | apps/frontend/src/utils/exportMail.js | @anchor send-export |
+| ui-input | RecipientInput | apps/frontend/src/components/shared/RecipientInput.jsx | @anchor recipient-input |
+| ui-modal | ExportChoiceModal | apps/frontend/src/components/shared/ExportChoiceModal.jsx | @anchor export-choice-modal |
+| ui-widok | SmtpSettingsPage | apps/frontend/src/SmtpSettingsPage.jsx | @anchor smtp-settings-page |
+| ui-stan | isAdmin (sidebar) | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-is-admin |
+| ui-przycisk | Poczta SMTP (sidebar) | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-smtp-button |
+| ui-stan | pendingExport (WBS) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor pending-export |
+| ui-stan | pendingExport (Requirements) | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-pending-export |
+| ui-stan | pendingExport (DocumentViewer) | apps/frontend/src/components/shared/DocumentViewer.jsx | @anchor document-viewer-pending-export |
+| ui-stan | pendingExport (DocSidebar) | apps/frontend/src/components/Documentation/DocumentationSidebar.jsx | @anchor doc-sidebar-pending-export |
+| ui-funkcja | buildDownloadArtifact | apps/frontend/src/utils/downloadPdfWithHighlights.js | @anchor build-download-artifact |
 
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)

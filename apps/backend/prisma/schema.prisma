@@ -486,6 +486,33 @@ model Company {
   @@map("companies")
 }
 
+/// Singleton — konfiguracja serwera poczty wychodzącej (SMTP), jeden wiersz id = "singleton".
+/// Źródło prawdy dla wysyłki maili (panel „Poczta SMTP"). Gdy puste — fallback do zmiennych env SMTP_*.
+model SmtpSettings {
+  /// @anchor smtp-settings-id
+  id        String   @id @default("singleton")
+  /// @anchor smtp-settings-host
+  host      String?
+  /// @anchor smtp-settings-port
+  port      Int?     @default(587)
+  /// @anchor smtp-settings-secure
+  secure    Boolean  @default(false)
+  /// @anchor smtp-settings-username
+  username  String?
+  /// @anchor smtp-settings-password
+  password  String?
+  /// @anchor smtp-settings-from-email
+  fromEmail String?
+  /// @anchor smtp-settings-from-name
+  fromName  String?
+  /// @anchor smtp-settings-reply-to
+  replyTo   String?
+  /// @anchor smtp-settings-updated-at
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("smtp_settings")
+}
+
 model UserEntityConfig {
   id         String @id @default(uuid())
   userId     String

@@ -1,30 +1,133 @@
-import { Injectable } from '@nestjs/common';
-import { MailerService } from '@nestjs-modules/mailer';
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { SmtpService } from '../smtp/smtp.service';
+import { PrismaService } from '../prisma/prisma.service';
+
+const COMPANY_SINGLETON_ID = 'singleton';
+const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+
+const escapeHtml = (v: any) =>
+  String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+const fullName = (u: { firstName?: string | null; lastName?: string | null; email?: string | null }) =>
+  [u?.firstName, u?.lastName].filter(Boolean).join(' ').trim() || u?.email || '';
+
+const parseList = (v: any): string[] => {
+  if (!v) return [];
+  const arr = Array.isArray(v) ? v : String(v).split(/[;,]/);
+  return arr.map((s) => String(s).trim()).filter((s) => s.includes('@'));
+};
 
 @Injectable()
 export class MailService {
-  constructor(private mailerService: MailerService) { }
+  constructor(
+    private smtpService: SmtpService,
+    private prisma: PrismaService,
+  ) {}
 
+  // @anchor mail-send-user-confirmation
   async sendUserConfirmation(user: any, token: string) {
-    const url = `http://localhost:81/auth/confirm?token=${token}`; // TODO: Użyć ConfigService dla FRONTEND_URL
+    const url = `http://localhost:81/auth/confirm?token=${token}`; // TODO: ConfigService dla FRONTEND_URL
+    await this.smtpService.sendMail({
+      to: user.email,
+      subject: 'Witaj w GIGATEL ERP! Potwierdź swój email',
+      html: `
+        <h1>Witaj ${escapeHtml(user.firstName || '')}!</h1>
+        <p>Dziękujemy za rejestrację w systemie ERP.</p>
+        <p><a href="${url}">Kliknij tutaj, aby potwierdzić konto</a></p>
+        <br/>
+        <small>Jeśli to nie Ty, zignoruj ten email.</small>
+      `,
+    });
+  }
 
-    try {
-      await this.mailerService.sendMail({
-        to: user.email,
-        subject: 'Witaj w GIGATEL ERP! Potwierdź swój email',
-        html: `
-            <h1>Witaj ${user.firstName || ''}!</h1>
-            <p>Dziękujemy za rejestrację w systemie ERP.</p>
-            <p><a href="${url}">Kliknij tutaj, aby potwierdzić konto</a></p>
-            <br/>
-            <small>Jeśli to nie Ty, zignoruj ten email.</small>
-          `,
-      });
-      console.log(`[MAIL] Wysłano link aktywacyjny do: ${user.email}`);
-    } catch (e) {
-      console.error('[MAIL ERROR]', e);
-      // Rzucamy błąd dalej, żeby frontend wiedział, że coś poszło nie tak (np. złe hasło SMTP)
-      throw e;
+  // @anchor mail-send-export
+  // Wysyła DOKŁADNIE ten sam plik, który front pobiera lokalnie — jako załącznik.
+  async sendExport(
+    file: Express.Multer.File,
+    body: { to?: any; cc?: any; subject?: string; message?: string; nodeId?: string },
+  ) {
+    if (!file) throw new BadRequestException('Brak pliku do wysłania.');
+    const to = parseList(body?.to);
+    if (!to.length) throw new BadRequestException('Podaj co najmniej jednego odbiorcę.');
+    const cc = parseList(body?.cc);
+    // multer dostarcza originalname w latin1 — przywróć UTF-8 dla polskich znaków
+    const filename = Buffer.from(file.originalname || 'eksport', 'latin1').toString('utf8');
+    const subject = (body?.subject || `Eksport: ${filename}`).slice(0, 250);
+    const message = body?.message || '';
+    await this.smtpService.sendMail({
+      to,
+      cc: cc.length ? cc : undefined,
+      subject,
+      html: message
+        ? `<div style="white-space:pre-wrap;font-family:Arial,sans-serif">${escapeHtml(message)}</div>`
+        : `<p style="font-family:Arial,sans-serif">W załączniku przesyłamy: <strong>${escapeHtml(filename)}</strong>.</p>`,
+      attachments: [{ filename, content: file.buffer, contentType: file.mimetype }],
+    });
+    return { ok: true, sentTo: to, cc };
+  }
+
+  // @anchor mail-get-recipients
+  // Agreguje sugerowane adresy dla danego węzła zamówienia: właściciel, uprawnieni
+  // (użytkownicy + zespoły), kontakt klienta (OrderRequirements), kontakt lokalizacji
+  // (Site), firma (Company) oraz cały aktywny zespół. Odduplikowane po adresie.
+  async getRecipients(nodeId: string) {
+    const out = new Map<string, { email: string; label: string; source: string }>();
+    const add = (email: any, label: string, source: string) => {
+      const e = String(email || '').trim().toLowerCase();
+      if (!e || !e.includes('@')) return;
+      if (!out.has(e)) out.set(e, { email: e, label: label || e, source });
+    };
+
+    if (nodeId) {
+      const node = await this.prisma.processNode
+        .findUnique({
+          where: { id: nodeId },
+          include: {
+            owner: true,
+            permissions: { include: { user: true, team: { include: { users: true } } } },
+          },
+        })
+        .catch(() => null);
+      if (node?.owner) add(node.owner.email, fullName(node.owner), 'Właściciel');
+      for (const p of node?.permissions || []) {
+        if (p.user) add(p.user.email, fullName(p.user), 'Uprawnienia');
+        for (const u of p.team?.users || []) add(u.email, fullName(u), `Zespół: ${p.team?.name || ''}`);
+      }
+
+      const reqs = await this.prisma.orderRequirements.findMany({ where: { nodeId } }).catch(() => []);
+      for (const r of reqs) {
+        add(r.clientProjectManagerEmail, r.clientProjectManager || 'Kierownik projektu klienta', 'Kontakt klienta');
+        for (const m of String(r.clientContacts || '').match(EMAIL_RE) || []) {
+          add(m, 'Kontakt zamówienia', 'Kontakt zamówienia');
+        }
+      }
+
+      const site = await this.prisma.site.findUnique({ where: { id: nodeId } }).catch(() => null);
+      if (site) {
+        add(
+          site.contactEmail,
+          [site.contactFirstName, site.contactLastName].filter(Boolean).join(' ') || 'Kontakt lokalizacji',
+          'Lokalizacja',
+        );
+      }
     }
+
+    const company = await this.prisma.company
+      .findUnique({ where: { id: COMPANY_SINGLETON_ID } })
+      .catch(() => null);
+    if (company) {
+      add(
+        company.contactEmail,
+        [company.contactFirstName, company.contactLastName].filter(Boolean).join(' ') || company.name || 'Moja firma',
+        'Moja firma',
+      );
+    }
+
+    const users = await this.prisma.user
+      .findMany({ where: { isActive: true }, select: { email: true, firstName: true, lastName: true } })
+      .catch(() => []);
+    for (const u of users) add(u.email, fullName(u), 'Zespół');
+
+    return [...out.values()];
   }
 }

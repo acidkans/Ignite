@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Document, pdfjs } from 'react-pdf';
 import { FileText, ZoomIn, ZoomOut, Download, X, Maximize2, RefreshCw, FileQuestion, ChevronLeft, ChevronRight } from 'lucide-react';
-import { downloadPdfWithHighlights } from '../../utils/downloadPdfWithHighlights';
+import { buildDownloadArtifact } from '../../utils/downloadPdfWithHighlights';
+import ExportChoiceModal from '../shared/ExportChoiceModal';
 import { API_URL } from '../../config';
 import PdfPageWithHighlights from '../shared/PdfPageWithHighlights';
 
@@ -178,25 +179,30 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
     const fileUrl = selectedFile ? `${API_URL}/documents/download/${selectedFile.id}` : null;
 
     const [downloading, setDownloading] = useState(false);
+    // @anchor doc-sidebar-pending-export
+    const [pendingExport, setPendingExport] = useState(null);
 
-    const handleDownload = useCallback(async () => {
+    const handleDownload = useCallback(() => {
         if (!fileUrl) return;
-        setDownloading(true);
-        try {
-            await downloadPdfWithHighlights({ fileUrl, fileName: selectedFile.fileName, highlights: isPdf ? highlights : [], token });
-        } catch (err) {
-            console.error('[Sidebar Download]', err);
-            const a = document.createElement('a');
-            a.href = fileUrl;
-            a.download = selectedFile.fileName;
-            a.click();
-        } finally {
-            setDownloading(false);
-        }
+        setPendingExport({
+            title: selectedFile?.fileName || 'Dokument',
+            defaultFilename: selectedFile?.fileName || 'dokument',
+            makeArtifact: () => buildDownloadArtifact({ fileUrl, fileName: selectedFile.fileName, highlights: isPdf ? highlights : [], token }),
+        });
     }, [fileUrl, isPdf, highlights, selectedFile, token]);
 
     return (
         <div className="flex flex-col h-full w-full overflow-hidden">
+            {pendingExport && (
+                <ExportChoiceModal
+                    open={!!pendingExport}
+                    onClose={() => setPendingExport(null)}
+                    nodeId={nodeId}
+                    title={pendingExport.title}
+                    defaultFilename={pendingExport.defaultFilename}
+                    makeArtifact={pendingExport.makeArtifact}
+                />
+            )}
             {/* Header */}
             <div className="h-12 flex items-center justify-between px-3 border-b border-white/5 bg-gradient-to-r from-amber-500/10 to-orange-500/10 flex-shrink-0">
                 <div className="flex items-center gap-2 min-w-0">

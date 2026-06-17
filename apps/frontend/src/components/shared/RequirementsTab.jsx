@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Clock, Calendar, Target, Package, AlertTriangle, CheckCircle2, Plus, Trash2, GripVertical, Wrench, ClipboardList, ShieldCheck, User, Users, Mail, Phone, PhoneCall, FileDown, UserPlus } from 'lucide-react';
 import { API_URL } from '../../config';
 import { exportProjectPdf } from '../../utils/projectPdfExport';
-import { exportRequirementsPdf } from '../../utils/requirementsPdfExport';
+import { buildRequirementsArtifact } from '../../utils/requirementsPdfExport';
+import ExportChoiceModal from './ExportChoiceModal';
 import MarkdownEditor from './MarkdownEditor';
 
 function countWorkingDays(startStr, endStr) {
@@ -72,6 +73,8 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
+    // @anchor requirements-pending-export
+    const [pendingExport, setPendingExport] = useState(null);
 
     const [form, setForm] = useState({
         offerDeadlineDate: '',
@@ -469,10 +472,20 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
 
     return (
         <div className="animate-fade-in flex flex-col gap-4 w-full h-full min-h-[800px]">
+            {pendingExport && (
+                <ExportChoiceModal
+                    open={!!pendingExport}
+                    onClose={() => setPendingExport(null)}
+                    nodeId={nodeId}
+                    title={pendingExport.title}
+                    defaultFilename={pendingExport.defaultFilename}
+                    makeArtifact={pendingExport.makeArtifact}
+                />
+            )}
             {/* Top action bar */}
             <div className="flex justify-end items-center gap-3">
                 <button
-                    onClick={() => exportRequirementsPdf({ form, countdown, workingDays, orderName })}
+                    onClick={() => setPendingExport({ title: 'Informacje o zamówieniu (PDF)', defaultFilename: `${String(orderName || 'zamowienie').trim().replace(/[\\/:*?"<>|\s]+/g, '_') || 'zamowienie'}_informacje.pdf`, makeArtifact: () => buildRequirementsArtifact({ form, countdown, workingDays, orderName }) })}
                     className="flex items-center gap-1.5 px-3 py-1 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/25 rounded-lg text-purple-300 text-[10px] font-bold uppercase tracking-widest transition-all"
                     title="Eksportuj informacje o zamówieniu do PDF"
                 >
