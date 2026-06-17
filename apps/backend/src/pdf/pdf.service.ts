@@ -13,8 +13,12 @@ export class PdfService {
   // Świeża instancja na każdy render — prościej i pewniej niż współdzielona przy sporadycznych eksportach.
   // UWAGA: bez `--single-process` — ta flaga wywala `page.pdf()` (TargetCloseError: Target closed).
   async render(html: string): Promise<Buffer> {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const puppeteer = require('puppeteer');
+    // puppeteer jest ESM-only; Node 18 (prod) nie wspiera require() ESM (ERR_REQUIRE_ESM).
+    // Ładujemy przez natywny dynamiczny import(); `new Function` chroni go przed downlevelem
+    // tsc do require() (tsconfig ma module: commonjs).
+    const dynamicImport = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
+    const mod = await dynamicImport('puppeteer');
+    const puppeteer = mod.default || mod;
     const browser = await puppeteer.launch({
       headless: 'new',
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
