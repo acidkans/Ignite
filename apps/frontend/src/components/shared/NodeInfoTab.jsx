@@ -158,8 +158,8 @@ export default function NodeInfoTab({ nodeId }) {
                 </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-4 pt-4">
+            {/* Actions — przyklejone do dołu kontenera scrolla, nie gubią się między polami */}
+            <div className="sticky bottom-0 -mx-1 px-1 flex items-center justify-end gap-4 pt-4 pb-3 mt-4 border-t border-white/10 bg-gray-900/85 backdrop-blur-md rounded-b-2xl z-10">
                 <button
                     onClick={handleSave}
                     disabled={saving}

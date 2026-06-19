@@ -27,6 +27,10 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 
 export default function SchematTab({ nodeId, versionId, wbsData: externalWbsData, orderName = '' }) {
     const { isDesktop } = useDevice();
+    // @anchor schemat-can-fullscreen
+    // Na tabletach z dotykiem (Android landscape >=1024px) useDevice raportuje desktop,
+    // przez co znikał zielony przycisk pełnego ekranu. Wykrywamy dotyk niezależnie od szerokości.
+    const canFullscreen = !isDesktop || (typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches);
     const { dirHandle, dirName, syncStatus, syncStats, lastSync, isSupported, chooseFolder, syncFiles } = useLocalSchemaSync();
 
     const [schematics, setSchematics] = useState([]);
@@ -838,7 +842,7 @@ export default function SchematTab({ nodeId, versionId, wbsData: externalWbsData
     }
 
     return (
-        <div ref={rootRef} className={`flex flex-col h-full bg-gray-900/50 rounded-xl overflow-hidden border border-white/5 relative ${!isDesktop && isFullscreen ? 'fixed inset-0 z-[200]' : ''}`}>
+        <div ref={rootRef} className={`flex flex-col h-full bg-gray-900/50 rounded-xl overflow-hidden border border-white/5 relative ${canFullscreen && isFullscreen ? 'fixed inset-0 z-[200]' : ''}`}>
 
             {/* Górna belka — pełna szerokość */}
             <div
@@ -1106,7 +1110,7 @@ export default function SchematTab({ nodeId, versionId, wbsData: externalWbsData
 
                         {/* Overlay — przyciski zoom + fullscreen */}
                         <div className="fixed bottom-4 right-3 z-[100] flex flex-col gap-2 pointer-events-none">
-                            {!isDesktop && (
+                            {canFullscreen && (
                                 <button
                                     onClick={() => setIsFullscreen(f => !f)}
                                     className={`pointer-events-auto w-8 h-8 flex items-center justify-center rounded-lg bg-black/25 border border-emerald-400 text-emerald-400 active:scale-95 transition-transform`}

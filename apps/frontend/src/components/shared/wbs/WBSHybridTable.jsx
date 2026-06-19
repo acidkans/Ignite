@@ -179,6 +179,77 @@ function QaModal({ node, fieldClass, onChange, onPersist, onClose }) {
         </div>
     );
 }
+// ── Q&A gałęzi — read-only agregacja ─────────────────────────────────────────
+// Zbiera (tylko do odczytu) wszystkie niepuste pary Q&A z poddrzewa węzła —
+// wyłącznie dzieci i głębiej, pomijając sam węzeł. Zwraca [{ id, name, depth, pairs }].
+// @anchor collect-branch-qa
+function collectBranchQa(node, depth = 0, acc = []) {
+    for (const child of (node?.children || [])) {
+        const pairs = (Array.isArray(child.qa) ? child.qa : [])
+            .filter(p => (p?.question || '').trim() || (p?.answer || '').trim());
+        if (pairs.length) acc.push({ id: child.id, name: child.name || 'Element WBS', depth, pairs });
+        collectBranchQa(child, depth + 1, acc);
+    }
+    return acc;
+}
+
+// Read-only modal pokazujący wszystkie Q&A z gałęzi (dzieci danego węzła), grupowane
+// po węźle. Czysty podgląd — bez textarea/onChange/zapisu (edycja nietknięta gdzie indziej).
+// @anchor qa-branch-modal
+function QaBranchModal({ node, onClose }) {
+    useEffect(() => {
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [onClose]);
+    const groups = collectBranchQa(node);
+    const total = groups.reduce((s, g) => s + g.pairs.length, 0);
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+            <div className="relative bg-gray-950 border border-white/10 rounded-2xl shadow-2xl w-3/4 max-h-[85vh] flex flex-col overflow-hidden"
+                onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+                    <div>
+                        <p className="text-[14px] uppercase tracking-widest text-gray-500 font-bold flex items-center gap-1.5">
+                            <HelpCircle size={12} /> Q&A gałęzi — podgląd (read-only)
+                        </p>
+                        <h2 className="text-base font-semibold text-white mt-0.5">{node?.name || 'Element WBS'} · {total} {total === 1 ? 'pytanie' : 'pytań'}</h2>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-500 hover:text-white transition-all" title="Zamknij (Esc)">
+                        <X size={14} />
+                    </button>
+                </div>
+                <div className="overflow-y-auto flex-1 p-5 flex flex-col gap-5">
+                    {groups.length === 0 && (
+                        <p className="text-gray-600 text-[15px] italic">Brak pytań i odpowiedzi w tej gałęzi.</p>
+                    )}
+                    {groups.map(g => (
+                        <div key={g.id} style={{ marginLeft: `${g.depth * 16}px` }}>
+                            <p className="text-[14px] font-bold text-blue-300/80 mb-1.5">{g.name}</p>
+                            <table className="w-full text-[15px] border-collapse">
+                                <thead>
+                                    <tr>
+                                        <th className="text-left font-semibold uppercase tracking-wider text-gray-500 pb-0.5 w-1/2">Pytanie</th>
+                                        <th className="text-left font-semibold uppercase tracking-wider text-gray-500 pb-0.5 w-1/2">Odpowiedź</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {g.pairs.map((p, i) => (
+                                        <tr key={i} className="align-top">
+                                            <td className="pr-2 py-1 border-t border-white/5 text-gray-200 whitespace-pre-wrap break-words">{p.question || '—'}</td>
+                                            <td className="pr-2 py-1 border-t border-white/5 text-gray-300 whitespace-pre-wrap break-words">{p.answer || '—'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 import { UNIT_OPTIONS, sanitizeQtyInput } from './wbsConstants';
 import { ProductCard } from './WbsMaterialsPanel';
 
@@ -788,6 +859,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [copyBuffer, setCopyBuffer] = useState(null); // { node, sourceName }
     // @anchor qa-modal-node
     const [qaModalNode, setQaModalNode] = useState(null); // { id, name, fieldClass } — węzeł z otwartym modalem Q&A
+    // @anchor qa-branch-node
+    const [qaBranchNode, setQaBranchNode] = useState(null); // { id } — węzeł top-level z otwartym read-only podglądem Q&A całej gałęzi
     const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, status: 128, wlasciciel: 128, komentarz: 200, qa: 140, zalaczniki: 44 });
     const resizeDrag = useRef(null);
 
@@ -1415,16 +1488,28 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     />
                 </td>
 
-                {/* Q&A — badge otwiera modal 3/4 ekranu (długie pytania czytelne) */}
+                {/* Q&A — na węźle top-level suma Q&A całej gałęzi otwiera read-only podgląd;
+                    na pozostałych badge otwiera edytowalny modal 3/4 ekranu (edycja nietknięta). */}
                 <td className="px-3 py-2.5 min-w-[90px]" onClick={e => e.stopPropagation()}>
-                    <button
-                        onClick={() => setQaModalNode({ id: node.id, name: node.name, fieldClass: d.fieldClass })}
-                        className="flex items-center gap-1.5 text-[48px] text-gray-500 hover:text-blue-400 transition-all"
-                        title="Otwórz pytania i odpowiedzi"
-                    >
-                        <HelpCircle size={44} />
-                        <span>{(Array.isArray(node.qa) ? node.qa : []).filter(p => p?.question || p?.answer).length || '+'}</span>
-                    </button>
+                    {depth === 0 && hasChildren ? (
+                        <button
+                            onClick={() => setQaBranchNode({ id: node.id })}
+                            className="flex items-center gap-1.5 text-[30px] text-gray-500 hover:text-blue-400 transition-all"
+                            title="Podgląd Q&A całej gałęzi (read-only)"
+                        >
+                            <HelpCircle size={30} />
+                            <span>{collectBranchQa(node).reduce((s, g) => s + g.pairs.length, 0) || '0'}</span>
+                        </button>
+                    ) : (
+                        <button
+                            onClick={() => setQaModalNode({ id: node.id, name: node.name, fieldClass: d.fieldClass })}
+                            className="flex items-center gap-1.5 text-[48px] text-gray-500 hover:text-blue-400 transition-all"
+                            title="Otwórz pytania i odpowiedzi"
+                        >
+                            <HelpCircle size={44} />
+                            <span>{(Array.isArray(node.qa) ? node.qa : []).filter(p => p?.question || p?.answer).length || '+'}</span>
+                        </button>
+                    )}
                 </td>
 
                 {/* Załączniki — miniatury zdjęć z markerów */}
@@ -1471,7 +1556,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         }
 
         if (searchVisibleIds || isOpen(rowId)) {
-            (node.children || []).forEach((child, ci) => {
+            const kids = node.children || [];
+            // Akordeon na każdym poziomie: jeśli któreś dziecko jest rozwinięte, renderuj
+            // tylko je (rodzeństwo znika). Pomijane przy wyszukiwaniu — wtedy widoczne są
+            // wszystkie dopasowane węzły. Indeks `ci` zachowany, by numeracja WBS się nie zmieniła.
+            const openChild = !searchVisibleIds && kids.find(c => expanded.has(`node_${c.id}`));
+            kids.forEach((child, ci) => {
+                if (openChild && child.id !== openChild.id) return;
                 renderNode(child, depth + 1, `${wbsPath}.${ci + 1}`, node.id, rootIndex);
             });
         }
@@ -1789,6 +1880,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     onChange={(next) => handleField(qaModalNode.id, 'qa', next)}
                     onPersist={() => onSave?.()}
                     onClose={() => setQaModalNode(null)}
+                />
+            )}
+
+            {qaBranchNode && (
+                <QaBranchModal
+                    node={findNode(items, qaBranchNode.id) || { name: '', children: [] }}
+                    onClose={() => setQaBranchNode(null)}
                 />
             )}
         </div>

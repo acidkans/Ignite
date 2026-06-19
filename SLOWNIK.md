@@ -272,6 +272,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | matReqByWbsId | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-req-by-wbs-id |
 | ui-modal | QaModal | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-modal |
 | ui-stan | qaModalNode | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-modal-node |
+| ui-stan | qaBranchNode | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-branch-node |
+| ui-modal | QaBranchModal | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-branch-modal |
+| ui-funkcja | collectBranchQa | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor collect-branch-qa |
+| ui-stala | canFullscreen | apps/frontend/src/components/shared/SchematTab.jsx | @anchor schemat-can-fullscreen |
 | ui-funkcja | handleNodeExpand | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-node-expand-refresh |
 | ui-widok | CalendarView | apps/frontend/src/components/shared/wbs/CalendarView.jsx | @anchor calendar-view |
 | ui-karta | ProductCard | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card |
