@@ -433,12 +433,12 @@
       "PowerShell(git -C \"C:\\\\Users\\\\Cosinus\\\\Documents\\\\programiki\\\\ignite\" status --short)",
       "PowerShell(\"---dockerignore---\")",
       "PowerShell(\"---status---\")",
-      "Bash(ping -c 3 -W 3 159.69.212.91)",
-      "Bash(curl -s -m 10 -o /dev/null -w \"%{http_code}\\\\n\" https://erp.gigatel.org/)",
-      "Bash(curl -s -m 10 -o /dev/null -w \"%{http_code}\\\\n\" https://erp.gigatel.org/api/health)",
-      "Bash(ssh -o ConnectTimeout=10 gigatel 'echo OK_SSH')",
-      "PowerShell($ErrorActionPreference='SilentlyContinue'; foreach\\($t in @\\(@\\('159.69.212.91',22\\),@\\('159.69.212.91',443\\),@\\('github.com',443\\)\\)\\){ $r=Test-NetConnection -ComputerName $t[0] -Port $t[1] -WarningAction SilentlyContinue; \"{0}:{1} -> TcpTestSucceeded={2} RTT={3}ms\" -f $t[0],$t[1],$r.TcpTestSucceeded,$r.PingReplyDetails.RoundtripTime })",
-      "PowerShell($ErrorActionPreference='SilentlyContinue'; foreach\\($p in 22,443\\){ $r=Test-NetConnection -ComputerName 159.69.212.91 -Port $p -WarningAction SilentlyContinue; \"159.69.212.91:{0} -> {1}\" -f $p,$r.TcpTestSucceeded })"
+      "Bash(git branch *)",
+      "Bash(curl -sS -o /dev/null -w 'erp: %{http_code}\\\\ntask-tracker: %{http_code}\\\\n' https://erp.gigatel.org/api/health)",
+      "Bash(curl -sS -o /dev/null -w 'task: %{http_code}\\\\n' https://task-tracker.gigatel.org/)",
+      "Bash(node ../../test/reset-andrzej-password.js)",
+      "PowerShell(docker cp test/migration-materials-refactor.sql erp-db:/tmp/migration.sql)",
+      "PowerShell(docker exec erp-db psql -U postgres -d erp_db -f /tmp/migration.sql 2>&1)"
     ]
   }
 }

@@ -1557,12 +1557,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
         if (searchVisibleIds || isOpen(rowId)) {
             const kids = node.children || [];
-            // Akordeon na każdym poziomie: jeśli któreś dziecko jest rozwinięte, renderuj
-            // tylko je (rodzeństwo znika). Pomijane przy wyszukiwaniu — wtedy widoczne są
-            // wszystkie dopasowane węzły. Indeks `ci` zachowany, by numeracja WBS się nie zmieniła.
-            const openChild = !searchVisibleIds && kids.find(c => expanded.has(`node_${c.id}`));
+            // Akordeon: rodzeństwo jest widoczne jako wiersze, ale tylko rozwinięte dziecko
+            // pokazuje swoje pod-drzewo (sterowane przez `isOpen(rowId)` przy każdym wierszu).
             kids.forEach((child, ci) => {
-                if (openChild && child.id !== openChild.id) return;
                 renderNode(child, depth + 1, `${wbsPath}.${ci + 1}`, node.id, rootIndex);
             });
         }
@@ -1578,12 +1575,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 </tr>
             );
         }
-        // Akordeon: jeśli jakaś gałąź top-level jest otwarta — renderuj tylko ją
-        const openTopLevel = items.find(n => expanded.has(`node_${n.id}`));
-        const toRender = openTopLevel ? [openTopLevel] : items;
-        toRender.forEach((item, i) => {
-            const idx = items.indexOf(item);
-            renderNode(item, 0, `${idx + 1}`, null, idx);
+        // Akordeon: wszystkie top-level gałęzie zawsze widoczne jako wiersze;
+        // tylko rozwinięta gałąź pokazuje swoje pod-drzewo (przez `isOpen(rowId)`).
+        items.forEach((item, i) => {
+            renderNode(item, 0, `${i + 1}`, null, i);
         });
     }
 
