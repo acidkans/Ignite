@@ -311,7 +311,7 @@ export default function DashboardPage() {
             accessToken = d.accessToken;
         } catch { return; }
 
-        const clientId = 'MS_CLIENT_ID_PLACEHOLDER';
+        const clientId = '5c06fae5-021a-46ac-a286-52df20e58be1';
 
         const loadSdk = () => new Promise((resolve) => {
             if (window.OneDrive) { resolve(); return; }
