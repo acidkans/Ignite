@@ -10,7 +10,6 @@ import { ConfigService } from '@nestjs/config';
 
 // @anchor onedrive-controller
 @Controller('onedrive')
-@UseGuards(JwtAuthGuard)
 export class OneDriveController {
   constructor(
     private readonly oneDriveService: OneDriveService,
@@ -19,27 +18,38 @@ export class OneDriveController {
 
   // @anchor onedrive-auth-endpoint
   @Get('auth')
-  async auth(@Req() req: any, @Res() res: Response) {
+  @UseGuards(JwtAuthGuard)
+  async auth(@Req() req: any) {
     const url = await this.oneDriveService.getAuthUrl(req.user.userId);
-    res.redirect(url);
+    return { url };
   }
 
   // @anchor onedrive-callback-endpoint
+  // Publiczny — Microsoft przy redirectcie nie wysyła JWT; userId pochodzi z parametru `state`.
   @Get('callback')
   async callback(@Query('code') code: string, @Query('state') userId: string, @Res() res: Response) {
     await this.oneDriveService.handleCallback(code, userId);
-    const frontendUrl = this.config.get('FRONTEND_URL') || 'http://localhost:5173';
-    res.redirect(`${frontendUrl}/settings?onedrive=connected`);
+    const frontendUrl = this.config.get('FRONTEND_URL') || 'http://localhost:5174';
+    res.redirect(`${frontendUrl}/?onedrive=connected`);
   }
 
   // @anchor onedrive-status-endpoint
   @Get('status')
+  @UseGuards(JwtAuthGuard)
   status(@Req() req: any) {
     return this.oneDriveService.getStatus(req.user.userId);
   }
 
+  // @anchor onedrive-browse-endpoint
+  @Get('browse')
+  @UseGuards(JwtAuthGuard)
+  browse(@Req() req: any, @Query('parentId') parentId?: string) {
+    return this.oneDriveService.browseFolders(req.user.userId, parentId);
+  }
+
   // @anchor onedrive-set-folder-endpoint
   @Post('set-folder')
+  @UseGuards(JwtAuthGuard)
   setFolder(
     @Req() req: any,
     @Body() body: { nodeId: string; folderId: string; driveId: string; folderName: string },
@@ -51,6 +61,7 @@ export class OneDriveController {
 
   // @anchor onedrive-upload-endpoint
   @Post('upload')
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 100 * 1024 * 1024 } }))
   upload(
     @Req() req: any,
@@ -65,6 +76,7 @@ export class OneDriveController {
 
   // @anchor onedrive-files-endpoint
   @Get('files/:nodeId/:category')
+  @UseGuards(JwtAuthGuard)
   listFiles(
     @Req() req: any,
     @Param('nodeId') nodeId: string,
@@ -75,6 +87,7 @@ export class OneDriveController {
 
   // @anchor onedrive-access-token-endpoint
   @Get('access-token')
+  @UseGuards(JwtAuthGuard)
   async accessToken(@Req() req: any) {
     const token = await this.oneDriveService.getValidToken(req.user.userId);
     return { accessToken: token };
@@ -82,6 +95,7 @@ export class OneDriveController {
 
   // @anchor onedrive-disconnect-endpoint
   @Delete('disconnect')
+  @UseGuards(JwtAuthGuard)
   disconnect(@Req() req: any) {
     return this.oneDriveService.disconnect(req.user.userId);
   }

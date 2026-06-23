@@ -10,6 +10,16 @@ import AddNodeModal from '../shared/AddNodeModal';
 import NodePermissionsModal from '../shared/NodePermissionsModal';
 import NotificationBell from '../shared/NotificationBell';
 
+// @anchor find-node-by-id-layout — wyszukuje węzeł w drzewie (dla nazwy folderu OneDrive aktywnego węzła)
+function findNodeById(nodes, id) {
+    for (const node of nodes || []) {
+        if (node.id === id) return node;
+        const found = findNodeById(node.children, id);
+        if (found) return found;
+    }
+    return null;
+}
+
 export default function MainLayout({ onLogout }) {
     const navigate = useNavigate();
     const location = useLocation();
@@ -346,6 +356,7 @@ export default function MainLayout({ onLogout }) {
                     </div>
                     <DocumentationSidebar
                         nodeId={activeAreaId}
+                        oneDriveFolderName={findNodeById(menuTree, activeAreaId)?.oneDriveFolderName || null}
                         onClose={() => setDocsVisible(false)}
                         onOpenFullscreen={(file) => setDocsFullscreenFile(file)}
                     />
@@ -432,6 +443,8 @@ export default function MainLayout({ onLogout }) {
                             mimeType={docsFullscreenFile.mimeType}
                             documentId={docsFullscreenFile.id}
                             token={sessionStorage.getItem('token')}
+                            nodeId={activeAreaId}
+                            oneDriveFolderName={findNodeById(menuTree, activeAreaId)?.oneDriveFolderName || null}
                             onClose={() => setDocsFullscreenFile(null)}
                         />
                     </div>

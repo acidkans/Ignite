@@ -1,1 +1,8 @@
-[]
+[
+  {
+    "email": "andrzej@gigatel.app",
+    "password": "password123",
+    "firstName": "Andrzej",
+    "lastName": "Romanowicz"
+  }
+]

@@ -107,6 +107,8 @@ export default function DashboardPage() {
     const [wbsDataCache, setWbsDataCache] = useState({});
     const [oneDriveMsConnected, setOneDriveMsConnected] = useState(false);
     const [showOneDriveMenu, setShowOneDriveMenu] = useState(false);
+    // @anchor onedrive-picker-state — modal własnego przeglądarki folderów (Graph), zastępuje konsumencki picker js.live.net
+    const [oneDrivePicker, setOneDrivePicker] = useState({ open: false, nodeId: null, items: [], stack: [{ id: null, name: 'OneDrive' }], loading: false, error: '' });
     const oneDriveMenuRef = useRef(null);
 
     const now = useMemo(() => new Date(), []);
@@ -302,53 +304,66 @@ export default function DashboardPage() {
         return () => document.removeEventListener('mousedown', handler);
     }, [showOneDriveMenu]);
 
-    const openOneDrivePicker = async (nodeId) => {
+    // @anchor onedrive-browse-folders-fn — ładuje podfoldery danego parentId przez Graph (OneDrive for Business)
+    const browseOneDriveFolders = async (parentId) => {
         const token = localStorage.getItem('token');
-        let accessToken = '';
+        setOneDrivePicker(p => ({ ...p, loading: true, error: '' }));
         try {
-            const r = await fetch(`${API_URL}/onedrive/access-token`, { headers: { Authorization: `Bearer ${token}` } });
-            const d = await r.json();
-            accessToken = d.accessToken;
-        } catch { return; }
-
-        const clientId = '5c06fae5-021a-46ac-a286-52df20e58be1';
-
-        const loadSdk = () => new Promise((resolve) => {
-            if (window.OneDrive) { resolve(); return; }
-            const s = document.createElement('script');
-            s.src = 'https://js.live.net/v7.2/OneDrive.js';
-            s.onload = resolve;
-            document.head.appendChild(s);
-        });
-
-        await loadSdk();
-        window.OneDrive.open({
-            clientId,
-            action: 'query',
-            multiSelect: false,
-            advanced: { accessToken, filter: 'folder ne null', endpointHint: 'api.onedrive.com' },
-            success: async (result) => {
-                const item = result.value[0];
-                if (!item) return;
-                const driveId = item.parentReference?.driveId || '';
-                await fetch(`${API_URL}/onedrive/set-folder`, {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ nodeId, folderId: item.id, driveId, folderName: item.name }),
-                });
-                // Odśwież drzewo żeby activeNode.oneDriveFolderId był aktualny
-                if (typeof refreshTree === 'function') refreshTree();
-                setOneDriveMsConnected(true);
-                setShowOneDriveMenu(false);
-            },
-            cancel: () => {},
-            error: (e) => console.error('OneDrive picker error', e),
-        });
+            const qs = parentId ? `?parentId=${encodeURIComponent(parentId)}` : '';
+            const r = await fetch(`${API_URL}/onedrive/browse${qs}`, { headers: { Authorization: `Bearer ${token}` } });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const items = await r.json();
+            setOneDrivePicker(p => ({ ...p, items, loading: false }));
+        } catch (e) {
+            setOneDrivePicker(p => ({ ...p, loading: false, error: 'Nie udało się wczytać folderów OneDrive.' }));
+        }
     };
 
-    const handleOneDriveClick = () => {
+    // @anchor open-onedrive-picker — otwiera modal i ładuje katalog główny OneDrive
+    const openOneDrivePicker = (nodeId) => {
+        setShowOneDriveMenu(false);
+        setOneDrivePicker({ open: true, nodeId, items: [], stack: [{ id: null, name: 'OneDrive' }], loading: false, error: '' });
+        browseOneDriveFolders(null);
+    };
+
+    // @anchor onedrive-picker-enter — wchodzi do podfolderu
+    const enterOneDriveFolder = (folder) => {
+        setOneDrivePicker(p => ({ ...p, stack: [...p.stack, { id: folder.id, name: folder.name, driveId: folder.driveId }] }));
+        browseOneDriveFolders(folder.id);
+    };
+
+    // @anchor onedrive-picker-breadcrumb — skok do poziomu w breadcrumbie
+    const goToOneDriveLevel = (index) => {
+        setOneDrivePicker(p => ({ ...p, stack: p.stack.slice(0, index + 1) }));
+        browseOneDriveFolders(oneDrivePicker.stack[index].id);
+    };
+
+    // @anchor onedrive-picker-confirm — zapisuje wybrany folder (bieżący poziom) na węźle
+    const confirmOneDriveFolder = async () => {
+        const token = localStorage.getItem('token');
+        const { nodeId, stack } = oneDrivePicker;
+        const current = stack[stack.length - 1];
+        if (!current.id) { setOneDrivePicker(p => ({ ...p, error: 'Wejdź do folderu, który chcesz przypisać.' })); return; }
+        try {
+            await fetch(`${API_URL}/onedrive/set-folder`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nodeId, folderId: current.id, driveId: current.driveId || '', folderName: current.name }),
+            });
+            if (typeof refreshTree === 'function') refreshTree();
+            setOneDriveMsConnected(true);
+            setOneDrivePicker(p => ({ ...p, open: false }));
+        } catch {
+            setOneDrivePicker(p => ({ ...p, error: 'Nie udało się przypisać folderu.' }));
+        }
+    };
+
+    const handleOneDriveClick = async () => {
         if (!oneDriveMsConnected) {
-            window.location.href = `${API_URL}/onedrive/auth`;
+            const token = localStorage.getItem('token');
+            const res = await fetch(`${API_URL}/onedrive/auth`, { headers: { Authorization: `Bearer ${token}` } });
+            const { url } = await res.json();
+            window.location.href = url;
             return;
         }
         if (!activeNode?.oneDriveFolderId) {
@@ -614,6 +629,53 @@ export default function DashboardPage() {
                 </div>
             </header>
 
+            {/* @anchor onedrive-picker-modal — własny przeglądarek folderów OneDrive for Business (Graph) */}
+            {oneDrivePicker.open && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60" onMouseDown={() => setOneDrivePicker(p => ({ ...p, open: false }))}>
+                    <div className="w-[520px] max-h-[70vh] flex flex-col bg-gray-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden" onMouseDown={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
+                            <Cloud size={16} className="text-blue-400" />
+                            <span className="text-sm font-bold text-gray-200">Wybierz folder OneDrive</span>
+                            <button className="ml-auto text-gray-500 hover:text-gray-300 text-lg leading-none" onClick={() => setOneDrivePicker(p => ({ ...p, open: false }))}>×</button>
+                        </div>
+                        <div className="flex items-center flex-wrap gap-1 px-4 py-2 text-[11px] text-gray-400 border-b border-white/5">
+                            {oneDrivePicker.stack.map((lvl, i) => (
+                                <span key={i} className="flex items-center gap-1">
+                                    {i > 0 && <span className="text-gray-600">/</span>}
+                                    <button className={`hover:text-blue-300 ${i === oneDrivePicker.stack.length - 1 ? 'text-blue-300 font-semibold' : ''}`} onClick={() => goToOneDriveLevel(i)}>{lvl.name}</button>
+                                </span>
+                            ))}
+                        </div>
+                        <div className="flex-1 overflow-y-auto px-2 py-2 min-h-[180px]">
+                            {oneDrivePicker.loading && <div className="text-center text-gray-500 text-xs py-8">Wczytywanie…</div>}
+                            {oneDrivePicker.error && <div className="text-center text-red-400 text-xs py-8">{oneDrivePicker.error}</div>}
+                            {!oneDrivePicker.loading && !oneDrivePicker.error && oneDrivePicker.items.length === 0 && (
+                                <div className="text-center text-gray-500 text-xs py-8">Brak podfolderów na tym poziomie.</div>
+                            )}
+                            {!oneDrivePicker.loading && !oneDrivePicker.error && oneDrivePicker.items.map(f => (
+                                <button key={f.id} onClick={() => enterOneDriveFolder(f)}
+                                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-xs text-gray-300 hover:bg-white/5 transition-colors">
+                                    <FolderOpen size={14} className="text-amber-400 shrink-0" />
+                                    <span className="truncate">{f.name}</span>
+                                    {f.childCount > 0 && <span className="ml-auto text-gray-600 text-[10px]">{f.childCount}</span>}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex items-center gap-2 px-4 py-3 border-t border-white/10">
+                            <span className="text-[11px] text-gray-500 truncate">
+                                {oneDrivePicker.stack.length > 1 ? `Przypiszesz: ${oneDrivePicker.stack[oneDrivePicker.stack.length - 1].name}` : 'Wejdź do folderu, aby go przypisać'}
+                            </span>
+                            <button onClick={() => setOneDrivePicker(p => ({ ...p, open: false }))}
+                                className="ml-auto px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:bg-white/5">Anuluj</button>
+                            <button onClick={confirmOneDriveFolder} disabled={oneDrivePicker.stack.length <= 1}
+                                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 disabled:opacity-40 disabled:cursor-not-allowed">
+                                Przypisz ten folder
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* TAB SELECTOR */}
             <div className="px-4 flex border-b border-white/5 bg-white/[0.01] flex-shrink-0 z-10 overflow-x-auto scrollbar-none">
                 {/* Zakładki obszaru Logistyka */}
@@ -798,6 +860,7 @@ export default function DashboardPage() {
                                     nodeId={activeAreaId}
                                     versionId={selectedVersionId}
                                     orderName={activeNode?.name || ''}
+                                    oneDriveFolderName={activeNode?.oneDriveFolderName || null}
                                 />
                             ) : (
                                 <NodeInfoTab

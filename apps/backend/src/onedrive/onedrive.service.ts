@@ -179,8 +179,8 @@ export class OneDriveService {
     const folderId = category === 'finanse' ? node.oneDriveFinanseId : node.oneDriveDocumentacjaId;
 
     const uploadUrl = driveId
-      ? `${GRAPH_BASE}/drives/${driveId}/items/${folderId}:/${encodeURIComponent(filename)}:/content`
-      : `${GRAPH_BASE}/me/drive/items/${folderId}:/${encodeURIComponent(filename)}:/content`;
+      ? `${GRAPH_BASE}/drives/${driveId}/items/${folderId}:/${encodeURIComponent(filename)}:/content?@microsoft.graph.conflictBehavior=rename`
+      : `${GRAPH_BASE}/me/drive/items/${folderId}:/${encodeURIComponent(filename)}:/content?@microsoft.graph.conflictBehavior=rename`;
 
     const response = await axios.put(uploadUrl, buffer, {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': mimeType },
@@ -209,6 +209,29 @@ export class OneDriveService {
     });
 
     return response.data.value ?? [];
+  }
+
+  // @anchor onedrive-browse-folders
+  // Listuje podfoldery OneDrive (for Business) przez Graph — zastępuje konsumencki picker js.live.net.
+  async browseFolders(userId: string, parentId?: string): Promise<{ id: string; name: string; driveId: string; childCount: number }[]> {
+    const token = await this.getValidToken(userId);
+    const url = parentId
+      ? `${GRAPH_BASE}/me/drive/items/${parentId}/children`
+      : `${GRAPH_BASE}/me/drive/root/children`;
+
+    const response = await axios.get(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { $select: 'id,name,folder,parentReference', $top: 200 },
+    });
+
+    return (response.data.value ?? [])
+      .filter((it: any) => it.folder)
+      .map((it: any) => ({
+        id: it.id,
+        name: it.name,
+        driveId: it.parentReference?.driveId || '',
+        childCount: it.folder?.childCount ?? 0,
+      }));
   }
 
   // @anchor onedrive-create-folder

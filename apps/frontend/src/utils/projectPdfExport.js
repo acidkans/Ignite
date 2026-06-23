@@ -355,9 +355,8 @@ export async function buildProjectPdfArtifact({ nodeId, versionId, projectName, 
   .gantt-wrap [class*="WuQ0f"] { background: #fff !important; }
   @page { margin: 20mm 14mm; size: A4 portrait; }
 </style>
-${ganttData ? ganttData.styles : ''}
 <style>
-  /* Gantt overrides po załadowaniu bibliotecznych styli */
+  /* Gantt overrides — NIE wstrzykuj ganttData.styles (zawiera globalne CSS aplikacji z tłem kosmosu) */
   .gantt-wrap { background: #fff !important; overflow: hidden; }
   .gantt-wrap > * { background: #fff !important; }
   .gantt-wrap [class] { background: #fff !important; }

@@ -31,7 +31,7 @@ const fileIcon = (mime, name) => {
     return '📄';
 };
 
-export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen }) {
+export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen, oneDriveFolderName = null }) {
     const [files, setFiles] = useState([]);
     const [loadingFiles, setLoadingFiles] = useState(false);
     const [selectedFile, setSelectedFile] = useState(null);
@@ -201,6 +201,8 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
                     title={pendingExport.title}
                     defaultFilename={pendingExport.defaultFilename}
                     makeArtifact={pendingExport.makeArtifact}
+                    oneDriveFolderName={oneDriveFolderName}
+                    oneDriveCategory="dokumentacja"
                 />
             )}
             {/* Header */}

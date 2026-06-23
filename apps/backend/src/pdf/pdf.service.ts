@@ -20,7 +20,8 @@ export class PdfService {
     const mod = await dynamicImport('puppeteer');
     const puppeteer = mod.default || mod;
     const browser = await puppeteer.launch({
-      headless: 'new',
+      // puppeteer 22+ usunął string 'new'; dozwolone: true (nowy headless) / false / 'shell'.
+      headless: true,
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
       args: [
         '--no-sandbox',

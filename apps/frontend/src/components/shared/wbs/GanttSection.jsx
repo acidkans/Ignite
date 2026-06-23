@@ -1125,15 +1125,27 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
             innerSvg.insertBefore(rowLineG, innerSvg.firstChild);
         }
 
+        // Zbierz style strony, ale usuń reguły ustawiające background na html/body (tło kosmosu).
         const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
-            .map(s => s.outerHTML)
+            .map(s => {
+                if (s.tagName === 'STYLE') {
+                    const cleaned = (s.textContent || '')
+                        .replace(/\bhtml\s*,?\s*body\s*\{[^}]*background[^}]*\}/gi, '')
+                        .replace(/\bbody\s*\{[^}]*background-image\s*:[^;]*;/gi, '')
+                        .replace(/\bbody\s*\{[^}]*background\s*:[^;]*url\([^)]*\)[^;]*;/gi, '');
+                    const clone = s.cloneNode(false);
+                    clone.textContent = cleaned;
+                    return clone.outerHTML;
+                }
+                return s.outerHTML;
+            })
             .join('\n');
         const html = `<!doctype html><html><head><meta charset="utf-8"/>
 <title>Gantt – ${projectName || 'Projekt'}</title>
 ${styles}
 <style>
 @page { size: A3 landscape; margin: 8mm; }
-html, body { background:#fff; color:#0b0f17; margin:0; padding:0; font-family: Inter, system-ui, sans-serif; }
+html, body { background:#fff !important; background-image:none !important; color:#0b0f17; margin:0; padding:0; font-family: Inter, system-ui, sans-serif; }
 h1 { font-size: 18px; margin: 0 0 12px 0; }
 .meta { font-size: 11px; color:#475569; margin-bottom:14px; }
 .wrap { background:#fff; }
@@ -1186,7 +1198,10 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
         const taskListWidth = vc?.children[0]?.offsetWidth || 500;
         const contentWidth = Math.round(endPixel) + taskListWidth;
 
-        const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+        // Tylko style Gantta (class *ignite-gantt* lub *_WuQ0f*/_34SS0 itp.) —
+        // NIE wciągaj globalnych <link> ani <style> aplikacji (tło kosmosu z body).
+        const styles = Array.from(document.querySelectorAll('style'))
+            .filter(s => /ignite-gantt|_WuQ0f|_34SS0|_3T42e|gantt/i.test(s.textContent || ''))
             .map(s => s.outerHTML)
             .join('\n');
         // Nakładki tylko dla widoku — usuń z serializacji.

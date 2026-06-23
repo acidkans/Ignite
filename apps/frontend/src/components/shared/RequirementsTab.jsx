@@ -69,7 +69,7 @@ function parseItems(raw) {
     return {};
 }
 
-export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
+export default function RequirementsTab({ nodeId, versionId, orderName = '', oneDriveFolderName = null }) {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -480,6 +480,8 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '' }) {
                     title={pendingExport.title}
                     defaultFilename={pendingExport.defaultFilename}
                     makeArtifact={pendingExport.makeArtifact}
+                    oneDriveFolderName={oneDriveFolderName}
+                    oneDriveCategory="dokumentacja"
                 />
             )}
             {/* Top action bar */}

@@ -543,7 +543,7 @@ function DatasheetParsePanel({ documentId, fileName, nodeId, token, onApprove })
 
 // ─── Główny komponent ─────────────────────────────────────────────────────────
 
-export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, documentId = null, token = null, isOffer = false, isDatasheet = false, onApprove = null, onDatasheetApprove = null, nodeId = null }) {
+export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, documentId = null, token = null, isOffer = false, isDatasheet = false, onApprove = null, onDatasheetApprove = null, nodeId = null, oneDriveFolderName = null }) {
     const [numPages, setNumPages] = useState(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [scale, setScale] = useState(1.0);
@@ -836,6 +836,8 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
                     title={pendingExport.title}
                     defaultFilename={pendingExport.defaultFilename}
                     makeArtifact={pendingExport.makeArtifact}
+                    oneDriveFolderName={oneDriveFolderName}
+                    oneDriveCategory="dokumentacja"
                 />
             )}
         </div>
