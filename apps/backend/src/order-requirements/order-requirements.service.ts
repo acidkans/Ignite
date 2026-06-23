@@ -49,19 +49,24 @@ export class OrderRequirementsService {
 
         if (!record) return null;
 
-        // 3. Najlepsze źródło wbsTree: WbsNode tabela relacyjna dla tej wersji
+        // 3. Nakładamy per-version pola tekstowe (wbsDescription, offerText) na baseline
+        const merged: any = { ...record };
+        if (versioned?.wbsDescription != null) merged.wbsDescription = versioned.wbsDescription;
+        if (versioned?.offerText != null) merged.offerText = versioned.offerText;
+
+        // 4. Najlepsze źródło wbsTree: WbsNode tabela relacyjna dla tej wersji
         try {
             const relationalTree = await this.wbsNodes.getTree(effectiveNodeId, versionId);
             if (relationalTree) {
-                return { ...record, wbsTree: JSON.stringify(relationalTree) };
+                return { ...merged, wbsTree: JSON.stringify(relationalTree) };
             }
         } catch (e) {
             console.error('WbsNode read failed, falling back to blob:', e?.message);
         }
 
-        // 4. Fallback wbsTree: per-version blob > baseline blob
+        // 5. Fallback wbsTree: per-version blob > baseline blob
         const effectiveWbsTree = versioned?.wbsTree ?? record.wbsTree;
-        return { ...record, wbsTree: effectiveWbsTree };
+        return { ...merged, wbsTree: effectiveWbsTree };
     }
 
     async upsert(dto: UpsertOrderRequirementsDto) {
@@ -85,8 +90,7 @@ export class OrderRequirementsService {
             if (data.projectEnd !== undefined) requirementFields.projectEnd = data.projectEnd ? new Date(data.projectEnd) : null;
             if (data.projectGoal !== undefined) requirementFields.projectGoal = data.projectGoal;
             if (data.projectItems !== undefined) requirementFields.projectItems = data.projectItems;
-            if (data.wbsDescription !== undefined) requirementFields.wbsDescription = data.wbsDescription;
-            if (data.offerText !== undefined) requirementFields.offerText = data.offerText;
+            // wbsDescription i offerText są per-version — nie trafiają do baseline
             if (data.clientProjectManager !== undefined) requirementFields.clientProjectManager = data.clientProjectManager;
             if (data.clientProjectManagerCompany !== undefined) requirementFields.clientProjectManagerCompany = data.clientProjectManagerCompany;
             if (data.clientProjectManagerPhone !== undefined) requirementFields.clientProjectManagerPhone = data.clientProjectManagerPhone;
@@ -187,9 +191,13 @@ export class OrderRequirementsService {
                 });
             }
 
-            // wbsTree zapisujemy per-version (do rekordu (nodeId, versionId)).
-            // Gdy vId=null, wbsTree leci do baseline (back-compat).
-            if (wbsTreeField !== undefined) {
+            // Pola per-version: wbsTree, wbsDescription, offerText
+            const versionedTextUpdate: any = {};
+            if (wbsTreeField !== undefined) versionedTextUpdate.wbsTree = wbsTreeField;
+            if (data.wbsDescription !== undefined) versionedTextUpdate.wbsDescription = data.wbsDescription;
+            if (data.offerText !== undefined) versionedTextUpdate.offerText = data.offerText;
+
+            if (Object.keys(versionedTextUpdate).length > 0) {
                 if (vId) {
                     const versionedExisting = await tx.orderRequirements.findFirst({
                         where: { nodeId: effectiveNodeId, versionId: vId },
@@ -197,22 +205,18 @@ export class OrderRequirementsService {
                     if (versionedExisting) {
                         await tx.orderRequirements.update({
                             where: { id: versionedExisting.id },
-                            data: { wbsTree: wbsTreeField },
+                            data: versionedTextUpdate,
                         });
                     } else {
                         await tx.orderRequirements.create({
-                            data: {
-                                nodeId: effectiveNodeId,
-                                versionId: vId,
-                                wbsTree: wbsTreeField,
-                            },
+                            data: { nodeId: effectiveNodeId, versionId: vId, ...versionedTextUpdate },
                         });
                     }
-                } else {
-                    // brak versionId → zapis do baseline (zgodnie z poprzednim zachowaniem)
+                } else if (wbsTreeField !== undefined) {
+                    // brak versionId → wbsTree leci do baseline (back-compat); wbsDescription/offerText też
                     await tx.orderRequirements.update({
                         where: { id: baselineRecord.id },
-                        data: { wbsTree: wbsTreeField },
+                        data: versionedTextUpdate,
                     });
                 }
             }
