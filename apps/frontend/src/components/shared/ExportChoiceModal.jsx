@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
-import { X, Download, Mail, Send, Loader2, CheckCircle, ArrowLeft } from 'lucide-react';
+import { X, Download, Mail, Send, Loader2, CheckCircle, ArrowLeft, Cloud } from 'lucide-react';
 import RecipientInput from './RecipientInput';
 import { resolveArtifact, downloadBlob, sendExport } from '../../utils/exportMail';
+import { API_URL } from '../../config';
 
 // @anchor export-choice-modal
-// Wspólny modal eksportu: „Pobierz na urządzenie" albo „Wyślij mailem".
+// Wspólny modal eksportu: „Pobierz na urządzenie", „Wyślij mailem" albo „Zapisz na OneDrive".
 // makeArtifact: async () => ({ blob, filename }) | ({ html, filename }) — generuje plik dopiero po wyborze.
-export default function ExportChoiceModal({ open, onClose, title = 'Eksport', defaultFilename = 'plik', nodeId, makeArtifact }) {
+// oneDriveFolderName: string|null — gdy podany, folder jest powiązany i przycisk OneDrive jest aktywny.
+// oneDriveCategory: 'finanse'|'dokumentacja' — domyślnie 'finanse'.
+export default function ExportChoiceModal({ open, onClose, title = 'Eksport', defaultFilename = 'plik', nodeId, makeArtifact, oneDriveFolderName, oneDriveCategory = 'finanse' }) {
   const [mode, setMode] = useState('choice'); // 'choice' | 'email'
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -34,6 +37,32 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
       onClose();
     } catch (e) {
       setError(e?.message || 'Błąd generowania pliku');
+      setBusy(false);
+    }
+  };
+
+  const handleUploadOneDrive = async () => {
+    setBusy(true); setError('');
+    try {
+      const art = await resolveArtifact(await makeArtifact());
+      const token = localStorage.getItem('token');
+      const form = new FormData();
+      form.append('file', art.blob, art.filename);
+      form.append('nodeId', nodeId || '');
+      form.append('category', oneDriveCategory);
+      const res = await fetch(`${API_URL}/onedrive/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      if (!res.ok) throw new Error('Błąd uploadu na OneDrive');
+      const { webUrl } = await res.json();
+      setDone(`Zapisano na OneDrive${oneDriveFolderName ? ` → ${oneDriveFolderName}` : ''}`);
+      setBusy(false);
+      if (webUrl) setTimeout(() => window.open(webUrl, '_blank'), 400);
+      setTimeout(onClose, 2000);
+    } catch (e) {
+      setError(e?.message || 'Błąd zapisu na OneDrive');
       setBusy(false);
     }
   };
@@ -82,6 +111,15 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
               </button>
               <button onClick={() => { setMode('email'); setError(''); }} disabled={busy} className={`${btnBase} bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white`}>
                 <Mail size={16} /> Wyślij mailem
+              </button>
+              <button
+                onClick={handleUploadOneDrive}
+                disabled={busy || !oneDriveFolderName}
+                title={!oneDriveFolderName ? 'Najpierw powiąż folder OneDrive z tą gałęzią' : `Zapisz w: ${oneDriveFolderName}`}
+                className={`${btnBase} border ${oneDriveFolderName ? 'bg-green-500/10 border-green-500/20 hover:bg-green-500/20 text-green-300' : 'bg-white/5 border-white/10 text-gray-600 cursor-not-allowed'}`}
+              >
+                {busy ? <Loader2 size={16} className="animate-spin" /> : <Cloud size={16} />}
+                {oneDriveFolderName ? `OneDrive → ${oneDriveFolderName}` : 'OneDrive (brak folderu)'}
               </button>
             </div>
           ) : (

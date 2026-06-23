@@ -71,7 +71,7 @@ const DEFAULT_SECTION_ORDER = ['oferta', 'strategy', 'tasks', 'gantt', 'wbs-hybr
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 // @anchor unified-wbs-panel
-export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsDataLoad, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible }) {
+export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsDataLoad, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible, oneDriveFolderName = null }) {
     const [wbsData, setWbsData] = useState([]);
     const wbsDataRef = useRef(wbsData);
     wbsDataRef.current = wbsData;
@@ -4601,6 +4601,8 @@ ${ganttSectionHtml}
                     title={pendingExport.title}
                     defaultFilename={pendingExport.defaultFilename}
                     makeArtifact={pendingExport.makeArtifact}
+                    oneDriveFolderName={oneDriveFolderName}
+                    oneDriveCategory="finanse"
                 />
             )}
 

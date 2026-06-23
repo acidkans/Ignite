@@ -10,7 +10,7 @@ import MaterialDatabaseTab from './components/shared/MaterialDatabaseTab';
 import OffersTab from './components/shared/OffersTab';
 import UnifiedWbsPanel from './components/shared/wbs/UnifiedWbsPanel';
 import CommentsSlideOver from './components/shared/CommentsSlideOver';
-import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check } from 'lucide-react';
+import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink } from 'lucide-react';
 import { API_URL } from './config';
 import { APP_VERSION } from './version';
 
@@ -68,6 +68,7 @@ export default function DashboardPage() {
     const setAiVisible = context?.setAiVisible;
     const contextPendingTabRef = context?.pendingTabRef;
     const contextPendingRequirementIdRef = context?.pendingRequirementIdRef;
+    const refreshTree = context?.refreshTree;
 
     const { userId: currentUserId, roles: currentRoles = [] } = useMemo(() => decodeToken() || {}, []); // eslint-disable-line react-hooks/exhaustive-deps
     const isWorker = currentRoles.includes('USER') && !currentRoles.some(r => ['ADMIN', 'MANAGER', 'LOGISTYK'].includes(r));
@@ -104,6 +105,9 @@ export default function DashboardPage() {
     const [renameValue, setRenameValue] = useState('');
     const [wbsUpdateCount, setWbsUpdateCount] = useState(0);
     const [wbsDataCache, setWbsDataCache] = useState({});
+    const [oneDriveMsConnected, setOneDriveMsConnected] = useState(false);
+    const [showOneDriveMenu, setShowOneDriveMenu] = useState(false);
+    const oneDriveMenuRef = useRef(null);
 
     const now = useMemo(() => new Date(), []);
     const dateLabel = formatPolishDate(now);
@@ -275,6 +279,91 @@ export default function DashboardPage() {
         if (!orderId || !setActiveAreaId) return;
         pendingTabRef.current = 'unified';
         setActiveAreaId(String(orderId));
+    };
+
+    // OneDrive — sprawdź czy konto MS połączone (raz przy zalogowaniu)
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        fetch(`${API_URL}/onedrive/status`, { headers: { Authorization: `Bearer ${token}` } })
+            .then(r => r.json())
+            .then(d => setOneDriveMsConnected(d.connected === true))
+            .catch(() => {});
+    }, []);
+
+    // Zamknij dropdown po kliknięciu poza nim
+    useEffect(() => {
+        if (!showOneDriveMenu) return;
+        const handler = (e) => {
+            if (oneDriveMenuRef.current && !oneDriveMenuRef.current.contains(e.target))
+                setShowOneDriveMenu(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showOneDriveMenu]);
+
+    const openOneDrivePicker = async (nodeId) => {
+        const token = localStorage.getItem('token');
+        let accessToken = '';
+        try {
+            const r = await fetch(`${API_URL}/onedrive/access-token`, { headers: { Authorization: `Bearer ${token}` } });
+            const d = await r.json();
+            accessToken = d.accessToken;
+        } catch { return; }
+
+        const clientId = 'MS_CLIENT_ID_PLACEHOLDER';
+
+        const loadSdk = () => new Promise((resolve) => {
+            if (window.OneDrive) { resolve(); return; }
+            const s = document.createElement('script');
+            s.src = 'https://js.live.net/v7.2/OneDrive.js';
+            s.onload = resolve;
+            document.head.appendChild(s);
+        });
+
+        await loadSdk();
+        window.OneDrive.open({
+            clientId,
+            action: 'query',
+            multiSelect: false,
+            advanced: { accessToken, filter: 'folder ne null', endpointHint: 'api.onedrive.com' },
+            success: async (result) => {
+                const item = result.value[0];
+                if (!item) return;
+                const driveId = item.parentReference?.driveId || '';
+                await fetch(`${API_URL}/onedrive/set-folder`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nodeId, folderId: item.id, driveId, folderName: item.name }),
+                });
+                // Odśwież drzewo żeby activeNode.oneDriveFolderId był aktualny
+                if (typeof refreshTree === 'function') refreshTree();
+                setOneDriveMsConnected(true);
+                setShowOneDriveMenu(false);
+            },
+            cancel: () => {},
+            error: (e) => console.error('OneDrive picker error', e),
+        });
+    };
+
+    const handleOneDriveClick = () => {
+        if (!oneDriveMsConnected) {
+            window.location.href = `${API_URL}/onedrive/auth`;
+            return;
+        }
+        if (!activeNode?.oneDriveFolderId) {
+            openOneDrivePicker(activeNode.id);
+            return;
+        }
+        setShowOneDriveMenu(v => !v);
+    };
+
+    const handleOneDriveDisconnect = async () => {
+        const token = localStorage.getItem('token');
+        await fetch(`${API_URL}/onedrive/disconnect`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+        setOneDriveMsConnected(false);
+        setShowOneDriveMenu(false);
+        if (typeof refreshTree === 'function') refreshTree();
     };
 
     const handleSnapshot = async () => {
@@ -463,6 +552,56 @@ export default function DashboardPage() {
                             <span className="text-[11px] font-bold">Czat</span>
                         </button>
                     )}
+                    {/* OneDrive — tylko dla zamówień */}
+                    {isOrder && (() => {
+                        const folderLinked = !!activeNode?.oneDriveFolderId;
+                        const colorCls = folderLinked
+                            ? 'bg-green-500/10 border-green-500/20 hover:bg-green-500/20'
+                            : 'bg-orange-500/10 border-orange-500/20 hover:bg-orange-500/20';
+                        const iconCls = folderLinked ? 'text-green-400' : 'text-orange-400';
+                        const textCls = folderLinked ? 'text-green-300' : 'text-orange-300';
+                        const label = folderLinked
+                            ? (activeNode.oneDriveFolderName || 'OneDrive')
+                            : 'OneDrive';
+                        return (
+                            <div className="relative" ref={oneDriveMenuRef}>
+                                <button
+                                    onClick={handleOneDriveClick}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all group shrink-0 ${colorCls}`}
+                                    title={folderLinked ? `Folder: ${activeNode.oneDriveFolderName}` : 'Połącz folder OneDrive'}
+                                >
+                                    <Cloud size={14} className={`${iconCls} group-hover:scale-110 transition-transform`} />
+                                    <span className={`text-[11px] font-bold max-w-[120px] truncate ${textCls}`}>{label}</span>
+                                </button>
+                                {showOneDriveMenu && folderLinked && (
+                                    <div className="absolute right-0 top-full mt-1 w-52 bg-gray-900 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
+                                        <button
+                                            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-gray-300 hover:bg-white/5 transition-colors"
+                                            onClick={() => { window.open(`https://onedrive.live.com/`, '_blank'); setShowOneDriveMenu(false); }}
+                                        >
+                                            <FolderOpen size={13} className="text-green-400" />
+                                            Otwórz w OneDrive
+                                        </button>
+                                        <button
+                                            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-gray-300 hover:bg-white/5 transition-colors"
+                                            onClick={() => { setShowOneDriveMenu(false); openOneDrivePicker(activeNode.id); }}
+                                        >
+                                            <Cloud size={13} className="text-orange-400" />
+                                            Zmień folder
+                                        </button>
+                                        <div className="h-px bg-white/10 mx-3" />
+                                        <button
+                                            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                                            onClick={handleOneDriveDisconnect}
+                                        >
+                                            <Unlink size={13} />
+                                            Odłącz konto MS
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
                     {/* Database Snapshot Button (przeniesiony stąd) */}
                     <button
                         onClick={handleSnapshot}
@@ -624,6 +763,7 @@ export default function DashboardPage() {
                                     onWbsDataLoad={(data) => setWbsDataCache(prev => ({ ...prev, [activeAreaId]: data }))}
                                     setLeftVisible={setLeftVisible}
                                     setAiVisible={setAiVisible}
+                                    oneDriveFolderName={activeNode?.oneDriveFolderName || null}
                                 />
                             </div>
                         )}

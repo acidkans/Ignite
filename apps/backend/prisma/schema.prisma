@@ -33,6 +33,7 @@ model User {
   commentReads      CommentRead[]
   pushSubscriptions PushSubscription[]
   notifications     Notification[]
+  msToken           UserMsToken?
 
   @@map("users")
 }
@@ -179,6 +180,11 @@ model ProcessNode {
   fileSize                  Int?
   parsedPositions           String?
   documentCategory          String?
+  oneDriveFolderId          String?
+  oneDriveDriveId           String?
+  oneDriveFolderName        String?
+  oneDriveFinanseId         String?
+  oneDriveDocumentacjaId    String?
   budgetItems               BudgetLineItem[]
   hardware                  Hardware[]
   permissions               NodePermission[]           @relation("NodeACL")
@@ -945,4 +951,19 @@ model WbsNodeMaterial {
 
   @@unique([wbsNodeId, materialId])
   @@map("wbs_node_materials")
+}
+
+model UserMsToken {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  accessToken    String
+  refreshToken   String
+  expiresAt      DateTime
+  msAccountEmail String?
+  msDisplayName  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_ms_tokens")
 }

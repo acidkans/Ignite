@@ -32,6 +32,7 @@ import { WbsNodesModule } from './wbs-nodes/wbs-nodes.module';
 import { SmtpModule } from './smtp/smtp.module';
 import { MailModule } from './mail/mail.module';
 import { PdfModule } from './pdf/pdf.module';
+import { OneDriveModule } from './onedrive/onedrive.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { PdfModule } from './pdf/pdf.module';
     SmtpModule,
     MailModule,
     PdfModule,
+    OneDriveModule,
   ],
   controllers: [AppController],
   providers: [

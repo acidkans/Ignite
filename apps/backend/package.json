@@ -24,6 +24,7 @@
     "seed": "node prisma/seed.js && node prisma/seed-users-from-json.js"
   },
   "dependencies": {
+    "@azure/msal-node": "^5.2.5",
     "@google/generative-ai": "^0.24.1",
     "@huggingface/inference": "^4.13.5",
     "@nestjs-modules/mailer": "^1.10.3",
@@ -40,7 +41,7 @@
     "@qdrant/js-client-rest": "^1.16.2",
     "@types/multer": "^2.0.0",
     "argon2": "^0.31.0",
-    "axios": "^1.13.2",
+    "axios": "^1.18.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
     "docx": "^9.6.1",
