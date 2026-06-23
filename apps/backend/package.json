@@ -24,7 +24,6 @@
     "seed": "node prisma/seed.js && node prisma/seed-users-from-json.js"
   },
   "dependencies": {
-    "@azure/msal-node": "^5.2.5",
     "@google/generative-ai": "^0.24.1",
     "@huggingface/inference": "^4.13.5",
     "@nestjs-modules/mailer": "^1.10.3",

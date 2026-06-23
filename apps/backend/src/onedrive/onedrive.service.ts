@@ -1,55 +1,75 @@
 import { Injectable, Logger, UnauthorizedException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ConfidentialClientApplication, AuthorizationCodeRequest } from '@azure/msal-node';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
-const SCOPES = ['Files.ReadWrite', 'offline_access', 'User.Read'];
+const SCOPES = 'Files.ReadWrite offline_access User.Read';
 
 // @anchor onedrive-service
 @Injectable()
 export class OneDriveService {
   private readonly logger = new Logger(OneDriveService.name);
-  private msalClient: ConfidentialClientApplication;
   private encKey: Buffer;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
-    this.msalClient = new ConfidentialClientApplication({
-      auth: {
-        clientId: this.config.get('MS_CLIENT_ID') || '',
-        clientSecret: this.config.get('MS_CLIENT_SECRET') || '',
-        authority: `https://login.microsoftonline.com/${this.config.get('MS_TENANT_ID') || 'common'}`,
-      },
-    });
     const raw = this.config.get<string>('MS_TOKEN_ENCRYPTION_KEY') || '';
     this.encKey = Buffer.from(raw.padEnd(32, '0').slice(0, 32));
   }
 
+  private get clientId() { return this.config.get('MS_CLIENT_ID') || ''; }
+  private get clientSecret() { return this.config.get('MS_CLIENT_SECRET') || ''; }
+  private get tenant() { return this.config.get('MS_TENANT_ID') || 'common'; }
+  private get redirectUri() { return this.config.get('MS_REDIRECT_URI') || ''; }
+  private get tokenUrl() { return `https://login.microsoftonline.com/${this.tenant}/oauth2/v2.0/token`; }
+
   // @anchor onedrive-get-auth-url
   getAuthUrl(userId: string): Promise<string> {
-    return this.msalClient.getAuthCodeUrl({
-      scopes: SCOPES,
-      redirectUri: this.config.get('MS_REDIRECT_URI'),
+    const params = new URLSearchParams({
+      client_id: this.clientId,
+      response_type: 'code',
+      redirect_uri: this.redirectUri,
+      scope: SCOPES,
       state: userId,
+      response_mode: 'query',
     });
+    return Promise.resolve(
+      `https://login.microsoftonline.com/${this.tenant}/oauth2/v2.0/authorize?${params.toString()}`
+    );
   }
 
   // @anchor onedrive-handle-callback
   async handleCallback(code: string, userId: string): Promise<void> {
-    const tokenResponse = await this.msalClient.acquireTokenByCode({
-      code,
-      scopes: SCOPES,
-      redirectUri: this.config.get('MS_REDIRECT_URI'),
-    } as AuthorizationCodeRequest);
+    const response = await axios.post(this.tokenUrl,
+      new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: this.redirectUri,
+        client_id: this.clientId,
+        client_secret: this.clientSecret,
+        scope: SCOPES,
+      }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+    );
 
-    const accessToken = this.encrypt(tokenResponse.accessToken);
-    const refreshToken = this.encrypt((tokenResponse as any).refreshToken || '');
-    const expiresAt = tokenResponse.expiresOn ?? new Date(Date.now() + 3600 * 1000);
+    const { access_token, refresh_token, expires_in } = response.data;
+    const expiresAt = new Date(Date.now() + expires_in * 1000);
+
+    // Pobierz profil usera MS
+    let msAccountEmail = '';
+    let msDisplayName = '';
+    try {
+      const me = await axios.get(`${GRAPH_BASE}/me`, { headers: { Authorization: `Bearer ${access_token}` } });
+      msAccountEmail = me.data.userPrincipalName || me.data.mail || '';
+      msDisplayName = me.data.displayName || '';
+    } catch { /* nieistotne */ }
+
+    const accessToken = this.encrypt(access_token);
+    const refreshToken = this.encrypt(refresh_token || '');
 
     await this.prisma.userMsToken.upsert({
       where: { userId },
@@ -58,15 +78,15 @@ export class OneDriveService {
         accessToken,
         refreshToken,
         expiresAt,
-        msAccountEmail: tokenResponse.account?.username,
-        msDisplayName: tokenResponse.account?.name,
+        msAccountEmail,
+        msDisplayName,
       },
       update: {
         accessToken,
         refreshToken,
         expiresAt,
-        msAccountEmail: tokenResponse.account?.username,
-        msDisplayName: tokenResponse.account?.name,
+        msAccountEmail,
+        msDisplayName,
       },
     });
   }
@@ -89,7 +109,7 @@ export class OneDriveService {
         refresh_token: refreshToken,
         client_id: this.config.get('MS_CLIENT_ID') || '',
         client_secret: this.config.get('MS_CLIENT_SECRET') || '',
-        scope: SCOPES.join(' '),
+        scope: SCOPES,
       }),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
     );
