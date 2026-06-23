@@ -3,6 +3,7 @@ import { Trash2, Upload, MapPin, Hash, User, FileText, Eye, Clock, Image, Film, 
 import { API_URL } from '../../config';
 import DocumentViewer from './DocumentViewer';
 import { importQaFormPdf } from './wbs/importQaFormPdf';
+import OneDriveFilesSection from './OneDriveFilesSection';
 
 export default function PropertyPreview({ nodeId, versionId = null, searchQuery = '', isFinancialTab = false, isOfferTab = false, isDatasheetTab = false, onApprove = null, onDatasheetApprove = null }) {
     const [node, setNode] = useState(null);
@@ -493,6 +494,7 @@ export default function PropertyPreview({ nodeId, versionId = null, searchQuery 
                 )}
             </div>
         </div>
+        <OneDriveFilesSection nodeId={nodeId} category={isFinancialTab ? 'finanse' : 'dokumentacja'} />
         </div>
     );
 }
