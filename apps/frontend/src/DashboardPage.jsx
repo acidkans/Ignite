@@ -426,7 +426,7 @@ export default function DashboardPage() {
                     <div className="flex flex-col leading-tight">
                         <span className="text-[11px] text-gray-200 font-medium capitalize">{dateLabel}</span>
                         <span className="text-[10px] text-gray-500 font-mono uppercase tracking-wider">Tydzień {weekNumber}</span>
-                        <span className="text-[9px] text-gray-600 font-mono tracking-wider">{APP_VERSION}</span>
+                        <span className="text-[9px] text-gray-400 font-mono tracking-wider">{APP_VERSION}</span>
                     </div>
                 </div>
 

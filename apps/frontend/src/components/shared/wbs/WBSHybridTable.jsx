@@ -529,11 +529,11 @@ const GOLDEN_ANGLE = 137.508;
 function getBranchStyle(rootIndex, depth) {
     const hue = (rootIndex * GOLDEN_ANGLE) % 360;
     const d = Math.min(depth, 3);
-    const sat    = [35, 50, 62, 72][d];
-    const alpha  = [0.07, 0.12, 0.18, 0.24][d];
-    const alphaH = [0.13, 0.19, 0.27, 0.35][d];
+    const sat    = [55, 62, 68, 75][d];
+    const alpha  = [0.06, 0.11, 0.17, 0.23][d];
+    const alphaH = [0.11, 0.17, 0.24, 0.32][d];
     const bw     = [3, 2, 2, 1][d];
-    const bSat   = [55, 60, 65, 70][d];
+    const bSat   = [65, 68, 70, 73][d];
     const bAlpha = [0.70, 0.55, 0.40, 0.28][d];
     const nSat   = [90, 80, 75, 70][d];
     const nL     = [92, 88, 85, 82][d];
