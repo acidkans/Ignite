@@ -833,7 +833,6 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         const cleanup = () => {
             wrapper.querySelectorAll('.ignite-weekend-band').forEach(el => el.remove());
             wrapper.querySelectorAll('.ignite-seg-g').forEach(el => el.remove());
-            wrapper.querySelectorAll('.ignite-project-marker').forEach(el => el.remove());
             wrapper.querySelectorAll('[data-ignite-split]').forEach(el => {
                 if (el.dataset.igniteOrigFill) el.setAttribute('fill', el.dataset.igniteOrigFill);
                 el.style.opacity = '';
