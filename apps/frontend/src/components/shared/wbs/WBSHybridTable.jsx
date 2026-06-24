@@ -1410,14 +1410,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     type="text"
                                     inputMode="decimal"
                                     value={costFocusId === node.id
-                                        ? (node.unitCost ?? '')
+                                        ? (node.unitCost || '')
                                         : (Number(node.unitCost) ? fmtPLN(Number(node.unitCost)) : '')}
                                     onChange={e => {
                                         const clean = sanitizeQtyInput(e.target.value);
                                         if (clean !== e.target.value) flashWarn(node.id, 'unitCost');
                                         handleField(node.id, 'unitCost', clean);
                                     }}
-                                    onFocus={e => { setCostFocusId(node.id); if (!Number(node.unitCost)) handleField(node.id, 'unitCost', ''); e.target.select(); }}
+                                    onFocus={e => { setCostFocusId(node.id); e.target.select(); }}
                                     onBlur={e => { setCostFocusId(null); onNodeFieldSave?.(node.id, 'unitCost', Math.round((parseFloat(String(e.target.value).replace(',', '.')) || 0) * 100) / 100); }}
                                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
                                     placeholder="0,00"
