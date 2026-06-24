@@ -38,7 +38,7 @@ function AutoResizeTextarea({ value, onChange, onBlur, placeholder, className, s
 import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle } from 'lucide-react';
 
 // ── Q&A cell — zagnieżdżona tabela Pytanie / Odpowiedź per WBS node ───────────
-function QaPairRow({ p, idx, fieldClass, onUpdate, onRemove, onPersist }) {
+function QaPairRow({ p, idx, onUpdate, onRemove, onPersist }) {
     const qRef = useRef(null);
     const aRef = useRef(null);
     const syncHeights = useCallback(() => {
@@ -71,7 +71,7 @@ function QaPairRow({ p, idx, fieldClass, onUpdate, onRemove, onPersist }) {
                     onBlur={() => onPersist?.()}
                     onFocus={syncHeights}
                     placeholder="Pytanie…"
-                    className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[15px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
+                    className="bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[15px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 text-gray-200"
                     style={{ overflow: 'hidden', minHeight: '1.4em', resize: 'none' }}
                 />
             </td>
@@ -84,7 +84,7 @@ function QaPairRow({ p, idx, fieldClass, onUpdate, onRemove, onPersist }) {
                     onBlur={() => onPersist?.()}
                     onFocus={syncHeights}
                     placeholder="Odpowiedź…"
-                    className={`bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[15px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 ${fieldClass}`}
+                    className="bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[15px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 text-gray-200"
                     style={{ overflow: 'hidden', minHeight: '1.4em', resize: 'none' }}
                 />
             </td>
@@ -101,7 +101,7 @@ function QaPairRow({ p, idx, fieldClass, onUpdate, onRemove, onPersist }) {
     );
 }
 
-function QaCell({ pairs, fieldClass, onChange, onPersist }) {
+function QaCell({ pairs, onChange, onPersist }) {
     const list = Array.isArray(pairs) ? pairs : [];
     const update = (idx, field, value) => {
         onChange(list.map((p, i) => i === idx ? { ...p, [field]: value } : p));
@@ -126,7 +126,6 @@ function QaCell({ pairs, fieldClass, onChange, onPersist }) {
                                 key={idx}
                                 p={p}
                                 idx={idx}
-                                fieldClass={fieldClass}
                                 onUpdate={update}
                                 onRemove={remove}
                                 onPersist={onPersist}
@@ -150,7 +149,7 @@ function QaCell({ pairs, fieldClass, onChange, onPersist }) {
 // Wąska kolumna w tabeli zawężała długie pytania do nieczytelności. Badge w
 // kolumnie otwiera ten modal, w którym Pytanie/Odpowiedź mają pełną szerokość.
 // @anchor qa-modal
-function QaModal({ node, fieldClass, onChange, onPersist, onClose }) {
+function QaModal({ node, onChange, onPersist, onClose }) {
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
         document.addEventListener('keydown', onKey);
@@ -173,7 +172,7 @@ function QaModal({ node, fieldClass, onChange, onPersist, onClose }) {
                     </button>
                 </div>
                 <div className="overflow-y-auto flex-1 p-5">
-                    <QaCell pairs={list} fieldClass={fieldClass} onChange={onChange} onPersist={onPersist} />
+                    <QaCell pairs={list} onChange={onChange} onPersist={onPersist} />
                 </div>
             </div>
         </div>
@@ -516,33 +515,43 @@ const nodeTotal = node => {
 const fmt = v => v ? new Intl.NumberFormat('pl-PL').format(Math.round(v)) : '';
 
 // ── Depth visual config ───────────────────────────────────────────────────────
-// Depth-only: font size/weight, no color
 const DEPTH_SIZE = [
-    'text-base font-bold uppercase text-white',
+    'text-base font-bold uppercase',
     'text-base',
     'text-base',
     'text-base',
 ];
 const MAX_DEPTH = DEPTH_SIZE.length - 1;
 
-// Naprzemienne palety: niebieska (parzyste gałęzie) / pomarańczowa (nieparzyste)
-// Głębszy poziom = ciemniejszy odcień tła (depth 0 = najjaśniejszy, depth 3 = najciemniejszy)
-const BRANCH_PALETTE = [
-    // sky — parzyste gałęzie top-level (0, 2, 4, …)
-    [
-        { rowBg: 'bg-sky-500/[8%] hover:bg-sky-500/[13%]',    leftBorder: 'border-l-[3px] border-sky-400/70',  nameColor: 'text-white',    fieldClass: 'text-sky-200',  tagColor: 'bg-sky-500/20 text-sky-300 border-sky-500/40' },
-        { rowBg: 'bg-sky-500/[15%] hover:bg-sky-500/[20%]',   leftBorder: 'border-l-[2px] border-sky-400/55',  nameColor: 'text-sky-100',  fieldClass: 'text-sky-200',  tagColor: 'bg-sky-500/15 text-sky-300 border-sky-500/30' },
-        { rowBg: 'bg-sky-500/[22%] hover:bg-sky-500/[28%]',   leftBorder: 'border-l-[2px] border-sky-400/40',  nameColor: 'text-sky-200',  fieldClass: 'text-sky-300',  tagColor: 'bg-sky-500/10 text-sky-400 border-sky-500/20' },
-        { rowBg: 'bg-sky-500/[30%] hover:bg-sky-500/[37%]',   leftBorder: 'border-l-[1px] border-sky-400/30',  nameColor: 'text-sky-300',  fieldClass: 'text-sky-400',  tagColor: 'bg-sky-500/10 text-sky-400 border-sky-500/20' },
-    ],
-    // orange — nieparzyste gałęzie top-level (1, 3, 5, …)
-    [
-        { rowBg: 'bg-orange-500/[8%] hover:bg-orange-500/[13%]',  leftBorder: 'border-l-[3px] border-orange-400/70', nameColor: 'text-white',      fieldClass: 'text-orange-200', tagColor: 'bg-orange-500/20 text-orange-300 border-orange-500/40' },
-        { rowBg: 'bg-orange-500/[15%] hover:bg-orange-500/[20%]', leftBorder: 'border-l-[2px] border-orange-400/55', nameColor: 'text-orange-100',  fieldClass: 'text-orange-200', tagColor: 'bg-orange-500/15 text-orange-300 border-orange-500/30' },
-        { rowBg: 'bg-orange-500/[22%] hover:bg-orange-500/[28%]', leftBorder: 'border-l-[2px] border-orange-400/40', nameColor: 'text-orange-200',  fieldClass: 'text-orange-300', tagColor: 'bg-orange-500/10 text-orange-400 border-orange-500/20' },
-        { rowBg: 'bg-orange-500/[30%] hover:bg-orange-500/[37%]', leftBorder: 'border-l-[1px] border-orange-400/30', nameColor: 'text-orange-300',  fieldClass: 'text-orange-400', tagColor: 'bg-orange-500/10 text-orange-400 border-orange-500/20' },
-    ],
-];
+// Złoty kąt (137.508°) rozdziela barwy sąsiednich gałęzi maksymalnie od siebie.
+// Głębszy poziom = wyższe nasycenie i nieprzezroczystość tła.
+const GOLDEN_ANGLE = 137.508;
+function getBranchStyle(rootIndex, depth) {
+    const hue = (rootIndex * GOLDEN_ANGLE) % 360;
+    const d = Math.min(depth, 3);
+    const sat    = [35, 50, 62, 72][d];
+    const alpha  = [0.07, 0.12, 0.18, 0.24][d];
+    const alphaH = [0.13, 0.19, 0.27, 0.35][d];
+    const bw     = [3, 2, 2, 1][d];
+    const bSat   = [55, 60, 65, 70][d];
+    const bAlpha = [0.70, 0.55, 0.40, 0.28][d];
+    const nSat   = [90, 80, 75, 70][d];
+    const nL     = [92, 88, 85, 82][d];
+    const fSat   = [50, 55, 60, 65][d];
+    const fL     = [78, 74, 70, 67][d];
+    return {
+        trStyle: {
+            '--wbs-bg':  `hsla(${hue|0},${sat}%,55%,${alpha})`,
+            '--wbs-bgh': `hsla(${hue|0},${sat}%,55%,${alphaH})`,
+            '--wbs-bc':  `hsla(${hue|0},${bSat}%,65%,${bAlpha})`,
+            '--wbs-bw':  `${bw}px`,
+            '--wbs-nc':  `hsl(${hue|0},${nSat}%,${nL}%)`,
+            '--wbs-fc':  `hsl(${hue|0},${fSat}%,${fL}%)`,
+        },
+    };
+}
+// CSS wstrzyknięte raz — hover i kolory przez custom properties na <tr>
+const WBS_BRANCH_CSS = `.wbs-br{background-color:var(--wbs-bg);border-left:var(--wbs-bw) solid var(--wbs-bc);transition:background-color .12s}.wbs-br:hover{background-color:var(--wbs-bgh)}.wbs-br .wbs-name{color:var(--wbs-nc)}.wbs-br .wbs-field{color:var(--wbs-fc)}`;
 
 // ── Tag chips ─────────────────────────────────────────────────────────────────
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -858,7 +867,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [mergeOverId, setMergeOverId] = useState(null);
     const [copyBuffer, setCopyBuffer] = useState(null); // { node, sourceName }
     // @anchor qa-modal-node
-    const [qaModalNode, setQaModalNode] = useState(null); // { id, name, fieldClass } — węzeł z otwartym modalem Q&A
+    const [qaModalNode, setQaModalNode] = useState(null); // { id, name } — węzeł z otwartym modalem Q&A
     // @anchor qa-branch-node
     const [qaBranchNode, setQaBranchNode] = useState(null); // { id } — węzeł top-level z otwartym read-only podglądem Q&A całej gałęzi
     const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, status: 128, wlasciciel: 128, komentarz: 200, qa: 140, zalaczniki: 44 });
@@ -1194,8 +1203,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             return;
         }
         const rowId = `node_${node.id}`;
-        const bc = BRANCH_PALETTE[rootIndex % BRANCH_PALETTE.length][Math.min(depth, MAX_DEPTH)];
-        const d = { ...bc, nameClass: `${DEPTH_SIZE[Math.min(depth, MAX_DEPTH)]} ${bc.nameColor}` };
+        const bs = getBranchStyle(rootIndex, depth);
+        const d = {
+            trStyle: bs.trStyle,
+            nameClass: `${DEPTH_SIZE[Math.min(depth, MAX_DEPTH)]} wbs-name`,
+            fieldClass: 'wbs-field',
+        };
         const hasChildren = (node.children || []).length > 0;
         const isDragging = dragId === node.id;
         const overPos = dragOver?.nodeId === node.id ? dragOver.position : null;
@@ -1213,7 +1226,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 onDragOver={e => onDragOver(e, node.id, depth)}
                 onDragLeave={onDragLeave}
                 onDrop={e => onDrop(e, node.id)}
-                className={`border-b border-white/5 cursor-pointer group/node transition-opacity ${d.rowBg} ${d.leftBorder} ${isDragging ? 'opacity-25' : ''} ${dropBorder} ${reqDropHighlight} ${selectedNodeId === node.id ? 'outline outline-1 outline-blue-500/40 !bg-blue-500/5' : ''}`}
+                style={d.trStyle}
+                className={`border-b border-white/5 cursor-pointer group/node transition-opacity wbs-br ${isDragging ? 'opacity-25' : ''} ${dropBorder} ${reqDropHighlight} ${selectedNodeId === node.id ? 'outline outline-1 outline-blue-500/40 !bg-blue-500/5' : ''}`}
                 onClick={e => { setSelectedNodeId(node.id); hasChildren && toggle(rowId, e); }}
             >
                 {/* WBS ID — uchwyt drag */}
@@ -1503,7 +1517,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         </button>
                     ) : (
                         <button
-                            onClick={() => setQaModalNode({ id: node.id, name: node.name, fieldClass: d.fieldClass })}
+                            onClick={() => setQaModalNode({ id: node.id, name: node.name })}
                             className="flex items-center gap-1.5 text-[48px] text-gray-500 hover:text-blue-400 transition-all"
                             title="Otwórz pytania i odpowiedzi"
                         >
@@ -1721,6 +1735,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
     return (
         <div className="flex flex-col flex-1 min-h-0">
+            <style>{WBS_BRANCH_CSS}</style>
             {copyBuffer && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-900/30 border-b border-blue-500/20 text-[15px] text-blue-300">
                     <Clipboard size={12} className="flex-shrink-0" />
@@ -1872,7 +1887,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             {qaModalNode && (
                 <QaModal
                     node={findNode(items, qaModalNode.id) || { name: qaModalNode.name, qa: [] }}
-                    fieldClass={qaModalNode.fieldClass}
                     onChange={(next) => handleField(qaModalNode.id, 'qa', next)}
                     onPersist={() => onSave?.()}
                     onClose={() => setQaModalNode(null)}
