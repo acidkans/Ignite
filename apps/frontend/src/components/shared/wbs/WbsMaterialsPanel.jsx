@@ -1410,7 +1410,11 @@ export default function WbsMaterialsPanel({
                 wbsNodeId: node.id,
             }),
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+            const errText = await res.text().catch(() => '');
+            console.error('[createCard] błąd tworzenia karty:', res.status, errText, 'wbsNodeId:', node.id);
+            return;
+        }
         const created = await res.json();
         setCards(prev => ({ ...prev, [node.id]: created }));
         setExpandedId(node.id);

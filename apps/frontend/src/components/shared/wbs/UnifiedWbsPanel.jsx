@@ -2000,8 +2000,89 @@ ${ganttSectionHtml}
     };
 
     const handleExportBudgetExcel = async () => {
+        const exportDate = new Date().toLocaleDateString('pl-PL');
+        const fileProjectName = String(orderName || projectName || 'projekt').trim() || 'projekt';
+        const safeProjectName = fileProjectName.replace(/[\\/:*?"<>|]+/g, '_');
+        const parsedPercentDiscount = Number(String(budgetDiscountPercent).replace(',', '.'));
+        const parsedAmountDiscount = Number(String(budgetDiscountAmount).replace(',', '.'));
+        const discountAmountFromValue = Number.isFinite(parsedAmountDiscount) ? Math.max(0, parsedAmountDiscount) : 0;
+
+        // Porównanie — fetch danych przed tworzeniem arkuszy, żeby być pierwszą zakładką.
+        let comparisonData = null;
+        try {
+            const versionsRes = await fetch(`${API_URL}/ai/versions/${nodeId}`, { headers: authHeaders() });
+            if (versionsRes.ok) {
+                const allVersions = await versionsRes.json();
+                if (Array.isArray(allVersions) && allVersions.length > 0) {
+                    const computeSummaryFromItems = (items) => {
+                        const leaves = (items || []).filter(it => {
+                            const t = String(it.type || '').toLowerCase();
+                            return t !== '' && t !== 'group';
+                        });
+                        let totalCost = 0, totalRevenue = 0;
+                        for (const it of leaves) {
+                            const tc = parseFloat(it.totalCost) || (parseFloat(it.unitCost) || 0) * (parseFloat(it.quantity) || 0);
+                            const m = parseFloat(it.margin) || 0;
+                            const op = m !== 0 ? tc * (1 + m / 100) : 0;
+                            totalCost += tc;
+                            totalRevenue += op;
+                        }
+                        return { rows: leaves.length, totalCost, totalRevenue };
+                    };
+                    const versionSummaries = await Promise.all(allVersions.map(async (ver) => {
+                        try {
+                            const res = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}?versionId=${ver.id}`, { headers: authHeaders() });
+                            if (!res.ok) return null;
+                            const data = await res.json();
+                            return { label: ver.label || ver.id, ...computeSummaryFromItems(data.items) };
+                        } catch { return null; }
+                    }));
+                    const validSums = versionSummaries.filter(Boolean);
+                    if (validSums.length > 0) comparisonData = { validSums };
+                }
+            }
+        } catch (e) {
+            console.warn('Porównanie snapszotów — błąd fetch:', e);
+        }
+
         const workbook = new ExcelJS.Workbook();
-        // Konwencja: arkusze nazwane tylko typem (Podsumowanie / Budżet / Q&A) — nazwa projektu jest w nazwie pliku.
+
+        // Konwencja: Porównanie jako pierwsza zakładka (gdy jest >0 wersji), potem Podsumowanie / Budżet / Q&A.
+        if (comparisonData) {
+            const { validSums } = comparisonData;
+            const compSheet = workbook.addWorksheet('Porównanie');
+            compSheet.columns = [{ width: 28 }, ...validSums.map(() => ({ width: 20 }))];
+            const hdrRow = compSheet.addRow(['Wskaźnik', ...validSums.map(s => s.label)]);
+            hdrRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            hdrRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+            const metrics = validSums.map(s => {
+                const discFromPct = Number.isFinite(parsedPercentDiscount) ? Math.max(0, parsedPercentDiscount) / 100 * s.totalRevenue : 0;
+                const totalDisc = discFromPct + discountAmountFromValue;
+                const revAfterDisc = Math.max(0, s.totalRevenue - totalDisc);
+                const profitAfterDisc = revAfterDisc - s.totalCost;
+                const marginAfterDisc = revAfterDisc > 0 ? profitAfterDisc / revAfterDisc : 0;
+                return { rows: s.rows, totalCost: s.totalCost, totalRevenue: s.totalRevenue, discPct: parsedPercentDiscount / 100 || 0, discAmt: discountAmountFromValue, totalDisc, revAfterDisc, profitAfterDisc, marginAfterDisc };
+            });
+            const addMetricRow = (label, getValue, numFmt) => {
+                const r = compSheet.addRow([label, ...metrics.map(getValue)]);
+                if (numFmt) for (let c = 2; c <= metrics.length + 1; c++) r.getCell(c).numFmt = numFmt;
+                return r;
+            };
+            addMetricRow('Liczba wierszy', m => m.rows);
+            addMetricRow('Koszt całkowity', m => m.totalCost, '#,##0.00');
+            addMetricRow('Przychód przed rabatami', m => m.totalRevenue, '#,##0.00');
+            addMetricRow('Rabat procentowy', m => m.discPct, '0.00%');
+            addMetricRow('Rabat kwotowy', m => m.discAmt, '#,##0.00');
+            addMetricRow('Łączny rabat', m => m.totalDisc, '#,##0.00');
+            addMetricRow('Przychód po rabatach', m => m.revAfterDisc, '#,##0.00');
+            addMetricRow('Zysk po rabatach', m => m.profitAfterDisc, '#,##0.00');
+            addMetricRow('Marża po rabatach', m => m.marginAfterDisc, '0.00%');
+            compSheet.eachRow((row, rn) => {
+                if (rn > 1 && rn % 2 === 0) row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+            });
+            compSheet.views = [{ state: 'frozen', ySplit: 1 }];
+        }
+
         const summarySheet = workbook.addWorksheet('Podsumowanie');
         const budget = appendBudgetSheet(workbook);
         if (budget.empty) {
@@ -2018,15 +2099,9 @@ ${ganttSectionHtml}
         }
         const { rows, summary, qaSheetRows } = budget;
 
-        const exportDate = new Date().toLocaleDateString('pl-PL');
-        const fileProjectName = String(orderName || projectName || 'projekt').trim() || 'projekt';
-        const safeProjectName = fileProjectName.replace(/[\\/:*?"<>|]+/g, '_');
-        const parsedPercentDiscount = Number(String(budgetDiscountPercent).replace(',', '.'));
-        const parsedAmountDiscount = Number(String(budgetDiscountAmount).replace(',', '.'));
         const discountAmountFromPercent = Number.isFinite(parsedPercentDiscount)
             ? Math.max(0, parsedPercentDiscount) / 100 * summary.totalRevenue
             : 0;
-        const discountAmountFromValue = Number.isFinite(parsedAmountDiscount) ? Math.max(0, parsedAmountDiscount) : 0;
         const exportedTotalDiscount = discountAmountFromPercent + discountAmountFromValue;
         const exportedRevenueAfterDiscount = Math.max(0, summary.totalRevenue - exportedTotalDiscount);
         const exportedProfitAfterDiscount = exportedRevenueAfterDiscount - summary.totalCost;
@@ -4506,6 +4581,7 @@ ${ganttSectionHtml}
                                 setWbsTree={setWbsTreeAndRef}
                                 nodeName={orderName || projectName || 'Projekt'}
                                 processNodeId={nodeId}
+                                versionId={versionId}
                                 onSave={handleSaveHybridWBS}
                                 users={assignedUsers}
                                 onRequirementDrop={isManagerOrAdmin ? handleRequirementAssignToWbs : null}

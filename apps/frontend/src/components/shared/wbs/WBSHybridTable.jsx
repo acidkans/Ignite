@@ -256,7 +256,7 @@ const API_URL = '/api';
 
 // ─── MaterialReqExpandPanel ───────────────────────────────────────────────────
 
-function MaterialReqExpandPanel({ node, req, processNodeId, onSaved, onDeleteNode, onNodeFieldSave }) {
+function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, onDeleteNode, onNodeFieldSave }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     const headers = React.useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
 
@@ -272,7 +272,7 @@ function MaterialReqExpandPanel({ node, req, processNodeId, onSaved, onDeleteNod
         fetch(`${API_URL}/material-requirements`, {
             method: 'POST', headers,
             body: JSON.stringify({
-                nodeId: processNodeId, name: node.name, type: reqType,
+                nodeId: processNodeId, versionId: versionId || null, name: node.name, type: reqType,
                 quantity: node.quantity || 1, unit: node.unit || 'sztuki', wbsNodeId: node.id,
             }),
         }).then(r => r.ok ? r.json() : null).then(data => { if (data) { setCard(data); onSaved?.(data); } });
@@ -816,7 +816,7 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal, on
 
 // ── Component ─────────────────────────────────────────────────────────────────
 // @anchor wbs-hybrid-table
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null }) {
     const getAllIds = useCallback((items) => {
         const ids = ['root'];
         const walk = (nodes) => nodes?.forEach(n => { ids.push(`node_${n.id}`); walk(n.children); });
@@ -1556,6 +1556,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 return (reqTag && matReqByWbsId[reqTag.slice(4)]) || matReqByWbsId[node.id] || null;
                             })()}
                             processNodeId={processNodeId}
+                            versionId={versionId}
                             onNodeFieldSave={onNodeFieldSave}
                             onSaved={updated => { setMatReqByWbsId(prev => ({ ...prev, [node.id]: updated, ...(updated?.id ? { [updated.id]: updated } : {}) })); onMaterialReqUpdated?.(); }}
                             onDeleteNode={() => {

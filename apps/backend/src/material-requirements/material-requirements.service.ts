@@ -397,17 +397,19 @@ export class MaterialRequirementsService {
 
         const targetIds = mappings.map(m => m.targetWbsNodeId).filter(Boolean);
         const existingTargets = await this.prisma.wbsNode.findMany({
-            where: { id: { in: targetIds } }, select: { id: true }
+            where: { id: { in: targetIds } }, select: { id: true, versionId: true }
         });
-        const validTargetSet = new Set(existingTargets.map(n => n.id));
+        const validTargetMap = new Map(existingTargets.map(n => [n.id, n]));
 
         const created: any[] = [];
         for (const src of sources) {
             const mapping = mappings.find(m => m.sourceWbsNodeId === src.wbsNodeId);
-            if (!mapping || !validTargetSet.has(mapping.targetWbsNodeId)) continue;
+            if (!mapping || !validTargetMap.has(mapping.targetWbsNodeId)) continue;
+            const targetNode = validTargetMap.get(mapping.targetWbsNodeId);
             const { id, wbsNodeId, wbsNodeIds, wbsNodeAllocations, createdAt, updatedAt, ...rest } = src as any;
+            // Użyj versionId z docelowego węzła WBS — source może mieć versionId=null (karta stworzona bez wersji)
             const clone = await this.prisma.materialRequirement.create({
-                data: { ...rest, wbsNodeId: mapping.targetWbsNodeId },
+                data: { ...rest, wbsNodeId: mapping.targetWbsNodeId, versionId: targetNode?.versionId ?? rest.versionId },
             });
             // WbsNodeMaterial.materialId → materials.id; auto-tworzenie pominięte (powstaje przy selectProposal)
             created.push(clone);
