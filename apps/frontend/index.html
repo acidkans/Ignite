@@ -16,6 +16,31 @@
   <body spellcheck="true">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      (function () {
+        function applySpellcheck(el) {
+          if (
+            (el.tagName === 'INPUT' && (el.type === 'text' || el.type === '')) ||
+            el.tagName === 'TEXTAREA' ||
+            el.getAttribute('contenteditable') === 'true'
+          ) {
+            el.setAttribute('spellcheck', 'true');
+          }
+        }
+        var observer = new MutationObserver(function (mutations) {
+          mutations.forEach(function (m) {
+            m.addedNodes.forEach(function (node) {
+              if (node.nodeType !== 1) return;
+              applySpellcheck(node);
+              node.querySelectorAll &&
+                node.querySelectorAll('input[type="text"], input:not([type]), textarea, [contenteditable="true"]')
+                  .forEach(applySpellcheck);
+            });
+          });
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+      })();
+    </script>
     <!-- Dev-tracker tylko na desktopie (>=1024px) — na mobile/tablet widget nie da się przenieść i zasłania UI -->
     <script>
       if (window.innerWidth >= 1024) {
