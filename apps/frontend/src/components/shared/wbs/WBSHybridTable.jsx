@@ -1263,9 +1263,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 onClick={e => {
                                     e.stopPropagation();
                                     const { clone, mappings } = deepCloneNodeWithMappings(copyBuffer.node);
-                                    save({ ...wbsTree, items: addChildTo(items, node.id, clone) });
+                                    const newTree = { ...wbsTree, items: addChildTo(items, node.id, clone) };
+                                    save(newTree);
                                     setCopyBuffer(null);
-                                    if (mappings.length > 0) onPasteCloned?.(mappings);
+                                    if (mappings.length > 0) onPasteCloned?.(mappings, newTree);
                                 }}
                                 title={`Wklej „${copyBuffer.sourceName}" jako dziecko (z wymaganiami technicznymi, typem i statusem)`}
                                 className="p-1 rounded text-emerald-500/60 hover:text-emerald-300 hover:bg-emerald-500/10 transition-all"

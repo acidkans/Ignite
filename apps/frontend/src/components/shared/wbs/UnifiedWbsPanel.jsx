@@ -912,14 +912,17 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // nowe wbs_nodes powstały w bazie), a następnie sklonuj powiązane wymagania techniczne
     // (productName, technicalSpec, manufacturer, model, dataSheet, status, …).
     // @anchor handle-paste-cloned
-    const handlePasteCloned = useCallback(async (mappings) => {
+    // treeSnapshot — drzewo przekazane wprost z WBSHybridTable (wbsTreeRef.current może być jeszcze stale
+    // gdy React nie zdążył odpalić updater-a setState przed tym wywołaniem)
+    const handlePasteCloned = useCallback(async (mappings, treeSnapshot) => {
         if (!Array.isArray(mappings) || mappings.length === 0) return;
         if (hybridSaveTimeout.current) clearTimeout(hybridSaveTimeout.current);
+        const treeToSave = treeSnapshot ?? wbsTreeRef.current;
         try {
             await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`, {
                 method: 'POST',
                 headers: authHeaders(),
-                body: JSON.stringify(wbsTreeRef.current),
+                body: JSON.stringify(treeToSave),
             });
             await fetch(`${API_URL}/material-requirements/clone-for-wbs`, {
                 method: 'POST',
