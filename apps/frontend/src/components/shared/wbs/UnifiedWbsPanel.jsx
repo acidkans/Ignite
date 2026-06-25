@@ -2924,12 +2924,11 @@ ${ganttSectionHtml}
                 applyBorder(r, 3, cellBorder);
             }
             const lastDataRow = sheet.rowCount;
-            // Razem = suma poddrzew tylko gałęzi grupujących najwyższego poziomu —
-            // gałęzie zagnieżdżone w innej grupującej są już wliczone w jej poddrzewo.
-            const total = groupNodes
-                .filter(g => !localChain(g.id).slice(0, -1).some(a => a.type === 'group'))
-                .reduce((s, g) => s + subtreeOfferTotal(g.id), 0);
-            const sumRow = sheet.addRow(['Razem (gałęzie najwyższego poziomu)', '', total]);
+            // Razem = suma wszystkich wycenionych węzłów (od korzenia),
+            // spójnie z zakładką Podsumowanie — obejmuje też węzły poza gałęziami grupującymi.
+            const rootNode = wbsData.find(n => !n.parentId);
+            const total = rootNode ? subtreeOfferTotal(rootNode.id) : 0;
+            const sumRow = sheet.addRow(['Razem', '', total]);
             sumRow.font = { bold: true };
             sumRow.fill = sumFill;
             sumRow.getCell(3).numFmt = numFmt;
