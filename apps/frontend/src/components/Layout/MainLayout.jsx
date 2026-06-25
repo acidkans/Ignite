@@ -9,6 +9,7 @@ import DocumentViewer from '../shared/DocumentViewer';
 import AddNodeModal from '../shared/AddNodeModal';
 import NodePermissionsModal from '../shared/NodePermissionsModal';
 import NotificationBell from '../shared/NotificationBell';
+import { APP_VERSION } from '../../version';
 
 // @anchor find-node-by-id-layout — wyszukuje węzeł w drzewie (dla nazwy folderu OneDrive aktywnego węzła)
 function findNodeById(nodes, id) {
@@ -259,6 +260,11 @@ export default function MainLayout({ onLogout }) {
                         userRoles={userRoles}
                         onReloadTree={fetchTree}
                     />
+                </div>
+
+                {/* Version */}
+                <div className="px-3 py-1.5 border-t border-white/5">
+                    <span className="text-[18px] font-mono text-gray-600 tracking-wider">{APP_VERSION}</span>
                 </div>
 
                 {/* User Footer */}
