@@ -195,9 +195,32 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
             });
             const updates = { [field]: parsed };
             const patch = r => r.id === id ? { ...r, ...updates } : r;
-            setItems(prev => prev.map(patch));
             setDatasheetItems(prev => prev.map(patch));
             window.dispatchEvent(new CustomEvent('material-req-updated', { detail: { id, updates } }));
+        } catch {}
+        setEditingCell(null);
+    };
+
+    // @anchor material-database-patch-material
+    const handlePatchMaterial = async (id, field, value) => {
+        const token = sessionStorage.getItem('token');
+        const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+        try {
+            if (field === 'stockStatus') {
+                const qty = value === '' ? 0 : Number(value);
+                await fetch(`${API_URL}/materials/${id}/stock`, {
+                    method: 'PATCH', headers,
+                    body: JSON.stringify({ quantity: qty }),
+                });
+                setItems(prev => prev.map(r => r.id === id ? { ...r, stockStatus: qty } : r));
+            } else {
+                const parsed = field === 'priceNetto' ? (value === '' ? null : Number(value)) : (value === '' ? null : value);
+                await fetch(`${API_URL}/materials/${id}`, {
+                    method: 'PATCH', headers,
+                    body: JSON.stringify({ [field]: parsed }),
+                });
+                setItems(prev => prev.map(r => r.id === id ? { ...r, [field]: parsed } : r));
+            }
         } catch {}
         setEditingCell(null);
     };
@@ -320,11 +343,18 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
 
     const handleDelete = async (id) => {
         const token = sessionStorage.getItem('token');
-        await fetch(`${API_URL}/material-requirements/${id}`, {
+        const res = await fetch(`${API_URL}/material-requirements/${id}`, {
             method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
         });
-        setItems(prev => prev.filter(r => r.id !== id));
-        setDatasheetItems(prev => prev.filter(r => r.id !== id));
+        if (res.ok) setDatasheetItems(prev => prev.filter(r => r.id !== id));
+    };
+
+    const handleDeleteMaterial = async (id) => {
+        const token = sessionStorage.getItem('token');
+        const res = await fetch(`${API_URL}/materials/${id}`, {
+            method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) setItems(prev => prev.filter(r => r.id !== id));
     };
 
     // Dedup: wyklucz z globalnej bazy rekordy już widoczne w datasheetItems
@@ -498,42 +528,40 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
                                                 </td>
                                                 <td className="px-3 py-2 text-gray-200 max-w-[200px] cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'productName', value: r.productName ?? '' })}>
                                                     {editingCell?.id === r.id && editingCell?.field === 'productName'
-                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchField(r.id, 'productName', v)} onCancel={() => setEditingCell(null)} />
+                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchMaterial(r.id, 'productName', v)} onCancel={() => setEditingCell(null)} />
                                                         : <span className="line-clamp-2" title={r.productName || '—'}>{r.productName || <span className="text-gray-500">—</span>}</span>}
                                                 </td>
                                                 <td className="px-3 py-2 cursor-pointer" onClick={() => setEditingCell({ id: r.id, field: 'type', value: r.type ?? 'MATERIAL' })}>
                                                     {editingCell?.id === r.id && editingCell?.field === 'type'
-                                                        ? <InlineCell value={editingCell.value} options={TYPE_OPTIONS} onSave={v => handlePatchField(r.id, 'type', v)} onCancel={() => setEditingCell(null)} />
+                                                        ? <InlineCell value={editingCell.value} options={TYPE_OPTIONS} onSave={v => handlePatchMaterial(r.id, 'type', v)} onCancel={() => setEditingCell(null)} />
                                                         : <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-300 text-[10px] font-semibold">{TYPE_LABELS[wbsTypeFromAny(r.type)] || r.type}</span>}
                                                 </td>
                                                 <td className="px-3 py-2 text-gray-300 cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'manufacturer', value: r.manufacturer ?? '' })}>
                                                     {editingCell?.id === r.id && editingCell?.field === 'manufacturer'
-                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchField(r.id, 'manufacturer', v)} onCancel={() => setEditingCell(null)} />
+                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchMaterial(r.id, 'manufacturer', v)} onCancel={() => setEditingCell(null)} />
                                                         : (r.manufacturer || <span className="text-gray-600">—</span>)}
                                                 </td>
                                                 <td className="px-3 py-2 text-gray-400 cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'model', value: r.model ?? '' })}>
                                                     {editingCell?.id === r.id && editingCell?.field === 'model'
-                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchField(r.id, 'model', v)} onCancel={() => setEditingCell(null)} />
+                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchMaterial(r.id, 'model', v)} onCancel={() => setEditingCell(null)} />
                                                         : (r.model || <span className="text-gray-600">—</span>)}
                                                 </td>
                                                 <td className="px-3 py-2 text-right text-green-400 font-mono whitespace-nowrap cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'priceNetto', value: r.priceNetto ?? '' })}>
                                                     {editingCell?.id === r.id && editingCell?.field === 'priceNetto'
-                                                        ? <InlineCell value={editingCell.value} type="number" onSave={v => handlePatchField(r.id, 'priceNetto', v)} onCancel={() => setEditingCell(null)} className="text-right" />
+                                                        ? <InlineCell value={editingCell.value} type="number" onSave={v => handlePatchMaterial(r.id, 'priceNetto', v)} onCancel={() => setEditingCell(null)} className="text-right" />
                                                         : (r.priceNetto != null ? `${Number(r.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : <span className="text-gray-600">—</span>)}
                                                 </td>
-                                                <td className="px-3 py-2 text-cyan-400 text-[11px] cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'availability', value: r.availability ?? '' })}>
-                                                    {editingCell?.id === r.id && editingCell?.field === 'availability'
-                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchField(r.id, 'availability', v)} onCancel={() => setEditingCell(null)} />
-                                                        : (r.availability || <span className="text-gray-600">—</span>)}
+                                                <td className="px-3 py-2 text-cyan-400 text-[11px]">
+                                                    {r.availability || <span className="text-gray-600">—</span>}
                                                 </td>
                                                 <td className="px-3 py-2 text-[11px] max-w-[140px] cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'productUrl', value: r.productUrl ?? '' })}>
                                                     {editingCell?.id === r.id && editingCell?.field === 'productUrl'
-                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchField(r.id, 'productUrl', v)} onCancel={() => setEditingCell(null)} />
+                                                        ? <InlineCell value={editingCell.value} onSave={v => handlePatchMaterial(r.id, 'productUrl', v)} onCancel={() => setEditingCell(null)} />
                                                         : (r.productUrl ? <a href={r.productUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-400 hover:text-blue-300 truncate block" title={r.productUrl}>{(() => { try { return new URL(r.productUrl).hostname.replace(/^www\./, ''); } catch { return r.productUrl.slice(0, 20); } })()}</a> : <span className="text-gray-600">—</span>)}
                                                 </td>
                                                 <td className="px-3 py-2 text-right text-gray-300 cursor-text" onClick={() => setEditingCell({ id: r.id, field: 'stockStatus', value: r.stockStatus ?? '' })}>
                                                     {editingCell?.id === r.id && editingCell?.field === 'stockStatus'
-                                                        ? <InlineCell value={editingCell.value} type="number" onSave={v => handlePatchField(r.id, 'stockStatus', v)} onCancel={() => setEditingCell(null)} className="text-right" />
+                                                        ? <InlineCell value={editingCell.value} type="number" onSave={v => handlePatchMaterial(r.id, 'stockStatus', v)} onCancel={() => setEditingCell(null)} className="text-right" />
                                                         : (r.stockStatus ? `${r.stockStatus} szt` : <span className="text-gray-600">—</span>)}
                                                 </td>
                                                 <td className="px-3 py-2">
@@ -548,7 +576,7 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
                                                     ) : '—'}
                                                 </td>
                                                 <td className="px-2 py-2 text-center">
-                                                    <button onClick={() => handleDelete(r.id)} className="opacity-0 group-hover:opacity-100 text-red-800 hover:text-red-400 transition-all">
+                                                    <button onClick={() => handleDeleteMaterial(r.id)} className="opacity-0 group-hover:opacity-100 text-red-800 hover:text-red-400 transition-all">
                                                         <Trash2 size={13} />
                                                     </button>
                                                 </td>
