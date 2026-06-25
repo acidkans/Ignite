@@ -979,9 +979,14 @@ ODPOWIEDŹ: Brak dokumentów. Prześlij pliki aby uzyskać odpowiedź.`;
         }
 
         if (modelName.startsWith('gemini') && this.genAI) {
-            // Google Gemini
+            // Google Gemini — z historią rozmowy
             const model = this.genAI.getGenerativeModel({ model: modelName });
-            const result = await model.generateContent(prompt);
+            const history = (conversationHistory || []).map(m => ({
+                role: m.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: m.content }],
+            }));
+            const chat = model.startChat({ history });
+            const result = await chat.sendMessage(prompt + '\n\nPYTANIE: ' + question);
             const response = await result.response;
             return response.text();
 
