@@ -214,8 +214,20 @@ export class MaterialRequirementsService {
 
     async findAllByNode(nodeId: string, versionId?: string, listId?: string) {
         const vId = await resolveVersionId(this.prisma, nodeId, versionId);
-        const where: any = { nodeId, versionId: vId };
-        if (listId) where.OR = [{ listId }, { listId: null }];
+        // Fallback: zwróć też karty z versionId=null (stare dane przed migracją) gdy vId jest aktywną wersją
+        const versionFilter = vId
+            ? { OR: [{ versionId: vId }, { versionId: null }] }
+            : { versionId: null };
+        const where: any = { nodeId, ...versionFilter };
+        if (listId) {
+            const existingOr = where.OR || [];
+            where.AND = [
+                { OR: existingOr.length ? existingOr : [versionFilter] },
+                { OR: [{ listId }, { listId: null }] },
+            ];
+            delete where.OR;
+            if (where.versionId !== undefined) delete where.versionId;
+        }
         const items = await this.prisma.materialRequirement.findMany({
             where,
             include: {
@@ -381,6 +393,20 @@ export class MaterialRequirementsService {
         const { wbsNodeId, ...prismaData } = dto;
         // Spójność z findAllByNode: resolveVersionId żeby null → aktywna wersja węzła
         const resolvedVersionId = await resolveVersionId(this.prisma, dto.nodeId, dto.versionId);
+        // Idempotentne tworzenie: wbsNodeId @unique — jeśli karta już istnieje (stare dane z versionId=null),
+        // zaktualizuj jej versionId i zwróć ją zamiast crashować na constraint
+        if (wbsNodeId) {
+            const existing = await this.prisma.materialRequirement.findUnique({ where: { wbsNodeId } });
+            if (existing) {
+                if (!existing.versionId && resolvedVersionId) {
+                    return this.prisma.materialRequirement.update({
+                        where: { id: existing.id },
+                        data: { versionId: resolvedVersionId },
+                    });
+                }
+                return existing;
+            }
+        }
         const created = await this.prisma.materialRequirement.create({ data: { ...prismaData, versionId: resolvedVersionId, wbsNodeId: wbsNodeId ?? null } });
         // WbsNodeMaterial.materialId teraz → materials.id (nie material_requirements.id)
         // Auto-tworzenie pominięte — WbsNodeMaterial powstaje przy selectProposal()
