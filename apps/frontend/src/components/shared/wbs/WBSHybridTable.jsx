@@ -1529,10 +1529,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     ) : (
                         <button
                             onClick={() => setQaModalNode({ id: node.id, name: node.name })}
-                            className="flex items-center gap-1.5 text-[48px] text-gray-500 hover:text-blue-400 transition-all"
+                            className="flex items-center gap-1.5 text-[30px] text-gray-500 hover:text-blue-400 transition-all"
                             title="Otwórz pytania i odpowiedzi"
                         >
-                            <HelpCircle size={44} />
+                            <HelpCircle size={30} />
                             <span>{(Array.isArray(node.qa) ? node.qa : []).filter(p => p?.question || p?.answer).length || '+'}</span>
                         </button>
                     )}
