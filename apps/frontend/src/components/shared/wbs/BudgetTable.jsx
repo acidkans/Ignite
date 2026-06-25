@@ -126,6 +126,7 @@ export default function BudgetTable({
     }, [colWidths]);
 
     useEffect(() => {
+        if (focusedRowId != null) return;
         const newRows = rows.map(calcDerived);
         const editableFields = ['name', 'unitCost', 'quantity', 'margin', 'discount', 'comment', 'unit', 'type'];
         let externalChange = newRows.length !== localRows.length;
@@ -140,7 +141,7 @@ export default function BudgetTable({
         }
         setLocalRows(newRows);
         if (externalChange) setSyncVersion(v => v + 1);
-    }, [rows]);
+    }, [rows, focusedRowId]);
 
     const handleChange = (rowId, field, rawValue) => {
         setLocalRows(prev => prev.map(r => {
