@@ -979,14 +979,15 @@ ODPOWIEDŹ: Brak dokumentów. Prześlij pliki aby uzyskać odpowiedź.`;
         }
 
         if (modelName.startsWith('gemini') && this.genAI) {
-            // Google Gemini — z historią rozmowy
+            // Google Gemini — historia jako tekst w prompcie
             const model = this.genAI.getGenerativeModel({ model: modelName });
-            const history = (conversationHistory || []).map(m => ({
-                role: m.role === 'assistant' ? 'model' : 'user',
-                parts: [{ text: m.content }],
-            }));
-            const chat = model.startChat({ history });
-            const result = await chat.sendMessage(prompt + '\n\nPYTANIE: ' + question);
+            let historyText = '';
+            if (conversationHistory && conversationHistory.length > 0) {
+                historyText = '\n\nHISTORIA ROZMOWY:\n' + conversationHistory
+                    .map(m => `${m.role === 'assistant' ? 'Asystent' : 'Użytkownik'}: ${m.content}`)
+                    .join('\n');
+            }
+            const result = await model.generateContent(prompt + historyText + '\n\nAKTUALNE PYTANIE: ' + question);
             const response = await result.response;
             return response.text();
 
