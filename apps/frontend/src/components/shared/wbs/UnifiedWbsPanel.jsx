@@ -2637,7 +2637,7 @@ ${ganttSectionHtml}
                 if (unitCost > 0) { aggRow.costSum += unitCost * qty; aggRow.costCount += qty; }
             }
 
-            const orderSheet = workbook.addWorksheet('Zamówienie (agregacja)');
+            const orderSheet = workbook.addWorksheet('Materiały (agregacja)');
             orderSheet.columns = [
                 { header: 'Lp.', key: 'idx', width: 5 },
                 { header: 'Gdzie wykorzystywany', key: 'paths', width: 60 },
@@ -3220,7 +3220,7 @@ ${ganttSectionHtml}
             }
 
             // ── Sheet Zamówienie (agregacja): agregacja logistyczna po nazwie+wymaganiach ──
-            const orderSheet = workbook.addWorksheet('Zamówienie (agregacja)');
+            const orderSheet = workbook.addWorksheet('Materiały (agregacja)');
             const orderAgg = new Map();
             for (const node of matNodes) {
                 const card = reqByNodeId[node.id] || null;
