@@ -488,7 +488,18 @@ export default function BudgetTable({
                                 <td className={TD}>
                                     <select
                                         value={row.type || ''}
-                                        onChange={e => { handleChange(row.id, 'type', e.target.value); onFieldChange(row, 'type', e.target.value); }}
+                                        onChange={e => {
+                                            const newType = e.target.value;
+                                            if (newType === 'group') {
+                                                const uc = parseFloat(row.unitCost);
+                                                if (uc && uc !== 0) {
+                                                    alert('Ten węzeł ma wartość w polu "Koszt jednostkowy" (' + Number(row.unitCost).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' PLN).\n\nUsuń ją przed zmianą na gałąź grupującą — inaczej wartość wejdzie do podsumowania oferty.');
+                                                    return;
+                                                }
+                                            }
+                                            handleChange(row.id, 'type', newType);
+                                            onFieldChange(row, 'type', newType);
+                                        }}
                                         onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
                                         onBlur={handleCellBlur}
                                         onKeyDown={e => handleKeyDown(e, row.id, 'type')}
