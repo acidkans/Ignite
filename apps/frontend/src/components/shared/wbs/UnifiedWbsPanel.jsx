@@ -180,6 +180,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const strategySaveTimeout = useRef(null);
     const offerLoadedRef = useRef(false);
     const offerSaveTimeout = useRef(null);
+    const fetchStrategyGenRef = useRef(0);
     const budgetImportFileInputRef = useRef(null);
     const reqDropTargetRef = useRef(null);
 
@@ -735,15 +736,17 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         strategyLoadedRef.current = false;
         offerLoadedRef.current = false;
         offerDateLoadedRef.current = false;
+        fetchStrategyGenRef.current += 1;
         setWbsDescription('');
         setOfferText('');
     }, [nodeId, versionId]);
 
     const fetchStrategy = useCallback(async () => {
+        const gen = fetchStrategyGenRef.current;
         try {
             const url = versionId ? `${API_URL}/order-requirements/${nodeId}?versionId=${versionId}` : `${API_URL}/order-requirements/${nodeId}`;
             const res = await fetch(url, { headers: { Authorization: `Bearer ${token()}` } });
-            if (res.ok) {
+            if (res.ok && gen === fetchStrategyGenRef.current) {
                 const text = await res.text();
                 const data = text ? JSON.parse(text) : null;
                 if (data && !strategyLoadedRef.current) {
@@ -3311,6 +3314,226 @@ ${ganttSectionHtml}
         // Arkusz "Harmonogram" (+ "Dni_wolne") — ta sama logika Gantta co
         // w samodzielnym eksporcie harmonogramu. Pomijany gdy brak danych.
         appendGanttSheet(workbook);
+
+        // ── Sheet "Założenia": tekst z zakładki Oferta, sformatowany Markdown → Excel ──
+        {
+            const sheet = workbook.addWorksheet('Założenia');
+            sheet.getColumn(1).width = 100;
+
+            const assNavyFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
+            const assH2Fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2D4A6E' } };
+            const assH3Fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF2F7' } };
+            const assAltFill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+            const assThFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B5A8A' } };
+
+            // **tekst** → ExcelJS richText
+            const parseRt = (text) => {
+                const parts = String(text || '').split(/(\*\*[^*]+\*\*)/g);
+                if (parts.length === 1) return null;
+                const rt = [];
+                for (let pi = 0; pi < parts.length; pi++) {
+                    const p = parts[pi]; if (!p) continue;
+                    rt.push(pi % 2 === 1 ? { text: p.slice(2, -2), font: { bold: true } } : { text: p });
+                }
+                const valid = rt.filter(r => r.text);
+                return valid.length ? valid : null;
+            };
+            const plain = (t) => String(t || '').replace(/\*\*/g, '');
+            const setVal = (cell, text) => {
+                const rt = parseRt(text);
+                cell.value = rt ? { richText: rt } : plain(text);
+            };
+
+            const offerLines = (getOfferText() || '').split('\n');
+            let li = 0;
+            while (li < offerLines.length) {
+                const raw = offerLines[li];
+                const trimmed = raw.trim();
+
+                if (/^\{tabela wbs[123]?\}$/i.test(trimmed)) { li++; continue; }
+
+                if (!trimmed) { sheet.addRow([]).height = 4; li++; continue; }
+
+                // Markdown table block
+                if (trimmed.startsWith('|')) {
+                    const block = [];
+                    while (li < offerLines.length && offerLines[li].trim().startsWith('|')) {
+                        block.push(offerLines[li].trim()); li++;
+                    }
+                    const isSepLine = (l) => /^\s*\|[\s\-:|]+\|\s*$/.test(l);
+                    const parseCols = (l) => l.slice(1, -1).split('|').map(c => c.trim());
+                    const dataRows = block.filter(l => !isSepLine(l));
+                    if (dataRows.length) {
+                        const colCount = Math.max(...dataRows.map(l => parseCols(l).length));
+                        for (let c = 2; c <= colCount; c++) {
+                            const col = sheet.getColumn(c);
+                            if (!col.width || col.width < 20) col.width = 28;
+                        }
+                        const sepIdx = block.findIndex(isSepLine);
+                        const headerCount = sepIdx > 0 ? sepIdx : 1;
+                        dataRows.forEach((line, ri) => {
+                            const cols = parseCols(line);
+                            while (cols.length < colCount) cols.push('');
+                            const row = sheet.addRow([]);
+                            const isHeader = ri < headerCount;
+                            cols.forEach((col, ci) => {
+                                const cell = row.getCell(ci + 1);
+                                setVal(cell, col);
+                                if (isHeader) {
+                                    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                                    cell.fill = assThFill;
+                                } else if ((ri - headerCount) % 2 === 0) {
+                                    cell.fill = assAltFill;
+                                }
+                                cell.border = cellBorder;
+                                cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
+                            });
+                            row.height = 18;
+                        });
+                        sheet.addRow([]).height = 4;
+                    }
+                    continue;
+                }
+
+                // H1
+                if (trimmed.startsWith('# ') && !trimmed.startsWith('## ')) {
+                    const row = sheet.addRow([]);
+                    const cell = row.getCell(1);
+                    cell.value = plain(trimmed.slice(2));
+                    cell.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+                    cell.fill = assNavyFill;
+                    cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
+                    row.height = 26;
+                    li++; continue;
+                }
+
+                // H2
+                if (trimmed.startsWith('## ') && !trimmed.startsWith('### ')) {
+                    const row = sheet.addRow([]);
+                    const cell = row.getCell(1);
+                    cell.value = plain(trimmed.slice(3));
+                    cell.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+                    cell.fill = assH2Fill;
+                    cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
+                    row.height = 22;
+                    li++; continue;
+                }
+
+                // H3
+                if (trimmed.startsWith('### ')) {
+                    const row = sheet.addRow([]);
+                    const cell = row.getCell(1);
+                    cell.value = plain(trimmed.slice(4));
+                    cell.font = { bold: true, size: 11, color: { argb: 'FF1E3A5F' } };
+                    cell.fill = assH3Fill;
+                    cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
+                    row.height = 20;
+                    li++; continue;
+                }
+
+                // Bullet list
+                const ulm = raw.match(/^(\s*)[-*] (.*)/);
+                if (ulm) {
+                    const indent = Math.floor(ulm[1].replace(/\t/g, '  ').length / 2);
+                    const row = sheet.addRow([]);
+                    const cell = row.getCell(1);
+                    const rt = parseRt(ulm[2]);
+                    const pfx = { text: '• ', font: { bold: true, color: { argb: 'FF1E3A5F' } } };
+                    cell.value = rt ? { richText: [pfx, ...rt] } : '• ' + plain(ulm[2]);
+                    cell.alignment = { wrapText: true, vertical: 'middle', indent: indent + 1 };
+                    row.height = 16;
+                    li++; continue;
+                }
+
+                // Numbered list
+                const olm = raw.match(/^(\s*)(\d+)\. (.*)/);
+                if (olm) {
+                    const indent = Math.floor(olm[1].replace(/\t/g, '  ').length / 2);
+                    const row = sheet.addRow([]);
+                    const cell = row.getCell(1);
+                    const rt = parseRt(olm[3]);
+                    const pfx = { text: olm[2] + '. ', font: { bold: true, color: { argb: 'FF1E3A5F' } } };
+                    cell.value = rt ? { richText: [pfx, ...rt] } : olm[2] + '. ' + plain(olm[3]);
+                    cell.alignment = { wrapText: true, vertical: 'middle', indent: indent + 1 };
+                    row.height = 16;
+                    li++; continue;
+                }
+
+                // Paragraph
+                {
+                    const row = sheet.addRow([]);
+                    const cell = row.getCell(1);
+                    setVal(cell, trimmed);
+                    cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
+                    row.height = Math.max(16, Math.ceil(trimmed.length / 90) * 15);
+                    li++;
+                }
+            }
+
+            if (!getOfferText()?.trim()) {
+                const row = sheet.addRow([]);
+                row.getCell(1).value = 'Brak treści oferty.';
+                row.getCell(1).font = { italic: true, color: { argb: 'FF888888' } };
+            }
+        }
+
+        // ── Sheet "Q&A": pytania i odpowiedzi ze struktury WBS ──
+        {
+            const sheet = workbook.addWorksheet('Q&A');
+            sheet.columns = [
+                { header: 'Ścieżka WBS', key: 'path', width: 42 },
+                { header: 'Pytanie', key: 'question', width: 52 },
+                { header: 'Odpowiedź', key: 'answer', width: 62 },
+            ];
+            const qaHdr = sheet.getRow(1);
+            qaHdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            qaHdr.fill = navyFill;
+            qaHdr.alignment = { vertical: 'middle', wrapText: true };
+            applyBorder(qaHdr, 3, cellBorder);
+            qaHdr.height = 20;
+
+            // DFS — identyczna kolejność jak w exportQaFormPdf
+            const qaByPar = new Map();
+            for (const n of wbsData) {
+                const pid = n.parentId || null;
+                if (!qaByPar.has(pid)) qaByPar.set(pid, []);
+                qaByPar.get(pid).push(n);
+            }
+            for (const ch of qaByPar.values()) ch.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+            const qaWalk = [];
+            const walkQ = (pid) => { for (const n of (qaByPar.get(pid) || [])) { qaWalk.push(n); walkQ(n.id); } };
+            walkQ(null);
+
+            const qaById = new Map(wbsData.map(n => [String(n.id), n]));
+            const getWbsPath = (node) => {
+                const segs = []; let cur = node;
+                while (cur) { segs.unshift(cur.name || ''); cur = cur.parentId ? qaById.get(String(cur.parentId)) : null; }
+                return segs.join(' / ');
+            };
+
+            const qaAltFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F4FF' } };
+            let qaIdx = 0;
+            for (const node of qaWalk) {
+                if (!Array.isArray(node.qa)) continue;
+                const pairs = node.qa.filter(p => (p?.question || '').trim());
+                if (!pairs.length) continue;
+                const path = getWbsPath(node);
+                for (const pair of pairs) {
+                    const row = sheet.addRow({ path, question: pair.question || '', answer: pair.answer || '' });
+                    row.alignment = { vertical: 'top', wrapText: true };
+                    if (qaIdx % 2 === 0) for (let ci = 1; ci <= 3; ci++) row.getCell(ci).fill = qaAltFill;
+                    applyBorder(row, 3, cellBorder);
+                    row.height = Math.max(20, Math.ceil(((pair.answer || '').length + 1) / 60) * 15);
+                    qaIdx++;
+                }
+            }
+            if (qaIdx === 0) {
+                const row = sheet.addRow({ path: 'Brak pytań Q&A w strukturze projektu.', question: '', answer: '' });
+                row.getCell(1).font = { italic: true, color: { argb: 'FF888888' } };
+            }
+            sheet.views = [{ state: 'frozen', ySplit: 1 }];
+            if (qaIdx > 0) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: qaIdx + 1, column: 3 } };
+        }
 
         const buf = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });

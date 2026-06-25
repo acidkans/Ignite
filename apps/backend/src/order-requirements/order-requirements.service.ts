@@ -212,8 +212,8 @@ export class OrderRequirementsService {
                             data: { nodeId: effectiveNodeId, versionId: vId, ...versionedTextUpdate },
                         });
                     }
-                } else if (wbsTreeField !== undefined) {
-                    // brak versionId → wbsTree leci do baseline (back-compat); wbsDescription/offerText też
+                } else {
+                    // brak versionId → wbsTree, wbsDescription i offerText lądują w baseline
                     await tx.orderRequirements.update({
                         where: { id: baselineRecord.id },
                         data: versionedTextUpdate,
