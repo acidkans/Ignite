@@ -2591,6 +2591,107 @@ ${ganttSectionHtml}
             if (hasLoose) cfSheet.getColumn(looseColIdx).width = 18;
         }
 
+        // ── Sheet Zamówienie (agregacja): logistyczna agregacja materiałów po nazwie+wymaganiach ──
+        {
+            const STATUS_LABELS_M = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
+            const TYPE_LABELS_M = { material: 'Materiał', equipment: 'Sprzęt' };
+            const upperFirst = (path) => { if (!path) return ''; const idx = path.indexOf(' › '); return idx < 0 ? path.toUpperCase() : path.slice(0, idx).toUpperCase() + path.slice(idx); };
+
+            const reqByNode = {};
+            for (const req of allRequirements) {
+                if (req.wbsNodeId) reqByNode[req.wbsNodeId] = req;
+                try { const alloc = JSON.parse(req.wbsNodeAllocations || '{}'); for (const nid of Object.keys(alloc)) { if (nid && !reqByNode[nid]) reqByNode[nid] = req; } } catch {}
+            }
+            for (const node of wbsData) {
+                if (reqByNode[node.id]) continue;
+                const reqTag = (node.tags || []).find(t => typeof t === 'string' && t.startsWith('req:'));
+                if (reqTag) { const req = allRequirements.find(r => r.id === reqTag.slice(4)); if (req) reqByNode[node.id] = req; }
+            }
+
+            const matNodesBudget = wbsData.filter(n => n.type === 'material' || n.type === 'equipment');
+            const orderAgg = new Map();
+            for (const node of matNodesBudget) {
+                const card = reqByNode[node.id] || null;
+                const name = (node.name || '').trim();
+                const tech = (card?.technicalSpec || '').trim();
+                const unit = (node.unit || 'szt').trim();
+                const type = TYPE_LABELS_M[node.type] || node.type || '';
+                if (!name && !tech) continue;
+                const aggKey = `${type}||${name.toLowerCase()}||${tech.toLowerCase()}||${unit.toLowerCase()}`;
+                const qty = Math.max(0, parseFloat(node.quantity) || 0);
+                const status = STATUS_LABELS_M[card?.status] || '';
+                const selectedProposal = (card?.proposals || []).find(p => p.isSelected);
+                const chosen = selectedProposal || card || null;
+                const product = [chosen?.manufacturer, chosen?.model].filter(Boolean).join(' / ');
+                const unitCost = parseFloat(node.unitCost) || 0;
+
+                if (!orderAgg.has(aggKey)) {
+                    orderAgg.set(aggKey, { type, name, tech, unit, qty: 0, positions: 0, paths: [], statuses: new Set(), products: new Set(), costSum: 0, costCount: 0 });
+                }
+                const aggRow = orderAgg.get(aggKey);
+                aggRow.qty += qty;
+                aggRow.positions += 1;
+                if (node.path) aggRow.paths.push(upperFirst(node.path));
+                if (status) aggRow.statuses.add(status);
+                if (product) aggRow.products.add(product);
+                if (unitCost > 0) { aggRow.costSum += unitCost * qty; aggRow.costCount += qty; }
+            }
+
+            const orderSheet = workbook.addWorksheet('Zamówienie (agregacja)');
+            orderSheet.columns = [
+                { header: 'Lp.', key: 'idx', width: 5 },
+                { header: 'Gdzie wykorzystywany', key: 'paths', width: 60 },
+                { header: 'Nazwa', key: 'name', width: 32 },
+                { header: 'Łączna ilość', key: 'qty', width: 14 },
+                { header: 'Jednostka', key: 'unit', width: 10 },
+                { header: 'Wymagania techniczne', key: 'tech', width: 48 },
+                { header: 'Liczba pozycji WBS', key: 'positions', width: 14 },
+                { header: 'Proponowany produkt', key: 'product', width: 28 },
+                { header: 'Średni koszt jedn.', key: 'cost', width: 16 },
+                { header: 'Szac. koszt netto', key: 'costTotal', width: 16 },
+                { header: 'Statusy', key: 'statuses', width: 28 },
+            ];
+            const orderHeader = orderSheet.getRow(1);
+            orderHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            orderHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
+
+            const aggSorted = [...orderAgg.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl', { numeric: true, sensitivity: 'base' }));
+            aggSorted.forEach((row, i) => {
+                const avgCost = row.costCount > 0 ? row.costSum / row.costCount : null;
+                const added = orderSheet.addRow({
+                    idx: i + 1,
+                    paths: row.paths.join('\n'),
+                    name: row.name,
+                    tech: row.tech,
+                    qty: row.qty,
+                    unit: row.unit,
+                    positions: row.positions,
+                    product: [...row.products].join('; '),
+                    cost: avgCost,
+                    costTotal: avgCost != null ? avgCost * row.qty : null,
+                    statuses: [...row.statuses].join(', '),
+                });
+                added.alignment = { vertical: 'top', wrapText: true };
+            });
+
+            if (aggSorted.length > 0) {
+                const lastAggRow = aggSorted.length + 1;
+                const totalsRow = orderSheet.addRow({
+                    name: 'Razem',
+                    qty: { formula: `=SUM(D2:D${lastAggRow})`, result: aggSorted.reduce((s, r) => s + r.qty, 0) },
+                    positions: { formula: `=SUM(G2:G${lastAggRow})`, result: aggSorted.reduce((s, r) => s + r.positions, 0) },
+                    costTotal: { formula: `=SUM(J2:J${lastAggRow})`, result: aggSorted.reduce((s, r) => s + (r.costCount > 0 ? (r.costSum / r.costCount) * r.qty : 0), 0) },
+                });
+                totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
+                orderSheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastAggRow, column: orderSheet.columnCount } };
+            }
+            orderSheet.getColumn('qty').numFmt = '#,##0.##';
+            orderSheet.getColumn('cost').numFmt = '#,##0.00';
+            orderSheet.getColumn('costTotal').numFmt = '#,##0.00';
+            orderSheet.views = [{ state: 'frozen', ySplit: 1 }];
+        }
+
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         return { blob, filename: `${safeProjectName}_budzet.xlsx` };
@@ -3117,6 +3218,94 @@ ${ganttSectionHtml}
                     to: { row: matLastDataRow, column: materialsSheet.columnCount },
                 };
             }
+
+            // ── Sheet Zamówienie (agregacja): agregacja logistyczna po nazwie+wymaganiach ──
+            const orderSheet = workbook.addWorksheet('Zamówienie (agregacja)');
+            const orderAgg = new Map();
+            for (const node of matNodes) {
+                const card = reqByNodeId[node.id] || null;
+                const name = (node.name || '').trim();
+                const tech = (card?.technicalSpec || '').trim();
+                const unit = (node.unit || 'szt').trim();
+                const type = TYPE_LABELS_XLS[node.type] || node.type || '';
+                if (!name && !tech) continue;
+                const aggKey = `${type}||${name.toLowerCase()}||${tech.toLowerCase()}||${unit.toLowerCase()}`;
+                const qty = Math.max(0, parseFloat(node.quantity) || 0);
+                const status = STATUS_LABELS_XLS[card?.status] || '';
+                const selectedProposal = (card?.proposals || []).find(p => p.isSelected);
+                const chosen = selectedProposal || card || null;
+                const product = [chosen?.manufacturer, chosen?.model].filter(Boolean).join(' / ');
+                const unitCost = parseFloat(node.unitCost) || 0;
+
+                if (!orderAgg.has(aggKey)) {
+                    orderAgg.set(aggKey, { type, name, tech, unit, qty: 0, positions: 0, paths: [], statuses: new Set(), products: new Set(), costSum: 0, costCount: 0, offerSum: 0 });
+                }
+                const aggRow = orderAgg.get(aggKey);
+                aggRow.qty += qty;
+                aggRow.positions += 1;
+                if (node.path) aggRow.paths.push(upperFirstSegment(node.path));
+                if (status) aggRow.statuses.add(status);
+                if (product) aggRow.products.add(product);
+                if (unitCost > 0) { aggRow.costSum += unitCost * qty; aggRow.costCount += qty; }
+                aggRow.offerSum += localPriceOf(node);
+            }
+
+            orderSheet.columns = [
+                { header: 'Lp.', key: 'idx', width: 5 },
+                { header: 'Gdzie wykorzystywany', key: 'paths', width: 60 },
+                { header: 'Nazwa', key: 'name', width: 32 },
+                { header: 'Łączna ilość', key: 'qty', width: 14 },
+                { header: 'Jednostka', key: 'unit', width: 10 },
+                { header: 'Wymagania techniczne', key: 'tech', width: 48 },
+                { header: 'Liczba pozycji WBS', key: 'positions', width: 14 },
+                { header: 'Proponowany produkt', key: 'product', width: 28 },
+                { header: 'Średni koszt jedn.', key: 'cost', width: 16 },
+                { header: 'Szac. koszt netto', key: 'costTotal', width: 16 },
+                { header: 'Cena ofertowa łącznie', key: 'offerTotal', width: 20 },
+                { header: 'Statusy', key: 'statuses', width: 28 },
+            ];
+            const orderHeader = orderSheet.getRow(1);
+            orderHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            orderHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
+
+            const aggSorted = [...orderAgg.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl', { numeric: true, sensitivity: 'base' }));
+            aggSorted.forEach((row, i) => {
+                const avgCost = row.costCount > 0 ? row.costSum / row.costCount : null;
+                const added = orderSheet.addRow({
+                    idx: i + 1,
+                    paths: row.paths.join('\n'),
+                    name: row.name,
+                    tech: row.tech,
+                    qty: row.qty,
+                    unit: row.unit,
+                    positions: row.positions,
+                    product: [...row.products].join('; '),
+                    cost: avgCost,
+                    costTotal: avgCost != null ? avgCost * row.qty : null,
+                    offerTotal: row.offerSum,
+                    statuses: [...row.statuses].join(', '),
+                });
+                added.alignment = { vertical: 'top', wrapText: true };
+            });
+
+            if (aggSorted.length > 0) {
+                const lastAggDataRow = aggSorted.length + 1;
+                const totalsRow = orderSheet.addRow({
+                    name: 'Razem',
+                    qty: { formula: `=SUM(D2:D${lastAggDataRow})`, result: aggSorted.reduce((s, r) => s + r.qty, 0) },
+                    positions: { formula: `=SUM(G2:G${lastAggDataRow})`, result: aggSorted.reduce((s, r) => s + r.positions, 0) },
+                    costTotal: { formula: `=SUM(J2:J${lastAggDataRow})`, result: aggSorted.reduce((s, r) => s + (r.costCount > 0 ? (r.costSum / r.costCount) * r.qty : 0), 0) },
+                    offerTotal: { formula: `=SUM(K2:K${lastAggDataRow})`, result: aggSorted.reduce((s, r) => s + r.offerSum, 0) },
+                });
+                totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
+                orderSheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastAggDataRow, column: orderSheet.columnCount } };
+            }
+            orderSheet.getColumn('qty').numFmt = '#,##0.##';
+            orderSheet.getColumn('cost').numFmt = numFmt;
+            orderSheet.getColumn('costTotal').numFmt = numFmt;
+            orderSheet.getColumn('offerTotal').numFmt = numFmt;
+            orderSheet.views = [{ state: 'frozen', ySplit: 1 }];
         }
 
         // Arkusz "Harmonogram" (+ "Dni_wolne") — ta sama logika Gantta co
