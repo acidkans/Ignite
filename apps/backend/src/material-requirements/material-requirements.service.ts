@@ -379,7 +379,9 @@ export class MaterialRequirementsService {
         wbsNodeId?: string;
     }) {
         const { wbsNodeId, ...prismaData } = dto;
-        const created = await this.prisma.materialRequirement.create({ data: { ...prismaData, wbsNodeId: wbsNodeId ?? null } });
+        // Spójność z findAllByNode: resolveVersionId żeby null → aktywna wersja węzła
+        const resolvedVersionId = await resolveVersionId(this.prisma, dto.nodeId, dto.versionId);
+        const created = await this.prisma.materialRequirement.create({ data: { ...prismaData, versionId: resolvedVersionId, wbsNodeId: wbsNodeId ?? null } });
         // WbsNodeMaterial.materialId teraz → materials.id (nie material_requirements.id)
         // Auto-tworzenie pominięte — WbsNodeMaterial powstaje przy selectProposal()
         return created;
