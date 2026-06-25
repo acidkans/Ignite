@@ -360,7 +360,7 @@ export class MaterialRequirementsService {
             priceNetto: item.budgetedPriceNetto ?? null,
             productUrl: item.material?.productUrl ?? null,
             seller: item.material?.seller ?? null,
-            availability: null as string | null,
+            availability: item.proposals?.find((p: any) => p.isSelected)?.availability ?? item.availability ?? null,
             stockStatus: null as number | null,
         };
     }
@@ -444,6 +444,8 @@ export class MaterialRequirementsService {
             dataSheetUrl, dataSheetName, complianceUrl, complianceName, availability,
             priceNetto, ...rest } = dto as any;
         const data: any = { ...rest };
+        // Zapisz availability bezpośrednio na wymaganiu (niezależnie od propozycji)
+        if (availability !== undefined) data.availability = availability;
         if (priceNetto !== undefined) data.budgetedPriceNetto = priceNetto;
 
         // Krok 7b: gdy manufacturer I model są podane → auto-upsert Material + twórz wybraną propozycję

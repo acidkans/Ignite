@@ -4,6 +4,19 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-06-25 — fix(productcard): availability persists + Wybierz odświeża pola
+
+### schema.prisma
+- dodano pole `availabilityString?` w modelu `MaterialRequirement` — dostępność wpisana w ProductCard zapisywana bezpośrednio na wymaganiu (niezależnie od propozycji)
+
+### słownik
+- dodano `mat-req-availability` — `MaterialRequirement.availability`, schema.prisma
+
+### wytyczne
+- `schema-pole` `MaterialRequirement.availability` — pole transient (czas dostawy), nie jest kopią z `Material`; zapisywane bezpośrednio na wymaganiu (a nie tylko na wybranej propozycji), żeby przetrwać brak zaznaczonej propozycji
+
+---
+
 ## 2026-06-16 — feat(mail): konfiguracja SMTP w panelu + eksporty „wyślij mailem / pobierz" z podpowiedziami adresów
 
 ### schema.prisma

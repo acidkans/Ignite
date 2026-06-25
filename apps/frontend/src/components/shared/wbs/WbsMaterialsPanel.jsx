@@ -519,10 +519,9 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
             priceNetto: card?.priceNetto ? String(card.priceNetto) : '',
             productUrl: card?.productUrl || '',
         });
-    // Zresetuj formularz tylko przy zmianie karty (nowe id).
-    // Nie reaguj na zmiany pojedynczych pól — każdy blur sam wywołuje patchCard,
-    // a reset po onRefresh kasował niezapisane wartości innych pól.
-    }, [card?.id]);
+    // Zresetuj formularz przy zmianie karty (nowe id) LUB gdy materialId się zmieni
+    // (kliknięcie "Wybierz" na propozycji — pola producent/model/produktName powinny się zaktualizować).
+    }, [card?.id, card?.materialId]);
 
     // Pobierz obrazek z auth nagłówkiem i stwórz blob URL (img src nie może wysłać Authorization)
     useEffect(() => {

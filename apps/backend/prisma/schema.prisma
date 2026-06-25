@@ -761,6 +761,10 @@ model MaterialRequirement {
   /// @anchor mat-req-compliance-data
   complianceData String?
 
+  // Dostępność / czas dostawy (transient — nie w katalogu materials)
+  /// @anchor mat-req-availability
+  availability String? // dostępność wpisana w ProductCard (czas dostawy / stan)
+
   // Budżet wymagania (niezależny od ceny referencyjnej w materials)
   /// @anchor mat-req-budgeted-price-netto
   budgetedPriceNetto Float? // zabudżetowana cena netto za sztukę (do kalkulacji kosztów WBS)
