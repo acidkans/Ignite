@@ -2017,7 +2017,7 @@ ${ganttSectionHtml}
                     const computeSummaryFromItems = (items) => {
                         const leaves = (items || []).filter(it => {
                             const t = String(it.type || '').toLowerCase();
-                            return t !== '' && t !== 'group';
+                            return t !== 'group';
                         });
                         let totalCost = 0, totalRevenue = 0;
                         for (const it of leaves) {
