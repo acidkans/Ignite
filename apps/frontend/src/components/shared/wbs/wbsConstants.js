@@ -106,13 +106,34 @@ export const UNIT_OPTIONS = [
 // Znaki spoza tego zbioru oraz kolejne separatory są odrzucane — UI pokazuje
 // ostrzeżenie "tylko cyfry", a wartość nigdy nie jest podmieniana na domyślną.
 export function sanitizeQtyInput(raw) {
+  const s = String(raw);
+  if (s.startsWith('=')) {
+    // formuła — przepuść znaki matematyczne, zapobiegnij injectionowi
+    return '=' + s.slice(1).replace(/[^0-9+\-*/.(), ]/g, '');
+  }
   let seenSep = false;
   let out = '';
-  for (const ch of String(raw)) {
+  for (const ch of s) {
     if (ch >= '0' && ch <= '9') { out += ch; continue; }
     if ((ch === '.' || ch === ',') && !seenSep) { seenSep = true; out += ch; }
   }
   return out;
+}
+
+// @anchor eval-qty-formula
+export function evalQtyFormula(raw) {
+  const s = String(raw).trim();
+  if (!s.startsWith('=')) return null;
+  const expr = s.slice(1).replace(/,/g, '.').replace(/[^0-9+\-*/.() ]/g, '');
+  if (!expr.trim()) return null;
+  try {
+    // eslint-disable-next-line no-new-func
+    const result = Function('"use strict"; return (' + expr + ')')();
+    if (typeof result !== 'number' || !Number.isFinite(result)) return null;
+    return parseFloat(result.toFixed(10).replace(/\.?0+$/, ''));
+  } catch {
+    return null;
+  }
 }
 
 // @anchor default-unit-for-type

@@ -249,7 +249,7 @@ function QaBranchModal({ node, onClose }) {
     );
 }
 
-import { UNIT_OPTIONS, sanitizeQtyInput } from './wbsConstants';
+import { UNIT_OPTIONS, sanitizeQtyInput, evalQtyFormula } from './wbsConstants';
 import { ProductCard } from './WbsMaterialsPanel';
 
 const API_URL = '/api';
@@ -1373,9 +1373,20 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 }}
                                 onFocus={e => { setQtyFocusId(node.id); if (!parseFloat(String(node.quantity).replace(',', '.'))) handleField(node.id, 'quantity', ''); e.target.select(); }}
                                 onMouseUp={e => e.target.select()}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        const all = Array.from(document.querySelectorAll('input:not([disabled]):not([readonly]), select:not([disabled]), textarea:not([disabled]):not([readonly])'));
+                                        const idx = all.indexOf(e.target);
+                                        if (idx >= 0 && all[idx + 1]) all[idx + 1].focus();
+                                        else e.target.blur();
+                                    }
+                                }}
                                 onBlur={e => {
                                     setQtyFocusId(null);
-                                    const n = parseFloat(String(e.target.value).replace(',', '.'));
+                                    const raw = String(e.target.value);
+                                    const evaluated = evalQtyFormula(raw);
+                                    const n = evaluated !== null ? evaluated : parseFloat(raw.replace(',', '.'));
                                     const clean = Number.isFinite(n) && n >= 0 ? String(n) : '0';
                                     handleField(node.id, 'quantity', clean);
                                     onRequirementsQtyChange?.(node.id, clean, node.name);
