@@ -2924,10 +2924,10 @@ ${ganttSectionHtml}
                 applyBorder(r, 3, cellBorder);
             }
             const lastDataRow = sheet.rowCount;
-            // Razem = suma wszystkich wycenionych węzłów (od korzenia),
-            // spójnie z zakładką Podsumowanie — obejmuje też węzły poza gałęziami grupującymi.
-            const rootNode = wbsData.find(n => !n.parentId);
-            const total = rootNode ? subtreeOfferTotal(rootNode.id) : 0;
+            // Razem: identyczny flat-sum co w zakładce Podsumowanie —
+            // iteruje wbsData wprost, bez traversalu drzewa, żeby węzły-sieroty
+            // i węzły poza gałęziami grupującymi były liczone tak samo w obu miejscach.
+            const total = wbsData.reduce((s, item) => (!item.parentId ? s : s + localPriceOf(item)), 0);
             const sumRow = sheet.addRow(['Razem', '', total]);
             sumRow.font = { bold: true };
             sumRow.fill = sumFill;
