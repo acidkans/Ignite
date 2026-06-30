@@ -67,6 +67,46 @@ export class UserTasksService {
     });
   }
 
+  // @anchor user-tasks-due-reminders
+  // Alerty wymagające wyświetlenia — remindAt <= teraz, sentAt=null, zadanie OPEN
+  async getDueReminders(userId: string) {
+    return this.prisma.taskReminder.findMany({
+      where: {
+        userId,
+        remindAt: { lte: new Date() },
+        sentAt: null,
+        userTask: { status: 'OPEN', deletedAt: null },
+      },
+      include: { userTask: { select: { id: true, title: true, plannedEnd: true } } },
+      orderBy: { remindAt: 'asc' },
+    });
+  }
+
+  // @anchor user-tasks-handle-reminder
+  // action='dismiss' → sentAt=now; action='snooze' → nowy remindAt, snoozedFrom=stary remindAt
+  async handleReminder(userId: string, reminderId: string, action: 'dismiss' | 'snooze', minutes?: number) {
+    const reminder = await this.prisma.taskReminder.findFirst({
+      where: { id: reminderId, userId },
+    });
+    if (!reminder) return;
+
+    if (action === 'dismiss') {
+      await this.prisma.taskReminder.update({
+        where: { id: reminderId },
+        data: { sentAt: new Date() },
+      });
+    } else if (action === 'snooze' && minutes) {
+      await this.prisma.taskReminder.update({
+        where: { id: reminderId },
+        data: {
+          snoozedFrom: reminder.remindAt,
+          remindAt: new Date(Date.now() + minutes * 60000),
+          sentAt: null,
+        },
+      });
+    }
+  }
+
   // @anchor user-tasks-trash-cleanup
   // Usuwa fizycznie zadania przebywające w koszu dłużej niż retentionDays dni.
   async cleanupTrash(retentionDays: number): Promise<number> {

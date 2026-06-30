@@ -11,6 +11,7 @@ import OffersTab from './components/shared/OffersTab';
 import UnifiedWbsPanel from './components/shared/wbs/UnifiedWbsPanel';
 import CommentsSlideOver from './components/shared/CommentsSlideOver';
 import MyTasksModal from './components/shared/MyTasksModal';
+import TaskReminderToast from './components/shared/TaskReminderToast';
 import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink } from 'lucide-react';
 import { API_URL } from './config';
 import { APP_VERSION } from './version';
@@ -118,6 +119,22 @@ export default function DashboardPage() {
 
     // @anchor dashboard-my-tasks-open
     const [myTasksOpen, setMyTasksOpen] = useState(false);
+
+    // @anchor dashboard-due-reminders
+    const [dueReminders, setDueReminders] = useState([]);
+    useEffect(() => {
+        const fetchDue = () => {
+            const token = sessionStorage.getItem('token');
+            if (!token) return;
+            fetch(`${API_URL}/my-tasks/reminders/due`, { headers: { Authorization: `Bearer ${token}` } })
+                .then(r => r.ok ? r.json() : [])
+                .then(data => setDueReminders(Array.isArray(data) ? data : []))
+                .catch(() => {});
+        };
+        fetchDue();
+        const interval = setInterval(fetchDue, 60000);
+        return () => clearInterval(interval);
+    }, []);
 
     // Sprawdź typ aktywnego węzła
     const activeNode = useMemo(() => findNodeById(menuTree, activeAreaId), [menuTree, activeAreaId]);
@@ -893,6 +910,12 @@ export default function DashboardPage() {
 
         {/* Modal zadań osobistych — otwarty kliknięciem kalendarza w headerze */}
         <MyTasksModal open={myTasksOpen} onClose={() => setMyTasksOpen(false)} />
+
+        {/* Toast alarmu — po lewej pod ikoną kalendarza */}
+        <TaskReminderToast
+            reminders={dueReminders}
+            onDismissed={id => setDueReminders(prev => prev.filter(r => r.id !== id))}
+        />
         </>
     );
 }

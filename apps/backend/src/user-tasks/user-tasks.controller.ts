@@ -35,4 +35,20 @@ export class UserTasksController {
   softDelete(@Req() req: any, @Param('id') id: string) {
     return this.userTasks.softDelete(req.user.userId, id);
   }
+
+  // @anchor user-tasks-reminders-due-endpoint
+  @Get('reminders/due')
+  getDueReminders(@Req() req: any) {
+    return this.userTasks.getDueReminders(req.user.userId);
+  }
+
+  // @anchor user-tasks-reminder-handle-endpoint
+  @Patch('reminders/:reminderId')
+  handleReminder(
+    @Req() req: any,
+    @Param('reminderId') reminderId: string,
+    @Body() body: { action: 'dismiss' | 'snooze'; minutes?: number },
+  ) {
+    return this.userTasks.handleReminder(req.user.userId, reminderId, body.action, body.minutes);
+  }
 }

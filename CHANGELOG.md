@@ -4,6 +4,20 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-06-30 — feat(ui): TaskReminderToast + endpointy alertów (Etap 7) (v2026.06.30.626)
+
+### architektura / API
+- dodano `back-endpoint` `GET /my-tasks/reminders/due` — alerty z `remindAt <= now` i `sentAt=null` dla usera
+- dodano `back-endpoint` `PATCH /my-tasks/reminders/:id` — action: dismiss (sentAt=now) lub snooze (nowy remindAt, snoozedFrom=stary)
+- dodano `ui-modal` `TaskReminderToast` (`apps/frontend/src/components/shared/TaskReminderToast.jsx`) — toast po lewej pod ikoną kalendarza; snooze 10/30/60 min lub dismiss
+- dodano `ui-stan` `dashboard-due-reminders` w `DashboardPage` — polling co 60s, usuwanie po dismiss
+
+### wytyczne
+- `back-endpoint` `GET /my-tasks/reminders/due` — filtr: `userTask.status=OPEN`, `deletedAt=null`; nie zwraca przypomnień dla usuniętych zadań
+- `ui-modal` `TaskReminderToast` — wyświetla tylko pierwsze przypomnienie z listy; reszta sygnalizowana licznikiem (+N); użytkownik rozpatruje po kolei
+
+---
+
 ## 2026-06-30 — feat(ui): MyTasksModal — modal zadań osobistych kliknięciem kalendarza (Etap 6) (v2026.06.30.625)
 
 ### architektura / API

@@ -647,6 +647,18 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | pendingExport (DocSidebar) | apps/frontend/src/components/Documentation/DocumentationSidebar.jsx | @anchor doc-sidebar-pending-export |
 | ui-funkcja | buildDownloadArtifact | apps/frontend/src/utils/downloadPdfWithHighlights.js | @anchor build-download-artifact |
 
+### TaskReminderToast + alerty (Etap 7)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-modal | TaskReminderToast | apps/frontend/src/components/shared/TaskReminderToast.jsx | @anchor task-reminder-toast |
+| ui-funkcja | TaskReminderToast.handleAction | apps/frontend/src/components/shared/TaskReminderToast.jsx | @anchor task-reminder-toast-action |
+| ui-stan | dashboard-due-reminders | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-due-reminders |
+| back-endpoint | GET /my-tasks/reminders/due | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-reminders-due-endpoint |
+| back-endpoint | PATCH /my-tasks/reminders/:id | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-reminder-handle-endpoint |
+| back-funkcja | UserTasksService.getDueReminders | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-due-reminders |
+| back-funkcja | UserTasksService.handleReminder | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-handle-reminder |
+
 ### MyTasksModal — frontend (Etap 6)
 
 | Tag | Nazwa | Plik | Anchor |
