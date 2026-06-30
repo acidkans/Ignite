@@ -647,6 +647,39 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | pendingExport (DocSidebar) | apps/frontend/src/components/Documentation/DocumentationSidebar.jsx | @anchor doc-sidebar-pending-export |
 | ui-funkcja | buildDownloadArtifact | apps/frontend/src/utils/downloadPdfWithHighlights.js | @anchor build-download-artifact |
 
+### Moduł UserTask — zadania osobiste
+
+#### Schema (Prisma — `apps/backend/prisma/schema.prisma`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| schema-model | UserTask | apps/backend/prisma/schema.prisma | @anchor user-task |
+| schema-pole | UserTask.id | apps/backend/prisma/schema.prisma | @anchor user-task-id |
+| schema-pole | UserTask.userId | apps/backend/prisma/schema.prisma | @anchor user-task-user-id |
+| schema-pole | UserTask.nodeId | apps/backend/prisma/schema.prisma | @anchor user-task-node-id |
+| schema-pole | UserTask.title | apps/backend/prisma/schema.prisma | @anchor user-task-title |
+| schema-pole | UserTask.status | apps/backend/prisma/schema.prisma | @anchor user-task-status |
+| schema-pole | UserTask.plannedStart | apps/backend/prisma/schema.prisma | @anchor user-task-planned-start |
+| schema-pole | UserTask.plannedEnd | apps/backend/prisma/schema.prisma | @anchor user-task-planned-end |
+| schema-pole | UserTask.msToDoId | apps/backend/prisma/schema.prisma | @anchor user-task-ms-todo-id |
+| schema-pole | UserTask.msListName | apps/backend/prisma/schema.prisma | @anchor user-task-ms-list-name |
+| schema-pole | UserTask.msEtag | apps/backend/prisma/schema.prisma | @anchor user-task-ms-etag |
+| schema-pole | UserTask.source | apps/backend/prisma/schema.prisma | @anchor user-task-source |
+| schema-pole | UserTask.deletedAt | apps/backend/prisma/schema.prisma | @anchor user-task-deleted-at |
+| schema-relacja | UserTask.user | apps/backend/prisma/schema.prisma | @anchor user-task-user |
+| schema-relacja | UserTask.node | apps/backend/prisma/schema.prisma | @anchor user-task-node |
+| schema-relacja | UserTask.reminders | apps/backend/prisma/schema.prisma | @anchor user-task-reminders |
+| schema-model | TaskReminder | apps/backend/prisma/schema.prisma | @anchor task-reminder |
+| schema-pole | TaskReminder.userTaskId | apps/backend/prisma/schema.prisma | @anchor task-reminder-user-task-id |
+| schema-pole | TaskReminder.userId | apps/backend/prisma/schema.prisma | @anchor task-reminder-user-id |
+| schema-pole | TaskReminder.remindAt | apps/backend/prisma/schema.prisma | @anchor task-reminder-remind-at |
+| schema-pole | TaskReminder.sentAt | apps/backend/prisma/schema.prisma | @anchor task-reminder-sent-at |
+| schema-pole | TaskReminder.snoozedFrom | apps/backend/prisma/schema.prisma | @anchor task-reminder-snoozed-from |
+| schema-model | MsTodoSyncState | apps/backend/prisma/schema.prisma | @anchor ms-todo-sync-state |
+| schema-pole | MsTodoSyncState.deltaLink | apps/backend/prisma/schema.prisma | @anchor ms-todo-sync-state-delta-link |
+| schema-pole | MsTodoSyncState.lastSyncAt | apps/backend/prisma/schema.prisma | @anchor ms-todo-sync-state-last-sync-at |
+| schema-pole | ProcessNode.taskListSlug | apps/backend/prisma/schema.prisma | @anchor process-node-task-list-slug |
+
 ### Moduł NotificationSettings
 
 #### Schema (Prisma — `apps/backend/prisma/schema.prisma`)

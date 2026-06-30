@@ -34,6 +34,8 @@ model User {
   pushSubscriptions PushSubscription[]
   notifications     Notification[]
   msToken           UserMsToken?
+  userTasks         UserTask[]
+  msTodoSyncState   MsTodoSyncState?
 
   @@map("users")
 }
@@ -185,6 +187,8 @@ model ProcessNode {
   oneDriveFolderName        String?
   oneDriveFinanseId         String?
   oneDriveDocumentacjaId    String?
+  /// @anchor process-node-task-list-slug
+  taskListSlug              String?  @unique
   budgetItems               BudgetLineItem[]
   hardware                  Hardware[]
   permissions               NodePermission[]           @relation("NodeACL")
@@ -204,6 +208,7 @@ model ProcessNode {
   wbsNodes                  WbsNode[]
   materialRequirementsLists MaterialRequirementsList[]
   documentHighlights        DocumentHighlight[]
+  userTasks                 UserTask[]
 
   @@map("process_nodes")
 }
@@ -992,4 +997,100 @@ model SystemNotificationSettings {
   updatedAt                 DateTime @updatedAt
 
   @@map("system_notification_settings")
+}
+
+/// @anchor user-task
+/// Zadanie osobiste usera — synchronizowane dwukierunkowo z MS To Do / Samsung Reminder.
+model UserTask {
+  /// @anchor user-task-id
+  id             String         @id @default(uuid())
+  /// @anchor user-task-user-id
+  userId         String
+  /// @anchor user-task-node-id
+  nodeId         String?
+  /// @anchor user-task-version-id
+  versionId      String?
+  /// @anchor user-task-title
+  title          String
+  /// @anchor user-task-description
+  description    String?
+  /// @anchor user-task-status
+  status         String         @default("OPEN")
+  /// @anchor user-task-planned-start
+  plannedStart   DateTime?
+  /// @anchor user-task-planned-end
+  plannedEnd     DateTime?
+  /// @anchor user-task-ms-todo-id
+  msToDoId       String?        @unique
+  /// @anchor user-task-ms-list-id
+  msListId       String?
+  /// @anchor user-task-ms-list-name
+  msListName     String?
+  /// @anchor user-task-ms-etag
+  msEtag         String?
+  /// @anchor user-task-ms-last-modified
+  msLastModified DateTime?
+  /// @anchor user-task-source
+  source         String         @default("IGNITE")
+  /// @anchor user-task-deleted-at
+  deletedAt      DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  /// @anchor user-task-user
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// @anchor user-task-node
+  node      ProcessNode?  @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+  /// @anchor user-task-reminders
+  reminders TaskReminder[]
+
+  @@index([userId, deletedAt])
+  @@index([userId, nodeId])
+  @@index([msToDoId])
+  @@map("user_tasks")
+}
+
+/// @anchor task-reminder
+/// Alarm do zadania osobistego — per user, obsługuje snooze i Web Push.
+model TaskReminder {
+  /// @anchor task-reminder-id
+  id          String    @id @default(uuid())
+  /// @anchor task-reminder-user-task-id
+  userTaskId  String
+  /// @anchor task-reminder-user-id
+  userId      String
+  /// @anchor task-reminder-remind-at
+  remindAt    DateTime
+  /// @anchor task-reminder-sent-at
+  sentAt      DateTime?
+  /// @anchor task-reminder-snoozed-from
+  snoozedFrom DateTime?
+  createdAt   DateTime  @default(now())
+
+  /// @anchor task-reminder-user-task
+  userTask UserTask @relation(fields: [userTaskId], references: [id], onDelete: Cascade)
+
+  @@index([remindAt, sentAt])
+  @@index([userId])
+  @@map("task_reminders")
+}
+
+/// @anchor ms-todo-sync-state
+/// Stan synchronizacji MS To Do per user — deltaLink do inkrementalnego pobierania zmian.
+model MsTodoSyncState {
+  /// @anchor ms-todo-sync-state-user-id
+  userId              String    @id
+  /// @anchor ms-todo-sync-state-delta-link
+  deltaLink           String?
+  /// @anchor ms-todo-sync-state-started-at
+  msTodoSyncStartedAt DateTime?
+  /// @anchor ms-todo-sync-state-last-sync-at
+  lastSyncAt          DateTime?
+  /// @anchor ms-todo-sync-state-last-sync-error
+  lastSyncError       String?
+
+  /// @anchor ms-todo-sync-state-user
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ms_todo_sync_state")
 }

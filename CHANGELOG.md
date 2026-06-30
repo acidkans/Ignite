@@ -4,6 +4,23 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-06-30 — feat(tasks): schema zadań osobistych — UserTask, TaskReminder, MsTodoSyncState, taskListSlug (v2026.06.30.622)
+
+### schema.prisma
+- dodano model `UserTask` — zadanie osobiste usera (sync MS To Do); pola: `userId`, `nodeId?`, `title`, `status` (OPEN/DONE), `plannedStart?`, `plannedEnd?`, `msToDoId?` (unique), `msListId?`, `msListName?`, `msEtag?`, `msLastModified?`, `source` (IGNITE/MS_TODO), `deletedAt?` (soft delete)
+- dodano model `TaskReminder` — alarm do zadania: `userTaskId` (FK cascade), `userId`, `remindAt`, `sentAt?`, `snoozedFrom?`
+- dodano model `MsTodoSyncState` — stan sync per user: `deltaLink?`, `msTodoSyncStartedAt?`, `lastSyncAt?`, `lastSyncError?`
+- dodano pole `schema-pole` `ProcessNode.taskListSlug String? @unique` — slug do auto-pinningu zadań z MS To Do
+- dodano relacje `User.userTasks[]`, `User.msTodoSyncState?`
+
+### wytyczne
+- `schema-pole` `ProcessNode.taskListSlug` — globalnie unikalne (nullable = wiele NULLi OK); edycja per-węzeł w panelu węzła (Etap 8); auto-pinning: hashtag w tytule zadania `#slug` > nazwa listy MS To Do slugified
+- `schema-pole` `UserTask.source` — wartości: `IGNITE` (utworzone w Ignite) lub `MS_TODO` (zaimportowane z Graph)
+- `schema-model` `TaskReminder.userId` — denormalizowane pole (brak FK do `users`), tylko do szybkiego query crona bez joinów
+- `schema-model` `UserTask.deletedAt` — soft delete; kosz 30 dni czyszczony przez cron (retencja z `SystemNotificationSettings.trashRetentionDays`)
+
+---
+
 ## 2026-06-30 — feat(notifications): backend ustawień powiadomień — SystemNotificationSettings + moduł NestJS (v2026.06.30.621)
 
 ### schema.prisma
