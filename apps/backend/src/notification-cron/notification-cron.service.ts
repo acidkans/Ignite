@@ -63,7 +63,10 @@ export class NotificationCronService {
     for (const reminder of due) {
       const { title, userId } = reminder.userTask;
       try {
-        await this.push.sendToUser(userId, '🔔 Przypomnienie', title);
+        await this.push.sendToUser(userId, '🔔 Przypomnienie', title, undefined, {
+          type: 'REMINDER',
+          reminderId: reminder.id,
+        });
         await this.prisma.taskReminder.update({
           where: { id: reminder.id },
           data: { sentAt: new Date() },

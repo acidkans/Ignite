@@ -133,7 +133,10 @@ export default function DashboardPage() {
         };
         fetchDue();
         const interval = setInterval(fetchDue, 60000);
-        return () => clearInterval(interval);
+        // SW deleguje akcje snooze/dismiss przez App.jsx → CustomEvent
+        const onHandled = (e) => setDueReminders(prev => prev.filter(r => r.id !== e.detail.reminderId));
+        window.addEventListener('reminder-handled', onHandled);
+        return () => { clearInterval(interval); window.removeEventListener('reminder-handled', onHandled); };
     }, []);
 
     // Sprawdź typ aktywnego węzła

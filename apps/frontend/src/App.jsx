@@ -143,11 +143,25 @@ function App() {
   }, [token]);
 
   // Nawigacja z powiadomienia push (kliknięcie gdy aplikacja otwarta)
+  // Obsługa akcji snooze/dismiss z powiadomień REMINDER (service worker deleguje do okna)
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
+    // @anchor app-sw-message-handler
     const handler = (event) => {
-      if (event.data?.type === 'NAVIGATE_TO_ORDER' && event.data.orderId) {
-        window.dispatchEvent(new CustomEvent('push-navigate-order', { detail: { orderId: event.data.orderId } }));
+      const { type, orderId, reminderId, minutes } = event.data || {};
+      if (type === 'NAVIGATE_TO_ORDER' && orderId) {
+        window.dispatchEvent(new CustomEvent('push-navigate-order', { detail: { orderId } }));
+      }
+      if ((type === 'SNOOZE_REMINDER' || type === 'DISMISS_REMINDER') && reminderId) {
+        const token = sessionStorage.getItem('token');
+        const action = type === 'SNOOZE_REMINDER' ? 'snooze' : 'dismiss';
+        fetch(`${import.meta.env.VITE_API_URL || ''}/api/my-tasks/reminders/${reminderId}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, minutes }),
+        }).catch(() => {});
+        // Usuń z lokalnego stanu — DashboardPage usłyszy przez REMINDER_DUE lub polling
+        window.dispatchEvent(new CustomEvent('reminder-handled', { detail: { reminderId } }));
       }
     };
     navigator.serviceWorker.addEventListener('message', handler);

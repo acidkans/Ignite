@@ -4,6 +4,21 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-06-30 — feat(sw): Web Push REMINDER — action buttons snooze, SW delegate do okna (Etap 9) (v2026.06.30.628)
+
+### architektura / API
+- rozszerzono `back-funkcja` `PushService.sendToUser` o `extra?: Record<string, any>` — dodatkowe pola w payload JSON (używane dla `type: 'REMINDER'`, `reminderId`)
+- `NotificationCronService.dispatchReminders` teraz przesyła `{ type: 'REMINDER', reminderId }` w payloadzie push
+- `apps/frontend/src/sw.js` — `push` handler: REMINDER pokazuje 3 action buttons (snooze-10, snooze-30, dismiss); `notificationclick` deleguje akcję do okna przez `postMessage`
+- `App.jsx` — listener SW `SNOOZE_REMINDER` / `DISMISS_REMINDER` → PATCH `/my-tasks/reminders/:id` + emit `reminder-handled` CustomEvent
+- `DashboardPage` — listener `reminder-handled` usuwa reminder z lokalnego stanu toast
+
+### wytyczne
+- `back-serwis` `PushService.sendToUser` — parametr `extra` mergowany bezpośrednio do JSON payload; kolizja kluczy z `title`/`body`/`orderId` jest cichym nadpisaniem — używaj tylko unikalnych kluczy (`type`, `reminderId`)
+- SW nie ma dostępu do JWT — akcje snooze/dismiss delegowane przez `postMessage` do okna aplikacji (App.jsx) które ma token w sessionStorage
+
+---
+
 ## 2026-06-30 — feat(ui): taskListSlug w NodeInfoTab — auto-slugify + walidacja unikalności (Etap 8) (v2026.06.30.627)
 
 ### architektura / API

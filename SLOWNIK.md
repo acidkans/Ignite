@@ -647,6 +647,15 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | pendingExport (DocSidebar) | apps/frontend/src/components/Documentation/DocumentationSidebar.jsx | @anchor doc-sidebar-pending-export |
 | ui-funkcja | buildDownloadArtifact | apps/frontend/src/utils/downloadPdfWithHighlights.js | @anchor build-download-artifact |
 
+### Service Worker REMINDER push (Etap 9)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-funkcja | PushService.sendToUser | apps/backend/src/push/push.service.ts | @anchor push-send-to-user |
+| ui-funkcja | sw push handler | apps/frontend/src/sw.js | @anchor sw-push-handler |
+| ui-funkcja | sw notificationclick | apps/frontend/src/sw.js | @anchor sw-notification-click |
+| ui-funkcja | App.jsx SW message handler | apps/frontend/src/App.jsx | @anchor app-sw-message-handler |
+
 ### taskListSlug UI + slug-check (Etap 8)
 
 | Tag | Nazwa | Plik | Anchor |

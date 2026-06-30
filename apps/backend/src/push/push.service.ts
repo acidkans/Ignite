@@ -36,7 +36,8 @@ export class PushService implements OnModuleInit {
         return this.prisma.pushSubscription.deleteMany({ where: { endpoint } });
     }
 
-    async sendToUser(userId: string, title: string, body: string, orderId?: string) {
+    // @anchor push-send-to-user
+    async sendToUser(userId: string, title: string, body: string, orderId?: string, extra?: Record<string, any>) {
         const subs = await this.prisma.pushSubscription.findMany({ where: { userId } });
         this.logger.log(`[Push] sendToUser=${userId} subs=${subs.length} title="${title}"`);
 
@@ -45,7 +46,7 @@ export class PushService implements OnModuleInit {
             return;
         }
 
-        const payload = JSON.stringify({ title, body, orderId });
+        const payload = JSON.stringify({ title, body, orderId, ...extra });
 
         for (const sub of subs) {
             try {

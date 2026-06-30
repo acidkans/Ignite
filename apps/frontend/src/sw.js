@@ -61,8 +61,9 @@ registerRoute(
     }),
 );
 
-// --- Web Push (zachowane z public/sw.js z v2026.04.29.301) ---
+// --- Web Push ---
 
+// @anchor sw-push-handler
 self.addEventListener('push', (event) => {
     let data = {};
     if (event.data) {
@@ -70,28 +71,70 @@ self.addEventListener('push', (event) => {
     }
 
     const title = data.title || 'ERP';
+    const isReminder = data.type === 'REMINDER';
+
     const options = {
         body: data.body || '',
         icon: '/icons/icon-192.png',
         badge: '/icons/icon-192.png',
-        tag: data.orderId || 'erp-notification',
+        tag: isReminder ? `reminder-${data.reminderId}` : (data.orderId || 'erp-notification'),
         renotify: true,
-        data: { orderId: data.orderId || null, url: '/' },
+        data: {
+            orderId: data.orderId || null,
+            reminderId: data.reminderId || null,
+            type: data.type || 'ORDER',
+            url: '/',
+        },
+        // Przyciski akcji widoczne w systemowym popupie (Android / Chrome desktop)
+        actions: isReminder ? [
+            { action: 'snooze-10', title: '10 min' },
+            { action: 'snooze-30', title: '30 min' },
+            { action: 'dismiss', title: 'Zamknij' },
+        ] : [],
     };
 
     event.waitUntil(Promise.all([
         self.registration.showNotification(title, options),
         self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-            for (const c of list) c.postMessage({ type: 'NEW_NOTIFICATION', orderId: data.orderId || null });
+            for (const c of list) {
+                c.postMessage({ type: 'NEW_NOTIFICATION', orderId: data.orderId || null });
+                if (isReminder) {
+                    // Powiadom otwartą kartę żeby pokazała in-app toast
+                    c.postMessage({ type: 'REMINDER_DUE', reminderId: data.reminderId });
+                }
+            }
         }),
     ]));
 });
 
+// @anchor sw-notification-click
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    const orderId = event.notification.data?.orderId;
-    const url = orderId ? `/?orderId=${orderId}` : '/';
+    const { orderId, reminderId, type } = event.notification.data || {};
+    const action = event.action;
 
+    // Obsługa akcji dla REMINDER — deleguj do otwartej karty aplikacji
+    if (type === 'REMINDER' && reminderId) {
+        let msg;
+        if (action === 'snooze-10') msg = { type: 'SNOOZE_REMINDER', reminderId, minutes: 10 };
+        else if (action === 'snooze-30') msg = { type: 'SNOOZE_REMINDER', reminderId, minutes: 30 };
+        else msg = { type: 'DISMISS_REMINDER', reminderId };
+
+        event.waitUntil(
+            self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+                for (const client of clientList) {
+                    client.postMessage(msg);
+                    if (!action) client.focus(); // klik w samo powiadomienie — otwórz kartę
+                    return;
+                }
+                if (!action && self.clients.openWindow) return self.clients.openWindow('/');
+            }),
+        );
+        return;
+    }
+
+    // Domyślna obsługa ORDER
+    const url = orderId ? `/?orderId=${orderId}` : '/';
     event.waitUntil(
         self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
             for (const client of clientList) {
