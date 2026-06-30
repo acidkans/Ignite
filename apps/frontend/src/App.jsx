@@ -4,6 +4,7 @@ import LoginPage from './LoginPage';
 import UsersPage from './UsersPage';
 import FirmaPage from './FirmaPage';
 import SmtpSettingsPage from './SmtpSettingsPage';
+import NotificationSettingsPage from './NotificationSettingsPage';
 import ProcessTreePage from './ProcessTreePage';
 import DashboardPage from './DashboardPage';
 import MainLayout from './components/Layout/MainLayout';
@@ -191,6 +192,7 @@ function App() {
             <Route path="/users" element={<UsersPage />} />
             <Route path="/firma" element={<FirmaPage />} />
             <Route path="/smtp" element={<SmtpSettingsPage />} />
+            <Route path="/notifications" element={<NotificationSettingsPage />} />
             <Route path="/process-tree" element={<ProcessTreePage />} />
             <Route path="/hr/*" element={<Placeholder title="Moduł HR" />} />
             <Route path="*" element={<NotFound />} />

@@ -4,6 +4,26 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-06-30 — feat(notifications): panel admin powiadomień (Web Push + MS To Do) — szkielet UI
+
+### architektura / API
+- dodano `ui-widok` `NotificationSettingsPage` (`/notifications`, admin-only) — globalne ustawienia powiadomień Ignite: status VAPID/Web Push, sync z Microsoft To Do (Samsung Reminder), domyślne ustawienia alarmów (godzina, retencja kosza, snooze presets), info o auto-pinningu po slug węzła. Szkielet UI bez backendu — diagnostyka czyta `GET /push/public-key`, zapis ustawień to placeholder do podłączenia w kolejnej iteracji
+- dodano `ui-przycisk` `sidebar-notifications-button` — kafelek "Powiadomienia" w DynamicSidebar pod "Poczta SMTP", widoczny tylko dla admina
+- dodano route `/notifications` w `App.jsx`
+
+### słownik
+- dodano `sidebar-notifications-button` — kafelek admin w sidebarze pod SMTP
+- dodano `notification-settings-page` — panel admin powiadomień
+- dodano `notification-settings-form` — stan formularza (defaultReminderHour, snoozePresetsMinutes, trashRetentionDays, msTodoSyncIntervalMinutes, msTodoEnabled, webPushEnabled)
+- dodano `notification-settings-diagnostics` — stan read-only (vapidConfigured, webPushSubscriptions, msGraphConfigured, msConnectedUsers, pendingReminders)
+- dodano `notification-status-row`, `notification-switch` — helpery UI
+
+### wytyczne
+- `ui-widok` `NotificationSettingsPage` — szkielet wyłącznie frontend, zapis ustawień jeszcze nie podłączony do backendu. Po akceptacji UI dorobimy `back-modul` `NotificationSettingsModule` z modelem `SystemNotificationSettings` (singleton, analogicznie do `SmtpSettings`) i endpointami `GET/PATCH /notification-settings` + ewentualnie `POST /notification-settings/test-push`
+- `ui-widok` `NotificationSettingsPage` — sluggi węzłów (`ProcessNode.taskListSlug`) świadomie NIE są edytowalne z tego panelu — edycja per-węzeł w Zarządzaniu Drzewem; panel pokazuje tylko zasadę działania (auto-pinning po slugu listy MS To Do oraz `#slug` w tytule)
+
+---
+
 ## 2026-06-25 — fix(productcard): availability persists + Wybierz odświeża pola
 
 ### schema.prisma

@@ -438,7 +438,8 @@
       "Bash(curl -sS -o /dev/null -w 'task: %{http_code}\\\\n' https://task-tracker.gigatel.org/)",
       "Bash(node ../../test/reset-andrzej-password.js)",
       "PowerShell(docker cp test/migration-materials-refactor.sql erp-db:/tmp/migration.sql)",
-      "PowerShell(docker exec erp-db psql -U postgres -d erp_db -f /tmp/migration.sql 2>&1)"
+      "PowerShell(docker exec erp-db psql -U postgres -d erp_db -f /tmp/migration.sql 2>&1)",
+      "Bash(ssh root@gigatel.app \"ls /var/www/dev-tracker/ 2>/dev/null || echo 'no /var/www/dev-tracker'; docker ps | grep -i tracker\")"
     ]
   }
 }

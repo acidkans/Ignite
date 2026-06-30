@@ -635,6 +635,12 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-widok | SmtpSettingsPage | apps/frontend/src/SmtpSettingsPage.jsx | @anchor smtp-settings-page |
 | ui-stan | isAdmin (sidebar) | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-is-admin |
 | ui-przycisk | Poczta SMTP (sidebar) | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-smtp-button |
+| ui-przycisk | Powiadomienia (sidebar) | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-notifications-button |
+| ui-widok | NotificationSettingsPage | apps/frontend/src/NotificationSettingsPage.jsx | @anchor notification-settings-page |
+| ui-stan | formularz ustawień powiadomień | apps/frontend/src/NotificationSettingsPage.jsx | @anchor notification-settings-form |
+| ui-stan | diagnostyka powiadomień | apps/frontend/src/NotificationSettingsPage.jsx | @anchor notification-settings-diagnostics |
+| ui-funkcja | StatusRow (panel powiadomień) | apps/frontend/src/NotificationSettingsPage.jsx | @anchor notification-status-row |
+| ui-funkcja | Switch (panel powiadomień) | apps/frontend/src/NotificationSettingsPage.jsx | @anchor notification-switch |
 | ui-stan | pendingExport (WBS) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor pending-export |
 | ui-stan | pendingExport (Requirements) | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-pending-export |
 | ui-stan | pendingExport (DocumentViewer) | apps/frontend/src/components/shared/DocumentViewer.jsx | @anchor document-viewer-pending-export |
