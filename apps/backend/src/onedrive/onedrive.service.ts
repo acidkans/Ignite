@@ -88,6 +88,7 @@ export class OneDriveService {
         expiresAt,
         msAccountEmail,
         msDisplayName,
+        needsReauth: false, // nowy token ma pełne scope — czyść flagę
       },
     });
   }

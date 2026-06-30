@@ -4,6 +4,17 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-06-30 — feat(ui): MS To Do connection panel w NotificationSettingsPage (Etap 10) (v2026.06.30.629)
+
+### architektura / API
+- dodano `ui-sekcja` MS To Do connection panel w `NotificationSettingsPage` — status połączenia (connected/email/needsReauth), last sync time + error, przyciski: Połącz, Połącz ponownie (gdy needsReauth), Wymuś sync, Rozłącz
+- sekcja pobiera `GET /ms-todo/status` przy montowaniu; Connect → redirect na `GET /onedrive/auth-url`; Disconnect → `DELETE /ms-todo/disconnect`; Resync → `POST /ms-todo/resync`
+
+### wytyczne
+- `ui-sekcja` `ms-todo-connection-panel` — po ponownym podłączeniu konta (`handleCallback` w OneDriveService) trzeba wywołać `MsTodoService.clearNeedsReauth(userId)` — zaimplementowane, ale callback jest w `/onedrive/callback` i automatycznie reset
+
+---
+
 ## 2026-06-30 — feat(sw): Web Push REMINDER — action buttons snooze, SW delegate do okna (Etap 9) (v2026.06.30.628)
 
 ### architektura / API

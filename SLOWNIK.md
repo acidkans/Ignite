@@ -647,6 +647,13 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | pendingExport (DocSidebar) | apps/frontend/src/components/Documentation/DocumentationSidebar.jsx | @anchor doc-sidebar-pending-export |
 | ui-funkcja | buildDownloadArtifact | apps/frontend/src/utils/downloadPdfWithHighlights.js | @anchor build-download-artifact |
 
+### MS To Do connection panel (Etap 10)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-stan | ms-todo-connection-state | apps/frontend/src/NotificationSettingsPage.jsx | @anchor ms-todo-connection-state |
+| ui-sekcja | ms-todo-connection-panel | apps/frontend/src/NotificationSettingsPage.jsx | @anchor ms-todo-connection-panel |
+
 ### Service Worker REMINDER push (Etap 9)
 
 | Tag | Nazwa | Plik | Anchor |
