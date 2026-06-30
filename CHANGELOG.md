@@ -4,6 +4,19 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-06-30 — feat(ui): taskListSlug w NodeInfoTab — auto-slugify + walidacja unikalności (Etap 8) (v2026.06.30.627)
+
+### architektura / API
+- dodano `back-endpoint` `GET /process-tree/slug-check?slug=&excludeNodeId=` — sprawdza czy slug jest wolny (excludeNodeId dla edycji własnego sluga)
+- rozszerzono `back-dto` `UpdateNodeDto` o `taskListSlug?: string | null`
+- rozszerzono `back-funkcja` `getNodeInfo` select o `taskListSlug`
+- dodano sekcję "Integracja zadań (MS To Do)" w `NodeInfoTab` — input auto-slugify + debounce 400ms + status wolny/zajęty/sprawdzam
+
+### wytyczne
+- `ui-input` `taskListSlug` — wartość zawsze auto-slugified (lowercase, hyphens, strip diacritics); przesyłana jako `null` gdy puste (a nie empty string) przez `|| null` w PATCH body
+
+---
+
 ## 2026-06-30 — feat(ui): TaskReminderToast + endpointy alertów (Etap 7) (v2026.06.30.626)
 
 ### architektura / API

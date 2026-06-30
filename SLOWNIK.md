@@ -647,6 +647,17 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | pendingExport (DocSidebar) | apps/frontend/src/components/Documentation/DocumentationSidebar.jsx | @anchor doc-sidebar-pending-export |
 | ui-funkcja | buildDownloadArtifact | apps/frontend/src/utils/downloadPdfWithHighlights.js | @anchor build-download-artifact |
 
+### taskListSlug UI + slug-check (Etap 8)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-funkcja | slugify | apps/frontend/src/components/shared/NodeInfoTab.jsx | @anchor node-info-slugify |
+| ui-stan | slugStatus | apps/frontend/src/components/shared/NodeInfoTab.jsx | @anchor node-info-slug-status |
+| ui-funkcja | handleSlugChange | apps/frontend/src/components/shared/NodeInfoTab.jsx | @anchor node-info-slug-change |
+| back-endpoint | GET /process-tree/slug-check | apps/backend/src/process-tree/process-tree.controller.ts | @anchor process-tree-slug-check-endpoint |
+| back-funkcja | ProcessTreeService.checkSlugAvailable | apps/backend/src/process-tree/process-tree.service.ts | @anchor process-tree-slug-check |
+| back-dto | UpdateNodeDto.taskListSlug | apps/backend/src/process-tree/dto/process-tree.dto.ts | @anchor update-node-dto-task-list-slug |
+
 ### TaskReminderToast + alerty (Etap 7)
 
 | Tag | Nazwa | Plik | Anchor |

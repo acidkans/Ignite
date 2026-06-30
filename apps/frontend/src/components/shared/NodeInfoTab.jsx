@@ -1,6 +1,14 @@
-import { useState, useEffect } from 'react';
-import { Save, User, MapPin, Hash, Globe, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Save, User, MapPin, Hash, Globe, CheckCircle2, Link } from 'lucide-react';
 import { API_URL } from '../../config';
+
+// @anchor node-info-slugify
+function slugify(str) {
+    return str.toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+}
 
 export default function NodeInfoTab({ nodeId }) {
     const [loading, setLoading] = useState(true);
@@ -13,8 +21,12 @@ export default function NodeInfoTab({ nodeId }) {
         nip: '',
         region: '',
         contactPerson: '',
-        type: ''
+        type: '',
+        taskListSlug: '',
     });
+    // @anchor node-info-slug-status
+    const [slugStatus, setSlugStatus] = useState(null); // null | 'checking' | 'available' | 'taken'
+    const slugTimerRef = useRef(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -34,7 +46,8 @@ export default function NodeInfoTab({ nodeId }) {
                         nip: node.nip || '',
                         region: node.region || '',
                         contactPerson: node.contactPerson || '',
-                        type: node.type || ''
+                        type: node.type || '',
+                        taskListSlug: node.taskListSlug || '',
                     });
                 }
             } catch (err) {
@@ -63,7 +76,8 @@ export default function NodeInfoTab({ nodeId }) {
                     address: data.address,
                     nip: data.nip,
                     region: data.region,
-                    contactPerson: data.contactPerson
+                    contactPerson: data.contactPerson,
+                    taskListSlug: data.taskListSlug || null,
                 })
             });
 
@@ -77,6 +91,28 @@ export default function NodeInfoTab({ nodeId }) {
         } finally {
             setSaving(false);
         }
+    };
+
+    // @anchor node-info-slug-change
+    const handleSlugChange = (raw) => {
+        const slug = slugify(raw);
+        setData(d => ({ ...d, taskListSlug: slug }));
+        setSlugStatus(slug ? 'checking' : null);
+        clearTimeout(slugTimerRef.current);
+        if (!slug) return;
+        slugTimerRef.current = setTimeout(async () => {
+            try {
+                const token = sessionStorage.getItem('token');
+                const res = await fetch(
+                    `${API_URL}/process-tree/slug-check?slug=${encodeURIComponent(slug)}&excludeNodeId=${nodeId}`,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+                if (res.ok) {
+                    const { available } = await res.json();
+                    setSlugStatus(available ? 'available' : 'taken');
+                }
+            } catch { setSlugStatus(null); }
+        }, 400);
     };
 
     if (loading) {
@@ -155,6 +191,47 @@ export default function NodeInfoTab({ nodeId }) {
                             />
                         </div>
                     </div>
+                </div>
+            </div>
+
+            {/* Integracja zadań MS To Do */}
+            <div className="bg-black/40 backdrop-blur-md rounded-2xl border border-white/10 p-6 shadow-2xl">
+                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-5 flex items-center gap-2">
+                    <Link size={14} className="text-blue-400" />
+                    Integracja zadań (MS To Do)
+                </h3>
+                <div className="space-y-2">
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                        <Hash size={11} className="text-gray-500" /> Slug listy zadań
+                        <span className="text-gray-600 normal-case font-normal tracking-normal">
+                            — wpisz lub użyj #slug w tytule zadania
+                        </span>
+                    </label>
+                    <div className="relative">
+                        <input
+                            type="text"
+                            value={data.taskListSlug}
+                            onChange={(e) => handleSlugChange(e.target.value)}
+                            className={`w-full h-11 bg-white/[0.03] border rounded-xl px-4 text-sm font-mono text-white focus:outline-none focus:bg-white/[0.06] transition-all ${
+                                slugStatus === 'taken' ? 'border-red-500/50 focus:border-red-500/70' :
+                                slugStatus === 'available' ? 'border-green-500/50 focus:border-green-500/70' :
+                                'border-white/10 focus:border-blue-500/50'
+                            }`}
+                            placeholder="np. projekt-a, strefa-logistyki"
+                        />
+                        {slugStatus === 'checking' && (
+                            <span className="absolute right-3 top-3 text-[10px] text-gray-500 animate-pulse">sprawdzam…</span>
+                        )}
+                        {slugStatus === 'available' && (
+                            <span className="absolute right-3 top-3 text-[10px] text-green-400">✓ wolny</span>
+                        )}
+                        {slugStatus === 'taken' && (
+                            <span className="absolute right-3 top-3 text-[10px] text-red-400">✗ zajęty</span>
+                        )}
+                    </div>
+                    <p className="text-[10px] text-gray-600">
+                        Automatycznie przypinaj zadania z tej listy MS To Do do węzła. Musi być globalnie unikalny.
+                    </p>
                 </div>
             </div>
 

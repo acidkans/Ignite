@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Req } from '@nestjs/common';
 import { ProcessTreeService } from './process-tree.service';
 import { CreateNodeDto, UpdateNodeDto, MoveNodeDto, UpdateNodePermissionsDto } from './dto/process-tree.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -24,6 +24,16 @@ export class ProcessTreeController {
     @Get(':id/info')
     getNodeInfo(@Param('id') id: string) {
         return this.processTreeService.getNodeInfo(id);
+    }
+
+    // @anchor process-tree-slug-check-endpoint
+    // Sprawdza czy slug jest wolny; excludeNodeId = aktualny węzeł (edycja własnego sluga)
+    @Get('slug-check')
+    checkSlug(
+        @Query('slug') slug: string,
+        @Query('excludeNodeId') excludeNodeId?: string,
+    ) {
+        return this.processTreeService.checkSlugAvailable(slug, excludeNodeId);
     }
 
     @Get(':id')

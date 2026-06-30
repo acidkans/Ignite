@@ -49,6 +49,11 @@ export class UpdateNodeDto {
     @IsOptional()
     @IsString()
     contactPerson?: string;
+
+    // @anchor update-node-dto-task-list-slug
+    @IsOptional()
+    @IsString()
+    taskListSlug?: string | null;
 }
 
 export class MoveNodeDto {

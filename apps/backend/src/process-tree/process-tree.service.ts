@@ -269,7 +269,7 @@ export class ProcessTreeService {
     async getNodeInfo(id: string) {
         const node = await this.prisma.processNode.findUnique({
             where: { id },
-            select: { id: true, name: true, customTypeLabel: true, address: true, nip: true, region: true, contactPerson: true, type: true },
+            select: { id: true, name: true, customTypeLabel: true, address: true, nip: true, region: true, contactPerson: true, type: true, taskListSlug: true },
         });
         if (!node) throw new NotFoundException(`Node ${id} not found`);
         return node;
@@ -410,6 +410,13 @@ export class ProcessTreeService {
     /**
      * Update node properties
      */
+    // @anchor process-tree-slug-check
+    async checkSlugAvailable(slug: string, excludeNodeId?: string): Promise<{ available: boolean }> {
+        const existing = await this.prisma.processNode.findUnique({ where: { taskListSlug: slug } });
+        const available = !existing || existing.id === excludeNodeId;
+        return { available };
+    }
+
     async update(id: string, dto: UpdateNodeDto, user?: any) {
         const node = await this.prisma.processNode.findUnique({
             where: { id },
