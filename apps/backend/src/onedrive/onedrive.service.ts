@@ -5,7 +5,8 @@ import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
-const SCOPES = 'Files.ReadWrite offline_access User.Read';
+// Tasks.ReadWrite wymagany dla sync z MS To Do / Samsung Reminder
+const SCOPES = 'Files.ReadWrite offline_access User.Read Tasks.ReadWrite';
 
 // @anchor onedrive-service
 @Injectable()

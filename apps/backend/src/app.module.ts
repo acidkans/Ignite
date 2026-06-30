@@ -34,6 +34,7 @@ import { MailModule } from './mail/mail.module';
 import { PdfModule } from './pdf/pdf.module';
 import { OneDriveModule } from './onedrive/onedrive.module';
 import { NotificationSettingsModule } from './notification-settings/notification-settings.module';
+import { MsTodoModule } from './ms-todo/ms-todo.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { NotificationSettingsModule } from './notification-settings/notification
     PdfModule,
     OneDriveModule,
     NotificationSettingsModule,
+    MsTodoModule,
   ],
   controllers: [AppController],
   providers: [

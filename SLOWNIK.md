@@ -647,6 +647,34 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | pendingExport (DocSidebar) | apps/frontend/src/components/Documentation/DocumentationSidebar.jsx | @anchor doc-sidebar-pending-export |
 | ui-funkcja | buildDownloadArtifact | apps/frontend/src/utils/downloadPdfWithHighlights.js | @anchor build-download-artifact |
 
+### Moduł MsTodo — MS Graph / To Do service
+
+#### Backend (`apps/backend/src/ms-todo/`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-modul | MsTodoModule | apps/backend/src/ms-todo/ms-todo.module.ts | @anchor ms-todo-module |
+| back-serwis | MsTodoService | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-service |
+| back-controller | MsTodoController | apps/backend/src/ms-todo/ms-todo.controller.ts | @anchor ms-todo-controller |
+| back-funkcja | MsTodoService.getValidAccessToken | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-get-valid-token |
+| back-funkcja | MsTodoService.fetchLists | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-fetch-lists |
+| back-funkcja | MsTodoService.fetchTasksDelta | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-fetch-tasks-delta |
+| back-funkcja | MsTodoService.createTask | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-create-task |
+| back-funkcja | MsTodoService.updateTask | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-update-task |
+| back-funkcja | MsTodoService.deleteTask | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-delete-task |
+| back-funkcja | MsTodoService.getStatus | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-get-status |
+| back-funkcja | MsTodoService.disconnect | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-disconnect |
+| back-funkcja | MsTodoService.bootstrapSync | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-bootstrap-sync |
+| back-funkcja | MsTodoService.updateSyncState | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-update-sync-state |
+| back-funkcja | MsTodoService.handleGraphError | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-handle-graph-error |
+| back-endpoint | GET /ms-todo/status | apps/backend/src/ms-todo/ms-todo.controller.ts | @anchor ms-todo-get-status-endpoint |
+| back-endpoint | GET /ms-todo/lists | apps/backend/src/ms-todo/ms-todo.controller.ts | @anchor ms-todo-get-lists-endpoint |
+| back-endpoint | DELETE /ms-todo/disconnect | apps/backend/src/ms-todo/ms-todo.controller.ts | @anchor ms-todo-disconnect-endpoint |
+| back-endpoint | POST /ms-todo/resync | apps/backend/src/ms-todo/ms-todo.controller.ts | @anchor ms-todo-resync-endpoint |
+| schema-pole | UserMsToken.needsReauth | apps/backend/prisma/schema.prisma | @anchor user-ms-token-needs-reauth |
+| back-funkcja | MsTodoService.markNeedsReauth | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-mark-needs-reauth |
+| back-funkcja | MsTodoService.clearNeedsReauth | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-clear-reauth |
+
 ### Moduł UserTask — zadania osobiste
 
 #### Schema (Prisma — `apps/backend/prisma/schema.prisma`)

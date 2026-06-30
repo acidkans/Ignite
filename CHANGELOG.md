@@ -4,6 +4,25 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-06-30 — feat(ms-todo): MS Graph / To Do service — MsTodoModule, needsReauth, Tasks.ReadWrite scope (v2026.06.30.623)
+
+### schema.prisma
+- dodano pole `schema-pole` `UserMsToken.needsReauth Boolean @default(false)` — flaga wymuszająca reauth po dodaniu scope `Tasks.ReadWrite`; istniejące tokeny migracja ustawia na `true`
+
+### architektura / API
+- dodano `back-modul` `MsTodoModule` (`apps/backend/src/ms-todo/`) — wrappery Graph API: `fetchLists`, `fetchTasksDelta`, `createTask`, `updateTask`, `deleteTask`; importuje `OneDriveModule` dla `getValidToken`
+- dodano `back-endpoint` `GET /ms-todo/status` — { connected, needsReauth, lastSyncAt, lastSyncError }
+- dodano `back-endpoint` `GET /ms-todo/lists` — lista list MS To Do (debug / mapowanie slugów)
+- dodano `back-endpoint` `DELETE /ms-todo/disconnect` — usuwa UserMsToken + MsTodoSyncState
+- dodano `back-endpoint` `POST /ms-todo/resync` — placeholder, właściwa logika w Etap 5
+- rozszerzono `back-stala` `SCOPES` w `OneDriveService` o `Tasks.ReadWrite`
+
+### wytyczne
+- `back-serwis` `MsTodoService.handleGraphError` — 401/403 z Graph API → `needsReauth=true` + `UnauthorizedException`; nie rzucaj surowego błędu axios na zewnątrz
+- `schema-pole` `UserMsToken.needsReauth` — czyszczone przez `clearNeedsReauth(userId)` po pomyślnym OAuth callback; produkcja: wywołaj w `OneDriveService.handleCallback` po upsert tokenu
+
+---
+
 ## 2026-06-30 — feat(tasks): schema zadań osobistych — UserTask, TaskReminder, MsTodoSyncState, taskListSlug (v2026.06.30.622)
 
 ### schema.prisma
