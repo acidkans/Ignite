@@ -1,3 +1,9 @@
+// Node.js 18 nie ma globalThis.crypto — wymagany przez uuid v9+ (@nestjs/schedule)
+import { webcrypto } from 'node:crypto';
+if (!globalThis.crypto) {
+  (globalThis as any).crypto = webcrypto;
+}
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
