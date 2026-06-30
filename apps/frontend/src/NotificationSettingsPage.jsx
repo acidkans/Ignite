@@ -28,6 +28,7 @@ export default function NotificationSettingsPage() {
   // @anchor ms-todo-connection-state
   const [msStatus, setMsStatus] = useState(null); // null = loading
   const [msAction, setMsAction] = useState(null); // 'connecting' | 'disconnecting' | 'resyncing'
+  const [msOAuthResult, setMsOAuthResult] = useState(null); // 'connected' | 'error' | null
 
   const fetchMsStatus = async () => {
     try {
@@ -37,7 +38,15 @@ export default function NotificationSettingsPage() {
     } catch { /* silent */ }
   };
 
-  useEffect(() => { fetchMsStatus(); }, []);
+  useEffect(() => {
+    fetchMsStatus();
+    const params = new URLSearchParams(window.location.search);
+    const ms = params.get('ms');
+    if (ms === 'connected' || ms === 'error') {
+      setMsOAuthResult(ms);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   const handleMsConnect = async () => {
     setMsAction('connecting');
@@ -292,6 +301,19 @@ export default function NotificationSettingsPage() {
             <Link2 size={16} className="text-blue-400" />
             <h4 className="text-xs font-bold uppercase tracking-widest text-gray-300">Konto Microsoft (MS To Do)</h4>
           </div>
+
+          {msOAuthResult === 'connected' && (
+            <div className="flex items-center gap-2 text-[11px] text-emerald-200 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+              <CheckCircle size={13} className="shrink-0" />
+              <span>Połączono z Microsoft. Synchronizacja zadań zostanie uruchomiona przez cron w ciągu kilku minut.</span>
+            </div>
+          )}
+          {msOAuthResult === 'error' && (
+            <div className="flex items-center gap-2 text-[11px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+              <AlertCircle size={13} className="shrink-0" />
+              <span>Błąd autoryzacji Microsoft. Spróbuj ponownie lub skontaktuj się z administratorem.</span>
+            </div>
+          )}
 
           {msStatus === null ? (
             <div className="flex items-center gap-2 text-gray-500 text-sm">

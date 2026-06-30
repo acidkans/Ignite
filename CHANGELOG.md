@@ -4,6 +4,22 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-06-30 — fix(backend): MS To Do sync — TaskReminder, push IGNITE→Graph, fix echo konfliktów (v2026.06.30.630)
+
+### architektura / API
+- dodano `back-funkcja` `UserTasksService.syncReminderForTask` — tworzy/aktualizuje/usuwa `TaskReminder` wg `plannedEnd`; brak konkretnej godziny (00:00) → alarm o `SystemNotificationSettings.defaultReminderHour`; wołane z `UserTasksService.create`, `UserTasksService.update` (gdy zmienia się `plannedEnd`) oraz z `TaskSyncService.processDeltaTasks` (obie ścieżki: nowy task z MS i "MS wygrywa" update) — wcześniej `TaskReminder` nie był nigdzie tworzony, więc cały system alertów (cron `dispatchReminders`) był martwy mimo gotowego UI
+- dodano `back-funkcja` `UserTasksService.pushNewTaskToGraph` + `UserTasksService.resolveIgniteListId` — nowe zadanie utworzone w IGNITE jest teraz pushowane do MS Graph (find-or-create listy "Ignite" w MS To Do), zapisuje `msToDoId`/`msListId`/`msListName`/`msEtag`/`msLastModified` na utworzonym `UserTask`; best-effort, błędy nie blokują tworzenia zadania lokalnie
+- dodano `back-funkcja` `UserTasksService.pushUpdateToGraph` — `UserTasksService.update` pushuje zmiany `title`/`status`/`plannedEnd` do Graph gdy zadanie ma już `msToDoId`+`msListId`
+- `UserTasksService.softDelete` — gdy zadanie ma `msToDoId`+`msListId`, oznacza je jako `completed` w MS Graph (symetria z lokalnym soft-delete)
+- dodano `back-funkcja` `MsTodoService.createList` — POST `/me/todo/lists`, używane przez find-or-create listy "Ignite"
+- naprawiono `back-funkcja` `TaskSyncService.processDeltaTasks` — porównanie konfliktu zmienione z `msLastModified > existing.updatedAt` na `msLastModified > existing.msLastModified`; `updatedAt` jest bumpowane przez Prisma `@updatedAt` przy KAŻDYM `.update()`, w tym przez sam silnik sync, co dawało fałszywe "DB wygrywa" i zbędne pushe do Graph przy każdym resyncu ("echo")
+
+### wytyczne
+- `back-funkcja` `UserTasksService.syncReminderForTask` — wołać zawsze po każdej zmianie `plannedEnd` zadania (create/update/sync z MS), inaczej `TaskReminder` rozjeżdża się z faktycznym terminem
+- `schema-pole` `UserTask.updatedAt` — NIE używać jako wskaźnika "ostatnia zmiana ze strony MS" w logice konfliktów; do tego służy `UserTask.msLastModified`, bo `updatedAt` bumpuje też sam silnik sync
+
+---
+
 ## 2026-06-30 — feat(ui): MS To Do connection panel w NotificationSettingsPage (Etap 10) (v2026.06.30.629)
 
 ### architektura / API

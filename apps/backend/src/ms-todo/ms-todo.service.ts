@@ -100,6 +100,22 @@ export class MsTodoService {
     }
   }
 
+  // @anchor ms-todo-create-list
+  // Find-or-create wywołuje to tylko gdy lista o danej nazwie nie istnieje (UserTasksService.resolveIgniteListId).
+  async createList(userId: string, displayName: string): Promise<string> {
+    const token = await this.getValidAccessToken(userId);
+    try {
+      const res = await axios.post(
+        `${GRAPH_BASE}/me/todo/lists`,
+        { displayName },
+        { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } },
+      );
+      return res.data.id;
+    } catch (err) {
+      await this.handleGraphError(userId, err);
+    }
+  }
+
   // @anchor ms-todo-update-task
   async updateTask(userId: string, listId: string, taskId: string, patch: Partial<MsTodoTask>): Promise<MsTodoTask> {
     const token = await this.getValidAccessToken(userId);

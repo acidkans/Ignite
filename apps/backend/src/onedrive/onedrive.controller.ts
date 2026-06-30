@@ -28,9 +28,13 @@ export class OneDriveController {
   // Publiczny — Microsoft przy redirectcie nie wysyła JWT; userId pochodzi z parametru `state`.
   @Get('callback')
   async callback(@Query('code') code: string, @Query('state') userId: string, @Res() res: Response) {
-    await this.oneDriveService.handleCallback(code, userId);
     const frontendUrl = this.config.get('FRONTEND_URL') || 'http://localhost:5174';
-    res.redirect(`${frontendUrl}/?onedrive=connected`);
+    try {
+      await this.oneDriveService.handleCallback(code, userId);
+      res.redirect(`${frontendUrl}/notification-settings?ms=connected`);
+    } catch {
+      res.redirect(`${frontendUrl}/notification-settings?ms=error`);
+    }
   }
 
   // @anchor onedrive-status-endpoint

@@ -1,5 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationSettingsService } from '../notification-settings/notification-settings.service';
+import { MsTodoService } from '../ms-todo/ms-todo.service';
+
+const IGNITE_LIST_NAME = 'Ignite';
 
 export interface CreateUserTaskDto {
   title: string;
@@ -21,7 +25,13 @@ export interface UpdateUserTaskDto {
 // @anchor user-tasks-service
 @Injectable()
 export class UserTasksService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(UserTasksService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifSettings: NotificationSettingsService,
+    private readonly msTodo: MsTodoService,
+  ) {}
 
   // @anchor user-tasks-list
   // Zwraca tylko OPEN i nie-usunięte, sortowane po plannedEnd ASC (null na końcu)
@@ -38,7 +48,7 @@ export class UserTasksService {
 
   // @anchor user-tasks-create
   async create(userId: string, dto: CreateUserTaskDto) {
-    return this.prisma.userTask.create({
+    const task = await this.prisma.userTask.create({
       data: {
         userId,
         title: dto.title,
@@ -49,22 +59,140 @@ export class UserTasksService {
         source: 'IGNITE',
       },
     });
+
+    await this.syncReminderForTask(task.id, userId, task.plannedEnd);
+    await this.pushNewTaskToGraph(userId, task);
+    return task;
   }
 
   // @anchor user-tasks-update
   async update(userId: string, taskId: string, dto: UpdateUserTaskDto) {
-    return this.prisma.userTask.updateMany({
+    const result = await this.prisma.userTask.updateMany({
       where: { id: taskId, userId, deletedAt: null },
       data: dto,
     });
+
+    if (result.count > 0) {
+      if ('plannedEnd' in dto) {
+        await this.syncReminderForTask(taskId, userId, dto.plannedEnd ?? null);
+      }
+      await this.pushUpdateToGraph(userId, taskId, dto);
+    }
+    return result;
   }
 
   // @anchor user-tasks-soft-delete
   async softDelete(userId: string, taskId: string) {
-    return this.prisma.userTask.updateMany({
+    const task = await this.prisma.userTask.findFirst({ where: { id: taskId, userId } });
+    const result = await this.prisma.userTask.updateMany({
       where: { id: taskId, userId },
       data: { deletedAt: new Date() },
     });
+
+    if (task?.msToDoId && task.msListId) {
+      try {
+        await this.msTodo.updateTask(userId, task.msListId, task.msToDoId, { status: 'completed' });
+      } catch (err: any) {
+        this.logger.warn(`pushDelete failed for task ${taskId}: ${err?.message}`);
+      }
+    }
+    return result;
+  }
+
+  // @anchor user-tasks-sync-reminder
+  // Tworzy/aktualizuje/usuwa TaskReminder wg plannedEnd. Bez konkretnej godziny (00:00) → alarm o defaultReminderHour.
+  async syncReminderForTask(taskId: string, userId: string, plannedEnd: Date | null | undefined): Promise<void> {
+    if (!plannedEnd) {
+      await this.prisma.taskReminder.deleteMany({ where: { userTaskId: taskId, sentAt: null } });
+      return;
+    }
+
+    const settings = await this.notifSettings.getOrCreate();
+    const hasTime = plannedEnd.getHours() !== 0 || plannedEnd.getMinutes() !== 0;
+    const remindAt = new Date(plannedEnd);
+    if (!hasTime) remindAt.setHours(settings.defaultReminderHour, 0, 0, 0);
+
+    const existing = await this.prisma.taskReminder.findFirst({ where: { userTaskId: taskId, sentAt: null } });
+    if (existing) {
+      if (existing.remindAt.getTime() !== remindAt.getTime()) {
+        await this.prisma.taskReminder.update({
+          where: { id: existing.id },
+          data: { remindAt, snoozedFrom: null },
+        });
+      }
+    } else {
+      await this.prisma.taskReminder.create({ data: { userTaskId: taskId, userId, remindAt } });
+    }
+  }
+
+  // @anchor user-tasks-push-new-to-graph
+  // Best-effort: nowe zadanie IGNITE → lista "Ignite" w MS To Do (find-or-create listy).
+  private async pushNewTaskToGraph(userId: string, task: any): Promise<void> {
+    try {
+      const tokenRecord = await this.prisma.userMsToken.findUnique({ where: { userId } });
+      if (!tokenRecord || tokenRecord.needsReauth) return;
+
+      const settings = await this.notifSettings.getOrCreate();
+      if (!settings.msTodoEnabled) return;
+
+      const listId = await this.resolveIgniteListId(userId);
+      if (!listId) return;
+
+      const payload: any = { title: task.title, status: task.status === 'DONE' ? 'completed' : 'notStarted' };
+      if (task.plannedEnd) {
+        payload.dueDateTime = { dateTime: (task.plannedEnd as Date).toISOString(), timeZone: 'UTC' };
+      }
+
+      const created = await this.msTodo.createTask(userId, listId, payload);
+      await this.prisma.userTask.update({
+        where: { id: task.id },
+        data: {
+          msToDoId: created.id,
+          msListId: listId,
+          msListName: IGNITE_LIST_NAME,
+          msEtag: (created as any)['@odata.etag'] ?? null,
+          msLastModified: created.lastModifiedDateTime ? new Date(created.lastModifiedDateTime) : new Date(),
+        },
+      });
+    } catch (err: any) {
+      this.logger.warn(`pushNewTaskToGraph failed for task ${task.id}: ${err?.message}`);
+    }
+  }
+
+  // @anchor user-tasks-push-update-to-graph
+  private async pushUpdateToGraph(userId: string, taskId: string, dto: UpdateUserTaskDto): Promise<void> {
+    try {
+      const task = await this.prisma.userTask.findUnique({ where: { id: taskId } });
+      if (!task?.msToDoId || !task.msListId) return;
+
+      const patch: any = {};
+      if (dto.title !== undefined) patch.title = dto.title;
+      if (dto.status !== undefined) patch.status = dto.status === 'DONE' ? 'completed' : 'notStarted';
+      if ('plannedEnd' in dto) {
+        patch.dueDateTime = task.plannedEnd
+          ? { dateTime: (task.plannedEnd as Date).toISOString(), timeZone: 'UTC' }
+          : null;
+      }
+      if (Object.keys(patch).length === 0) return;
+
+      await this.msTodo.updateTask(userId, task.msListId, task.msToDoId, patch);
+    } catch (err: any) {
+      this.logger.warn(`pushUpdateToGraph failed for task ${taskId}: ${err?.message}`);
+    }
+  }
+
+  // @anchor user-tasks-resolve-ignite-list-id
+  // Find-or-create listy "Ignite" w MS To Do — cel synchronizacji dla zadań tworzonych w IGNITE.
+  private async resolveIgniteListId(userId: string): Promise<string | null> {
+    try {
+      const lists = await this.msTodo.fetchLists(userId);
+      const existing = lists.find((l) => l.displayName === IGNITE_LIST_NAME);
+      if (existing) return existing.id;
+      return await this.msTodo.createList(userId, IGNITE_LIST_NAME);
+    } catch (err: any) {
+      this.logger.warn(`resolveIgniteListId failed for user ${userId}: ${err?.message}`);
+      return null;
+    }
   }
 
   // @anchor user-tasks-due-reminders

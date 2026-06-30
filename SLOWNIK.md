@@ -715,6 +715,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | UserTasksService.update | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-update |
 | back-funkcja | UserTasksService.softDelete | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-soft-delete |
 | back-funkcja | UserTasksService.cleanupTrash | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-trash-cleanup |
+| back-funkcja | UserTasksService.syncReminderForTask | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-sync-reminder |
+| back-funkcja | UserTasksService.pushNewTaskToGraph | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-push-new-to-graph |
+| back-funkcja | UserTasksService.pushUpdateToGraph | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-push-update-to-graph |
+| back-funkcja | UserTasksService.resolveIgniteListId | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-resolve-ignite-list-id |
 | back-endpoint | GET /my-tasks | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-get-endpoint |
 | back-endpoint | POST /my-tasks | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-create-endpoint |
 | back-endpoint | PATCH /my-tasks/:id | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-update-endpoint |
@@ -738,6 +742,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | MsTodoService.fetchLists | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-fetch-lists |
 | back-funkcja | MsTodoService.fetchTasksDelta | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-fetch-tasks-delta |
 | back-funkcja | MsTodoService.createTask | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-create-task |
+| back-funkcja | MsTodoService.createList | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-create-list |
 | back-funkcja | MsTodoService.updateTask | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-update-task |
 | back-funkcja | MsTodoService.deleteTask | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-delete-task |
 | back-funkcja | MsTodoService.getStatus | apps/backend/src/ms-todo/ms-todo.service.ts | @anchor ms-todo-get-status |

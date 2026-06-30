@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MsTodoService, MsTodoList, MsTodoTask } from '../ms-todo/ms-todo.service';
+import { UserTasksService } from './user-tasks.service';
 
 // @anchor task-sync-service
 @Injectable()
@@ -10,6 +11,7 @@ export class TaskSyncService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly msTodo: MsTodoService,
+    private readonly userTasks: UserTasksService,
   ) {}
 
   // @anchor task-sync-single-user
@@ -75,9 +77,12 @@ export class TaskSyncService {
       const existing = await this.prisma.userTask.findUnique({ where: { msToDoId: task.id } });
 
       if (existing) {
-        if (msLastModified && msLastModified > existing.updatedAt) {
-          // MS wygrywa konfliktem
-          await this.prisma.userTask.update({
+        // Porównujemy z msLastModified (ostatni znany stan MS), NIE z updatedAt — updatedAt jest
+        // bumpowane przez Prisma @updatedAt przy każdym .update(), w tym przez sam silnik sync,
+        // co dawało fałszywe "DB wygrywa" i zbędne pushe do Graph przy każdym resyncu (echo).
+        const msWins = msLastModified && (!existing.msLastModified || msLastModified > existing.msLastModified);
+        if (msWins) {
+          const updated = await this.prisma.userTask.update({
             where: { id: existing.id },
             data: {
               title: task.title,
@@ -91,12 +96,13 @@ export class TaskSyncService {
               deletedAt: null,
             },
           });
+          await this.userTasks.syncReminderForTask(updated.id, userId, updated.plannedEnd);
         } else if (existing.msListId) {
           // DB wygrywa — pushuj do Graph
           await this.pushTaskToGraph(userId, existing, existing.msListId);
         }
       } else {
-        await this.prisma.userTask.create({
+        const created = await this.prisma.userTask.create({
           data: {
             userId,
             title: task.title,
@@ -111,6 +117,7 @@ export class TaskSyncService {
             nodeId: nodeId ?? null,
           },
         });
+        await this.userTasks.syncReminderForTask(created.id, userId, created.plannedEnd);
       }
     }
   }
