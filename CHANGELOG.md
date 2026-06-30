@@ -4,6 +4,18 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-06-30 — feat(ui): MyTasksModal — modal zadań osobistych kliknięciem kalendarza (Etap 6) (v2026.06.30.625)
+
+### architektura / API
+- dodano `ui-modal` `MyTasksModal` (`apps/frontend/src/components/shared/MyTasksModal.jsx`) — szkło-morfizm, karty zadań OPEN sortowane plannedEnd ASC, oznaczanie jako DONE jednym kliknięciem
+- dodano `ui-stan` `dashboard-my-tasks-open` w `DashboardPage` — otwiera modal kliknięciem kontenera kalendarza (lewy górny róg headera)
+
+### wytyczne
+- `ui-modal` `MyTasksModal` — backdrop kliknięcie zamyka modal; kliknięcie na kartę zadania nie zamyka
+- `ui-modal` `MyTasksModal` — fetch `GET /my-tasks` przy każdym otwarciu modalu; brak cache — zawsze świeże dane
+
+---
+
 ## 2026-06-30 — feat(tasks): cron sync + logika sync dwukierunkowa (Etap 4+5) (v2026.06.30.624)
 
 ### architektura / API

@@ -10,6 +10,7 @@ import MaterialDatabaseTab from './components/shared/MaterialDatabaseTab';
 import OffersTab from './components/shared/OffersTab';
 import UnifiedWbsPanel from './components/shared/wbs/UnifiedWbsPanel';
 import CommentsSlideOver from './components/shared/CommentsSlideOver';
+import MyTasksModal from './components/shared/MyTasksModal';
 import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink } from 'lucide-react';
 import { API_URL } from './config';
 import { APP_VERSION } from './version';
@@ -114,6 +115,9 @@ export default function DashboardPage() {
     const now = useMemo(() => new Date(), []);
     const dateLabel = formatPolishDate(now);
     const weekNumber = getWeekNumber(now);
+
+    // @anchor dashboard-my-tasks-open
+    const [myTasksOpen, setMyTasksOpen] = useState(false);
 
     // Sprawdź typ aktywnego węzła
     const activeNode = useMemo(() => findNodeById(menuTree, activeAreaId), [menuTree, activeAreaId]);
@@ -418,8 +422,12 @@ export default function DashboardPage() {
             {/* TOP BAR */}
             <header className="h-16 px-6 flex items-center gap-3 border-b border-white/5 bg-white/[0.02] backdrop-blur-sm flex-shrink-0 z-20">
 
-                {/* Data i tydzień */}
-                <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Data i tydzień — kliknij aby otworzyć Moje zadania */}
+                <div
+                    className="flex items-center gap-2 flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity select-none"
+                    onClick={() => setMyTasksOpen(true)}
+                    title="Moje zadania"
+                >
                     <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/20">
                         <Calendar size={13} className="text-blue-400" />
                     </div>
@@ -882,6 +890,9 @@ export default function DashboardPage() {
                 onClose={() => setShowComments(false)}
             />
         )}
+
+        {/* Modal zadań osobistych — otwarty kliknięciem kalendarza w headerze */}
+        <MyTasksModal open={myTasksOpen} onClose={() => setMyTasksOpen(false)} />
         </>
     );
 }

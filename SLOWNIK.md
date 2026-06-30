@@ -647,6 +647,16 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | pendingExport (DocSidebar) | apps/frontend/src/components/Documentation/DocumentationSidebar.jsx | @anchor doc-sidebar-pending-export |
 | ui-funkcja | buildDownloadArtifact | apps/frontend/src/utils/downloadPdfWithHighlights.js | @anchor build-download-artifact |
 
+### MyTasksModal — frontend (Etap 6)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-modal | MyTasksModal | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-modal-component |
+| ui-funkcja | formatDeadline | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-modal |
+| ui-karta | TaskCard | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-task-card |
+| ui-funkcja | MyTasksModal.handleDone | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-mark-done |
+| ui-stan | dashboard-my-tasks-open | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-my-tasks-open |
+
 ### Moduł UserTasks + NotificationCron (Etap 4+5)
 
 #### Backend (`apps/backend/src/user-tasks/`, `apps/backend/src/notification-cron/`)
