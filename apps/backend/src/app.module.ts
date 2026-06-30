@@ -33,6 +33,7 @@ import { SmtpModule } from './smtp/smtp.module';
 import { MailModule } from './mail/mail.module';
 import { PdfModule } from './pdf/pdf.module';
 import { OneDriveModule } from './onedrive/onedrive.module';
+import { NotificationSettingsModule } from './notification-settings/notification-settings.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { OneDriveModule } from './onedrive/onedrive.module';
     MailModule,
     PdfModule,
     OneDriveModule,
+    NotificationSettingsModule,
   ],
   controllers: [AppController],
   providers: [

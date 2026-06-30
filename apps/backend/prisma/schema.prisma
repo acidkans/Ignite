@@ -971,3 +971,25 @@ model UserMsToken {
 
   @@map("user_ms_tokens")
 }
+
+/// Singleton — globalne ustawienia powiadomień: Web Push, sync MS To Do, alarmy (jeden wiersz, id = "singleton").
+model SystemNotificationSettings {
+  /// @anchor notif-settings-id
+  id                        String   @id @default("singleton")
+  /// @anchor notif-settings-default-reminder-hour
+  defaultReminderHour       Int      @default(9)
+  /// @anchor notif-settings-snooze-presets
+  snoozePresetsMinutes      Json     @default("[10,30,60]")
+  /// @anchor notif-settings-trash-retention-days
+  trashRetentionDays        Int      @default(30)
+  /// @anchor notif-settings-ms-todo-sync-interval
+  msTodoSyncIntervalMinutes Int      @default(5)
+  /// @anchor notif-settings-ms-todo-enabled
+  msTodoEnabled             Boolean  @default(true)
+  /// @anchor notif-settings-web-push-enabled
+  webPushEnabled            Boolean  @default(true)
+  /// @anchor notif-settings-updated-at
+  updatedAt                 DateTime @updatedAt
+
+  @@map("system_notification_settings")
+}

@@ -647,6 +647,45 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | pendingExport (DocSidebar) | apps/frontend/src/components/Documentation/DocumentationSidebar.jsx | @anchor doc-sidebar-pending-export |
 | ui-funkcja | buildDownloadArtifact | apps/frontend/src/utils/downloadPdfWithHighlights.js | @anchor build-download-artifact |
 
+### Moduł NotificationSettings
+
+#### Schema (Prisma — `apps/backend/prisma/schema.prisma`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| schema-model | SystemNotificationSettings | apps/backend/prisma/schema.prisma | @anchor notif-settings-id |
+| schema-pole | SystemNotificationSettings.defaultReminderHour | apps/backend/prisma/schema.prisma | @anchor notif-settings-default-reminder-hour |
+| schema-json | SystemNotificationSettings.snoozePresetsMinutes | apps/backend/prisma/schema.prisma | @anchor notif-settings-snooze-presets |
+| schema-pole | SystemNotificationSettings.trashRetentionDays | apps/backend/prisma/schema.prisma | @anchor notif-settings-trash-retention-days |
+| schema-pole | SystemNotificationSettings.msTodoSyncIntervalMinutes | apps/backend/prisma/schema.prisma | @anchor notif-settings-ms-todo-sync-interval |
+| schema-pole | SystemNotificationSettings.msTodoEnabled | apps/backend/prisma/schema.prisma | @anchor notif-settings-ms-todo-enabled |
+| schema-pole | SystemNotificationSettings.webPushEnabled | apps/backend/prisma/schema.prisma | @anchor notif-settings-web-push-enabled |
+| schema-pole | SystemNotificationSettings.updatedAt | apps/backend/prisma/schema.prisma | @anchor notif-settings-updated-at |
+
+#### Backend (`apps/backend/src/notification-settings/`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-modul | NotificationSettingsModule | apps/backend/src/notification-settings/notification-settings.module.ts | @anchor notif-settings-module |
+| back-serwis | NotificationSettingsService | apps/backend/src/notification-settings/notification-settings.service.ts | @anchor notif-settings-service |
+| back-stala | SINGLETON_ID (notif) | apps/backend/src/notification-settings/notification-settings.service.ts | @anchor notif-settings-singleton-id |
+| back-funkcja | NotificationSettingsService.getOrCreate | apps/backend/src/notification-settings/notification-settings.service.ts | @anchor notif-settings-service-get-or-create |
+| back-funkcja | NotificationSettingsService.get | apps/backend/src/notification-settings/notification-settings.service.ts | @anchor notif-settings-service-get |
+| back-funkcja | NotificationSettingsService.update | apps/backend/src/notification-settings/notification-settings.service.ts | @anchor notif-settings-service-update |
+| back-funkcja | NotificationSettingsService.getStats | apps/backend/src/notification-settings/notification-settings.service.ts | @anchor notif-settings-service-get-stats |
+| back-controller | NotificationSettingsController | apps/backend/src/notification-settings/notification-settings.controller.ts | @anchor notif-settings-controller |
+| back-endpoint | GET /notification-settings | apps/backend/src/notification-settings/notification-settings.controller.ts | @anchor notif-settings-controller |
+| back-endpoint | PATCH /notification-settings | apps/backend/src/notification-settings/notification-settings.controller.ts | @anchor notif-settings-controller |
+| back-endpoint | POST /notification-settings/test-push | apps/backend/src/notification-settings/notification-settings.controller.ts | @anchor notif-settings-controller |
+
+#### Frontend (`apps/frontend/src/NotificationSettingsPage.jsx`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-funkcja | fetchSettings | apps/frontend/src/NotificationSettingsPage.jsx | @anchor notif-settings-fetch |
+| ui-funkcja | handleSave | apps/frontend/src/NotificationSettingsPage.jsx | @anchor notif-settings-handle-save |
+| ui-funkcja | handleTestPush | apps/frontend/src/NotificationSettingsPage.jsx | @anchor notif-settings-handle-test-push |
+
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)

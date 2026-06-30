@@ -36,28 +36,40 @@ export default function NotificationSettingsPage() {
 
   useEffect(() => { fetchSettings(); }, []);
 
+  // @anchor notif-settings-fetch
   const fetchSettings = async () => {
     setLoading(true);
     try {
       const token = sessionStorage.getItem('token');
-      const [pkRes] = await Promise.all([
-        fetch(`${API_URL}/push/public-key`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
-      ]);
-      const pk = pkRes && pkRes.ok ? await pkRes.json() : null;
-      setDiag((d) => ({
-        ...d,
-        vapidConfigured: !!(pk && pk.publicKey),
-        msGraphConfigured: true,
-      }));
+      const res = await fetch(`${API_URL}/notification-settings`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('fetch failed');
+      const data = await res.json();
+      const { diag: d, id: _id, updatedAt: _ua, ...settings } = data;
+      if (settings.snoozePresetsMinutes && !Array.isArray(settings.snoozePresetsMinutes)) {
+        settings.snoozePresetsMinutes = JSON.parse(settings.snoozePresetsMinutes);
+      }
+      setForm((prev) => ({ ...prev, ...settings }));
+      if (d) setDiag((prev) => ({ ...prev, ...d }));
     } catch {} finally {
       setLoading(false);
     }
   };
 
+  // @anchor notif-settings-handle-save
   const handleSave = async () => {
     setSaving(true);
     try {
-      await new Promise((r) => setTimeout(r, 400));
+      const token = sessionStorage.getItem('token');
+      const res = await fetch(`${API_URL}/notification-settings`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) throw new Error('save failed');
+      const data = await res.json();
+      if (data.diag) setDiag((prev) => ({ ...prev, ...data.diag }));
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } finally {
@@ -65,10 +77,16 @@ export default function NotificationSettingsPage() {
     }
   };
 
+  // @anchor notif-settings-handle-test-push
   const handleTestPush = async () => {
     setTesting(true); setTestMsg(null);
     try {
-      await new Promise((r) => setTimeout(r, 500));
+      const token = sessionStorage.getItem('token');
+      const res = await fetch(`${API_URL}/notification-settings/test-push`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('test failed');
       setTestMsg({ ok: true, text: 'Test wysłany — sprawdź notyfikację przeglądarki.' });
     } catch {
       setTestMsg({ ok: false, text: 'Błąd wysyłki testowego push.' });

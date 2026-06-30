@@ -4,6 +4,32 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-06-30 — feat(notifications): backend ustawień powiadomień — SystemNotificationSettings + moduł NestJS (v2026.06.30.621)
+
+### schema.prisma
+- dodano model `SystemNotificationSettings` — singleton (id="singleton") z polami: `schema-pole` `defaultReminderHour Int`, `snoozePresetsMinutes Json`, `trashRetentionDays Int`, `msTodoSyncIntervalMinutes Int`, `msTodoEnabled Boolean`, `webPushEnabled Boolean`
+
+### architektura / API
+- dodano `back-modul` `NotificationSettingsModule` (Global) z `back-serwis` `NotificationSettingsService` i `back-controller` `NotificationSettingsController`
+- dodano `back-endpoint` `GET /notification-settings` — zwraca ustawienia + diagnostykę (vapidConfigured, msGraphConfigured, webPushSubscriptions, msConnectedUsers, pendingReminders)
+- dodano `back-endpoint` `PATCH /notification-settings` — upsert ustawień
+- dodano `back-endpoint` `POST /notification-settings/test-push` — wysyła Web Push do bieżącego admina przez PushService
+- podpięto `ui-widok` `NotificationSettingsPage` do realnego API (zastąpiono placeholdery fetchSettings/handleSave/handleTestPush)
+
+### słownik
+- dodano `notif-settings-module` — GlobalModule NotificationSettings
+- dodano `notif-settings-controller` — kontroler ADMIN GET/PATCH/POST test-push
+- dodano `notif-settings-service` — serwis getOrCreate/get/update/getStats
+- dodano `system-notification-settings` — model Prisma (singleton)
+- dodano `notif-settings-fetch` — fetchSettings w NotificationSettingsPage (teraz GET /notification-settings)
+- dodano `notif-settings-handle-save` — handleSave (teraz PATCH /notification-settings)
+- dodano `notif-settings-handle-test-push` — handleTestPush (teraz POST /notification-settings/test-push)
+
+### wytyczne
+- `schema-model` `SystemNotificationSettings` — singleton id="singleton", wzorzec jak SmtpSettings i Company; `back-serwis` `NotificationSettingsService.getOrCreate()` tworzy wiersz przy pierwszym odczycie
+
+---
+
 ## 2026-06-30 — feat(notifications): panel admin powiadomień (Web Push + MS To Do) — szkielet UI
 
 ### architektura / API
