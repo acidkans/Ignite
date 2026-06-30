@@ -4,6 +4,26 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-06-30 — feat(tasks): cron sync + logika sync dwukierunkowa (Etap 4+5) (v2026.06.30.624)
+
+### architektura / API
+- dodano `back-modul` `UserTasksModule` (`apps/backend/src/user-tasks/`) — CRUD zadań osobistych + logika sync
+- dodano `back-serwis` `UserTasksService` — listForUser (OPEN, sorted plannedEnd ASC), create, update, softDelete, cleanupTrash
+- dodano `back-serwis` `TaskSyncService` — syncSingleUser (delta per-lista jako JSON w deltaLink), processDeltaTasks, resolveNodeId (hashtag > slugified listName), pushTaskToGraph (best-effort)
+- dodano `back-endpoint` `GET /my-tasks` — lista OPEN zadań usera (sortowane plannedEnd ASC, null na końcu)
+- dodano `back-endpoint` `POST /my-tasks` — utwórz zadanie (source=IGNITE)
+- dodano `back-endpoint` `PATCH /my-tasks/:id` — edytuj zadanie
+- dodano `back-endpoint` `DELETE /my-tasks/:id` — soft delete
+- dodano `back-modul` `NotificationCronModule` — 3 cron-joby: `*/5 * * * *` sync MS To Do, co minutę dispatch reminder push, `0 3 * * *` czyść kosz
+
+### wytyczne
+- `back-serwis` `TaskSyncService.resolveNodeId` — hashtag `#slug` w tytule zadania wygrywa nad slugified nazwą listy; diacrityki normalizowane przez NFD + strip combining marks
+- `back-serwis` `TaskSyncService.pushTaskToGraph` — best-effort (błąd logowany jako `warn`, nie przerywa sync)
+- `back-serwis` `MsTodoSyncState.deltaLink` — przechowuje JSON `{ listId: deltaLink }` dla inkrementalnego delta per-lista; nie jest to jeden globalny deltaLink
+- `back-serwis` `NotificationCronService.syncRunning` — mutex-flaga blokuje równoległe uruchomienie sync jeśli poprzedni cron jeszcze trwa
+
+---
+
 ## 2026-06-30 — feat(ms-todo): MS Graph / To Do service — MsTodoModule, needsReauth, Tasks.ReadWrite scope (v2026.06.30.623)
 
 ### schema.prisma

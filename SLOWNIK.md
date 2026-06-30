@@ -647,6 +647,35 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | pendingExport (DocSidebar) | apps/frontend/src/components/Documentation/DocumentationSidebar.jsx | @anchor doc-sidebar-pending-export |
 | ui-funkcja | buildDownloadArtifact | apps/frontend/src/utils/downloadPdfWithHighlights.js | @anchor build-download-artifact |
 
+### Moduł UserTasks + NotificationCron (Etap 4+5)
+
+#### Backend (`apps/backend/src/user-tasks/`, `apps/backend/src/notification-cron/`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-modul | UserTasksModule | apps/backend/src/user-tasks/user-tasks.module.ts | @anchor user-tasks-module |
+| back-serwis | UserTasksService | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-service |
+| back-controller | UserTasksController | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-controller |
+| back-serwis | TaskSyncService | apps/backend/src/user-tasks/task-sync.service.ts | @anchor task-sync-service |
+| back-funkcja | TaskSyncService.syncSingleUser | apps/backend/src/user-tasks/task-sync.service.ts | @anchor task-sync-single-user |
+| back-funkcja | TaskSyncService.processDeltaTasks | apps/backend/src/user-tasks/task-sync.service.ts | @anchor task-sync-process-delta |
+| back-funkcja | TaskSyncService.resolveNodeId | apps/backend/src/user-tasks/task-sync.service.ts | @anchor task-sync-resolve-node-id |
+| back-funkcja | TaskSyncService.pushTaskToGraph | apps/backend/src/user-tasks/task-sync.service.ts | @anchor task-sync-push-to-graph |
+| back-funkcja | UserTasksService.listForUser | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-list |
+| back-funkcja | UserTasksService.create | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-create |
+| back-funkcja | UserTasksService.update | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-update |
+| back-funkcja | UserTasksService.softDelete | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-soft-delete |
+| back-funkcja | UserTasksService.cleanupTrash | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-trash-cleanup |
+| back-endpoint | GET /my-tasks | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-get-endpoint |
+| back-endpoint | POST /my-tasks | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-create-endpoint |
+| back-endpoint | PATCH /my-tasks/:id | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-update-endpoint |
+| back-endpoint | DELETE /my-tasks/:id | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-delete-endpoint |
+| back-modul | NotificationCronModule | apps/backend/src/notification-cron/notification-cron.module.ts | @anchor notification-cron-module |
+| back-serwis | NotificationCronService | apps/backend/src/notification-cron/notification-cron.service.ts | @anchor notification-cron-service |
+| back-funkcja | NotificationCronService.syncMsTodo | apps/backend/src/notification-cron/notification-cron.service.ts | @anchor notification-cron-ms-todo-sync |
+| back-funkcja | NotificationCronService.dispatchReminders | apps/backend/src/notification-cron/notification-cron.service.ts | @anchor notification-cron-reminder-dispatch |
+| back-funkcja | NotificationCronService.cleanupTrash | apps/backend/src/notification-cron/notification-cron.service.ts | @anchor notification-cron-trash-cleanup |
+
 ### Moduł MsTodo — MS Graph / To Do service
 
 #### Backend (`apps/backend/src/ms-todo/`)

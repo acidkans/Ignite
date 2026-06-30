@@ -35,6 +35,8 @@ import { PdfModule } from './pdf/pdf.module';
 import { OneDriveModule } from './onedrive/onedrive.module';
 import { NotificationSettingsModule } from './notification-settings/notification-settings.module';
 import { MsTodoModule } from './ms-todo/ms-todo.module';
+import { UserTasksModule } from './user-tasks/user-tasks.module';
+import { NotificationCronModule } from './notification-cron/notification-cron.module';
 
 @Module({
   imports: [
@@ -76,6 +78,8 @@ import { MsTodoModule } from './ms-todo/ms-todo.module';
     OneDriveModule,
     NotificationSettingsModule,
     MsTodoModule,
+    UserTasksModule,
+    NotificationCronModule,
   ],
   controllers: [AppController],
   providers: [
