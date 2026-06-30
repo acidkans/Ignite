@@ -46,6 +46,19 @@ export function usePushSubscription(token) {
 
                 let sub = await reg.pushManager.getSubscription();
 
+                // Stara subskrypcja może być powiązana z innym kluczem VAPID (np. sprzed
+                // skonfigurowania kluczy na serwerze) — wtedy push provider odrzuca wysyłkę
+                // kodem 403, mimo że subskrypcja wygląda na aktywną. Trzeba ją odświeżyć.
+                if (sub && sub.options?.applicationServerKey) {
+                    const current = new Uint8Array(sub.options.applicationServerKey);
+                    const expected = urlBase64ToUint8Array(publicKey);
+                    const matches = current.length === expected.length && current.every((b, i) => b === expected[i]);
+                    if (!matches) {
+                        await sub.unsubscribe().catch(() => {});
+                        sub = null;
+                    }
+                }
+
                 if (!sub) {
                     const permission = await Notification.requestPermission();
                     if (permission !== 'granted') return;

@@ -57,9 +57,11 @@ export class PushService implements OnModuleInit {
                 this.logger.log(`[Push] OK → ${sub.endpoint.slice(0, 60)}…`);
             } catch (err: any) {
                 this.logger.warn(`[Push] BŁĄD statusCode=${err.statusCode} msg=${err.message}`);
-                if (err.statusCode === 410 || err.statusCode === 404) {
+                // 410/404 = subskrypcja wygasła; 403 = niezgodność klucza VAPID (np. subskrypcja
+                // sprzed skonfigurowania kluczy) — w obu przypadkach trwale nie do naprawienia.
+                if (err.statusCode === 410 || err.statusCode === 404 || err.statusCode === 403) {
                     await this.prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
-                    this.logger.warn(`[Push] Subskrypcja wygasła — usunięto`);
+                    this.logger.warn(`[Push] Subskrypcja nieprawidłowa — usunięto`);
                 }
             }
         }
