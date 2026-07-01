@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, Body, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Req } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OffersService } from './offers.service';
 import { MaterialRequirementsService } from '../material-requirements/material-requirements.service';
@@ -29,6 +29,12 @@ export class OffersController {
     @Delete(':id')
     delete(@Param('id') id: string) {
         return this.service.delete(id);
+    }
+
+    // @anchor offers-patch-positions
+    @Patch(':id/positions')
+    updatePositions(@Param('id') id: string, @Body() body: { positions: any[] }) {
+        return this.service.updatePositions(id, body.positions);
     }
 
     // @anchor offers-post-auto-assign

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronDown, Package, Zap } from 'lucide-react';
+import { ChevronDown, Package, Zap, Trash2 } from 'lucide-react';
 import { API_URL } from '../../config';
 import PropertyPreview from './PropertyPreview';
 
@@ -71,6 +71,19 @@ function OffersTable({ nodeId, refreshKey, searchQuery = '', isGlobal = false })
         next.has(id) ? next.delete(id) : next.add(id);
         return next;
     });
+
+    const handleDeletePosition = async (docId, posIndex) => {
+        const doc = docs.find(d => d.id === docId);
+        if (!doc) return;
+        const newPositions = doc.positions.filter((_, i) => i !== posIndex);
+        setDocs(prev => prev.map(d => d.id === docId ? { ...d, positions: newPositions } : d));
+        const token = sessionStorage.getItem('token');
+        await fetch(`${API_URL}/offers/${docId}/positions`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ positions: newPositions }),
+        });
+    };
 
     const handleDelete = async (id) => {
         if (!confirm('Usunąć tę ofertę z listy?')) return;
@@ -151,11 +164,12 @@ function OffersTable({ nodeId, refreshKey, searchQuery = '', isGlobal = false })
                                             <th className="text-right px-3 py-2 text-gray-500 font-semibold uppercase tracking-wider">Ilość</th>
                                             <th className="text-left px-3 py-2 text-gray-500 font-semibold uppercase tracking-wider">Jedn.</th>
                                             <th className="text-right px-3 py-2 text-gray-500 font-semibold uppercase tracking-wider">Cena netto</th>
+                                            <th className="w-8 px-2 py-2" />
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {positions.map((p, i) => (
-                                            <tr key={i} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                                            <tr key={i} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors group">
                                                 <td className="px-3 py-2 text-gray-600 text-center">{p.lp ?? i + 1}</td>
                                                 <td className="px-3 py-2 text-gray-200 max-w-[220px]">
                                                     <span className="line-clamp-2" title={p.description || p.name}>{p.description || p.name || '—'}</span>
@@ -165,6 +179,15 @@ function OffersTable({ nodeId, refreshKey, searchQuery = '', isGlobal = false })
                                                 <td className="px-3 py-2 text-gray-500">{p.unit || '—'}</td>
                                                 <td className="px-3 py-2 text-right text-gray-300 whitespace-nowrap">
                                                     {p.priceNetto != null ? `${Number(p.priceNetto).toFixed(2)} zł` : '—'}
+                                                </td>
+                                                <td className="px-2 py-2 text-center">
+                                                    <button
+                                                        onClick={() => handleDeletePosition(doc.id, i)}
+                                                        title="Usuń pozycję"
+                                                        className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 transition-all"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))}

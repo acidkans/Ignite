@@ -497,6 +497,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-endpoint | PATCH /material-requirements/:id/offer | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-patch-offer |
 | back-endpoint | DELETE /material-requirements/:id/offer | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-delete-offer |
 | back-endpoint | POST /offers/:id/auto-assign | apps/backend/src/offers/offers.controller.ts | @anchor offers-post-auto-assign |
+| back-endpoint | PATCH /offers/:id/positions | apps/backend/src/offers/offers.controller.ts | @anchor offers-patch-positions |
 | back-endpoint | POST /material-requirements/extract/:nodeId | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-extract |
 | back-endpoint | POST /material-requirements/:id/evaluate-compliance | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-evaluate-compliance |
 | back-endpoint | POST /material-requirements/:id/search-products | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-search-products |

@@ -50,4 +50,11 @@ export class OffersService {
     async delete(id: string) {
         return this.prisma.offer.delete({ where: { id } });
     }
+
+    async updatePositions(id: string, positions: any[]) {
+        return this.prisma.offer.update({
+            where: { id },
+            data: { positions: JSON.stringify(positions) },
+        });
+    }
 }
