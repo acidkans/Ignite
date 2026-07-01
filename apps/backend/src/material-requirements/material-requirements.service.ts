@@ -243,16 +243,16 @@ export class MaterialRequirementsService {
         // Material ma priorytet; fallback na bezpośrednie pole gdy materialId=null
         return items.map(item => ({
             ...item,
-            productName: item.material?.productName ?? item.productName ?? null,
-            manufacturer: item.material?.manufacturer ?? item.manufacturer ?? null,
-            model: item.material?.model ?? item.model ?? null,
-            dataSheetUrl: item.material?.dataSheetUrl ?? item.dataSheetUrl ?? null,
-            dataSheetName: item.material?.dataSheetName ?? item.dataSheetName ?? null,
-            complianceUrl: item.material?.complianceUrl ?? item.complianceUrl ?? null,
-            imageUrl: item.material?.imageUrl ?? item.imageUrl ?? null,
+            productName: item.material?.productName ?? null,
+            manufacturer: item.material?.manufacturer ?? null,
+            model: item.material?.model ?? null,
+            dataSheetUrl: item.material?.dataSheetUrl ?? null,
+            dataSheetName: item.material?.dataSheetName ?? null,
+            complianceUrl: item.material?.complianceUrl ?? null,
+            imageUrl: item.material?.imageUrl ?? null,
             priceNetto: item.budgetedPriceNetto ?? null,
-            productUrl: item.material?.productUrl ?? item.productUrl ?? null,
-            seller: item.material?.seller ?? item.seller ?? null,
+            productUrl: item.material?.productUrl ?? null,
+            seller: item.material?.seller ?? null,
         }));
     }
 
