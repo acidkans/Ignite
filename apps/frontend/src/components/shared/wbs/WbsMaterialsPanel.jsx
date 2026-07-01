@@ -490,7 +490,11 @@ function OfferPickerDropdown({ offers, onSelect, onClose }) {
                                 className="w-full text-left px-3 py-1.5 text-xs hover:bg-amber-500/10 transition-colors flex items-center gap-2 border-b border-white/5 last:border-0">
                                 <span className="text-gray-500 shrink-0 w-6 text-right">{pos.lp ?? idx + 1}.</span>
                                 <span className="flex-1 truncate text-gray-200">{pos.name || pos.description || '—'}</span>
-                                <span className="text-amber-300 whitespace-nowrap font-mono text-[10px] shrink-0">{Number(pos.priceNetto).toFixed(2)} zł</span>
+                                <span className="text-amber-300 whitespace-nowrap font-mono text-[10px] shrink-0">
+                                    {pos.priceNettoPln != null
+                                        ? `${Number(pos.priceNettoPln).toFixed(2)} zł`
+                                        : `${Number(pos.priceNetto).toFixed(2)} ${pos.currency || 'zł'}`}
+                                </span>
                             </button>
                         ))}
                     </div>
