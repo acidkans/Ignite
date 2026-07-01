@@ -100,7 +100,7 @@ export default function AddTaskModal({ open, onClose, nodeId, nodeName }) {
                                 <Calendar size={10} /> Termin (opcjonalnie)
                             </label>
                             <input
-                                type="date"
+                                type="datetime-local"
                                 value={plannedEnd}
                                 onChange={e => setPlannedEnd(e.target.value)}
                                 className="w-full px-3 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-colors [color-scheme:dark]"
