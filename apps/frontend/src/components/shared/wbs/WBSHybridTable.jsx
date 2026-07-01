@@ -35,7 +35,8 @@ function AutoResizeTextarea({ value, onChange, onBlur, placeholder, className, s
         />
     );
 }
-import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle } from 'lucide-react';
+import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo } from 'lucide-react';
+import AddTaskModal from '../AddTaskModal';
 
 // ── Q&A cell — zagnieżdżona tabela Pytanie / Odpowiedź per WBS node ───────────
 function QaPairRow({ p, idx, onUpdate, onRemove, onPersist }) {
@@ -866,6 +867,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // Koszyk: id chipa-celu podświetlonego podczas przeciągania innego chipa (scalanie duplikatów).
     const [mergeOverId, setMergeOverId] = useState(null);
     const [copyBuffer, setCopyBuffer] = useState(null); // { node, sourceName }
+    // @anchor add-task-node-state
+    const [addTaskNode, setAddTaskNode] = useState(null); // { id, name } — węzeł dla którego otwarto modal dodawania zadania
     // @anchor qa-modal-node
     const [qaModalNode, setQaModalNode] = useState(null); // { id, name } — węzeł z otwartym modalem Q&A
     // @anchor qa-branch-node
@@ -1306,6 +1309,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 <Plus size={16} />
                             </button>
                         )}
+                        <button
+                            onClick={e => { e.stopPropagation(); setAddTaskNode({ id: node.id, name: node.name }); }}
+                            className="p-1 hover:bg-blue-500/10 rounded text-gray-600 hover:text-blue-400 transition-all"
+                            title="Dodaj zadanie do tego węzła"
+                        >
+                            <ListTodo size={13} />
+                        </button>
                         <button
                             onClick={e => handleDelete(node.id, e)}
                             className="p-1 hover:bg-red-500/10 rounded text-gray-600 hover:text-red-500 transition-all"
@@ -1748,6 +1758,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     return (
         <div className="flex flex-col flex-1 min-h-0">
             <style>{WBS_BRANCH_CSS}</style>
+            <AddTaskModal
+                open={!!addTaskNode}
+                onClose={() => setAddTaskNode(null)}
+                nodeId={addTaskNode?.id}
+                nodeName={addTaskNode?.name}
+            />
             {copyBuffer && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-900/30 border-b border-blue-500/20 text-[15px] text-blue-300">
                     <Clipboard size={12} className="flex-shrink-0" />

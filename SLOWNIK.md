@@ -274,6 +274,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | qaModalNode | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-modal-node |
 | ui-stan | qaBranchNode | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-branch-node |
 | ui-modal | QaBranchModal | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-branch-modal |
+| ui-stan | addTaskNode | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor add-task-node-state |
+| ui-modal | AddTaskModal | apps/frontend/src/components/shared/AddTaskModal.jsx | @anchor add-task-modal |
+| ui-funkcja | handleSubmit (AddTaskModal) | apps/frontend/src/components/shared/AddTaskModal.jsx | @anchor add-task-modal-submit |
 | ui-funkcja | collectBranchQa | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor collect-branch-qa |
 | ui-stala | canFullscreen | apps/frontend/src/components/shared/SchematTab.jsx | @anchor schemat-can-fullscreen |
 | ui-funkcja | handleNodeExpand | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-node-expand-refresh |
