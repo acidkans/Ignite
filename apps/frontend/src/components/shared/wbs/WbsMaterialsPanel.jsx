@@ -832,6 +832,11 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                     <Paperclip size={8} className="shrink-0" />
                                     <span className="truncate">Poz.{offerSnap.lp} · {offerSnap.name}</span>
                                 </div>
+                                {offerSnap.rateComment && (
+                                    <div className="mt-0.5 text-[9px] text-amber-400/50 font-mono truncate" title={offerSnap.rateComment}>
+                                        {offerSnap.rateComment}
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div className="relative">

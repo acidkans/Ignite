@@ -1342,15 +1342,48 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
         const pos = positions[positionIdx];
         if (!pos) throw new BadRequestException('Indeks pozycji poza zakresem');
 
+        // Cena w PLN — jeśli waluta obca, użyj przeliczonej wartości
+        const pricePln = pos.priceNettoPln ?? pos.priceNetto ?? null;
+        const currency = (pos.currency || 'PLN').toUpperCase();
+        const rateComment = (currency !== 'PLN' && pos.exchangeRate && pos.priceNetto != null)
+            ? `${pos.priceNetto} ${currency} × ${pos.exchangeRate} (NBP ${pos.rateDate}) = ${pricePln?.toFixed(2)} zł`
+            : null;
+
+        // Upsert do tabeli materials (producent + model z pozycji oferty)
+        let materialId: string | null = null;
+        const mfr = normalizeManufacturer(pos.manufacturer ?? null);
+        const mdl = pos.model ?? null;
+        const pn = pos.name || pos.description || null;
+        if (mfr) {
+            const existing = await this.prisma.material.findFirst({
+                where: { manufacturer: mfr, model: mdl ?? null },
+            });
+            const mat = existing
+                ? existing
+                : await this.prisma.material.create({
+                    data: { manufacturer: mfr, model: mdl, productName: pn, type: 'DEVICE' },
+                });
+            materialId = mat.id;
+        }
+
         return this.prisma.materialRequirement.update({
             where: { id },
             data: {
                 offerId,
                 offerPositionIdx: positionIdx,
+                budgetedPriceNetto: pricePln,
+                ...(materialId ? { materialId } : {}),
                 offerPositionSnapshot: JSON.stringify({
                     lp: pos.lp ?? positionIdx + 1,
-                    name: pos.name || pos.description || '',
-                    priceNetto: pos.priceNetto ?? null,
+                    name: pn ?? '',
+                    manufacturer: mfr ?? null,
+                    model: mdl ?? null,
+                    priceNetto: pricePln,
+                    priceOriginal: currency !== 'PLN' ? pos.priceNetto : null,
+                    currency: currency !== 'PLN' ? currency : null,
+                    exchangeRate: pos.exchangeRate ?? null,
+                    rateDate: pos.rateDate ?? null,
+                    rateComment,
                     unit: pos.unit || '',
                     wbsPath: pos.wbsPath ?? null,
                 }),
