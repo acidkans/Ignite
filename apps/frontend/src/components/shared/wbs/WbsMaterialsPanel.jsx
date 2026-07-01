@@ -507,7 +507,7 @@ function OfferPickerDropdown({ offers, onSelect, onClose }) {
 // ─── ProductCard ──────────────────────────────────────────────────────────────
 
 // @anchor product-card
-export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, onPropagatePrice, readOnly, onPatch }) {
+export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, onRefreshOffers, onPropagatePrice, readOnly, onPatch }) {
     const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
 
     const [fields, setFields] = useState({
@@ -878,7 +878,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                     className={`w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50 ${offers?.length > 0 && !readOnly ? 'pr-6' : ''}`}
                                     placeholder="0.00" />
                                 {offers?.length > 0 && !readOnly && (
-                                    <button onClick={() => setOfferPicker(v => !v)} title="Przypisz cenę z oferty"
+                                    <button onClick={() => { if (!offerPicker) onRefreshOffers?.(); setOfferPicker(v => !v); }} title="Przypisz cenę z oferty"
                                         className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-gray-600 hover:text-amber-400 transition-colors">
                                         <Paperclip size={10} />
                                     </button>
@@ -2009,6 +2009,7 @@ export default function WbsMaterialsPanel({
                                                     materialDb={materialDb}
                                                     offers={offers}
                                                     onRefresh={refreshCards}
+                                                    onRefreshOffers={fetchOffers}
                                                     onPropagatePrice={propagatePriceNetto}
                                                     readOnly={readOnly}
                                                     onPatch={(cardId, data) => setCards(prev => {
