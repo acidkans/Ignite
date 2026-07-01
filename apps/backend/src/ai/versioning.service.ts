@@ -306,18 +306,20 @@ export class VersioningService {
         for (const wn of wbsNodes) {
             const newWbsId = wbsIdMap.get(wn.id);
             if (!newWbsId) continue;
-            const tags: string[] = Array.isArray((wn as any).tags) ? (wn as any).tags : [];
-            const remapped = tags.map(tag => {
+            let tags: string[] = [];
+            try { tags = (wn as any).tags ? JSON.parse((wn as any).tags) : []; } catch { tags = []; }
+            if (!Array.isArray(tags)) tags = [];
+            const remapped = tags.map((tag: string) => {
                 if (typeof tag === 'string' && tag.startsWith('req:')) {
                     const newReqId = matReqIdMap.get(tag.slice(4));
                     return newReqId ? `req:${newReqId}` : tag;
                 }
                 return tag;
             });
-            if (remapped.some((t, i) => t !== tags[i])) {
+            if (remapped.some((t: string, i: number) => t !== tags[i])) {
                 await tx.wbsNode.update({
                     where: { id: newWbsId },
-                    data: { tags: remapped },
+                    data: { tags: JSON.stringify(remapped) },
                 });
             }
         }
