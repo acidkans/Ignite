@@ -335,6 +335,11 @@ function OfferParsePanel({ documentId, token, onApprove }) {
                                         placeholder="Cena netto" type="number" min="0" step="0.01"
                                         className="bg-black/40 border border-white/10 rounded px-1.5 py-1 text-[10px] text-teal-300 font-mono focus:outline-none focus:border-teal-500" />
                                 </div>
+                                {pos.currency && pos.currency !== 'PLN' && pos.exchangeRate && (
+                                    <div className="ml-5 text-[9px] text-amber-400/80 font-mono">
+                                        {pos.priceNetto} {pos.currency} × {pos.exchangeRate} (NBP {pos.rateDate}) = <span className="text-amber-300 font-semibold">{pos.priceNettoPln?.toFixed(2)} zł</span>
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>

@@ -1433,10 +1433,49 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
         const raw = await this.callAiForJson(this.buildOfferParsePrompt(text));
         const jsonMatch = raw.match(/\[[\s\S]*\]/);
         if (!jsonMatch) return [];
+        let items: any[];
         try {
-            const items = JSON.parse(jsonMatch[0]);
-            return Array.isArray(items) ? items : [];
+            items = JSON.parse(jsonMatch[0]);
+            if (!Array.isArray(items)) return [];
         } catch { return []; }
+
+        // Przelicz waluty obce na PLN przez NBP
+        const foreignCurrencies = [...new Set(
+            items.map(i => (i.currency || 'PLN').toUpperCase()).filter(c => c !== 'PLN')
+        )];
+        const rateMap: Record<string, { rate: number; date: string }> = {};
+        for (const code of foreignCurrencies) {
+            const r = await this.fetchNbpRate(code);
+            if (r) rateMap[code] = r;
+        }
+
+        return items.map(item => {
+            const currency = (item.currency || 'PLN').toUpperCase();
+            const rateInfo = rateMap[currency];
+            const priceNettoPln = rateInfo && item.priceNetto != null
+                ? Math.round(item.priceNetto * rateInfo.rate * 100) / 100
+                : (item.priceNetto ?? null);
+            return {
+                ...item,
+                currency,
+                exchangeRate: rateInfo?.rate ?? null,
+                rateDate: rateInfo?.date ?? null,
+                priceNettoPln,
+            };
+        });
+    }
+
+    private async fetchNbpRate(currency: string): Promise<{ rate: number; date: string } | null> {
+        try {
+            const res = await fetch(
+                `https://api.nbp.pl/api/exchangerates/rates/a/${currency.toLowerCase()}/?format=json`,
+                { headers: { Accept: 'application/json' } }
+            );
+            if (!res.ok) return null;
+            const data: any = await res.json();
+            const latest = data?.rates?.[0];
+            return latest ? { rate: latest.mid, date: latest.effectiveDate } : null;
+        } catch { return null; }
     }
 
     private buildOfferParsePrompt(text: string): string {
@@ -1456,11 +1495,12 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
     "unit": "sztuki",
     "quantity": 1,
     "priceNetto": 100.00,
+    "currency": "EUR",
     "wbsPath": null
   }
 ]
 
-Zasady: ceny jako liczby bez waluty, null gdy pole nieznane, wyodrębnij wszystkie pozycje.`;
+Zasady: ceny jako liczby bez waluty (usuń symbole €, $, PLN, zł, USD, EUR i separatory tysięcy), pole currency to kod ISO waluty (EUR/USD/PLN/GBP itp.) — wstaw PLN jeśli waluta nieznana, null gdy pole nieznane, wyodrębnij wszystkie pozycje.`;
     }
 
     private async parseExcelOffer(filePath: string): Promise<any[]> {
