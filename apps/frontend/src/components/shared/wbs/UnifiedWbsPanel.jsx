@@ -3737,10 +3737,14 @@ ${ganttSectionHtml}
                 // odczyta stare dane z DB (race condition)
                 const normalizedType = String(node?.type || '').toLowerCase();
                 if (normalizedType === 'material' || normalizedType === 'equipment') {
-                    // Szukaj wymagania przez wbsNodeId (pewniejsze niż req: tag)
+                    // Szukaj wymagania: 1) wbsNodeId, 2) tag req:, 3) fallback po nazwie (stare węzły / snapshot)
                     const reqByNodeId = allRequirements.find(r => r.wbsNodeId === id);
                     const reqTagId = (node?.tags || []).find(t => String(t).startsWith('req:'))?.slice(4);
-                    const reqId = reqByNodeId?.id || reqTagId;
+                    const nodeName = String(node?.name || '').trim().toLowerCase();
+                    const reqByName = (!reqByNodeId && !reqTagId && nodeName)
+                        ? allRequirements.find(r => String(r.name || '').trim().toLowerCase() === nodeName)
+                        : null;
+                    const reqId = reqByNodeId?.id || reqTagId || reqByName?.id;
                     if (reqId) {
                         await fetch(`${API_URL}/material-requirements/${reqId}`, {
                             method: 'PATCH',

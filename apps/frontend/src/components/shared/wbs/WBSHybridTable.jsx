@@ -265,7 +265,11 @@ function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, 
     const [materialDb, setMaterialDb] = React.useState([]);
     const [offers, setOffers] = React.useState([]);
 
-    // Jeśli nie ma karty — utwórz ją automatycznie
+    // Jeśli nie ma karty — utwórz ją automatycznie (tylko gdy naprawdę nie istnieje).
+    // WAŻNE: versionId=null (baseline), nie snapshot — requirement musi być widoczny we wszystkich wersjach.
+    // Snapshot-owe wersjoowanie WBS klonuje węzły (nowe UUID), więc `req` lookup po wbsNodeId
+    // zawodzi dla snapshot-ów. Fallback po nazwie (matReqByName) jest obsługiwany przez rodzica przed
+    // przekazaniem `req` do panelu, więc tutaj docieramy tylko gdy requirement faktycznie nie istnieje.
     React.useEffect(() => {
         if (card) { setCard(req); return; }
         if (!node.id) return;
@@ -273,7 +277,7 @@ function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, 
         fetch(`${API_URL}/material-requirements`, {
             method: 'POST', headers,
             body: JSON.stringify({
-                nodeId: processNodeId, versionId: versionId || null, name: node.name, type: reqType,
+                nodeId: processNodeId, versionId: null, name: node.name, type: reqType,
                 quantity: node.quantity || 1, unit: node.unit || 'sztuki', wbsNodeId: node.id,
             }),
         }).then(r => r.ok ? r.json() : null).then(data => { if (data) { setCard(data); onSaved?.(data); } });
@@ -854,6 +858,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // @anchor mat-req-by-wbs-id
     // Mapa node→wymaganie. Klucze: wbsNodeId ORAZ MaterialRequirement.id (dla rozwiązywania liścia po tagu req:).
     const [matReqByWbsId, setMatReqByWbsId] = useState({});
+    // @anchor mat-req-by-name
+    // Fallback: gdy node nie ma tagu req: i wbsNodeId nie pasuje (np. snapshot lub stary węzeł),
+    // szukamy requirement po nazwie. Zapobiega auto-tworzeniu ghost-requirements.
+    const [matReqByName, setMatReqByName] = useState({});
     const [expandedMaterialIds, setExpandedMaterialIds] = useState(new Set());
     const [reqDragOverNode, setReqDragOverNode] = useState(null);
     const [selectedNodeId, setSelectedNodeId] = useState(null);
@@ -904,6 +912,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     const data = await res.json();
                     const map = {};
                     const reqMap = {};
+                    const nameMap = {};
                     data.forEach(r => {
                         if (r.name) map[r.name.toLowerCase()] = r.status;
                         if (r.wbsNodeId) reqMap[r.wbsNodeId] = r;
@@ -911,9 +920,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         // a wbsNodeId wskazuje gałąź-rodzica (cel dropa), nie liść. Bez tego klucza
                         // ProductCard liścia nie znajdował wymagania i pokazywał puste „Wymagania techniczne".
                         reqMap[r.id] = r;
+                        // Fallback po nazwie — dla węzłów snapshot (klonowane ID) i starych węzłów bez req: taga.
+                        if (r.name) nameMap[r.name.toLowerCase()] = r;
                     });
                     setMaterialStatuses(map);
                     setMatReqByWbsId(reqMap);
+                    setMatReqByName(nameMap);
                 }
             } catch (e) {}
         };
@@ -1571,10 +1583,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         <MaterialReqExpandPanel
                             node={node}
                             req={(() => {
-                                // Najpierw po tagu `req:<id>` (prawdziwe połączenie liść↔wymaganie),
-                                // potem fallback po wbsNodeId (węzły bez tagu, np. ręczne pozycje materiałowe).
+                                // 1. Tag req:<id> — bezpośrednie połączenie liść↔wymaganie (najwłaściwsze)
                                 const reqTag = (node.tags || []).find(t => String(t).startsWith('req:'));
-                                return (reqTag && matReqByWbsId[reqTag.slice(4)]) || matReqByWbsId[node.id] || null;
+                                if (reqTag && matReqByWbsId[reqTag.slice(4)]) return matReqByWbsId[reqTag.slice(4)];
+                                // 2. wbsNodeId — aktywna wersja, węzeł jest właścicielem wymagania
+                                if (matReqByWbsId[node.id]) return matReqByWbsId[node.id];
+                                // 3. Fallback po nazwie — dla węzłów snapshot (klonowane ID) i starych węzłów
+                                //    bez tagu req:. Zapobiega tworzeniu ghost-requirements z błędnym versionId.
+                                return matReqByName[String(node.name || '').trim().toLowerCase()] || null;
                             })()}
                             processNodeId={processNodeId}
                             versionId={versionId}

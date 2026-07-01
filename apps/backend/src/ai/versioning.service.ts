@@ -292,7 +292,65 @@ export class VersioningService {
                     status: mr.status,
                     listId: null,
                     materialId: mr.materialId ?? null,
+                    availability: (mr as any).availability ?? null,
+                    budgetedPriceNetto: (mr as any).budgetedPriceNetto ?? null,
+                    offerId: (mr as any).offerId ?? null,
+                    offerPositionIdx: (mr as any).offerPositionIdx ?? null,
+                    offerPositionSnapshot: (mr as any).offerPositionSnapshot ?? null,
                 }
+            });
+        }
+
+        // 9b. Remap req: tags in cloned WBS nodes to new requirement IDs
+        // (tagi kopiowane z oryginału wskazują na stare ID wymagań — muszą wskazywać na klony)
+        for (const wn of wbsNodes) {
+            const newWbsId = wbsIdMap.get(wn.id);
+            if (!newWbsId) continue;
+            const tags: string[] = Array.isArray((wn as any).tags) ? (wn as any).tags : [];
+            const remapped = tags.map(tag => {
+                if (typeof tag === 'string' && tag.startsWith('req:')) {
+                    const newReqId = matReqIdMap.get(tag.slice(4));
+                    return newReqId ? `req:${newReqId}` : tag;
+                }
+                return tag;
+            });
+            if (remapped.some((t, i) => t !== tags[i])) {
+                await tx.wbsNode.update({
+                    where: { id: newWbsId },
+                    data: { tags: remapped },
+                });
+            }
+        }
+
+        // 9c. Clone ProductProposals (remapowane na nowe ID wymagań)
+        const proposals = await tx.productProposal.findMany({
+            where: { materialRequirementId: { in: Array.from(matReqIdMap.keys()) } },
+        });
+
+        for (const pp of proposals) {
+            const newReqId = matReqIdMap.get(pp.materialRequirementId);
+            if (!newReqId) continue;
+            await tx.productProposal.create({
+                data: {
+                    materialRequirementId: newReqId,
+                    productName: pp.productName,
+                    manufacturer: pp.manufacturer,
+                    model: pp.model,
+                    sourceUrl: pp.sourceUrl,
+                    priceNetto: pp.priceNetto,
+                    seller: pp.seller,
+                    offerNumber: (pp as any).offerNumber ?? null,
+                    availability: pp.availability,
+                    imageUrl: pp.imageUrl,
+                    isManual: pp.isManual,
+                    dataSheetUrl: pp.dataSheetUrl,
+                    dataSheetName: pp.dataSheetName,
+                    complianceUrl: pp.complianceUrl,
+                    complianceName: pp.complianceName,
+                    matchScore: pp.matchScore,
+                    isSelected: pp.isSelected,
+                    isRejected: pp.isRejected,
+                },
             });
         }
 
@@ -321,6 +379,7 @@ export class VersioningService {
                     budgetNotes: sourceReq.budgetNotes,
                     clientContacts: sourceReq.clientContacts,
                     clientProjectManager: sourceReq.clientProjectManager,
+                    clientProjectManagerCompany: (sourceReq as any).clientProjectManagerCompany ?? null,
                     clientProjectManagerEmail: sourceReq.clientProjectManagerEmail,
                     clientProjectManagerPhone: sourceReq.clientProjectManagerPhone,
                     offerStatus: sourceReq.offerStatus,
