@@ -525,12 +525,17 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
 
     const assignOffer = useCallback(async (offerId, positionIdx) => {
         setOfferPicker(false);
-        await fetch(`${API_URL}/material-requirements/${card.id}/offer`, {
+        const res = await fetch(`${API_URL}/material-requirements/${card.id}/offer`, {
             method: 'PATCH', headers,
             body: JSON.stringify({ offerId, positionIdx }),
         });
+        const updated = res.ok ? await res.json() : null;
         onRefresh();
-    }, [card?.id, headers, onRefresh]);
+        const pricePln = updated?.budgetedPriceNetto ?? null;
+        if (pricePln != null && onPropagatePrice) {
+            onPropagatePrice(card, wbsNode, pricePln);
+        }
+    }, [card, wbsNode, headers, onRefresh, onPropagatePrice]);
 
     const removeOffer = useCallback(async () => {
         await fetch(`${API_URL}/material-requirements/${card.id}/offer`, {
