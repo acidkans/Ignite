@@ -1310,7 +1310,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             </button>
                         )}
                         <button
-                            onClick={e => { e.stopPropagation(); setAddTaskNode({ id: node.id, name: node.name }); }}
+                            onClick={e => { e.stopPropagation(); setAddTaskNode({ id: processNodeId, name: node.name }); }}
                             className="p-1 hover:bg-blue-500/10 rounded text-gray-600 hover:text-blue-400 transition-all"
                             title="Dodaj zadanie do tego węzła"
                         >
