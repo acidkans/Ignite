@@ -264,6 +264,11 @@ function OfferParsePanel({ documentId, token, onApprove }) {
         setApproved(false);
     };
 
+    const removePos = (i) => {
+        setPositions(prev => prev.filter((_, idx) => idx !== i));
+        setApproved(false);
+    };
+
     const handleApprove = async () => {
         setSaving(true);
         try {
@@ -315,6 +320,9 @@ function OfferParsePanel({ documentId, token, onApprove }) {
                                     <input value={pos.description || ''} onChange={e => updatePos(i, 'description', e.target.value)}
                                         placeholder="Nazwa / opis"
                                         className="flex-1 bg-black/40 border border-white/10 rounded px-1.5 py-1 text-[11px] text-white focus:outline-none focus:border-teal-500" />
+                                    <button onClick={() => removePos(i)} title="Usuń pozycję" className="text-gray-600 hover:text-red-400 transition-colors flex-shrink-0">
+                                        <Trash2 size={11} />
+                                    </button>
                                 </div>
                                 <div className="grid grid-cols-2 gap-1 ml-5">
                                     <input value={pos.manufacturer || ''} onChange={e => updatePos(i, 'manufacturer', e.target.value)}
