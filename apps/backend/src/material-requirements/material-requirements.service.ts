@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { normalizeManufacturer } from '../common/normalize.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveVersionId } from '../common/version.util';
 import { VectorService } from '../ai/vector.service';
@@ -239,18 +240,19 @@ export class MaterialRequirementsService {
         });
 
         // Spłaszcz pola Material na poziom wymagania (backward compat)
+        // Material ma priorytet; fallback na bezpośrednie pole gdy materialId=null
         return items.map(item => ({
             ...item,
-            productName: item.material?.productName ?? null,
-            manufacturer: item.material?.manufacturer ?? null,
-            model: item.material?.model ?? null,
-            dataSheetUrl: item.material?.dataSheetUrl ?? null,
-            dataSheetName: item.material?.dataSheetName ?? null,
-            complianceUrl: item.material?.complianceUrl ?? null,
-            imageUrl: item.material?.imageUrl ?? null,
+            productName: item.material?.productName ?? item.productName ?? null,
+            manufacturer: item.material?.manufacturer ?? item.manufacturer ?? null,
+            model: item.material?.model ?? item.model ?? null,
+            dataSheetUrl: item.material?.dataSheetUrl ?? item.dataSheetUrl ?? null,
+            dataSheetName: item.material?.dataSheetName ?? item.dataSheetName ?? null,
+            complianceUrl: item.material?.complianceUrl ?? item.complianceUrl ?? null,
+            imageUrl: item.material?.imageUrl ?? item.imageUrl ?? null,
             priceNetto: item.budgetedPriceNetto ?? null,
-            productUrl: item.material?.productUrl ?? null,
-            seller: item.material?.seller ?? null,
+            productUrl: item.material?.productUrl ?? item.productUrl ?? null,
+            seller: item.material?.seller ?? item.seller ?? null,
         }));
     }
 
@@ -518,7 +520,7 @@ export class MaterialRequirementsService {
                 await this.prisma.productProposal.create({
                     data: {
                         materialRequirementId: id,
-                        manufacturer: mfr, model: mdl,
+                        manufacturer: normalizeManufacturer(mfr), model: mdl,
                         productName: pn ?? undefined,
                         isManual: true, isSelected: true,
                         ...(priceNetto != null ? { priceNetto } : {}),
@@ -1034,7 +1036,7 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
                     data: {
                         materialRequirementId: id,
                         productName: p.productName,
-                        manufacturer: p.manufacturer,
+                        manufacturer: normalizeManufacturer(p.manufacturer),
                         model: p.model || null,
                         sourceUrl: p.sourceUrl || null,
                         matchScore: p.matchScore || null,
@@ -1101,11 +1103,12 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
     async addManualProposal(id: string, dto: { productName: string; manufacturer: string; model?: string; sourceUrl?: string; priceNetto?: number | null; availability?: string }) {
         await this.findOne(id);
         return this.prisma.productProposal.create({
-            data: { materialRequirementId: id, isManual: true, ...dto },
+            data: { materialRequirementId: id, isManual: true, ...dto, manufacturer: normalizeManufacturer(dto.manufacturer) },
         });
     }
 
     async updateProposal(proposalId: string, dto: Partial<{ productName: string; manufacturer: string; model: string; sourceUrl: string; priceNetto: number | null; seller: string | null; offerNumber: string | null; availability: string | null; isRejected: boolean; }>) {
+        if (dto.manufacturer !== undefined) dto.manufacturer = normalizeManufacturer(dto.manufacturer) ?? undefined;
         return this.prisma.productProposal.update({ where: { id: proposalId }, data: dto });
     }
 
@@ -1158,7 +1161,7 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
                 ? existingMaterial
                 : await this.prisma.material.create({
                     data: {
-                        manufacturer: proposal.manufacturer,
+                        manufacturer: normalizeManufacturer(proposal.manufacturer),
                         model: proposal.model ?? null,
                         productName: proposal.productName,
                         type: 'DEVICE',

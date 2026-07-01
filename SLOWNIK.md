@@ -249,6 +249,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 
 | Tag | Nazwa | Plik | Anchor |
 |-----|-------|------|--------|
+| back-funkcja | normalizeManufacturer | apps/backend/src/common/normalize.util.ts | @anchor normalize-manufacturer |
 | back-funkcja | normalizeVersionId | apps/backend/src/common/version.util.ts | @anchor normalize-version-id |
 | back-funkcja | resolveVersionId | apps/backend/src/common/version.util.ts | @anchor resolve-version-id |
 | back-funkcja | cloneVersionData | apps/backend/src/ai/versioning.service.ts | @anchor clone-version-data |

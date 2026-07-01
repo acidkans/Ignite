@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalizeManufacturer } from '../common/normalize.util';
 
 @Injectable()
 // @anchor materials-service
@@ -68,7 +69,7 @@ export class MaterialsService {
     }) {
         return this.prisma.material.create({
             data: {
-                manufacturer: dto.manufacturer,
+                manufacturer: normalizeManufacturer(dto.manufacturer),
                 model: dto.model ?? null,
                 productName: dto.productName ?? null,
                 type: dto.type ?? 'DEVICE',
@@ -100,6 +101,7 @@ export class MaterialsService {
         complianceName: string | null;
     }>) {
         await this.findOne(id);
+        if (dto.manufacturer !== undefined) dto.manufacturer = normalizeManufacturer(dto.manufacturer) ?? '';
         return this.prisma.material.update({ where: { id }, data: dto as any });
     }
 
