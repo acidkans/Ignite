@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { Trash2, ArrowUp, ArrowDown } from 'lucide-react';
-import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, TYPE_OPTIONS, TYPE_LABELS, UNIT_OPTIONS, parseLocaleNumber, sanitizeQtyInput } from './wbsConstants';
+import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, TYPE_OPTIONS, TYPE_LABELS, UNIT_OPTIONS, parseLocaleNumber, sanitizeQtyInput, evalQtyFormula } from './wbsConstants';
 
 const TH_BASE = 'text-left px-3 py-2.5 text-[17px] font-bold uppercase tracking-widest text-white whitespace-normal break-words select-none relative align-bottom';
 const TD = 'px-2 py-1.5 align-top break-words';
@@ -547,13 +547,25 @@ export default function BudgetTable({
                                             key={`${row.id}-quantity-${syncVersion}`}
                                             defaultValue={row.quantity != null && row.quantity !== 0 ? Number(row.quantity).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
                                             onChange={e => {
-                                                const clean = sanitizeQtyInput(e.target.value);
-                                                if (clean !== e.target.value) { e.target.value = clean; flashWarn(row.id, 'quantity'); }
+                                                const val = e.target.value;
+                                                if (val.startsWith('=')) {
+                                                    handleChange(row.id, 'quantity', val);
+                                                    return;
+                                                }
+                                                const clean = sanitizeQtyInput(val);
+                                                if (clean !== val) { e.target.value = clean; flashWarn(row.id, 'quantity'); }
                                                 handleChange(row.id, 'quantity', clean);
                                             }}
                                             onBlur={e => {
                                                 handleCellBlur();
-                                                const n = parseLocaleNumber(e.target.value);
+                                                const raw = e.target.value;
+                                                const evaluated = evalQtyFormula(raw);
+                                                if (evaluated !== null && evaluated >= 0) {
+                                                    e.target.value = evaluated.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                                    onFieldChange(row, 'quantity', e.target.value);
+                                                    return;
+                                                }
+                                                const n = parseLocaleNumber(raw);
                                                 if (n != null && n >= 0) {
                                                     e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                                     onFieldChange(row, 'quantity', e.target.value);

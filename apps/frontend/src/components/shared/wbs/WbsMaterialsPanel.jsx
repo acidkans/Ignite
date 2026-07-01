@@ -8,7 +8,7 @@ import {
     FileText, Link as LinkIcon, Download, BookOpen, X, Database, Paperclip,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
-import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput } from './wbsConstants';
+import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula } from './wbsConstants';
 import { buildPdfDocument, openPdfBlob, fetchLogoDataUrl, esc as escPdf } from '../../../utils/wbsPdfExport';
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
@@ -1091,9 +1091,10 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
 
     const handleQtyBlur = () => {
         setEditQty(false);
-        // Puste/niepoprawne → jawne 0 (nigdy magiczna 1). 0 jest poprawną wartością.
-        const parsed = parseFloat(String(qtyVal).replace(',', '.'));
-        const v = Number.isFinite(parsed) ? parsed : 0;
+        const raw = String(qtyVal);
+        const evaluated = evalQtyFormula(raw);
+        const n = evaluated !== null ? evaluated : parseFloat(raw.replace(',', '.'));
+        const v = Number.isFinite(n) && n >= 0 ? n : 0;
         if (v !== node.quantity) onPatchNode(node.id, { quantity: v });
     };
 
@@ -1143,8 +1144,10 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                     <div className="relative inline-block">
                         <input autoFocus type="text" inputMode="decimal" value={qtyVal}
                             onChange={e => {
-                                const clean = sanitizeQtyInput(e.target.value);
-                                if (clean !== e.target.value) flashWarn('qty');
+                                const val = e.target.value;
+                                if (val.startsWith('=')) { setQtyVal(val); return; }
+                                const clean = sanitizeQtyInput(val);
+                                if (clean !== val) flashWarn('qty');
                                 setQtyVal(clean);
                             }}
                             onFocus={e => e.target.select()} onMouseUp={e => e.target.select()}
@@ -1268,6 +1271,7 @@ export default function WbsMaterialsPanel({
     onWbsUpdate,
     onWbsNodeUnitCostChange,
     onPatchNode,
+    onQuantityChange,
     externalWbsNodes,
     refreshKey = 0,
     searchQuery = '',
@@ -1482,8 +1486,12 @@ export default function WbsMaterialsPanel({
             setInternalWbsNodes(prev => prev.map(n => n.id === wbsNodeId ? { ...n, ...data } : n));
         }
         onPatchNode?.(wbsNodeId, data);
+        if (data.quantity !== undefined && onQuantityChange) {
+            const nodeName = wbsNodes.find(n => n.id === wbsNodeId)?.name || '';
+            await onQuantityChange(wbsNodeId, data.quantity, nodeName);
+        }
         onWbsUpdate?.();
-    }, [onWbsUpdate, onPatchNode, externalWbsNodes]);
+    }, [onWbsUpdate, onPatchNode, externalWbsNodes, wbsNodes, onQuantityChange]);
 
     const createCard = useCallback(async (node) => {
         const reqType = wbsTypeFromAny(node.type) === 'equipment' ? 'equipment' : 'material';

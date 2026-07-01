@@ -4366,7 +4366,10 @@ ${ganttSectionHtml}
                 const normalizedType = String(row.type || row.budgetType || '').toLowerCase();
                 if (normalizedType === 'work' || normalizedType === 'praca') {
                     setRequirementsQtyByNode((prev) => ({ ...prev, [row.id]: q }));
-                    syncMaterialRequirementsFromWbsQuantity(row.id, q, row.name);
+                    (async () => {
+                        await syncMaterialRequirementsFromWbsQuantity(row.id, q, row.name);
+                        await refreshMaterialCosts();
+                    })();
                 } else if (normalizedType === 'material' || normalizedType === 'equipment') {
                     // Variant B: WBS is source of truth; update local material meta so inheritedQuantity reflects edit
                     const lookupKey = makeMaterialLookupKey(row.subjectName || row.name, row.name);
@@ -5061,6 +5064,13 @@ ${ganttSectionHtml}
                             readOnly={!isManagerOrAdmin && !isLogistyk}
                             externalWbsNodes={wbsData}
                             onPatchNode={(id, data) => setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))}
+                            onQuantityChange={async (id, qty, name) => {
+                                const q = String(qty);
+                                setRequirementsQtyByNode(prev => ({ ...prev, [id]: q }));
+                                saveBudgetField(id, { quantity: q });
+                                await syncMaterialRequirementsFromWbsQuantity(id, q, name);
+                                await refreshMaterialCosts();
+                            }}
                             onWbsNodeUnitCostChange={(nid, price) => updateNodeField(nid, 'unitCost', price)}
                             onWbsUpdate={async () => { setReqRefreshKey(k => k + 1); await refreshMaterialCosts(); await refreshWbsNodes(); }}
                             refreshKey={reqRefreshKey}
