@@ -29,6 +29,7 @@ export default function NotificationSettingsPage() {
   const [msStatus, setMsStatus] = useState(null); // null = loading
   const [msAction, setMsAction] = useState(null); // 'connecting' | 'disconnecting' | 'resyncing'
   const [msOAuthResult, setMsOAuthResult] = useState(null); // 'connected' | 'error' | null
+  const [msResyncMsg, setMsResyncMsg] = useState(null); // 'ok' | 'error' | null
 
   const fetchMsStatus = async () => {
     try {
@@ -68,9 +69,16 @@ export default function NotificationSettingsPage() {
 
   const handleMsResync = async () => {
     setMsAction('resyncing');
-    const token = sessionStorage.getItem('token');
-    await fetch(`${API_URL}/ms-todo/resync`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-    setMsAction(null);
+    setMsResyncMsg(null);
+    try {
+      const token = sessionStorage.getItem('token');
+      const res = await fetch(`${API_URL}/ms-todo/resync`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      setMsResyncMsg(res.ok ? 'ok' : 'error');
+    } catch {
+      setMsResyncMsg('error');
+    } finally {
+      setMsAction(null);
+    }
   };
 
   // Diagnostyka — placeholder do podłączenia z backendem.
@@ -321,15 +329,18 @@ export default function NotificationSettingsPage() {
             </div>
           ) : msStatus.connected ? (
             <>
-              <div className="flex items-center gap-2 text-emerald-400 text-sm">
-                <CheckCircle size={14} />
-                <span>Połączone jako <strong className="text-white">{msStatus.msAccountEmail || '(brak email)'}</strong></span>
-              </div>
-
-              {msStatus.needsReauth && (
-                <div className="flex items-start gap-2 text-[11px] text-amber-200 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
-                  <AlertCircle size={13} className="shrink-0 mt-0.5" />
-                  <span>Wymagana ponowna autoryzacja — dodano uprawnienie <code>Tasks.ReadWrite</code>. Połącz konto ponownie.</span>
+              {msStatus.needsReauth ? (
+                <div className="flex items-start gap-2 text-[11px] text-amber-200 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2">
+                  <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                  <span>
+                    Połączono jako <strong className="text-white">{msStatus.msAccountEmail || '(brak email)'}</strong>, ale wymagana jest ponowna autoryzacja —
+                    dodano uprawnienie <code>Tasks.ReadWrite</code>. Synchronizacja jest wstrzymana do czasu ponownego połączenia.
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-emerald-400 text-sm">
+                  <CheckCircle size={14} />
+                  <span>Połączone jako <strong className="text-white">{msStatus.msAccountEmail || '(brak email)'}</strong></span>
                 </div>
               )}
 
@@ -344,8 +355,8 @@ export default function NotificationSettingsPage() {
                 )}
               </div>
 
-              <div className="flex gap-2 flex-wrap pt-1">
-                {msStatus.needsReauth && (
+              <div className="flex gap-2 flex-wrap items-center pt-1">
+                {msStatus.needsReauth ? (
                   <button
                     onClick={handleMsConnect}
                     disabled={!!msAction}
@@ -353,15 +364,21 @@ export default function NotificationSettingsPage() {
                   >
                     <ExternalLink size={12} /> Połącz ponownie
                   </button>
+                ) : (
+                  <button
+                    onClick={handleMsResync}
+                    disabled={!!msAction}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-gray-300 text-[11px] rounded-lg transition-all disabled:opacity-50"
+                  >
+                    {msAction === 'resyncing' ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                    Wymuś sync
+                  </button>
                 )}
-                <button
-                  onClick={handleMsResync}
-                  disabled={!!msAction}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-gray-300 text-[11px] rounded-lg transition-all disabled:opacity-50"
-                >
-                  {msAction === 'resyncing' ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-                  Wymuś sync
-                </button>
+                {msResyncMsg && (
+                  <span className={`text-[11px] ${msResyncMsg === 'ok' ? 'text-emerald-300' : 'text-red-300'}`}>
+                    {msResyncMsg === 'ok' ? 'Zlecono — pojawi się po najbliższym cyklu (do 5 min).' : 'Błąd zlecenia synchronizacji.'}
+                  </span>
+                )}
                 <button
                   onClick={handleMsDisconnect}
                   disabled={!!msAction}
