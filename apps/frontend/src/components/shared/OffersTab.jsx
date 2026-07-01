@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronDown, Package } from 'lucide-react';
+import { ChevronDown, Package, Zap } from 'lucide-react';
 import { API_URL } from '../../config';
 import PropertyPreview from './PropertyPreview';
 
@@ -35,6 +35,8 @@ function OffersTable({ nodeId, refreshKey, searchQuery = '', isGlobal = false })
     const [docs, setDocs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [expandedIds, setExpandedIds] = useState(new Set());
+    const [autoAssigning, setAutoAssigning] = useState(null); // id oferty w trakcie auto-assign
+    const [autoAssignResult, setAutoAssignResult] = useState({}); // {[offerId]: {assigned,skipped,notFound}}
 
     const q = searchQuery.trim().toLowerCase();
     const filteredDocs = useMemo(() => {
@@ -77,6 +79,23 @@ function OffersTable({ nodeId, refreshKey, searchQuery = '', isGlobal = false })
         setDocs(prev => prev.filter(d => d.id !== id));
     };
 
+    const handleAutoAssign = async (id) => {
+        setAutoAssigning(id);
+        try {
+            const token = sessionStorage.getItem('token');
+            const res = await fetch(`${API_URL}/offers/${id}/auto-assign`, {
+                method: 'POST', headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+                const result = await res.json();
+                setAutoAssignResult(prev => ({ ...prev, [id]: result }));
+                setTimeout(() => setAutoAssignResult(prev => { const n = { ...prev }; delete n[id]; return n; }), 5000);
+            }
+        } finally {
+            setAutoAssigning(null);
+        }
+    };
+
     if (loading) return <div className="flex items-center justify-center py-8 text-gray-500 text-sm">Ładowanie…</div>;
 
     if (filteredDocs.length === 0) return (
@@ -101,6 +120,22 @@ function OffersTable({ nodeId, refreshKey, searchQuery = '', isGlobal = false })
                             >{doc.fileName}</span>
                             <span className="text-[10px] text-gray-500 shrink-0">{positions.length} poz.</span>
                             <span className="text-[10px] text-gray-600 shrink-0">{new Date(doc.createdAt).toLocaleDateString('pl-PL')}</span>
+                            {positions.some(p => p.wbsPath) && (
+                                <button
+                                    onClick={e => { e.stopPropagation(); handleAutoAssign(doc.id); }}
+                                    disabled={autoAssigning === doc.id}
+                                    title="Auto-przypisz ceny do wymagań materiałowych po ścieżce WBS"
+                                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 transition-colors disabled:opacity-40 shrink-0">
+                                    <Zap size={9} />
+                                    {autoAssigning === doc.id ? 'Przypisuję…' : 'Auto-przypisz'}
+                                </button>
+                            )}
+                            {autoAssignResult[doc.id] && (
+                                <span className="text-[10px] text-green-400 shrink-0">
+                                    ✓ {autoAssignResult[doc.id].assigned} przypisano
+                                    {autoAssignResult[doc.id].notFound > 0 && `, ${autoAssignResult[doc.id].notFound} nie znaleziono`}
+                                </span>
+                            )}
                             <button onClick={e => { e.stopPropagation(); handleDelete(doc.id); }} className="p-1 text-gray-600 hover:text-red-400 transition-colors ml-1" title="Usuń ofertę">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                             </button>

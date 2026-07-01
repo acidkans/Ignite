@@ -1329,7 +1329,84 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
         return results;
     }
 
-    // ─── PARSOWANIE OFERTY PDF ────────────────────────────────────────────────
+    // ─── PRZYPISANIE POZYCJI OFERTY ───────────────────────────────────────────
+
+    async assignOfferPosition(id: string, offerId: string, positionIdx: number): Promise<any> {
+        const offer = await this.prisma.offer.findUnique({ where: { id: offerId } });
+        if (!offer) throw new NotFoundException('Oferta nie znaleziona');
+        let positions: any[];
+        try { positions = JSON.parse(offer.positions); } catch { positions = []; }
+        const pos = positions[positionIdx];
+        if (!pos) throw new BadRequestException('Indeks pozycji poza zakresem');
+
+        return this.prisma.materialRequirement.update({
+            where: { id },
+            data: {
+                offerId,
+                offerPositionIdx: positionIdx,
+                offerPositionSnapshot: JSON.stringify({
+                    lp: pos.lp ?? positionIdx + 1,
+                    name: pos.name || pos.description || '',
+                    priceNetto: pos.priceNetto ?? null,
+                    unit: pos.unit || '',
+                    wbsPath: pos.wbsPath ?? null,
+                }),
+            },
+        });
+    }
+
+    async removeOfferPosition(id: string): Promise<any> {
+        return this.prisma.materialRequirement.update({
+            where: { id },
+            data: { offerId: null, offerPositionIdx: null, offerPositionSnapshot: null },
+        });
+    }
+
+    async autoAssignFromOffer(offerId: string): Promise<{ assigned: number; skipped: number; notFound: number }> {
+        const offer = await this.prisma.offer.findUnique({ where: { id: offerId } });
+        if (!offer) throw new NotFoundException('Oferta nie znaleziona');
+        let positions: any[];
+        try { positions = JSON.parse(offer.positions); } catch { positions = []; }
+
+        let assigned = 0, skipped = 0, notFound = 0;
+
+        for (let idx = 0; idx < positions.length; idx++) {
+            const pos = positions[idx];
+            if (pos.priceNetto == null) { skipped++; continue; }
+            const posName = (pos.name || pos.description || '').trim().toLowerCase();
+            if (!posName) { skipped++; continue; }
+
+            const req = await this.prisma.materialRequirement.findFirst({
+                where: {
+                    nodeId: offer.nodeId,
+                    name: { equals: posName, mode: 'insensitive' },
+                    offerId: null, // nie nadpisuj już przypisanych
+                },
+            });
+
+            if (!req) { notFound++; continue; }
+
+            await this.prisma.materialRequirement.update({
+                where: { id: req.id },
+                data: {
+                    offerId: offer.id,
+                    offerPositionIdx: idx,
+                    offerPositionSnapshot: JSON.stringify({
+                        lp: pos.lp ?? idx + 1,
+                        name: pos.name || pos.description || '',
+                        priceNetto: pos.priceNetto,
+                        unit: pos.unit || '',
+                        wbsPath: pos.wbsPath ?? null,
+                    }),
+                },
+            });
+            assigned++;
+        }
+
+        return { assigned, skipped, notFound };
+    }
+
+    // ─── PARSOWANIE OFERTY PDF/XLSX ───────────────────────────────────────────
 
     async parseOfferDocument(documentId: string): Promise<any[]> {
         const doc = await this.prisma.processNode.findUnique({ where: { id: documentId } });
@@ -1343,10 +1420,24 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
         const filePath = path.join(process.cwd(), 'uploads', doc.storagePath);
         if (!fs.existsSync(filePath)) throw new NotFoundException('Plik nie istnieje na dysku');
 
+        const ext = path.extname(doc.storagePath || '').toLowerCase();
+        const isExcel = ext === '.xlsx' || ext === '.xls' || (doc.mimeType || '').includes('spreadsheet') || (doc.mimeType || '').includes('excel');
+        if (isExcel) return await this.parseExcelOffer(filePath);
+
         const text = await this.extractPdfText(filePath);
         if (!text || text.trim().length < 20) throw new BadRequestException('Nie udało się odczytać tekstu z PDF');
 
-        const prompt = `Jesteś ekspertem analizującym oferty handlowe. Przeanalizuj poniższy tekst z oferty i wyciągnij wszystkie pozycje materiałowe/urządzenia.
+        const raw = await this.callAiForJson(this.buildOfferParsePrompt(text));
+        const jsonMatch = raw.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) return [];
+        try {
+            const items = JSON.parse(jsonMatch[0]);
+            return Array.isArray(items) ? items : [];
+        } catch { return []; }
+    }
+
+    private buildOfferParsePrompt(text: string): string {
+        return `Jesteś ekspertem analizującym oferty handlowe. Przeanalizuj poniższy tekst z oferty i wyciągnij wszystkie pozycje materiałowe/urządzenia.
 
 TEKST OFERTY:
 ${text.slice(0, 10000)}
@@ -1355,24 +1446,102 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
 [
   {
     "lp": 1,
+    "name": "pełna nazwa produktu",
     "description": "pełna nazwa produktu",
     "manufacturer": "producent lub null",
     "model": "model/nr katalogowy lub null",
     "unit": "sztuki",
     "quantity": 1,
-    "priceNetto": 100.00
+    "priceNetto": 100.00,
+    "wbsPath": null
   }
 ]
 
 Zasady: ceny jako liczby bez waluty, null gdy pole nieznane, wyodrębnij wszystkie pozycje.`;
+    }
 
-        const raw = await this.callAiForJson(prompt);
-        const jsonMatch = raw.match(/\[[\s\S]*\]/);
-        if (!jsonMatch) return [];
-        try {
-            const items = JSON.parse(jsonMatch[0]);
-            return Array.isArray(items) ? items : [];
-        } catch { return []; }
+    private async parseExcelOffer(filePath: string): Promise<any[]> {
+        const XLSX = require('xlsx');
+        const wb = XLSX.readFile(filePath, { cellDates: false, raw: false });
+
+        // Szukamy arkusza "Materiały" (nasz eksport — jeden wiersz = jedna pozycja WBS)
+        const matName = wb.SheetNames.find((n: string) => n.toLowerCase().startsWith('materi'));
+        if (matName) {
+            const ws = wb.Sheets[matName];
+            const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, blankrows: false });
+            if (rows.length < 2) return [];
+
+            const hdr = rows[0].map((h: any) => String(h ?? '').toLowerCase());
+            const col = (kwds: string[]) => hdr.findIndex((h: string) => kwds.some(k => h.includes(k)));
+
+            const wbsIdx   = col(['cieżka wbs', 'sciezka wbs', 'pełna']);
+            const nameIdx  = col(['pozycja']);
+            const qtyIdx   = col(['ilość', 'ilo']);
+            const unitIdx  = col(['jednostka']);
+            const priceIdx = col(['koszt jednostkowy', 'koszt']);
+            const mfrIdx   = col(['producent']);
+            const modIdx   = col(['model']);
+
+            // Jeśli mamy kolumnę WBS path to to jest nasz format — parsujemy bezpośrednio
+            if (wbsIdx >= 0 && nameIdx >= 0) {
+                return rows.slice(1)
+                    .filter((row: any[]) => row[nameIdx] != null && String(row[nameIdx]).trim())
+                    .map((row: any[], i: number) => ({
+                        lp: i + 1,
+                        name: String(row[nameIdx] ?? '').trim(),
+                        description: String(row[nameIdx] ?? '').trim(),
+                        quantity: row[qtyIdx] != null ? Number(row[qtyIdx]) || 1 : 1,
+                        unit: String(row[unitIdx] ?? 'szt').trim(),
+                        priceNetto: row[priceIdx] != null && row[priceIdx] !== '' ? Number(row[priceIdx]) || null : null,
+                        wbsPath: wbsIdx >= 0 ? String(row[wbsIdx] ?? '').trim() : null,
+                        manufacturer: mfrIdx >= 0 && row[mfrIdx] ? String(row[mfrIdx]).trim() : null,
+                        model: modIdx >= 0 && row[modIdx] ? String(row[modIdx]).trim() : null,
+                    }));
+            }
+        }
+
+        // Arkusz "Zamówienie (agregacja)" — jeden wiersz = agregat pozycji
+        const zamName = wb.SheetNames.find((n: string) => n.toLowerCase().startsWith('zam'));
+        if (zamName) {
+            const ws = wb.Sheets[zamName];
+            const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, blankrows: false });
+            if (rows.length < 2) return [];
+
+            const hdr = rows[0].map((h: any) => String(h ?? '').toLowerCase());
+            const col = (kwds: string[]) => hdr.findIndex((h: string) => kwds.some(k => h.includes(k)));
+
+            const lpIdx    = col(['lp', 'lp.']);
+            const whereIdx = col(['gdzie', 'wykorzyst']);
+            const nameIdx  = col(['nazwa']);
+            const qtyIdx   = col(['ilo']);
+            const unitIdx  = col(['jednostka']);
+            const priceIdx = col(['koszt jednostkowy', 'koszt']);
+
+            if (nameIdx >= 0) {
+                return rows.slice(1)
+                    .filter((row: any[]) => lpIdx < 0 || (row[lpIdx] != null && !isNaN(Number(row[lpIdx]))))
+                    .filter((row: any[]) => row[nameIdx] != null && String(row[nameIdx]).trim())
+                    .map((row: any[], i: number) => ({
+                        lp: lpIdx >= 0 ? Number(row[lpIdx]) : i + 1,
+                        name: String(row[nameIdx] ?? '').trim(),
+                        description: String(row[nameIdx] ?? '').trim(),
+                        quantity: row[qtyIdx] != null ? Number(row[qtyIdx]) || 1 : 1,
+                        unit: String(row[unitIdx] ?? 'szt').trim(),
+                        priceNetto: row[priceIdx] != null && row[priceIdx] !== '' ? Number(row[priceIdx]) || null : null,
+                        // "Gdzie wykorzystywany" może mieć kilka ścieżek oddzielonych \n
+                        wbsPath: whereIdx >= 0 && row[whereIdx] ? String(row[whereIdx]).split('\n')[0].trim() : null,
+                    }));
+            }
+        }
+
+        // Nieznany format — konwertuj do CSV i parsuj przez AI
+        const csvText = wb.SheetNames
+            .map((n: string) => `=== ${n} ===\n${XLSX.utils.sheet_to_csv(wb.Sheets[n])}`)
+            .join('\n\n');
+        const raw = await this.callAiForJson(this.buildOfferParsePrompt(csvText));
+        const match = raw.match(/\[[\s\S]*\]/);
+        if (!match) return [];
+        try { const r = JSON.parse(match[0]); return Array.isArray(r) ? r : []; } catch { return []; }
     }
 
     private extractPdfText(filePath: string): Promise<string> {

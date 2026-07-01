@@ -4,6 +4,33 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-01 — feat(offers): przypisanie cen ofertowych w ProductCard + parsowanie Excel
+
+### schema.prisma
+- dodano pole `schema-pole` `offerId String?` w modelu `MaterialRequirement` — FK do Offer (nullable)
+- dodano pole `schema-pole` `offerPositionIdx Int?` w modelu `MaterialRequirement` — indeks pozycji w Offer.positions[]
+- dodano pole `schema-pole` `offerPositionSnapshot String?` w modelu `MaterialRequirement` — JSON snapshot {lp, name, priceNetto, unit, wbsPath}
+
+### architektura / API
+- dodano `back-endpoint` `PATCH /material-requirements/:id/offer` — przypisuje pozycję oferty do wymagania
+- dodano `back-endpoint` `DELETE /material-requirements/:id/offer` — usuwa przypisanie, przywraca ręczną edycję ceny
+- dodano `back-endpoint` `POST /offers/:id/auto-assign` — bulk matchowanie po wbsPath i name, przypisuje ceny do MaterialRequirements
+- rozszerzono `back-endpoint` `POST /material-requirements/parse-offer` o obsługę plików xlsx/xls: wykrywa arkusz "Materiały" (nasz eksport) lub "Zamówienie (agregacja)", parsuje bezpośrednio bez AI; nieznany format fallback do AI przez CSV
+
+### słownik
+- dodano `schema-pole` `offerId` — FK do Offer w MaterialRequirement
+- dodano `schema-pole` `offerPositionIdx` — indeks pozycji oferty
+- dodano `schema-pole` `offerPositionSnapshot` — snapshot JSON ceny z oferty
+- dodano `back-endpoint` `offers-post-auto-assign` — auto-assign po wbsPath
+- dodano `back-endpoint` `mat-req-patch-offer` — przypisanie pozycji oferty
+- dodano `back-endpoint` `mat-req-delete-offer` — usunięcie przypisania
+
+### wytyczne
+- `schema-pole` `offerPositionSnapshot` — jest warstwą nadpisującą `budgetedPriceNetto`; gdy ustawiony, frontend pokazuje cenę z snapshotu (locked); usunięcie przypisania nie zeruje `budgetedPriceNetto`
+- `back-endpoint` `auto-assign` — nie nadpisuje już przypisanych pozycji (warunek `offerId: null`); matchuje po `name` (insensitive) w obrębie tego samego `nodeId`
+
+---
+
 ## 2026-06-30 — fix(backend): MS To Do sync — TaskReminder, push IGNITE→Graph, fix echo konfliktów (v2026.06.30.630)
 
 ### architektura / API

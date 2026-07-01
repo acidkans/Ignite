@@ -1,11 +1,15 @@
 import { Controller, Get, Post, Delete, Param, Body, UseGuards, Req } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OffersService } from './offers.service';
+import { MaterialRequirementsService } from '../material-requirements/material-requirements.service';
 
 @Controller('offers')
 @UseGuards(JwtAuthGuard)
 export class OffersController {
-    constructor(private readonly service: OffersService) {}
+    constructor(
+        private readonly service: OffersService,
+        private readonly matReqService: MaterialRequirementsService,
+    ) {}
 
     @Post()
     create(@Body() body: { nodeId: string; fileName: string; positions: any[]; documentId?: string }, @Req() req: any) {
@@ -25,5 +29,12 @@ export class OffersController {
     @Delete(':id')
     delete(@Param('id') id: string) {
         return this.service.delete(id);
+    }
+
+    // @anchor offers-post-auto-assign
+    /** Auto-przypisanie cen z oferty do MaterialRequirements po wbsPath */
+    @Post(':id/auto-assign')
+    autoAssign(@Param('id') id: string) {
+        return this.matReqService.autoAssignFromOffer(id);
     }
 }

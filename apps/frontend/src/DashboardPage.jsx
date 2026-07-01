@@ -435,6 +435,20 @@ export default function DashboardPage() {
         ? 'Szukaj w materiałach i kartach katalogowych…'
         : 'Szukaj po nazwie pliku, dacie…';
 
+    // @anchor handle-financial-offer-approve
+    const handleFinancialOfferApprove = useCallback(async (positions, documentId, fileName) => {
+        try {
+            const token = sessionStorage.getItem('token');
+            await fetch(`${API_URL}/offers`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nodeId: activeAreaId, fileName, positions, documentId }),
+            });
+        } catch (e) {
+            console.error('Błąd zapisu oferty:', e);
+        }
+    }, [activeAreaId]);
+
     return (
         <>
         <div className="flex flex-col h-full bg-gradient-to-br from-gray-900 via-gray-900 to-black text-white relative overflow-hidden">
@@ -837,6 +851,7 @@ export default function DashboardPage() {
                                 versionId={selectedVersionId}
                                 searchQuery={searchQuery}
                                 isFinancialTab={true}
+                                onApprove={handleFinancialOfferApprove}
                             />
                         )}
                         {activeTab === 'unified' && isOrder && (

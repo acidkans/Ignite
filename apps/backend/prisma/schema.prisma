@@ -774,6 +774,14 @@ model MaterialRequirement {
   /// @anchor mat-req-budgeted-price-netto
   budgetedPriceNetto Float? // zabudżetowana cena netto za sztukę (do kalkulacji kosztów WBS)
 
+  // Przypisanie pozycji oferty (nadpisuje budgetedPriceNetto przy wyświetlaniu)
+  /// @anchor mat-req-offer-id
+  offerId               String? // FK do Offer (nullable)
+  /// @anchor mat-req-offer-position-idx
+  offerPositionIdx      Int?    // indeks w Offer.positions[]
+  /// @anchor mat-req-offer-position-snapshot
+  offerPositionSnapshot String? // JSON snapshot: {lp, name, priceNetto, unit, wbsPath}
+
   // Status weryfikacji
   /// @anchor mat-req-status
   status String @default("PENDING") // PENDING | CONFIRMED | REJECTED | PROPOSAL

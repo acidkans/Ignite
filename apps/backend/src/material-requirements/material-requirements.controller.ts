@@ -198,6 +198,21 @@ export class MaterialRequirementsController {
         return this.service.remove(id);
     }
 
+    // @anchor mat-req-patch-offer
+    /** Przypisuje pozycję oferty — nadpisuje cenę przez snapshot */
+    @Patch(':id/offer')
+    assignOffer(@Param('id') id: string, @Body() body: { offerId: string; positionIdx: number }) {
+        if (!body.offerId || body.positionIdx == null) throw new BadRequestException('offerId i positionIdx wymagane');
+        return this.service.assignOfferPosition(id, body.offerId, body.positionIdx);
+    }
+
+    // @anchor mat-req-delete-offer
+    /** Usuwa przypisanie pozycji oferty */
+    @Delete(':id/offer')
+    removeOffer(@Param('id') id: string) {
+        return this.service.removeOfferPosition(id);
+    }
+
     // ─── UPLOAD PLIKÓW ─────────────────────────────────────────────────────────
 
     /** Upload karty katalogowej (PDF) */

@@ -5,7 +5,7 @@ import {
     ChevronRight, ChevronDown, Package, Wrench,
     CheckCircle, Clock, XCircle, Star, Trash2, AlertCircle,
     ShoppingCart, Warehouse, LogOut, Plus, Search, Sparkles,
-    FileText, Link as LinkIcon, Download, BookOpen, X, Database,
+    FileText, Link as LinkIcon, Download, BookOpen, X, Database, Paperclip,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput } from './wbsConstants';
@@ -457,6 +457,49 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb }) {
     );
 }
 
+// ─── OfferPickerDropdown ──────────────────────────────────────────────────────
+
+function OfferPickerDropdown({ offers, onSelect, onClose }) {
+    const ref = useRef(null);
+    useEffect(() => {
+        const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [onClose]);
+
+    const allPositions = offers.flatMap(offer =>
+        (offer.positions || []).map((pos, idx) => ({ offer, pos, idx }))
+    ).filter(({ pos }) => pos.priceNetto != null);
+
+    if (!allPositions.length) return (
+        <div ref={ref} className="absolute z-50 top-full left-0 mt-1 w-72 bg-gray-900 border border-amber-500/30 rounded-xl shadow-xl p-3 text-xs text-gray-500">
+            Brak pozycji z cenami w ofertach tego węzła.
+        </div>
+    );
+
+    return (
+        <div ref={ref} className="absolute z-50 top-full left-0 mt-1 w-80 bg-gray-900 border border-amber-500/30 rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto">
+            {offers.map(offer => {
+                const positions = (offer.positions || []).filter(p => p.priceNetto != null);
+                if (!positions.length) return null;
+                return (
+                    <div key={offer.id}>
+                        <div className="px-3 py-1.5 text-[9px] font-semibold text-amber-400/70 bg-white/5 truncate uppercase tracking-widest">{offer.fileName}</div>
+                        {positions.map((pos, idx) => (
+                            <button key={idx} onClick={() => onSelect(offer.id, (offer.positions || []).indexOf(pos))}
+                                className="w-full text-left px-3 py-1.5 text-xs hover:bg-amber-500/10 transition-colors flex items-center gap-2 border-b border-white/5 last:border-0">
+                                <span className="text-gray-500 shrink-0 w-6 text-right">{pos.lp ?? idx + 1}.</span>
+                                <span className="flex-1 truncate text-gray-200">{pos.name || pos.description || '—'}</span>
+                                <span className="text-amber-300 whitespace-nowrap font-mono text-[10px] shrink-0">{Number(pos.priceNetto).toFixed(2)} zł</span>
+                            </button>
+                        ))}
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
 // ─── ProductCard ──────────────────────────────────────────────────────────────
 
 // @anchor product-card
@@ -475,6 +518,26 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     const [comboOpen, setComboOpen] = useState(null);
     const [priceWarn, setPriceWarn] = useState(false);
     const priceWarnTimer = useRef(null);
+    const [offerPicker, setOfferPicker] = useState(false);
+    const offerSnap = useMemo(() => {
+        try { return card?.offerPositionSnapshot ? JSON.parse(card.offerPositionSnapshot) : null; } catch { return null; }
+    }, [card?.offerPositionSnapshot]);
+
+    const assignOffer = useCallback(async (offerId, positionIdx) => {
+        setOfferPicker(false);
+        await fetch(`${API_URL}/material-requirements/${card.id}/offer`, {
+            method: 'PATCH', headers,
+            body: JSON.stringify({ offerId, positionIdx }),
+        });
+        onRefresh();
+    }, [card?.id, headers, onRefresh]);
+
+    const removeOffer = useCallback(async () => {
+        await fetch(`${API_URL}/material-requirements/${card.id}/offer`, {
+            method: 'DELETE', headers,
+        });
+        onRefresh();
+    }, [card?.id, headers, onRefresh]);
     useEffect(() => () => { if (priceWarnTimer.current) clearTimeout(priceWarnTimer.current); }, []);
     const [localImageUrl, setLocalImageUrl] = useState(null);
     const [imageKey, setImageKey] = useState(0);
@@ -753,39 +816,67 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                     })}
                     <div className="flex-1 min-w-[90px]">
                         <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Koszt jedn.</label>
-                        <div className="relative">
-                            <input
-                                ref={el => { comboRefs.current['priceNetto'] = el; }}
-                                type="text" inputMode="decimal"
-                                value={fields.priceNetto}
-                                onChange={e => {
-                                    const clean = sanitizeQtyInput(e.target.value);
-                                    if (clean !== e.target.value) flashPriceWarn();
-                                    setF('priceNetto', clean);
-                                }}
-                                onFocus={e => { if (!parseFloat(String(fields.priceNetto).replace(',', '.'))) setF('priceNetto', ''); e.target.select(); }}
-                                onBlur={() => {
-                                    const raw = String(fields.priceNetto ?? '').trim().replace(',', '.');
-                                    let next;
-                                    if (raw === '') next = null;
-                                    else { const v = parseFloat(raw); if (isNaN(v)) return; next = v; }
-                                    if (onPropagatePrice) onPropagatePrice(card, wbsNode, next);
-                                    else patchCard({ priceNetto: next });
-                                }}
-                                onKeyDown={e => {
-                                    if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        e.target.blur();
-                                        comboRefs.current['availability']?.focus();
-                                    }
-                                }}
-                                disabled={readOnly}
-                                className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
-                                placeholder="0.00" />
-                            {priceWarn && (
-                                <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
-                            )}
-                        </div>
+                        {offerSnap ? (
+                            <div>
+                                <div className="flex items-center gap-1">
+                                    <div className="flex-1 bg-black/30 border border-amber-500/30 rounded px-2 py-1.5 text-xs text-amber-300 font-mono truncate">
+                                        {offerSnap.priceNetto != null ? `${Number(offerSnap.priceNetto).toFixed(2)} zł` : '—'}
+                                    </div>
+                                    {!readOnly && (
+                                        <button onClick={removeOffer} title="Usuń przypisanie oferty" className="p-1 text-gray-600 hover:text-red-400 transition-colors shrink-0">
+                                            <Trash2 size={12} />
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="mt-0.5 flex items-center gap-1 text-[9px] text-amber-400/60 truncate" title={offerSnap.wbsPath || offerSnap.name}>
+                                    <Paperclip size={8} className="shrink-0" />
+                                    <span className="truncate">Poz.{offerSnap.lp} · {offerSnap.name}</span>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="relative">
+                                <input
+                                    ref={el => { comboRefs.current['priceNetto'] = el; }}
+                                    type="text" inputMode="decimal"
+                                    value={fields.priceNetto}
+                                    onChange={e => {
+                                        const clean = sanitizeQtyInput(e.target.value);
+                                        if (clean !== e.target.value) flashPriceWarn();
+                                        setF('priceNetto', clean);
+                                    }}
+                                    onFocus={e => { if (!parseFloat(String(fields.priceNetto).replace(',', '.'))) setF('priceNetto', ''); e.target.select(); }}
+                                    onBlur={() => {
+                                        const raw = String(fields.priceNetto ?? '').trim().replace(',', '.');
+                                        let next;
+                                        if (raw === '') next = null;
+                                        else { const v = parseFloat(raw); if (isNaN(v)) return; next = v; }
+                                        if (onPropagatePrice) onPropagatePrice(card, wbsNode, next);
+                                        else patchCard({ priceNetto: next });
+                                    }}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            e.target.blur();
+                                            comboRefs.current['availability']?.focus();
+                                        }
+                                    }}
+                                    disabled={readOnly}
+                                    className={`w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50 ${offers?.length > 0 && !readOnly ? 'pr-6' : ''}`}
+                                    placeholder="0.00" />
+                                {offers?.length > 0 && !readOnly && (
+                                    <button onClick={() => setOfferPicker(v => !v)} title="Przypisz cenę z oferty"
+                                        className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-gray-600 hover:text-amber-400 transition-colors">
+                                        <Paperclip size={10} />
+                                    </button>
+                                )}
+                                {offerPicker && offers?.length > 0 && (
+                                    <OfferPickerDropdown offers={offers} onSelect={assignOffer} onClose={() => setOfferPicker(false)} />
+                                )}
+                                {priceWarn && (
+                                    <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
+                                )}
+                            </div>
+                        )}
                     </div>
                     <div className="flex-1 min-w-[90px]">
                         <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Dostępność</label>
