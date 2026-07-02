@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { resolveVersionId } from '../common/version.util';
 import { VectorService } from '../ai/vector.service';
 import { ProcessTreeService } from '../process-tree/process-tree.service';
+import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -22,6 +23,7 @@ export class MaterialRequirementsService {
         private readonly prisma: PrismaService,
         private readonly vectorService: VectorService,
         private readonly processTreeService: ProcessTreeService,
+        private readonly exchangeRates: ExchangeRatesService,
         private readonly configService: ConfigService,
     ) { }
 
@@ -1478,7 +1480,7 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
         )];
         const rateMap: Record<string, { rate: number; date: string }> = {};
         for (const code of foreignCurrencies) {
-            const r = await this.fetchNbpRate(code);
+            const r = await this.exchangeRates.fetchNbpRate(code);
             if (r) rateMap[code] = r;
         }
 
@@ -1496,19 +1498,6 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
                 priceNettoPln,
             };
         });
-    }
-
-    private async fetchNbpRate(currency: string): Promise<{ rate: number; date: string } | null> {
-        try {
-            const res = await fetch(
-                `https://api.nbp.pl/api/exchangerates/rates/a/${currency.toLowerCase()}/?format=json`,
-                { headers: { Accept: 'application/json' } }
-            );
-            if (!res.ok) return null;
-            const data: any = await res.json();
-            const latest = data?.rates?.[0];
-            return latest ? { rate: latest.mid, date: latest.effectiveDate } : null;
-        } catch { return null; }
     }
 
     private buildOfferParsePrompt(text: string): string {

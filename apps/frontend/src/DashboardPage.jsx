@@ -12,7 +12,7 @@ import UnifiedWbsPanel from './components/shared/wbs/UnifiedWbsPanel';
 import CommentsSlideOver from './components/shared/CommentsSlideOver';
 import MyTasksModal from './components/shared/MyTasksModal';
 import TaskReminderToast from './components/shared/TaskReminderToast';
-import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink } from 'lucide-react';
+import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink, Coins } from 'lucide-react';
 import { API_URL } from './config';
 import { APP_VERSION } from './version';
 
@@ -116,6 +116,17 @@ export default function DashboardPage() {
     const now = useMemo(() => new Date(), []);
     const dateLabel = formatPolishDate(now);
     const weekNumber = getWeekNumber(now);
+
+    // @anchor dashboard-exchange-rates — kursy EUR/USD z NBP (backend odświeża codziennie o północy)
+    const [exchangeRates, setExchangeRates] = useState({});
+    useEffect(() => {
+        const token = sessionStorage.getItem('token');
+        if (!token) return;
+        fetch(`${API_URL}/exchange-rates`, { headers: { Authorization: `Bearer ${token}` } })
+            .then(r => r.ok ? r.json() : {})
+            .then(data => setExchangeRates(data && typeof data === 'object' ? data : {}))
+            .catch(() => {});
+    }, []);
 
     // @anchor dashboard-my-tasks-open
     const [myTasksOpen, setMyTasksOpen] = useState(false);
@@ -471,6 +482,24 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
+                {/* @anchor dashboard-exchange-rates-box — kursy NBP obok daty (ten sam rozmiar co kontener daty) */}
+                <div
+                    className="flex items-center gap-2 flex-shrink-0 select-none"
+                    title={`Kurs NBP${exchangeRates.EUR?.date ? ` z ${exchangeRates.EUR.date}` : ''} — odświeżany codziennie o północy`}
+                >
+                    <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                        <Coins size={13} className="text-emerald-400" />
+                    </div>
+                    <div className="flex flex-col leading-tight font-mono">
+                        <span className="text-[11px] text-gray-200 font-medium">
+                            EUR {exchangeRates.EUR?.rate != null ? Number(exchangeRates.EUR.rate).toFixed(4).replace('.', ',') : '—'}
+                        </span>
+                        <span className="text-[11px] text-gray-200 font-medium">
+                            USD {exchangeRates.USD?.rate != null ? Number(exchangeRates.USD.rate).toFixed(4).replace('.', ',') : '—'}
+                        </span>
+                    </div>
+                </div>
+
                 <div className="h-7 w-px bg-white/10 flex-shrink-0" />
 
                 {/* Nazwa i Etykieta Klienta/Węzła (zastępuje Snapshot po lewej) */}
@@ -596,7 +625,7 @@ export default function DashboardPage() {
                 )}
 
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 ml-auto pl-4">
                     {/* Komunikacja — tylko dla zamówień */}
                     {isOrder && (
                         <button

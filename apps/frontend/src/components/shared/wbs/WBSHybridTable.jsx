@@ -1466,7 +1466,15 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                         handleField(node.id, 'unitCost', clean);
                                     }}
                                     onFocus={e => { setCostFocusId(node.id); e.target.select(); }}
-                                    onBlur={e => { setCostFocusId(null); onNodeFieldSave?.(node.id, 'unitCost', Math.round((parseFloat(String(e.target.value).replace(',', '.')) || 0) * 100) / 100); }}
+                                    onBlur={e => {
+                                        setCostFocusId(null);
+                                        const raw = String(e.target.value);
+                                        const evaluated = evalQtyFormula(raw);
+                                        const n = evaluated !== null ? evaluated : parseFloat(raw.replace(',', '.'));
+                                        const rounded = Math.round((Number.isFinite(n) ? n : 0) * 100) / 100;
+                                        handleField(node.id, 'unitCost', String(rounded));
+                                        onNodeFieldSave?.(node.id, 'unitCost', rounded);
+                                    }}
                                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
                                     placeholder="0,00"
                                     className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}`}

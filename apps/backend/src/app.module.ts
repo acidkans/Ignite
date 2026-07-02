@@ -37,6 +37,7 @@ import { NotificationSettingsModule } from './notification-settings/notification
 import { MsTodoModule } from './ms-todo/ms-todo.module';
 import { UserTasksModule } from './user-tasks/user-tasks.module';
 import { NotificationCronModule } from './notification-cron/notification-cron.module';
+import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { NotificationCronModule } from './notification-cron/notification-cron.mo
     MsTodoModule,
     UserTasksModule,
     NotificationCronModule,
+    ExchangeRatesModule,
   ],
   controllers: [AppController],
   providers: [

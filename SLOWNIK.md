@@ -848,6 +848,28 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | handleSave | apps/frontend/src/NotificationSettingsPage.jsx | @anchor notif-settings-handle-save |
 | ui-funkcja | handleTestPush | apps/frontend/src/NotificationSettingsPage.jsx | @anchor notif-settings-handle-test-push |
 
+### Moduł ExchangeRates (kursy NBP)
+
+#### Backend (`apps/backend/src/exchange-rates/`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-serwis | ExchangeRatesService | apps/backend/src/exchange-rates/exchange-rates.service.ts | @anchor exchange-rates-service |
+| back-stala | cache | apps/backend/src/exchange-rates/exchange-rates.service.ts | @anchor exchange-rates-cache |
+| back-funkcja | refresh (cron) | apps/backend/src/exchange-rates/exchange-rates.service.ts | @anchor exchange-rates-cron |
+| back-funkcja | getRates | apps/backend/src/exchange-rates/exchange-rates.service.ts | @anchor exchange-rates-get |
+| back-funkcja | fetchNbpRate | apps/backend/src/exchange-rates/exchange-rates.service.ts | @anchor fetch-nbp-rate |
+| back-controller | ExchangeRatesController | apps/backend/src/exchange-rates/exchange-rates.controller.ts | @anchor exchange-rates-controller |
+| back-endpoint | GET /exchange-rates | apps/backend/src/exchange-rates/exchange-rates.controller.ts | @anchor exchange-rates-endpoint |
+| back-modul | ExchangeRatesModule | apps/backend/src/exchange-rates/exchange-rates.module.ts | @anchor exchange-rates-module |
+
+#### Frontend (`apps/frontend/src/DashboardPage.jsx`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-stan | exchangeRates | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-exchange-rates |
+| ui-sekcja | kontener kursów NBP | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-exchange-rates-box |
+
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)

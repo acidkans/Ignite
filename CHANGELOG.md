@@ -4,6 +4,23 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-02 — feat(dashboard): kursy EUR/USD z NBP w nagłówku + formuły w kolumnie Koszt jedn. WBS
+
+### architektura / API
+- dodano moduł `back-modul` `ExchangeRatesModule` z `back-serwis` `ExchangeRatesService` — pobiera kursy NBP raz dziennie o północy (`@Cron EVERY_DAY_AT_MIDNIGHT`) + przy starcie, cache w pamięci dla EUR i USD
+- dodano `back-endpoint` `GET /exchange-rates` — zwraca `{ EUR: {rate,date}, USD: {rate,date} }` do nagłówka Dashboardu
+- przeniesiono logikę `back-funkcja` `fetchNbpRate` z `MaterialRequirementsService` do `ExchangeRatesService` (jedno źródło) — import ofert reużywa jej przez wstrzyknięty serwis, bez duplikacji
+- `ui-sekcja` nagłówek Dashboardu: obok daty dodano kontener kursów NBP (ten sam rozmiar), prawy blok przycisków przesunięty do prawej krawędzi (`ml-auto`)
+
+### słownik
+- dodano `back-serwis` `exchange-rates-service`, `back-funkcja` `fetch-nbp-rate` / `exchange-rates-cron` / `exchange-rates-get`, `back-stala` `exchange-rates-cache`, `back-controller` `exchange-rates-controller`, `back-endpoint` `exchange-rates-endpoint`, `back-modul` `exchange-rates-module`
+- dodano `ui-stan` `dashboard-exchange-rates`, `ui-sekcja` `dashboard-exchange-rates-box`
+
+### wytyczne
+- `back-funkcja` `fetchNbpRate` — jedyne źródło kursu NBP; każde nowe użycie kursu wstrzykuje `ExchangeRatesService`, nie kopiuje wywołania `api.nbp.pl`
+
+---
+
 ## 2026-07-02 — fix(materials): 500 na PATCH z powodu duplikatów producenta + brakujący endpoint obrazu karty katalogowej
 
 ### architektura / API
