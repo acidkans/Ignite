@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useBeforeUnload } from '../../../hooks/useBeforeUnload';
 import ExcelJS from 'exceljs';
 import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays, BarChart3, ChevronUp, FileText } from 'lucide-react';
 import MarkdownEditor from '../MarkdownEditor';
@@ -101,6 +102,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const [strategySaved, setStrategySaved] = useState(false);
     const [offerText, setOfferText] = useState('');
     const [offerSaving, setOfferSaving] = useState(false);
+    const [isDirty, setIsDirty] = useState(false);
+    useBeforeUnload(isDirty);
 
     useEffect(() => {
         localStorage.setItem('unifiedWbsSectionOrder', JSON.stringify(sectionOrder));
@@ -1045,6 +1048,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 body: JSON.stringify({ nodeId, versionId, wbsDescription: desc }),
             });
             setStrategySaved(true);
+            setIsDirty(false);
             setTimeout(() => setStrategySaved(false), 2000);
         } catch (e) { console.error('Save strategy error:', e); }
         finally { setStrategySaving(false); }
@@ -1059,6 +1063,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 body: JSON.stringify({ nodeId, versionId, offerText: desc }),
             });
             setOfferSaved(true);
+            setIsDirty(false);
             setTimeout(() => setOfferSaved(false), 2000);
         } catch (e) { console.error('Save offer error:', e); }
         finally { setOfferSaving(false); }
@@ -4927,7 +4932,7 @@ ${ganttSectionHtml}
                             </div>
                             <MarkdownEditor
                                 value={offerText}
-                                onChange={setOfferText}
+                                onChange={(v) => { setOfferText(v); setIsDirty(true); }}
                                 onSave={(v) => saveOffer(v)}
                                 previewTitle="Oferta"
                                 onExportPDF={() => handleExportPDF('oferta')}
@@ -4950,7 +4955,7 @@ ${ganttSectionHtml}
                         <div className="flex flex-col flex-1 min-h-0 p-4">
                             <MarkdownEditor
                                 value={wbsDescription}
-                                onChange={setWbsDescription}
+                                onChange={(v) => { setWbsDescription(v); setIsDirty(true); }}
                                 onSave={(v) => saveStrategy(v)}
                                 previewTitle="Jak to chcemy zrobić"
                                 onExportPDF={() => handleExportPDF('strategy')}
