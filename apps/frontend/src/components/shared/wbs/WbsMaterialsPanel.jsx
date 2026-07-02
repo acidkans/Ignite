@@ -733,16 +733,26 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
         }).sort((a, b) => (a[fieldKey] || '').localeCompare(b[fieldKey] || ''));
     }, [materialDb, fields]);
 
-    const selectMaterial = useCallback(async (mat) => {
+    const selectMaterial = useCallback(async (mat, fieldKey = 'productName') => {
+        // Wypełnij TYLKO klikane pole + pola nadrzędne (upstream), nigdy pola "w dół" hierarchii.
+        // Lista sugestii jest zdeduplikowana po wartości klikanego pola (np. po producencie),
+        // więc podstawienie modelu/nazwy z pierwszego lepszego materiału tego producenta było błędem —
+        // user musiał kasować auto-wpisany model i szukać właściwego. Wybór producenta = tylko producent.
+        const applicable = [fieldKey, ...(AC_UPSTREAM[fieldKey] || [])];
         const uiFields = {};
-        const updates = { materialId: mat.id };
-        if (mat.manufacturer) { uiFields.manufacturer = mat.manufacturer.toUpperCase(); updates.manufacturer = mat.manufacturer.toUpperCase(); }
-        if (mat.model) { uiFields.model = mat.model; updates.model = mat.model; }
-        if (mat.productName) { uiFields.productName = mat.productName; updates.productName = mat.productName; }
-        if (mat.dataSheetUrl) { updates.dataSheetUrl = mat.dataSheetUrl; updates.dataSheetName = mat.dataSheetName || mat.productName || 'karta.pdf'; }
+        const updates = {};
+        if (applicable.includes('manufacturer') && mat.manufacturer) { const mf = mat.manufacturer.toUpperCase(); uiFields.manufacturer = mf; updates.manufacturer = mf; }
+        if (applicable.includes('model') && mat.model) { uiFields.model = mat.model; updates.model = mat.model; }
+        if (applicable.includes('productName') && mat.productName) { uiFields.productName = mat.productName; updates.productName = mat.productName; }
+        // materialId + karta katalogowa dopiero gdy znany jest konkretny materiał (model wybrany),
+        // nie przy samym producencie — inaczej wiązalibyśmy wymaganie do przypadkowego modelu.
+        if (applicable.includes('model')) {
+            updates.materialId = mat.id;
+            if (mat.dataSheetUrl) { updates.dataSheetUrl = mat.dataSheetUrl; updates.dataSheetName = mat.dataSheetName || mat.productName || 'karta.pdf'; }
+        }
         setFields(prev => ({ ...prev, ...uiFields }));
         setComboOpen(null);
-        await patchCard(updates);
+        if (Object.keys(updates).length) await patchCard(updates);
     }, [patchCard]);
 
     const comboFields = [
@@ -815,7 +825,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                 {comboOpen === key && suggestions.length > 0 && (
                                     <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-gray-900 border border-white/20 rounded shadow-xl max-h-48 overflow-auto custom-scrollbar">
                                         {suggestions.map((m, i) => (
-                                            <button key={i} onMouseDown={() => selectMaterial(m)}
+                                            <button key={i} onMouseDown={() => selectMaterial(m, key)}
                                                 className="w-full text-left px-3 py-1.5 text-xs text-gray-200 hover:bg-white/10 truncate">
                                                 {m[key]}
                                             </button>
