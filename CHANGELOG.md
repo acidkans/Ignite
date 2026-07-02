@@ -4,6 +4,23 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-02 — feat(export-excel): kolumna „Rabat (%)" eksportowana tylko gdy niezerowa
+
+### architektura / API
+- `ui-funkcja` `appendBudgetSheet` (arkusz `Budżet` w eksporcie Analiza projektu do Excel) — kolumna `Rabat (%)` (`discount`) pomijana, gdy żadna pozycja nie ma rabatu ≠ 0; formuły `unitOfferPrice`/`offerPrice` warunkowo tracą czynnik `(1 − rabat)`
+
+### wytyczne
+- eksport Excel — kolumnę danych bez żadnej wartości ≠ 0 (jak `Rabat (%)`) pomijaj w arkuszu; formuły odwołujące się do tej kolumny muszą warunkowo pomijać jej czynnik
+
+## 2026-07-02 — feat(export-excel): usunięcie metryki „Liczba wierszy" + filtry na wszystkich tabelach
+
+### architektura / API
+- `ui-funkcja` `handleExportBudgetExcel` (Analiza projektu do Excel) — usunięto metrykę „Liczba wierszy" z arkusza `Porównanie` oraz z bloku podsumowania w arkuszu `Podsumowanie`; skorygowano przesunięte referencje `numFmt` (B4–B11 → B3–B10)
+- dodano `autoFilter` na arkuszu `Porównanie` (macierz wskaźników) i `Drzewo WBS` (filtr obejmuje nagłówek + dane, bez wiersza „Razem") — pozostałe arkusze danych (`Budżet`, `Q&A`, `Materiały (agregacja)`, `Materiały`, `Zamówienie (agregacja)`, WBS1–3, `Gałęzie grupujące`) miały filtr już wcześniej
+
+### wytyczne
+- eksport Excel — każdy arkusz z pojedynczą tabelą danych ma mieć `autoFilter` na wierszu nagłówka; arkusze z wieloma stosowanymi tabelami (`Podsumowanie`, `Cash flow`) pozostają bez filtra — Excel dopuszcza tylko jeden `autoFilter` na arkusz
+
 ## 2026-07-02 — feat(dashboard): kursy EUR/USD z NBP w nagłówku + formuły w kolumnie Koszt jedn. WBS
 
 ### architektura / API

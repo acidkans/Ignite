@@ -1718,6 +1718,8 @@ ${ganttSectionHtml}
         // „Cena ofertowa" kolumna „Jednostkowa cena ofertowa" (koszt jedn. × narzut).
         // Wiersz 1 = pole rabatu całościowego; nagłówek tabeli w wierszu 2, dane od 3.
         // Formuły używają liter z sheet.getColumn(key).letter — odporne na zmianę układu.
+        // Kolumnę „Rabat (%)" eksportujemy tylko gdy którakolwiek pozycja ma rabat ≠ 0.
+        const hasRowDiscount = rows.some(r => (Number(r.discount) || 0) !== 0);
         const BUDGET_COLUMNS = [
             { key: 'index', width: 6, header: 'Lp.' },
             { key: 'subjectName', width: 28, header: 'Przedmiot' },
@@ -1731,7 +1733,7 @@ ${ganttSectionHtml}
             { key: 'unitCost', width: 18, header: 'Koszt jednostkowy' },
             { key: 'totalCost', width: 18, header: 'Koszt całościowy' },
             { key: 'margin', width: 12, header: 'Marża (%)' },
-            { key: 'discount', width: 12, header: 'Rabat (%)' },
+            ...(hasRowDiscount ? [{ key: 'discount', width: 12, header: 'Rabat (%)' }] : []),
             { key: 'unitOfferPrice', width: 20, header: ' ofertowa cena jed.' },
             { key: 'offerPrice', width: 20, header: 'ofertowa cena całość.' },
             { key: 'comment', width: 32, header: 'Komentarz' },
@@ -1763,7 +1765,7 @@ ${ganttSectionHtml}
         const cQuantity = budgetColLetter('quantity');
         const cTotalCost = budgetColLetter('totalCost');
         const cMargin = budgetColLetter('margin');
-        const cDiscount = budgetColLetter('discount');
+        const cDiscount = hasRowDiscount ? budgetColLetter('discount') : null;
         const cOfferPrice = budgetColLetter('offerPrice');
 
         const qaSheetRows = [];
@@ -1779,6 +1781,8 @@ ${ganttSectionHtml}
             // Jednostkowa cena ofertowa = koszt jedn. × narzut × (1 − rabat).
             // Brak narzutu ⇒ 0 (spójnie z formułą „Cena ofertowa").
             const unitOffer = m === 0 ? 0 : uc * (1 + m / 100) * (1 - d / 100);
+            // Bez kolumny rabatu formuły pomijają czynnik (1 − rabat).
+            const discFactor = hasRowDiscount ? `*(1-${cDiscount}${r})` : '';
             budgetSheet.addRow({
                 index: index + 1,
                 subjectName: row.subjectName || '',
@@ -1793,8 +1797,8 @@ ${ganttSectionHtml}
                 totalCost: { formula: `=${cUnitCost}${r}*${cQuantity}${r}`, result: Number(row.totalCost) || 0 },
                 margin: m / 100,
                 discount: d / 100,
-                unitOfferPrice: { formula: `=IF(${cMargin}${r}=0,0,${cUnitCost}${r}*(1+${cMargin}${r})*(1-${cDiscount}${r}))`, result: unitOffer },
-                offerPrice: { formula: `=IF(${cMargin}${r}=0,0,${cTotalCost}${r}*(1+${cMargin}${r})*(1-${cDiscount}${r}))`, result: Number(row.offerPrice) || 0 },
+                unitOfferPrice: { formula: `=IF(${cMargin}${r}=0,0,${cUnitCost}${r}*(1+${cMargin}${r})${discFactor})`, result: unitOffer },
+                offerPrice: { formula: `=IF(${cMargin}${r}=0,0,${cTotalCost}${r}*(1+${cMargin}${r})${discFactor})`, result: Number(row.offerPrice) || 0 },
                 comment: row.comment || '',
                 status: row.status || '',
                 qaCount: qaList.length,
@@ -1824,7 +1828,7 @@ ${ganttSectionHtml}
             budgetSheet.getColumn(key).numFmt = '#,##0.00';
         });
         budgetSheet.getColumn('margin').numFmt = '0.00%';
-        budgetSheet.getColumn('discount').numFmt = '0.00%';
+        if (hasRowDiscount) budgetSheet.getColumn('discount').numFmt = '0.00%';
         budgetSheet.views = [{ state: 'frozen', ySplit: 2 }];
         // Filtr na nagłówek (wiersz 2) + wiersze danych (bez wiersza „Razem"). Kolejność
         // wierszy = kolejność gałęzi w WBS (buildRows sortuje po wbsOrderMap).
@@ -1839,8 +1843,12 @@ ${ganttSectionHtml}
     };
 
     // @anchor build-wbs-tree-dump
-    // Pełny zrzut drzewa WBS: wszystkie węzły w kolejności hierarchii; koszt i cena
-    // ofertowa gałęzi = suma zrolowana z dzieci, liście biorą totalCost/totalPrice.
+    // Pełny zrzut drzewa WBS: wszystkie węzły w kolejności hierarchii; gałęzie
+    // rolują sumę z dzieci. Koszt/cena własna węzła liczone TAK SAMO jak w
+    // arkuszu „Podsumowanie" (appendBudgetSheet / summarizeBudgetRows): węzeł
+    // wnosi własną wartość tylko gdy jest liściem budżetu (parentId != null &&
+    // type != 'group'); koszt = koszt jedn.×ilość, cena = marża≠0 ? koszt×(1+marża)×(1−rabat) : 0.
+    // Dzięki temu suma „Razem" w Drzewie WBS zgadza się z Podsumowaniem.
     const buildWbsTreeDump = () => {
         const byParent = {};
         for (const n of wbsData) {
@@ -1850,6 +1858,18 @@ ${ganttSectionHtml}
         Object.values(byParent).forEach(list =>
             list.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
         );
+        // Kanoniczny koszt/cena ofertowa pojedynczej pozycji — identyczne z regułą
+        // budżetu: brak narzutu ⇒ cena ofertowa 0 (nie czytamy pól totalPrice/totalCost z bazy).
+        const canonical = (n) => {
+            const q = Math.max(0, parseFloat(n.quantity) || 0);
+            const uc = Math.max(0, parseFloat(n.unitCost) || 0);
+            const m = (n.margin != null && String(n.margin) !== '') ? parseFloat(n.margin) : null;
+            const d = Math.max(0, parseFloat(n.discount) || 0);
+            const cost = uc * q;
+            let price = (m !== null && m !== 0) ? cost * (1 + m / 100) : 0;
+            if (price > 0 && d > 0) price = Math.max(0, price * (1 - d / 100));
+            return { cost, price };
+        };
         const out = [];
         const walk = (parentId, depth) => {
             const children = byParent[parentId || '__root__'] || [];
@@ -1857,6 +1877,9 @@ ${ganttSectionHtml}
             for (const n of children) {
                 const kids = byParent[n.id];
                 const isGroup = !!(kids && kids.length);
+                // Liść budżetu = ten sam filtr co buildRows(VIEWS.BUDGET).
+                const isBudgetLeaf = n.parentId != null && n.type !== 'group';
+                const own = isBudgetLeaf ? canonical(n) : { cost: 0, price: 0 };
                 const entry = {
                     depth,
                     name: String(n.name || '(bez nazwy)').trim() || '(bez nazwy)',
@@ -1869,14 +1892,11 @@ ${ganttSectionHtml}
                     price: 0,
                 };
                 out.push(entry);
-                if (isGroup) {
-                    const sub = walk(n.id, depth + 1);
-                    entry.cost = sub.cost;
-                    entry.price = sub.price;
-                } else {
-                    entry.cost = Number(n.totalCost) || 0;
-                    entry.price = Number(n.totalPrice) || 0;
-                }
+                const sub = isGroup ? walk(n.id, depth + 1) : { cost: 0, price: 0 };
+                // Węzeł może być JEDNOCZEŚNIE liściem budżetu i mieć dzieci — wtedy
+                // wnosi własną wartość + rollup (spójnie z płaską sumą budżetu).
+                entry.cost = own.cost + sub.cost;
+                entry.price = own.price + sub.price;
                 cost += entry.cost;
                 price += entry.price;
             }
@@ -2076,7 +2096,6 @@ ${ganttSectionHtml}
                 if (numFmt) for (let c = 2; c <= metrics.length + 1; c++) r.getCell(c).numFmt = numFmt;
                 return r;
             };
-            addMetricRow('Liczba wierszy', m => m.rows);
             addMetricRow('Koszt całkowity', m => m.totalCost, '#,##0.00');
             addMetricRow('Przychód przed rabatami', m => m.totalRevenue, '#,##0.00');
             addMetricRow('Rabat procentowy', m => m.discPct, '0.00%');
@@ -2089,6 +2108,9 @@ ${ganttSectionHtml}
                 if (rn > 1 && rn % 2 === 0) row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
             });
             compSheet.views = [{ state: 'frozen', ySplit: 1 }];
+            if (compSheet.rowCount > 1) {
+                compSheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: compSheet.rowCount, column: compSheet.columnCount } };
+            }
         }
 
         const summarySheet = workbook.addWorksheet('Podsumowanie');
@@ -2127,7 +2149,6 @@ ${ganttSectionHtml}
         ];
         summarySheet.addRow([`Budżet projektu`, fileProjectName]);
         summarySheet.addRow(['Data eksportu', exportDate]);
-        summarySheet.addRow(['Liczba wierszy', summary.rows]);
         summarySheet.addRow(['Koszt całkowity', summary.totalCost]);
         summarySheet.addRow(['Przychód przed rabatami', summary.totalRevenue]);
         summarySheet.addRow(['Rabat procentowy', parsedPercentDiscount / 100 || 0]);
@@ -2137,14 +2158,14 @@ ${ganttSectionHtml}
         summarySheet.addRow(['Zysk po rabatach', exportedProfitAfterDiscount]);
         summarySheet.addRow(['Marża po rabatach', exportedMarginAfterDiscount / 100]);
 
+        summarySheet.getCell('B3').numFmt = '#,##0.00';
         summarySheet.getCell('B4').numFmt = '#,##0.00';
-        summarySheet.getCell('B5').numFmt = '#,##0.00';
-        summarySheet.getCell('B6').numFmt = '0.00%';
+        summarySheet.getCell('B5').numFmt = '0.00%';
+        summarySheet.getCell('B6').numFmt = '#,##0.00';
         summarySheet.getCell('B7').numFmt = '#,##0.00';
         summarySheet.getCell('B8').numFmt = '#,##0.00';
         summarySheet.getCell('B9').numFmt = '#,##0.00';
-        summarySheet.getCell('B10').numFmt = '#,##0.00';
-        summarySheet.getCell('B11').numFmt = '0.00%';
+        summarySheet.getCell('B10').numFmt = '0.00%';
         summarySheet.getRow(1).font = { bold: true, size: 14 };
 
         // Per-type aggregation: jeden wiersz na typ — koszty agregowane BEZ rozróżniania
@@ -2278,6 +2299,10 @@ ${ganttSectionHtml}
             treeSheet.getColumn(k).numFmt = '#,##0.00';
         });
         treeSheet.views = [{ state: 'frozen', ySplit: 1 }];
+        // Filtr na nagłówek + wiersze danych (bez wiersza „Razem").
+        if (treeDump.rows.length > 0) {
+            treeSheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: treeDump.rows.length + 1, column: treeSheet.columnCount } };
+        }
 
         // Q&A sheet — zagnieżdżona tabela: Pozycja WBS / Pytanie / Odpowiedź
         const qaSheet = workbook.addWorksheet('Q&A');
