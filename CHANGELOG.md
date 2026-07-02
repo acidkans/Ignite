@@ -4,6 +4,23 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-02 — fix(materials): 500 na PATCH z powodu duplikatów producenta + brakujący endpoint obrazu karty katalogowej
+
+### architektura / API
+- dodano `back-endpoint` `GET /materials/:id/image` — obraz produktu z katalogu (Material.imageUrl), analogicznie do `mat-req-get-image`
+- rozszerzono `back-endpoint` `PATCH /materials/:id` i `POST /materials` o scalanie duplikatów: gdy znormalizowany `manufacturer`+`model` koliduje z unique constraint na istniejącym rekordzie, zamiast 500 scala oba materiały (`MaterialsService.mergeInto`) — przepina `MaterialRequirement.materialId`, `MaterialStock`, `WbsNodeMaterial`, usuwa duplikat
+
+### słownik
+- dodano `back-endpoint` `materials-get-image` — GET /materials/:id/image
+- dodano `back-funkcja` `materials-get-image-stream` — strumień obrazu materiału z uploads
+- dodano `back-funkcja` `materials-resolve-upload-path` — rozwiązanie ścieżki pliku (legacy absolutna vs relatywna)
+- dodano `back-funkcja` `materials-merge-into` — scalanie duplikatu materiału w istniejący rekord
+
+### wytyczne
+- `back-funkcja` `normalizeManufacturer` — MUSI być używana przy KAŻDYM zapisie `Material.manufacturer` (create/update/import z karty katalogowej/AI). Przed tą poprawką część ścieżek zapisu robiła surowe `.toUpperCase()` całego stringa, co tworzyło w bazie duplikaty tego samego producenta w różnych formatach (np. `SCHNEIDER` / `SCHNEIDER ELECTRIC` / `Schneider`) i łamało cross-filtering w `ProductCard` oraz powodowało 500 na `PATCH /materials/:id` przy kolizji unique constraint `(manufacturer, model)`
+- `ui-funkcja` `getFilteredSuggestions` (WbsMaterialsPanel.jsx, ProductCard) — filtruj sugestie TYLKO po polach nadrzędnych w hierarchii manufacturer → model → productName (patrz `AC_UPSTREAM`), nigdy po polach podrzędnych — inaczej nieaktualna wartość w polu "w dół" hierarchii błędnie blokuje sugestie w polu "w górę"
+- `ui-funkcja` `handlePatchMaterial`/`handlePatchField` (MaterialDatabaseTab.jsx) — zawsze sprawdzaj `res.ok` po PATCH przed aktualizacją lokalnego stanu; optymistyczny update bez sprawdzenia statusu maskuje realne błędy zapisu
+
 ## 2026-07-01 — feat(offers): przypisanie cen ofertowych w ProductCard + parsowanie Excel
 
 ### schema.prisma

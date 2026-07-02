@@ -1,11 +1,32 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeManufacturer } from '../common/normalize.util';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 // @anchor materials-service
 export class MaterialsService {
     constructor(private readonly prisma: PrismaService) {}
+
+    // @anchor materials-resolve-upload-path
+    private resolveUploadPath(stored: string): string {
+        if (path.isAbsolute(stored)) return stored; // legacy: absolutna ścieżka Docker
+        return path.join(process.cwd(), 'uploads', stored);
+    }
+
+    // @anchor materials-get-image-stream
+    /** Obraz produktu z katalogu (Material.imageUrl — nazwa pliku we wspólnym katalogu uploads) */
+    async getImageStream(id: string) {
+        const m = await this.findOne(id);
+        if (!m.imageUrl) throw new NotFoundException('No image for this material');
+        const filePath = this.resolveUploadPath(m.imageUrl);
+        if (!fs.existsSync(filePath)) throw new NotFoundException('Image file not found');
+        const stream = fs.createReadStream(filePath);
+        const ext = path.extname(m.imageUrl).toLowerCase();
+        const mimeMap: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' };
+        return { stream, mimeType: mimeMap[ext] || 'application/octet-stream' };
+    }
 
     // ─── KATALOG ──────────────────────────────────────────────────────────────
 
@@ -67,10 +88,15 @@ export class MaterialsService {
         complianceUrl?: string | null;
         complianceName?: string | null;
     }) {
+        const manufacturer = normalizeManufacturer(dto.manufacturer);
+        const model = dto.model ?? null;
+        // Unikaj 500 z unique constraint (manufacturer, model) — jeśli katalog już ma ten produkt, zaktualizuj go zamiast crashować.
+        const existing = await this.prisma.material.findFirst({ where: { manufacturer, model } });
+        if (existing) return this.update(existing.id, dto as any);
         return this.prisma.material.create({
             data: {
-                manufacturer: normalizeManufacturer(dto.manufacturer),
-                model: dto.model ?? null,
+                manufacturer,
+                model,
                 productName: dto.productName ?? null,
                 type: dto.type ?? 'DEVICE',
                 priceNetto: dto.priceNetto ?? undefined,
@@ -100,9 +126,57 @@ export class MaterialsService {
         complianceUrl: string | null;
         complianceName: string | null;
     }>) {
-        await this.findOne(id);
+        const current = await this.findOne(id);
         if (dto.manufacturer !== undefined) dto.manufacturer = normalizeManufacturer(dto.manufacturer) ?? '';
+        // (manufacturer, model) ma unique constraint w bazie. Normalizacja producenta może sprawić,
+        // że edytowany rekord "zderzy się" z już istniejącym katalogowym duplikatem (np. legacy
+        // "SCHNEIDER ELECTRIC" normalizuje się do tego samego "Schneider" co inny wiersz) —
+        // zamiast wywalać 500, scalamy oba rekordy w jeden.
+        if (dto.manufacturer !== undefined || dto.model !== undefined) {
+            const finalManufacturer = dto.manufacturer !== undefined ? dto.manufacturer : current.manufacturer;
+            const finalModel = dto.model !== undefined ? dto.model : current.model;
+            const duplicate = await this.prisma.material.findFirst({
+                where: { manufacturer: finalManufacturer, model: finalModel, NOT: { id } },
+            });
+            if (duplicate) return this.mergeInto(id, duplicate.id, dto);
+        }
         return this.prisma.material.update({ where: { id }, data: dto as any });
+    }
+
+    // @anchor materials-merge-into
+    /** Scala materiał `loserId` w `winnerId`: przepina wszystkie referencje, sumuje ilości, usuwa duplikat. */
+    private async mergeInto(loserId: string, winnerId: string, dto: Record<string, any>) {
+        await this.prisma.$transaction(async (tx) => {
+            await tx.materialRequirement.updateMany({ where: { materialId: loserId }, data: { materialId: winnerId } });
+
+            const loserStock = await tx.materialStock.findMany({ where: { materialId: loserId } });
+            for (const s of loserStock) {
+                const winnerStock = await tx.materialStock.findFirst({ where: { materialId: winnerId } });
+                if (winnerStock) {
+                    await tx.materialStock.update({ where: { id: winnerStock.id }, data: { quantity: { increment: s.quantity } } });
+                    await tx.materialStock.delete({ where: { id: s.id } });
+                } else {
+                    await tx.materialStock.update({ where: { id: s.id }, data: { materialId: winnerId } });
+                }
+            }
+
+            const loserAllocations = await tx.wbsNodeMaterial.findMany({ where: { materialId: loserId } });
+            for (const a of loserAllocations) {
+                const existing = await tx.wbsNodeMaterial.findFirst({ where: { wbsNodeId: a.wbsNodeId, materialId: winnerId } });
+                if (existing) {
+                    await tx.wbsNodeMaterial.update({ where: { id: existing.id }, data: { quantity: { increment: a.quantity } } });
+                    await tx.wbsNodeMaterial.delete({ where: { id: a.id } });
+                } else {
+                    await tx.wbsNodeMaterial.update({ where: { id: a.id }, data: { materialId: winnerId } });
+                }
+            }
+
+            await tx.material.delete({ where: { id: loserId } });
+
+            const { manufacturer, model, ...rest } = dto;
+            if (Object.keys(rest).length) await tx.material.update({ where: { id: winnerId }, data: rest });
+        });
+        return this.findOne(winnerId);
     }
 
     // @anchor materials-remove
@@ -181,7 +255,7 @@ export class MaterialsService {
         for (const item of items) {
             if (!item.manufacturer) continue;
             const productName = String(item.productName || '').slice(0, 300) || null;
-            const manufacturer = String(item.manufacturer).slice(0, 200).toUpperCase();
+            const manufacturer = normalizeManufacturer(String(item.manufacturer).slice(0, 200)) as string;
             const model = item.model ? String(item.model).slice(0, 200) : null;
 
             const existing = await this.prisma.material.findFirst({ where: { manufacturer, model: model ?? null } });

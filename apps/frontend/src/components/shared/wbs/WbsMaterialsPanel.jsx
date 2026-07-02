@@ -625,8 +625,8 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
             return;
         }
         let cancelled = false;
-        // Fetch danych materiału
-        fetch(`${API_URL}/material-requirements/${card.materialId}`, {
+        // Fetch danych materiału — card.materialId to id z tabeli materials, nie material-requirements
+        fetch(`${API_URL}/materials/${card.materialId}`, {
             headers: { Authorization: `Bearer ${token}` },
         }).then(async res => {
             if (!res.ok || cancelled) return;
@@ -634,7 +634,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
             if (!cancelled) setCatalogMaterial(data);
         }).catch(() => {});
         // Fetch obrazka
-        fetch(`${API_URL}/material-requirements/${card.materialId}/image`, {
+        fetch(`${API_URL}/materials/${card.materialId}/image`, {
             headers: { Authorization: `Bearer ${token}` },
         }).then(async res => {
             if (!res.ok || cancelled) return;
@@ -714,9 +714,11 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     const ciEq = (a, b) => (a || '').toLowerCase() === (b || '').toLowerCase();
 
     const getFilteredSuggestions = useCallback((fieldKey) => {
-        const otherFields = ['manufacturer', 'model', 'productName'].filter(f => f !== fieldKey);
+        // Kaskada tylko w górę hierarchii (manufacturer → model → productName), tak jak w findInlineAc/AC_UPSTREAM.
+        // Filtrowanie po polach "w dół" (np. model po productName) blokowało sugestie, gdy productName
+        // zostało z poprzedniego produktu i nie pasowało do nowego modelu tego samego producenta.
         let base = materialDb;
-        for (const f of otherFields) {
+        for (const f of (AC_UPSTREAM[fieldKey] || [])) {
             if (fields[f]) base = base.filter(m => ciEq(m[f], fields[f]));
         }
         const typed = (fields[fieldKey] || '').toLowerCase();

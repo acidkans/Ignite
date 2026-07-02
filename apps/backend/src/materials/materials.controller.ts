@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, BadRequestException, Res } from '@nestjs/common';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { MaterialsService } from './materials.service';
 
@@ -36,6 +37,14 @@ export class MaterialsController {
     @Get(':id')
     findOne(@Param('id') id: string) {
         return this.service.findOne(id);
+    }
+
+    // @anchor materials-get-image
+    @Get(':id/image')
+    async getImage(@Param('id') id: string, @Res() res: Response) {
+        const { stream, mimeType } = await this.service.getImageStream(id);
+        res.set({ 'Content-Type': mimeType });
+        stream.pipe(res);
     }
 
     // @anchor materials-post-create

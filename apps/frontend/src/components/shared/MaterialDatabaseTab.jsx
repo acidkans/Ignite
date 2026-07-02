@@ -188,11 +188,12 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
             ? (value === '' ? null : Number(value))
             : (value === '' ? null : value);
         try {
-            await fetch(`${API_URL}/material-requirements/${id}`, {
+            const res = await fetch(`${API_URL}/material-requirements/${id}`, {
                 method: 'PATCH',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ [field]: parsed }),
             });
+            if (!res.ok) { console.error(`Zapis pola ${field} nie powiódł się (${res.status})`); setEditingCell(null); return; }
             const updates = { [field]: parsed };
             const patch = r => r.id === id ? { ...r, ...updates } : r;
             setDatasheetItems(prev => prev.map(patch));
@@ -208,18 +209,22 @@ export default function MaterialDatabaseTab({ nodeId, searchQuery = '', isGlobal
         try {
             if (field === 'stockStatus') {
                 const qty = value === '' ? 0 : Number(value);
-                await fetch(`${API_URL}/materials/${id}/stock`, {
+                const res = await fetch(`${API_URL}/materials/${id}/stock`, {
                     method: 'PATCH', headers,
                     body: JSON.stringify({ quantity: qty }),
                 });
+                if (!res.ok) { console.error(`Zapis stanu magazynowego nie powiódł się (${res.status})`); setEditingCell(null); return; }
                 setItems(prev => prev.map(r => r.id === id ? { ...r, stockStatus: qty } : r));
             } else {
                 const parsed = field === 'priceNetto' ? (value === '' ? null : Number(value)) : (value === '' ? null : value);
-                await fetch(`${API_URL}/materials/${id}`, {
+                const res = await fetch(`${API_URL}/materials/${id}`, {
                     method: 'PATCH', headers,
                     body: JSON.stringify({ [field]: parsed }),
                 });
-                setItems(prev => prev.map(r => r.id === id ? { ...r, [field]: parsed } : r));
+                if (!res.ok) { console.error(`Zapis pola ${field} nie powiódł się (${res.status})`); setEditingCell(null); return; }
+                // Zmiana manufacturer/model może scalić rekord z istniejącym duplikatem pod innym id
+                // (patrz MaterialsService.mergeInto) — bezpieczniej odświeżyć całą listę niż łatać lokalnie po starym id.
+                setRefreshKey(k => k + 1);
             }
         } catch {}
         setEditingCell(null);

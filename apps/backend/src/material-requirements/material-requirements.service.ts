@@ -480,7 +480,7 @@ export class MaterialRequirementsService {
 
         // Krok 7b: gdy manufacturer I model są podane → auto-upsert Material + twórz wybraną propozycję
         if (manufacturer && model) {
-            const mfr = String(manufacturer).slice(0, 200).toUpperCase();
+            const mfr = normalizeManufacturer(String(manufacturer).slice(0, 200)) as string;
             const mdl = String(model).slice(0, 200);
             const pn = productName ? String(productName).slice(0, 300) : null;
             const existingMat = await this.prisma.material.findFirst({ where: { manufacturer: mfr, model: mdl } });
@@ -1276,7 +1276,7 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
             if (!Array.isArray(items)) return [];
             const mapped = items.map(item => ({
                 productName: String(item.productName || '').slice(0, 300),
-                manufacturer: item.manufacturer ? String(item.manufacturer).slice(0, 200).toUpperCase() : null,
+                manufacturer: item.manufacturer ? normalizeManufacturer(String(item.manufacturer).slice(0, 200)) : null,
                 model: item.model ? String(item.model).slice(0, 200) : null,
                 type: ['DEVICE', 'MATERIAL', 'CABLE', 'SOFTWARE', 'SERVICE'].includes(item.type) ? item.type : 'DEVICE',
             })).filter(i => i.productName.length > 0);
@@ -1305,7 +1305,7 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
         for (const item of items) {
             if (!item.manufacturer) continue; // bez producenta nie możemy upsertować do materials
             const productName = String(item.productName || '').slice(0, 300) || null;
-            const manufacturer = String(item.manufacturer).slice(0, 200).toUpperCase();
+            const manufacturer = normalizeManufacturer(String(item.manufacturer).slice(0, 200)) as string;
             const model = item.model ? String(item.model).slice(0, 200) : null;
 
             // Upsert do tabeli materials (katalog produktów)

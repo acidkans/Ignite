@@ -356,6 +356,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-hook | mat-req-panel-global-update-listener | apps/frontend/src/components/shared/wbs/MaterialRequirementsPanel.jsx | @anchor mat-req-panel-global-update-listener |
 | ui-hook | wbs-materials-panel-global-update-listener | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-panel-global-update-listener |
 | ui-stan | comboRefs | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card-combo-refs |
+| ui-hook | useBeforeUnload | apps/frontend/src/hooks/useBeforeUnload.js | @anchor use-before-unload |
 
 ### Skrypty narzędziowe (root repo)
 
@@ -524,9 +525,13 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | MaterialsService.updateStock | apps/backend/src/materials/materials.service.ts | @anchor materials-update-stock |
 | back-funkcja | MaterialsService.findProposalHistory | apps/backend/src/materials/materials.service.ts | @anchor materials-find-proposal-history |
 | back-funkcja | MaterialsService.createFromDatasheet | apps/backend/src/materials/materials.service.ts | @anchor materials-from-datasheet |
+| back-funkcja | MaterialsService.resolveUploadPath | apps/backend/src/materials/materials.service.ts | @anchor materials-resolve-upload-path |
+| back-funkcja | MaterialsService.getImageStream | apps/backend/src/materials/materials.service.ts | @anchor materials-get-image-stream |
+| back-funkcja | MaterialsService.mergeInto | apps/backend/src/materials/materials.service.ts | @anchor materials-merge-into |
 | back-endpoint | GET /materials | apps/backend/src/materials/materials.controller.ts | @anchor materials-get-all |
 | back-endpoint | GET /materials/database | apps/backend/src/materials/materials.controller.ts | @anchor materials-get-database |
 | back-endpoint | GET /materials/:id | apps/backend/src/materials/materials.controller.ts | @anchor materials-get-one |
+| back-endpoint | GET /materials/:id/image | apps/backend/src/materials/materials.controller.ts | @anchor materials-get-image |
 | back-endpoint | POST /materials | apps/backend/src/materials/materials.controller.ts | @anchor materials-post-create |
 | back-endpoint | PATCH /materials/:id | apps/backend/src/materials/materials.controller.ts | @anchor materials-patch-update |
 | back-endpoint | DELETE /materials/:id | apps/backend/src/materials/materials.controller.ts | @anchor materials-delete-one |
