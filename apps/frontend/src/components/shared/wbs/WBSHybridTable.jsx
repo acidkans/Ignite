@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny } from './wbsConstants';
 
-function AutoResizeTextarea({ value, onChange, onBlur, placeholder, className, style }) {
+function AutoResizeTextarea({ value, onChange, onBlur, onKeyDown, placeholder, className, style, ...rest }) {
     const ref = useRef(null);
     const adjust = useCallback(() => {
         const el = ref.current;
@@ -28,10 +28,12 @@ function AutoResizeTextarea({ value, onChange, onBlur, placeholder, className, s
             value={value}
             onChange={e => { onChange(e); adjust(); }}
             onBlur={onBlur}
+            onKeyDown={onKeyDown}
             onFocus={adjust}
             placeholder={placeholder}
             className={className}
             style={{ overflow: 'hidden', minHeight: '1.4em', resize: 'none', ...(style || {}) }}
+            {...rest}
         />
     );
 }
@@ -351,7 +353,7 @@ const STRUCT_STATUS_META = {
     MIXED:     { label: 'Mieszany',     style: 'bg-sky-500/20 text-sky-300 border-sky-500/30' },
 };
 
-function StatusSelect({ value, onChange }) {
+function StatusSelect({ value, onChange, onKeyDown, ...rest }) {
     const meta = STRUCT_STATUS_META[value || ''] || STRUCT_STATUS_META[''];
     return (
         <select
@@ -359,6 +361,8 @@ function StatusSelect({ value, onChange }) {
             onChange={e => onChange(e.target.value)}
             className={`text-[14px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 cursor-pointer focus:outline-none focus:ring-0 transition-colors ${meta.style}`}
             onClick={e => e.stopPropagation()}
+            onKeyDown={onKeyDown}
+            {...rest}
         >
             {Object.entries(STRUCT_STATUS_META).map(([code, { label }]) => (
                 <option key={code} value={code} className="bg-gray-900 text-white">{label}</option>
@@ -855,6 +859,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [qaBranchNode, setQaBranchNode] = useState(null); // { id } — węzeł top-level z otwartym read-only podglądem Q&A całej gałęzi
     const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, status: 128, wlasciciel: 128, komentarz: 200, qa: 140, zalaczniki: 44 });
     const resizeDrag = useRef(null);
+    // @anchor grid-nav-table-ref
+    // Kontener tabeli — zawęża zapytania nawigacji klawiaturowej (grid-nav) do tego drzewa,
+    // zamiast przeszukiwać cały document (poprzednia wersja gubiła fokus poza tabelą).
+    const tableWrapperRef = useRef(null);
 
     const startColResize = (col, e) => {
         e.preventDefault();
@@ -1156,6 +1164,80 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
     const rows = [];
 
+    // ── Grid keyboard navigation (Excel-like) ────────────────────────────────
+    // @anchor grid-nav-row-order
+    // Kolejność renderowanych wierszy węzłów (node.id), wypełniana w trakcie renderNode —
+    // pomija wiersze zwinięte/odfiltrowane przez wyszukiwarkę, więc Góra/Dół trafiają
+    // tylko w faktycznie widoczne wiersze.
+    const navRowOrder = [];
+    // @anchor grid-nav-column-order
+    const GRID_COLUMN_ORDER = ['nazwa', 'typ', 'ilosc', 'jednostka', ...(isManager ? ['cena_netto'] : []), 'status', 'wlasciciel', 'komentarz'];
+    // @anchor handle-grid-key-down
+    // Enter/strzałki nawigują między edytowalnymi komórkami jak w arkuszu kalkulacyjnym:
+    // Enter/Dół/Góra = ta sama kolumna, sąsiedni wiersz; Lewo/Prawo = sąsiednia kolumna w wierszu.
+    // W polach tekstowych strzałki Lewo/Prawo/Góra/Dół nawigują tylko gdy kursor jest na
+    // brzegu tekstu — w przeciwnym razie poruszają kursorem tekstowym (zachowanie natywne).
+    const handleGridKeyDown = (e, rowKey, colKey) => {
+        const target = e.target;
+        const isTextarea = target.tagName === 'TEXTAREA';
+        const isTextInput = target.tagName === 'INPUT' && target.type === 'text';
+        const isText = isTextarea || isTextInput;
+        // selectionStart===0 (nie wymaga selectionEnd===0) obejmuje też stan "cały tekst zaznaczony"
+        // (np. po onFocus robiącym e.target.select() w polach Ilość/Koszt) — w takim stanie strzałka
+        // ma od razu nawigować między komórkami, tak jak w arkuszu, a nie tylko kolapsować zaznaczenie.
+        const atStart = isText && target.selectionStart === 0;
+        const atEnd = isText && target.selectionEnd === target.value.length;
+
+        const focusCell = (r, c) => {
+            const el = tableWrapperRef.current?.querySelector(`[data-nav-row="${CSS.escape(r)}"][data-nav-col="${c}"]`);
+            if (!el) return false;
+            el.focus();
+            if (typeof el.select === 'function') el.select();
+            return true;
+        };
+        const stepRow = (dir) => {
+            const idx = navRowOrder.indexOf(rowKey);
+            if (idx === -1) return false;
+            for (let i = idx + dir; i >= 0 && i < navRowOrder.length; i += dir) {
+                if (focusCell(navRowOrder[i], colKey)) return true;
+            }
+            return false;
+        };
+        const stepCol = (dir) => {
+            const idx = GRID_COLUMN_ORDER.indexOf(colKey);
+            if (idx === -1) return false;
+            for (let i = idx + dir; i >= 0 && i < GRID_COLUMN_ORDER.length; i += dir) {
+                if (focusCell(rowKey, GRID_COLUMN_ORDER[i])) return true;
+            }
+            return false;
+        };
+
+        switch (e.key) {
+            case 'Enter':
+                e.preventDefault();
+                stepRow(1);
+                return;
+            case 'ArrowDown':
+                if (isTextarea && !atEnd) return;
+                if (stepRow(1)) e.preventDefault();
+                return;
+            case 'ArrowUp':
+                if (isTextarea && !atStart) return;
+                if (stepRow(-1)) e.preventDefault();
+                return;
+            case 'ArrowRight':
+                if (isText && !atEnd) return;
+                if (stepCol(1)) e.preventDefault();
+                return;
+            case 'ArrowLeft':
+                if (isText && !atStart) return;
+                if (stepCol(-1)) e.preventDefault();
+                return;
+            default:
+                return;
+        }
+    };
+
     // ── Root row ──────────────────────────────────────────────────────────────
     rows.push(
         <tr key="root" className="border-b border-white/5 bg-slate-900/50 hover:bg-slate-900/70 cursor-pointer select-none" onClick={e => toggle('root', e)}>
@@ -1193,6 +1275,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             return;
         }
         const rowId = `node_${node.id}`;
+        navRowOrder.push(node.id);
         const bs = getBranchStyle(rootIndex, depth);
         const d = {
             trStyle: bs.trStyle,
@@ -1253,6 +1336,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         }}
                         placeholder={depth === 0 ? 'Nazwa przedmiotu projektu…' : 'Nazwa elementu…'}
                         className={`w-full bg-transparent border-none resize-none focus:outline-none placeholder-gray-700 min-w-[60px] select-text leading-snug ${d.nameClass}`}
+                        data-nav-row={node.id}
+                        data-nav-col="nazwa"
+                        onKeyDown={e => handleGridKeyDown(e, node.id, 'nazwa')}
                     />
                     <div className="absolute top-1/2 -translate-y-1/2 right-1 flex items-center gap-1">
                         <button
@@ -1351,6 +1437,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 }
                             }}
                             className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-base w-full focus:outline-none focus:border-blue-500 transition-colors cursor-pointer ${d.fieldClass}`}
+                            data-nav-row={node.id}
+                            data-nav-col="typ"
+                            onKeyDown={e => handleGridKeyDown(e, node.id, 'typ')}
                         >
                             <option value="" className="bg-gray-900">— wybierz typ —</option>
                             {TYPE_OPTIONS.filter(o => o !== '').map(o => (
@@ -1375,15 +1464,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 }}
                                 onFocus={e => { setQtyFocusId(node.id); if (!parseFloat(String(node.quantity).replace(',', '.'))) handleField(node.id, 'quantity', ''); e.target.select(); }}
                                 onMouseUp={e => e.target.select()}
-                                onKeyDown={e => {
-                                    if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        const all = Array.from(document.querySelectorAll('input:not([disabled]):not([readonly]), select:not([disabled]), textarea:not([disabled]):not([readonly])'));
-                                        const idx = all.indexOf(e.target);
-                                        if (idx >= 0 && all[idx + 1]) all[idx + 1].focus();
-                                        else e.target.blur();
-                                    }
-                                }}
+                                onKeyDown={e => handleGridKeyDown(e, node.id, 'ilosc')}
                                 onBlur={e => {
                                     setQtyFocusId(null);
                                     const raw = String(e.target.value);
@@ -1393,7 +1474,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     handleField(node.id, 'quantity', clean);
                                     onRequirementsQtyChange?.(node.id, clean, node.name);
                                 }}
-                                placeholder="0" className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}`} />
+                                placeholder="0" className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}`}
+                                data-nav-row={node.id}
+                                data-nav-col="ilosc" />
                             {warnKey === `${node.id}:quantity` && (
                                 <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
                             )}
@@ -1409,7 +1492,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         ) : (
                             <select value={node.unit || ''}
                                 onChange={e => { handleField(node.id, 'unit', e.target.value); onNodeFieldSave?.(node.id, 'unit', e.target.value); }}
-                                className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-base w-full focus:outline-none focus:border-blue-500 cursor-pointer ${d.fieldClass}`}>
+                                className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-base w-full focus:outline-none focus:border-blue-500 cursor-pointer ${d.fieldClass}`}
+                                data-nav-row={node.id}
+                                data-nav-col="jednostka"
+                                onKeyDown={e => handleGridKeyDown(e, node.id, 'jednostka')}>
                                 <option value="" className="bg-gray-900">—</option>
                                 {UNIT_OPTIONS.map(u => <option key={u} value={u} className="bg-gray-900">{u}</option>)}
                             </select>
@@ -1455,9 +1541,11 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                         handleField(node.id, 'unitCost', String(rounded));
                                         onNodeFieldSave?.(node.id, 'unitCost', rounded);
                                     }}
-                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}
+                                    onKeyDown={e => handleGridKeyDown(e, node.id, 'cena_netto')}
                                     placeholder="0,00"
                                     className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}`}
+                                    data-nav-row={node.id}
+                                    data-nav-col="cena_netto"
                                 />
                                 {warnKey === `${node.id}:unitCost` && (
                                     <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
@@ -1479,6 +1567,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     onNodeFieldSave?.(node.id, 'status', v);
                                     if (reqTag) onNodeStatusChange?.(node.id, v, reqTag.slice(4));
                                 }}
+                                data-nav-row={node.id}
+                                data-nav-col="status"
+                                onKeyDown={e => handleGridKeyDown(e, node.id, 'status')}
                             />
                         );
                     })()}
@@ -1491,6 +1582,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             value={node.owner || ''}
                             onChange={e => { handleField(node.id, 'owner', e.target.value); onNodeFieldSave?.(node.id, 'owner', e.target.value); }}
                             className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-base w-full focus:outline-none focus:border-blue-500 transition-colors cursor-pointer ${d.fieldClass}`}
+                            data-nav-row={node.id}
+                            data-nav-col="wlasciciel"
+                            onKeyDown={e => handleGridKeyDown(e, node.id, 'wlasciciel')}
                         >
                             <option value="" className="bg-gray-900">—</option>
                             {users.length > 0 && users.map(u => {
@@ -1509,7 +1603,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         </select>
                     ) : (
                         <input type="text" value={node.owner || ''} onChange={e => handleField(node.id, 'owner', e.target.value)} onBlur={e => onNodeFieldSave?.(node.id, 'owner', e.target.value)}
-                            placeholder="—" className={`bg-transparent border-none focus:outline-none text-base w-full placeholder-gray-700 ${d.fieldClass}`} />
+                            onKeyDown={e => handleGridKeyDown(e, node.id, 'wlasciciel')}
+                            placeholder="—" className={`bg-transparent border-none focus:outline-none text-base w-full placeholder-gray-700 ${d.fieldClass}`}
+                            data-nav-row={node.id}
+                            data-nav-col="wlasciciel" />
                     )}
                 </td>
 
@@ -1521,6 +1618,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         onBlur={e => { onNodeFieldSave?.(node.id, 'comment', e.target.value); window.dispatchEvent(new CustomEvent('wbs-comment-changed', { detail: { wbsNodeIds: [node.id], comment: e.target.value } })); }}
                         placeholder="—"
                         className={`bg-transparent border-none resize-none focus:outline-none text-base w-full placeholder-gray-700 leading-snug ${d.fieldClass}`}
+                        data-nav-row={node.id}
+                        data-nav-col="komentarz"
+                        onKeyDown={e => handleGridKeyDown(e, node.id, 'komentarz')}
                     />
                 </td>
 
@@ -1651,7 +1751,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     <button onClick={() => setCopyBuffer(null)} className="ml-auto p-0.5 rounded hover:bg-white/10 text-gray-500 hover:text-white"><X size={12} /></button>
                 </div>
             )}
-            <div className="flex-1 min-h-0 overflow-auto overflow-x-auto custom-scrollbar">
+            <div className="flex-1 min-h-0 overflow-auto overflow-x-auto custom-scrollbar" ref={tableWrapperRef}>
             <div className="w-full">
                 <table className="text-base border-collapse" style={{ tableLayout: 'fixed', width: '100%' }}>
                     <colgroup>
