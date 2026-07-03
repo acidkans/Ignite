@@ -666,17 +666,17 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 return;
             }
 
-            const entries = await Promise.all(nodeIds.map(async (id) => {
-                try {
-                    const res = await fetch(`${API_URL}/schematics/wbs-node-markers/${id}`, { headers: { Authorization: `Bearer ${token()}` } });
-                    const data = res.ok ? await res.json() : [];
-                    return [id, data];
-                } catch {
-                    return [id, []];
-                }
-            }));
-
-            if (active) setMarkerLinksCache(Object.fromEntries(entries));
+            try {
+                const res = await fetch(`${API_URL}/schematics/wbs-node-markers/batch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+                    body: JSON.stringify({ wbsNodeIds: nodeIds }),
+                });
+                const byNode = res.ok ? await res.json() : {};
+                if (active) setMarkerLinksCache(byNode);
+            } catch {
+                if (active) setMarkerLinksCache({});
+            }
         };
 
         loadMarkerLinks();

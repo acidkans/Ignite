@@ -257,7 +257,7 @@ const API_URL = '/api';
 
 // ─── MaterialReqExpandPanel ───────────────────────────────────────────────────
 
-function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, onDeleteNode, onNodeFieldSave }) {
+function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, onDeleteNode, onNodeFieldSave, reqsLoaded }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     const headers = React.useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
 
@@ -270,9 +270,12 @@ function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, 
     // Snapshot-owe wersjoowanie WBS klonuje węzły (nowe UUID), więc `req` lookup po wbsNodeId
     // zawodzi dla snapshot-ów. Fallback po nazwie (matReqByName) jest obsługiwany przez rodzica przed
     // przekazaniem `req` do panelu, więc tutaj docieramy tylko gdy requirement faktycznie nie istnieje.
+    // reqsLoaded pilnuje, żeby auto-create nie odpalił się zanim rodzic skończy pierwszy fetch
+    // material-requirements/node/{processNodeId} — inaczej `req` bywa chwilowo null i powstaje
+    // duplikat (ghost-requirement), bo prawdziwe wymaganie i tak zaraz przyjdzie z fetcha.
     React.useEffect(() => {
         if (card) { setCard(req); return; }
-        if (!node.id) return;
+        if (!node.id || !reqsLoaded) return;
         const reqType = wbsTypeFromAny(node.type) === 'equipment' ? 'equipment' : 'material';
         fetch(`${API_URL}/material-requirements`, {
             method: 'POST', headers,
@@ -282,7 +285,7 @@ function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, 
             }),
         }).then(r => r.ok ? r.json() : null).then(data => { if (data) { setCard(data); onSaved?.(data); } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [node.id]);
+    }, [node.id, reqsLoaded]);
 
     React.useEffect(() => { setCard(req); }, [req]);
 
@@ -368,24 +371,6 @@ function InheritedStatusBadge({ status }) {
     const meta = STRUCT_STATUS_META[status];
     if (!meta) return <span className="text-[14px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 text-gray-500 border-gray-600/30 flex items-center gap-1 w-max"><Link size={8}/> {status}</span>;
     return <span title="Status dziedziczony z zapotrzebowania" className={`text-[14px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 flex items-center gap-1 w-max cursor-default ${meta.style}`}><Link size={8}/> {meta.label}</span>;
-}
-
-function QtyInput({ value, onChange }) {
-    const [local, setLocal] = useState(value != null ? String(value) : '');
-    useEffect(() => { setLocal(value != null ? String(value) : ''); }, [value]);
-    return (
-        <input
-            type="text"
-            value={local}
-            onChange={e => setLocal(e.target.value)}
-            onBlur={() => {
-                const v = parseFloat(local.replace(',', '.'));
-                if (!isNaN(v) && v >= 0) onChange(v);
-            }}
-            placeholder="1"
-            className="bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700"
-        />
-    );
 }
 
 // Node types: 'project' (root), 'product' (przedmiot projektu), 'material'|'work'|'service' (typy pracy)
@@ -508,16 +493,6 @@ const sumChildrenCost = node => {
     if (!kids.length) return own;
     return own + kids.reduce((a, c) => a + sumChildrenCost(c), 0);
 };
-
-const nodeTotal = node => {
-    const base = { res: parseFloat(node.resources) || 0, cost: parseFloat(node.cost) || 0 };
-    return (node.children || []).reduce((a, c) => {
-        const t = nodeTotal(c);
-        return { res: a.res + t.res, cost: a.cost + t.cost };
-    }, base);
-};
-
-const fmt = v => v ? new Intl.NumberFormat('pl-PL').format(Math.round(v)) : '';
 
 // ── Depth visual config ───────────────────────────────────────────────────────
 const DEPTH_SIZE = [
@@ -797,7 +772,7 @@ function MarkerAttachmentsModal({ wbsNodeId, wbsNodeName, processNodeId, onClose
 }
 
 // ── Attachment preview cell ───────────────────────────────────────────────────
-function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal, onPreview }) {
+function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal }) {
     const links = markerLinksCache[wbsNodeId] || [];
 
     const allAtts = links.flatMap(l => (l.marker?.attachments || []));
@@ -822,12 +797,6 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal, on
 // ── Component ─────────────────────────────────────────────────────────────────
 // @anchor wbs-hybrid-table
 export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null }) {
-    const getAllIds = useCallback((items) => {
-        const ids = ['root'];
-        const walk = (nodes) => nodes?.forEach(n => { ids.push(`node_${n.id}`); walk(n.children); });
-        walk(items);
-        return new Set(ids);
-    }, []);
     const [expanded, setExpanded] = useState(() => new Set());
     const initialExpandDoneRef = useRef(false);
     // Domyślnie rozwiń tylko do 2. poziomu (root + węzły top-level) przy pierwszym
@@ -852,7 +821,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [tagInput, setTagInput] = useState('');
     const [markerLinksCache, setMarkerLinksCache] = useState({});
     const [attachmentModal, setAttachmentModal] = useState(null); // { wbsNodeId, wbsNodeName }
-    const [lightboxAtt, setLightboxAtt] = useState(null); // attachment for fullscreen preview
     const tagInputRef = useRef(null);
     const [materialStatuses, setMaterialStatuses] = useState({});
     // @anchor mat-req-by-wbs-id
@@ -862,6 +830,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // Fallback: gdy node nie ma tagu req: i wbsNodeId nie pasuje (np. snapshot lub stary węzeł),
     // szukamy requirement po nazwie. Zapobiega auto-tworzeniu ghost-requirements.
     const [matReqByName, setMatReqByName] = useState({});
+    // @anchor mat-reqs-loaded
+    // True dopiero po pierwszym fetch'u material-requirements/node/{processNodeId} — zapobiega
+    // auto-create ghost-requirements w MaterialReqExpandPanel, jeśli user rozwinie panel wcześniej.
+    const [matReqsLoaded, setMatReqsLoaded] = useState(false);
     const [expandedMaterialIds, setExpandedMaterialIds] = useState(new Set());
     const [reqDragOverNode, setReqDragOverNode] = useState(null);
     const [selectedNodeId, setSelectedNodeId] = useState(null);
@@ -927,26 +899,33 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     setMatReqByWbsId(reqMap);
                     setMatReqByName(nameMap);
                 }
-            } catch (e) {}
+            } catch (e) { console.warn('[WBS] fetchMat failed', e); }
+            finally { setMatReqsLoaded(true); }
         };
         fetchMat();
     }, [processNodeId, materialRefreshKey]);
 
     const items = wbsTree?.items || [];
 
-    // Pre-fetch marker links for all WBS nodes (+ periodic refresh)
-    const fetchMarkerLinks = useCallback(() => {
+    // Pre-fetch marker links for all WBS nodes (+ periodic refresh) — jedno zapytanie batch
+    // zamiast N (po jednym na węzeł), inaczej drzewo 200 węzłów robiło 200 fetchy co 30s.
+    const fetchMarkerLinks = useCallback(async () => {
         if (!processNodeId) return;
         const allIds = [];
         const collectAllIds = (nodes) => nodes.forEach(n => { allIds.push(n.id); collectAllIds(n.children || []); });
         collectAllIds(items);
-        allIds.forEach(async id => {
-            const res = await fetch(`${API_URL}/schematics/wbs-node-markers/${id}`);
+        if (!allIds.length) return;
+        try {
+            const res = await fetch(`${API_URL}/schematics/wbs-node-markers/batch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ wbsNodeIds: allIds }),
+            });
             if (res.ok) {
-                const data = await res.json();
-                setMarkerLinksCache(prev => ({ ...prev, [id]: data }));
+                const byNode = await res.json();
+                setMarkerLinksCache(byNode);
             }
-        });
+        } catch (e) { console.warn('[WBS] fetchMarkerLinks failed', e); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [processNodeId, items.length]);
 
@@ -1148,10 +1127,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     };
 
     const onDragEnd = () => { dragIdRef.current = null; setDragId(null); setDragOver(null); setReqDragOverNode(null); };
-
-    // ── Totals ────────────────────────────────────────────────────────────────
-    const totalRes  = items.reduce((a, n) => a + nodeTotal(n).res,  0);
-    const totalCost = items.reduce((a, n) => a + nodeTotal(n).cost, 0);
 
     // ── Search filter ─────────────────────────────────────────────────────────
     const normalizedSearch = String(searchQuery || '').trim().toLowerCase();
@@ -1580,7 +1555,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         nodeName={node.name}
                         markerLinksCache={markerLinksCache}
                         onOpenModal={setAttachmentModal}
-                        onPreview={setLightboxAtt}
                     />
                 </td>
 
@@ -1607,6 +1581,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             })()}
                             processNodeId={processNodeId}
                             versionId={versionId}
+                            reqsLoaded={matReqsLoaded}
                             onNodeFieldSave={onNodeFieldSave}
                             onSaved={updated => { setMatReqByWbsId(prev => ({ ...prev, [node.id]: updated, ...(updated?.id ? { [updated.id]: updated } : {}) })); onMaterialReqUpdated?.(); }}
                             onDeleteNode={() => {
@@ -1659,130 +1634,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             }
         }
     };
-
-    // ── PDF export with full-size images ─────────────────────────────────────
-    const handleExportPdf = useCallback(async () => {
-        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-
-        // Convert image URL to base64 for embedding in print HTML
-        const toBase64 = async (fileUrl) => {
-            try {
-                const res = await fetch(`${API_URL}/schematics/file/${fileUrl}`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                if (!res.ok) return null;
-                const blob = await res.blob();
-                return new Promise(resolve => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result);
-                    reader.readAsDataURL(blob);
-                });
-            } catch { return null; }
-        };
-
-        // Collect only visible (expanded) nodes with their attachments
-        const nodeRows = [];
-        const collectNodes = (nodes, prefix = '', depth = 0) => {
-            nodes.forEach((n, i) => {
-                const path = prefix ? `${prefix}.${i + 1}` : `${i + 1}`;
-                const links = markerLinksCache[n.id] || [];
-                const atts = links.flatMap(l => (l.marker?.attachments || []));
-                nodeRows.push({
-                    path,
-                    name: n.name || '(bez nazwy)',
-                    status: n.status || '',
-                    quantity: n.quantity || '',
-                    unit: n.unit || '',
-                    cost: n.cost || '',
-                    comment: n.comment || '',
-                    tags: n.tags || [],
-                    atts,
-                    depth,
-                });
-                if (expanded.has(n.id) && (n.children || []).length > 0) {
-                    collectNodes(n.children, path, depth + 1);
-                }
-            });
-        };
-        collectNodes(items);
-
-        // Pre-fetch all images as base64
-        const allImageAtts = nodeRows.flatMap(r => r.atts.filter(a => a.fileType === 'IMAGE'));
-        const b64Map = {};
-        await Promise.all(allImageAtts.map(async att => {
-            b64Map[att.fileUrl] = await toBase64(att.fileUrl);
-        }));
-
-        const cell = (content, extra = '') =>
-            `<td style="padding:5px 7px;border:1px solid #ddd;font-size:11px;vertical-align:top${extra ? ';' + extra : ''}">${content}</td>`;
-
-        // Build HTML
-        const tableRows = nodeRows.map(r => {
-            const imagesHtml = r.atts.filter(a => a.fileType === 'IMAGE').map(a => {
-                const src = b64Map[a.fileUrl];
-                return src ? `<div style="page-break-inside:avoid;margin:6px 0"><img src="${src}" style="max-width:100%;height:auto;border-radius:4px" />${a.note ? `<p style="font-size:10px;color:#666;margin:2px 0">${a.note}</p>` : ''}</div>` : '';
-            }).join('');
-            const filesHtml = r.atts.filter(a => a.fileType !== 'IMAGE').map(a =>
-                `<span style="display:inline-block;padding:2px 6px;background:#f0f0f0;border-radius:4px;font-size:10px;margin:2px">${a.fileName}</span>`
-            ).join('');
-            const tagsHtml = r.tags.map(t => `<span style="display:inline-block;padding:1px 6px;background:#e0e7ff;border-radius:8px;font-size:10px;margin:1px">${t}</span>`).join(' ');
-
-            return `<tr>
-                ${cell(r.path, 'white-space:nowrap;font-family:monospace')}
-                ${cell(`<span style="padding-left:${r.depth * 14}px">${r.name}</span>`)}
-                ${cell(r.quantity, 'text-align:right')}
-                ${cell(r.unit)}
-                ${cell(r.status)}
-                ${cell(r.cost, 'text-align:right')}
-                ${cell(r.comment)}
-                ${cell(tagsHtml)}
-                ${cell(imagesHtml + filesHtml)}
-            </tr>`;
-        }).join('');
-
-        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>WBS - ${nodeName}</title>
-        <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; margin: 20px; color: #1a1a1a; }
-            h1 { font-size: 18px; margin-bottom: 16px; }
-            table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-            col.c-wbs  { width: 60px; }
-            col.c-name { width: 200px; }
-            col.c-sm   { width: 60px; }
-            col.c-xs   { width: 50px; }
-            col.c-md   { width: 90px; }
-            col.c-lg   { width: 130px; }
-            col.c-xl   { width: 160px; }
-            col.c-att  { width: 140px; }
-            th { background: #f3f4f6; padding: 6px 7px; border: 1px solid #ddd; font-size: 10px; text-transform: uppercase; text-align: left; }
-            img { max-width: 100%; }
-            h1, h2, h3, h4, h5, h6 { break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
-            tr { break-inside: avoid; page-break-inside: avoid; }
-            thead { display: table-header-group; }
-            @page { size: A3 landscape; margin: 20mm 14mm; }
-            @media print { body { margin: 0; } }
-        </style></head><body>
-        <h1>WBS — ${nodeName}</h1>
-        <table>
-            <colgroup>
-                <col class="c-wbs"/><col class="c-name"/>
-                <col class="c-xs"/><col class="c-xs"/><col class="c-md"/>
-                <col class="c-sm"/><col class="c-xl"/><col class="c-lg"/><col class="c-att"/>
-            </colgroup>
-            <thead><tr>
-                <th>WBS</th><th>Nazwa</th>
-                <th style="text-align:right">Ilość</th><th>Jednostka</th><th>Status</th>
-                <th style="text-align:right">Koszt</th>
-                <th>Komentarz</th><th>Znaczniki</th><th>Załączniki</th>
-            </tr></thead>
-            <tbody>${tableRows}</tbody>
-        </table>
-        </body></html>`;
-
-        const win = window.open('', '_blank');
-        win.document.write(html);
-        win.document.close();
-        setTimeout(() => win.print(), 600);
-    }, [items, markerLinksCache, nodeName]);
 
     return (
         <div className="flex flex-col flex-1 min-h-0">
@@ -1900,35 +1751,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             </div>
                         </div>
                     )}
-                </div>
-            )}
-
-            {/* Lightbox — powiększenie załącznika */}
-            {lightboxAtt && (
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95" onClick={() => setLightboxAtt(null)}>
-                    <div className="relative w-full h-full flex items-center justify-center p-6" onClick={e => e.stopPropagation()}>
-                        <button onClick={() => setLightboxAtt(null)}
-                            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white z-10 transition-all">
-                            <X size={20} />
-                        </button>
-                        {lightboxAtt.fileType === 'IMAGE' ? (
-                            <img src={`${API_URL}/schematics/file/${lightboxAtt.fileUrl}`}
-                                alt={lightboxAtt.fileName}
-                                className="max-w-full max-h-full rounded-xl object-contain" />
-                        ) : lightboxAtt.fileType === 'AUDIO' ? (
-                            <audio controls src={`${API_URL}/schematics/file/${lightboxAtt.fileUrl}`} />
-                        ) : (
-                            <div className="bg-gray-900 rounded-xl p-10 text-center">
-                                <FileText size={56} className="text-gray-500 mx-auto mb-4" />
-                                <p className="text-white text-base">{lightboxAtt.fileName}</p>
-                                <a href={`${API_URL}/schematics/file/${lightboxAtt.fileUrl}`} target="_blank" rel="noreferrer"
-                                    className="mt-3 inline-block text-blue-400 text-base hover:underline">Otwórz plik</a>
-                            </div>
-                        )}
-                        {lightboxAtt.note && (
-                            <p className="absolute bottom-6 left-0 right-0 text-base text-gray-400 text-center">{lightboxAtt.note}</p>
-                        )}
-                    </div>
                 </div>
             )}
 

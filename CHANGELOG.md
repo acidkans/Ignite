@@ -4,6 +4,19 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-03 — refactor(wbs): batch endpoint markerów WBS + usunięcie martwego eksportu PDF w WBSHybridTable
+
+### architektura / API
+- dodano `POST /schematics/wbs-node-markers/batch` — przyjmuje `{ wbsNodeIds: string[] }`, zwraca mapę `wbsNodeId → link[]` jednym zapytaniem; zastępuje N pojedynczych `GET /schematics/wbs-node-markers/:id` wywoływanych przez `WBSHybridTable` i `UnifiedWbsPanel` (drzewo 200 węzłów robiło 200 fetchy co 30s)
+- usunięto martwy, nigdy nie wywoływany `handleExportPdf` z `WBSHybridTable.jsx` (inline HTML, bez escapowania, niezgodny z zasadą `wbsPdfExport.js`)
+
+### słownik
+- dodano `back-funkcja` `getMarkersForWbsNodesBatch` — `schematics.service.ts`, grupuje `wbsMarkerLink` po `wbsNodeId`
+- dodano `ui-stan` `matReqsLoaded` — `WBSHybridTable.jsx`, blokuje auto-create karty materiałowej (`MaterialReqExpandPanel`) dopóki pierwszy fetch `material-requirements/node/:id` się nie zakończy (zapobiega ghost-requirements)
+
+### wytyczne
+- `MaterialReqExpandPanel` auto-create karty materiałowej — zawsze gate'ować flagą "dane rodzica załadowane", inaczej rozwinięcie panelu przed zakończeniem fetcha tworzy duplikat wymagania
+
 ## 2026-07-02 — feat(export-excel): kolumna „Rabat (%)" eksportowana tylko gdy niezerowa
 
 ### architektura / API

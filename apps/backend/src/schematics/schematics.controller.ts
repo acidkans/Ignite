@@ -109,6 +109,11 @@ export class SchematicsController {
     return this.schematicsService.getWbsLinksForMarker(markerId, versionId);
   }
 
+  @Post('wbs-node-markers/batch')
+  async getMarkersForWbsNodesBatch(@Body() data: { wbsNodeIds: string[] }) {
+    return this.schematicsService.getMarkersForWbsNodesBatch(data.wbsNodeIds || []);
+  }
+
   @Get('process-node-markers/:processNodeId')
   async getAllMarkersForProcessNode(@Param('processNodeId') processNodeId: string) {
     return this.schematicsService.getAllMarkersForProcessNode(processNodeId);

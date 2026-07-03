@@ -272,6 +272,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-input | wbs-unit-cost-input | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-unit-price-input |
 | ui-stan | matReqByWbsId | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-req-by-wbs-id |
 | ui-stan | matReqByName | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-req-by-name |
+| ui-stan | matReqsLoaded | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-reqs-loaded |
 | ui-modal | QaModal | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-modal |
 | ui-stan | qaModalNode | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-modal-node |
 | ui-stan | qaBranchNode | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-branch-node |
@@ -475,6 +476,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-serwis | MaterialRequirementsService | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor material-requirements-service |
 | back-funkcja | getWbsNodeTypes | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor get-wbs-node-types |
 | back-funkcja | resolveUploadPath | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor resolve-upload-path |
+| back-funkcja | getMarkersForWbsNodesBatch | apps/backend/src/schematics/schematics.service.ts | @anchor get-markers-for-wbs-nodes-batch |
 | back-endpoint | GET /material-requirements/database | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-database |
 | back-endpoint | GET /material-requirements/all-materials | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-all-materials |
 | back-endpoint | GET /material-requirements/usage | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-usage |

@@ -314,6 +314,29 @@ export class SchematicsService {
         return links;
     }
 
+    // @anchor get-markers-for-wbs-nodes-batch
+    // Batch wariant getMarkersForWbsNode — jedno zapytanie zamiast N, zwraca mapę wbsNodeId -> links[].
+    async getMarkersForWbsNodesBatch(wbsNodeIds: string[]) {
+        if (!wbsNodeIds?.length) return {};
+        const links = await this.prisma.wbsMarkerLink.findMany({
+            where: { wbsNodeId: { in: wbsNodeIds } },
+            include: {
+                marker: {
+                    include: {
+                        attachments: true,
+                        schematic: { select: { id: true, fileName: true } },
+                    }
+                }
+            },
+            orderBy: { createdAt: 'asc' }
+        });
+        const byNode: Record<string, typeof links> = {};
+        for (const link of links) {
+            (byNode[link.wbsNodeId] ??= []).push(link);
+        }
+        return byNode;
+    }
+
     async getAllMarkersForProcessNode(processNodeId: string) {
         const schematics = await this.prisma.schematicDocument.findMany({
             where: { nodeId: processNodeId },
