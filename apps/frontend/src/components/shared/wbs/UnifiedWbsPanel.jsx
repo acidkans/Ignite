@@ -3787,10 +3787,16 @@ ${ganttSectionHtml}
                 }
                 await refreshWbsNodes();
             } else {
-                // Pola drzewa WBS — standardowy endpoint
-                setWbsData(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+                // Pola drzewa WBS — standardowy endpoint.
+                // Zmiana typu na 'group' zeruje pola cenowe RÓWNIEŻ optymistycznie —
+                // backend robi to samo (updateNode), ale bez lokalnego zerowania
+                // rollup w drzewie/budżecie trzymałby starą cenę do czasu refreshu.
+                const zeroesForGroup = (field === 'type' && String(value).toLowerCase() === 'group')
+                    ? { unitCost: 0, totalCost: 0, margin: 0, discount: 0, unitPrice: 0, totalPrice: 0 }
+                    : {};
+                setWbsData(prev => prev.map(item => item.id === id ? { ...item, [field]: value, ...zeroesForGroup } : item));
                 setWbsTreeAndRef(prev => {
-                    const upd = items => items.map(n => n.id === id ? { ...n, [field]: value } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
+                    const upd = items => items.map(n => n.id === id ? { ...n, [field]: value, ...zeroesForGroup } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
                     return { ...prev, items: upd(prev.items || []) };
                 });
                 await fetch(`${API_URL}/wbs-nodes/${id}`, {

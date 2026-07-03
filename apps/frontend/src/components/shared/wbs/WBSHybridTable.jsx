@@ -1356,6 +1356,11 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 if (newType === 'group') {
                                     handleField(node.id, 'unit', 'pakiet');
                                     onNodeFieldSave?.(node.id, 'unit', 'pakiet');
+                                    // Gałąź grupująca nie ma własnej ceny (wartość = suma dzieci) —
+                                    // zeruj koszt lokalnie od razu, żeby rollup w tabeli nie trzymał
+                                    // starej ceny do czasu refreshu. Backend (updateNode) utrwala zero
+                                    // przy zapisie type='group', więc osobny PATCH kosztu jest zbędny.
+                                    handleField(node.id, 'unitCost', 0);
                                 }
                                 if (newType === 'fuel') {
                                     handleField(node.id, 'unit', 'kilometry');
