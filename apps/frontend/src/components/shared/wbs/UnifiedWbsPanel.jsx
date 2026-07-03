@@ -2042,16 +2042,25 @@ ${ganttSectionHtml}
             if (versionsRes.ok) {
                 const allVersions = await versionsRes.json();
                 if (Array.isArray(allVersions) && allVersions.length > 0) {
+                    // Reguła IDENTYCZNA z buildRows(VIEWS.BUDGET) / summarizeBudgetRows /
+                    // buildWbsTreeDump / offerRevenueTotal: liść budżetu = parentId≠null &&
+                    // type≠'group'; koszt = koszt jedn.×ilość (BEZ fallbacku do totalCost);
+                    // cena ofertowa = narzut≠0 ? koszt×(1+narzut)×(1−rabat) : 0. Dzięki temu
+                    // kolumny w „Porównaniu" liczą się tak samo jak Podsumowanie / Budżet.
                     const computeSummaryFromItems = (items) => {
                         const leaves = (items || []).filter(it => {
                             const t = String(it.type || '').toLowerCase();
-                            return t !== 'group';
+                            return it.parentId != null && t !== 'group';
                         });
                         let totalCost = 0, totalRevenue = 0;
                         for (const it of leaves) {
-                            const tc = parseFloat(it.totalCost) || (parseFloat(it.unitCost) || 0) * (parseFloat(it.quantity) || 0);
-                            const m = parseFloat(it.margin) || 0;
-                            const op = m !== 0 ? tc * (1 + m / 100) : 0;
+                            const q = Math.max(0, parseFloat(it.quantity) || 0);
+                            const uc = Math.max(0, parseFloat(it.unitCost) || 0);
+                            const tc = uc * q;
+                            const m = (it.margin != null && String(it.margin) !== '') ? parseFloat(it.margin) : null;
+                            const d = Math.max(0, parseFloat(it.discount) || 0);
+                            let op = (m !== null && m !== 0) ? tc * (1 + m / 100) : 0;
+                            if (op > 0 && d > 0) op = Math.max(0, op * (1 - d / 100));
                             totalCost += tc;
                             totalRevenue += op;
                         }
