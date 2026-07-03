@@ -4686,13 +4686,17 @@ ${ganttSectionHtml}
     const wbsTablesByDepth = useMemo(() => {
         if (!wbsData.length) return {};
         const byId = new Map(wbsData.map(n => [n.id, n]));
+        // Formuła IDENTYCZNA z localPriceOf / offerRevenueTotal / buildWbsHtmlTable:
+        // gałąź grupująca (type='group') ⇒ 0 (wartość to suma dzieci), brak narzutu ⇒ 0
+        // (nie koszt). Wcześniej fallback do totalPrice zawyżał sumy w zakładce Założenia.
         const offerPriceOf = (item) => {
+            if (item.type === 'group') return 0;
             const q = Math.max(0, parseFloat(item.quantity) || 0);
             const uc = Math.max(0, parseFloat(item.unitCost) || 0);
             const tc = uc * q;
             const m = (item.margin != null && String(item.margin) !== '') ? parseFloat(item.margin) : null;
             const d = Math.max(0, parseFloat(item.discount) || 0);
-            let p = (m !== null && m !== 0) ? tc * (1 + m / 100) : (parseFloat(item.totalPrice) || 0);
+            let p = (m !== null && m !== 0) ? tc * (1 + m / 100) : 0;
             if (p > 0 && d > 0) p = Math.max(0, p * (1 - d / 100));
             return p;
         };

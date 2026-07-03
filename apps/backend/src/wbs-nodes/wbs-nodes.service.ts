@@ -480,6 +480,18 @@ export class WbsNodesService {
                 : [];
             allowed.qa = cleaned.length > 0 ? JSON.stringify(cleaned) : null;
         }
+        // Gałąź grupująca nie trzyma własnej ceny — jej wartość to suma dzieci.
+        // Przy zmianie typu na 'group' zerujemy pola cenowe, inaczej stara cena
+        // (z czasu, gdy węzeł był typu work/material/…) dubluje się z sumą dzieci
+        // w eksportach oferty/budżetu.
+        if (String(allowed.type || '').toLowerCase() === 'group') {
+            allowed.unitCost = 0;
+            allowed.totalCost = 0;
+            allowed.margin = 0;
+            allowed.discount = 0;
+            allowed.unitPrice = 0;
+            allowed.totalPrice = 0;
+        }
         let updated;
         try {
             updated = await this.prisma.wbsNode.update({ where: { id }, data: allowed });
@@ -655,6 +667,14 @@ export class WbsNodesService {
             margin = existing.margin ?? 0;
             discount = existing.discount ?? 0;
             unitPrice = existing.unitPrice ?? 0;
+        }
+
+        // Gałąź grupująca nie ma własnej ceny — jej wartość to suma dzieci.
+        // Nawet jeśli caller przyśle pola cenowe, dla type='group' wymuszamy zera,
+        // spójnie z updateNode i eksportami (localPriceOf zwraca 0 dla group).
+        const effectiveType = String(data.type ?? existing.type ?? '').toLowerCase();
+        if (effectiveType === 'group') {
+            unitCost = 0; margin = 0; discount = 0; unitPrice = 0;
         }
 
         const totalCost = unitCost * quantity;

@@ -466,7 +466,12 @@
       "mcp__claude-in-chrome__find",
       "Bash(docker exec erp-db psql -U postgres -d erp_db -c ' *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(curl -s -o /dev/null -w \"https://erp.gigatel.org/api %{http_code}\\\\n\" https://erp.gigatel.org/api)",
+      "Bash(curl -s -o /dev/null -w \"https://erp.gigatel.org \\(frontend\\) %{http_code}\\\\n\" https://erp.gigatel.org)",
+      "Bash(node prisma/fix-group-node-prices.js --dry)",
+      "Bash(git commit -m '@ *)"
     ]
   }
 }
