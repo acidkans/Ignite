@@ -2162,10 +2162,12 @@ ${ganttSectionHtml}
         summarySheet.addRow(['Przychód przed rabatami', summary.totalRevenue]);
         summarySheet.addRow(['Rabat procentowy', parsedPercentDiscount / 100 || 0]);
         summarySheet.addRow(['Rabat kwotowy', discountAmountFromValue]);
-        summarySheet.addRow(['Łączny rabat', exportedTotalDiscount]);
-        summarySheet.addRow(['Przychód po rabatach', exportedRevenueAfterDiscount]);
-        summarySheet.addRow(['Zysk po rabatach', exportedProfitAfterDiscount]);
-        summarySheet.addRow(['Marża po rabatach', exportedMarginAfterDiscount / 100]);
+        // Łączny/Przychód po rabatach/Zysk/Marża jako formuły (nie statyczne liczby) —
+        // zmiana kosztu, przychodu lub rabatu w pliku ma przeliczyć resztę wiersza 7-10.
+        summarySheet.addRow(['Łączny rabat', { formula: '=B5*B4+B6', result: exportedTotalDiscount }]);
+        summarySheet.addRow(['Przychód po rabatach', { formula: '=MAX(0,B4-B7)', result: exportedRevenueAfterDiscount }]);
+        summarySheet.addRow(['Zysk po rabatach', { formula: '=B8-B3', result: exportedProfitAfterDiscount }]);
+        summarySheet.addRow(['Marża po rabatach', { formula: '=IF(B8=0,0,B9/B8)', result: exportedMarginAfterDiscount / 100 }]);
 
         summarySheet.getCell('B3').numFmt = '#,##0.00';
         summarySheet.getCell('B4').numFmt = '#,##0.00';
@@ -2198,16 +2200,29 @@ ${ganttSectionHtml}
 
         const perTypeFirstRow = perTypeHeaderRow.number + 1;
         const typeEntries = Object.values(typeAgg).sort((a, b) => b.cost - a.cost);
+        // Zysk/Marża jako formuły (=C-B / =IF(C=0,0,D/C)) — nie statyczne liczby.
         for (const agg of typeEntries) {
+            const rn = summarySheet.rowCount + 1;
             const profit = agg.revenue - agg.cost;
             const margin = agg.revenue > 0 ? profit / agg.revenue : 0;
-            summarySheet.addRow([agg.typeLabel, agg.cost, agg.revenue, profit, margin]);
+            summarySheet.addRow([
+                agg.typeLabel, agg.cost, agg.revenue,
+                { formula: `=C${rn}-B${rn}`, result: profit },
+                { formula: `=IF(C${rn}=0,0,D${rn}/C${rn})`, result: margin },
+            ]);
         }
         const perTypeTotalCost = typeEntries.reduce((s, a) => s + a.cost, 0);
         const perTypeTotalRevenue = typeEntries.reduce((s, a) => s + a.revenue, 0);
         const perTypeTotalProfit = perTypeTotalRevenue - perTypeTotalCost;
         const perTypeTotalMargin = perTypeTotalRevenue > 0 ? perTypeTotalProfit / perTypeTotalRevenue : 0;
-        const perTypeTotalsRow = summarySheet.addRow(['Razem', perTypeTotalCost, perTypeTotalRevenue, perTypeTotalProfit, perTypeTotalMargin]);
+        const perTypeTotalsRowNum = summarySheet.rowCount + 1;
+        const perTypeTotalsRow = summarySheet.addRow([
+            'Razem',
+            { formula: `=SUBTOTAL(9,B${perTypeFirstRow}:B${perTypeTotalsRowNum - 1})`, result: perTypeTotalCost },
+            { formula: `=SUBTOTAL(9,C${perTypeFirstRow}:C${perTypeTotalsRowNum - 1})`, result: perTypeTotalRevenue },
+            { formula: `=C${perTypeTotalsRowNum}-B${perTypeTotalsRowNum}`, result: perTypeTotalProfit },
+            { formula: `=IF(C${perTypeTotalsRowNum}=0,0,D${perTypeTotalsRowNum}/C${perTypeTotalsRowNum})`, result: perTypeTotalMargin },
+        ]);
         perTypeTotalsRow.font = { bold: true };
         perTypeTotalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
 
@@ -2244,17 +2259,30 @@ ${ganttSectionHtml}
                 if (b === '(puste)') return -1;
                 return a.localeCompare(b, 'pl');
             });
+            // Zysk/Marża jako formuły (=C-B / =IF(C=0,0,D/C)) — nie statyczne liczby.
             for (const ownerKey of ownerKeys) {
+                const rn = summarySheet.rowCount + 1;
                 const agg = byOwner[ownerKey];
                 const profit = agg.revenue - agg.cost;
                 const margin = agg.revenue > 0 ? profit / agg.revenue : 0;
-                summarySheet.addRow([ownerKey, agg.cost, agg.revenue, profit, margin]);
+                summarySheet.addRow([
+                    ownerKey, agg.cost, agg.revenue,
+                    { formula: `=C${rn}-B${rn}`, result: profit },
+                    { formula: `=IF(C${rn}=0,0,D${rn}/C${rn})`, result: margin },
+                ]);
             }
             const ownerTotalCost = ownerKeys.reduce((s, k) => s + byOwner[k].cost, 0);
             const ownerTotalRevenue = ownerKeys.reduce((s, k) => s + byOwner[k].revenue, 0);
             const ownerTotalProfit = ownerTotalRevenue - ownerTotalCost;
             const ownerTotalMargin = ownerTotalRevenue > 0 ? ownerTotalProfit / ownerTotalRevenue : 0;
-            const ownerTotalsRow = summarySheet.addRow(['Razem', ownerTotalCost, ownerTotalRevenue, ownerTotalProfit, ownerTotalMargin]);
+            const ownerTotalsRowNum = summarySheet.rowCount + 1;
+            const ownerTotalsRow = summarySheet.addRow([
+                'Razem',
+                { formula: `=SUBTOTAL(9,B${ownerFirstRow}:B${ownerTotalsRowNum - 1})`, result: ownerTotalCost },
+                { formula: `=SUBTOTAL(9,C${ownerFirstRow}:C${ownerTotalsRowNum - 1})`, result: ownerTotalRevenue },
+                { formula: `=C${ownerTotalsRowNum}-B${ownerTotalsRowNum}`, result: ownerTotalProfit },
+                { formula: `=IF(C${ownerTotalsRowNum}=0,0,D${ownerTotalsRowNum}/C${ownerTotalsRowNum})`, result: ownerTotalMargin },
+            ]);
             ownerTotalsRow.font = { bold: true };
             ownerTotalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
             for (let r = ownerFirstRow; r <= ownerTotalsRow.number; r++) {
@@ -2893,6 +2921,18 @@ ${ganttSectionHtml}
                         }
                         const sepIdx = block.findIndex(isSepLine);
                         const headerCount = sepIdx > 0 ? sepIdx : 1;
+                        // Komórka z liczbą w formacie fmtPLN (np. „1 234,56", ew. pogrubiona **...**
+                        // w wierszu „Razem") — rozpoznajemy jako liczbę z formatem walutowym, nie
+                        // jako tekst. Inaczej ceny ofertowe w tabelach {tabela wbs1/2/3} trafiały do
+                        // Excela jako zwykły string (bez formatu, bez możliwości SUM/przeliczenia).
+                        const parseCurrencyCell = (col) => {
+                            const isBold = /^\*\*[\s\S]*\*\*$/.test(col.trim());
+                            const plainCandidate = plain(col).trim();
+                            if (!/^[\d\s ]+,\d{2}$/.test(plainCandidate)) return null;
+                            const num = parseFloat(plainCandidate.replace(/[\s ]/g, '').replace(',', '.'));
+                            if (!Number.isFinite(num)) return null;
+                            return { num, isBold };
+                        };
                         dataRows.forEach((line, ri) => {
                             const cols = parseCols(line);
                             while (cols.length < colCount) cols.push('');
@@ -2900,7 +2940,16 @@ ${ganttSectionHtml}
                             const isHeader = ri < headerCount;
                             cols.forEach((col, ci) => {
                                 const cell = row.getCell(ci + 1);
-                                setVal(cell, col);
+                                const currency = !isHeader ? parseCurrencyCell(col) : null;
+                                if (currency) {
+                                    cell.value = currency.num;
+                                    cell.numFmt = '#,##0.00" zł"';
+                                    cell.alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
+                                    if (currency.isBold) cell.font = { bold: true };
+                                } else {
+                                    setVal(cell, col);
+                                    cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
+                                }
                                 if (isHeader) {
                                     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
                                     cell.fill = assThFill;
@@ -2908,7 +2957,6 @@ ${ganttSectionHtml}
                                     cell.fill = assAltFill;
                                 }
                                 cell.border = cellBorder;
-                                cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
                             });
                             row.height = 18;
                         });
@@ -3165,7 +3213,16 @@ ${ganttSectionHtml}
                 for (const g2 of [...g1.children.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
                     let firstD2 = true;
                     for (const d3 of [...g2.children.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
-                        const r = sheet.addRow([g1.name, g2.name, d3.name, TYPE_LABELS[d3.type] || d3.type || '', d3.total, 0.23, d3.total * 1.23, d3.total * 0.23]);
+                        // Brutto/VAT jako formuły (=E*(1+F) / =E*F) — nie statyczne liczby,
+                        // żeby zmiana netto lub stawki VAT w pliku przeliczyła kolumny automatycznie.
+                        const rowNum = sheet.rowCount + 1;
+                        const r = sheet.addRow([
+                            g1.name, g2.name, d3.name, TYPE_LABELS[d3.type] || d3.type || '',
+                            d3.total,
+                            0.23,
+                            { formula: `=E${rowNum}*(1+F${rowNum})`, result: d3.total * 1.23 },
+                            { formula: `=E${rowNum}*F${rowNum}`, result: d3.total * 0.23 },
+                        ]);
                         r.getCell(5).numFmt = numFmt; r.getCell(5).alignment = { horizontal: 'right' };
                         r.getCell(6).numFmt = '0%';   r.getCell(6).alignment = { horizontal: 'center' };
                         r.getCell(7).numFmt = numFmt; r.getCell(7).alignment = { horizontal: 'right' };
@@ -3357,6 +3414,11 @@ ${ganttSectionHtml}
                 const matQty = Math.max(0, parseFloat(node.quantity) || 0);
                 const offerTotal = localPriceOf(node);
                 const offerPerQty = matQty > 0 ? offerTotal / matQty : offerTotal;
+                // Cena jedn. jako formuła (=offerTotal/qty) — nie statyczna liczba, żeby
+                // ręczna zmiana "Cena ofertowa łącznie" lub "Ilość" w pliku ją przeliczyła.
+                const matRowNum = materialsSheet.rowCount + 1;
+                const qtyColLetter = materialsSheet.getColumn('qty').letter;
+                const offerTotalColLetter = materialsSheet.getColumn('offerTotal').letter;
 
                 const addedRow = materialsSheet.addRow({
                     type: TYPE_LABELS_XLS[node.type] || node.type,
@@ -3365,7 +3427,9 @@ ${ganttSectionHtml}
                     name: node.name || '',
                     qty: Number(node.quantity ?? 1),
                     unit: node.unit || 'szt',
-                    offerPerQty,
+                    offerPerQty: matQty > 0
+                        ? { formula: `=${offerTotalColLetter}${matRowNum}/${qtyColLetter}${matRowNum}`, result: offerPerQty }
+                        : offerTotal,
                     offerTotal,
                     tech: card?.technicalSpec || '',
                     manufacturer: card?.manufacturer || '',
