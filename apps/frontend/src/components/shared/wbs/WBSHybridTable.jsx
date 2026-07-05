@@ -436,6 +436,16 @@ const findNode = (nodes, id) => {
     return null;
 };
 
+// @anchor find-depth
+const findDepth = (nodes, id, depth = 0) => {
+    for (const n of nodes) {
+        if (n.id === id) return depth;
+        const found = findDepth(n.children || [], id, depth + 1);
+        if (found != null) return found;
+    }
+    return null;
+};
+
 const subtreeContains = (node, id) =>
     node.id === id || (node.children || []).some(c => subtreeContains(c, id));
 
@@ -1163,6 +1173,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     }
 
     const rows = [];
+    const selectedDepth = selectedNodeId != null ? findDepth(items, selectedNodeId) : null;
 
     // ── Grid keyboard navigation (Excel-like) ────────────────────────────────
     // @anchor grid-nav-row-order
@@ -1313,7 +1324,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     <div className="relative flex items-center gap-1.5">
                         <GripVertical
                             size={11}
-                            className="text-gray-700 group-hover/node:text-gray-500 flex-shrink-0"
+                            className={`flex-shrink-0 ${selectedDepth != null && depth === selectedDepth + 1 ? 'text-amber-400' : 'text-gray-700 group-hover/node:text-gray-500'}`}
                         />
                         {hasChildren
                             ? <ChevronRight size={12} className={`text-gray-400 transition-transform flex-shrink-0 ${isOpen(rowId) ? 'rotate-90' : ''}`} />
@@ -1323,7 +1334,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 </td>
 
                 {/* Nazwa */}
-                <td className="px-3 py-1.5 select-text relative" style={{ paddingLeft: `calc(0.75rem + ${depth * 14}px)`, paddingRight: '7rem' }} onClick={e => e.stopPropagation()}>
+                <td className="px-3 py-1.5 select-text relative" style={{ paddingLeft: `calc(0.75rem + ${depth * 24}px)`, paddingRight: '7rem' }} onClick={e => e.stopPropagation()}>
                     <AutoResizeTextarea
                         value={node.name || ''}
                         onChange={e => handleField(node.id, 'name', e.target.value)}
