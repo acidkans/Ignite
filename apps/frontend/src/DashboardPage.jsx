@@ -553,7 +553,7 @@ export default function DashboardPage() {
                             </button>
 
                             {showVersionMenu && (
-                                <div className="absolute left-0 mt-2 w-48 bg-gray-900 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden backdrop-blur-xl">
+                                <div className="absolute left-0 mt-2 w-max min-w-[12rem] max-w-xs bg-gray-900 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden backdrop-blur-xl">
                                     <div className="p-2 border-b border-white/5 bg-white/[0.02]">
                                         <button
                                             onClick={() => { handleCreateVersion(); setShowVersionMenu(false); }}
@@ -584,7 +584,7 @@ export default function DashboardPage() {
                                                         />
                                                     ) : (
                                                         <>
-                                                            <span className="truncate flex-1">{v.label}</span>
+                                                            <span className="flex-1 break-words">{v.label}</span>
                                                             {v.isActive && <span className="text-[8px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full shrink-0">ACTIVE</span>}
                                                         </>
                                                     )}

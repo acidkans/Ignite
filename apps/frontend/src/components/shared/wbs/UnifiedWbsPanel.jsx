@@ -2209,6 +2209,12 @@ ${ganttSectionHtml}
                 const dropdownFirstRow = rawFirstRow;
                 const dropdownLastRow = rawFirstRow + nSnaps - 1;
 
+                // Excel przycina listę rozwijaną data validation do szerokości kolumny komórki —
+                // poszerzamy kolumnę B (gdzie stoją pickery Snapshot A/B), żeby pełne nazwy snapszotów
+                // były widoczne w dropdownie, nie tylko obcięty początek.
+                const maxSnapLabelLen = Math.max(...validSums.map((s) => (s.label || '').length));
+                compSheet.getColumn(2).width = Math.max(compSheet.getColumn(2).width || 0, maxSnapLabelLen + 2);
+
                 // Konwencja: najnowszy snapszot zawsze skrajnie z lewej (jak w tabeli ogólnej powyżej) —
                 // domyślnie A = najnowszy (lewe kolumny), B = drugi najnowszy (prawe kolumny).
                 // allVersions jest posortowane createdAt desc, więc validSums[0] = najnowszy.
