@@ -252,7 +252,7 @@ function QaBranchModal({ node, onClose }) {
     );
 }
 
-import { UNIT_OPTIONS, sanitizeQtyInput, evalQtyFormula } from './wbsConstants';
+import { UNIT_OPTIONS, sanitizeQtyInput, evalQtyFormula, suggestDefaultUnit } from './wbsConstants';
 import { ProductCard } from './WbsMaterialsPanel';
 
 const API_URL = '/api';
@@ -1344,6 +1344,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             if ((node.type === 'equipment' || node.type === 'material') && v) {
                                 onMaterialNodeCreated?.({ wbsNodeId: node.id, name: v, type: node.type, parentId });
                             }
+                            if (!node.unit || node.unit === 'sztuki') {
+                                const suggested = suggestDefaultUnit(v, node.type);
+                                if (suggested) {
+                                    handleField(node.id, 'unit', suggested);
+                                    onNodeFieldSave?.(node.id, 'unit', suggested);
+                                }
+                            }
                         }}
                         placeholder={depth === 0 ? 'Nazwa przedmiotu projektu…' : 'Nazwa elementu…'}
                         className={`w-full bg-transparent border-none resize-none focus:outline-none placeholder-gray-700 min-w-[60px] select-text leading-snug ${d.nameClass}`}
@@ -1442,6 +1449,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 }
                                 if (newType === 'work') {
                                     ensureFuelLeaf(node.id);
+                                }
+                                if (isMaterial || newType === 'work' || newType === 'service') {
+                                    const suggested = suggestDefaultUnit(node.name, newType);
+                                    if (suggested) {
+                                        handleField(node.id, 'unit', suggested);
+                                        onNodeFieldSave?.(node.id, 'unit', suggested);
+                                    }
                                 }
                                 if (isMaterial && node.name) {
                                     onMaterialNodeCreated?.({ wbsNodeId: node.id, name: node.name, type: newType, parentId });

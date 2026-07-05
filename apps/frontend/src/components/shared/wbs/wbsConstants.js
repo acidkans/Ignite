@@ -101,6 +101,21 @@ export const UNIT_OPTIONS = [
   'pakiet',
 ];
 
+// @anchor cable-unit-keywords-regex
+// Rozpoznaje kable/światłowody/korytka kablowe/dukty kablowe w nazwie pozycji WBS.
+export const CABLE_UNIT_KEYWORDS_REGEX = /kabe?l|światłow/i;
+
+// @anchor suggest-default-unit
+// Proponuje domyślną jednostkę dla nowo tworzonej pozycji WBS na podstawie nazwy i typu.
+// Priorytet: nazwa kablowa/światłowodowa > typ "praca"/"usługa". Zwraca null gdy brak
+// dopasowania — wołający NIE powinien wtedy nadpisywać istniejącej jednostki.
+export function suggestDefaultUnit(name, type) {
+  if (CABLE_UNIT_KEYWORDS_REGEX.test(name || '')) return 'metry';
+  if (type === 'work') return 'dni';
+  if (type === 'service') return 'pakiet';
+  return null;
+}
+
 // @anchor sanitize-qty-input
 // Ilość: dopuszcza tylko cyfry + jeden separator dziesiętny (',' lub '.').
 // Znaki spoza tego zbioru oraz kolejne separatory są odrzucane — UI pokazuje

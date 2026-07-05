@@ -200,6 +200,8 @@ export class WbsNodesService {
                 ? this.computeQaStatus(qaArr)
                 : (item.status || '');
             // unitCost przenoszony z drzewa tylko dla NOWYCH węzłów (ścieżka create).
+            // quantity CELOWO nie jest przenoszona — klon przez Kopiuj/Wklej ma dostać
+            // nową ilość do uzupełnienia (Prisma @default(1)), nie ilość ze źródłowej gałęzi.
             // Aktualizacja istniejących węzłów używa jawnych pól i nie rusza budżetu.
             const ucRaw = (item as any).unitCost;
             const ucNum = (ucRaw === '' || ucRaw == null) ? undefined : Number(ucRaw);
