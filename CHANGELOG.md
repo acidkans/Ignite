@@ -4,6 +4,25 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-05 — feat(export-excel): tabele „Porównanie per typ" i „Porównanie per pozycja" z wyborem snapszotów w Excelu
+
+### architektura / API
+- `ui-funkcja` `handleExportBudgetExcel` (arkusz `Porównanie`) — dodano sekcję „Porównanie per typ" pod istniejącą tabelą ogólną: kolumny grupowane per metryka (Koszt A/B/Δ, Przychód A/B/Δ, Zysk A/B/Δ, Marża% A/B/Δ), jeden wiersz na typ (`work`/`service`/`material`/`fuel`/...) + `Razem`; poniżej dodano analogiczną sekcję „Porównanie per pozycja (liście budżetu)" — te same dwa dropdowny Snapshot A/B, ale wiersz na każdy pojedynczy liść budżetu zamiast na typ
+- `computeSummaryFromItems` (lokalna funkcja w `handleExportBudgetExcel`) — zwraca teraz dodatkowo `byType` (koszt/przychód zagregowane per typ, per snapszot); `versionSummaries` niesie też `createdAt` snapszotu i `leafByPath` (koszt/przychód per pojedynczy liść budżetu)
+- nowa lokalna funkcja `computeLeafByPath` — dopasowuje ten sam liść budżetu między snapszotami po ścieżce nazw (root → ... → liść), bo id-ki liści są nowe w każdym klonie wersji (`versioning.service.ts`)
+- wybór dwóch porównywanych snapszotów odbywa się w samym Excelu — dwie listy rozwijane (data validation) „Snapshot A"/„Snapshot B" nad tabelą „Porównanie per typ", współdzielone przez obie tabele; wartości liczone formułami `SUMIFS` względem bloków danych źródłowych (Snapshot × Typ, i osobno Snapshot × Pozycja) dopisanych niżej w tym samym arkuszu; domyślnie Snapshot A = najnowszy (lewe kolumny), Snapshot B = drugi najnowszy (prawe kolumny) — najnowszy zawsze skrajnie z lewej, tak jak w tabeli ogólnej powyżej
+- kolumna Δ zawsze liczy nowszy−starszy niezależnie od kolejności wyboru w dropdownach — pomocnicza komórka „Kolejność" (`IF(INDEX/MATCH dat...)`) ustala znak
+- nagłówki kolumn A/B obu tabel to formuły `={dropdown}&"_koszt"` itd. — nazwa kolumny podąża za wybranym snapszotem zamiast statycznego „Koszt A"/„Koszt B"
+- oba bloki danych źródłowych (Snapshot × Typ, Snapshot × Pozycja) mają teraz `row.hidden = true` — dane zasilają formuły `SUMIFS`, ale nie zaśmiecają widoku; `autoFilter` arkusza (jeden na cały arkusz — limit Excela) trafia na tabelę z największą liczbą wierszy (zwykle „Porównanie per pozycja")
+- nad tabelą „Porównanie per typ" dodano wiersz legendy (scalone komórki A:M) — formuła nazywa aktualnie wybrany nowszy/starszy snapszot niezależnie od tego, który jest w dropdownie A/B, np. „Δ = v3 (nowszy) minus v2 (starszy) — dodatnia Δ = wzrost, ujemna = spadek"; dotyczy obu tabel (per typ i per pozycja), bo współdzielą te same dropdowny
+
+### wytyczne
+- eksport Excel — gdy tabela ma być sterowana wyborem użytkownika już w pliku (nie w UI aplikacji przed eksportem), użyj wzorca: blok danych źródłowych (surowe wartości per kombinacja kryteriów) + komórki z data validation (lista) + formuły `SUMIFS`/`INDEX`/`MATCH` odwołujące się do wyboru w tych komórkach
+- eksport Excel — przy wielu tabelach porównujących snapszoty kolumnowo: najnowszy snapszot zawsze skrajnie z lewej, kolejne w prawo
+- dopasowywanie tego samego obiektu (liścia budżetu) między wersjami — nie licz po `id` (nowe przy każdym klonie), tylko po stabilnym kluczu jak ścieżka nazw w hierarchii
+- eksport Excel — bloki danych źródłowych (pomocnicze, zasilające formuły `SUMIFS`) ukrywaj wierszami (`row.hidden = true`), nigdy nie usuwaj — usunięcie zepsułoby formuły w tabelach widocznych, które się do nich odwołują
+- eksport Excel — Excel dopuszcza tylko jeden `autoFilter` na arkusz; gdy arkusz ma wiele widocznych tabel, filtr dostaje ta z największą liczbą wierszy (priorytet, nie suma) — nie próbuj wymuszać filtra na każdej tabeli przez `autoFilter`, do tego trzeba by Tabel Excela (ListObject), które wymagają statycznego tekstu w nagłówku (nie formuły) — konflikt z żywymi nagłówkami „{snapshot}_metryka"
+
 ## 2026-07-03 — refactor(wbs): batch endpoint markerów WBS + usunięcie martwego eksportu PDF w WBSHybridTable
 
 ### architektura / API

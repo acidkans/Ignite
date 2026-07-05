@@ -2053,6 +2053,7 @@ ${ganttSectionHtml}
                             return it.parentId != null && t !== 'group';
                         });
                         let totalCost = 0, totalRevenue = 0;
+                        const byType = {};
                         for (const it of leaves) {
                             const q = Math.max(0, parseFloat(it.quantity) || 0);
                             const uc = Math.max(0, parseFloat(it.unitCost) || 0);
@@ -2063,15 +2064,63 @@ ${ganttSectionHtml}
                             if (op > 0 && d > 0) op = Math.max(0, op * (1 - d / 100));
                             totalCost += tc;
                             totalRevenue += op;
+                            const typeKey = String(it.type || '').toLowerCase();
+                            const typeLabel = TYPE_LABELS[typeKey] || typeKey || '—';
+                            if (!byType[typeLabel]) byType[typeLabel] = { cost: 0, revenue: 0 };
+                            byType[typeLabel].cost += tc;
+                            byType[typeLabel].revenue += op;
                         }
-                        return { rows: leaves.length, totalCost, totalRevenue };
+                        return { rows: leaves.length, totalCost, totalRevenue, byType };
+                    };
+                    // Identyfikuje ten sam liść budżetu między snapszotami po ścieżce nazw
+                    // (root → ... → liść), bo id-ki są nowe w każdym klonie wersji (versioning.service.ts).
+                    const computeLeafByPath = (items) => {
+                        const byId = {};
+                        for (const it of (items || [])) byId[it.id] = it;
+                        const pathCache = {};
+                        const pathOf = (it) => {
+                            if (pathCache[it.id]) return pathCache[it.id];
+                            const parts = [];
+                            let cur = it, guard = 0;
+                            while (cur && guard++ < 50) {
+                                parts.unshift(String(cur.name || '(bez nazwy)').trim() || '(bez nazwy)');
+                                cur = cur.parentId ? byId[cur.parentId] : null;
+                            }
+                            const path = parts.join(' / ');
+                            pathCache[it.id] = path;
+                            return path;
+                        };
+                        const leaves = (items || []).filter(it => {
+                            const t = String(it.type || '').toLowerCase();
+                            return it.parentId != null && t !== 'group';
+                        });
+                        const byPath = {};
+                        for (const it of leaves) {
+                            const q = Math.max(0, parseFloat(it.quantity) || 0);
+                            const uc = Math.max(0, parseFloat(it.unitCost) || 0);
+                            const tc = uc * q;
+                            const m = (it.margin != null && String(it.margin) !== '') ? parseFloat(it.margin) : null;
+                            const d = Math.max(0, parseFloat(it.discount) || 0);
+                            let op = (m !== null && m !== 0) ? tc * (1 + m / 100) : 0;
+                            if (op > 0 && d > 0) op = Math.max(0, op * (1 - d / 100));
+                            const path = pathOf(it);
+                            if (!byPath[path]) byPath[path] = { cost: 0, revenue: 0 };
+                            byPath[path].cost += tc;
+                            byPath[path].revenue += op;
+                        }
+                        return byPath;
                     };
                     const versionSummaries = await Promise.all(allVersions.map(async (ver) => {
                         try {
                             const res = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}?versionId=${ver.id}`, { headers: authHeaders() });
                             if (!res.ok) return null;
                             const data = await res.json();
-                            return { label: ver.label || ver.id, ...computeSummaryFromItems(data.items) };
+                            return {
+                                label: ver.label || ver.id,
+                                createdAt: ver.createdAt,
+                                ...computeSummaryFromItems(data.items),
+                                leafByPath: computeLeafByPath(data.items),
+                            };
                         } catch { return null; }
                     }));
                     const validSums = versionSummaries.filter(Boolean);
@@ -2117,8 +2166,352 @@ ${ganttSectionHtml}
                 if (rn > 1 && rn % 2 === 0) row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
             });
             compSheet.views = [{ state: 'frozen', ySplit: 1 }];
-            if (compSheet.rowCount > 1) {
-                compSheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: compSheet.rowCount, column: compSheet.columnCount } };
+            // Excel dopuszcza tylko jeden autoFilter na arkusz — kandydatów ustalamy niżej
+            // (tabela ogólna / per typ / per pozycja) i na końcu wybieramy jeden, z priorytetem
+            // dla tabeli z największą liczbą wierszy (najbardziej przydatny filtr).
+            const generalTableRange = compSheet.rowCount > 1 ? { from: { row: 1, column: 1 }, to: { row: compSheet.rowCount, column: compSheet.columnCount } } : null;
+
+            // Porównanie per typ — dwa snapszoty obok siebie (wybierane dropdownem w Excelu),
+            // kolumny grupowane per metryka (Koszt A/B/Δ, Przychód A/B/Δ, ...), nie per snapszot.
+            // Blok danych źródłowych (Snapszot × Typ) niżej w tym samym arkuszu zasila formuły
+            // SUMIFS tabeli; „Kolejność" wylicza automatycznie który z dwóch wybranych snapszotów
+            // jest nowszy, żeby Δ zawsze było nowszy−starszy niezależnie od kolejności w dropdownach.
+            if (validSums.length >= 2) {
+                for (let c = 2; c <= 13; c++) {
+                    const col = compSheet.getColumn(c);
+                    if (!col.width || col.width < 16) col.width = 16;
+                }
+                compSheet.getColumn(1).width = Math.max(compSheet.getColumn(1).width || 0, 24);
+
+                const allTypeCosts = {};
+                for (const s of validSums) {
+                    for (const [t, v] of Object.entries(s.byType || {})) {
+                        allTypeCosts[t] = (allTypeCosts[t] || 0) + v.cost;
+                    }
+                }
+                const allTypeLabels = Object.keys(allTypeCosts).sort((a, b) => allTypeCosts[b] - allTypeCosts[a]);
+                const nSnaps = validSums.length;
+                const nTypes = allTypeLabels.length;
+
+                const baseRow = compSheet.rowCount;
+                const pickerARowNum = baseRow + 3;
+                const pickerBRowNum = baseRow + 4;
+                const orderFlagRowNum = baseRow + 5;
+                const legendRowNum = baseRow + 6;
+                const headerRowNum = baseRow + 8;
+                const dataFirstRow = headerRowNum + 1;
+                const dataLastRow = dataFirstRow + nTypes - 1;
+                const razemRowNum = dataLastRow + 1;
+                const rawTitleRowNum = razemRowNum + 2;
+                const rawHeaderRowNum = rawTitleRowNum + 1;
+                const rawFirstRow = rawHeaderRowNum + 1;
+                const rawLastRow = rawFirstRow + nTypes * nSnaps - 1;
+                const dropdownFirstRow = rawFirstRow;
+                const dropdownLastRow = rawFirstRow + nSnaps - 1;
+
+                // Konwencja: najnowszy snapszot zawsze skrajnie z lewej (jak w tabeli ogólnej powyżej) —
+                // domyślnie A = najnowszy (lewe kolumny), B = drugi najnowszy (prawe kolumny).
+                // allVersions jest posortowane createdAt desc, więc validSums[0] = najnowszy.
+                const defaultIdxA = 0, defaultIdxB = 1;
+                const sA = validSums[defaultIdxA], sB = validSums[defaultIdxB];
+                const orderFlagDefault = new Date(sA.createdAt) >= new Date(sB.createdAt) ? 1 : -1;
+
+                const setRow = (rowNum, values) => {
+                    const row = compSheet.getRow(rowNum);
+                    values.forEach((v, i) => { if (v !== undefined) row.getCell(i + 1).value = v; });
+                    row.commit();
+                    return row;
+                };
+
+                const titleRow = setRow(baseRow + 2, ['Porównanie per typ']);
+                titleRow.font = { bold: true, size: 12 };
+
+                const dropdownRange = `$A$${dropdownFirstRow}:$A$${dropdownLastRow}`;
+                const pickerARow = setRow(pickerARowNum, ['Snapshot A', sA.label]);
+                pickerARow.getCell(1).font = { bold: true };
+                pickerARow.getCell(2).dataValidation = { type: 'list', allowBlank: false, formulae: [dropdownRange] };
+                const pickerBRow = setRow(pickerBRowNum, ['Snapshot B', sB.label]);
+                pickerBRow.getCell(1).font = { bold: true };
+                pickerBRow.getCell(2).dataValidation = { type: 'list', allowBlank: false, formulae: [dropdownRange] };
+
+                const dateRange = `$B$${dropdownFirstRow}:$B$${dropdownLastRow}`;
+                const orderFlagRow = setRow(orderFlagRowNum, [
+                    'Kolejność (automatyczne, nie edytuj)',
+                    {
+                        formula: `IF(INDEX(${dateRange},MATCH($B$${pickerARowNum},${dropdownRange},0))>=INDEX(${dateRange},MATCH($B$${pickerBRowNum},${dropdownRange},0)),1,-1)`,
+                        result: orderFlagDefault,
+                    },
+                ]);
+                orderFlagRow.getCell(1).font = { italic: true, color: { argb: 'FF9CA3AF' } };
+                orderFlagRow.getCell(2).font = { italic: true, color: { argb: 'FF9CA3AF' } };
+                const orderFlagRef = `$B$${orderFlagRowNum}`;
+
+                // Legenda kierunku Δ — żeby przy odczycie wniosków było jasne co z czym porównujemy.
+                // Dynamiczna (formuła): nazywa aktualnie wybrany nowszy/starszy snapszot, niezależnie
+                // od tego, który jest akurat w dropdownie A czy B. Obowiązuje dla obu tabel niżej
+                // (per typ i per pozycja), bo obie współdzielą te same dropdowny/Kolejność.
+                const newerLabelDefault = orderFlagDefault === 1 ? sA.label : sB.label;
+                const olderLabelDefault = orderFlagDefault === 1 ? sB.label : sA.label;
+                const legendRow = setRow(legendRowNum, [
+                    {
+                        formula: `"Δ = " & IF(${orderFlagRef}=1,$B$${pickerARowNum},$B$${pickerBRowNum}) & " (nowszy) minus " & IF(${orderFlagRef}=1,$B$${pickerBRowNum},$B$${pickerARowNum}) & " (starszy) — dodatnia Δ = wzrost, ujemna = spadek. Dotyczy obu tabel niżej."`,
+                        result: `Δ = ${newerLabelDefault} (nowszy) minus ${olderLabelDefault} (starszy) — dodatnia Δ = wzrost, ujemna = spadek. Dotyczy obu tabel niżej.`,
+                    },
+                ]);
+                legendRow.getCell(1).font = { italic: true, size: 10, color: { argb: 'FF9CA3AF' } };
+                compSheet.mergeCells(legendRowNum, 1, legendRowNum, 13);
+
+                // Nagłówki kolumn A/B jako formuły „{snapshot}_metryka" — podążają za wyborem w dropdownie.
+                const snapHeader = (pickerRowNum, snap, suffix) => ({ formula: `$B$${pickerRowNum}&"_${suffix}"`, result: `${snap.label}_${suffix}` });
+                const headerRow = setRow(headerRowNum, [
+                    'Typ',
+                    snapHeader(pickerARowNum, sA, 'koszt'), snapHeader(pickerBRowNum, sB, 'koszt'), 'Δ Koszt',
+                    snapHeader(pickerARowNum, sA, 'przychód'), snapHeader(pickerBRowNum, sB, 'przychód'), 'Δ Przychód',
+                    snapHeader(pickerARowNum, sA, 'zysk'), snapHeader(pickerBRowNum, sB, 'zysk'), 'Δ Zysk',
+                    snapHeader(pickerARowNum, sA, 'marża'), snapHeader(pickerBRowNum, sB, 'marża'), 'Δ Marża',
+                ]);
+                headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+
+                const rawTypeCol = `$C$${rawFirstRow}:$C$${rawLastRow}`;
+                const rawSnapCol = `$A$${rawFirstRow}:$A$${rawLastRow}`;
+                const rawCostCol = `$D$${rawFirstRow}:$D$${rawLastRow}`;
+                const rawRevCol = `$E$${rawFirstRow}:$E$${rawLastRow}`;
+
+                allTypeLabels.forEach((t, i) => {
+                    const rn = dataFirstRow + i;
+                    const costA = sA.byType[t]?.cost || 0, costB = sB.byType[t]?.cost || 0;
+                    const revA = sA.byType[t]?.revenue || 0, revB = sB.byType[t]?.revenue || 0;
+                    const profitA = revA - costA, profitB = revB - costB;
+                    const marginA = revA > 0 ? profitA / revA : 0, marginB = revB > 0 ? profitB / revB : 0;
+                    setRow(rn, [
+                        t,
+                        { formula: `SUMIFS(${rawCostCol},${rawSnapCol},$B$${pickerARowNum},${rawTypeCol},$A${rn})`, result: costA },
+                        { formula: `SUMIFS(${rawCostCol},${rawSnapCol},$B$${pickerBRowNum},${rawTypeCol},$A${rn})`, result: costB },
+                        { formula: `${orderFlagRef}*(B${rn}-C${rn})`, result: orderFlagDefault * (costA - costB) },
+                        { formula: `SUMIFS(${rawRevCol},${rawSnapCol},$B$${pickerARowNum},${rawTypeCol},$A${rn})`, result: revA },
+                        { formula: `SUMIFS(${rawRevCol},${rawSnapCol},$B$${pickerBRowNum},${rawTypeCol},$A${rn})`, result: revB },
+                        { formula: `${orderFlagRef}*(E${rn}-F${rn})`, result: orderFlagDefault * (revA - revB) },
+                        { formula: `E${rn}-B${rn}`, result: profitA },
+                        { formula: `F${rn}-C${rn}`, result: profitB },
+                        { formula: `${orderFlagRef}*(H${rn}-I${rn})`, result: orderFlagDefault * (profitA - profitB) },
+                        { formula: `IF(E${rn}=0,0,H${rn}/E${rn})`, result: marginA },
+                        { formula: `IF(F${rn}=0,0,I${rn}/F${rn})`, result: marginB },
+                        { formula: `${orderFlagRef}*(K${rn}-L${rn})`, result: orderFlagDefault * (marginA - marginB) },
+                    ]);
+                });
+
+                const razemCostA = allTypeLabels.reduce((s, t) => s + (sA.byType[t]?.cost || 0), 0);
+                const razemCostB = allTypeLabels.reduce((s, t) => s + (sB.byType[t]?.cost || 0), 0);
+                const razemRevA = allTypeLabels.reduce((s, t) => s + (sA.byType[t]?.revenue || 0), 0);
+                const razemRevB = allTypeLabels.reduce((s, t) => s + (sB.byType[t]?.revenue || 0), 0);
+                const razemProfitA = razemRevA - razemCostA, razemProfitB = razemRevB - razemCostB;
+                const razemMarginA = razemRevA > 0 ? razemProfitA / razemRevA : 0;
+                const razemMarginB = razemRevB > 0 ? razemProfitB / razemRevB : 0;
+                const razemRow = setRow(razemRowNum, [
+                    'Razem',
+                    { formula: `SUM(B${dataFirstRow}:B${dataLastRow})`, result: razemCostA },
+                    { formula: `SUM(C${dataFirstRow}:C${dataLastRow})`, result: razemCostB },
+                    { formula: `SUM(D${dataFirstRow}:D${dataLastRow})`, result: orderFlagDefault * (razemCostA - razemCostB) },
+                    { formula: `SUM(E${dataFirstRow}:E${dataLastRow})`, result: razemRevA },
+                    { formula: `SUM(F${dataFirstRow}:F${dataLastRow})`, result: razemRevB },
+                    { formula: `SUM(G${dataFirstRow}:G${dataLastRow})`, result: orderFlagDefault * (razemRevA - razemRevB) },
+                    { formula: `E${razemRowNum}-B${razemRowNum}`, result: razemProfitA },
+                    { formula: `F${razemRowNum}-C${razemRowNum}`, result: razemProfitB },
+                    { formula: `${orderFlagRef}*(H${razemRowNum}-I${razemRowNum})`, result: orderFlagDefault * (razemProfitA - razemProfitB) },
+                    { formula: `IF(E${razemRowNum}=0,0,H${razemRowNum}/E${razemRowNum})`, result: razemMarginA },
+                    { formula: `IF(F${razemRowNum}=0,0,I${razemRowNum}/F${razemRowNum})`, result: razemMarginB },
+                    { formula: `${orderFlagRef}*(K${razemRowNum}-L${razemRowNum})`, result: orderFlagDefault * (razemMarginA - razemMarginB) },
+                ]);
+                razemRow.font = { bold: true };
+                razemRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
+
+                for (let r = dataFirstRow; r <= razemRowNum; r++) {
+                    for (const col of ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']) compSheet.getCell(`${col}${r}`).numFmt = '#,##0.00';
+                    for (const col of ['K', 'L', 'M']) compSheet.getCell(`${col}${r}`).numFmt = '0.00%';
+                    if (r > dataFirstRow && r < razemRowNum && (r - dataFirstRow) % 2 === 1) {
+                        compSheet.getRow(r).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+                    }
+                }
+
+                // Ukryte wiersze (nie usunięte!) — formuły SUMIFS/INDEX w tabeli wyżej odwołują
+                // się do tego zakresu; usunięcie zepsułoby je. Użytkownik może odkryć w Excelu
+                // (zaznacz wiersze wokół → Format → Odkryj), gdyby chciał podejrzeć dane surowe.
+                const rawTitleRow = setRow(rawTitleRowNum, ['Dane źródłowe (pomocnicze, generowane automatycznie — nie edytuj)']);
+                rawTitleRow.font = { italic: true, size: 10, color: { argb: 'FF9CA3AF' } };
+                rawTitleRow.hidden = true;
+                const rawHeaderRow = setRow(rawHeaderRowNum, ['Snapshot', 'Data utworzenia', 'Typ', 'Koszt', 'Przychód', 'Zysk', 'Marża%']);
+                rawHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                rawHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF374151' } };
+                rawHeaderRow.hidden = true;
+
+                allTypeLabels.forEach((t, ti) => {
+                    validSums.forEach((s, si) => {
+                        const rn = rawFirstRow + ti * nSnaps + si;
+                        const cost = s.byType[t]?.cost || 0;
+                        const revenue = s.byType[t]?.revenue || 0;
+                        const profit = revenue - cost;
+                        const margin = revenue > 0 ? profit / revenue : 0;
+                        const row = setRow(rn, [
+                            s.label,
+                            s.createdAt ? new Date(s.createdAt) : null,
+                            t,
+                            cost,
+                            revenue,
+                            { formula: `E${rn}-D${rn}`, result: profit },
+                            { formula: `IF(E${rn}=0,0,F${rn}/E${rn})`, result: margin },
+                        ]);
+                        row.getCell(2).numFmt = 'yyyy-mm-dd hh:mm';
+                        row.getCell(4).numFmt = '#,##0.00';
+                        row.getCell(5).numFmt = '#,##0.00';
+                        row.getCell(6).numFmt = '#,##0.00';
+                        row.getCell(7).numFmt = '0.00%';
+                        row.hidden = true;
+                    });
+                });
+
+                // Porównanie per pozycja (liście budżetu) — te same dropdowny Snapshot A/B co wyżej,
+                // wiersz na każdy liść zamiast na typ; liście dopasowywane po ścieżce nazw.
+                const allLeafCosts = {};
+                for (const s of validSums) {
+                    for (const [p, v] of Object.entries(s.leafByPath || {})) {
+                        allLeafCosts[p] = (allLeafCosts[p] || 0) + v.cost;
+                    }
+                }
+                const allLeafPaths = Object.keys(allLeafCosts).sort((a, b) => allLeafCosts[b] - allLeafCosts[a]);
+                const nLeaves = allLeafPaths.length;
+
+                let leafHeaderRowNum, leafDataLastRow;
+                if (nLeaves > 0) {
+                    compSheet.getColumn(1).width = Math.max(compSheet.getColumn(1).width || 0, 50);
+
+                    const leafTitleRowNum = rawLastRow + 2;
+                    leafHeaderRowNum = rawLastRow + 3;
+                    const leafDataFirstRow = leafHeaderRowNum + 1;
+                    leafDataLastRow = leafDataFirstRow + nLeaves - 1;
+                    const leafRazemRowNum = leafDataLastRow + 1;
+                    const leafRawTitleRowNum = leafRazemRowNum + 2;
+                    const leafRawHeaderRowNum = leafRawTitleRowNum + 1;
+                    const leafRawFirstRow = leafRawHeaderRowNum + 1;
+                    const leafRawLastRow = leafRawFirstRow + nLeaves * nSnaps - 1;
+
+                    const leafTitleRow = setRow(leafTitleRowNum, ['Porównanie per pozycja (liście budżetu)']);
+                    leafTitleRow.font = { bold: true, size: 12 };
+
+                    const leafHeaderRow = setRow(leafHeaderRowNum, [
+                        'Pozycja (ścieżka)',
+                        snapHeader(pickerARowNum, sA, 'koszt'), snapHeader(pickerBRowNum, sB, 'koszt'), 'Δ Koszt',
+                        snapHeader(pickerARowNum, sA, 'przychód'), snapHeader(pickerBRowNum, sB, 'przychód'), 'Δ Przychód',
+                        snapHeader(pickerARowNum, sA, 'zysk'), snapHeader(pickerBRowNum, sB, 'zysk'), 'Δ Zysk',
+                        snapHeader(pickerARowNum, sA, 'marża'), snapHeader(pickerBRowNum, sB, 'marża'), 'Δ Marża',
+                    ]);
+                    leafHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                    leafHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+
+                    const leafRawPosCol = `$C$${leafRawFirstRow}:$C$${leafRawLastRow}`;
+                    const leafRawSnapCol = `$A$${leafRawFirstRow}:$A$${leafRawLastRow}`;
+                    const leafRawCostCol = `$D$${leafRawFirstRow}:$D$${leafRawLastRow}`;
+                    const leafRawRevCol = `$E$${leafRawFirstRow}:$E$${leafRawLastRow}`;
+
+                    allLeafPaths.forEach((p, i) => {
+                        const rn = leafDataFirstRow + i;
+                        const costA = sA.leafByPath[p]?.cost || 0, costB = sB.leafByPath[p]?.cost || 0;
+                        const revA = sA.leafByPath[p]?.revenue || 0, revB = sB.leafByPath[p]?.revenue || 0;
+                        const profitA = revA - costA, profitB = revB - costB;
+                        const marginA = revA > 0 ? profitA / revA : 0, marginB = revB > 0 ? profitB / revB : 0;
+                        setRow(rn, [
+                            p,
+                            { formula: `SUMIFS(${leafRawCostCol},${leafRawSnapCol},$B$${pickerARowNum},${leafRawPosCol},$A${rn})`, result: costA },
+                            { formula: `SUMIFS(${leafRawCostCol},${leafRawSnapCol},$B$${pickerBRowNum},${leafRawPosCol},$A${rn})`, result: costB },
+                            { formula: `${orderFlagRef}*(B${rn}-C${rn})`, result: orderFlagDefault * (costA - costB) },
+                            { formula: `SUMIFS(${leafRawRevCol},${leafRawSnapCol},$B$${pickerARowNum},${leafRawPosCol},$A${rn})`, result: revA },
+                            { formula: `SUMIFS(${leafRawRevCol},${leafRawSnapCol},$B$${pickerBRowNum},${leafRawPosCol},$A${rn})`, result: revB },
+                            { formula: `${orderFlagRef}*(E${rn}-F${rn})`, result: orderFlagDefault * (revA - revB) },
+                            { formula: `E${rn}-B${rn}`, result: profitA },
+                            { formula: `F${rn}-C${rn}`, result: profitB },
+                            { formula: `${orderFlagRef}*(H${rn}-I${rn})`, result: orderFlagDefault * (profitA - profitB) },
+                            { formula: `IF(E${rn}=0,0,H${rn}/E${rn})`, result: marginA },
+                            { formula: `IF(F${rn}=0,0,I${rn}/F${rn})`, result: marginB },
+                            { formula: `${orderFlagRef}*(K${rn}-L${rn})`, result: orderFlagDefault * (marginA - marginB) },
+                        ]);
+                    });
+
+                    const leafRazemCostA = allLeafPaths.reduce((s, p) => s + (sA.leafByPath[p]?.cost || 0), 0);
+                    const leafRazemCostB = allLeafPaths.reduce((s, p) => s + (sB.leafByPath[p]?.cost || 0), 0);
+                    const leafRazemRevA = allLeafPaths.reduce((s, p) => s + (sA.leafByPath[p]?.revenue || 0), 0);
+                    const leafRazemRevB = allLeafPaths.reduce((s, p) => s + (sB.leafByPath[p]?.revenue || 0), 0);
+                    const leafRazemProfitA = leafRazemRevA - leafRazemCostA, leafRazemProfitB = leafRazemRevB - leafRazemCostB;
+                    const leafRazemMarginA = leafRazemRevA > 0 ? leafRazemProfitA / leafRazemRevA : 0;
+                    const leafRazemMarginB = leafRazemRevB > 0 ? leafRazemProfitB / leafRazemRevB : 0;
+                    const leafRazemRow = setRow(leafRazemRowNum, [
+                        'Razem',
+                        { formula: `SUM(B${leafDataFirstRow}:B${leafDataLastRow})`, result: leafRazemCostA },
+                        { formula: `SUM(C${leafDataFirstRow}:C${leafDataLastRow})`, result: leafRazemCostB },
+                        { formula: `SUM(D${leafDataFirstRow}:D${leafDataLastRow})`, result: orderFlagDefault * (leafRazemCostA - leafRazemCostB) },
+                        { formula: `SUM(E${leafDataFirstRow}:E${leafDataLastRow})`, result: leafRazemRevA },
+                        { formula: `SUM(F${leafDataFirstRow}:F${leafDataLastRow})`, result: leafRazemRevB },
+                        { formula: `SUM(G${leafDataFirstRow}:G${leafDataLastRow})`, result: orderFlagDefault * (leafRazemRevA - leafRazemRevB) },
+                        { formula: `E${leafRazemRowNum}-B${leafRazemRowNum}`, result: leafRazemProfitA },
+                        { formula: `F${leafRazemRowNum}-C${leafRazemRowNum}`, result: leafRazemProfitB },
+                        { formula: `${orderFlagRef}*(H${leafRazemRowNum}-I${leafRazemRowNum})`, result: orderFlagDefault * (leafRazemProfitA - leafRazemProfitB) },
+                        { formula: `IF(E${leafRazemRowNum}=0,0,H${leafRazemRowNum}/E${leafRazemRowNum})`, result: leafRazemMarginA },
+                        { formula: `IF(F${leafRazemRowNum}=0,0,I${leafRazemRowNum}/F${leafRazemRowNum})`, result: leafRazemMarginB },
+                        { formula: `${orderFlagRef}*(K${leafRazemRowNum}-L${leafRazemRowNum})`, result: orderFlagDefault * (leafRazemMarginA - leafRazemMarginB) },
+                    ]);
+                    leafRazemRow.font = { bold: true };
+                    leafRazemRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
+
+                    for (let r = leafDataFirstRow; r <= leafRazemRowNum; r++) {
+                        for (const col of ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']) compSheet.getCell(`${col}${r}`).numFmt = '#,##0.00';
+                        for (const col of ['K', 'L', 'M']) compSheet.getCell(`${col}${r}`).numFmt = '0.00%';
+                        if (r > leafDataFirstRow && r < leafRazemRowNum && (r - leafDataFirstRow) % 2 === 1) {
+                            compSheet.getRow(r).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+                        }
+                    }
+
+                    const leafRawTitleRow = setRow(leafRawTitleRowNum, ['Dane źródłowe (pomocnicze, generowane automatycznie — nie edytuj)']);
+                    leafRawTitleRow.font = { italic: true, size: 10, color: { argb: 'FF9CA3AF' } };
+                    leafRawTitleRow.hidden = true;
+                    const leafRawHeaderRow = setRow(leafRawHeaderRowNum, ['Snapshot', 'Data utworzenia', 'Pozycja (ścieżka)', 'Koszt', 'Przychód', 'Zysk', 'Marża%']);
+                    leafRawHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                    leafRawHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF374151' } };
+                    leafRawHeaderRow.hidden = true;
+
+                    allLeafPaths.forEach((p, pi) => {
+                        validSums.forEach((s, si) => {
+                            const rn = leafRawFirstRow + pi * nSnaps + si;
+                            const cost = s.leafByPath[p]?.cost || 0;
+                            const revenue = s.leafByPath[p]?.revenue || 0;
+                            const profit = revenue - cost;
+                            const margin = revenue > 0 ? profit / revenue : 0;
+                            const row = setRow(rn, [
+                                s.label,
+                                s.createdAt ? new Date(s.createdAt) : null,
+                                p,
+                                cost,
+                                revenue,
+                                { formula: `E${rn}-D${rn}`, result: profit },
+                                { formula: `IF(E${rn}=0,0,F${rn}/E${rn})`, result: margin },
+                            ]);
+                            row.getCell(2).numFmt = 'yyyy-mm-dd hh:mm';
+                            row.getCell(4).numFmt = '#,##0.00';
+                            row.getCell(5).numFmt = '#,##0.00';
+                            row.getCell(6).numFmt = '#,##0.00';
+                            row.getCell(7).numFmt = '0.00%';
+                            row.hidden = true;
+                        });
+                    });
+                }
+
+                // Jeden autoFilter na arkusz (limit Excela) — wybieramy tabelę z największą
+                // liczbą wierszy, bo tam filtr jest najbardziej przydatny: per pozycja > per typ > ogólna.
+                const perTypeRange = { from: { row: headerRowNum, column: 1 }, to: { row: dataLastRow, column: 13 } };
+                const leafRange = nLeaves > 0 ? { from: { row: leafHeaderRowNum, column: 1 }, to: { row: leafDataLastRow, column: 13 } } : null;
+                const rowsIn = (r) => r.to.row - r.from.row;
+                let chosenRange = generalTableRange;
+                if (perTypeRange && (!chosenRange || rowsIn(perTypeRange) > rowsIn(chosenRange))) chosenRange = perTypeRange;
+                if (leafRange && (!chosenRange || rowsIn(leafRange) > rowsIn(chosenRange))) chosenRange = leafRange;
+                if (chosenRange) compSheet.autoFilter = chosenRange;
             }
         }
 
