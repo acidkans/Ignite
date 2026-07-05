@@ -1,37 +1,64 @@
 /**
- * Testuje logikę "Porównanie per typ" z UnifiedWbsPanel.jsx (dropdowny + SUMIFS + Δ nowszy-starszy)
- * na syntetycznych danych, bez potrzeby logowania/DB. Kod skopiowany 1:1 z handleExportBudgetExcel.
+ * Testuje logikę "Porównanie per typ" + "Porównanie per pozycja" z UnifiedWbsPanel.jsx
+ * (dropdowny + SUMIFS + Δ nowszy-starszy + kolumny współdzielone między obiema tabelami +
+ * dopasowanie liścia przez hash zamiast tekstu) na syntetycznych danych, bez potrzeby
+ * logowania/DB. Kod skopiowany 1:1 z handleExportBudgetExcel.
  */
 const path = require('path');
 const ExcelJS = require(require.resolve('exceljs', { paths: [path.join(__dirname, '..', 'apps', 'frontend', 'node_modules')] }));
 
-// 3 snapszoty (najnowszy pierwszy, jak z /ai/versions — createdAt desc), 3 typy, 3 liście.
+// Regresja realnego buga: opisowa nazwa WĘZŁA (jeden poziom hierarchii, nie cała sklejona
+// ścieżka) > 255 znaków (limit kryterium SUMIFS/COUNTIFS w Excelu). Pierwsza wersja poprawki
+// (rozbicie ścieżki na kolumny per poziom) nadal padała, bo pojedynczy poziom sam w sobie
+// bywa dłuższy niż limit — dlatego dopasowanie musi iść przez hash, nie przez tekst.
+const longNodeName = 'Dostawa i uruchomienie urządzenia UPS Galaxy VS 120 kW 400V wraz z modułami akumulatorowymi pozwalającymi zapewnić czas podtrzymania zainstalowanych urządzeń w szafach rack min 1 godzina, wraz z pełną dokumentacją techniczną, protokołami odbioru oraz szkoleniem personelu obsługującego';
+if (longNodeName.length <= 255) throw new Error('fixture błędu: longNodeName musi mieć > 255 znaków, ma ' + longNodeName.length);
+
+// Klucz w leafByPath = parts.join(' / ') — jak w prawdziwym computeLeafByPath (parts = poziomy BEZ roota).
+const leaf = (parts, cost, revenue) => [parts.join(' / '), { cost, revenue, parts }];
+
+// 3 snapszoty (najnowszy pierwszy, jak z /ai/versions — createdAt desc), 3 typy, 7 liści.
+// Liść "Sekcja E" ma DŁUGĄ nazwę węzła w środkowym poziomie (Gałąź 2), nie w nazwie liścia —
+// dokładnie odtwarza zgłoszony bug (Gałąź 1 = "OPCJA1 DELTA-Dostawa i uruchomienie...").
 const validSums = [
     { label: 'v3 (najnowszy)', createdAt: '2026-07-05T10:00:00.000Z', byType: {
         'Praca': { cost: 3200, revenue: 5850 },
         'Usługa': { cost: 3000, revenue: 3300 },
         'Materiał': { cost: 2206.8, revenue: 2647.32 },
-    }, leafByPath: {
-        'Projekt / Sekcja A / Fundamenty': { cost: 1000, revenue: 1800 },
-        'Projekt / Sekcja A / Konstrukcja stalowa': { cost: 2200, revenue: 4050 },
-        'Projekt / Sekcja B / Instalacja elektryczna': { cost: 1800, revenue: 2400 },
-        'Projekt / Sekcja B / Wykończenie': { cost: 900, revenue: 1400 },
-        'Projekt / Sekcja D / Ogrodzenie': { cost: 300, revenue: 500 },
-    } },
+    }, leafByPath: Object.fromEntries([
+        leaf(['Sekcja A', 'Fundamenty'], 1000, 1800),
+        leaf(['Sekcja A', 'Konstrukcja stalowa'], 2200, 4050),
+        leaf(['Sekcja B', 'Instalacja elektryczna'], 1800, 2400),
+        leaf(['Sekcja B', 'Wykończenie'], 900, 1400),
+        leaf(['Sekcja D', 'Ogrodzenie'], 300, 500),
+        leaf(['Sekcja E', longNodeName, 'kabel sygnalizacyjny UPS-Bypass 4x1mm'], 100, 125),
+        // Podgrupa PRZEMIANOWANA między snapszotami (Gałąź 2 inna niż w v2) — musi się i tak
+        // dopasować, bo Gałąź 1 + Pozycja jest ta sama i para jest jednoznaczna (brak kolizji).
+        leaf(['Sekcja B', 'opis nowy podgrupy', 'Transport sprzętu'], 500, 700),
+        // Kolizja celowa: dwie RÓŻNE pozycje o tej samej nazwie "kabel" w tej samej głównej
+        // gałęzi "Sekcja B", ale w różnych podgrupach — nie mogą się zsumować po cichu.
+        // Pierwsza ma DŁUGĄ nazwę podgrupy (>255 znaków) — po odpadnięciu do dopasowania po
+        // pełnej ścieżce (fallback kolizji) resolvedKey sam w sobie jest > 255 znaków, więc to
+        // też testuje że hash radzi sobie z długim kluczem W FALLBACKU, nie tylko w skrócie.
+        leaf(['Sekcja B', longNodeName, 'kabel'], 200, 300),
+        leaf(['Sekcja B', 'Bypass', 'kabel'], 150, 220),
+    ]) },
     { label: 'v2', createdAt: '2026-06-01T10:00:00.000Z', byType: {
         'Praca': { cost: 2800, revenue: 5000 },
         'Usługa': { cost: 2500, revenue: 2800 },
         'Paliwo': { cost: 140, revenue: 154 }, // typ nieobecny w v3 -> musi wyjść 0 w SUMIFS
-    }, leafByPath: {
-        'Projekt / Sekcja A / Fundamenty': { cost: 900, revenue: 1600 },
-        'Projekt / Sekcja A / Konstrukcja stalowa': { cost: 2800, revenue: 5000 },
-        'Projekt / Sekcja C / Paliwo do agregatu': { cost: 140, revenue: 154 }, // liść nieobecny w v3 -> 0 w SUMIFS
-    } },
+    }, leafByPath: Object.fromEntries([
+        leaf(['Sekcja A', 'Fundamenty'], 900, 1600),
+        leaf(['Sekcja A', 'Konstrukcja stalowa'], 2800, 5000),
+        leaf(['Sekcja C', 'Paliwo do agregatu'], 140, 154), // liść nieobecny w v3 -> 0 w SUMIFS
+        leaf(['Sekcja E', longNodeName, 'kabel sygnalizacyjny UPS-Bypass 4x1mm'], 80, 100), // ta sama głęboka ścieżka, inna wartość
+        leaf(['Sekcja B', 'opis stary podgrupy', 'Transport sprzętu'], 450, 650), // ta sama pozycja co w v3, inna podgrupa (rename)
+    ]) },
     { label: 'v1 (najstarszy)', createdAt: '2026-05-01T10:00:00.000Z', byType: {
         'Praca': { cost: 2000, revenue: 4000 },
-    }, leafByPath: {
-        'Projekt / Sekcja A / Fundamenty': { cost: 800, revenue: 1500 },
-    } },
+    }, leafByPath: Object.fromEntries([
+        leaf(['Sekcja A', 'Fundamenty'], 800, 1500),
+    ]) },
 ];
 
 const workbook = new ExcelJS.Workbook();
@@ -40,14 +67,9 @@ compSheet.columns = [{ width: 28 }, ...validSums.map(() => ({ width: 20 }))];
 const hdrRow = compSheet.addRow(['Wskaźnik', ...validSums.map(s => s.label)]);
 compSheet.addRow(['Koszt całkowity', ...validSums.map(s => Object.values(s.byType).reduce((a, b) => a + b.cost, 0))]);
 
-// ---- BEGIN: kod 1:1 z UnifiedWbsPanel.jsx (sekcja "Porównanie per typ") ----
+// ---- BEGIN: kod 1:1 z UnifiedWbsPanel.jsx (sekcja "Porównanie per typ" + "per pozycja") ----
 if (validSums.length >= 2) {
     const generalTableRange = compSheet.rowCount > 1 ? { from: { row: 1, column: 1 }, to: { row: compSheet.rowCount, column: compSheet.columnCount } } : null;
-    for (let c = 2; c <= 13; c++) {
-        const col = compSheet.getColumn(c);
-        if (!col.width || col.width < 16) col.width = 16;
-    }
-    compSheet.getColumn(1).width = Math.max(compSheet.getColumn(1).width || 0, 24);
 
     const allTypeCosts = {};
     for (const s of validSums) {
@@ -58,6 +80,105 @@ if (validSums.length >= 2) {
     const allTypeLabels = Object.keys(allTypeCosts).sort((a, b) => allTypeCosts[b] - allTypeCosts[a]);
     const nSnaps = validSums.length;
     const nTypes = allTypeLabels.length;
+
+    // Liście (dla "per pozycja") liczone TERAZ, żeby znać głębokość PRZED ułożeniem kolumn —
+    // obie tabele mają wspólny układ (Gałąź 1..N → Typ/Pozycja → 12 kolumn metryk).
+    //
+    // Dopasowanie domyślnie po Gałąź 1 + Pozycja (odporne na rename/przenoszenie w poziomach
+    // pośrednich). Kolizja = w JEDNYM snapszocie dwie różne pełne ścieżki dają ten sam short key
+    // (naprawdę różne, jednocześnie istniejące pozycje) — wtedy fallback do pełnej ścieżki + flaga.
+    const mainBranchOf = (parts) => (parts.length > 1 ? parts[0] : '(brak gałęzi)');
+    const leafNameOf = (parts) => parts[parts.length - 1];
+    const shortKeyOf = (parts) => `${mainBranchOf(parts)} :: ${leafNameOf(parts)}`;
+
+    const collidingShortKeys = new Set();
+    for (const s of validSums) {
+        const seenInSnapshot = {};
+        for (const [fullKey, v] of Object.entries(s.leafByPath || {})) {
+            const sk = shortKeyOf(v.parts);
+            if (seenInSnapshot[sk] !== undefined && seenInSnapshot[sk] !== fullKey) {
+                collidingShortKeys.add(sk);
+            }
+            seenInSnapshot[sk] = fullKey;
+        }
+    }
+    const resolvedKeyOf = (parts) => {
+        const sk = shortKeyOf(parts);
+        return collidingShortKeys.has(sk) ? parts.join(' / ') : sk;
+    };
+    for (const s of validSums) {
+        const remapped = {};
+        for (const v of Object.values(s.leafByPath || {})) {
+            const rk = resolvedKeyOf(v.parts);
+            if (!remapped[rk]) remapped[rk] = { cost: 0, revenue: 0, parts: v.parts, isCollision: collidingShortKeys.has(shortKeyOf(v.parts)) };
+            remapped[rk].cost += v.cost;
+            remapped[rk].revenue += v.revenue;
+        }
+        s.leafByResolvedKey = remapped;
+    }
+
+    const allLeafCosts = {};
+    const leafParts = {};
+    const leafIsCollision = {};
+    for (const s of validSums) {
+        for (const [rk, v] of Object.entries(s.leafByResolvedKey || {})) {
+            allLeafCosts[rk] = (allLeafCosts[rk] || 0) + v.cost;
+            if (!leafParts[rk]) leafParts[rk] = v.parts;
+            if (v.isCollision) leafIsCollision[rk] = true;
+        }
+    }
+    const allLeafPaths = Object.keys(allLeafCosts).sort((a, b) => allLeafCosts[b] - allLeafCosts[a]);
+    const nLeaves = allLeafPaths.length;
+    const maxDepth = allLeafPaths.reduce((m, p) => Math.max(m, leafParts[p].length), 0);
+    const nBranchCols = Math.max(0, maxDepth - 1);
+    const L = (idx) => compSheet.getColumn(idx).letter;
+    const hashKey = (s) => {
+        let h = 0;
+        for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+        return 'k' + (h >>> 0).toString(36);
+    };
+
+    const posIdx = nBranchCols + 1;
+    const kAIdx = posIdx + 1, kBIdx = posIdx + 2, dKIdx = posIdx + 3;
+    const rAIdx = posIdx + 4, rBIdx = posIdx + 5, dRIdx = posIdx + 6;
+    const zAIdx = posIdx + 7, zBIdx = posIdx + 8, dZIdx = posIdx + 9;
+    const mAIdx = posIdx + 10, mBIdx = posIdx + 11, dMIdx = posIdx + 12;
+    const uwagaIdx = dMIdx + 1;
+    const hashIdx = uwagaIdx + 1;
+
+    for (let c = 1; c <= nBranchCols; c++) {
+        const col = compSheet.getColumn(c);
+        if (!col.width || col.width < 22) col.width = 22;
+    }
+    compSheet.getColumn(posIdx).width = Math.max(compSheet.getColumn(posIdx).width || 0, 45);
+    for (let c = kAIdx; c <= dMIdx; c++) {
+        const col = compSheet.getColumn(c);
+        if (!col.width || col.width < 16) col.width = 16;
+    }
+    const colKA = L(kAIdx), colKB = L(kBIdx), colDK = L(dKIdx);
+    const colRA = L(rAIdx), colRB = L(rBIdx), colDR = L(dRIdx);
+    const colZA = L(zAIdx), colZB = L(zBIdx), colDZ = L(dZIdx);
+    const colMA = L(mAIdx), colMB = L(mBIdx), colDM = L(dMIdx);
+    const colPos = L(posIdx);
+
+    const styleMetricGroups = (headerRowN, dataStartRowN, dataEndRowN) => {
+        for (let r = headerRowN; r <= dataEndRowN; r++) {
+            for (const col of [colKA, colRA, colZA, colMA]) {
+                const cell = compSheet.getCell(`${col}${r}`);
+                cell.border = { ...(cell.border || {}), left: { style: 'thick' } };
+            }
+        }
+        for (let r = dataStartRowN; r <= dataEndRowN; r++) {
+            for (const col of [colKA, colKB, colDK]) {
+                const cell = compSheet.getCell(`${col}${r}`);
+                cell.font = { ...(cell.font || {}), color: { argb: 'FFDC2626' } };
+            }
+            for (const col of [colRA, colRB]) {
+                const cell = compSheet.getCell(`${col}${r}`);
+                cell.font = { ...(cell.font || {}), bold: true };
+            }
+        }
+    };
 
     const baseRow = compSheet.rowCount;
     const pickerARowNum = baseRow + 3;
@@ -118,10 +239,11 @@ if (validSums.length >= 2) {
         },
     ]);
     legendRow.getCell(1).font = { italic: true, size: 10, color: { argb: 'FF9CA3AF' } };
-    compSheet.mergeCells(legendRowNum, 1, legendRowNum, 13);
+    compSheet.mergeCells(legendRowNum, 1, legendRowNum, dMIdx);
 
     const snapHeader = (pickerRowNum, snap, suffix) => ({ formula: `$B$${pickerRowNum}&"_${suffix}"`, result: `${snap.label}_${suffix}` });
     const headerRow = setRow(headerRowNum, [
+        ...Array(nBranchCols).fill(undefined),
         'Typ',
         snapHeader(pickerARowNum, sA, 'koszt'), snapHeader(pickerBRowNum, sB, 'koszt'), 'Δ Koszt',
         snapHeader(pickerARowNum, sA, 'przychód'), snapHeader(pickerBRowNum, sB, 'przychód'), 'Δ Przychód',
@@ -143,19 +265,20 @@ if (validSums.length >= 2) {
         const profitA = revA - costA, profitB = revB - costB;
         const marginA = revA > 0 ? profitA / revA : 0, marginB = revB > 0 ? profitB / revB : 0;
         setRow(rn, [
+            ...Array(nBranchCols).fill(undefined),
             t,
-            { formula: `SUMIFS(${rawCostCol},${rawSnapCol},$B$${pickerARowNum},${rawTypeCol},$A${rn})`, result: costA },
-            { formula: `SUMIFS(${rawCostCol},${rawSnapCol},$B$${pickerBRowNum},${rawTypeCol},$A${rn})`, result: costB },
-            { formula: `${orderFlagRef}*(B${rn}-C${rn})`, result: orderFlagDefault * (costA - costB) },
-            { formula: `SUMIFS(${rawRevCol},${rawSnapCol},$B$${pickerARowNum},${rawTypeCol},$A${rn})`, result: revA },
-            { formula: `SUMIFS(${rawRevCol},${rawSnapCol},$B$${pickerBRowNum},${rawTypeCol},$A${rn})`, result: revB },
-            { formula: `${orderFlagRef}*(E${rn}-F${rn})`, result: orderFlagDefault * (revA - revB) },
-            { formula: `E${rn}-B${rn}`, result: profitA },
-            { formula: `F${rn}-C${rn}`, result: profitB },
-            { formula: `${orderFlagRef}*(H${rn}-I${rn})`, result: orderFlagDefault * (profitA - profitB) },
-            { formula: `IF(E${rn}=0,0,H${rn}/E${rn})`, result: marginA },
-            { formula: `IF(F${rn}=0,0,I${rn}/F${rn})`, result: marginB },
-            { formula: `${orderFlagRef}*(K${rn}-L${rn})`, result: orderFlagDefault * (marginA - marginB) },
+            { formula: `SUMIFS(${rawCostCol},${rawSnapCol},$B$${pickerARowNum},${rawTypeCol},$${colPos}${rn})`, result: costA },
+            { formula: `SUMIFS(${rawCostCol},${rawSnapCol},$B$${pickerBRowNum},${rawTypeCol},$${colPos}${rn})`, result: costB },
+            { formula: `${orderFlagRef}*(${colKA}${rn}-${colKB}${rn})`, result: orderFlagDefault * (costA - costB) },
+            { formula: `SUMIFS(${rawRevCol},${rawSnapCol},$B$${pickerARowNum},${rawTypeCol},$${colPos}${rn})`, result: revA },
+            { formula: `SUMIFS(${rawRevCol},${rawSnapCol},$B$${pickerBRowNum},${rawTypeCol},$${colPos}${rn})`, result: revB },
+            { formula: `${orderFlagRef}*(${colRA}${rn}-${colRB}${rn})`, result: orderFlagDefault * (revA - revB) },
+            { formula: `${colRA}${rn}-${colKA}${rn}`, result: profitA },
+            { formula: `${colRB}${rn}-${colKB}${rn}`, result: profitB },
+            { formula: `${orderFlagRef}*(${colZA}${rn}-${colZB}${rn})`, result: orderFlagDefault * (profitA - profitB) },
+            { formula: `IF(${colRA}${rn}=0,0,${colZA}${rn}/${colRA}${rn})`, result: marginA },
+            { formula: `IF(${colRB}${rn}=0,0,${colZB}${rn}/${colRB}${rn})`, result: marginB },
+            { formula: `${orderFlagRef}*(${colMA}${rn}-${colMB}${rn})`, result: orderFlagDefault * (marginA - marginB) },
         ]);
     });
 
@@ -167,30 +290,34 @@ if (validSums.length >= 2) {
     const razemMarginA = razemRevA > 0 ? razemProfitA / razemRevA : 0;
     const razemMarginB = razemRevB > 0 ? razemProfitB / razemRevB : 0;
     const razemRow = setRow(razemRowNum, [
+        ...Array(nBranchCols).fill(undefined),
         'Razem',
-        { formula: `SUM(B${dataFirstRow}:B${dataLastRow})`, result: razemCostA },
-        { formula: `SUM(C${dataFirstRow}:C${dataLastRow})`, result: razemCostB },
-        { formula: `SUM(D${dataFirstRow}:D${dataLastRow})`, result: orderFlagDefault * (razemCostA - razemCostB) },
-        { formula: `SUM(E${dataFirstRow}:E${dataLastRow})`, result: razemRevA },
-        { formula: `SUM(F${dataFirstRow}:F${dataLastRow})`, result: razemRevB },
-        { formula: `SUM(G${dataFirstRow}:G${dataLastRow})`, result: orderFlagDefault * (razemRevA - razemRevB) },
-        { formula: `E${razemRowNum}-B${razemRowNum}`, result: razemProfitA },
-        { formula: `F${razemRowNum}-C${razemRowNum}`, result: razemProfitB },
-        { formula: `${orderFlagRef}*(H${razemRowNum}-I${razemRowNum})`, result: orderFlagDefault * (razemProfitA - razemProfitB) },
-        { formula: `IF(E${razemRowNum}=0,0,H${razemRowNum}/E${razemRowNum})`, result: razemMarginA },
-        { formula: `IF(F${razemRowNum}=0,0,I${razemRowNum}/F${razemRowNum})`, result: razemMarginB },
-        { formula: `${orderFlagRef}*(K${razemRowNum}-L${razemRowNum})`, result: orderFlagDefault * (razemMarginA - razemMarginB) },
+        { formula: `SUM(${colKA}${dataFirstRow}:${colKA}${dataLastRow})`, result: razemCostA },
+        { formula: `SUM(${colKB}${dataFirstRow}:${colKB}${dataLastRow})`, result: razemCostB },
+        { formula: `SUM(${colDK}${dataFirstRow}:${colDK}${dataLastRow})`, result: orderFlagDefault * (razemCostA - razemCostB) },
+        { formula: `SUM(${colRA}${dataFirstRow}:${colRA}${dataLastRow})`, result: razemRevA },
+        { formula: `SUM(${colRB}${dataFirstRow}:${colRB}${dataLastRow})`, result: razemRevB },
+        { formula: `SUM(${colDR}${dataFirstRow}:${colDR}${dataLastRow})`, result: orderFlagDefault * (razemRevA - razemRevB) },
+        { formula: `${colRA}${razemRowNum}-${colKA}${razemRowNum}`, result: razemProfitA },
+        { formula: `${colRB}${razemRowNum}-${colKB}${razemRowNum}`, result: razemProfitB },
+        { formula: `${orderFlagRef}*(${colZA}${razemRowNum}-${colZB}${razemRowNum})`, result: orderFlagDefault * (razemProfitA - razemProfitB) },
+        { formula: `IF(${colRA}${razemRowNum}=0,0,${colZA}${razemRowNum}/${colRA}${razemRowNum})`, result: razemMarginA },
+        { formula: `IF(${colRB}${razemRowNum}=0,0,${colZB}${razemRowNum}/${colRB}${razemRowNum})`, result: razemMarginB },
+        { formula: `${orderFlagRef}*(${colMA}${razemRowNum}-${colMB}${razemRowNum})`, result: orderFlagDefault * (razemMarginA - razemMarginB) },
     ]);
     razemRow.font = { bold: true };
     razemRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
 
+    const moneyColsTyp = [colKA, colKB, colDK, colRA, colRB, colDR, colZA, colZB, colDZ];
+    const pctColsTyp = [colMA, colMB, colDM];
     for (let r = dataFirstRow; r <= razemRowNum; r++) {
-        for (const col of ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']) compSheet.getCell(`${col}${r}`).numFmt = '#,##0.00';
-        for (const col of ['K', 'L', 'M']) compSheet.getCell(`${col}${r}`).numFmt = '0.00%';
+        for (const col of moneyColsTyp) compSheet.getCell(`${col}${r}`).numFmt = '#,##0.00';
+        for (const col of pctColsTyp) compSheet.getCell(`${col}${r}`).numFmt = '0.00%';
         if (r > dataFirstRow && r < razemRowNum && (r - dataFirstRow) % 2 === 1) {
             compSheet.getRow(r).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
         }
     }
+    styleMetricGroups(headerRowNum, dataFirstRow, razemRowNum);
 
     const rawTitleRow = setRow(rawTitleRowNum, ['Dane źródłowe (pomocnicze, generowane automatycznie — nie edytuj)']);
     rawTitleRow.font = { italic: true, size: 10, color: { argb: 'FF9CA3AF' } };
@@ -225,19 +352,12 @@ if (validSums.length >= 2) {
         });
     });
 
-    // ---- Porównanie per pozycja (liście budżetu) — kopia 1:1 z UnifiedWbsPanel.jsx ----
-    const allLeafCosts = {};
-    for (const s of validSums) {
-        for (const [p, v] of Object.entries(s.leafByPath || {})) {
-            allLeafCosts[p] = (allLeafCosts[p] || 0) + v.cost;
-        }
-    }
-    const allLeafPaths = Object.keys(allLeafCosts).sort((a, b) => allLeafCosts[b] - allLeafCosts[a]);
-    const nLeaves = allLeafPaths.length;
-
-    let leafDataFirstRow, leafRazemRowNum, leafHeaderRowNum, leafDataLastRow;
+    // ---- Porównanie per pozycja (liście budżetu) — hash-based dopasowanie ----
+    let leafHeaderRowNum, leafDataLastRow, leafTableWidth, leafDataFirstRow, leafRazemRowNum;
     if (nLeaves > 0) {
-        compSheet.getColumn(1).width = Math.max(compSheet.getColumn(1).width || 0, 50);
+        leafTableWidth = uwagaIdx;
+        compSheet.getColumn(hashIdx).hidden = true;
+        compSheet.getColumn(uwagaIdx).width = Math.max(compSheet.getColumn(uwagaIdx).width || 0, 55);
 
         const leafTitleRowNum = rawLastRow + 2;
         leafHeaderRowNum = rawLastRow + 3;
@@ -249,113 +369,140 @@ if (validSums.length >= 2) {
         const leafRawFirstRow = leafRawHeaderRowNum + 1;
         const leafRawLastRow = leafRawFirstRow + nLeaves * nSnaps - 1;
 
+        const leafRawHashIdx = 2, leafRawCostIdx = 4, leafRawRevIdx = 5, leafRawProfitIdx = 6, leafRawMarginIdx = 7;
+
         const leafTitleRow = setRow(leafTitleRowNum, ['Porównanie per pozycja (liście budżetu)']);
         leafTitleRow.font = { bold: true, size: 12 };
 
+        const branchHeaders = Array.from({ length: nBranchCols }, (_, i) => `Gałąź ${i + 1}`);
         const leafHeaderRow = setRow(leafHeaderRowNum, [
-            'Pozycja (ścieżka)',
+            ...branchHeaders,
+            'Pozycja',
             snapHeader(pickerARowNum, sA, 'koszt'), snapHeader(pickerBRowNum, sB, 'koszt'), 'Δ Koszt',
             snapHeader(pickerARowNum, sA, 'przychód'), snapHeader(pickerBRowNum, sB, 'przychód'), 'Δ Przychód',
             snapHeader(pickerARowNum, sA, 'zysk'), snapHeader(pickerBRowNum, sB, 'zysk'), 'Δ Zysk',
             snapHeader(pickerARowNum, sA, 'marża'), snapHeader(pickerBRowNum, sB, 'marża'), 'Δ Marża',
+            'Uwaga',
         ]);
         leafHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         leafHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
 
-        const leafRawPosCol = `$C$${leafRawFirstRow}:$C$${leafRawLastRow}`;
-        const leafRawSnapCol = `$A$${leafRawFirstRow}:$A$${leafRawLastRow}`;
-        const leafRawCostCol = `$D$${leafRawFirstRow}:$D$${leafRawLastRow}`;
-        const leafRawRevCol = `$E$${leafRawFirstRow}:$E$${leafRawLastRow}`;
+        const rawRangeCol2 = (idx) => `$${L(idx)}$${leafRawFirstRow}:$${L(idx)}$${leafRawLastRow}`;
+        const leafRawSnapRange = rawRangeCol2(1);
+        const leafRawHashRange = rawRangeCol2(leafRawHashIdx);
+        const leafRawCostRange = rawRangeCol2(leafRawCostIdx);
+        const leafRawRevRange = rawRangeCol2(leafRawRevIdx);
+        const leafSumifs = (valueRange, pickerRowNum, rn) =>
+            `SUMIFS(${valueRange},${leafRawSnapRange},$B$${pickerRowNum},${leafRawHashRange},$${L(hashIdx)}${rn})`;
 
         allLeafPaths.forEach((p, i) => {
             const rn = leafDataFirstRow + i;
-            const costA = sA.leafByPath[p]?.cost || 0, costB = sB.leafByPath[p]?.cost || 0;
-            const revA = sA.leafByPath[p]?.revenue || 0, revB = sB.leafByPath[p]?.revenue || 0;
+            const parts = leafParts[p];
+            const branchVals = parts.slice(0, -1);
+            const leafName = parts[parts.length - 1];
+            const costA = sA.leafByResolvedKey[p]?.cost || 0, costB = sB.leafByResolvedKey[p]?.cost || 0;
+            const revA = sA.leafByResolvedKey[p]?.revenue || 0, revB = sB.leafByResolvedKey[p]?.revenue || 0;
             const profitA = revA - costA, profitB = revB - costB;
             const marginA = revA > 0 ? profitA / revA : 0, marginB = revB > 0 ? profitB / revB : 0;
             setRow(rn, [
-                p,
-                { formula: `SUMIFS(${leafRawCostCol},${leafRawSnapCol},$B$${pickerARowNum},${leafRawPosCol},$A${rn})`, result: costA },
-                { formula: `SUMIFS(${leafRawCostCol},${leafRawSnapCol},$B$${pickerBRowNum},${leafRawPosCol},$A${rn})`, result: costB },
-                { formula: `${orderFlagRef}*(B${rn}-C${rn})`, result: orderFlagDefault * (costA - costB) },
-                { formula: `SUMIFS(${leafRawRevCol},${leafRawSnapCol},$B$${pickerARowNum},${leafRawPosCol},$A${rn})`, result: revA },
-                { formula: `SUMIFS(${leafRawRevCol},${leafRawSnapCol},$B$${pickerBRowNum},${leafRawPosCol},$A${rn})`, result: revB },
-                { formula: `${orderFlagRef}*(E${rn}-F${rn})`, result: orderFlagDefault * (revA - revB) },
-                { formula: `E${rn}-B${rn}`, result: profitA },
-                { formula: `F${rn}-C${rn}`, result: profitB },
-                { formula: `${orderFlagRef}*(H${rn}-I${rn})`, result: orderFlagDefault * (profitA - profitB) },
-                { formula: `IF(E${rn}=0,0,H${rn}/E${rn})`, result: marginA },
-                { formula: `IF(F${rn}=0,0,I${rn}/F${rn})`, result: marginB },
-                { formula: `${orderFlagRef}*(K${rn}-L${rn})`, result: orderFlagDefault * (marginA - marginB) },
+                ...Array.from({ length: nBranchCols }, (_, j) => branchVals[j]),
+                leafName,
+                { formula: leafSumifs(leafRawCostRange, pickerARowNum, rn), result: costA },
+                { formula: leafSumifs(leafRawCostRange, pickerBRowNum, rn), result: costB },
+                { formula: `${orderFlagRef}*(${colKA}${rn}-${colKB}${rn})`, result: orderFlagDefault * (costA - costB) },
+                { formula: leafSumifs(leafRawRevRange, pickerARowNum, rn), result: revA },
+                { formula: leafSumifs(leafRawRevRange, pickerBRowNum, rn), result: revB },
+                { formula: `${orderFlagRef}*(${colRA}${rn}-${colRB}${rn})`, result: orderFlagDefault * (revA - revB) },
+                { formula: `${colRA}${rn}-${colKA}${rn}`, result: profitA },
+                { formula: `${colRB}${rn}-${colKB}${rn}`, result: profitB },
+                { formula: `${orderFlagRef}*(${colZA}${rn}-${colZB}${rn})`, result: orderFlagDefault * (profitA - profitB) },
+                { formula: `IF(${colRA}${rn}=0,0,${colZA}${rn}/${colRA}${rn})`, result: marginA },
+                { formula: `IF(${colRB}${rn}=0,0,${colZB}${rn}/${colRB}${rn})`, result: marginB },
+                { formula: `${orderFlagRef}*(${colMA}${rn}-${colMB}${rn})`, result: orderFlagDefault * (marginA - marginB) },
+                leafIsCollision[p] ? '⚠ Kilka pozycji o tej nazwie w tej gałęzi — dopasowano po pełnej ścieżce, sprawdź ręcznie' : undefined,
             ]);
+            compSheet.getRow(rn).getCell(hashIdx).value = hashKey(p);
+            if (leafIsCollision[p]) {
+                compSheet.getRow(rn).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDE68A' } };
+            }
         });
 
-        const leafRazemCostA = allLeafPaths.reduce((s, p) => s + (sA.leafByPath[p]?.cost || 0), 0);
-        const leafRazemCostB = allLeafPaths.reduce((s, p) => s + (sB.leafByPath[p]?.cost || 0), 0);
-        const leafRazemRevA = allLeafPaths.reduce((s, p) => s + (sA.leafByPath[p]?.revenue || 0), 0);
-        const leafRazemRevB = allLeafPaths.reduce((s, p) => s + (sB.leafByPath[p]?.revenue || 0), 0);
+        const leafRazemCostA = allLeafPaths.reduce((s, p) => s + (sA.leafByResolvedKey[p]?.cost || 0), 0);
+        const leafRazemCostB = allLeafPaths.reduce((s, p) => s + (sB.leafByResolvedKey[p]?.cost || 0), 0);
+        const leafRazemRevA = allLeafPaths.reduce((s, p) => s + (sA.leafByResolvedKey[p]?.revenue || 0), 0);
+        const leafRazemRevB = allLeafPaths.reduce((s, p) => s + (sB.leafByResolvedKey[p]?.revenue || 0), 0);
         const leafRazemProfitA = leafRazemRevA - leafRazemCostA, leafRazemProfitB = leafRazemRevB - leafRazemCostB;
         const leafRazemMarginA = leafRazemRevA > 0 ? leafRazemProfitA / leafRazemRevA : 0;
         const leafRazemMarginB = leafRazemRevB > 0 ? leafRazemProfitB / leafRazemRevB : 0;
         const leafRazemRow = setRow(leafRazemRowNum, [
+            ...Array(nBranchCols).fill(undefined),
             'Razem',
-            { formula: `SUM(B${leafDataFirstRow}:B${leafDataLastRow})`, result: leafRazemCostA },
-            { formula: `SUM(C${leafDataFirstRow}:C${leafDataLastRow})`, result: leafRazemCostB },
-            { formula: `SUM(D${leafDataFirstRow}:D${leafDataLastRow})`, result: orderFlagDefault * (leafRazemCostA - leafRazemCostB) },
-            { formula: `SUM(E${leafDataFirstRow}:E${leafDataLastRow})`, result: leafRazemRevA },
-            { formula: `SUM(F${leafDataFirstRow}:F${leafDataLastRow})`, result: leafRazemRevB },
-            { formula: `SUM(G${leafDataFirstRow}:G${leafDataLastRow})`, result: orderFlagDefault * (leafRazemRevA - leafRazemRevB) },
-            { formula: `E${leafRazemRowNum}-B${leafRazemRowNum}`, result: leafRazemProfitA },
-            { formula: `F${leafRazemRowNum}-C${leafRazemRowNum}`, result: leafRazemProfitB },
-            { formula: `${orderFlagRef}*(H${leafRazemRowNum}-I${leafRazemRowNum})`, result: orderFlagDefault * (leafRazemProfitA - leafRazemProfitB) },
-            { formula: `IF(E${leafRazemRowNum}=0,0,H${leafRazemRowNum}/E${leafRazemRowNum})`, result: leafRazemMarginA },
-            { formula: `IF(F${leafRazemRowNum}=0,0,I${leafRazemRowNum}/F${leafRazemRowNum})`, result: leafRazemMarginB },
-            { formula: `${orderFlagRef}*(K${leafRazemRowNum}-L${leafRazemRowNum})`, result: orderFlagDefault * (leafRazemMarginA - leafRazemMarginB) },
+            { formula: `SUM(${colKA}${leafDataFirstRow}:${colKA}${leafDataLastRow})`, result: leafRazemCostA },
+            { formula: `SUM(${colKB}${leafDataFirstRow}:${colKB}${leafDataLastRow})`, result: leafRazemCostB },
+            { formula: `SUM(${colDK}${leafDataFirstRow}:${colDK}${leafDataLastRow})`, result: orderFlagDefault * (leafRazemCostA - leafRazemCostB) },
+            { formula: `SUM(${colRA}${leafDataFirstRow}:${colRA}${leafDataLastRow})`, result: leafRazemRevA },
+            { formula: `SUM(${colRB}${leafDataFirstRow}:${colRB}${leafDataLastRow})`, result: leafRazemRevB },
+            { formula: `SUM(${colDR}${leafDataFirstRow}:${colDR}${leafDataLastRow})`, result: orderFlagDefault * (leafRazemRevA - leafRazemRevB) },
+            { formula: `${colRA}${leafRazemRowNum}-${colKA}${leafRazemRowNum}`, result: leafRazemProfitA },
+            { formula: `${colRB}${leafRazemRowNum}-${colKB}${leafRazemRowNum}`, result: leafRazemProfitB },
+            { formula: `${orderFlagRef}*(${colZA}${leafRazemRowNum}-${colZB}${leafRazemRowNum})`, result: orderFlagDefault * (leafRazemProfitA - leafRazemProfitB) },
+            { formula: `IF(${colRA}${leafRazemRowNum}=0,0,${colZA}${leafRazemRowNum}/${colRA}${leafRazemRowNum})`, result: leafRazemMarginA },
+            { formula: `IF(${colRB}${leafRazemRowNum}=0,0,${colZB}${leafRazemRowNum}/${colRB}${leafRazemRowNum})`, result: leafRazemMarginB },
+            { formula: `${orderFlagRef}*(${colMA}${leafRazemRowNum}-${colMB}${leafRazemRowNum})`, result: orderFlagDefault * (leafRazemMarginA - leafRazemMarginB) },
         ]);
         leafRazemRow.font = { bold: true };
         leafRazemRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
 
+        const moneyCols = [colKA, colKB, colDK, colRA, colRB, colDR, colZA, colZB, colDZ];
+        const pctCols = [colMA, colMB, colDM];
         for (let r = leafDataFirstRow; r <= leafRazemRowNum; r++) {
-            for (const col of ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']) compSheet.getCell(`${col}${r}`).numFmt = '#,##0.00';
-            for (const col of ['K', 'L', 'M']) compSheet.getCell(`${col}${r}`).numFmt = '0.00%';
+            for (const col of moneyCols) compSheet.getCell(`${col}${r}`).numFmt = '#,##0.00';
+            for (const col of pctCols) compSheet.getCell(`${col}${r}`).numFmt = '0.00%';
+            const isCollisionRow = leafIsCollision[allLeafPaths[r - leafDataFirstRow]];
+            if (!isCollisionRow && r > leafDataFirstRow && r < leafRazemRowNum && (r - leafDataFirstRow) % 2 === 1) {
+                compSheet.getRow(r).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+            }
         }
+        styleMetricGroups(leafHeaderRowNum, leafDataFirstRow, leafRazemRowNum);
 
         const leafRawTitleRow = setRow(leafRawTitleRowNum, ['Dane źródłowe (pomocnicze, generowane automatycznie — nie edytuj)']);
         leafRawTitleRow.font = { italic: true, size: 10, color: { argb: 'FF9CA3AF' } };
         leafRawTitleRow.hidden = true;
-        const leafRawHeaderRow = setRow(leafRawHeaderRowNum, ['Snapshot', 'Data utworzenia', 'Pozycja (ścieżka)', 'Koszt', 'Przychód', 'Zysk', 'Marża%']);
+        const leafRawHeaderRow = setRow(leafRawHeaderRowNum, [
+            'Snapshot', 'Hash', 'Pozycja (informacyjnie, pełna ścieżka)', 'Koszt', 'Przychód', 'Zysk', 'Marża%',
+        ]);
         leafRawHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         leafRawHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF374151' } };
         leafRawHeaderRow.hidden = true;
 
         allLeafPaths.forEach((p, pi) => {
+            const key = hashKey(p);
             validSums.forEach((s, si) => {
                 const rn = leafRawFirstRow + pi * nSnaps + si;
-                const cost = s.leafByPath[p]?.cost || 0;
-                const revenue = s.leafByPath[p]?.revenue || 0;
+                const cost = s.leafByResolvedKey[p]?.cost || 0;
+                const revenue = s.leafByResolvedKey[p]?.revenue || 0;
                 const profit = revenue - cost;
                 const margin = revenue > 0 ? profit / revenue : 0;
                 const row = setRow(rn, [
                     s.label,
-                    s.createdAt ? new Date(s.createdAt) : null,
+                    key,
                     p,
                     cost,
                     revenue,
                     { formula: `E${rn}-D${rn}`, result: profit },
                     { formula: `IF(E${rn}=0,0,F${rn}/E${rn})`, result: margin },
                 ]);
-                row.getCell(2).numFmt = 'yyyy-mm-dd hh:mm';
-                row.getCell(4).numFmt = '#,##0.00';
-                row.getCell(5).numFmt = '#,##0.00';
-                row.getCell(6).numFmt = '#,##0.00';
-                row.getCell(7).numFmt = '0.00%';
+                row.getCell(leafRawCostIdx).numFmt = '#,##0.00';
+                row.getCell(leafRawRevIdx).numFmt = '#,##0.00';
+                row.getCell(leafRawProfitIdx).numFmt = '#,##0.00';
+                row.getCell(leafRawMarginIdx).numFmt = '0.00%';
                 row.hidden = true;
             });
         });
     }
 
-    const perTypeRange = { from: { row: headerRowNum, column: 1 }, to: { row: dataLastRow, column: 13 } };
-    const leafRange = nLeaves > 0 ? { from: { row: leafHeaderRowNum, column: 1 }, to: { row: leafDataLastRow, column: 13 } } : null;
+    const perTypeRange = { from: { row: headerRowNum, column: 1 }, to: { row: dataLastRow, column: dMIdx } };
+    const leafRange = nLeaves > 0 ? { from: { row: leafHeaderRowNum, column: 1 }, to: { row: leafDataLastRow, column: leafTableWidth } } : null;
     const rowsIn = (r) => r.to.row - r.from.row;
     let chosenRange = generalTableRange;
     if (perTypeRange && (!chosenRange || rowsIn(perTypeRange) > rowsIn(chosenRange))) chosenRange = perTypeRange;
@@ -372,62 +519,117 @@ if (validSums.length >= 2) {
     assert(allTypeLabels.length === 4, 'union typów = 4 (Praca, Usługa, Materiał, Paliwo)');
     assert(allTypeLabels.includes('Paliwo'), 'Paliwo (obecne tylko w v2) trafia do listy typów');
 
-    // Domyślnie A=v3(najnowszy, lewe kolumny), B=v2 (prawe kolumny) -> newest leftmost.
-    // orderFlag: dataA(2026-07-05) >= dataB(2026-06-01) => 1
     assert(orderFlagDefault === 1, 'orderFlagDefault = 1 (A jest nowszy niż B — najnowszy zawsze z lewej)');
 
-    // Praca: A=v3(cost3200,rev5850), B=v2(cost2800,rev5000). Δ musi być nowszy(A)-starszy(B) = 3200-2800=400
+    // Praca: A=v3(cost3200,rev5850), B=v2(cost2800,rev5000). Δ = nowszy(A)-starszy(B) = 400
     const pracaRowNum = dataFirstRow + allTypeLabels.indexOf('Praca');
-    const pracaCell = compSheet.getCell(`D${pracaRowNum}`);
-    assert(res(pracaCell) === 400, `Δ Koszt Praca = 400 (nowszy-starszy), got ${res(pracaCell)}`);
+    const pracaKA = res(compSheet.getCell(`${colKA}${pracaRowNum}`));
+    assert(pracaKA === 3200, `Koszt A (v3) Praca = 3200, got ${pracaKA}`);
+    const pracaDK = res(compSheet.getCell(`${colDK}${pracaRowNum}`));
+    assert(pracaDK === 400, `Δ Koszt Praca = 400 (nowszy-starszy), got ${pracaDK}`);
 
-    // Paliwo: B=v2 ma Paliwo(cost140), A=v3 nie ma Paliwo -> costA=0, Δ=orderFlag*(0-140)=1*(-140)=-140 => (nowszy-starszy)=0-140=-140 OK
+    // Paliwo: B=v2 ma Paliwo(cost140), A=v3 nie ma -> costA=0, Δ=1*(0-140)=-140
     const paliwoRowNum = dataFirstRow + allTypeLabels.indexOf('Paliwo');
-    const paliwoCostA = compSheet.getCell(`B${paliwoRowNum}`);
-    assert(res(paliwoCostA) === 0, `Koszt A (v3, najnowszy) dla Paliwo = 0 (typ nieobecny), got ${res(paliwoCostA)}`);
-    const paliwoDelta = compSheet.getCell(`D${paliwoRowNum}`);
-    assert(res(paliwoDelta) === -140, `Δ Koszt Paliwo = -140 (nowszy 0 minus starszy 140), got ${res(paliwoDelta)}`);
+    assert(res(compSheet.getCell(`${colKA}${paliwoRowNum}`)) === 0, 'Koszt A (v3, najnowszy) dla Paliwo = 0 (typ nieobecny)');
+    assert(res(compSheet.getCell(`${colDK}${paliwoRowNum}`)) === -140, 'Δ Koszt Paliwo = -140 (nowszy 0 minus starszy 140)');
 
-    // Razem: suma Δ Koszt wierszy powinna równać się D razemRowNum
     let sumDelta = 0;
-    for (let r = dataFirstRow; r <= dataLastRow; r++) sumDelta += res(compSheet.getCell(`D${r}`));
-    const razemDelta = res(compSheet.getCell(`D${razemRowNum}`));
+    for (let r = dataFirstRow; r <= dataLastRow; r++) sumDelta += res(compSheet.getCell(`${colDK}${r}`));
+    const razemDelta = res(compSheet.getCell(`${colDK}${razemRowNum}`));
     assert(Math.abs(sumDelta - razemDelta) < 1e-9, `Razem Δ Koszt (${razemDelta}) = suma Δ per typ (${sumDelta})`);
 
-    // Marża Razem NIE jest średnią wierszy tylko zysk_total/przychod_total
-    const marzaARazem = res(compSheet.getCell(`K${razemRowNum}`));
+    const marzaARazem = res(compSheet.getCell(`${colMA}${razemRowNum}`));
     const expectedMarzaA = razemRevA > 0 ? (razemRevA - razemCostA) / razemRevA : 0;
     assert(Math.abs(marzaARazem - expectedMarzaA) < 1e-9, `Marża% A Razem liczona z sum (${marzaARazem}) = zysk_total/przychod_total (${expectedMarzaA})`);
 
-    // dataValidation na dropdownach obecna i wskazuje na poprawny zakres (pierwsza grupa typu w bloku źródłowym)
     assert(pickerARow.getCell(2).dataValidation?.formulae[0] === dropdownRange, 'dropdown A ma poprawną walidację listy');
-    assert(dropdownLastRow - dropdownFirstRow + 1 === nSnaps, `zakres dropdown obejmuje dokładnie ${nSnaps} snapszoty (po jednym na typ[0])`);
+    assert(dropdownLastRow - dropdownFirstRow + 1 === nSnaps, `zakres dropdown obejmuje dokładnie ${nSnaps} snapszoty`);
+
+    // ---- asercje: WSPÓLNY układ kolumn obu tabel (koszt pod kosztem, przychód pod przychodem) ----
+    assert(nBranchCols === 2, `nBranchCols = 2 (najgłębszy liść ma 3 poziomy bez roota), got ${nBranchCols}`);
+    const typHeaderVal = compSheet.getCell(`${colPos}${headerRowNum}`).value;
+    assert(typHeaderVal === 'Typ', `nagłówek "Typ" tabeli per typ jest w tej samej kolumnie (${colPos}) co "Pozycja" tabeli per pozycja`);
+    const pozycjaHeaderVal = compSheet.getCell(`${colPos}${leafHeaderRowNum}`).value;
+    assert(pozycjaHeaderVal === 'Pozycja', `nagłówek "Pozycja" w tej samej kolumnie ${colPos} co "Typ" wyżej`);
+    // Koszt A obu tabel w TEJ SAMEJ kolumnie (colKA) -> "koszt pod kosztem"
+    assert(compSheet.getCell(`${colKA}${headerRowNum}`).value.result.endsWith('_koszt'), 'nagłówek Koszt A tabeli per typ w kolumnie colKA');
+    assert(compSheet.getCell(`${colKA}${leafHeaderRowNum}`).value.result.endsWith('_koszt'), 'nagłówek Koszt A tabeli per pozycja w TEJ SAMEJ kolumnie colKA co per typ');
+    // Kolumny 1..nBranchCols muszą być puste dla tabeli per typ (Typ nie ma gałęzi)
+    for (let c = 1; c <= nBranchCols; c++) {
+        assert(compSheet.getCell(`${L(c)}${headerRowNum}`).value == null, `kolumna ${L(c)} (Gałąź) pusta w nagłówku tabeli per typ`);
+        assert(compSheet.getCell(`${L(c)}${dataFirstRow}`).value == null, `kolumna ${L(c)} (Gałąź) pusta w wierszach danych tabeli per typ`);
+    }
 
     // ---- asercje: Porównanie per pozycja (liście) ----
-    assert(nLeaves === 6, `union liści = 6 (więcej niż nTypes=4, żeby test tabeli per pozycja wygrywał priorytet autoFilter), got ${nLeaves}`);
-    assert(allLeafPaths[0] === 'Projekt / Sekcja A / Konstrukcja stalowa', 'najdroższy liść (suma 5000) jest pierwszy');
+    assert(nLeaves === 10, `union pozycji = 10 (8 dopasowanych po Gałąź1+Pozycja + 2 kolidujące po pełnej ścieżce), got ${nLeaves}`);
+    assert(allLeafPaths[0] === 'Sekcja A :: Konstrukcja stalowa', 'najdroższa pozycja (suma 5000) jest pierwsza');
+    assert(!allLeafPaths[0].includes('Projekt'), 'root NIE jest częścią klucza dopasowania (wymaganie "bez roota")');
 
-    const paliwoLeafRowNum = leafDataFirstRow + allLeafPaths.indexOf('Projekt / Sekcja C / Paliwo do agregatu');
-    assert(res(compSheet.getCell(`B${paliwoLeafRowNum}`)) === 0, 'Koszt A (v3) dla liścia obecnego tylko w v2 = 0');
-    assert(res(compSheet.getCell(`D${paliwoLeafRowNum}`)) === -140, 'Δ Koszt liścia obecnego tylko w v2 = -140 (nowszy 0 - starszy 140)');
+    const paliwoLeafRowNum = leafDataFirstRow + allLeafPaths.indexOf('Sekcja C :: Paliwo do agregatu');
+    assert(res(compSheet.getCell(`${colKA}${paliwoLeafRowNum}`)) === 0, 'Koszt A (v3) dla pozycji obecnej tylko w v2 = 0');
+    assert(res(compSheet.getCell(`${colDK}${paliwoLeafRowNum}`)) === -140, 'Δ Koszt pozycji obecnej tylko w v2 = -140 (nowszy 0 - starszy 140)');
+
+    // ---- Rename gałęzi pośredniej MIĘDZY snapszotami -> ma się MERGE'OWAĆ (nie kolizja) ----
+    const transportRowNum = leafDataFirstRow + allLeafPaths.indexOf('Sekcja B :: Transport sprzętu');
+    assert(transportRowNum >= leafDataFirstRow, '"Sekcja B :: Transport sprzętu" istnieje jako JEDEN wiersz mimo zmiany Gałąź 2 między snapszotami');
+    assert(res(compSheet.getCell(`${colKA}${transportRowNum}`)) === 500, `Koszt A (v3) Transport sprzętu = 500 mimo innej Gałąź 2 niż w v2, got ${res(compSheet.getCell(`${colKA}${transportRowNum}`))}`);
+    assert(res(compSheet.getCell(`${colKB}${transportRowNum}`)) === 450, `Koszt B (v2) Transport sprzętu = 450, got ${res(compSheet.getCell(`${colKB}${transportRowNum}`))}`);
+    assert(res(compSheet.getCell(`${colDK}${transportRowNum}`)) === 50, `Δ Koszt Transport sprzętu = 50 (500-450), got ${res(compSheet.getCell(`${colDK}${transportRowNum}`))}`);
+    assert(compSheet.getCell(`${L(uwagaIdx)}${transportRowNum}`).value == null, 'brak Uwagi dla renamowanej-ale-jednoznacznej pozycji (nie jest kolizją)');
+
+    // ---- Kolizja PRAWDZIWA: dwie różne pozycje "kabel" w tej samej Sekcji B, różne podgrupy ----
+    // Jedna z nich ma DODATKOWO bardzo długą nazwę podgrupy (>255 znaków) — testuje że fallback
+    // do pełnej ścieżki (przy kolizji) też działa poprawnie przez hash, nie tylko krótki klucz.
+    const collisionKey1 = ['Sekcja B', longNodeName, 'kabel'].join(' / ');
+    const collisionKey2 = ['Sekcja B', 'Bypass', 'kabel'].join(' / ');
+    assert(collisionKey1.length > 255, 'klucz kolidującej pozycji z długą nazwą podgrupy ma > 255 znaków');
+    const collRow1 = leafDataFirstRow + allLeafPaths.indexOf(collisionKey1);
+    const collRow2 = leafDataFirstRow + allLeafPaths.indexOf(collisionKey2);
+    assert(collRow1 >= leafDataFirstRow && collRow2 >= leafDataFirstRow && collRow1 !== collRow2, 'obie kolidujące pozycje "kabel" istnieją jako OSOBNE wiersze (nie zsumowane po cichu)');
+    assert(res(compSheet.getCell(`${colKA}${collRow1}`)) === 200, `Koszt A pierwszej kolidującej pozycji "kabel" = 200 (nie 350), got ${res(compSheet.getCell(`${colKA}${collRow1}`))}`);
+    assert(res(compSheet.getCell(`${colKA}${collRow2}`)) === 150, `Koszt A drugiej kolidującej pozycji "kabel" = 150 (nie 350), got ${res(compSheet.getCell(`${colKA}${collRow2}`))}`);
+    const uwaga1 = compSheet.getCell(`${L(uwagaIdx)}${collRow1}`).value;
+    const uwaga2 = compSheet.getCell(`${L(uwagaIdx)}${collRow2}`).value;
+    assert(typeof uwaga1 === 'string' && uwaga1.includes('Kilka pozycji'), 'pierwsza kolidująca pozycja ma widoczne ostrzeżenie "Uwaga"');
+    assert(typeof uwaga2 === 'string' && uwaga2.includes('Kilka pozycji'), 'druga kolidująca pozycja ma widoczne ostrzeżenie "Uwaga"');
+    assert(compSheet.getRow(collRow1).fill?.fgColor?.argb === 'FFFDE68A', 'kolidujący wiersz ma żółte podświetlenie (nie zwykłe paskowanie)');
 
     let leafSumDelta = 0;
-    for (let r = leafDataFirstRow; r < leafRazemRowNum; r++) leafSumDelta += res(compSheet.getCell(`D${r}`));
-    assert(Math.abs(leafSumDelta - res(compSheet.getCell(`D${leafRazemRowNum}`))) < 1e-9, 'Razem Δ Koszt (liście) = suma Δ per pozycja');
+    for (let r = leafDataFirstRow; r < leafRazemRowNum; r++) leafSumDelta += res(compSheet.getCell(`${colDK}${r}`));
+    assert(Math.abs(leafSumDelta - res(compSheet.getCell(`${colDK}${leafRazemRowNum}`))) < 1e-9, 'Razem Δ Koszt (liście) = suma Δ per pozycja');
 
-    const leafHeaderB = compSheet.getCell(`B${leafHeaderRowNum}`).value;
-    assert(leafHeaderB.result === `${sA.label}_koszt`, `nagłówek kolumny B tabeli liści = "${sA.label}_koszt" (dynamiczny, ten sam dropdown co tabela per typ)`);
+    const leafHeaderKA = compSheet.getCell(`${colKA}${leafHeaderRowNum}`).value;
+    assert(leafHeaderKA.result === `${sA.label}_koszt`, `nagłówek Koszt A tabeli liści = "${sA.label}_koszt" (dynamiczny)`);
 
     // ---- asercje: bloki danych źródłowych są ukryte, tabele widoczne nie ----
     assert(compSheet.getRow(rawTitleRowNum).hidden === true, 'wiersz tytułowy bloku źródłowego (per typ) jest ukryty');
     assert(compSheet.getRow(rawFirstRow).hidden === true, 'pierwszy wiersz danych bloku źródłowego (per typ) jest ukryty');
     assert(compSheet.getRow(razemRowNum).hidden !== true, 'wiersz Razem tabeli per typ (widoczny) NIE jest ukryty');
     assert(compSheet.getRow(leafDataFirstRow).hidden !== true, 'pierwszy wiersz tabeli per pozycja (widoczny) NIE jest ukryty');
+    assert(compSheet.getColumn(hashIdx).hidden === true, 'kolumna hash (dopasowanie liścia) jest ukryta');
 
     assert(compSheet.autoFilter && compSheet.autoFilter.from.row === leafHeaderRowNum, 'autoFilter trafia na tabelę per pozycja (najwięcej wierszy)');
 
     const legendText = res(compSheet.getCell(`A${legendRowNum}`));
     assert(legendText.includes(`${newerLabelDefault} (nowszy)`) && legendText.includes(`${olderLabelDefault} (starszy)`), `legenda opisuje kierunek Δ: "${legendText}"`);
+
+    // ---- asercje: stylowanie grup metryk (czerwony koszt, pogrubiona cena ofertowa, grube krawędzie) ----
+    assert(compSheet.getCell(`${colKA}${pracaRowNum}`).font.color.argb === 'FFDC2626', 'Koszt A (per typ) ma czerwony font');
+    assert(compSheet.getCell(`${colKB}${pracaRowNum}`).font.color.argb === 'FFDC2626', 'Koszt B (per typ) ma czerwony font');
+    assert(compSheet.getCell(`${colDK}${pracaRowNum}`).font.color.argb === 'FFDC2626', 'Δ Koszt (per typ) ma czerwony font');
+    assert(compSheet.getCell(`${colRA}${pracaRowNum}`).font.bold === true, 'Przychód A (cena ofertowa, per typ) jest pogrubiony');
+    assert(compSheet.getCell(`${colRB}${pracaRowNum}`).font.bold === true, 'Przychód B (cena ofertowa, per typ) jest pogrubiony');
+    assert(compSheet.getCell(`${colZA}${pracaRowNum}`).font?.color?.argb !== 'FFDC2626', 'Zysk NIE jest czerwony (tylko koszt)');
+    assert(compSheet.getCell(`${colKA}${headerRowNum}`).border?.left?.style === 'thick', 'gruba krawędź między Typ/Pozycja a grupą Koszt (nagłówek per typ)');
+    assert(compSheet.getCell(`${colRA}${headerRowNum}`).border?.left?.style === 'thick', 'gruba krawędź między Koszt a Przychód (nagłówek per typ)');
+    assert(compSheet.getCell(`${colZA}${headerRowNum}`).border?.left?.style === 'thick', 'gruba krawędź między Przychód a Zysk (nagłówek per typ)');
+    assert(compSheet.getCell(`${colMA}${headerRowNum}`).border?.left?.style === 'thick', 'gruba krawędź między Zysk a Marża (nagłówek per typ)');
+    assert(compSheet.getCell(`${colKA}${razemRowNum}`).font.color.argb === 'FFDC2626', 'Razem wiersz też ma czerwony Koszt A');
+
+    // to samo w tabeli per pozycja
+    assert(compSheet.getCell(`${colKA}${transportRowNum}`).font.color.argb === 'FFDC2626', 'Koszt A (per pozycja) ma czerwony font');
+    assert(compSheet.getCell(`${colRA}${transportRowNum}`).font.bold === true, 'Przychód A (per pozycja) jest pogrubiony');
+    assert(compSheet.getCell(`${colRA}${leafHeaderRowNum}`).border?.left?.style === 'thick', 'gruba krawędź między Koszt a Przychód (nagłówek per pozycja)');
 
     console.log('\nWszystkie asercje przeszły. Zapisuję plik testowy...');
 }

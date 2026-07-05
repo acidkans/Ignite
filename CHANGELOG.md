@@ -4,6 +4,25 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-05 — fix(export-excel): dopasowanie pozycji po Gałąź 1 + Pozycja (z wykrywaniem kolizji) + wspólny układ kolumn tabel „per typ"/„per pozycja"
+
+### architektura / API
+- `ui-funkcja` `handleExportBudgetExcel` (tabela „Porównanie per pozycja") — kolumna „Pozycja (ścieżka)" (jeden sklejony string) zastąpiona kolumnami „Gałąź 1"…„Gałąź N" (od najwyższej gałęzi WBS) + „Pozycja" (sama nazwa liścia), tylko do wglądu/filtrowania
+- **fix:** `computeLeafByPath` robił `chain.slice(1)` zakładając że trzeba obciąć „zbędny root projektu" z listy przodków — ale taki węzeł NIGDY nie jest częścią `items` (projekt to `ProcessNode`, osobna tabela; `WbsNode.parentId=null` oznacza tu NAJWYŻSZĄ GAŁĄŹ, np. „Instalacje elektryczne" — `wbs-nodes.service.ts getUnifiedTree` pyta po `WbsNode.nodeId`, nie po `ProcessNode.id`). Efekt: kolumna „Gałąź 1" wychodziła pusta / cała ścieżka przesunięta o jeden poziom w dół, najwyższa gałąź znikała z eksportu. `slice(1)` usunięty — `parts` to teraz pełny `chain` bez obcinania
+- dopasowanie pozycji między snapszotami domyślnie po **Gałąź 1 (główna gałąź) + Pozycja** (`shortKey`), nie po pełnej ścieżce — odporne na zmianę nazw/przenoszenie w poziomach POŚREDNICH (Gałąź 2..N) między snapszotami. Wykrywanie kolizji: jeśli w OBRĘBIE JEDNEGO snapszotu ta sama para Gałąź1+Pozycja odpowiada dwóm różnym pełnym ścieżkom (naprawdę różne, jednocześnie istniejące pozycje w różnych podgrupach) — dla TYCH pozycji fallback do dopasowania po pełnej ścieżce + nowa widoczna kolumna „Uwaga" z ostrzeżeniem i żółte podświetlenie wiersza, żeby użytkownik zweryfikował ręcznie. Rename między snapszotami (różne pełne ścieżki w RÓŻNYCH snapszotach) nie liczy się jako kolizja i merguje się bezpiecznie
+- dopasowanie (short key lub pełna ścieżka przy kolizji) idzie przez UKRYTĄ kolumnę hash (prosty 32-bit hash, zawsze krótki), nie przez tekst — nawet pojedynczy poziom hierarchii bywa opisową nazwą > 255 znaków (limit kryterium `SUMIFS`/`COUNTIFS`)
+- `computeLeafByPath` — zwraca teraz `{ cost, revenue, parts }` (tablica nazw poziomów bez roota); `parts` używane do budowy czytelnych kolumn Gałąź/Pozycja i do wyliczenia short/full key, nie bezpośrednio do dopasowania w Excelu
+- tabele „Porównanie per typ" i „Porównanie per pozycja" mają teraz WSPÓLNY układ kolumn: `nBranchCols` (puste dla „per typ") → Typ/Pozycja → 12 kolumn metryk (Koszt/Przychód/Zysk/Marża% A/B/Δ) — ten sam snapszot (np. Koszt A) jest w tej samej kolumnie w obu tabelach, `nBranchCols` liczone raz przed budową obu tabel
+
+### wytyczne
+- Excel `SUMIFS`/`COUNTIFS` ucina/nie dopasowuje kryterium tekstowego dłuższego niż ~255 znaków — dotyczy to KAŻDEGO pojedynczego kryterium, nie tylko sklejonej wieloznakowej ścieżki; pojedynczy poziom hierarchii z opisową nazwą węzła (typowe w realnych projektach WBS) też może przekroczyć limit. Do dopasowania obiektów po zmiennej, potencjalnie długiej nazwie używaj krótkiego hasha (np. prosty 32-bit hash → base36) jako kryterium `SUMIFS`, nigdy surowego tekstu — czytelny tekst zostaw wyłącznie w kolumnach do wglądu/filtrowania
+- gdy dwie tabele w tym samym arkuszu porównują te same snapszoty kolumnowo, licz wspólny offset kolumn (np. `nBranchCols`) RAZ, przed budową którejkolwiek z tabel, i użyj go w obu — inaczej metryki tego samego snapszotu wylądują w różnych kolumnach między tabelami
+- dopasowywanie obiektów między wersjami po „luźnym" kluczu (np. główna gałąź + nazwa, żeby przetrwać rename poziomów pośrednich) wymaga wykrywania kolizji: sprawdzaj czy klucz jest jednoznaczny W OBRĘBIE JEDNEGO zbioru danych (jednego snapszotu), nie globalnie — globalna kontrola myli rename (bezpieczny) z prawdziwą kolizją (różne obiekty o tej samej nazwie); przy kolizji nie sumuj po cichu, oznacz widocznym ostrzeżeniem i cofnij się do precyzyjnego klucza
+- `WbsNode.parentId=null` ≠ „to jest root projektu, obetnij go" — `WbsNode` i `ProcessNode` to osobne tabele, projekt (`ProcessNode`) nigdy nie pojawia się jako wiersz w zapytaniach po `WbsNode.nodeId`; `parentId=null` na `WbsNode` to zwykły najwyższy poziom drzewa WBS, nie sentinel do odfiltrowania
+- test budowany na RĘCZNIE podanych fixture'ach (np. gotowe `parts: [...]`) nie wykrywa bugów w funkcji, która te dane WYLICZA (tu: `partsOf`/`chain.slice`) — jeśli logika ma krok transformacji danych wejściowych, dodaj osobny test na SYNTETYCZNYM wejściu w kształcie realnych danych (surowe `items` z `parentId`), nie tylko na już-przetworzonym wyniku
+
+---
+
 ## 2026-07-05 — feat(export-excel): tabele „Porównanie per typ" i „Porównanie per pozycja" z wyborem snapszotów w Excelu
 
 ### architektura / API
