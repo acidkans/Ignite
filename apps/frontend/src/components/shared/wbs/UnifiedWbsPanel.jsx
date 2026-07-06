@@ -3461,16 +3461,16 @@ ${ganttSectionHtml}
             }
         };
 
-        // ── Sheet "Założenia": tekst z zakładki Oferta ──
-        buildMarkdownSheet('Założenia', getOfferText(), 'Brak treści oferty.');
+        // ── Sheet "Oferta": tekst wpisany w zakładce Oferta (WBS panel) ──
+        buildMarkdownSheet('Oferta', getOfferText(), 'Brak treści oferty.');
         // ── Sheet "Strategia": tekst z sekcji „Jak to chcemy zrobić" (drugi arkusz) ──
         buildMarkdownSheet('Strategia', getStrategyText(), 'Brak treści strategii.');
 
-        // ── Sheet Podsumowanie: ceny ofertowe agregowane wg typu gałęzi ──
+        // ── Sheet Oferta-podział na Typy: ceny ofertowe agregowane wg typu zakresu ──
         {
-            const sheet = workbook.addWorksheet('Podsumowanie');
+            const sheet = workbook.addWorksheet('Oferta-podział na Typy');
             sheet.columns = [{ width: 32 }, { width: 24 }];
-            const hdr = sheet.addRow(['Typ gałęzi', 'Cena ofertowa (PLN)']);
+            const hdr = sheet.addRow(['Typ zakresu', 'Cena ofertowa (PLN)']);
             hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
             hdr.fill = navyFill;
             hdr.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -3668,11 +3668,11 @@ ${ganttSectionHtml}
             if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 8 } };
         }
 
-        // ── Sheet Gałęzie grupujące: suma cen ofertowych poddrzewa każdej gałęzi type='group' ──
+        // ── Sheet Zakresy grupujące: suma cen ofertowych poddrzewa każdego zakresu type='group' ──
         {
-            const sheet = workbook.addWorksheet('Gałęzie grupujące');
+            const sheet = workbook.addWorksheet('Zakresy grupujące');
             sheet.columns = [{ width: 40 }, { width: 50 }, { width: 24 }];
-            const hdr = sheet.addRow(['Gałąź grupująca', 'Ścieżka', 'Cena ofertowa (PLN)']);
+            const hdr = sheet.addRow(['Zakres grupujący', 'Ścieżka', 'Cena ofertowa (PLN)']);
             hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
             hdr.fill = navyFill;
             hdr.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -3705,7 +3705,7 @@ ${ganttSectionHtml}
                 applyBorder(r, 3, cellBorder);
             }
             const lastDataRow = sheet.rowCount;
-            // Razem: identyczny flat-sum co w zakładce Podsumowanie —
+            // Razem: identyczny flat-sum co w zakładce Oferta-podział na Typy —
             // iteruje wbsData wprost, bez traversalu drzewa, żeby węzły-sieroty
             // i węzły poza gałęziami grupującymi były liczone tak samo w obu miejscach.
             const total = wbsData.reduce((s, item) => (!item.parentId ? s : s + localPriceOf(item)), 0);
@@ -3772,7 +3772,7 @@ ${ganttSectionHtml}
             materialsSheet.columns = [
                 { header: 'Typ', key: 'type', width: 12 },
                 { header: 'Zakres', key: 'parent', width: 24 },
-                { header: 'Podgałąź', key: 'path', width: 40 },
+                { header: 'Podzakres', key: 'path', width: 40 },
                 { header: 'Sprzęt/Materiał', key: 'name', width: 28 },
                 { header: 'Ilość', key: 'qty', width: 8 },
                 { header: 'Jednostka', key: 'unit', width: 10 },
