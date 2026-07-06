@@ -9,14 +9,15 @@ Używaj nazwy z kolumny **Skrót** — Claude będzie wiedział dokładnie co zm
 
 | Skrót | Co robi (potocznie) | Funkcja | Plik | Wiersz |
 |---|---|---|---|---|
-| EKSPORT_OFERTA_PDF | Drukuje ofertę z tabelami WBS 1/2/3 | `handleExportPDF('oferta')` | `components/shared/wbs/UnifiedWbsPanel.jsx` | 1032 |
-| EKSPORT_STRATEGIA_PDF | Drukuje tekst strategii projektu | `handleExportPDF('strategy')` | `components/shared/wbs/UnifiedWbsPanel.jsx` | 1032 |
+| EKSPORT_OFERTA_PDF | Drukuje ofertę: tabele WBS 1/2/3 + „Jak to chcemy zrobić" (własna strona) + materiały (własna strona) | `handleExportPDF('oferta')` | `components/shared/wbs/UnifiedWbsPanel.jsx` | 1032 |
 | EKSPORT_PROJEKT | Drukuje cały projekt: wymagania + WBS + materiały + Gantt (bez cen/budżetu — bezpieczny dla klienta) | `exportProjectPdf` | `utils/projectPdfExport.js` | 121 |
 | EKSPORT_WYMAGANIA | Drukuje zakładkę "Informacje o zamówieniu" | `exportRequirementsPdf` | `utils/requirementsPdfExport.js` | 21 |
 | EKSPORT_QA | Generuje PDF z polami do ręcznego wpisania odpowiedzi | `exportQaFormPdf` | `components/shared/wbs/exportQaFormPdf.js` | 68 |
 | IMPORT_QA | Wczytuje odpowiedzi z wypełnionego PDF z powrotem do systemu | `importQaFormPdf` | `components/shared/wbs/importQaFormPdf.js` | 3 |
 
 > Usunięto 2026-07-06: `EKSPORT_WBS_PDF` (`handleExportPDF('wbs')`) i `EKSPORT_BUDZET_PDF` (`handleExportPDF('budget')`) — przyciski PDF sekcji Budżet i WBS Tree usunięte (dane poufne: koszty/marże nie mają trafiać poza firmę), oraz `EKSPORT_MATERIALY_PDF` (`exportToPdf` w `WbsMaterialsPanel.jsx`) — funkcja usunięta jako martwy kod po usunięciu przycisku. Zob. CHANGELOG.md 2026-07-06.
+>
+> Usunięto 2026-07-06: `EKSPORT_STRATEGIA_PDF` (`handleExportPDF('strategy')`) jako osobny przycisk — treść „Jak to chcemy zrobić" dołączona do `EKSPORT_OFERTA_PDF` (za ofertą, przed materiałami, własna strona). Zob. CHANGELOG.md 2026-07-06.
 
 ---
 

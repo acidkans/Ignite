@@ -1228,8 +1228,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             return `<div><div style="font-size:10px;color:#111827;font-weight:bold;margin-bottom:4px;">📎 ${allAtts.length}</div>${itemsHtml}</div>`;
         };
 
-        const strategyHtml = show('strategy') ? `
-            <div class="section">
+        const strategyHtml = (show('strategy') || show('oferta')) ? `
+            <div class="section" style="${show('oferta') ? 'page-break-before: always;' : ''}">
                 <div class="section-header">Jak to chcemy zrobić</div>
                 <div class="strategy-text">${renderStrategyHtml(getStrategyText() || 'Brak treści strategii')}</div>
             </div>` : '';
@@ -5466,14 +5466,13 @@ ${ganttSectionHtml}
                                 onChange={(v) => { setWbsDescription(v); setIsDirty(true); }}
                                 onSave={(v) => saveStrategy(v)}
                                 previewTitle="Jak to chcemy zrobić"
-                                onExportPDF={() => handleExportPDF('strategy')}
                                 placeholder="Zdefiniuj plan i strategię realizacji projektu..."
                                 containerClassName="flex-1 min-h-0"
                                 className="flex-1 min-h-0 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed resize-none"
                                 saveIndicator={true}
                             />
                         </div>
-                    ), () => handleExportPDF('strategy'));
+                    ), null);
                 }
                 if (key === 'tasks') {
                     return renderSection('tasks', 'Zadania', CalendarDays, 'blue', (

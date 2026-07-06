@@ -4,6 +4,16 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-06 — sekcja „Jak to chcemy zrobić" dołączona do eksportu PDF Oferty (własna strona), zamiast osobnego eksportu
+
+### architektura / API
+- `back-funkcja` `handleExportPDF` (`UnifiedWbsPanel.jsx`) — `strategyHtml` renderuje się teraz gdy `show('strategy') || show('oferta')` (wcześniej tylko `show('strategy')`), więc treść „Jak to chcemy zrobić" jest automatycznie dołączana do eksportu PDF Oferty — pozycja w dokumencie: za ofertą, przed materiałami (kolejność już istniała w szablonie HTML)
+- `ui-przycisk` — dodano `page-break-before: always` do sekcji strategii gdy renderowana w ramach Oferty (`show('oferta')`), tak żeby zaczynała się od nowej strony — analogicznie do już istniejącego łamania strony przed sekcją Materiały
+- `ui-przycisk` — usunięty osobny przycisk „PDF" z nagłówka sekcji „Jak to chcemy zrobić" oraz przycisk PDF w jej wewnętrznym edytorze markdown (`onExportPDF`) — eksport treści strategii dostępny jest teraz wyłącznie przez eksport Oferty
+
+### wytyczne
+- `back-funkcja` `handleExportPDF('strategy')` nie ma już wywołań w kodzie — jeśli w przyszłości trzeba przywrócić samodzielny eksport strategii, wystarczy dodać z powrotem przycisk wywołujący `handleExportPDF('strategy')`, logika `show()` już to obsłuży
+
 ## 2026-07-06 — usunięcie przycisków eksportu PDF sekcji Budżet/Materiały/WBS Tree (dane poufne)
 
 ### architektura / API
