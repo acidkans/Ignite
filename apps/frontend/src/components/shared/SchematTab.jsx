@@ -1685,8 +1685,8 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
             const treeRes = await fetch(`${API_URL}/order-requirements/${nodeId}`, { headers: { 'Authorization': `Bearer ${token}` } });
             if (treeRes.ok) {
                 const data = await treeRes.json();
-                const tree = typeof data.wbsTree === 'string' ? JSON.parse(data.wbsTree) : (data.wbsTree || []);
-                setWbsNodes(flattenWbsNodes(tree));
+                const tree = typeof data.wbsTree === 'string' ? JSON.parse(data.wbsTree) : (data.wbsTree || {});
+                setWbsNodes(flattenWbsNodes(tree.items || []));
             }
             // Auto-linkuj nowy węzeł do znacznika
             const linkRes = await fetch(`${API_URL}/schematics/wbs-node-markers`, {
