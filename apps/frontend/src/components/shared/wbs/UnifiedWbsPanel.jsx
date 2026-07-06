@@ -3265,16 +3265,20 @@ ${ganttSectionHtml}
         };
         const numFmt = '#,##0.00';
 
-        // ── Sheet "Założenia": tekst z zakładki Oferta, sformatowany Markdown → Excel ──
-        {
-            const sheet = workbook.addWorksheet('Założenia');
+        // @anchor build-markdown-sheet
+        // Buduje arkusz z tekstem Markdown (Oferta/Strategia) → sformatowane wiersze Excela.
+        // Wspólna dla obu arkuszy tekstowych, żeby nie duplikować parsera Markdown.
+        const buildMarkdownSheet = (sheetName, text, emptyMessage) => {
+            const sheet = workbook.addWorksheet(sheetName);
             sheet.getColumn(1).width = 100;
 
             const assNavyFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
-            const assH2Fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2D4A6E' } };
-            const assH3Fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF2F7' } };
             const assAltFill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
             const assThFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B5A8A' } };
+            // Wysokość wiersza dopasowana do długości zawijanego tekstu (kolumna szer. 100
+            // znaków) — stała wysokość powodowała, że długi wiersz (np. tytuł + zdanie w tej
+            // samej linii Markdown) nachodził wizualnie na kolejne, puste wiersze poniżej.
+            const wrapHeight = (t, base, perLine) => Math.max(base, Math.ceil(String(t || '').length / 90) * perLine);
 
             // **tekst** → ExcelJS richText
             const parseRt = (text) => {
@@ -3294,7 +3298,7 @@ ${ganttSectionHtml}
                 cell.value = rt ? { richText: rt } : plain(text);
             };
 
-            const offerLines = (getOfferText() || '').split('\n');
+            const offerLines = (text || '').split('\n');
             let li = 0;
             while (li < offerLines.length) {
                 const raw = offerLines[li];
@@ -3346,6 +3350,14 @@ ${ganttSectionHtml}
                                     cell.numFmt = '#,##0.00" zł"';
                                     cell.alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
                                     if (currency.isBold) cell.font = { bold: true };
+                                } else if (isHeader) {
+                                    // Nagłówek zawsze wymuszony bold+biały (niżej) — jeśli tekst
+                                    // nagłówka zawiera **markdown**, setVal() zwróciłby richText
+                                    // z runem bez koloru, przez co Excel ignorowałby cell.font
+                                    // (biały) i renderował domyślny czarny tekst na granatowym tle
+                                    // (niewidoczny nagłówek). Nagłówek zawsze jako zwykły string.
+                                    cell.value = plain(col);
+                                    cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
                                 } else {
                                     setVal(cell, col);
                                     cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
@@ -3369,35 +3381,37 @@ ${ganttSectionHtml}
                 if (trimmed.startsWith('# ') && !trimmed.startsWith('## ')) {
                     const row = sheet.addRow([]);
                     const cell = row.getCell(1);
-                    cell.value = plain(trimmed.slice(2));
+                    const headingText = plain(trimmed.slice(2));
+                    cell.value = headingText;
                     cell.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
                     cell.fill = assNavyFill;
                     cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
-                    row.height = 26;
+                    row.height = wrapHeight(headingText, 26, 20);
                     li++; continue;
                 }
 
-                // H2
+                // H2/H3 — zwykła komórka (bez wypełnienia), tylko tytuł (H1) ma
+                // być sformatowany kolorowym banerem. Zostaje pogrubienie jako
+                // jedyny sygnał hierarchii, żeby nagłówek nie zlewał się z akapitem.
                 if (trimmed.startsWith('## ') && !trimmed.startsWith('### ')) {
                     const row = sheet.addRow([]);
                     const cell = row.getCell(1);
-                    cell.value = plain(trimmed.slice(3));
-                    cell.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
-                    cell.fill = assH2Fill;
+                    const headingText = plain(trimmed.slice(3));
+                    cell.value = headingText;
+                    cell.font = { bold: true, size: 12 };
                     cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
-                    row.height = 22;
+                    row.height = wrapHeight(headingText, 20, 17);
                     li++; continue;
                 }
 
-                // H3
                 if (trimmed.startsWith('### ')) {
                     const row = sheet.addRow([]);
                     const cell = row.getCell(1);
-                    cell.value = plain(trimmed.slice(4));
-                    cell.font = { bold: true, size: 11, color: { argb: 'FF1E3A5F' } };
-                    cell.fill = assH3Fill;
+                    const headingText = plain(trimmed.slice(4));
+                    cell.value = headingText;
+                    cell.font = { bold: true, size: 11 };
                     cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
-                    row.height = 20;
+                    row.height = wrapHeight(headingText, 18, 15);
                     li++; continue;
                 }
 
@@ -3440,12 +3454,17 @@ ${ganttSectionHtml}
                 }
             }
 
-            if (!getOfferText()?.trim()) {
+            if (!text?.trim()) {
                 const row = sheet.addRow([]);
-                row.getCell(1).value = 'Brak treści oferty.';
+                row.getCell(1).value = emptyMessage;
                 row.getCell(1).font = { italic: true, color: { argb: 'FF888888' } };
             }
-        }
+        };
+
+        // ── Sheet "Założenia": tekst z zakładki Oferta ──
+        buildMarkdownSheet('Założenia', getOfferText(), 'Brak treści oferty.');
+        // ── Sheet "Strategia": tekst z sekcji „Jak to chcemy zrobić" (drugi arkusz) ──
+        buildMarkdownSheet('Strategia', getStrategyText(), 'Brak treści strategii.');
 
         // ── Sheet Podsumowanie: ceny ofertowe agregowane wg typu gałęzi ──
         {

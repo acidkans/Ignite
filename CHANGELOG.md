@@ -4,6 +4,15 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-06 — dodanie arkusza „Strategia" do eksportu Excel „Eksport tabel oferty"
+
+### architektura / API
+- `ui-funkcja` `handleExportOfertaWbsExcel` (`UnifiedWbsPanel.jsx`) — wydzielono `buildMarkdownSheet(sheetName, text, emptyMessage)`, wspólny parser Markdown→Excel używany teraz przez dwa arkusze tekstowe zamiast jednego
+- `ui-funkcja` `buildMarkdownSheet` — nowy drugi arkusz „Strategia" (po „Założenia") z treścią sekcji „Jak to chcemy zrobić" (`getStrategyText()`), analogicznie do arkusza „Założenia” (tekst Oferty)
+
+### wytyczne
+- `ui-funkcja` `buildMarkdownSheet` — wysokość wiersza nagłówków H1/H2/H3 liczona dynamicznie z długości tekstu (`wrapHeight`), nie stała — stała wysokość przy długiej linii Markdown (np. tytuł i zdanie w jednej linii, bez podziału Enterem) powodowała wizualne nachodzenie tekstu na kolejne, puste wiersze arkusza
+
 ## 2026-07-06 — sekcja „Jak to chcemy zrobić" dołączona do eksportu PDF Oferty (własna strona), zamiast osobnego eksportu
 
 ### architektura / API
