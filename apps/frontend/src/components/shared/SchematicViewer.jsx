@@ -162,6 +162,13 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
         return () => window.removeEventListener('schematic-synced', handler);
     }, [subtaskId, nodeId]);
 
+    // Otwarcie panelu znacznika — od razu pokazuje to co mamy, a w tle odświeża
+    // (inny user mógł usunąć załącznik/znacznik zanim otworzyliśmy panel).
+    const openMarker = (m) => {
+        setSelectedMarker(m);
+        fetchSchematics(true).catch(() => {});
+    };
+
     // Aktualizuj selectedMarker gdy schematics się zmienią (np. po dodaniu załącznika)
     const viewerSyncRef = useRef(null);
     useEffect(() => {
@@ -575,7 +582,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
 
                         <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
                             {selectedSchematic.markers.filter(m => m.pageNumber === pageNumber && m.type === 'LINE').map(line => (
-                                <g key={line.id} className="pointer-events-auto cursor-pointer group" onClick={(e) => { e.stopPropagation(); setSelectedMarker(line); }}>
+                                <g key={line.id} className="pointer-events-auto cursor-pointer group" onClick={(e) => { e.stopPropagation(); openMarker(line); }}>
                                     <line x1={`${line.x}%`} y1={`${line.y}%`} x2={`${line.x2}%`} y2={`${line.y2}%`} stroke="#3b82f6" strokeWidth="6" className="opacity-0 group-hover:opacity-20 transition-opacity" />
                                     <line x1={`${line.x}%`} y1={`${line.y}%`} x2={`${line.x2}%`} y2={`${line.y2}%`} stroke="#3b82f6" strokeWidth="2" strokeDasharray="6,4" />
                                 </g>
@@ -595,7 +602,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                                     // Na mobile kontener jest skalowany CSS-em — kontr-skala 1/scale utrzymuje stały rozmiar etykiety
                                     transform: isMobile ? `translate(-50%, -50%) scale(${1 / scale})` : 'translate(-50%, -50%)',
                                 }}
-                                onClick={(e) => { e.stopPropagation(); setSelectedMarker(m); }}
+                                onClick={(e) => { e.stopPropagation(); openMarker(m); }}
                             >
                                 <div className="bg-orange-500/90 text-white text-[11px] font-bold px-1.5 py-0.5 rounded shadow-sm border border-orange-400 whitespace-nowrap">
                                     {m.note}
@@ -616,7 +623,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                                         // Na mobile kontener jest skalowany CSS-em — kontr-skala 1/scale utrzymuje stały rozmiar pinezki
                                         transform: isMobile ? `translate(-50%, -50%) scale(${1 / scale})` : 'translate(-50%, -50%)',
                                     }}
-                                    onClick={(e) => { e.stopPropagation(); setSelectedMarker(m); }}
+                                    onClick={(e) => { e.stopPropagation(); openMarker(m); }}
                                     onMouseEnter={() => setHoveredMarkerId(m.id)}
                                     onMouseLeave={() => setHoveredMarkerId(null)}
                                 >
@@ -747,7 +754,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                             {selectedSchematic.markers.map((m, idx) => (
                                 <tr
                                     key={m.id}
-                                    onClick={() => { setSelectedMarker(m); setPageNumber(m.pageNumber); setShowTable(false); }}
+                                    onClick={() => { openMarker(m); setPageNumber(m.pageNumber); setShowTable(false); }}
                                     className={`cursor-pointer border-t border-white/5 transition-colors ${selectedMarker?.id === m.id ? 'bg-blue-500/10 text-white' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`}
                                 >
                                     <td className="px-3 py-1.5 text-gray-600">{idx + 1}</td>

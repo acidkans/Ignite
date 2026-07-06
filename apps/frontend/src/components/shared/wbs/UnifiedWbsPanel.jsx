@@ -196,7 +196,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const [allRequirements, setAllRequirements] = useState([]);
     const [reqRefreshKey, setReqRefreshKey] = useState(0);
     const materialsExportFn = useRef(null);
-    const materialsPdfExportFn = useRef(null);
     // @anchor pending-export
     // Wspólny modal wyboru „Pobierz / Wyślij mailem" dla wszystkich eksportów panelu.
     const [pendingExport, setPendingExport] = useState(null);
@@ -1199,10 +1198,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         const show = (key) => sectionKey === key || sectionKey === 'all';
         const ganttData = sectionKey === 'gantt' ? (ganttGetHtmlRef.current?.() || null) : null;
 
-        // Zawsze czytaj Q&A z live ref, żeby nie eksportować przestarzałego stanu przed debounced save.
-        const buildLiveQaMap = (nodes, acc = {}) => { for (const n of nodes) { acc[n.id] = n.qa; if (n.children?.length) buildLiveQaMap(n.children, acc); } return acc; };
-        const liveQaMap = buildLiveQaMap(wbsTreeRef.current?.items || []);
-
         let logoDataUrl = '';
         try {
             const logoRes = await fetch(`${window.location.origin}/airtel-logo-services.png`);
@@ -1233,47 +1228,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             return `<div><div style="font-size:10px;color:#111827;font-weight:bold;margin-bottom:4px;">📎 ${allAtts.length}</div>${itemsHtml}</div>`;
         };
 
-        const renderQaCell = (qa) => {
-            const list = Array.isArray(qa) ? qa.filter(p => (p?.question || '').trim() || (p?.answer || '').trim()) : [];
-            if (list.length === 0) return '';
-            const rows = list.map(p => `
-                <tr>
-                    <td style="padding:2px 4px;border:1px solid #e5e7eb;font-size:9px;text-align:left;vertical-align:top;color:#1f2937;background:#fff;word-wrap:break-word;white-space:normal;max-width:0">${esc(p.question || '')}</td>
-                    <td style="padding:2px 4px;border:1px solid #e5e7eb;font-size:9px;text-align:left;vertical-align:top;color:#374151;background:#fff;word-wrap:break-word;white-space:normal;max-width:0">${esc(p.answer || '')}</td>
-                </tr>`).join('');
-            return `<table style="width:100%;border-collapse:collapse;margin:0">
-                <thead><tr>
-                    <th style="padding:2px 4px;border:1px solid #d1d5db;font-size:8px;text-transform:uppercase;letter-spacing:0.05em;background:#f3f4f6;color:#4b5563;text-align:left;width:50%">Pytanie</th>
-                    <th style="padding:2px 4px;border:1px solid #d1d5db;font-size:8px;text-transform:uppercase;letter-spacing:0.05em;background:#f3f4f6;color:#4b5563;text-align:left;width:50%">Odpowiedź</th>
-                </tr></thead>
-                <tbody>${rows}</tbody>
-            </table>`;
-        };
-
-        const buildTreeRows = (parentId, depth, includeBudget) => {
-            const children = wbsData
-                .filter(n => (n.parentId || null) === (parentId || null))
-                .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-            return children.map(n => {
-                const indent = depth * 18;
-                const nameStyle = depth === 0 ? 'font-weight:bold' : 'color:#374151';
-                const budgetCols = includeBudget ? `
-                    <td class="num">${fmtPLN(n.unitCost)}</td>
-                    <td class="num">${fmtQty(n.quantity)}</td>
-                    <td>${esc(n.unit || defaultUnitForType(n.type))}</td>
-                    <td class="num">${fmtPct(n.margin)}</td>
-                    <td class="num">${fmtPLN(n.totalCost)}</td>
-                    <td class="num">${fmtPLN(n.totalPrice)}</td>
-                    <td style="text-align:left;word-wrap:break-word;white-space:normal;max-width:120px">${esc(n.comment || '')}</td>` : `
-                    <td>${esc(n.status || '')}</td>
-                    <td style="text-align:left;padding:4px">${renderQaCell(liveQaMap[n.id] ?? n.qa)}</td>`;
-                return `<tr>
-                    <td style="padding-left:${8 + indent}px;${nameStyle};text-align:left">${depth > 0 ? '└ ' : ''}${(n.name || '').replace(/</g, '&lt;')}</td>
-                    ${budgetCols}
-                </tr>${buildTreeRows(n.id, depth + 1, includeBudget)}`;
-            }).join('');
-        };
-
         const strategyHtml = show('strategy') ? `
             <div class="section">
                 <div class="section-header">Jak to chcemy zrobić</div>
@@ -1292,112 +1246,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         const offerHtml = show('oferta') ? `
             <div class="section">
                 <div class="offer-text">${offerHtmlContent}</div>
-            </div>` : '';
-
-        const wbsHtml = show('wbs') ? `
-            <div class="section">
-                <div class="section-header">Struktura zadań projektu</div>
-                <table>
-                    <thead><tr><th style="width:30%">Nazwa</th><th style="width:14%">Status</th><th style="width:56%">Q&amp;A</th></tr></thead>
-                    <tbody>${wbsData.length ? buildTreeRows(null, 0, false) : '<tr><td colspan="3">Brak danych WBS</td></tr>'}</tbody>
-                </table>
-            </div>` : '';
-
-        const _bItems = wbsData.filter(n => n.parentId != null);
-        const _bTotalCost = _bItems.reduce((s, n) => s + (parseFloat(n.totalCost) || 0), 0);
-        const _bTotalPrice = _bItems.reduce((s, n) => s + (parseFloat(n.totalPrice) || 0), 0);
-
-        // Per-subject (top-level branch) breakdown
-        const _idToParent = Object.fromEntries(wbsData.map(n => [n.id, n.parentId]));
-        const _getRootId = (id) => { let c = id, s = 20; while (_idToParent[c] && s-- > 0) c = _idToParent[c]; return c; };
-        const _rootNames = Object.fromEntries(wbsData.filter(n => !n.parentId).map(n => [n.id, n.name]));
-        const _subjectMap = {};
-        const _typeMap = {};
-        for (const item of _bItems) {
-            const rid = _getRootId(item.id);
-            const rn = _rootNames[rid] || '(inne)';
-            if (!_subjectMap[rid]) _subjectMap[rid] = { name: rn, cost: 0, price: 0 };
-            _subjectMap[rid].cost += parseFloat(item.totalCost) || 0;
-            _subjectMap[rid].price += parseFloat(item.totalPrice) || 0;
-            const t = item.type || '—';
-            if (!_typeMap[t]) _typeMap[t] = { label: TYPE_LABELS[t] || t, cost: 0, price: 0 };
-            _typeMap[t].cost += parseFloat(item.totalCost) || 0;
-            _typeMap[t].price += parseFloat(item.totalPrice) || 0;
-        }
-        const _parsedPct = parseFloat(String(budgetDiscountPercent || '').replace(',', '.')) || 0;
-        const _parsedAmt = parseFloat(String(budgetDiscountAmount || '').replace(',', '.')) || 0;
-        const _discFromPct = _parsedPct > 0 ? _bTotalPrice * _parsedPct / 100 : 0;
-        const _revAfterDisc = Math.max(0, _bTotalPrice - _discFromPct - (_parsedAmt > 0 ? _parsedAmt : 0));
-        const _profit = _revAfterDisc - _bTotalCost;
-        const _marginPct = _revAfterDisc > 0 ? (_profit / _revAfterDisc) * 100 : 0;
-
-        const _summaryRow = (label, cost, price, bold = false, dark = false) => {
-            const p = price - cost;
-            const m = price > 0 ? (p / price) * 100 : 0;
-            const style = dark ? 'background:#e5e7eb;font-size:15px;font-weight:bold;color:#111' : bold ? 'font-weight:bold' : '';
-            const nc = '';
-            const pc = dark ? (p >= 0 ? '#86efac' : '#fca5a5') : (p >= 0 ? '#16a34a' : '#dc2626');
-            return `<tr style="${style}">
-                <td style="text-align:left${dark ? ';color:#fff' : ''}">${esc(label)}</td>
-                <td class="num" ${nc}>${fmtPLN(cost)}</td>
-                <td class="num" ${nc}>${fmtPLN(price)}</td>
-                <td class="num" style="color:${pc}">${fmtPLN(p)}</td>
-                <td class="num" style="color:${pc}">${m.toLocaleString('pl-PL', { minimumFractionDigits: 1 })}%</td>
-            </tr>`;
-        };
-
-        const _budgetSummaryHtml = sectionKey === 'budget' && isManagerOrAdmin ? `
-            <div class="section summary-section">
-                <div class="section-header">Podsumowanie budżetu</div>
-                <div class="summary-block">
-                    <div class="table-title">Podział wg typu pozycji</div>
-                    <table>
-                        <thead><tr><th style="text-align:left">Typ</th><th>Koszt</th><th>Przychód</th><th>Zysk</th><th>Marża%</th></tr></thead>
-                        <tbody>
-                            ${Object.values(_typeMap).map(t => _summaryRow(t.label, t.cost, t.price)).join('')}
-                            ${_summaryRow('Razem', _bTotalCost, _bTotalPrice, true, true)}
-                        </tbody>
-                    </table>
-                </div>
-                <div class="summary-block">
-                    <div class="table-title">Podział wg przedmiotu projektu</div>
-                    <table>
-                        <thead><tr><th style="text-align:left">Przedmiot</th><th>Koszt</th><th>Przychód</th><th>Zysk</th><th>Marża%</th></tr></thead>
-                        <tbody>
-                            ${Object.values(_subjectMap).map(s => _summaryRow(s.name, s.cost, s.price)).join('')}
-                            ${_summaryRow('Razem', _bTotalCost, _bTotalPrice, true, true)}
-                        </tbody>
-                    </table>
-                </div>
-                <div class="summary-block">
-                    <div class="table-title">Wyniki finansowe</div>
-                    <table class="kv">
-                        <tbody>
-                            <tr><th>Koszt całkowity</th><td class="num">${fmtPLN(_bTotalCost)} PLN</td></tr>
-                            <tr><th>Przychód przed rabatami</th><td class="num">${fmtPLN(_bTotalPrice)} PLN</td></tr>
-                            ${_parsedPct > 0 ? `<tr><th>Rabat procentowy</th><td class="num">${_parsedPct.toLocaleString('pl-PL', { minimumFractionDigits: 2 })}%</td></tr>` : ''}
-                            ${_parsedAmt > 0 ? `<tr><th>Rabat kwotowy</th><td class="num">${fmtPLN(_parsedAmt)} PLN</td></tr>` : ''}
-                            <tr style="font-weight:bold"><th>Przychód po rabatach</th><td class="num">${fmtPLN(_revAfterDisc)} PLN</td></tr>
-                            <tr><th>Zysk</th><td class="num" style="color:${_profit >= 0 ? '#16a34a' : '#dc2626'}">${fmtPLN(_profit)} PLN</td></tr>
-                            <tr><th>Marża</th><td class="num" style="color:${_profit >= 0 ? '#16a34a' : '#dc2626'}">${_marginPct.toLocaleString('pl-PL', { minimumFractionDigits: 2 })}%</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>` : '';
-
-        const budgetHtml = show('budget') && isManagerOrAdmin ? `
-            <div class="section">
-                <div class="section-header">Budżet</div>
-                <table class="budget-table">
-                    <thead><tr><th style="width:26%;text-align:left">Pozycja</th><th>Koszt jednostkowy</th><th>Ilość</th><th>Jednostki</th><th>Marża%</th><th>Koszt całościowy</th><th>Suma netto</th><th style="width:18%;text-align:left">Komentarz</th></tr></thead>
-                    <tbody>${wbsData.length ? buildTreeRows(null, 0, true) : '<tr><td colspan="8">Brak danych budżetowych</td></tr>'}</tbody>
-                    <tfoot><tr style="background:#f3f4f6;font-weight:bold;font-size:15px;color:#111">
-                        <td colspan="5" style="text-align:right;text-transform:uppercase;letter-spacing:0.05em;padding:7px 8px">Razem:</td>
-                        <td class="num" style="color:#111">${fmtPLN(_bTotalCost)} PLN</td>
-                        <td class="num" style="color:#111">${fmtPLN(_bTotalPrice)} PLN</td>
-                        <td></td>
-                    </tr></tfoot>
-                </table>
             </div>` : '';
 
         const matStatusLabel = (code) => {
@@ -1630,9 +1478,6 @@ ${ganttData ? ganttData.styles : ''}
       <td class="doc-body-cell">
 ${offerHtml}
 ${strategyHtml}
-${wbsHtml}
-${budgetHtml}
-${_budgetSummaryHtml}
 ${materialsHtml}
 ${ganttSectionHtml}
       </td>
@@ -5500,29 +5345,29 @@ ${ganttSectionHtml}
                                 + Dodaj produkt projektu
                             </button>
                         )}
+                        {(key === 'wbs' || key === 'wbs-hybrid') && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); openExport({ title: 'Q&A PDF', defaultFilename: `Q&A_${safeFileBase()}.pdf`, makeArtifact: () => exportQaFormPdf(wbsData, orderName || projectName || 'Projekt') }); }}
+                                className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
+                            >
+                                <FileDown size={11} /> Q&A PDF
+                            </button>
+                        )}
+                        {(key === 'wbs' || key === 'wbs-hybrid' || onExport) && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); openExport({ title: 'PDF — wszystkie sekcje', defaultFilename: `${safeFileBase()}_projekt.pdf`, makeArtifact: () => buildProjectPdfArtifact({ nodeId, versionId, projectName, orderName, ganttHtml: ganttGetHtmlRef.current?.() || null }) }); }}
+                                className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
+                            >
+                                <FileDown size={11} /> PDF wszystkie sekcje
+                            </button>
+                        )}
                         {onExport && (
-                            <>
-                                {(key === 'wbs' || key === 'wbs-hybrid') && (
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); openExport({ title: 'Q&A PDF', defaultFilename: `Q&A_${safeFileBase()}.pdf`, makeArtifact: () => exportQaFormPdf(wbsData, orderName || projectName || 'Projekt') }); }}
-                                        className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
-                                    >
-                                        <FileDown size={11} /> Q&A PDF
-                                    </button>
-                                )}
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); openExport({ title: 'PDF — wszystkie sekcje', defaultFilename: `${safeFileBase()}_projekt.pdf`, makeArtifact: () => buildProjectPdfArtifact({ nodeId, versionId, projectName, orderName, ganttHtml: ganttGetHtmlRef.current?.() || null }) }); }}
-                                    className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
-                                >
-                                    <FileDown size={11} /> PDF wszystkie sekcje
-                                </button>
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); onExport(); }}
-                                    className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0"
-                                >
-                                    <FileDown size={11} /> PDF
-                                </button>
-                            </>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onExport(); }}
+                                className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0"
+                            >
+                                <FileDown size={11} /> PDF
+                            </button>
                         )}
                         <ChevronRight size={14} className={`text-gray-500 transition-transform flex-shrink-0 ${isActive ? 'rotate-90' : ''}`} />
                     </div>
@@ -5688,7 +5533,7 @@ ${ganttSectionHtml}
                                 onNodeExpand={handleNodeExpand}
                             />
                         </div>
-                    ), () => handleExportPDF('wbs'), isManagerOrAdmin ? (
+                    ), null, isManagerOrAdmin ? (
                         <button
                             onClick={(e) => { e.stopPropagation(); handleWbsExtract(); }}
                             disabled={extractingForWbs}
@@ -5711,7 +5556,7 @@ ${ganttSectionHtml}
                             onDiscountPercentChange={setBudgetDiscountPercent}
                             onDiscountAmountChange={setBudgetDiscountAmount}
                         />
-                    ), () => handleExportPDF('budget'), (
+                    ), null, (
                         <div className="flex items-center gap-2">
                             <button onClick={(e) => { e.stopPropagation(); const invalid = validateBudgetPricing(); if (invalid.length) { alert(`Eksport wstrzymany — ${invalid.length} pozycji wymaga uzupełnienia:\n\n${invalid.join('\n')}\n\nUzupełnij koszt jednostkowy i narzut tych pozycji, po czym ponów eksport.`); return; } openExport({ title: 'Analiza projektu (Excel)', defaultFilename: `${safeFileBase()}_budzet.xlsx`, makeArtifact: handleExportBudgetExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-lg text-green-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                                 <FileDown size={11} /> Analiza projektu do Excel
@@ -5749,17 +5594,11 @@ ${ganttSectionHtml}
                             projectName={projectName}
                             orderName={orderName}
                             onExportReady={fn => { materialsExportFn.current = fn; }}
-                            onExportPdfReady={fn => { materialsPdfExportFn.current = fn; }}
                         />
                     ), null, (
-                        <>
-                            <button onClick={e => { e.stopPropagation(); openExport({ title: 'Materiały PDF', defaultFilename: `${safeFileBase()}_materialy.pdf`, makeArtifact: () => materialsPdfExportFn.current?.() }); }} className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
-                                <FileDown size={11} /> PDF
-                            </button>
-                            <button onClick={e => { e.stopPropagation(); openExport({ title: 'Materiały (Excel)', defaultFilename: `${safeFileBase()}_materialy.xlsx`, makeArtifact: () => materialsExportFn.current?.() }); }} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
-                                <FileDown size={11} /> Excel
-                            </button>
-                        </>
+                        <button onClick={e => { e.stopPropagation(); openExport({ title: 'Materiały (Excel)', defaultFilename: `${safeFileBase()}_materialy.xlsx`, makeArtifact: () => materialsExportFn.current?.() }); }} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
+                            <FileDown size={11} /> Excel
+                        </button>
                     ));
                 }
                 return null;

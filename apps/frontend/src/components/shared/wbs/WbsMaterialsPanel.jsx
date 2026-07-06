@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula } from './wbsConstants';
-import { buildPdfDocument, openPdfBlob, fetchLogoDataUrl, esc as escPdf } from '../../../utils/wbsPdfExport';
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
 
@@ -1304,7 +1303,6 @@ export default function WbsMaterialsPanel({
     projectName = '',
     orderName = '',
     onExportReady,
-    onExportPdfReady,
 }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
 
@@ -1845,69 +1843,8 @@ export default function WbsMaterialsPanel({
         return { blob, filename: `${safeOrder}_materialy.xlsx` };
     }, [matNodes, cards, orderName, projectName]);
 
-    const exportToPdf = useCallback(async () => {
-        const cols = ['Przedmiot projektu', 'Nazwa', 'Wymagania techniczne', 'Ilość', 'Produkt', 'Zdjęcie'];
-
-        const [logoDataUrl] = await Promise.all([fetchLogoDataUrl()]);
-
-        // Pobierz obrazki z auth headerem i zakoduj do base64
-        const imageBase64 = {};
-        await Promise.all(sortedFilteredNodes.map(async node => {
-            const card = cards[node.id];
-            if (!card?.imageUrl || !card?.id) return;
-            try {
-                const res = await fetch(`${API_URL}/material-requirements/${card.id}/image`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (!res.ok) return;
-                const blob = await res.blob();
-                const b64 = await new Promise(resolve => {
-                    const reader = new FileReader();
-                    reader.onload = () => resolve(reader.result);
-                    reader.readAsDataURL(blob);
-                });
-                imageBase64[node.id] = b64;
-            } catch {}
-        }));
-
-        const bodyRows = sortedFilteredNodes.map(node => {
-            const card = cards[node.id] || null;
-            const parent = getParentPath(node.path);
-            const product = [card?.manufacturer, card?.model].filter(Boolean).join(' / ') || '—';
-            const techSpec = (card?.technicalSpec || '—').replace(/\n/g, '<br>');
-            const imgCell = imageBase64[node.id]
-                ? `<img src="${imageBase64[node.id]}" style="max-width:80px;max-height:80px;object-fit:contain;" />`
-                : '—';
-            return [parent, node.name || '—', techSpec, `${node.quantity ?? 1} ${node.unit || 'szt'}`, product, imgCell];
-        });
-
-        const safeOrderPdf = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'zamowienie';
-        const date = new Date().toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' });
-
-        const bodyHtml = `
-<table>
-  <thead><tr>${cols.map(c => `<th>${escPdf(c)}</th>`).join('')}</tr></thead>
-  <tbody>${bodyRows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
-</table>`;
-
-        const html = buildPdfDocument({
-            logoDataUrl,
-            title: orderName || projectName || 'Zamówienie',
-            subtitle: 'Pozycje materiałowe',
-            date,
-            bodyHtml,
-            extraCss: `@page { size: A4 landscape; margin: 20mm 14mm; }
-  th { background: #1a1a2e; color: #fff; text-align: left; }`,
-        });
-
-        const safeOrder = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'zamowienie';
-        // Zwraca HTML — render PDF i wybór pobierz/wyślij robi ExportChoiceModal (przez /pdf/render).
-        return { html, filename: `${safeOrder}_materialy.pdf` };
-    }, [sortedFilteredNodes, cards, token, orderName, projectName]);
-
-    // Notify parent when export functions update
+    // Notify parent when export function updates
     useEffect(() => { onExportReady?.(exportToExcel); }, [exportToExcel]);
-    useEffect(() => { onExportPdfReady?.(exportToPdf); }, [exportToPdf]);
 
     // ─ Render guards ─────────────────────────────────────────────────────────
 

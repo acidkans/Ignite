@@ -4,6 +4,18 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-06 — usunięcie przycisków eksportu PDF sekcji Budżet/Materiały/WBS Tree (dane poufne)
+
+### architektura / API
+- `ui-przycisk` — usunięty pojedynczy przycisk „PDF" z nagłówka sekcji Budżet (`renderSection('budget', ...)`, `UnifiedWbsPanel.jsx`) — eksport z cenami/marżami jest poufny, nie ma trafiać poza firmę. Zostaje eksport Excel + import Excel
+- `ui-przycisk` — usunięty pojedynczy przycisk „PDF" z nagłówka sekcji WBS Tree (`renderSection('wbs-hybrid', ...)`) — z tego samego powodu. „Q&A PDF" i „PDF wszystkie sekcje" (bez cen/marż — patrz `projectPdfExport.js`) zostają dostępne z tego nagłówka, warunek ich renderowania rozdzielony od `onExport` sekcji
+- `ui-przycisk` — usunięty przycisk „Materiały PDF" z nagłówka sekcji Materiały (`WbsMaterialsPanel.jsx`) wraz z całą funkcją `exportToPdf` i propem `onExportPdfReady` (martwy kod po usunięciu jedynego wywołania) — zostaje eksport Excel
+- `back-funkcja` `handleExportPDF('budget')` i `handleExportPDF('wbs')` nie są już wywoływane znikąd — usunięte powiązane gałęzie budowy HTML (`wbsHtml`, `budgetHtml`, `_budgetSummaryHtml`, `buildTreeRows`, `renderQaCell`) jako martwy kod; funkcja działa teraz tylko dla `oferta`/`strategy`/`gantt` (eksporty klienckie, bez cen)
+
+### wytyczne
+- `ui-przycisk` — eksport PDF z danymi poufnymi (koszt jednostkowy, marża, cena) ma przycisk WYŁĄCZNIE tam, gdzie dokument jest jawnie oznaczony jako wewnętrzny (np. dawny Budżet/PDF) — nigdy nie dodawaj generycznego przycisku „PDF" do sekcji przez wspólny `renderSection(..., onExport, ...)` bez sprawdzenia czy budowany HTML zawiera kolumny cenowe
+- `ui-przycisk` „PDF wszystkie sekcje" i „Q&A PDF" w `renderSection` są renderowane niezależnie od `onExport` (nie od sekcji z jedną, dedykowaną eksportu) — to globalne akcje niepowiązane z poufnością konkretnej sekcji, więc nie powinny znikać razem z usunięciem przycisku PDF danej sekcji
+
 ## 2026-07-05 — fix(export-excel): dopasowanie pozycji po Gałąź 1 + Pozycja (z wykrywaniem kolizji) + wspólny układ kolumn tabel „per typ"/„per pozycja"
 
 ### architektura / API
