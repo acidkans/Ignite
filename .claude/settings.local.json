@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash(git *)",
       "Bash(git init:*)",
       "Bash(find . -type f -name *.json -o -name *.sh -o -name *.md -o -name .env* -o -name docker-compose* -o -name Dockerfile)",
       "Bash(find /c/Users/Andrzej/.gemini/antigravity/scratch/Ignite -not -path */node_modules* -type d)",
@@ -475,7 +476,11 @@
       "Bash(git commit *)",
       "Bash(ls deploy*.sh apps/deploy*.sh)",
       "Bash(find . -maxdepth 2 -name \"deploy*\" -not -path \"*/node_modules/*\")",
-      "Bash(ssh -o ConnectTimeout=10 -o BatchMode=yes gigatel \"echo OK && cd /srv/apps/erp && git rev-parse --short HEAD\")"
+      "Bash(ssh -o ConnectTimeout=10 -o BatchMode=yes gigatel \"echo OK && cd /srv/apps/erp && git rev-parse --short HEAD\")",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(cat ~/.claude/settings.json 2>/dev/null | head -100)",
+      "Bash(python -c \"import json; json.load\\(open\\('.claude/settings.local.json', encoding='utf-8'\\)\\); print\\('OK'\\)\")"
     ]
   }
 }

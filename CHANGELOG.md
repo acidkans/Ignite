@@ -4,6 +4,16 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-07 — dodanie sekcji „Schemat" do eksportu PDF Oferty (przed sekcją Materiały)
+
+### architektura / API
+- `ui-funkcja` `buildSchematSectionHtml` (`utils/schematPdfExport.js`, nowy plik) — wydzielona z `SchematTab.jsx`/`exportMarkersToPdf` logika budowy sekcji Schemat (tabela znaczników, Q&A z WBS, strony schematów PDF/obrazów z naniesionymi markerami — render przez `pdfjs` na canvas), teraz reużywalna. `SchematTab.jsx` pozostaje bez zmian (własna kopia logiki, nienaruszona)
+- `back-funkcja` `handleExportPDF('oferta')` (`UnifiedWbsPanel.jsx`) — dodano `schematHtml` (renderowane gdy `show('oferta')`), wywołuje `buildSchematSectionHtml` z `pageBreakBefore: true` i `sectionTitle: 'Schemat'` — pozycja w dokumencie: za „Jak to chcemy zrobić", przed sekcją Materiały
+- `ui-stala` `SCHEMAT_SECTION_CSS` (`utils/schematPdfExport.js`) — style sekcji (`.sch-table`, `.qa-*`, `.sch-page`) dołączone do `<style>` bloku eksportu Oferty
+
+### wytyczne
+- `back-funkcja` `buildSchematSectionHtml` — jeśli w danym node'zie nie ma żadnych schematów/znaczników, zwraca `{ html: '', isEmpty: true }` — sekcja po prostu nie pojawia się w PDF, bez pustej strony
+
 ## 2026-07-06 — dodanie arkusza „Strategia" do eksportu Excel „Eksport tabel oferty"
 
 ### architektura / API
