@@ -252,7 +252,7 @@ function QaBranchModal({ node, onClose }) {
     );
 }
 
-import { UNIT_OPTIONS, sanitizeQtyInput, evalQtyFormula, suggestDefaultUnit } from './wbsConstants';
+import { UNIT_OPTIONS, sanitizeQtyInput, evalQtyFormula, suggestDefaultUnit, getLeafDefault } from './wbsConstants';
 import { ProductCard } from './WbsMaterialsPanel';
 
 const API_URL = '/api';
@@ -810,7 +810,7 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal }) 
 
 // ── Component ─────────────────────────────────────────────────────────────────
 // @anchor wbs-hybrid-table
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null, onApplyLeafDefaults = null }) {
     const [expanded, setExpanded] = useState(() => new Set());
     const initialExpandDoneRef = useRef(false);
     // Domyślnie rozwiń tylko do 2. poziomu (root + węzły top-level) przy pierwszym
@@ -1425,13 +1425,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             onChange={e => {
                                 const newType = e.target.value;
                                 const isMaterial = newType === 'equipment' || newType === 'material';
-                                const wasWork = node.type === 'work' || node.type === 'service';
                                 handleField(node.id, 'type', newType);
                                 onNodeFieldSave?.(node.id, 'type', newType);
-                                if (isMaterial && wasWork) {
-                                    handleField(node.id, 'unit', 'sztuki');
-                                    onNodeFieldSave?.(node.id, 'unit', 'sztuki');
-                                }
                                 if (newType === 'group') {
                                     handleField(node.id, 'unit', 'pakiet');
                                     onNodeFieldSave?.(node.id, 'unit', 'pakiet');
@@ -1440,22 +1435,27 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     // starej ceny do czasu refreshu. Backend (updateNode) utrwala zero
                                     // przy zapisie type='group', więc osobny PATCH kosztu jest zbędny.
                                     handleField(node.id, 'unitCost', 0);
-                                }
-                                if (newType === 'fuel') {
-                                    handleField(node.id, 'unit', 'kilometry');
-                                    onNodeFieldSave?.(node.id, 'unit', 'kilometry');
-                                    handleField(node.id, 'unitCost', 0.7);
-                                    onNodeFieldSave?.(node.id, 'unitCost', 0.7);
+                                } else if (isMaterial) {
+                                    // Materiał/sprzęt wyceniane indywidualnie (wymagania materiałowe) —
+                                    // przy zmianie typu ustaw tylko jednostkę, nie ruszaj ceny.
+                                    const suggestedUnit = suggestDefaultUnit(node.name, newType);
+                                    const unitToApply = suggestedUnit || (getLeafDefault(newType) || {}).unit;
+                                    if (unitToApply != null) { handleField(node.id, 'unit', unitToApply); onNodeFieldSave?.(node.id, 'unit', unitToApply); }
+                                } else if (newType) {
+                                    // Praca/usługa/nocleg/paliwo — wartości domyślne z modalu przy KAŻDEJ zmianie typu
+                                    // (nowe i istniejące pozycje), od razu w tabeli, edytowalne później.
+                                    // Jednostka: nazwa kablowa/światłowodowa ma priorytet nad domyślną z modalu.
+                                    // Ilość zachowana (nie przekazujemy jej do defaults) — patrz applyLeafDefaults.
+                                    const defs = getLeafDefault(newType) || {};
+                                    const suggestedUnit = suggestDefaultUnit(node.name, newType);
+                                    const unitToApply = suggestedUnit || defs.unit;
+                                    if (unitToApply != null) handleField(node.id, 'unit', unitToApply);
+                                    if (defs.unitCost != null) handleField(node.id, 'unitCost', defs.unitCost);
+                                    if (defs.margin != null) handleField(node.id, 'margin', defs.margin);
+                                    onApplyLeafDefaults?.(node.id, { unit: unitToApply, unitCost: defs.unitCost, margin: defs.margin });
                                 }
                                 if (newType === 'work') {
                                     ensureFuelLeaf(node.id);
-                                }
-                                if (isMaterial || newType === 'work' || newType === 'service') {
-                                    const suggested = suggestDefaultUnit(node.name, newType);
-                                    if (suggested) {
-                                        handleField(node.id, 'unit', suggested);
-                                        onNodeFieldSave?.(node.id, 'unit', suggested);
-                                    }
                                 }
                                 if (isMaterial && node.name) {
                                     onMaterialNodeCreated?.({ wbsNodeId: node.id, name: node.name, type: newType, parentId });

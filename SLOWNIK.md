@@ -320,6 +320,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | handleGanttDurationChange | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-gantt-duration-change |
 | ui-funkcja | handleHybridRequirementsQtyChange | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-hybrid-requirements-qty-change |
 | ui-funkcja | handleHybridNodeStatusChange | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-hybrid-node-status-change |
+| ui-funkcja | applyLeafDefaults | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor apply-leaf-defaults |
+| ui-stan | leafDefaultsOpen | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor leaf-defaults-modal-state |
 
 #### Frontend — stałe i utilsy (`wbsConstants.js`)
 
@@ -352,6 +354,12 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | isLeafNode | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor is-leaf-node |
 | ui-funkcja | buildHierarchy | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor build-hierarchy |
 | ui-funkcja | flattenHierarchy | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor flatten-hierarchy |
+| ui-stala | LEAF_TYPE_OPTIONS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor leaf-type-options |
+| ui-stala | WBS_DEFAULTS_STORAGE_KEY | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor wbs-defaults-storage-key |
+| ui-stala | SEED_LEAF_DEFAULTS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor seed-leaf-defaults |
+| ui-funkcja | loadLeafDefaults | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor load-leaf-defaults |
+| ui-funkcja | saveLeafDefaults | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor save-leaf-defaults |
+| ui-funkcja | getLeafDefault | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor get-leaf-default |
 
 ### Moduł Logistyka — Baza materiałów (`apps/frontend/src/components/shared/MaterialDatabaseTab.jsx`)
 

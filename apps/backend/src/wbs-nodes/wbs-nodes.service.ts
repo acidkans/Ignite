@@ -206,6 +206,11 @@ export class WbsNodesService {
             const ucRaw = (item as any).unitCost;
             const ucNum = (ucRaw === '' || ucRaw == null) ? undefined : Number(ucRaw);
             const unitCost = Number.isFinite(ucNum) ? ucNum : undefined;
+            // margin — jak unitCost — przenoszony z drzewa tylko dla NOWYCH węzłów (ścieżka create),
+            // żeby domyślna marża typu liścia (modal „Domyślne wartości") utrwaliła się od razu.
+            const mRaw = (item as any).margin;
+            const mNum = (mRaw === '' || mRaw == null) ? undefined : Number(mRaw);
+            const margin = Number.isFinite(mNum) ? mNum : undefined;
             rows.push({
                 id: item.id,
                 parentId,
@@ -222,6 +227,7 @@ export class WbsNodesService {
                 tags: Array.isArray(item.tags) && item.tags.length > 0 ? JSON.stringify(item.tags) : null,
                 qa: Array.isArray(item.qa) && item.qa.length > 0 ? JSON.stringify(item.qa) : null,
                 unitCost,
+                margin,
                 sortOrder: i,
             });
             if (item.children?.length) {

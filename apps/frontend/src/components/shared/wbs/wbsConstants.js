@@ -272,3 +272,48 @@ export const flattenHierarchy = (root, depth = 0) => {
   }
   return result;
 };
+
+// ── Domyślne wartości liści budżetowych ──────────────────────────────────────
+// @anchor leaf-type-options
+// Typy liści (bez grupującego i pustego) — kolejność = kolejność wierszy w modalu „Domyślne wartości".
+export const LEAF_TYPE_OPTIONS = TYPE_OPTIONS.filter(t => t !== '' && t !== 'group');
+
+// @anchor wbs-defaults-storage-key
+// Klucz localStorage z konfigurowalnymi wartościami domyślnymi liści (globalny per przeglądarka).
+export const WBS_DEFAULTS_STORAGE_KEY = 'ignite:wbsLeafDefaults:v1';
+
+// @anchor seed-leaf-defaults
+// Fabryczne wartości domyślne każdego typu liścia. Stosowane przy nadaniu typu nowemu węzłowi
+// i jako baza modalu (użytkownik nadpisuje je w localStorage). Pola: unit, unitCost (zł), margin (%), quantity.
+export const SEED_LEAF_DEFAULTS = {
+  work:      { unit: 'dni',       unitCost: 0,   margin: 0, quantity: 1 },
+  material:  { unit: 'sztuki',    unitCost: 0,   margin: 0, quantity: 1 },
+  equipment: { unit: 'sztuki',    unitCost: 0,   margin: 0, quantity: 1 },
+  service:   { unit: 'pakiet',    unitCost: 0,   margin: 0, quantity: 1 },
+  lodging:   { unit: 'sztuki',    unitCost: 0,   margin: 0, quantity: 1 },
+  fuel:      { unit: 'kilometry', unitCost: 0.7, margin: 0, quantity: 1 },
+};
+
+// @anchor load-leaf-defaults
+// Zwraca komplet wartości domyślnych (seed nadpisany tym co w localStorage). Brak/uszkodzony wpis → seed.
+export function loadLeafDefaults() {
+  let stored = {};
+  try { stored = JSON.parse(localStorage.getItem(WBS_DEFAULTS_STORAGE_KEY) || '{}') || {}; } catch { stored = {}; }
+  const merged = {};
+  for (const t of LEAF_TYPE_OPTIONS) {
+    merged[t] = { ...SEED_LEAF_DEFAULTS[t], ...(stored[t] || {}) };
+  }
+  return merged;
+}
+
+// @anchor save-leaf-defaults
+export function saveLeafDefaults(defaults) {
+  try { localStorage.setItem(WBS_DEFAULTS_STORAGE_KEY, JSON.stringify(defaults || {})); } catch { /* localStorage niedostępny */ }
+}
+
+// @anchor get-leaf-default
+// Wartości domyślne dla pojedynczego typu liścia (null gdy typ nie jest liściem).
+export function getLeafDefault(type) {
+  const t = String(type || '').toLowerCase();
+  return loadLeafDefaults()[t] || null;
+}

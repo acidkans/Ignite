@@ -4,6 +4,23 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-07 — WBS/Budżet: przycisk „Domyślne wartości" + auto-wartości nowych liści
+
+### architektura / API
+- `ui-stala` `SEED_LEAF_DEFAULTS` (`wbsConstants.js`) — fabryczne wartości domyślne każdego typu liścia (`unit`, `unitCost`, `margin`, `quantity`); baza modalu i nadpisań w localStorage
+- `ui-funkcja` `loadLeafDefaults` / `saveLeafDefaults` / `getLeafDefault` (`wbsConstants.js`) — odczyt/zapis konfigurowalnych domyślnych z localStorage (klucz `WBS_DEFAULTS_STORAGE_KEY`), z fallbackiem do seed
+- `ui-stala` `LEAF_TYPE_OPTIONS` (`wbsConstants.js`) — lista typów liści (TYPE_OPTIONS bez `group` i pustego), kolejność wierszy modalu
+- `ui-funkcja` `applyLeafDefaults` (`UnifiedWbsPanel.jsx`) — po otypowaniu liścia zapisuje `unit` (endpoint drzewa) oraz `unitCost/quantity/margin` jednym PATCH-em `/wbs-nodes/:id/budget`, z optymistyczną aktualizacją drzewa/budżetu
+- `ui-modal` `leafDefaultsOpen` (`UnifiedWbsPanel.jsx`) — modal edycji domyślnych wartości, przycisk „Domyślne wartości" obok „Import budżetu z Excel" w nagłówku sekcji Budżet
+- `WBSHybridTable.jsx` — nowy prop `onApplyLeafDefaults`; zmiana typu na liść czyta `getLeafDefault(type)` i stosuje wartości domyślne (jednostka kablowa/światłowodowa z `suggestDefaultUnit` ma priorytet). Defaulty tylko dla ŚWIEŻEGO liścia (poprzedni typ pusty) — retype istniejącego liścia nie kasuje cen, zmienia tylko jednostkę
+- `back-serwis` `WbsNodesService.flattenForInsert` — ścieżka create nowego węzła przenosi z drzewa również `margin` (jak `unitCost`), by domyślna marża świeżego liścia utrwaliła się od razu „w locie" (unified POST). `quantity` nadal celowo nieprzenoszona
+
+### wytyczne
+- `ui-funkcja` `applyLeafDefaults` — pola budżetowe (`unitCost`, `margin`, `quantity`) zapisywać ZAWSZE łącznie przez `/budget`, nie pojedynczo przez endpoint drzewa (drzewo nie przelicza `unitPrice`/`totalPrice`)
+- `back-serwis` `flattenForInsert` — nowe pole budżetowe przenoszone z drzewa dla nowych węzłów dodawaj tu ORAZ upewnij się, że ścieżka `update` (istniejące węzły) go NIE nadpisuje (zachowanie edycji)
+- domyślne wartości pozycji stosują się przy KAŻDEJ zmianie typu (nowe i istniejące) dla pozycji innych niż materiał/sprzęt (te wyceniane indywidualnie przez wymagania materiałowe); ilość jest zachowywana; edycja w tabeli po zmianie nadal możliwa. Uwaga: „tylko nowe" dotyczy WYŁĄCZNIE braku retroaktywnej propagacji zmiany domyślnej z modalu — nie zmiany typu pozycji
+- domyślne wartości liści są globalne per przeglądarka (localStorage), nie per-projekt — świadomy wybór, brak zmiany w schemacie
+
 ## 2026-07-07 — dodanie sekcji „Schemat" do eksportu PDF Oferty (przed sekcją Materiały)
 
 ### architektura / API

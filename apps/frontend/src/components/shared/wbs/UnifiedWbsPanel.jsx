@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useBeforeUnload } from '../../../hooks/useBeforeUnload';
 import ExcelJS from 'exceljs';
-import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays, BarChart3, ChevronUp, FileText } from 'lucide-react';
+import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays, BarChart3, ChevronUp, FileText, SlidersHorizontal, RotateCcw } from 'lucide-react';
 import MarkdownEditor from '../MarkdownEditor';
 import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import GanttSection from './GanttSection';
-import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny } from './wbsConstants';
+import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, SEED_LEAF_DEFAULTS, loadLeafDefaults, saveLeafDefaults, getLeafDefault } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
@@ -166,6 +166,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const [budgetImportHeaderRow, setBudgetImportHeaderRow] = useState(1);
     const [budgetImportLastRow, setBudgetImportLastRow] = useState(1);
     const [budgetImportMapping, setBudgetImportMapping] = useState({});
+    // @anchor leaf-defaults-modal-state
+    const [leafDefaultsOpen, setLeafDefaultsOpen] = useState(false);
+    const [leafDefaultsDraft, setLeafDefaultsDraft] = useState(() => loadLeafDefaults());
 
     // ── WBS Hybrid Tree state ──
     const [wbsTree, setWbsTree] = useState({ items: [] });
@@ -4391,6 +4394,43 @@ ${ganttSectionHtml}
         } catch (e) { console.error('Save budget field error:', e); }
     }, [authHeaders]);
 
+    // @anchor apply-leaf-defaults
+    // Stosuje wartości domyślne typu liścia do świeżo otypowanego węzła: unit przez endpoint drzewa,
+    // a unitCost/quantity/margin jednym PATCH-em /budget (z przeliczeniem unitPrice/totalPrice po stronie backendu).
+    const applyLeafDefaults = useCallback(async (id, defaults) => {
+        if (!id || !defaults) return;
+        const node = wbsData.find(n => n.id === id) || {};
+        const unit = defaults.unit ?? node.unit;
+        const unitCost = Number(defaults.unitCost) || 0;
+        // Ilość: zachowaj istniejącą dodatnią (retype istniejącej pozycji), w innym wypadku 1 (nowa pozycja).
+        const existingQty = parseFloat(node.quantity);
+        const quantity = Number.isFinite(existingQty) && existingQty > 0 ? existingQty : 1;
+        const margin = Number(defaults.margin) || 0;
+        const discount = parseFloat(node.discount) || 0;
+        const unitPrice = discount > 0
+            ? unitCost * (1 + margin / 100) * (1 - discount / 100)
+            : unitCost * (1 + margin / 100);
+        // Optymistyczna aktualizacja — budżet/drzewo pokazują wartości od razu
+        setWbsData(prev => prev.map(item => item.id === id
+            ? { ...item, unit, unitCost, quantity, margin, unitPrice, totalCost: unitCost * quantity, totalPrice: unitPrice * quantity }
+            : item));
+        setWbsTreeAndRef(prev => {
+            const upd = items => items.map(n => n.id === id ? { ...n, unit, unitCost, quantity, margin } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
+            return { ...prev, items: upd(prev.items || []) };
+        });
+        try {
+            if (unit != null) {
+                await fetch(`${API_URL}/wbs-nodes/${id}`, {
+                    method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ unit }),
+                });
+            }
+            await fetch(`${API_URL}/wbs-nodes/${id}/budget`, {
+                method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ unitCost, quantity, margin, discount }),
+            });
+            await refreshWbsNodes();
+        } catch (e) { console.error('Apply leaf defaults error:', e); }
+    }, [wbsData, authHeaders, refreshWbsNodes, setWbsTreeAndRef]);
+
     const updateMaterialRequirementField = useCallback(async (id, patch) => {
         if (!id || !patch || Object.keys(patch).length === 0) return;
         try {
@@ -4826,6 +4866,21 @@ ${ganttSectionHtml}
                 row.totalCost = totalCost;
                 row.offerPrice = margin !== 0 ? totalCost * (1 + margin / 100) : 0;
                 row.totalPrice = row.offerPrice;
+                // Każda zmiana typu na pozycję inną niż materiał/sprzęt (te wyceniane indywidualnie)
+                // zaciąga konfigurowalne wartości domyślne z modalu „Domyślne wartości" — dotyczy
+                // pozycji nowych ORAZ istniejących (edycja później w tabeli nadal możliwa).
+                if (!inheritedFromMaterials) {
+                    const defs = getLeafDefault(row.type);
+                    if (defs) {
+                        row.unit = defs.unit ?? row.unit;
+                        row.unitCost = Number(defs.unitCost) || 0;
+                        row.margin = Number(defs.margin) || 0;
+                        const q = parseFloat(row.quantity) || 0;
+                        row.cost = row.totalCost = row.unitCost * q;
+                        row.offerPrice = row.margin !== 0 ? row.totalCost * (1 + row.margin / 100) : 0;
+                        row.totalPrice = row.offerPrice;
+                    }
+                }
                 updateNodeField(row.id, 'type', row.type);
                 setWbsData(prev => prev.map(item => item.id === row.id ? {
                     ...item,
@@ -5565,6 +5620,7 @@ ${ganttSectionHtml}
                                 onMaterialReqUpdated={async () => { setReqRefreshKey(k => k + 1); await refreshWbsNodes(); }}
                                 onPasteCloned={handlePasteCloned}
                                 onNodeExpand={handleNodeExpand}
+                                onApplyLeafDefaults={applyLeafDefaults}
                             />
                         </div>
                     ), null, isManagerOrAdmin ? (
@@ -5597,6 +5653,9 @@ ${ganttSectionHtml}
                             </button>
                             <button onClick={(e) => { e.stopPropagation(); budgetImportFileInputRef.current?.click(); }} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                                 <FileDown size={11} /> Import budżetu z Excel
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); setLeafDefaultsDraft(loadLeafDefaults()); setLeafDefaultsOpen(true); }} className="flex items-center gap-1.5 px-3 py-1 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-lg text-sky-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                                <SlidersHorizontal size={11} /> Domyślne wartości
                             </button>
                         </div>
                     ),
@@ -5866,6 +5925,89 @@ ${ganttSectionHtml}
                                     className="px-4 py-2 rounded-lg border border-emerald-500/30 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 transition-all disabled:opacity-50"
                                 >
                                     {budgetImportLoading ? 'Importowanie...' : 'Importuj'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {leafDefaultsOpen && (
+                <div className="fixed inset-0 z-[125] bg-[#05070bcc] backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setLeafDefaultsOpen(false)}>
+                    <div className="w-full max-w-3xl max-h-[90vh] overflow-hidden rounded-2xl border border-white/10 bg-[#0b0f17] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                        <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 rounded-xl bg-sky-500/15 border border-sky-500/20 text-sky-300"><SlidersHorizontal size={16} /></div>
+                                <div>
+                                    <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-white">Domyślne wartości pozycji</h3>
+                                    <p className="text-[10px] text-gray-500 uppercase tracking-widest">Nowa pozycja danego typu przyjmie te wartości — zmienisz je potem w tabeli</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setLeafDefaultsOpen(false)} className="p-2 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 transition-all" aria-label="Zamknij">
+                                <X size={14} />
+                            </button>
+                        </div>
+
+                        <div className="p-5 overflow-auto max-h-[calc(90vh-140px)] custom-scrollbar">
+                            <div className="rounded-xl border border-white/10 overflow-hidden">
+                                <div className="grid grid-cols-[1.4fr,1.2fr,1fr,0.9fr] gap-3 px-4 py-2.5 bg-white/5 text-[10px] uppercase tracking-widest text-gray-400 font-bold">
+                                    <div>Typ pozycji</div>
+                                    <div>Jednostka</div>
+                                    <div>Koszt jedn. (zł)</div>
+                                    <div>Narzut (%)</div>
+                                </div>
+                                <div className="divide-y divide-white/5">
+                                    {/* Materiał i sprzęt wyceniane indywidualnie (wymagania materiałowe) — poza modalem domyślnych */}
+                                    {LEAF_TYPE_OPTIONS.filter((t) => t !== 'material' && t !== 'equipment').map((t) => {
+                                        const row = leafDefaultsDraft[t] || SEED_LEAF_DEFAULTS[t] || {};
+                                        const setField = (field, value) => setLeafDefaultsDraft((prev) => ({ ...prev, [t]: { ...(prev[t] || SEED_LEAF_DEFAULTS[t] || {}), [field]: value } }));
+                                        return (
+                                            <div key={t} className="grid grid-cols-[1.4fr,1.2fr,1fr,0.9fr] gap-3 px-4 py-2.5 items-center hover:bg-white/[0.02] transition-colors">
+                                                <div className="text-sm text-white font-medium">{TYPE_LABELS[t] || t}</div>
+                                                <select
+                                                    value={row.unit ?? ''}
+                                                    onChange={(e) => setField('unit', e.target.value)}
+                                                    className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-sky-500"
+                                                >
+                                                    {UNIT_OPTIONS.map((u) => (<option key={u} value={u} className="bg-gray-900">{u}</option>))}
+                                                </select>
+                                                <input
+                                                    type="number" step="0.01" min="0"
+                                                    value={row.unitCost ?? 0}
+                                                    onFocus={(e) => e.target.select()}
+                                                    onChange={(e) => setField('unitCost', e.target.value === '' ? 0 : Number(e.target.value))}
+                                                    className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-sky-500"
+                                                />
+                                                <input
+                                                    type="number" step="0.1" min="0"
+                                                    value={row.margin ?? 0}
+                                                    onFocus={(e) => e.target.select()}
+                                                    onChange={(e) => setField('margin', e.target.value === '' ? 0 : Number(e.target.value))}
+                                                    className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-sky-500"
+                                                />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="px-5 py-3 border-t border-white/10 flex items-center justify-between">
+                            <button
+                                onClick={() => setLeafDefaultsDraft(structuredClone(SEED_LEAF_DEFAULTS))}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-white/10 text-gray-300 hover:bg-white/10 transition-all text-xs"
+                            >
+                                <RotateCcw size={12} /> Przywróć fabryczne
+                            </button>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setLeafDefaultsOpen(false)} className="px-4 py-2 rounded-lg border border-white/10 text-gray-300 hover:bg-white/10 transition-all text-sm">
+                                    Anuluj
+                                </button>
+                                <button
+                                    onClick={() => { saveLeafDefaults(leafDefaultsDraft); setLeafDefaultsOpen(false); }}
+                                    className="px-4 py-2 rounded-lg border border-sky-500/30 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25 transition-all text-sm font-medium"
+                                >
+                                    Zapisz domyślne
                                 </button>
                             </div>
                         </div>

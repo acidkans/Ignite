@@ -500,6 +500,11 @@ export default function BudgetTable({
                                             }
                                             handleChange(row.id, 'type', newType);
                                             onFieldChange(row, 'type', newType);
+                                            // Zmiana typu przelicza sąsiednie komórki (jednostka/koszt/marża) w rodzicu.
+                                            // Pola są niekontrolowane (defaultValue + key=syncVersion) — zwolnij blokadę
+                                            // sync (focusedRowId selecta typu), by efekt bumpnął syncVersion i odświeżył je od razu.
+                                            clearTimeout(blurTimer.current);
+                                            setFocusedRowId(null);
                                         }}
                                         onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}
                                         onBlur={handleCellBlur}
