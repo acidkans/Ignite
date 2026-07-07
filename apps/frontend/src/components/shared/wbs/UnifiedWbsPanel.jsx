@@ -12,6 +12,7 @@ import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLoo
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
+import { buildSchematSectionHtml, SCHEMAT_SECTION_CSS } from '../../../utils/schematPdfExport';
 import ExportChoiceModal from '../ExportChoiceModal';
 import WBSHybridTable from './WBSHybridTable';
 import BudgetTable from './BudgetTable';
@@ -1248,6 +1249,19 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 <div class="offer-text">${offerHtmlContent}</div>
             </div>` : '';
 
+        const schematHtml = show('oferta') ? await (async () => {
+            try {
+                const { html: sectionHtml } = await buildSchematSectionHtml({
+                    nodeId, wbsData, orderName, token: sessionStorage.getItem('token'),
+                    sectionTitle: 'Schemat', pageBreakBefore: true,
+                });
+                return sectionHtml;
+            } catch (e) {
+                console.error('Eksport sekcji Schemat w PDF Oferty nie powiódł się:', e);
+                return '';
+            }
+        })() : '';
+
         const matStatusLabel = (code) => {
             const labels = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
             return labels[code] || code || '—';
@@ -1452,6 +1466,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     .summary-block { margin-bottom: 16px; }
     .summary-section { page-break-before: always; }
   }
+${SCHEMAT_SECTION_CSS}
 </style>
 ${ganttData ? ganttData.styles : ''}
 </head>
@@ -1478,6 +1493,7 @@ ${ganttData ? ganttData.styles : ''}
       <td class="doc-body-cell">
 ${offerHtml}
 ${strategyHtml}
+${schematHtml}
 ${materialsHtml}
 ${ganttSectionHtml}
       </td>

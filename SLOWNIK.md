@@ -9,7 +9,7 @@ Używaj nazwy z kolumny **Skrót** — Claude będzie wiedział dokładnie co zm
 
 | Skrót | Co robi (potocznie) | Funkcja | Plik | Wiersz |
 |---|---|---|---|---|
-| EKSPORT_OFERTA_PDF | Drukuje ofertę: tabele WBS 1/2/3 + „Jak to chcemy zrobić" (własna strona) + materiały (własna strona) | `handleExportPDF('oferta')` | `components/shared/wbs/UnifiedWbsPanel.jsx` | 1032 |
+| EKSPORT_OFERTA_PDF | Drukuje ofertę: tabele WBS 1/2/3 + „Jak to chcemy zrobić" (własna strona) + Schemat — znaczniki/Q&A/strony schematów (własna strona) + materiały (własna strona) | `handleExportPDF('oferta')` | `components/shared/wbs/UnifiedWbsPanel.jsx` | 1032 |
 | EKSPORT_PROJEKT | Drukuje cały projekt: wymagania + WBS + materiały + Gantt (bez cen/budżetu — bezpieczny dla klienta) | `exportProjectPdf` | `utils/projectPdfExport.js` | 121 |
 | EKSPORT_WYMAGANIA | Drukuje zakładkę "Informacje o zamówieniu" | `exportRequirementsPdf` | `utils/requirementsPdfExport.js` | 21 |
 | EKSPORT_QA | Generuje PDF z polami do ręcznego wpisania odpowiedzi | `exportQaFormPdf` | `components/shared/wbs/exportQaFormPdf.js` | 68 |
@@ -39,6 +39,7 @@ Używaj nazwy z kolumny **Skrót** — Claude będzie wiedział dokładnie co zm
 | OTWORZ_PDF | Otwiera okno przeglądarki i wywołuje drukowanie | `openPdfBlob` | `utils/wbsPdfExport.js` | 71 |
 | POBIERZ_LOGO | Pobiera logo firmy jako base64 | `fetchLogoDataUrl` | `utils/wbsPdfExport.js` | 121 |
 | BUDUJ_TABELE_WBS | Buduje HTML tabeli WBS na wybranym poziomie zagłębienia | `buildWbsHtmlTable` | `utils/wbsPdfExport.js` | 142 |
+| BUDUJ_SEKCJA_SCHEMAT | Buduje HTML sekcji Schemat (tabela znaczników + Q&A z WBS + strony schematów z naniesionymi markerami) — współdzielone przez `EKSPORT_OFERTA_PDF` i eksport PDF w `SchematTab.jsx` | `buildSchematSectionHtml` | `utils/schematPdfExport.js` | 110 |
 
 ---
 
