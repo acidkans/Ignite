@@ -4,6 +4,26 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-07 — WBS: strategia per gałąź (kolumna `strategy`, top-level)
+
+### schema.prisma
+- dodano pole `strategy String?` w modelu `WbsNode` — strategia realizacji gałęzi; Postgres `text` (bez limitu 256 znaków). Migracja `20260707120000_add_strategy_to_wbs_node`
+
+### architektura / API
+- `back-serwis` `WbsNodesService` — `strategy` obsłużone w `buildTree`, `flattenForInsert`, obu ścieżkach `saveTree`, `getUnifiedTree` oraz w liście dozwolonych pól `updateNode` (PATCH `/wbs-nodes/:id`)
+- `back-serwis` `versioning.service.ts` — `strategy` kopiowane przy klonowaniu wersji (`wbsNode.create`)
+- `ui-kolumna` `strategia` (`WBSHybridTable.jsx`) — nowa kolumna drzewa WBS; edytowalna tylko dla węzłów `depth === 0`, głębsze pokazują `—`
+- `ui-funkcja` `BranchStrategyField` (`UnifiedWbsPanel.jsx`) — pole strategii gałęzi w zakładce „Jak to chcemy zrobić", lista pod globalnym edytorem (tylko gałęzie top-level)
+- `ui-funkcja` `buildWbsHtmlTable` (`wbsPdfExport.js`) — tabela oferty depth=1 dostaje kolumnę „Strategia" (gdy któraś gałąź ma treść)
+- eksport Excel oferty — kolumna „Strategia" w arkuszach „Drzewo WBS" i „WBS1 - Zakresy"
+
+### słownik
+- dodano `schema-pole` `WbsNode.strategy` — pole strategii gałęzi
+- dodano `ui-funkcja` `BranchStrategyField` — pole strategii gałęzi w zakładce Strategia
+
+### wytyczne
+- `schema-pole` `WbsNode.strategy` — edytowalne i eksportowane TYLKO dla węzłów top-level (`depth === 0`); głębsze węzły ignorują to pole. Nowa kolumna z `versionId` → dodana do klonu w `versioning.service.ts`
+
 ## 2026-07-07 — WBS/Budżet: przycisk „Domyślne wartości" + auto-wartości nowych liści
 
 ### architektura / API

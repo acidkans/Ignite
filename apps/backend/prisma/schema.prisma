@@ -929,6 +929,8 @@ model WbsNode {
   totalPrice Float   @default(0)
   /// @anchor wbs-node-comment
   comment    String?
+  /// @anchor wbs-node-strategy
+  strategy   String? // strategia realizacji gałęzi (węzły top-level); Postgres text = bez limitu 256
   /// @anchor wbs-node-phase
   phase      String? // PRZED | INSTAL | PO
   /// @anchor wbs-node-gantt-start

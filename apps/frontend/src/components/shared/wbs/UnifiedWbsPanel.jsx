@@ -73,6 +73,28 @@ const DEFAULT_SECTION_ORDER = ['oferta', 'strategy', 'tasks', 'gantt', 'wbs-hybr
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 // @anchor unified-wbs-panel
+// @anchor branch-strategy-field
+// Pole strategii pojedynczej gałęzi top-level w zakładce „Jak to chcemy zrobić".
+// Lokalny stan + zapis onBlur (nie PATCH-ujemy przy każdym znaku). Synchronizuje się
+// z propem gdy wartość zmieni się gdzie indziej (np. edycja w kolumnie drzewa WBS).
+function BranchStrategyField({ name, value, onSave }) {
+    const [text, setText] = useState(value || '');
+    useEffect(() => { setText(value || ''); }, [value]);
+    return (
+        <div className="flex flex-col gap-1">
+            <label className="text-sm font-semibold text-blue-300/80 uppercase tracking-wide">{name || 'Gałąź'}</label>
+            <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onBlur={() => { if (text !== (value || '')) onSave(text); }}
+                placeholder="Strategia realizacji tej gałęzi…"
+                rows={2}
+                className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-gray-300 text-base focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed resize-y"
+            />
+        </div>
+    );
+}
+
 export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsDataLoad, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible, oneDriveFolderName = null }) {
     const [wbsData, setWbsData] = useState([]);
     const wbsDataRef = useRef(wbsData);
@@ -1751,6 +1773,7 @@ ${ganttSectionHtml}
                     quantity: Number(n.quantity) || 0,
                     unit: n.unit || '',
                     unitCost: Number(n.unitCost) || 0,
+                    strategy: depth === 0 ? (n.strategy || '') : '',
                     isGroup,
                     cost: 0,
                     price: 0,
@@ -2724,6 +2747,7 @@ ${ganttSectionHtml}
             { header: 'Koszt całkowity', key: 'cost', width: 16 },
             { header: 'Cena ofertowa', key: 'price', width: 16 },
             { header: 'Zysk', key: 'profit', width: 14 },
+            { header: 'Strategia', key: 'strategy', width: 40 },
         ];
         const treeHdr = treeSheet.getRow(1);
         treeHdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -2738,8 +2762,10 @@ ${ganttSectionHtml}
                 cost: r.cost,
                 price: r.price,
                 profit: r.price - r.cost,
+                strategy: r.strategy || '',
             });
             row.getCell('name').alignment = { indent: r.depth };
+            row.getCell('strategy').alignment = { wrapText: true, vertical: 'top' };
             if (r.isGroup || r.depth === 0) row.getCell('name').font = { bold: true };
         });
         const treeTotalRow = treeSheet.addRow({
@@ -3532,12 +3558,12 @@ ${ganttSectionHtml}
         // ── Sheet WBS1 ──
         {
             const sheet = workbook.addWorksheet('WBS1 - Zakresy');
-            sheet.columns = [{ width: 45 }, { width: 18 }, { width: 24 }];
-            const hdr = sheet.addRow(['Zakresy', 'Typ', 'Cena ofertowa (PLN)']);
+            sheet.columns = [{ width: 45 }, { width: 18 }, { width: 24 }, { width: 50 }];
+            const hdr = sheet.addRow(['Zakresy', 'Typ', 'Cena ofertowa (PLN)', 'Strategia']);
             hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
             hdr.fill = navyFill;
             hdr.alignment = { horizontal: 'center', vertical: 'middle' };
-            applyBorder(hdr, 3, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
+            applyBorder(hdr, 4, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
 
             const groups = new Map();
             for (const item of wbsData) {
@@ -3546,19 +3572,20 @@ ${ganttSectionHtml}
                 if (price <= 0) continue;
                 const d1 = localChain(item.id)[0];
                 if (!d1) continue;
-                if (!groups.has(d1.id)) groups.set(d1.id, { id: d1.id, name: d1.name || '', type: d1.type || '', total: 0 });
+                if (!groups.has(d1.id)) groups.set(d1.id, { id: d1.id, name: d1.name || '', type: d1.type || '', strategy: d1.strategy || '', total: 0 });
                 groups.get(d1.id).total += price;
             }
             const entries = [...groups.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id));
             const total = entries.reduce((s, e) => s + e.total, 0);
             for (const e of entries) {
-                const r = sheet.addRow([e.name, TYPE_LABELS[e.type] || e.type || '', e.total]);
+                const r = sheet.addRow([e.name, TYPE_LABELS[e.type] || e.type || '', e.total, e.strategy || '']);
                 r.getCell(3).numFmt = numFmt;
                 r.getCell(3).alignment = { horizontal: 'right' };
-                applyBorder(r, 3, cellBorder);
+                r.getCell(4).alignment = { wrapText: true, vertical: 'top' };
+                applyBorder(r, 4, cellBorder);
             }
             const lastDataRow = sheet.rowCount;
-            const sumRow = sheet.addRow(['Razem', '', total]);
+            const sumRow = sheet.addRow(['Razem', '', total, '']);
             sumRow.font = { bold: true };
             sumRow.fill = sumFill;
             sumRow.getCell(3).value = lastDataRow >= 2
@@ -3566,9 +3593,9 @@ ${ganttSectionHtml}
                 : total;
             sumRow.getCell(3).numFmt = numFmt;
             sumRow.getCell(3).alignment = { horizontal: 'right' };
-            applyBorder(sumRow, 3, sumBorder);
+            applyBorder(sumRow, 4, sumBorder);
             sheet.views = [{ state: 'frozen', ySplit: 1 }];
-            if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 3 } };
+            if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 4 } };
         }
 
         // ── Sheet WBS2 ──
@@ -5561,6 +5588,23 @@ ${ganttSectionHtml}
                                 className="flex-1 min-h-0 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed resize-none"
                                 saveIndicator={true}
                             />
+                            {/* Strategie per gałąź (tylko węzły top-level) — pod globalną strategią. */}
+                            {wbsData.filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0).length > 0 && (
+                                <div className="mt-4 pt-4 border-t border-white/10 flex flex-col gap-4">
+                                    <div className="text-sm font-bold uppercase tracking-widest text-gray-500">Strategie gałęzi</div>
+                                    {wbsData
+                                        .filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0)
+                                        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+                                        .map(n => (
+                                            <BranchStrategyField
+                                                key={n.id}
+                                                name={n.name}
+                                                value={n.strategy}
+                                                onSave={(v) => updateNodeField(n.id, 'strategy', v)}
+                                            />
+                                        ))}
+                                </div>
+                            )}
                         </div>
                     ), null);
                 }

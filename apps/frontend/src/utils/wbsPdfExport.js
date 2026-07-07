@@ -178,17 +178,22 @@ export function buildWbsHtmlTable(wbsData, depth) {
             const chain = localChain(item.id);
             const d1 = chain[0];
             if (!d1) continue;
-            if (!groups.has(d1.id)) groups.set(d1.id, { name: d1.name || '', total: 0 });
+            if (!groups.has(d1.id)) groups.set(d1.id, { name: d1.name || '', strategy: d1.strategy || '', total: 0 });
             groups.get(d1.id).total += price;
         }
         const entries = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
         if (!entries.length) return '';
         const total = entries.reduce((s, e) => s + e.total, 0);
+        const hasStrategy = entries.some(e => (e.strategy || '').trim());
         const thNarrow = thS + 'width:120px;';
         const tdRNarrow = tdR + 'width:120px;';
         const sumRNarrow = sumR + 'width:120px;';
-        const rows = entries.map(e => `<tr><td style="${tdS}">${esc(e.name)}</td><td style="${tdRNarrow}">${fmtPLN(e.total)}</td></tr>`).join('');
-        return `<div class="wbs-offer-table"><table style="${tblStyle}width:auto;"><thead><tr><th style="${thS}">Zakresy</th><th style="${thNarrow}">Cena ofertowa (PLN)</th></tr></thead><tbody>${rows}<tr><td style="${sumS}text-align:right;"><strong>Razem</strong></td><td style="${sumRNarrow}"><strong>${fmtPLN(total)}</strong></td></tr></tbody></table></div>`;
+        // Kolumna „Strategia" dodawana tylko gdy któraś gałąź ma treść — inaczej pusta kolumna psuje layout wąskiej tabeli.
+        const stratTh = hasStrategy ? `<th style="${thS}">Strategia</th>` : '';
+        const stratTd = (e) => hasStrategy ? `<td style="${tdS}white-space:pre-wrap;">${esc(e.strategy || '')}</td>` : '';
+        const rows = entries.map(e => `<tr><td style="${tdS}">${esc(e.name)}</td>${stratTd(e)}<td style="${tdRNarrow}">${fmtPLN(e.total)}</td></tr>`).join('');
+        const sumColspan = hasStrategy ? ' colspan="2"' : '';
+        return `<div class="wbs-offer-table"><table style="${tblStyle}width:auto;"><thead><tr><th style="${thS}">Zakresy</th>${stratTh}<th style="${thNarrow}">Cena ofertowa (PLN)</th></tr></thead><tbody>${rows}<tr><td${sumColspan} style="${sumS}text-align:right;"><strong>Razem</strong></td><td style="${sumRNarrow}"><strong>${fmtPLN(total)}</strong></td></tr></tbody></table></div>`;
     }
 
     if (depth === 2) {

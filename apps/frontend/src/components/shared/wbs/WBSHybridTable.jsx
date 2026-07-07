@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny } from './wbsConstants';
+import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber } from './wbsConstants';
 
 function AutoResizeTextarea({ value, onChange, onBlur, onKeyDown, placeholder, className, style, ...rest }) {
     const ref = useRef(null);
@@ -393,6 +393,7 @@ const mkNode = (withDefaults = false) => {
         qa: [],
         type: '',
         comment: '',
+        strategy: '',
         children: [],
     };
 };
@@ -506,6 +507,21 @@ const sumChildrenCost = node => {
     const kids = node.children || [];
     if (!kids.length) return own;
     return own + kids.reduce((a, c) => a + sumChildrenCost(c), 0);
+};
+
+// @anchor sum-children-offer-price
+// Cena ofertowa węzła = własna (ilość×koszt×narzut, jak w budżecie) + suma dzieci.
+// Formuła identyczna z BudgetTable.calcDerived: brak narzutu → 0, potem opcjonalny rabat.
+// Sumowana na tych samych poziomach co koszt (sumChildrenCost).
+const sumChildrenOfferPrice = node => {
+    const cost = (parseFloat(node.unitCost) || 0) * (parseFloat(node.quantity) || 0);
+    const marginRaw = node.margin != null && node.margin !== '' ? parseLocaleNumber(String(node.margin)) : null;
+    const disc = Math.max(0, parseLocaleNumber(String(node.discount ?? '')) ?? 0);
+    let own = (marginRaw !== null && marginRaw !== 0) ? cost * (1 + marginRaw / 100) : 0;
+    if (own > 0 && disc > 0) own = Math.max(0, own * (1 - disc / 100));
+    const kids = node.children || [];
+    if (!kids.length) return own;
+    return own + kids.reduce((a, c) => a + sumChildrenOfferPrice(c), 0);
 };
 
 // ── Depth visual config ───────────────────────────────────────────────────────
@@ -867,7 +883,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [qaModalNode, setQaModalNode] = useState(null); // { id, name } — węzeł z otwartym modalem Q&A
     // @anchor qa-branch-node
     const [qaBranchNode, setQaBranchNode] = useState(null); // { id } — węzeł top-level z otwartym read-only podglądem Q&A całej gałęzi
-    const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, status: 128, wlasciciel: 128, komentarz: 200, qa: 140, zalaczniki: 44 });
+    const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, cena_ofert: 110, status: 128, wlasciciel: 128, komentarz: 200, strategia: 220, qa: 140, zalaczniki: 44 });
     const resizeDrag = useRef(null);
     // @anchor grid-nav-table-ref
     // Kontener tabeli — zawęża zapytania nawigacji klawiaturowej (grid-nav) do tego drzewa,
@@ -1182,7 +1198,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // tylko w faktycznie widoczne wiersze.
     const navRowOrder = [];
     // @anchor grid-nav-column-order
-    const GRID_COLUMN_ORDER = ['nazwa', 'typ', 'ilosc', 'jednostka', ...(isManager ? ['cena_netto'] : []), 'status', 'wlasciciel', 'komentarz'];
+    const GRID_COLUMN_ORDER = ['nazwa', 'typ', 'ilosc', 'jednostka', ...(isManager ? ['cena_netto'] : []), 'status', 'wlasciciel', 'komentarz', 'strategia'];
     // @anchor handle-grid-key-down
     // Enter/strzałki nawigują między edytowalnymi komórkami jak w arkuszu kalkulacyjnym:
     // Enter/Dół/Góra = ta sama kolumna, sąsiedni wiersz; Lewo/Prawo = sąsiednia kolumna w wierszu.
@@ -1269,6 +1285,11 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             {isManager && (
                 <td className="px-3 py-3 text-right font-bold text-white text-base" onClick={e => e.stopPropagation()}>
                     {fmtPLN(items.reduce((a, n) => a + sumChildrenCost(n), 0))}
+                </td>
+            )}
+            {isManager && (
+                <td className="px-3 py-3 text-right font-bold text-green-400 text-base" onClick={e => e.stopPropagation()}>
+                    {fmtPLN(items.reduce((a, n) => a + sumChildrenOfferPrice(n), 0))}
                 </td>
             )}
             <td className="px-3 py-3" />
@@ -1580,6 +1601,24 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     </td>
                 )}
 
+                {/* Cena ofertowa (ilość×koszt×narzut, sumowana jak koszt — tylko manager) */}
+                {/* @anchor wbs-offer-price-cell */}
+                {isManager && (
+                    <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                        {(() => {
+                            const offer = sumChildrenOfferPrice(node);
+                            return (
+                                <div
+                                    title={hasChildren ? 'Suma cen ofertowych gałęzi' : 'Cena ofertowa = ilość × koszt × narzut'}
+                                    className={`text-base w-full text-right font-semibold ${offer > 0 ? 'text-green-400' : 'text-gray-600'}`}
+                                >
+                                    {offer > 0 ? fmtPLN(offer) : '—'}
+                                </div>
+                            );
+                        })()}
+                    </td>
+                )}
+
                 {/* Status */}
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                     {(() => {
@@ -1649,6 +1688,25 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     />
                 </td>
 
+                {/* Strategia — edytowalna tylko dla gałęzi najwyższego poziomu (depth===0).
+                    Głębsze węzły pokazują wyszarzony placeholder (strategia dotyczy tylko top-level). */}
+                <td className="px-3 py-2.5 min-w-[180px]" onClick={e => e.stopPropagation()}>
+                    {depth === 0 ? (
+                        <AutoResizeTextarea
+                            value={node.strategy || ''}
+                            onChange={e => handleField(node.id, 'strategy', e.target.value)}
+                            onBlur={e => onNodeFieldSave?.(node.id, 'strategy', e.target.value)}
+                            placeholder="Strategia gałęzi…"
+                            className={`bg-transparent border-none resize-none focus:outline-none text-base w-full placeholder-gray-700 leading-snug ${d.fieldClass}`}
+                            data-nav-row={node.id}
+                            data-nav-col="strategia"
+                            onKeyDown={e => handleGridKeyDown(e, node.id, 'strategia')}
+                        />
+                    ) : (
+                        <span className="text-gray-700 text-base select-none">—</span>
+                    )}
+                </td>
+
                 {/* Q&A — na węźle top-level suma Q&A całej gałęzi otwiera read-only podgląd;
                     na pozostałych badge otwiera edytowalny modal 3/4 ekranu (edycja nietknięta). */}
                 <td className="px-3 py-2.5 min-w-[90px]" onClick={e => e.stopPropagation()}>
@@ -1691,7 +1749,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         if ((node.type === 'material' || node.type === 'equipment') && expandedMaterialIds.has(node.id)) {
             rows.push(
                 <tr key={`mat-req-${node.id}`}>
-                    <td colSpan={11} className="p-0 border-b border-amber-500/10 bg-amber-500/[0.02]">
+                    <td colSpan={12} className="p-0 border-b border-amber-500/10 bg-amber-500/[0.02]">
                         <MaterialReqExpandPanel
                             node={node}
                             req={(() => {
@@ -1735,7 +1793,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         if (items.length === 0) {
             rows.push(
                 <tr key="empty">
-                    <td colSpan={10} className="px-3 py-3 pl-16 text-[14px] text-gray-700 italic">
+                    <td colSpan={11} className="px-3 py-3 pl-16 text-[14px] text-gray-700 italic">
                         Brak przedmiotów — kliknij <span className="text-gray-500">+</span> przy projekcie, aby dodać
                     </td>
                 </tr>
@@ -1786,9 +1844,11 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         <col style={{ width: colWidths.ilosc }} />
                         <col style={{ width: colWidths.jednostka }} />
                         {isManager && <col style={{ width: colWidths.cena_netto }} />}
+                        {isManager && <col style={{ width: colWidths.cena_ofert }} />}
                         <col style={{ width: colWidths.status }} />
                         <col style={{ width: colWidths.wlasciciel }} />
                         <col style={{ width: colWidths.komentarz }} />
+                        <col style={{ width: colWidths.strategia }} />
                         <col style={{ width: colWidths.qa }} />
                         <col style={{ width: colWidths.zalaczniki }} />
                         <col style={{ width: 48 }} />
@@ -1796,7 +1856,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
                         <tr className="border-b border-white/10">
                             <th className="px-1 py-2.5 text-base font-bold uppercase tracking-widest text-white" />
-                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jednostka','text-left'],...(isManager ? [['cena_netto','Koszt jedn.','text-right']] : []),['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['qa','Q&A','text-left'],['zalaczniki','Attach.','text-left']].map(([key, label, align]) => (
+                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jednostka','text-left'],...(isManager ? [['cena_netto','Koszt jedn.','text-right'],['cena_ofert','Cena ofert.','text-right']] : []),['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['strategia','Strategia','text-left'],['qa','Q&A','text-left'],['zalaczniki','Attach.','text-left']].map(([key, label, align]) => (
                                 <th key={key} className={`px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white ${align} relative select-none`}>
                                     {label}
                                     <div onMouseDown={e => startColResize(key, e)} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-500/40 transition-colors" />

@@ -176,6 +176,7 @@ export class VersioningService {
                     unitPrice: wn.unitPrice,
                     totalPrice: wn.totalPrice,
                     comment: wn.comment,
+                    strategy: (wn as any).strategy ?? null,
                     phase: wn.phase,
                     ganttStart: (wn as any).ganttStart ?? null,
                     ganttEnd: (wn as any).ganttEnd ?? null,

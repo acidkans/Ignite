@@ -19,6 +19,7 @@ export interface WbsTreeItem {
     resources: string;
     cost: string;
     comment: string;
+    strategy: string;
     tags: string[];
     qa: QaPair[];
     children: WbsTreeItem[];
@@ -95,6 +96,7 @@ export class WbsNodesService {
                             resources: row.resources,
                             cost: row.cost,
                             comment: row.comment,
+                            strategy: row.strategy,
                             tags: row.tags,
                             qa: row.qa,
                             sortOrder: row.sortOrder,
@@ -115,6 +117,7 @@ export class WbsNodesService {
                             resources: row.resources,
                             cost: row.cost,
                             comment: row.comment,
+                            strategy: row.strategy,
                             tags: row.tags,
                             qa: row.qa,
                             sortOrder: row.sortOrder,
@@ -179,6 +182,7 @@ export class WbsNodesService {
                     resources: n.resources || '',
                     cost: n.cost || '',
                     comment: n.comment || '',
+                    strategy: n.strategy || '',
                     tags: this.parseTags(n.tags),
                     qa,
                     children: this.buildTree(nodes, n.id),
@@ -224,6 +228,7 @@ export class WbsNodesService {
                 resources: item.resources || '',
                 cost: item.cost || '',
                 comment: item.comment || '',
+                strategy: item.strategy || null,
                 tags: Array.isArray(item.tags) && item.tags.length > 0 ? JSON.stringify(item.tags) : null,
                 qa: Array.isArray(item.qa) && item.qa.length > 0 ? JSON.stringify(item.qa) : null,
                 unitCost,
@@ -405,6 +410,7 @@ export class WbsNodesService {
                 unitPrice: node.unitPrice,
                 totalPrice: node.totalPrice,
                 comment: node.comment,
+                strategy: node.strategy,
                 phase: node.phase,
                 ganttStart: node.ganttStart ? node.ganttStart.toISOString() : null,
                 ganttEnd: node.ganttEnd ? node.ganttEnd.toISOString() : null,
@@ -457,7 +463,7 @@ export class WbsNodesService {
      */
     async updateNode(id: string, data: any) {
         const allowed: Record<string, any> = {};
-        for (const key of ['name', 'type', 'status', 'owner', 'resources', 'cost', 'parentId', 'sortOrder', 'comment', 'unit', 'unitPrice']) {
+        for (const key of ['name', 'type', 'status', 'owner', 'resources', 'cost', 'parentId', 'sortOrder', 'comment', 'strategy', 'unit', 'unitPrice']) {
             if (data[key] !== undefined) allowed[key] = data[key];
         }
         if (data.ganttStart !== undefined) {
