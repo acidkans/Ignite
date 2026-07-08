@@ -4,6 +4,19 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-08 — WBS: kolumna Narzut % w WBSHybridTable (v2026.07.08.689)
+
+### architektura / API
+- `ui-kolumna` `narzut` — nowa edytowalna kolumna Narzut % między „Koszt jedn." a „Cena ofert." w `WBSHybridTable` (tylko manager); edytuje pole `margin` liścia/węzła z kosztem, dla `depth=0` i `type=group` pokazuje „—"
+
+### słownik
+- dodano `wbs-margin-input` — input Narzut % w WBSHybridTable, edytuje `node.margin`, plik `apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx`
+
+### wytyczne
+- `ui-input` `wbs-margin-input` — kolumna Narzut % dostępna tylko dla `isManager`; musi być w `GRID_COLUMN_ORDER` i colgroup pod tym samym warunkiem co `cena_netto`
+
+---
+
 ## 2026-07-08 — OneDrive: podgląd plików w apce (nie tylko lista) (v2026.07.08.687)
 
 ### architektura / API

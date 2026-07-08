@@ -5701,14 +5701,19 @@ ${ganttSectionHtml}
                             />
                         </div>
                     ), null, isManagerOrAdmin ? (
-                        <button
-                            onClick={(e) => { e.stopPropagation(); handleWbsExtract(); }}
-                            disabled={extractingForWbs}
-                            className={`flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 ${extractingForWbs ? 'opacity-50 pointer-events-none' : ''}`}
-                        >
-                            {extractingForWbs ? <div className="w-3 h-3 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" /> : <Sparkles size={11} />}
-                            Wyciągnij z dokumentów
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={(e) => { e.stopPropagation(); handleWbsExtract(); }}
+                                disabled={extractingForWbs}
+                                className={`flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 ${extractingForWbs ? 'opacity-50 pointer-events-none' : ''}`}
+                            >
+                                {extractingForWbs ? <div className="w-3 h-3 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" /> : <Sparkles size={11} />}
+                                Wyciągnij z dokumentów
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); setLeafDefaultsDraft(loadLeafDefaults()); setLeafDefaultsOpen(true); }} className="flex items-center gap-1.5 px-3 py-1 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-lg text-sky-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
+                                <SlidersHorizontal size={11} /> Domyślne wartości
+                            </button>
+                        </div>
                     ) : null);
                 }
                 if (key === 'budget') {
@@ -5730,9 +5735,6 @@ ${ganttSectionHtml}
                             </button>
                             <button onClick={(e) => { e.stopPropagation(); budgetImportFileInputRef.current?.click(); }} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                                 <FileDown size={11} /> Import budżetu z Excel
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); setLeafDefaultsDraft(loadLeafDefaults()); setLeafDefaultsOpen(true); }} className="flex items-center gap-1.5 px-3 py-1 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-lg text-sky-300 text-[10px] font-bold uppercase tracking-widest transition-all">
-                                <SlidersHorizontal size={11} /> Domyślne wartości
                             </button>
                         </div>
                     ),

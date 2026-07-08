@@ -883,7 +883,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [qaModalNode, setQaModalNode] = useState(null); // { id, name } — węzeł z otwartym modalem Q&A
     // @anchor qa-branch-node
     const [qaBranchNode, setQaBranchNode] = useState(null); // { id } — węzeł top-level z otwartym read-only podglądem Q&A całej gałęzi
-    const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, cena_ofert: 110, status: 128, wlasciciel: 128, komentarz: 200, strategia: 220, qa: 140, zalaczniki: 44 });
+    const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, narzut: 90, cena_ofert: 110, status: 128, wlasciciel: 128, komentarz: 200, strategia: 220, qa: 140, zalaczniki: 44 });
     const resizeDrag = useRef(null);
     // @anchor grid-nav-table-ref
     // Kontener tabeli — zawęża zapytania nawigacji klawiaturowej (grid-nav) do tego drzewa,
@@ -1198,7 +1198,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // tylko w faktycznie widoczne wiersze.
     const navRowOrder = [];
     // @anchor grid-nav-column-order
-    const GRID_COLUMN_ORDER = ['nazwa', 'typ', 'ilosc', 'jednostka', ...(isManager ? ['cena_netto'] : []), 'status', 'wlasciciel', 'komentarz', 'strategia'];
+    const GRID_COLUMN_ORDER = ['nazwa', 'typ', 'ilosc', 'jednostka', ...(isManager ? ['cena_netto', 'narzut'] : []), 'status', 'wlasciciel', 'komentarz', 'strategia'];
     // @anchor handle-grid-key-down
     // Enter/strzałki nawigują między edytowalnymi komórkami jak w arkuszu kalkulacyjnym:
     // Enter/Dół/Góra = ta sama kolumna, sąsiedni wiersz; Lewo/Prawo = sąsiednia kolumna w wierszu.
@@ -1601,6 +1601,45 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     </td>
                 )}
 
+                {/* Narzut % (tylko manager) — edytowalny na liściach/węzłach z kosztem */}
+                {/* @anchor wbs-margin-input */}
+                {isManager && (
+                    <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                        {(depth === 0 || node.type === 'group') ? (
+                            <div className={`text-base w-full text-right text-gray-600 ${d.fieldClass}`}>—</div>
+                        ) : (
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={node.margin != null && node.margin !== '' ? String(node.margin).replace('.', ',') : ''}
+                                    onChange={e => {
+                                        const clean = sanitizeQtyInput(e.target.value);
+                                        if (clean !== e.target.value) flashWarn(node.id, 'margin');
+                                        handleField(node.id, 'margin', clean);
+                                    }}
+                                    onFocus={e => e.target.select()}
+                                    onBlur={e => {
+                                        const raw = String(e.target.value);
+                                        const n = parseFloat(raw.replace(',', '.'));
+                                        const val = Number.isFinite(n) ? String(n) : '';
+                                        handleField(node.id, 'margin', val);
+                                        onNodeFieldSave?.(node.id, 'margin', val === '' ? null : Number(val));
+                                    }}
+                                    onKeyDown={e => handleGridKeyDown(e, node.id, 'narzut')}
+                                    placeholder="—"
+                                    className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}`}
+                                    data-nav-row={node.id}
+                                    data-nav-col="narzut"
+                                />
+                                {warnKey === `${node.id}:margin` && (
+                                    <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
+                                )}
+                            </div>
+                        )}
+                    </td>
+                )}
+
                 {/* Cena ofertowa (ilość×koszt×narzut, sumowana jak koszt — tylko manager) */}
                 {/* @anchor wbs-offer-price-cell */}
                 {isManager && (
@@ -1844,6 +1883,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         <col style={{ width: colWidths.ilosc }} />
                         <col style={{ width: colWidths.jednostka }} />
                         {isManager && <col style={{ width: colWidths.cena_netto }} />}
+                        {isManager && <col style={{ width: colWidths.narzut }} />}
                         {isManager && <col style={{ width: colWidths.cena_ofert }} />}
                         <col style={{ width: colWidths.status }} />
                         <col style={{ width: colWidths.wlasciciel }} />
@@ -1856,7 +1896,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
                         <tr className="border-b border-white/10">
                             <th className="px-1 py-2.5 text-base font-bold uppercase tracking-widest text-white" />
-                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jednostka','text-left'],...(isManager ? [['cena_netto','Koszt jedn.','text-right'],['cena_ofert','Cena ofert.','text-right']] : []),['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['strategia','Strategia','text-left'],['qa','Q&A','text-left'],['zalaczniki','Attach.','text-left']].map(([key, label, align]) => (
+                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jednostka','text-left'],...(isManager ? [['cena_netto','Koszt jedn.','text-right'],['narzut','Narzut %','text-right'],['cena_ofert','Cena ofert.','text-right']] : []),['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['strategia','Strategia','text-left'],['qa','Q&A','text-left'],['zalaczniki','Attach.','text-left']].map(([key, label, align]) => (
                                 <th key={key} className={`px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white ${align} relative select-none`}>
                                     {label}
                                     <div onMouseDown={e => startColResize(key, e)} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-500/40 transition-colors" />
