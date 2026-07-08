@@ -259,7 +259,7 @@ const API_URL = '/api';
 
 // ─── MaterialReqExpandPanel ───────────────────────────────────────────────────
 
-function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, onDeleteNode, onNodeFieldSave, reqsLoaded }) {
+function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, onDeleteNode, onNodeFieldSave, onNodeFieldLocal, reqsLoaded }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     const headers = React.useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
 
@@ -303,6 +303,20 @@ function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, 
         onDeleteNode?.();
     };
 
+    // Cena z ProductCard → budżet WBS. Aktualizuje lokalny wbsTree (żeby wiersz liścia od razu
+    // pokazał nową cenę, nie starą do przeładowania) + persystuje unitCost na węźle ORAZ priceNetto
+    // na karcie materiałowej (inaczej KOSZT JEDN wraca do starej wartości po onRefresh).
+    const handlePropagatePrice = React.useCallback(async (c, w, price) => {
+        onNodeFieldLocal?.(node.id, 'unitCost', price);
+        onNodeFieldSave?.(node.id, 'unitCost', price);
+        if (c?.id) {
+            setCard(prev => (prev ? { ...prev, priceNetto: price } : prev));
+            await fetch(`${API_URL}/material-requirements/${c.id}`, {
+                method: 'PATCH', headers, body: JSON.stringify({ priceNetto: price }),
+            });
+        }
+    }, [node.id, headers, onNodeFieldLocal, onNodeFieldSave]);
+
     return (
         <div className="border-l-2 border-amber-500/30 ml-8">
             <div className="flex items-center gap-3 px-4 pt-3 pb-1">
@@ -331,7 +345,7 @@ function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, 
                             onSaved?.(updated);
                         }
                     }}
-                    onPropagatePrice={(c, w, price) => onNodeFieldSave?.(node.id, 'unitCost', price)}
+                    onPropagatePrice={handlePropagatePrice}
                     readOnly={false}
                 />
             ) : (
@@ -1805,6 +1819,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             versionId={versionId}
                             reqsLoaded={matReqsLoaded}
                             onNodeFieldSave={onNodeFieldSave}
+                            onNodeFieldLocal={handleField}
                             onSaved={updated => { setMatReqByWbsId(prev => ({ ...prev, [node.id]: updated, ...(updated?.id ? { [updated.id]: updated } : {}) })); onMaterialReqUpdated?.(); }}
                             onDeleteNode={() => {
                                 const deletedIds = collectIds(items, node.id);

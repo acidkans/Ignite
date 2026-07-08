@@ -269,7 +269,7 @@ function ProposalRow({ p, token, onDelete, onSelect, onDeleted: onImageDeleted, 
     );
 }
 
-function ProposalsSection({ req, token, onRefresh, onPatch, materialDb }) {
+function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropagatePrice, wbsNode }) {
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const [proposals, setProposals] = useState(req.proposals || []);
     const [searching, setSearching] = useState(false);
@@ -330,7 +330,13 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb }) {
         await fetch(`${API_URL}/material-requirements/proposals/${p.id}/select`, { method: 'PATCH', headers });
         // Optimistic: zaznacz checkmark natychmiast i zaktualizuj cenę w rodzicu
         setProposals(prev => prev.map(x => ({ ...x, isSelected: x.id === p.id })));
-        if (p.priceNetto != null) onPatch?.(req.id, { priceNetto: p.priceNetto });
+        if (p.priceNetto != null) {
+            // Propaguj cenę wybranej propozycji do budżetu WBS (unitCost liścia), tak samo jak
+            // ręczna edycja pola „Koszt jedn." w ProductCard. Bez tego cena trafiała tylko do
+            // wymagania materiałowego, a wiersz liścia w WBSHybridTable pokazywał starą wartość.
+            if (onPropagatePrice) onPropagatePrice(req, wbsNode, p.priceNetto);
+            else onPatch?.(req.id, { priceNetto: p.priceNetto });
+        }
         onRefresh();
     };
 
@@ -948,7 +954,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                 </div>
 
                 {/* Propozycje */}
-                {!readOnly && <ProposalsSection req={card} token={token} onRefresh={onRefresh} onPatch={onPatch} materialDb={materialDb} />}
+                {!readOnly && <ProposalsSection req={card} token={token} onRefresh={onRefresh} onPatch={onPatch} materialDb={materialDb} onPropagatePrice={onPropagatePrice} wbsNode={wbsNode} />}
             </div>
 
             {/* Ikona karty katalogowej — widoczna gdy materiał zaciągnięty z bazy */}
