@@ -17,7 +17,10 @@ dotenv.config({ path: join(process.cwd(), '.env') });
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // bodyParser:false wyłącza wbudowany parser Nesta (domyślny limit 100kb, który
+  // odrzucał eksport PDF oferty z wklejonymi obrazami base64 — PayloadTooLargeError).
+  // Rejestrujemy własne parsery z limitem 50mb jako jedyne w łańcuchu middleware.
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
   app.setGlobalPrefix('api');

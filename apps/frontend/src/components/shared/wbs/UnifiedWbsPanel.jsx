@@ -1220,6 +1220,15 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 if (!ok) return;
             }
         }
+        const labels = { oferta: 'Oferta', strategy: 'Jak to chcemy zrobić', wbs: 'Struktura projektu', budget: 'Budżet', gantt: 'Harmonogram', materials: 'Materiały', all: 'Pełny projekt' };
+        const filename = `${safeFileBase()}_${sectionKey}.pdf`;
+        // Modal otwieramy natychmiast; ciężki build HTML (fetch logo, schematów,
+        // materiałów, wklejanie obrazów base64) dzieje się dopiero po wyborze akcji —
+        // wcześniej klik blokował UI na kilka sekund zanim modal się pojawił.
+        openExport({
+            title: `Eksport PDF: ${labels[sectionKey] || sectionKey}`,
+            defaultFilename: filename,
+            makeArtifact: async () => {
         const date = new Date().toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' });
         const show = (key) => sectionKey === key || sectionKey === 'all';
         const ganttData = sectionKey === 'gantt' ? (ganttGetHtmlRef.current?.() || null) : null;
@@ -1544,9 +1553,9 @@ ${ganttSectionHtml}
 </body>
 </html>`;
 
-        const labels = { oferta: 'Oferta', strategy: 'Jak to chcemy zrobić', wbs: 'Struktura projektu', budget: 'Budżet', gantt: 'Harmonogram', materials: 'Materiały', all: 'Pełny projekt' };
-        const filename = `${safeFileBase()}_${sectionKey}.pdf`;
-        openExport({ title: `Eksport PDF: ${labels[sectionKey] || sectionKey}`, defaultFilename: filename, makeArtifact: async () => ({ html, filename }) });
+                return { html, filename };
+            },
+        });
     };
 
     // @anchor handle-export-budget-excel
