@@ -4,6 +4,14 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-07 — Eksport: strategie per gałąź w PDF i Excel (sekcja „Jak to chcemy zrobić")
+
+### architektura / API
+- `ui-funkcja` `handleExportPDF` (`UnifiedWbsPanel.jsx`) — sekcja „Jak to chcemy zrobić" renderuje pod globalną strategią blok „Strategie gałęzi": strategia (`strategy`) każdego węzła top-level (`depth === 0`), sortowana wg `sortOrder`
+- eksport Excel — arkusz „Strategia" dokleja strategie per gałąź jako markdown (`# Strategie gałęzi` + `## <nazwa>`), obok globalnego tekstu strategii
+
+---
+
 ## 2026-07-07 — WBS: strategia per gałąź (kolumna `strategy`, top-level)
 
 ### schema.prisma

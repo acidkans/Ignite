@@ -1254,10 +1254,23 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             return `<div><div style="font-size:10px;color:#111827;font-weight:bold;margin-bottom:4px;">📎 ${allAtts.length}</div>${itemsHtml}</div>`;
         };
 
+        const branchStrategiesHtml = (() => {
+            const tops = (wbsData || [])
+                .filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0 && String(n.strategy || '').trim())
+                .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+            if (!tops.length) return '';
+            const items = tops.map(n => `
+                <div class="branch-strategy">
+                    <div class="branch-strategy-name">${esc(n.name || '(bez nazwy)')}</div>
+                    <div class="strategy-text">${renderStrategyHtml(n.strategy)}</div>
+                </div>`).join('');
+            return `<div class="branch-strategies-title">Strategie gałęzi</div>${items}`;
+        })();
         const strategyHtml = (show('strategy') || show('oferta')) ? `
             <div class="section" style="${show('oferta') ? 'page-break-before: always;' : ''}">
                 <div class="section-header">Jak to chcemy zrobić</div>
                 <div class="strategy-text">${renderStrategyHtml(getStrategyText() || 'Brak treści strategii')}</div>
+                ${branchStrategiesHtml}
             </div>` : '';
 
         const offerHtmlContent = (() => {
@@ -1445,6 +1458,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   .offer-text h1:first-child, .offer-text h2:first-child, .offer-text h3:first-child { margin-top: 0; }
   .strategy-text ul, .strategy-text ol, .offer-text ul, .offer-text ol { margin: 4px 0 8px 1.5em; padding-left: 1em; }
   .strategy-text li, .offer-text li { margin: 2px 0; }
+  .branch-strategies-title { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; color: #4b5563; margin: 14px 0 6px 0; break-after: avoid; page-break-after: avoid; }
+  .branch-strategy { margin-bottom: 8px; break-inside: avoid; page-break-inside: avoid; }
+  .branch-strategy-name { font-size: 11px; font-weight: bold; color: #1a1a2e; margin-bottom: 3px; break-after: avoid; page-break-after: avoid; }
   table { border-collapse: collapse; width: 100%; }
   td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; text-align: center; }
   td.num { text-align: center; font-family: monospace; font-size: 10px; }
@@ -3508,8 +3524,16 @@ ${ganttSectionHtml}
 
         // ── Sheet "Oferta": tekst wpisany w zakładce Oferta (WBS panel) ──
         buildMarkdownSheet('Oferta', getOfferText(), 'Brak treści oferty.');
-        // ── Sheet "Strategia": tekst z sekcji „Jak to chcemy zrobić" (drugi arkusz) ──
-        buildMarkdownSheet('Strategia', getStrategyText(), 'Brak treści strategii.');
+        // ── Sheet "Strategia": tekst z sekcji „Jak to chcemy zrobić" + strategie per gałąź ──
+        const branchStrategyMd = (wbsData || [])
+            .filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0 && String(n.strategy || '').trim())
+            .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+            .map(n => `## ${n.name || '(bez nazwy)'}\n\n${String(n.strategy).trim()}`)
+            .join('\n\n');
+        const strategyFull = [getStrategyText() || '', branchStrategyMd ? `# Strategie gałęzi\n\n${branchStrategyMd}` : '']
+            .filter(s => String(s).trim())
+            .join('\n\n');
+        buildMarkdownSheet('Strategia', strategyFull, 'Brak treści strategii.');
 
         // ── Sheet Oferta-podział na Typy: ceny ofertowe agregowane wg typu zakresu ──
         {
