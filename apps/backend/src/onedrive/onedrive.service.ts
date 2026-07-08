@@ -213,6 +213,34 @@ export class OneDriveService {
     return response.data.value ?? [];
   }
 
+  // @anchor onedrive-download-file
+  // Strumieniuje treść pliku z OneDrive przez Graph. itemId identyfikuje plik w obrębie drive'u.
+  // Pobiera pre-autoryzowany `@microsoft.graph.downloadUrl` (bez nagłówka Authorization przy samym pobraniu),
+  // dzięki czemu unikamy problemu z przekazywaniem Bearera przy redirectcie /content → storage host.
+  async downloadFile(
+    userId: string,
+    nodeId: string,
+    itemId: string,
+  ): Promise<{ stream: NodeJS.ReadableStream; fileName: string; mimeType: string }> {
+    const node = await this.prisma.processNode.findUnique({ where: { id: nodeId } });
+    if (!node?.oneDriveFolderId) throw new NotFoundException('Folder OneDrive nie jest powiązany z tą gałęzią');
+
+    const token = await this.getValidToken(userId);
+    const driveId = node.oneDriveDriveId;
+    const metaUrl = driveId
+      ? `${GRAPH_BASE}/drives/${driveId}/items/${itemId}`
+      : `${GRAPH_BASE}/me/drive/items/${itemId}`;
+
+    const meta = await axios.get(metaUrl, { headers: { Authorization: `Bearer ${token}` } });
+    const downloadUrl = meta.data['@microsoft.graph.downloadUrl'];
+    if (!downloadUrl) throw new NotFoundException('Nie można pobrać treści pliku z OneDrive');
+
+    const fileName = meta.data.name || 'plik';
+    const mimeType = meta.data.file?.mimeType || 'application/octet-stream';
+    const fileRes = await axios.get(downloadUrl, { responseType: 'stream' });
+    return { stream: fileRes.data, fileName, mimeType };
+  }
+
   // @anchor onedrive-browse-folders
   // Listuje podfoldery OneDrive (for Business) przez Graph — zastępuje konsumencki picker js.live.net.
   async browseFolders(userId: string, parentId?: string): Promise<{ id: string; name: string; driveId: string; childCount: number }[]> {

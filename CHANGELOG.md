@@ -4,6 +4,24 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-08 — OneDrive: podgląd plików w apce (nie tylko lista) (v2026.07.08.687)
+
+### architektura / API
+- `back-endpoint` `GET /onedrive/content/:nodeId?itemId=&token=` — strumieniuje treść pliku z OneDrive do przeglądarki przez backend; publiczny na poziomie guarda (react-pdf/`<img>` nie wysyłają nagłówka Authorization), JWT weryfikowany ręcznie z query param `token`
+- `back-serwis` `OneDriveService.downloadFile` — pobiera pre-autoryzowany `@microsoft.graph.downloadUrl` z Graph i strumieniuje go dalej (omija problem Bearera przy redirectcie `/content`)
+- `back-modul` `OneDriveModule` — dodano `JwtModule` (weryfikacja tokenu w kontrolerze)
+- `ui-sekcja` `OneDriveFilesSection` — klik w nazwę pliku otwiera `DocumentViewer` w modalu (PDF/obraz/office/tekst renderowane tak samo jak pliki z bazy); wcześniej lista OneDrive miała tylko link „otwórz w OneDrive"
+
+### słownik
+- dodano `back-serwis` `downloadFile` (OneDrive) — strumieniowanie treści pliku z OneDrive
+- dodano `back-endpoint` `GET /onedrive/content/:nodeId` — endpoint podglądu treści OneDrive
+- dodano `ui-stan` `preview` (OneDriveFilesSection) — aktualnie podglądany plik OneDrive
+
+### wytyczne
+- `back-endpoint` `onedrive-content-endpoint` — treść plików OneDrive MUSI iść przez backend (strumień), nie przez `@microsoft.graph.downloadUrl` bezpośrednio w przeglądarce — te URL-e nie zwracają nagłówków CORS, więc react-pdf/fetch je zablokuje
+
+---
+
 ## 2026-07-07 — Eksport: strategie per gałąź w PDF i Excel (sekcja „Jak to chcemy zrobić")
 
 ### architektura / API

@@ -4,6 +4,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
+import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OneDriveService } from './onedrive.service';
 import { ConfigService } from '@nestjs/config';
@@ -14,6 +15,7 @@ export class OneDriveController {
   constructor(
     private readonly oneDriveService: OneDriveService,
     private readonly config: ConfigService,
+    private readonly jwtService: JwtService,
   ) {}
 
   // @anchor onedrive-auth-endpoint
@@ -87,6 +89,41 @@ export class OneDriveController {
     @Param('category') category: 'finanse' | 'dokumentacja',
   ) {
     return this.oneDriveService.listFiles(req.user.userId, nodeId, category);
+  }
+
+  // @anchor onedrive-content-endpoint
+  // Strumieniuje treść pliku OneDrive do przeglądarki (podgląd w apce).
+  // Publiczny na poziomie guarda — react-pdf/<img> nie wysyłają nagłówka Authorization,
+  // dlatego JWT przekazywany jest w query param `token` i weryfikowany ręcznie.
+  @Get('content/:nodeId')
+  async content(
+    @Param('nodeId') nodeId: string,
+    @Query('itemId') itemId: string,
+    @Query('token') token: string,
+    @Res() res: Response,
+  ) {
+    let userId: string;
+    try {
+      const payload = await this.jwtService.verifyAsync(token);
+      userId = payload.sub;
+    } catch {
+      res.status(401).json({ message: 'Nieprawidłowy lub wygasły token' });
+      return;
+    }
+    try {
+      const { stream, fileName, mimeType } = await this.oneDriveService.downloadFile(userId, nodeId, itemId);
+      const enc = encodeURIComponent(fileName);
+      res.set({
+        'Content-Type': mimeType,
+        'Content-Disposition': `inline; filename="${enc}"; filename*=UTF-8''${enc}`,
+      });
+      stream.on('error', () => {
+        if (!res.headersSent) res.status(500).json({ message: 'Błąd strumienia OneDrive' });
+      });
+      stream.pipe(res);
+    } catch {
+      if (!res.headersSent) res.status(500).json({ message: 'Błąd pobierania pliku z OneDrive' });
+    }
   }
 
   // @anchor onedrive-access-token-endpoint

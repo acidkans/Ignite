@@ -890,6 +890,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 |-----|-------|------|--------|
 | ui-stan | exchangeRates | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-exchange-rates |
 | ui-sekcja | kontener kursów NBP | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-exchange-rates-box |
+| back-serwis | downloadFile (OneDrive) | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-download-file |
+| back-endpoint | GET /onedrive/content/:nodeId | apps/backend/src/onedrive/onedrive.controller.ts | @anchor onedrive-content-endpoint |
+| ui-stan | preview (OneDriveFilesSection) | apps/frontend/src/components/shared/OneDriveFilesSection.jsx | @anchor onedrive-files-preview |
 
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)

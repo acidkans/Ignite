@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Cloud, FileText, FileSpreadsheet, FileImage, File, ExternalLink, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Cloud, FileText, FileSpreadsheet, FileImage, File, ExternalLink, RefreshCw, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { API_URL } from '../../config';
+import DocumentViewer from './DocumentViewer';
 
 // @anchor onedrive-files-section
 // Sekcja z listą plików z folderu OneDrive powiązanego z węzłem.
@@ -12,6 +14,8 @@ export default function OneDriveFilesSection({ nodeId, category = 'finanse' }) {
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(true);
   const [loaded, setLoaded] = useState(false);
+  // @anchor onedrive-files-preview
+  const [preview, setPreview] = useState(null); // { id, name, mimeType }
 
   const fetchFiles = useCallback(async () => {
     if (!nodeId) return;
@@ -62,6 +66,11 @@ export default function OneDriveFilesSection({ nodeId, category = 'finanse' }) {
 
   const folderLabel = category === 'finanse' ? 'pliki_finansowe' : 'dokumentacja_projektowa';
 
+  const previewToken = sessionStorage.getItem('token') || localStorage.getItem('token');
+  const previewUrl = preview
+    ? `${API_URL}/onedrive/content/${nodeId}?itemId=${encodeURIComponent(preview.id)}&token=${encodeURIComponent(previewToken)}`
+    : null;
+
   return (
     <div className="mt-3 border border-white/8 rounded-xl overflow-hidden bg-white/[0.02]">
       {/* Nagłówek sekcji */}
@@ -105,7 +114,14 @@ export default function OneDriveFilesSection({ nodeId, category = 'finanse' }) {
               className="flex items-center gap-2 px-3 py-2 hover:bg-white/5 transition-colors group border-b border-white/[0.04] last:border-0"
             >
               {fileIcon(f.name)}
-              <span className="flex-1 text-[12px] text-gray-300 truncate" title={f.name}>{f.name}</span>
+              <button
+                type="button"
+                onClick={() => setPreview({ id: f.id, name: f.name, mimeType: f.file?.mimeType || '' })}
+                className="flex-1 min-w-0 text-left text-[12px] text-gray-300 truncate hover:text-blue-300 transition-colors"
+                title={`Podgląd: ${f.name}`}
+              >
+                {f.name}
+              </button>
               <span className="text-[10px] text-gray-600 shrink-0 hidden group-hover:inline">{fmtDate(f.lastModifiedDateTime)}</span>
               <span className="text-[10px] text-gray-600 shrink-0 w-12 text-right">{fmtSize(f.size)}</span>
               {f.webUrl && (
@@ -123,6 +139,26 @@ export default function OneDriveFilesSection({ nodeId, category = 'finanse' }) {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Modal podglądu pliku OneDrive — DocumentViewer strumieniuje treść przez backend */}
+      {preview && previewUrl && createPortal(
+        <div
+          className="fixed inset-0 z-[9990] bg-black/60 flex items-center justify-center p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setPreview(null); }}
+        >
+          <div className="w-full h-full max-w-[1600px] relative">
+            <DocumentViewer
+              fileUrl={previewUrl}
+              fileName={preview.name}
+              mimeType={preview.mimeType}
+              nodeId={nodeId}
+              token={previewToken}
+              onClose={() => setPreview(null)}
+            />
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
