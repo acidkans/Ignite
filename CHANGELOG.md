@@ -4,6 +4,18 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-09 — WBS: nagłówek „Oferta" + wstępne zdanie jako zwykły akapit w eksporcie Excel/PDF (v2026.07.09.696)
+
+### architektura / API
+- `ui-funkcja` `handleExportOfertaWbsExcel` (arkusz „Oferta") — dodano nagłówek H1 „Oferta"; wstępne zdanie „W odpowiedzi na zapytanie..." (wpisywane jako markdown H1 przez snippet „Wstęp") jest teraz demotowane do zwykłego akapitu, bo tę rolę nagłówka przejęła nowa sekcja
+- eksport PDF (`UnifiedWbsPanel.jsx`, sekcja oferty) — dodano `section-header` „Oferta"; to samo demotowanie wstępnego zdania z H1 na akapit
+
+## 2026-07-09 — WBS: nagłówek „Opis wyceny" dla strategii ogólnej w eksporcie Excel/PDF (v2026.07.09.695)
+
+### architektura / API
+- `ui-funkcja` `handleExportOfertaWbsExcel` (arkusz „Strategia") — dodano nagłówek H1 „Opis wyceny" przed tekstem ogólnej strategii (wcześniej sekcja nie miała żadnego nagłówka, tylko „Strategie gałęzi" dla gałęzi)
+- eksport PDF (`UnifiedWbsPanel.jsx`, sekcja strategii) — nagłówek zmieniony z „Jak to chcemy zrobić" na „Opis wyceny", spójnie z Excelem
+
 ## 2026-07-08 — WBS: kolumna Narzut % w WBSHybridTable (v2026.07.08.689)
 
 ### architektura / API

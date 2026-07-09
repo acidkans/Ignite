@@ -1277,13 +1277,16 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         })();
         const strategyHtml = (show('strategy') || show('oferta')) ? `
             <div class="section" style="${show('oferta') ? 'page-break-before: always;' : ''}">
-                <div class="section-header">Jak to chcemy zrobić</div>
+                <div class="section-header">Opis wyceny</div>
                 <div class="strategy-text">${renderStrategyHtml(getStrategyText() || 'Brak treści strategii')}</div>
                 ${branchStrategiesHtml}
             </div>` : '';
 
         const offerHtmlContent = (() => {
-            const text = getOfferText() || 'Brak treści oferty';
+            // Wstępne zdanie ("W odpowiedzi na zapytanie...") jest wpisywane jako markdown H1
+            // (patrz snippet „Wstęp"), bo wcześniej pełniło funkcję nagłówka sekcji. Sekcja ma
+            // teraz własny nagłówek "OFERTA", więc to zdanie demotujemy do zwykłego akapitu.
+            const text = (getOfferText() || 'Brak treści oferty').replace(/^#\s+/, '');
             const parts = text.split(/(\{tabela wbs[123]?\})/gi);
             return parts.map(part => {
                 const m = part.match(/^\{tabela wbs([123]?)\}$/i);
@@ -1293,6 +1296,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         })();
         const offerHtml = show('oferta') ? `
             <div class="section">
+                <div class="section-header">Oferta</div>
                 <div class="offer-text">${offerHtmlContent}</div>
             </div>` : '';
 
@@ -3532,14 +3536,21 @@ ${ganttSectionHtml}
         };
 
         // ── Sheet "Oferta": tekst wpisany w zakładce Oferta (WBS panel) ──
-        buildMarkdownSheet('Oferta', getOfferText(), 'Brak treści oferty.');
+        // Wstępne zdanie ("W odpowiedzi na zapytanie...") jest wpisywane jako markdown H1 (patrz
+        // snippet „Wstęp"), bo wcześniej pełniło funkcję nagłówka sekcji. Teraz sekcja ma własny
+        // nagłówek "Oferta", więc to zdanie demotujemy do zwykłego akapitu.
+        const offerBody = (getOfferText() || '').replace(/^#\s+/, '');
+        const offerFull = offerBody.trim() ? `# Oferta\n\n${offerBody}` : '';
+        buildMarkdownSheet('Oferta', offerFull, 'Brak treści oferty.');
         // ── Sheet "Strategia": tekst z sekcji „Jak to chcemy zrobić" + strategie per gałąź ──
         const branchStrategyMd = (wbsData || [])
             .filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0 && String(n.strategy || '').trim())
             .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
             .map(n => `## ${n.name || '(bez nazwy)'}\n\n${String(n.strategy).trim()}`)
             .join('\n\n');
-        const strategyFull = [getStrategyText() || '', branchStrategyMd ? `# Strategie gałęzi\n\n${branchStrategyMd}` : '']
+        const generalStrategyText = (getStrategyText() || '').trim();
+        const generalStrategyMd = generalStrategyText ? `# Opis wyceny\n\n${generalStrategyText}` : '';
+        const strategyFull = [generalStrategyMd, branchStrategyMd ? `# Strategie gałęzi\n\n${branchStrategyMd}` : '']
             .filter(s => String(s).trim())
             .join('\n\n');
         buildMarkdownSheet('Strategia', strategyFull, 'Brak treści strategii.');
