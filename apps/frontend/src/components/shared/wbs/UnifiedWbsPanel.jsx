@@ -4310,22 +4310,25 @@ ${ganttSectionHtml}
         pend.add(field);
         pendingFieldSaves.current.set(id, pend);
         try {
-            if (field === 'unitCost') {
-                // Pole budżetowe — zapisujemy przez /budget, nie przez /wbs-nodes (tree)
+            if (field === 'unitCost' || field === 'margin') {
+                // Pole budżetowe — zapisujemy przez /budget, nie przez /wbs-nodes (tree).
+                // `margin` (Narzut % w WBSHybridTable) musi iść tą samą ścieżką co unitCost —
+                // generyczny PATCH /wbs-nodes/:id (branch else) ma whitelistę pól bez `margin`,
+                // więc backend po cichu odrzucał zapis i WBS Budget/eksporty widziały starą wartość.
                 const node = wbsData.find(n => n.id === id);
-                const uc = parseFloat(value) || 0;
+                const uc = field === 'unitCost' ? (parseFloat(value) || 0) : (parseFloat(node?.unitCost) || 0);
+                const margin = field === 'margin' ? (parseFloat(value) || 0) : (parseFloat(node?.margin) || 0);
                 const qty = parseFloat(node?.quantity) || 0;
-                const margin = parseFloat(node?.margin) || 0;
                 const discount = parseFloat(node?.discount) || 0;
                 const up = discount > 0
                     ? uc * (1 + margin / 100) * (1 - discount / 100)
                     : uc * (1 + margin / 100);
                 // Optymistyczna aktualizacja łącznie z polami pochodnymi (budżet odświeży się od razu)
                 setWbsData(prev => prev.map(item => item.id === id
-                    ? { ...item, unitCost: uc, unitPrice: up, totalCost: uc * qty, totalPrice: up * qty }
+                    ? { ...item, unitCost: uc, margin, unitPrice: up, totalCost: uc * qty, totalPrice: up * qty }
                     : item));
                 setWbsTreeAndRef(prev => {
-                    const upd = items => items.map(n => n.id === id ? { ...n, unitCost: uc } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
+                    const upd = items => items.map(n => n.id === id ? { ...n, unitCost: uc, margin } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
                     return { ...prev, items: upd(prev.items || []) };
                 });
                 await fetch(`${API_URL}/wbs-nodes/${id}/budget`, {
@@ -4334,10 +4337,11 @@ ${ganttSectionHtml}
                     body: JSON.stringify({ unitCost: uc, quantity: qty, margin, discount }),
                 });
                 // Propagacja priceNetto → material-requirements dla typ=material/equipment
+                // (tylko przy realnej zmianie unitCost — margin nie wpływa na priceNetto)
                 // UWAGA: refreshWbsNodes musi być PO tym PATCHu — inaczej fetchCards w WbsMaterialsPanel
                 // odczyta stare dane z DB (race condition)
                 const normalizedType = String(node?.type || '').toLowerCase();
-                if (normalizedType === 'material' || normalizedType === 'equipment') {
+                if (field === 'unitCost' && (normalizedType === 'material' || normalizedType === 'equipment')) {
                     // Szukaj wymagania: 1) wbsNodeId, 2) tag req:, 3) fallback po nazwie (stare węzły / snapshot)
                     const reqByNodeId = allRequirements.find(r => r.wbsNodeId === id);
                     const reqTagId = (node?.tags || []).find(t => String(t).startsWith('req:'))?.slice(4);
