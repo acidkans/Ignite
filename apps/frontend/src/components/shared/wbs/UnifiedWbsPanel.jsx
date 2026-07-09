@@ -5610,20 +5610,20 @@ ${ganttSectionHtml}
                 }
                 if (key === 'strategy') {
                     return renderSection('strategy', 'Jak to chcemy zrobić', HelpCircle, 'blue', (
-                        <div className="flex flex-col flex-1 min-h-0 p-4">
+                        <div className="flex flex-col flex-1 min-h-0 p-4 overflow-y-auto custom-scrollbar">
                             <MarkdownEditor
                                 value={wbsDescription}
                                 onChange={(v) => { setWbsDescription(v); setIsDirty(true); }}
                                 onSave={(v) => saveStrategy(v)}
                                 previewTitle="Jak to chcemy zrobić"
                                 placeholder="Zdefiniuj plan i strategię realizacji projektu..."
-                                containerClassName="flex-1 min-h-0"
-                                className="flex-1 min-h-0 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed resize-none"
+                                containerClassName="flex-1 min-h-[280px] flex-shrink-0"
+                                className="flex-1 min-h-[220px] w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed resize-none"
                                 saveIndicator={true}
                             />
                             {/* Strategie per gałąź (tylko węzły top-level) — pod globalną strategią. */}
                             {wbsData.filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0).length > 0 && (
-                                <div className="mt-4 pt-4 border-t border-white/10 flex flex-col gap-4">
+                                <div className="mt-4 pt-4 border-t border-white/10 flex flex-col gap-4 flex-shrink-0">
                                     <div className="text-sm font-bold uppercase tracking-widest text-gray-500">Strategie gałęzi</div>
                                     {wbsData
                                         .filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0)
