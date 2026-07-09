@@ -1301,11 +1301,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     {fmtPLN(items.reduce((a, n) => a + sumChildrenCost(n), 0))}
                 </td>
             )}
+            {isManager && <td className="px-3 py-3" />}
             {isManager && (
                 <td className="px-3 py-3 text-right font-bold text-green-400 text-base" onClick={e => e.stopPropagation()}>
                     {fmtPLN(items.reduce((a, n) => a + sumChildrenOfferPrice(n), 0))}
                 </td>
             )}
+            <td className="px-3 py-3" />
+            <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
