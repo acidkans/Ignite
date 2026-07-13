@@ -894,6 +894,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-serwis | downloadFile (OneDrive) | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-download-file |
 | back-endpoint | GET /onedrive/content/:nodeId | apps/backend/src/onedrive/onedrive.controller.ts | @anchor onedrive-content-endpoint |
 | ui-stan | preview (OneDriveFilesSection) | apps/frontend/src/components/shared/OneDriveFilesSection.jsx | @anchor onedrive-files-preview |
+| ui-funkcja | fileIcon (PropertyPreview) | apps/frontend/src/components/shared/PropertyPreview.jsx | @anchor property-preview-file-icon |
 
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)

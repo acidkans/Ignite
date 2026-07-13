@@ -444,7 +444,7 @@ export default function MainLayout({ onLogout }) {
                 >
                     <div className="w-full h-full max-w-[1600px]">
                         <DocumentViewer
-                            fileUrl={`${API_URL}/documents/download/${docsFullscreenFile.id}`}
+                            fileUrl={`${API_URL}/documents/download/${docsFullscreenFile.id}/${encodeURIComponent(docsFullscreenFile.fileName)}`}
                             fileName={docsFullscreenFile.fileName}
                             mimeType={docsFullscreenFile.mimeType}
                             documentId={docsFullscreenFile.id}

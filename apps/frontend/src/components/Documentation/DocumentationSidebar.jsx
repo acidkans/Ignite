@@ -176,7 +176,7 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
     const isPdf = selectedFile?.mimeType === 'application/pdf' || ext === 'pdf';
     const isImage = selectedFile?.mimeType?.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp'].includes(ext);
 
-    const fileUrl = selectedFile ? `${API_URL}/documents/download/${selectedFile.id}` : null;
+    const fileUrl = selectedFile ? `${API_URL}/documents/download/${selectedFile.id}/${encodeURIComponent(selectedFile.fileName)}` : null;
 
     const [downloading, setDownloading] = useState(false);
     // @anchor doc-sidebar-pending-export

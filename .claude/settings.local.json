@@ -485,7 +485,15 @@
       "Bash(ssh -o ConnectTimeout=15 gigatel \"cd /srv/apps/erp/apps && docker compose build --no-cache frontend backend && docker compose up -d frontend backend\")",
       "Bash(ssh -o ConnectTimeout=15 gigatel \"docker ps --format 'table {{.Names}}\\\\t{{.Status}}' | grep erp\")",
       "PowerShell(powershell -NonInteractive -File \"$env:USERPROFILE\\\\.claude\\\\scripts\\\\claude-pull.ps1\" -Force)",
-      "Bash(curl -s https://erp.gigatel.org/ -o /dev/null -w \"HTTP %{http_code}\\\\n\")"
+      "Bash(curl -s https://erp.gigatel.org/ -o /dev/null -w \"HTTP %{http_code}\\\\n\")",
+      "Bash(powershell -NoProfile -Command \"Get-NetTCPConnection -LocalPort 3001,5173 -ErrorAction SilentlyContinue | Select-Object -Property LocalPort,OwningProcess\")",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} | Content-Type: %{content_type} | Size: %{size_download}\\\\n\" \"http://localhost:3001/api/documents/download/bb0e344d-a3e7-402b-9cbe-191e7bf22a2d/ANALIZA%20ZASAD%20UTRZYMANIA%20SYSTEMU%20ITS%20REGION%20KATOWICE.docx\")",
+      "Bash(curl -s \"http://localhost:3001/api/documents/download/bb0e344d-a3e7-402b-9cbe-191e7bf22a2d/ANALIZA%20ZASAD%20UTRZYMANIA%20SYSTEMU%20ITS%20REGION%20KATOWICE.docx\")",
+      "Bash(curl -s \"http://localhost:3001/api/documents/download/bb0e344d-a3e7-402b-9cbe-191e7bf22a2d\")",
+      "Bash(printf 'PK\\\\x03\\\\x04test-docx-binary-content-for-verification')",
+      "Bash(curl -s http://localhost:3001/api/documents/upload -F nodeId=d7dc25cc-3e89-42dc-b1ea-fbea7b05cf19 -F category=standard -F 'file=@C:/Users/Andrzej/AppData/Local/Temp/claude/C--Users-Andrzej--gemini-antigravity-scratch-Ignite/74a4dd64-d538-40d5-8c36-9aa6f55f7afb/scratchpad/test-verify.docx;type=application/vnd.openxmlformats-officedocument.wordprocessingml.document;filename=Zaktualizowany zakres GKI.docx')",
+      "Bash(curl -s -D - -o /dev/null \"http://localhost:3001/api/documents/download/fbe1a72e-0693-4855-8117-ceea4f5776fd/Zaktualizowany%20zakres%20GKI.docx\")",
+      "Bash(rm -f \"C:/Users/Andrzej/.gemini/antigravity/scratch/Ignite/apps/backend/uploads/\"*.docx)"
     ]
   }
 }

@@ -4,6 +4,14 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-13 — Dokumentacja/Pliki finansowe: naprawa podglądu .docx w DocumentViewer (v2026.07.13.698)
+
+### architektura / API
+- `back-endpoint` `GET /documents/download/:id/:filename` — nowa trasa (`apps/backend/src/documents/documents.controller.ts`), deleguje do istniejącej `downloadDocument`; `:filename` jest ignorowany serwerowo, służy wyłącznie do dołożenia rozszerzenia pliku (np. `.docx`) na końcu URL
+
+### wytyczne
+- `ui-funkcja` `DocumentViewer` (isOffice) — podgląd .docx/.doc/.xlsx/.pptx idzie przez zewnętrzny Microsoft Office Online Viewer (`view.officeapps.live.com/op/embed.aspx?src=...`), który wymaga aby przekazany URL kończył się rozpoznawalnym rozszerzeniem, inaczej zwraca „nie możemy otworzyć tego obiektu"; dlatego `fileUrl` przekazywany do `DocumentViewer` musi być budowany jako `/documents/download/:id/:encodedFileName`, nigdy samo `/documents/download/:id`
+
 ## 2026-07-09 — WBS: nagłówek „Oferta" + wstępne zdanie jako zwykły akapit w eksporcie Excel/PDF (v2026.07.09.696)
 
 ### architektura / API

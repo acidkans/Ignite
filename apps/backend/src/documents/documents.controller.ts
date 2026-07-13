@@ -30,6 +30,11 @@ export class DocumentsController {
         return this.documentsService.getDocumentsByNodeTree(nodeId);
     }
 
+    @Get('download/:id/:filename')
+    async downloadDocumentWithName(@Param('id') id: string, @Res() res: Response) {
+        return this.downloadDocument(id, res);
+    }
+
     @Get('download/:id')
     async downloadDocument(@Param('id') id: string, @Res() res: Response) {
         const { stream, fileName, mimeType } = await this.documentsService.getFileStream(id);

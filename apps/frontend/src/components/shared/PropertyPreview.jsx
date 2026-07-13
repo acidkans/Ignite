@@ -5,6 +5,19 @@ import DocumentViewer from './DocumentViewer';
 import { importQaFormPdf } from './wbs/importQaFormPdf';
 import OneDriveFilesSection from './OneDriveFilesSection';
 
+const UPLOAD_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.jpg,.jpeg,.png,.gif,.webp,.mp4,.webm';
+
+// @anchor property-preview-file-icon
+const fileIcon = (mime, name) => {
+    const ext = (name || '').split('.').pop()?.toLowerCase();
+    if (mime === 'application/pdf' || ext === 'pdf') return '📕';
+    if (mime?.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(ext)) return '🖼️';
+    if (['docx', 'doc'].includes(ext) || mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || mime === 'application/msword') return '📘';
+    if (['xlsx', 'xls'].includes(ext)) return '📗';
+    if (['pptx', 'ppt'].includes(ext)) return '📙';
+    return '📄';
+};
+
 export default function PropertyPreview({ nodeId, versionId = null, searchQuery = '', isFinancialTab = false, isOfferTab = false, isDatasheetTab = false, onApprove = null, onDatasheetApprove = null }) {
     const [node, setNode] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -372,31 +385,34 @@ export default function PropertyPreview({ nodeId, versionId = null, searchQuery 
                                                     : 'text-gray-300 hover:bg-white/10 hover:text-white'
                                             }`}
                                         >
-                                            <div className="flex-1 min-w-0">
-                                                {isRenaming ? (
-                                                    <input
-                                                        autoFocus
-                                                        value={renameValue}
-                                                        disabled={renameSaving}
-                                                        onChange={(e) => setRenameValue(e.target.value)}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
-                                                            else if (e.key === 'Escape') { e.preventDefault(); cancelRename(); }
-                                                        }}
-                                                        onBlur={commitRename}
-                                                        className="w-full bg-black/40 border border-blue-500/40 rounded px-2 py-1 text-[11px] text-white outline-none focus:border-blue-400"
-                                                    />
-                                                ) : (
-                                                    <div
-                                                        onDoubleClick={(e) => { e.stopPropagation(); startRename(file); }}
-                                                        className="text-xs truncate select-none"
-                                                        title="Dwuklik aby zmienić nazwę"
-                                                    >
-                                                        {file.fileName}
-                                                    </div>
-                                                )}
-                                                <div className="text-[10px] opacity-60 mt-0.5">{new Date(file.uploadedAt).toLocaleDateString()}</div>
+                                            <div className="flex-1 min-w-0 flex items-start gap-1.5">
+                                                <span className="text-xs shrink-0 leading-[18px]">{fileIcon(file.mimeType, file.fileName)}</span>
+                                                <div className="flex-1 min-w-0">
+                                                    {isRenaming ? (
+                                                        <input
+                                                            autoFocus
+                                                            value={renameValue}
+                                                            disabled={renameSaving}
+                                                            onChange={(e) => setRenameValue(e.target.value)}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+                                                                else if (e.key === 'Escape') { e.preventDefault(); cancelRename(); }
+                                                            }}
+                                                            onBlur={commitRename}
+                                                            className="w-full bg-black/40 border border-blue-500/40 rounded px-2 py-1 text-[11px] text-white outline-none focus:border-blue-400"
+                                                        />
+                                                    ) : (
+                                                        <div
+                                                            onDoubleClick={(e) => { e.stopPropagation(); startRename(file); }}
+                                                            className="text-xs truncate select-none"
+                                                            title="Dwuklik aby zmienić nazwę"
+                                                        >
+                                                            {file.fileName}
+                                                        </div>
+                                                    )}
+                                                    <div className="text-[10px] opacity-60 mt-0.5">{new Date(file.uploadedAt).toLocaleDateString()}</div>
+                                                </div>
                                             </div>
                                             <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                                 <button
@@ -463,7 +479,7 @@ export default function PropertyPreview({ nodeId, versionId = null, searchQuery 
                 >
                     <Upload size={14} />
                     {uploading ? 'Wgrywanie...' : dragActive ? 'Upuść plik' : 'Wgraj'}
-                    <input type="file" multiple className="hidden" ref={fileInputRef} onChange={handleFileSelect} disabled={uploading} />
+                    <input type="file" multiple accept={UPLOAD_ACCEPT} className="hidden" ref={fileInputRef} onChange={handleFileSelect} disabled={uploading} />
                 </label>
             </div>
 
@@ -471,7 +487,7 @@ export default function PropertyPreview({ nodeId, versionId = null, searchQuery 
             <div className="flex-1 overflow-hidden relative flex flex-col min-h-0">
                 {selectedFile ? (
                     <DocumentViewer
-                        fileUrl={`${API_URL}/documents/download/${selectedFile.id}`}
+                        fileUrl={`${API_URL}/documents/download/${selectedFile.id}/${encodeURIComponent(selectedFile.fileName)}`}
                         fileName={selectedFile.fileName}
                         mimeType={selectedFile.mimeType}
                         onClose={() => setSelectedFile(null)}
