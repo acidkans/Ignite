@@ -515,10 +515,13 @@ const insertNode = (nodes, targetId, node, position) => {
 // ── Stats ─────────────────────────────────────────────────────────────────────
 // @anchor sum-children-cost
 // Koszt węzła = własny Q×unitCost + suma dzieci.
-// Węzły grupujące bez unitCost (type=group) mają unitCost=0, więc dodają tylko dzieci.
+// Węzeł grupujący (type=group) jest czystym agregatorem — liczy TYLKO sumę dzieci,
+// nigdy własną cenę, nawet jeśli ma niezerowe unitCost/margin (spójne z buildRows(VIEWS.BUDGET),
+// offerRevenueTotal i backendowym zerowaniem pól cenowych dla type=group).
 const sumChildrenCost = node => {
-    const own = (parseFloat(node.unitCost) || 0) * (parseFloat(node.quantity) || 0);
     const kids = node.children || [];
+    if (node.type === 'group') return kids.reduce((a, c) => a + sumChildrenCost(c), 0);
+    const own = (parseFloat(node.unitCost) || 0) * (parseFloat(node.quantity) || 0);
     if (!kids.length) return own;
     return own + kids.reduce((a, c) => a + sumChildrenCost(c), 0);
 };
@@ -526,14 +529,15 @@ const sumChildrenCost = node => {
 // @anchor sum-children-offer-price
 // Cena ofertowa węzła = własna (ilość×koszt×narzut, jak w budżecie) + suma dzieci.
 // Formuła identyczna z BudgetTable.calcDerived: brak narzutu → 0, potem opcjonalny rabat.
-// Sumowana na tych samych poziomach co koszt (sumChildrenCost).
+// Węzeł grupujący (type=group) jest czystym agregatorem — patrz sumChildrenCost.
 const sumChildrenOfferPrice = node => {
+    const kids = node.children || [];
+    if (node.type === 'group') return kids.reduce((a, c) => a + sumChildrenOfferPrice(c), 0);
     const cost = (parseFloat(node.unitCost) || 0) * (parseFloat(node.quantity) || 0);
     const marginRaw = node.margin != null && node.margin !== '' ? parseLocaleNumber(String(node.margin)) : null;
     const disc = Math.max(0, parseLocaleNumber(String(node.discount ?? '')) ?? 0);
     let own = (marginRaw !== null && marginRaw !== 0) ? cost * (1 + marginRaw / 100) : 0;
     if (own > 0 && disc > 0) own = Math.max(0, own * (1 - disc / 100));
-    const kids = node.children || [];
     if (!kids.length) return own;
     return own + kids.reduce((a, c) => a + sumChildrenOfferPrice(c), 0);
 };

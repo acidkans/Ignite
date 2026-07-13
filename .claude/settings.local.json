@@ -484,7 +484,8 @@
       "Bash(ssh -o ConnectTimeout=15 gigatel \"cd /srv/apps/erp && git pull && cd apps && docker compose up -d --build --no-cache frontend backend\")",
       "Bash(ssh -o ConnectTimeout=15 gigatel \"cd /srv/apps/erp/apps && docker compose build --no-cache frontend backend && docker compose up -d frontend backend\")",
       "Bash(ssh -o ConnectTimeout=15 gigatel \"docker ps --format 'table {{.Names}}\\\\t{{.Status}}' | grep erp\")",
-      "PowerShell(powershell -NonInteractive -File \"$env:USERPROFILE\\\\.claude\\\\scripts\\\\claude-pull.ps1\" -Force)"
+      "PowerShell(powershell -NonInteractive -File \"$env:USERPROFILE\\\\.claude\\\\scripts\\\\claude-pull.ps1\" -Force)",
+      "Bash(curl -s https://erp.gigatel.org/ -o /dev/null -w \"HTTP %{http_code}\\\\n\")"
     ]
   }
 }
