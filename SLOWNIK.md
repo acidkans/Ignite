@@ -185,6 +185,23 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | handleAddExtraQuestion | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor handle-add-extra-question |
 | ui-funkcja | handleExtraQuestionChange | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor handle-extra-question-change |
 | ui-funkcja | handleSaveExtraQuestion | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor handle-save-extra-question |
+| ui-stan | qaTreeOpen | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor qa-tree-open |
+
+### Moduł QaTreeView (wspólny widok Q&A drzewa)
+
+#### Frontend (`apps/frontend/src/components/shared/wbs/QaTreeView.jsx` + sync offline)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-sekcja | QaTreeView | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor qa-tree-view |
+| ui-stan | qaFilter | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor qa-tree-filter |
+| ui-stan | queuedIds | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor qa-queued-ids |
+| ui-funkcja | persistNodeQa | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor persist-node-qa |
+| ui-input | GrowingTextarea | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor growing-textarea |
+| ui-funkcja | enqueueWbsQa | apps/frontend/src/services/repos/outboxRepo.js | @anchor enqueue-wbs-qa |
+| ui-funkcja | getPendingByType | apps/frontend/src/services/repos/outboxRepo.js | @anchor get-pending-by-type |
+| ui-stala | WBS_QA | apps/frontend/src/services/sync/syncOutbox.js | @anchor wbs-qa-outbox-type |
+| ui-stan | qaTreeOpen (SchematTab) | apps/frontend/src/components/shared/SchematTab.jsx | @anchor schemat-qa-tree-open |
 
 ### Moduł WBS
 

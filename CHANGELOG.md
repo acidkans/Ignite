@@ -4,6 +4,27 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-14 — feat(wbs): wspólny widok Q&A całego drzewa (QaTreeView) z kolejką offline (v2026.07.14.699)
+
+### architektura / API
+- dodano `ui-sekcja` `QaTreeView` (`apps/frontend/src/components/shared/wbs/QaTreeView.jsx`) — jeden edytowalny widok wszystkich pytań/odpowiedzi całego drzewa WBS, wspólny dla mobile (pełny ekran) i desktopu (modal 3/4); grupowanie po gałęziach top-level, filtry (wszystkie / z pytaniami / bez odpowiedzi, domyślnie mobile: bez odpowiedzi), wyszukiwarka; zapis per węzeł onBlur przez `PATCH /wbs-nodes/:id { qa }`
+- dodano typ outbox `WBS_QA` w `syncOutbox.js` — zapis Q&A wykonany offline (lub gdy PATCH padnie) trafia do kolejki Dexie (`db.outbox`) z dedupe latest-wins per węzeł (`enqueueWbsQa` w `outboxRepo.js`) i synchronizuje się automatycznie po odzyskaniu sieci; po syncu event `wbs-qa-synced`
+- drzewo Q&A cache'owane w meta KV Dexie (klucz `qaTree:{nodeId}:{versionId}`) — widok otwiera się offline na ostatnio pobranych danych, edycje offline nadpisują cache (write-through)
+- nowy kafelek „Q&A drzewa" w `MarkerDetailsPanel` (siatka mobilna i desktopowa) otwiera `QaTreeView`
+- desktopowe wejścia w zakładce „Schemat" (`SchematTab.jsx`, v2026.07.14.698): przycisk „Q&A" w pasku narzędzi obok „Eksport PDF" oraz przycisk „Q&A drzewa" w lokalnym panelu szczegółów znacznika (prop `onOpenQaTree` — lokalny panel SchematTab to inny komponent niż współdzielony `MarkerDetailsPanel`)
+
+### słownik
+- dodano `qa-tree-view` — komponent widoku, QaTreeView.jsx
+- dodano `qa-tree-filter`, `qa-queued-ids`, `persist-node-qa` — stan filtrów, znaczniki kolejki offline i zapis węzła w QaTreeView.jsx
+- dodano `qa-tree-open` — stan otwarcia widoku w MarkerDetailsPanel.jsx
+- dodano `enqueue-wbs-qa`, `get-pending-by-type` — kolejkowanie Q&A w outboxRepo.js
+- dodano `wbs-qa-outbox-type` — obsługa typu WBS_QA w syncOutbox.js
+- dodano `schemat-qa-tree-open` — stan otwarcia QaTreeView w SchematTab.jsx
+
+### wytyczne
+- `ui-funkcja` `persistNodeQa` — zapisy Q&A z widoków zbiorczych zawsze przez PATCH pojedynczego węzła z fallbackiem do outboxa (`enqueueWbsQa`); nie wysyłać całego drzewa (konflikt z debounce zapisu WBSHybridTable)
+- `ui-funkcja` `enqueueWbsQa` — przy kolejkowaniu zapisu tego samego węzła starszy wpis w outboxie musi zostać usunięty (latest-wins), inaczej sync nadpisze nowszą edycję starszą
+
 ## 2026-07-13 — Dokumentacja/Pliki finansowe: naprawa podglądu .docx w DocumentViewer (v2026.07.13.698)
 
 ### architektura / API

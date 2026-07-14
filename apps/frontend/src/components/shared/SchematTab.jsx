@@ -4,8 +4,9 @@ import { enqueueUpload, removeFromQueue, flushPendingUploads } from '../../utils
 import {
     Upload, X, MapPin, Image as ImageIcon, Mic, Trash2,
     MousePointer2, Minus, Type, ZoomIn, ZoomOut, Maximize, Minimize2, Hand, Camera, Download, FileText, Save, FileDown,
-    RefreshCw, HardDrive, FolderOpen, List, CheckSquare, Square, Layers, ChevronDown, Plus, Check, Pencil, Video, Play
+    RefreshCw, HardDrive, FolderOpen, List, CheckSquare, Square, Layers, ChevronDown, Plus, Check, Pencil, Video, Play, HelpCircle
 } from 'lucide-react';
+import QaTreeView from './wbs/QaTreeView';
 
 function flattenWbsNodes(nodes, prefix = '') {
     const result = [];
@@ -27,6 +28,8 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 
 export default function SchematTab({ nodeId, versionId, wbsData: externalWbsData, orderName = '' }) {
     const { isDesktop } = useDevice();
+    // @anchor schemat-qa-tree-open
+    const [qaTreeOpen, setQaTreeOpen] = useState(false); // widok Q&A całego drzewa WBS (QaTreeView)
     // @anchor schemat-can-fullscreen
     // Na tabletach z dotykiem (Android landscape >=1024px) useDevice raportuje desktop,
     // przez co znikał zielony przycisk pełnego ekranu. Wykrywamy dotyk niezależnie od szerokości.
@@ -1084,6 +1087,17 @@ export default function SchematTab({ nodeId, versionId, wbsData: externalWbsData
                                 {exporting ? 'Przygotowuję...' : 'Eksport PDF'}
                             </button>
 
+                            {nodeId && (
+                                <button
+                                    onClick={() => setQaTreeOpen(true)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20"
+                                    title="Q&A całego drzewa WBS — podgląd i edycja wszystkich pytań/odpowiedzi"
+                                >
+                                    <HelpCircle size={14} />
+                                    Q&A
+                                </button>
+                            )}
+
                             {!isDesktop && (<>
 
                             {selectedSchematic && (() => {
@@ -1357,10 +1371,15 @@ export default function SchematTab({ nodeId, versionId, wbsData: externalWbsData
                             onLightbox={setLightboxUrl}
                             nodeId={nodeId}
                             versionId={versionId}
+                            onOpenQaTree={() => setQaTreeOpen(true)}
                         />
                     </div>
                 )}
                 </div>
+
+                {qaTreeOpen && nodeId && (
+                    <QaTreeView nodeId={nodeId} versionId={versionId} onClose={() => setQaTreeOpen(false)} />
+                )}
 
 
             {selectedSchematic && (() => {
@@ -1532,7 +1551,7 @@ export default function SchematTab({ nodeId, versionId, wbsData: externalWbsData
     );
 }
 
-function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLightbox, nodeId, versionId }) {
+function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLightbox, nodeId, versionId, onOpenQaTree }) {
     const [uploading, setUploading] = useState(false);
     const [editName, setEditName] = useState(marker.name || '');
     const [editComment, setEditComment] = useState('');
@@ -2016,6 +2035,16 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                                     <Plus size={12} /> Wymaganie
                                 </button>
                             </div>
+                        )}
+
+                        {onOpenQaTree && (
+                            <button
+                                onClick={onOpenQaTree}
+                                className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-lg text-xs font-semibold transition-colors"
+                                title="Wszystkie pytania/odpowiedzi całego drzewa WBS"
+                            >
+                                <HelpCircle size={13} /> Q&A drzewa
+                            </button>
                         )}
                     </div>
                 )}

@@ -103,6 +103,20 @@ async function processItem(item, token) {
         window.dispatchEvent(new CustomEvent('attachment-synced', { detail: { markerId } }));
     }
 
+    // @anchor wbs-qa-outbox-type
+    // 'WBS_QA' — offline'owy zapis pytań/odpowiedzi węzła WBS z QaTreeView
+    if (item.type === 'WBS_QA') {
+        const { wbsNodeId, qa } = item.payload;
+        const res = await fetch(`${API_URL}/wbs-nodes/${wbsNodeId}`, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ qa }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        window.dispatchEvent(new CustomEvent('wbs-qa-synced', { detail: { wbsNodeId } }));
+        window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
+    }
+
     if (item.type === 'DELETE_MARKER') {
         const { markerId } = item.payload;
         const res = await fetch(`${API_URL}/schematics/markers/${markerId}`, {

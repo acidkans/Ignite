@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, MapPin, Mic, Camera, FilePlus, Trash2, Save, ChevronDown, ChevronLeft, Download, Image as ImageIcon, CheckSquare, Square, Layers, Plus, Check, Video, Play } from 'lucide-react';
+import { X, MapPin, Mic, Camera, FilePlus, Trash2, Save, ChevronDown, ChevronLeft, Download, Image as ImageIcon, CheckSquare, Square, Layers, Plus, Check, Video, Play, HelpCircle } from 'lucide-react';
 import { API_URL } from '../../config';
 import { useNetwork } from '../../hooks/useNetwork';
 import { enqueue, updateTempMarkerPayload } from '../../services/repos/outboxRepo';
 import { db } from '../../services/db';
+import QaTreeView from './wbs/QaTreeView';
 
 // Flatten all WBS nodes recursively with path label
 function flattenWbsNodes(nodes, prefix = '') {
@@ -171,6 +172,8 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
 
     // Mechanizm kafelków na mobile — nowe markery od razu otwierają sekcję WBS
     const [expandedSection, setExpandedSection] = useState(null);
+    // @anchor qa-tree-open
+    const [qaTreeOpen, setQaTreeOpen] = useState(false); // pełnoekranowy widok Q&A całego drzewa WBS
 
     // Responsive check
     const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
@@ -826,6 +829,19 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                     )}
                                 </button>
 
+                                {/* Q&A całego drzewa WBS */}
+                                {nodeId && (
+                                    <button onClick={() => setQaTreeOpen(true)} className="flex flex-col items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/5 active:bg-purple-500/10 active:border-purple-500/30 transition-all active:scale-95 text-left">
+                                        <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20">
+                                            <HelpCircle size={22} className="text-purple-400" />
+                                        </div>
+                                        <div>
+                                            <div className="text-xs font-black text-gray-200">Q&A drzewa</div>
+                                            <div className="text-[10px] text-gray-500 mt-0.5">wszystkie pytania projektu</div>
+                                        </div>
+                                    </button>
+                                )}
+
                                 {/* Nazwa */}
                                 <button onClick={() => setExpandedSection('name')} className="flex flex-col items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/5 active:bg-gray-500/10 active:border-gray-500/30 transition-all active:scale-95 text-left">
                                     <div className="p-2.5 rounded-xl bg-gray-500/10 border border-gray-500/20">
@@ -997,6 +1013,9 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                     </div>
                 </div>
 
+                {qaTreeOpen && nodeId && (
+                    <QaTreeView nodeId={nodeId} versionId={versionId} onClose={() => setQaTreeOpen(false)} />
+                )}
                 {LightboxEl}
             </>
         );
@@ -1123,6 +1142,19 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                     </div>
                                 )}
                             </button>
+
+                            {/* Q&A całego drzewa WBS */}
+                            {nodeId && (
+                                <button onClick={() => setQaTreeOpen(true)} className="flex flex-col items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-purple-500/10 hover:border-purple-500/30 transition-all text-left">
+                                    <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20">
+                                        <HelpCircle size={20} className="text-purple-400" />
+                                    </div>
+                                    <div>
+                                        <div className="text-xs font-black text-gray-200">Q&A drzewa</div>
+                                        <div className="text-[10px] text-gray-500 mt-0.5">wszystkie pytania projektu</div>
+                                    </div>
+                                </button>
+                            )}
 
                             {/* Nazwa */}
                             <button onClick={() => setExpandedSection('name')} className="flex flex-col items-start gap-3 p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-gray-500/10 hover:border-gray-500/30 transition-all text-left">
@@ -1298,6 +1330,9 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                 </div>
             </div>
 
+            {qaTreeOpen && nodeId && (
+                <QaTreeView nodeId={nodeId} versionId={versionId} onClose={() => setQaTreeOpen(false)} />
+            )}
             {LightboxEl}
         </>
     );
