@@ -3,6 +3,7 @@ import { X, MapPin, Mic, Camera, FilePlus, Trash2, Save, ChevronDown, ChevronLef
 import { API_URL } from '../../config';
 import { useNetwork } from '../../hooks/useNetwork';
 import { enqueue, updateTempMarkerPayload } from '../../services/repos/outboxRepo';
+import { syncOutbox } from '../../services/sync/syncOutbox';
 import { db } from '../../services/db';
 import QaTreeView from './wbs/QaTreeView';
 
@@ -401,42 +402,21 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         await loadPendingDrafts();
     };
 
+    // Outbox-first: plik ZAWSZE najpierw ląduje w IndexedDB (draft + outbox),
+    // a wysyłką zajmuje się wyłącznie globalny sync w tle (useSyncOutbox).
+    // Dzięki temu wyjście z panelu, zwinięcie apki na mobile czy reload strony
+    // w trakcie wysyłania nigdy nie gubi pliku. Przy dostępnej sieci sync
+    // odpalamy natychmiast — nie czekamy na cykliczny interwał.
     const uploadFile = async (file) => {
         setUploading(true);
         try {
-            if (!isOnline || isTemp) {
-                try {
-                    await saveAttachmentDraft(file);
-                } catch (err) {
-                    alert('Błąd zapisu lokalnego: ' + err.message);
-                }
-                return;
+            await saveAttachmentDraft(file);
+            if (isOnline) {
+                const token = sessionStorage.getItem('token');
+                if (token) syncOutbox(token).catch(() => {});
             }
-
-            const formData = new FormData();
-            formData.append('file', file);
-            const token = sessionStorage.getItem('token');
-            let res;
-            try {
-                res = await fetch(`${API_URL}/schematics/markers/${marker.id}/attachments`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` },
-                    body: formData
-                });
-            } catch (netErr) {
-                // Sieć padła mimo isOnline (słaby zasięg, stale probe) —
-                // NIE gubimy pliku: zapis do kolejki offline, dośle się przy syncu.
-                await saveAttachmentDraft(file);
-                return;
-            }
-            if (!res.ok) {
-                let msg = `Błąd wgrywania (HTTP ${res.status})`;
-                try { const body = await res.json(); msg += ': ' + (body.message || JSON.stringify(body)); } catch {}
-                throw new Error(msg);
-            }
-            onRefresh(true);
         } catch (err) {
-            alert(err.message);
+            alert('Błąd zapisu lokalnego: ' + err.message);
         } finally {
             setUploading(false);
         }

@@ -4,6 +4,14 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-15 — feat(schemat): upload załączników markera outbox-first — wysyłka zawsze przez globalny sync w tle (v2026.07.15.701)
+
+### architektura / API
+- `ui-funkcja` `uploadFile` (MarkerDetailsPanel) przeprojektowana na outbox-first: plik ZAWSZE najpierw trafia do IndexedDB (`saveAttachmentDraft` — draft + wpis outbox `ADD_ATTACHMENT`), niezależnie od stanu sieci; bezpośredni POST do API usunięty. Przy dostępnej sieci sync odpalany jest natychmiast (`syncOutbox`), bez czekania na 60-sekundowy interwał. Wysyłka działa w tle na poziomie aplikacji — wyjście z panelu, zwinięcie apki na mobile ani reload strony w trakcie wysyłania nie gubi pliku
+
+### wytyczne
+- `ui-funkcja` `uploadFile` (MarkerDetailsPanel) — upload załączników wyłącznie outbox-first; NIE przywracać bezpośredniego POST z komponentu: request żyje tylko tak długo jak strona, a na mobile przełączenie aplikacji w trakcie wysyłania ubija go bez śladu
+
 ## 2026-07-15 — fix(schemat): załączniki markera nie giną przy słabym zasięgu — fallback do outboxa + pending z IndexedDB w UI (v2026.07.15.700)
 
 ### architektura / API
