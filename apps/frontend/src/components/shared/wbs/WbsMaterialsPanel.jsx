@@ -1653,6 +1653,10 @@ export default function WbsMaterialsPanel({
         const STATUS_LABELS_XLS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
         const TYPE_LABELS_XLS = { material: 'Materiał', equipment: 'Sprzęt' };
 
+        // technicalSpec jest wpisywany jedna linia = jedno wymaganie; w Excelu
+        // zlewały się bez separatora, więc łączymy je średnikiem.
+        const joinTechLines = (tech) => (tech || '').split('\n').map(s => s.trim()).filter(Boolean).join('; ');
+
         // depth-0 (gałąź WBS) jest w UI uppercase'owane przez CSS (text-transform);
         // ujednolicamy w eksporcie — pierwszy segment ścieżki idzie wielkimi literami.
         const upperFirstSegment = (path) => {
@@ -1710,7 +1714,7 @@ export default function WbsMaterialsPanel({
                 productName: card?.productName || '',
                 price: card?.priceNetto != null ? Number(card.priceNetto) : null,
                 status: STATUS_LABELS_XLS[card?.status] || (card ? (card.status || '') : ''),
-                tech: card?.technicalSpec || '',
+                tech: joinTechLines(card?.technicalSpec),
                 availability: card?.availability || '',
                 pManufacturer: selectedProposal?.manufacturer || '',
                 pModel: selectedProposal?.model || '',
@@ -1807,7 +1811,7 @@ export default function WbsMaterialsPanel({
                 idx: i + 1,
                 paths: row.paths.join('\n'),
                 name: row.name,
-                tech: row.tech,
+                tech: joinTechLines(row.tech),
                 qty: row.qty,
                 unit: row.unit,
                 positions: row.positions,
