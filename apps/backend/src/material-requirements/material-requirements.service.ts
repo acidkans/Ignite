@@ -8,6 +8,7 @@ import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as mammoth from 'mammoth';
 import { randomUUID } from 'crypto';
 const PDFParser = require('pdf2json');
 const pdfParse = require('pdf-parse');
@@ -1249,8 +1250,8 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
         const filePath = path.join(process.cwd(), 'uploads', doc.storagePath);
         if (!fs.existsSync(filePath)) throw new NotFoundException('Plik nie istnieje na dysku');
 
-        const text = await this.extractPdfText(filePath);
-        if (!text || text.trim().length === 0) throw new BadRequestException('Nie udało się odczytać tekstu z dokumentu — PDF może być oparty na obrazie');
+        const text = await this.extractDocumentText(filePath);
+        if (!text || text.trim().length === 0) throw new BadRequestException('Nie udało się odczytać tekstu z dokumentu — może być oparty na obrazie (skan)');
 
         const prompt = `Jesteś ekspertem analizującym karty katalogowe i deklaracje właściwości użytkowych materiałów/urządzeń.
 Przeanalizuj poniższy tekst i wyciągnij wszystkie produkty.
@@ -1462,8 +1463,8 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
         const isExcel = ext === '.xlsx' || ext === '.xls' || (doc.mimeType || '').includes('spreadsheet') || (doc.mimeType || '').includes('excel');
         if (isExcel) return await this.parseExcelOffer(filePath);
 
-        const text = await this.extractPdfText(filePath);
-        if (!text || text.trim().length < 20) throw new BadRequestException('Nie udało się odczytać tekstu z PDF');
+        const text = await this.extractDocumentText(filePath);
+        if (!text || text.trim().length < 20) throw new BadRequestException('Nie udało się odczytać tekstu z dokumentu');
 
         const raw = await this.callAiForJson(this.buildOfferParsePrompt(text));
         const jsonMatch = raw.match(/\[[\s\S]*\]/);
@@ -1607,6 +1608,21 @@ Zasady: ceny jako liczby bez waluty (usuń symbole €, $, PLN, zł, USD, EUR i 
         const match = raw.match(/\[[\s\S]*\]/);
         if (!match) return [];
         try { const r = JSON.parse(match[0]); return Array.isArray(r) ? r : []; } catch { return []; }
+    }
+
+    /** Ekstrakcja tekstu z dokumentu — rozgałęzia na docx (mammoth) albo PDF (pdf-parse/pdf2json) wg rozszerzenia pliku */
+    private async extractDocumentText(filePath: string): Promise<string> {
+        const ext = path.extname(filePath).toLowerCase();
+        if (ext === '.docx' || ext === '.doc') {
+            try {
+                const buffer = fs.readFileSync(filePath);
+                const result = await mammoth.extractRawText({ buffer });
+                return result?.value || '';
+            } catch {
+                return '';
+            }
+        }
+        return this.extractPdfText(filePath);
     }
 
     private extractPdfText(filePath: string): Promise<string> {
