@@ -20,6 +20,9 @@ function flattenWbsNodes(nodes, prefix = '') {
 export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId, subtaskId, versionId, isNew = false }) {
     const { isOnline } = useNetwork();
     const [uploading, setUploading] = useState(false);
+    // Załączniki czekające w outboxie na sync (przetrwają reload — czytane z IndexedDB)
+    // @anchor pending-drafts
+    const [pendingDrafts, setPendingDrafts] = useState([]);
     const [editName, setEditName] = useState(marker.name || (marker.type === 'TEXT' ? marker.note || '' : ''));
     const [editComment, setEditComment] = useState('');
     const [editQuestion, setEditQuestion] = useState(marker.question || '');
@@ -52,6 +55,43 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     const camInputRef = useRef(null);
     // Flaga: user aktywnie zmienił przypisanie WBS → wywołaj auto-nazewnictwo
     const shouldAutoNameRef = useRef(false);
+
+    // Czyta z IndexedDB (outbox + attachmentDrafts) załączniki tego markera
+    // czekające na sync i buduje z nich podglądy blob-URL.
+    // @anchor load-pending-drafts
+    const loadPendingDrafts = useCallback(async () => {
+        try {
+            const items = await db.outbox.where('type').equals('ADD_ATTACHMENT').toArray();
+            const mine = items.filter(i => i.payload?.markerId === marker.id);
+            const drafts = [];
+            for (const item of mine) {
+                const draft = await db.attachmentDrafts.where('outboxId').equals(item.payload.outboxId).first();
+                if (!draft) continue;
+                const ft = draft.fileType || '';
+                drafts.push({
+                    id: `pending_${item.payload.outboxId}`,
+                    outboxId: item.payload.outboxId,
+                    isPending: true,
+                    fileType: ft.startsWith('image/') ? 'IMAGE' : ft.startsWith('video/') ? 'VIDEO' : ft.startsWith('audio/') ? 'AUDIO' : 'FILE',
+                    fileUrl: URL.createObjectURL(new Blob([draft.arrayBuffer], { type: ft })),
+                    fileName: draft.fileName,
+                });
+            }
+            setPendingDrafts(prev => {
+                prev.forEach(d => { try { URL.revokeObjectURL(d.fileUrl); } catch (_) {} });
+                return drafts;
+            });
+        } catch (err) {
+            console.warn('[MarkerDetails] loadPendingDrafts failed:', err);
+        }
+    }, [marker.id]);
+
+    useEffect(() => {
+        loadPendingDrafts();
+        const onSynced = () => loadPendingDrafts();
+        window.addEventListener('attachment-synced', onSynced);
+        return () => window.removeEventListener('attachment-synced', onSynced);
+    }, [loadPendingDrafts]);
 
     // Sync wbsLinksRef i inicjalizacja komentarza z pierwszego węzła WBS
     useEffect(() => { wbsLinksRef.current = wbsLinks; }, [wbsLinks]);
@@ -326,56 +366,69 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         }
     };
 
-    const uploadFile = async (file) => {
-        if (!isOnline || isTemp) {
-            setUploading(true);
-            try {
-                const arrayBuffer = await file.arrayBuffer();
-                const outboxId = crypto.randomUUID();
-                await db.attachmentDrafts.add({
-                    outboxId, arrayBuffer,
-                    fileName: file.name, fileType: file.type,
-                    createdAt: new Date().toISOString(),
-                });
-                await enqueue('ADD_ATTACHMENT', {
-                    markerId: marker.id, outboxId,
-                    fileName: file.name, fileType: file.type,
-                    subtaskId, nodeId,
-                });
-                // Optimistyczny podgląd — blob URL jako tymczasowy preview
-                const blobUrl = URL.createObjectURL(new Blob([arrayBuffer], { type: file.type }));
-                window.dispatchEvent(new CustomEvent('temp-marker-updated', {
-                    detail: {
-                        tempId: marker.id,
-                        updates: {
-                            attachments: [...(marker.attachments || []), {
-                                id: `pending_${outboxId}`,
-                                isPending: true,
-                                fileType: file.type.startsWith('image/') ? 'IMAGE' : file.type.startsWith('video/') ? 'VIDEO' : 'FILE',
-                                fileUrl: blobUrl,
-                                fileName: file.name,
-                            }],
-                        },
-                    },
-                }));
-            } catch (err) {
-                alert('Błąd zapisu lokalnego: ' + err.message);
-            } finally {
-                setUploading(false);
-            }
-            return;
-        }
+    // Zapis załącznika do lokalnej kolejki offline (IndexedDB): draft blob +
+    // wpis outbox ADD_ATTACHMENT. Plik doślemy przy najbliższym syncu.
+    // @anchor save-attachment-draft
+    const saveAttachmentDraft = async (file) => {
+        const arrayBuffer = await file.arrayBuffer();
+        const outboxId = crypto.randomUUID();
+        await db.attachmentDrafts.add({
+            outboxId, arrayBuffer,
+            fileName: file.name, fileType: file.type,
+            createdAt: new Date().toISOString(),
+        });
+        await enqueue('ADD_ATTACHMENT', {
+            markerId: marker.id, outboxId,
+            fileName: file.name, fileType: file.type,
+            subtaskId, nodeId,
+        });
+        // Optimistyczny podgląd — blob URL jako tymczasowy preview
+        const blobUrl = URL.createObjectURL(new Blob([arrayBuffer], { type: file.type }));
+        window.dispatchEvent(new CustomEvent('temp-marker-updated', {
+            detail: {
+                tempId: marker.id,
+                updates: {
+                    attachments: [...(marker.attachments || []), {
+                        id: `pending_${outboxId}`,
+                        isPending: true,
+                        fileType: file.type.startsWith('image/') ? 'IMAGE' : file.type.startsWith('video/') ? 'VIDEO' : 'FILE',
+                        fileUrl: blobUrl,
+                        fileName: file.name,
+                    }],
+                },
+            },
+        }));
+        await loadPendingDrafts();
+    };
 
+    const uploadFile = async (file) => {
         setUploading(true);
-        const formData = new FormData();
-        formData.append('file', file);
         try {
+            if (!isOnline || isTemp) {
+                try {
+                    await saveAttachmentDraft(file);
+                } catch (err) {
+                    alert('Błąd zapisu lokalnego: ' + err.message);
+                }
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
             const token = sessionStorage.getItem('token');
-            const res = await fetch(`${API_URL}/schematics/markers/${marker.id}/attachments`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
-                body: formData
-            });
+            let res;
+            try {
+                res = await fetch(`${API_URL}/schematics/markers/${marker.id}/attachments`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData
+                });
+            } catch (netErr) {
+                // Sieć padła mimo isOnline (słaby zasięg, stale probe) —
+                // NIE gubimy pliku: zapis do kolejki offline, dośle się przy syncu.
+                await saveAttachmentDraft(file);
+                return;
+            }
             if (!res.ok) {
                 let msg = `Błąd wgrywania (HTTP ${res.status})`;
                 try { const body = await res.json(); msg += ': ' + (body.message || JSON.stringify(body)); } catch {}
@@ -537,6 +590,19 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
 
     const handleDeleteAttachment = async (id) => {
         if (!window.confirm('Usunąć załącznik?')) return;
+        // Załącznik pending (jeszcze w kolejce offline) — usuwamy z IndexedDB, nie z API
+        if (String(id).startsWith('pending_')) {
+            try {
+                const outboxId = String(id).slice('pending_'.length);
+                const items = await db.outbox.where('type').equals('ADD_ATTACHMENT').toArray();
+                for (const it of items) {
+                    if (it.payload?.outboxId === outboxId) await db.outbox.delete(it.id);
+                }
+                await db.attachmentDrafts.where('outboxId').equals(outboxId).delete();
+                await loadPendingDrafts();
+            } catch (err) { console.error(err); }
+            return;
+        }
         try {
             const token = sessionStorage.getItem('token');
             await fetch(`${API_URL}/schematics/attachments/${id}`, {
@@ -607,6 +673,14 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     const getFileUrl = (fileName) => `${API_URL}/schematics/file/${fileName}`;
 
     const downloadFile = async (att) => {
+        if (att.isPending) {
+            // Plik jeszcze nie wysłany — blob URL lokalny, pobieramy bezpośrednio
+            const a = document.createElement('a');
+            a.href = att.fileUrl;
+            a.download = att.fileName || 'zalacznik';
+            a.click();
+            return;
+        }
         const url = getFileUrl(att.fileUrl);
         const token = sessionStorage.getItem('token');
         try {
@@ -621,13 +695,21 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     };
 
     const downloadAll = async () => {
-        for (const att of marker.attachments || []) {
+        for (const att of displayAttachments) {
             await downloadFile(att);
         }
     };
 
     const isTemp = marker.id?.toString().startsWith('temp_');
     const isVideoAtt = (att) => att.fileType === 'VIDEO' || /\.(mp4|mov|webm|avi|mkv|m4v)$/i.test(att.fileName || '');
+
+    // Załączniki z serwera + pending z IndexedDB (dedupe po id — temp markery
+    // dostają pending wpisy także przez event temp-marker-updated)
+    // @anchor display-attachments
+    const displayAttachments = [
+        ...(marker.attachments || []),
+        ...pendingDrafts.filter(d => !(marker.attachments || []).some(a => a.id === d.id)),
+    ];
 
     // ─── Lightbox (wspólny dla mobile i desktop) ───────────────────────────────
     const LightboxEl = lightboxAtt ? (
@@ -651,10 +733,10 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
 
     // ─── Sekcja: siatka załączników (reużywana na mobile i desktop) ────────────
     const AttachmentsGrid = (
-        marker.attachments?.length > 0 ? (
+        displayAttachments.length > 0 ? (
             <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
-                    {marker.attachments.map(att => (
+                    {displayAttachments.map(att => (
                         <div key={att.id} className={`relative rounded-2xl overflow-hidden bg-[#1e293b] border group shadow-xl ${att.isPending ? 'border-amber-500/40' : 'border-white/5'}`}>
                             {att.isPending && <div className="absolute top-2 left-2 z-10 px-1.5 py-0.5 bg-amber-500/80 rounded text-[9px] font-black text-white">⏳</div>}
                             <div className="aspect-square">
@@ -677,7 +759,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                     <input autoFocus value={editingAttNote.note} onChange={e => setEditingAttNote({ ...editingAttNote, note: e.target.value })} onBlur={() => handleUpdateAttachmentNote(att.id, editingAttNote.note)} onKeyDown={e => { if (e.key === 'Enter') handleUpdateAttachmentNote(att.id, editingAttNote.note); if (e.key === 'Escape') setEditingAttNote(null); }} className="flex-1 bg-transparent text-white text-[11px] outline-none placeholder:text-gray-500 min-w-0" placeholder="Wpisz notatkę..." />
                                 </div>
                             ) : (
-                                <div className="bg-black/60 px-2 py-1 cursor-pointer min-h-[26px] flex items-center" onClick={() => setEditingAttNote({ id: att.id, note: att.note || '' })}>
+                                <div className="bg-black/60 px-2 py-1 cursor-pointer min-h-[26px] flex items-center" onClick={() => { if (!att.isPending) setEditingAttNote({ id: att.id, note: att.note || '' }); }}>
                                     <span className="text-[11px] text-gray-300 truncate w-full">{att.note || <span className="text-gray-600 italic">+ notatka</span>}</span>
                                 </div>
                             )}
@@ -687,7 +769,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                     ))}
                 </div>
                 <button onClick={downloadAll} className="w-full flex items-center justify-center gap-2 py-3 text-xs font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-2xl active:scale-[0.98] transition-all">
-                    <Download size={14} /> Pobierz wszystko ({marker.attachments.length})
+                    <Download size={14} /> Pobierz wszystko ({displayAttachments.length})
                 </button>
             </div>
         ) : (
@@ -702,7 +784,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     if (isMobile) {
         const isExpanded = expandedSection !== null;
         const SECTION_TITLES = {
-            attachments: `Załączniki (${marker.attachments?.length || 0})`,
+            attachments: `Załączniki (${displayAttachments.length})`,
             add: 'Dodaj plik',
             wbs: 'Przedmiot projektu',
             comment: 'Komentarz',
@@ -762,11 +844,11 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                     </div>
                                     <div>
                                         <div className="text-xs font-black text-gray-200">Załączniki</div>
-                                        <div className="text-[10px] text-gray-500 mt-0.5">{marker.attachments?.length || 0} plików</div>
+                                        <div className="text-[10px] text-gray-500 mt-0.5">{displayAttachments.length} plików</div>
                                     </div>
-                                    {(marker.attachments?.length || 0) > 0 && (
+                                    {displayAttachments.length > 0 && (
                                         <div className="absolute top-3 right-3 min-w-[20px] h-5 px-1 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center">
-                                            {marker.attachments.length}
+                                            {displayAttachments.length}
                                         </div>
                                     )}
                                 </button>
@@ -1024,7 +1106,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     // ─── DESKTOP — panel boczny kafelkowy ─────────────────────────────────────
     const isExpanded = expandedSection !== null;
     const SECTION_TITLES = {
-        attachments: `Załączniki (${marker.attachments?.length || 0})`,
+        attachments: `Załączniki (${displayAttachments.length})`,
         add: 'Dodaj plik',
         wbs: 'Przedmiot projektu',
         comment: 'Komentarz',
@@ -1076,11 +1158,11 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                 </div>
                                 <div>
                                     <div className="text-xs font-black text-gray-200">Załączniki</div>
-                                    <div className="text-[10px] text-gray-500 mt-0.5">{marker.attachments?.length || 0} plików</div>
+                                    <div className="text-[10px] text-gray-500 mt-0.5">{displayAttachments.length} plików</div>
                                 </div>
-                                {(marker.attachments?.length || 0) > 0 && (
+                                {displayAttachments.length > 0 && (
                                     <div className="absolute top-3 right-3 min-w-[20px] h-5 px-1 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center">
-                                        {marker.attachments.length}
+                                        {displayAttachments.length}
                                     </div>
                                 )}
                             </button>

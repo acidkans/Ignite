@@ -4,6 +4,21 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-15 — fix(schemat): załączniki markera nie giną przy słabym zasięgu — fallback do outboxa + pending z IndexedDB w UI (v2026.07.15.700)
+
+### architektura / API
+- upload załącznika markera (`MarkerDetailsPanel.uploadFile`): błąd sieci w ścieżce „online" (fetch rzuca — słaby zasięg, stale probe `isOnline`) nie gubi już pliku — plik spada do kolejki offline (`attachmentDrafts` + outbox `ADD_ATTACHMENT`) przez nową `ui-funkcja` `saveAttachmentDraft`; alert zostaje tylko dla odpowiedzi HTTP !ok (serwer odpowiedział — retry i tak by padł)
+- pending załączniki są teraz czytane z IndexedDB przy montowaniu panelu (`ui-funkcja` `loadPendingDrafts` → `ui-stan` `pendingDrafts`) i renderowane w gridzie z badge ⏳ — przetrwają reload strony / ubicie karty przez mobile; usunięcie pending kasuje wpis z outboxa i draft, pobranie idzie z lokalnego blob URL
+- `useSyncOutbox`: sync outboxa odpala się cyklicznie co 60 s (`ui-stala` `OUTBOX_RETRY_INTERVAL_MS`), nie tylko przy zmianie token/isOnline — pojedynczy nieudany sync nie zostawia kolejki wiszącej w nieskończoność
+
+### słownik
+- dodano `pending-drafts`, `load-pending-drafts`, `save-attachment-draft`, `display-attachments` — obsługa pending załączników w MarkerDetailsPanel.jsx
+- dodano `outbox-retry-interval-ms` — interwał retry syncu w useSyncOutbox.js
+
+### wytyczne
+- `ui-funkcja` `uploadFile` (MarkerDetailsPanel) — każda nowa ścieżka uploadu plików z terenu MUSI przy błędzie sieci spadać do kolejki offline zamiast alertować i porzucać plik; `isOnline` z `useNetwork` jest optymistyczne (probe co 30 s) i nie gwarantuje, że POST przejdzie
+- `ui-stan` `pendingDrafts` — źródłem prawdy o niewysłanych załącznikach jest IndexedDB (outbox + attachmentDrafts), nigdy stan w pamięci ani blob URL-e z eventów — te giną przy reloadzie
+
 ## 2026-07-14 — feat(wbs): wspólny widok Q&A całego drzewa (QaTreeView) z kolejką offline (v2026.07.14.699)
 
 ### architektura / API

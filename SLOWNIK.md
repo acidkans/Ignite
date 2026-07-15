@@ -186,6 +186,11 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | handleExtraQuestionChange | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor handle-extra-question-change |
 | ui-funkcja | handleSaveExtraQuestion | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor handle-save-extra-question |
 | ui-stan | qaTreeOpen | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor qa-tree-open |
+| ui-stan | pendingDrafts | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor pending-drafts |
+| ui-funkcja | loadPendingDrafts | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor load-pending-drafts |
+| ui-funkcja | saveAttachmentDraft | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor save-attachment-draft |
+| ui-stala | displayAttachments | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor display-attachments |
+| ui-stala | OUTBOX_RETRY_INTERVAL_MS | apps/frontend/src/hooks/useSyncOutbox.js | @anchor outbox-retry-interval-ms |
 
 ### Moduł QaTreeView (wspólny widok Q&A drzewa)
 
