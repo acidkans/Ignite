@@ -4,6 +4,24 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-15 — feat(oferty): edycja zapisanych pozycji oferty z autozapisem + modal wyboru zamiast auto-parsowania (v2026.07.15.702)
+
+### architektura / API
+- zmieniono sygnaturę `back-endpoint` `POST /material-requirements/parse-offer` — nowy opcjonalny parametr body `force: boolean`; `force=true` pomija zapisane `schema-pole` `ProcessNode.parsedPositions` i wymusza faktyczne ponowne parsowanie (wcześniej przycisk „Parsuj ponownie" zwracał zapisane pozycje i nigdy nie parsował od nowa)
+- `back-funkcja` `getDocuments` (documents.service.ts) — odczyt `parsedPositions` najpierw jako czysty JSON (tak zapisuje `approveParsedPositions`), base64 tylko jako fallback dla starych rekordów; wcześniej dekodowanie wyłącznie base64 zawsze kończyło się `null`
+- `ui-sekcja` `OfferParsePanel` (DocumentViewer.jsx) — przy wejściu na już sparsowany dokument nie parsuje automatycznie; pokazuje `ui-modal` `OfferParsedChoiceModal` z wyborem: edycja zapisanych pozycji lub ponowne parsowanie. Edycje pól (cena, ilość, producent itd.) zapisanych pozycji zapisują się automatycznie (debounce 800 ms + flush przy zamknięciu podglądu). Pola `quantity`/`priceNetto` konwertowane na liczby, `priceNettoPln` przeliczany przy edycji ceny w walucie obcej
+
+### słownik
+- dodano `offer-parsed-choice-modal` — modal wyboru edycja/ponowne parsowanie, DocumentViewer.jsx
+- dodano `offer-choice-open` — stan otwarcia modala wyboru, DocumentViewer.jsx
+- dodano `offer-autosave-state` — stan autozapisu (idle/saving/saved/error), DocumentViewer.jsx
+- dodano `offer-save-positions` — funkcja PATCH pozycji do `/documents/:id/parsed-positions`, DocumentViewer.jsx
+- dodano `offer-parse-now` — funkcja parsowania oferty (z parametrem force), DocumentViewer.jsx
+
+### wytyczne
+- `schema-pole` `ProcessNode.parsedPositions` — zapisywany ZAWSZE jako czysty JSON string (nie base64); przy odczycie w nowych miejscach parsować bezpośrednio `JSON.parse`
+- `ui-sekcja` `OfferParsePanel` — autozapis edycji działa tylko gdy pozycje są już w bazie (`hasStoredRef`); świeżo sparsowane pozycje trafiają do bazy dopiero po „Zatwierdź dane oferty", żeby wymuszone parsowanie nie nadpisywało zapisanych danych przed zatwierdzeniem
+
 ## 2026-07-15 — feat(schemat): upload załączników markera outbox-first — wysyłka zawsze przez globalny sync w tle (v2026.07.15.701)
 
 ### architektura / API

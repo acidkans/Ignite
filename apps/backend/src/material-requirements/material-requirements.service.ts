@@ -1446,12 +1446,12 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
 
     // ─── PARSOWANIE OFERTY PDF/XLSX ───────────────────────────────────────────
 
-    async parseOfferDocument(documentId: string): Promise<any[]> {
+    async parseOfferDocument(documentId: string, force = false): Promise<any[]> {
         const doc = await this.prisma.processNode.findUnique({ where: { id: documentId } });
         if (!doc || !doc.storagePath) throw new NotFoundException('Dokument nie znaleziony lub brak pliku');
 
-        // Return pre-approved positions if available
-        if ((doc as any).parsedPositions) {
+        // Return pre-approved positions if available (unless force re-parse requested)
+        if (!force && (doc as any).parsedPositions) {
             try { return JSON.parse((doc as any).parsedPositions); } catch {}
         }
 

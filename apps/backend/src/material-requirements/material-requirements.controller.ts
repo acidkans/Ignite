@@ -261,11 +261,11 @@ export class MaterialRequirementsController {
         stream.pipe(res);
     }
 
-    /** Parsowanie pozycji z PDF oferty */
+    /** Parsowanie pozycji z PDF oferty; force=true pomija zapisane pozycje i parsuje od nowa */
     @Post('parse-offer')
-    parseOffer(@Body() body: { documentId: string }) {
+    parseOffer(@Body() body: { documentId: string; force?: boolean }) {
         if (!body.documentId) throw new BadRequestException('documentId wymagane');
-        return this.service.parseOfferDocument(body.documentId);
+        return this.service.parseOfferDocument(body.documentId, !!body.force);
     }
 
     /** Parsowanie karty katalogowej — zwraca producent, nazwa, model */

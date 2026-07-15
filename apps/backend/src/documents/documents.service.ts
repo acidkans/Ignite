@@ -406,10 +406,15 @@ export class DocumentsService {
         return documents.map(doc => {
             let parsedPositions: any[] | null = null;
             if (doc.parsedPositions) {
+                // Pole zapisywane jest jako czysty JSON (approveParsedPositions); base64 to fallback dla starych rekordów
                 try {
-                    const decoded = Buffer.from(doc.parsedPositions, 'base64').toString('utf-8');
-                    parsedPositions = JSON.parse(decoded);
-                } catch {}
+                    parsedPositions = JSON.parse(doc.parsedPositions);
+                } catch {
+                    try {
+                        const decoded = Buffer.from(doc.parsedPositions, 'base64').toString('utf-8');
+                        parsedPositions = JSON.parse(decoded);
+                    } catch {}
+                }
             }
             return {
                 id: doc.id,

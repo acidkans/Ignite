@@ -6,7 +6,7 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import { buildDownloadArtifact } from '../../utils/downloadPdfWithHighlights';
 import ExportChoiceModal from './ExportChoiceModal';
 import DocViewer, { DocViewerRenderers } from '@cyntler/react-doc-viewer';
-import { Maximize2, Minimize2, Download, X, ZoomIn, ZoomOut, CheckCircle, RotateCcw, FileText, ChevronRight, Link2, AlertCircle, ChevronDown, Sparkles, Trash2 } from 'lucide-react';
+import { Maximize2, Minimize2, Download, X, ZoomIn, ZoomOut, CheckCircle, RotateCcw, FileText, ChevronRight, Link2, AlertCircle, ChevronDown, Sparkles, Trash2, Pencil } from 'lucide-react';
 import { API_URL } from '../../config';
 import PdfPageWithHighlights from './PdfPageWithHighlights';
 
@@ -214,37 +214,91 @@ function OfferDatasheetMappingModal({ positions, documentId, token, onClose, onS
     );
 }
 
+// ─── Modal wyboru: edycja zapisanych pozycji czy ponowne parsowanie ───────────
+
+// @anchor offer-parsed-choice-modal
+function OfferParsedChoiceModal({ count, onEdit, onReparse }) {
+    return createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="bg-[#0f1117] border border-white/10 rounded-2xl shadow-2xl w-[440px] overflow-hidden">
+                <div className="flex items-center gap-2.5 px-5 py-4 border-b border-white/5">
+                    <FileText size={15} className="text-teal-400" />
+                    <span className="text-sm font-bold text-white">Oferta już sparsowana</span>
+                </div>
+                <div className="px-5 py-4">
+                    <p className="text-xs text-gray-400 leading-relaxed">
+                        Ten dokument ma już zapisane pozycje ({count}). Możesz je edytować — zmiany
+                        zapisują się automatycznie — albo sparsować plik ponownie. Ponowne parsowanie
+                        nadpisze zapisane pozycje dopiero po zatwierdzeniu.
+                    </p>
+                </div>
+                <div className="px-5 py-4 border-t border-white/5 bg-black/20 flex items-center gap-3">
+                    <button onClick={onReparse}
+                        className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-[11px] text-amber-300 font-semibold border border-amber-500/30 bg-amber-600/10 hover:bg-amber-600/20 transition-all">
+                        <RotateCcw size={12} />Parsuj ponownie
+                    </button>
+                    <button onClick={onEdit}
+                        className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 text-[11px] font-semibold border border-teal-500/30 transition-all">
+                        <Pencil size={12} />Edytuj pozycje
+                    </button>
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+}
+
 // ─── Panel pozycji oferty ─────────────────────────────────────────────────────
 
 function OfferParsePanel({ documentId, token, onApprove }) {
     const [positions, setPositions] = useState(null);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [approved, setApproved] = useState(false);
     const [error, setError] = useState(null);
     const [showMapping, setShowMapping] = useState(false);
-    const authHeaders = { Authorization: `Bearer ${token}` };
+    // @anchor offer-choice-open
+    const [choiceOpen, setChoiceOpen] = useState(false);
+    // @anchor offer-autosave-state
+    const [autoSave, setAutoSave] = useState('idle'); // idle | saving | saved | error
+    const hasStoredRef = useRef(false); // pozycje są już w bazie → edycje zapisują się automatycznie
+    const autoSaveTimer = useRef(null);
+    const positionsRef = useRef(null);
+    const dirtyRef = useRef(false);
 
-    const loadAndParse = useCallback(async (force = false) => {
+    useEffect(() => { positionsRef.current = positions; }, [positions]);
+
+    // Chwilowy status "zapisano" wraca do idle
+    useEffect(() => {
+        if (autoSave !== 'saved') return;
+        const t = setTimeout(() => setAutoSave('idle'), 2000);
+        return () => clearTimeout(t);
+    }, [autoSave]);
+
+    // @anchor offer-save-positions
+    const savePositions = useCallback(async (pos, { keepalive = false } = {}) => {
+        setAutoSave('saving');
+        try {
+            const res = await fetch(`${API_URL}/documents/${documentId}/parsed-positions`, {
+                method: 'PATCH', keepalive,
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ positions: pos }),
+            });
+            dirtyRef.current = !res.ok;
+            setAutoSave(res.ok ? 'saved' : 'error');
+            return res.ok;
+        } catch { setAutoSave('error'); return false; }
+    }, [documentId, token]);
+
+    // @anchor offer-parse-now
+    const parseNow = useCallback(async (force = false) => {
+        // Po wymuszonym parsowaniu autozapis wyłączony do czasu zatwierdzenia — zapisane pozycje w bazie zostają nietknięte
+        hasStoredRef.current = false;
         setLoading(true); setError(null); setApproved(false);
         try {
-            if (!force) {
-                // Check for pre-stored positions first
-                try {
-                    const stored = await fetch(`${API_URL}/documents/${documentId}/parsed-positions`, { headers: authHeaders });
-                    if (stored.ok) {
-                        const text = await stored.text();
-                        const data = text ? JSON.parse(text) : null;
-                        if (data && Array.isArray(data) && data.length > 0) {
-                            setPositions(data); setApproved(true); setLoading(false); return;
-                        }
-                    }
-                } catch { /* jeśli endpoint nie zwróci JSON — kontynuuj parsowanie */ }
-            }
-            // Parse from PDF
             const res = await fetch(`${API_URL}/material-requirements/parse-offer`, {
-                method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ documentId }),
+                method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ documentId, force }),
             });
             if (!res.ok) { const err = await res.json().catch(() => ({})); setError(err.message || `Błąd ${res.status}`); return; }
             const data = await res.json();
@@ -254,29 +308,82 @@ function OfferParsePanel({ documentId, token, onApprove }) {
         finally { setLoading(false); }
     }, [documentId, token]);
 
+    // Wejście: jeśli pozycje są już zapisane — pokaż modal wyboru zamiast parsować automatycznie
     useEffect(() => {
-        const timer = setTimeout(() => loadAndParse(), 1500);
-        return () => clearTimeout(timer);
-    }, [loadAndParse]);
+        let cancelled = false;
+        (async () => {
+            setLoading(true);
+            try {
+                const stored = await fetch(`${API_URL}/documents/${documentId}/parsed-positions`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (stored.ok) {
+                    const text = await stored.text();
+                    const data = text ? JSON.parse(text) : null;
+                    if (!cancelled && Array.isArray(data) && data.length > 0) {
+                        hasStoredRef.current = true;
+                        setPositions(data);
+                        setApproved(true);
+                        setLoading(false);
+                        setChoiceOpen(true);
+                        return;
+                    }
+                }
+            } catch { /* brak zapisanych pozycji — parsuj */ }
+            if (!cancelled) parseNow(false);
+        })();
+        return () => { cancelled = true; };
+    }, [documentId, token, parseNow]);
+
+    // Niedokończony autozapis nie ginie przy zamknięciu podglądu
+    useEffect(() => () => {
+        clearTimeout(autoSaveTimer.current);
+        if (dirtyRef.current && hasStoredRef.current && positionsRef.current) {
+            savePositions(positionsRef.current, { keepalive: true });
+        }
+    }, [savePositions]);
+
+    const scheduleAutoSave = (next) => {
+        if (!hasStoredRef.current) return;
+        dirtyRef.current = true;
+        clearTimeout(autoSaveTimer.current);
+        autoSaveTimer.current = setTimeout(() => savePositions(next), 800);
+    };
 
     const updatePos = (i, field, value) => {
-        setPositions(prev => prev.map((p, idx) => idx === i ? { ...p, [field]: value } : p));
-        setApproved(false);
+        const next = (positionsRef.current || []).map((p, idx) => {
+            if (idx !== i) return p;
+            let v = value;
+            if (field === 'quantity' || field === 'priceNetto') v = value === '' ? null : Number(value);
+            const upd = { ...p, [field]: v };
+            if (field === 'priceNetto') {
+                upd.priceNettoPln = (upd.currency && upd.currency !== 'PLN' && upd.exchangeRate && v != null)
+                    ? Math.round(v * upd.exchangeRate * 100) / 100
+                    : v;
+            }
+            return upd;
+        });
+        positionsRef.current = next;
+        setPositions(next);
+        scheduleAutoSave(next);
+        if (!hasStoredRef.current) setApproved(false);
     };
 
     const removePos = (i) => {
-        setPositions(prev => prev.filter((_, idx) => idx !== i));
-        setApproved(false);
+        const next = (positionsRef.current || []).filter((_, idx) => idx !== i);
+        positionsRef.current = next;
+        setPositions(next);
+        scheduleAutoSave(next);
+        if (!hasStoredRef.current) setApproved(false);
     };
 
     const handleApprove = async () => {
         setSaving(true);
         try {
-            const res = await fetch(`${API_URL}/documents/${documentId}/parsed-positions`, {
-                method: 'PATCH', headers: { ...authHeaders, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ positions }),
-            });
-            if (res.ok) { setApproved(true); onApprove?.(positions); setShowMapping(true); }
+            clearTimeout(autoSaveTimer.current);
+            const pos = positionsRef.current || positions;
+            const ok = await savePositions(pos);
+            if (ok) { hasStoredRef.current = true; setApproved(true); onApprove?.(pos); setShowMapping(true); }
             else setError('Błąd zapisu');
         } catch { setError('Błąd połączenia'); }
         finally { setSaving(false); }
@@ -289,9 +396,12 @@ function OfferParsePanel({ documentId, token, onApprove }) {
                 <div className="flex items-center gap-2">
                     <FileText size={12} className="text-teal-400" />
                     <span className="text-[11px] font-bold text-gray-300 uppercase tracking-widest">Pozycje z oferty</span>
-                    {approved && <span className="flex items-center gap-1 text-[9px] text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded-full border border-green-400/20"><CheckCircle size={8} />zatwierdzone</span>}
+                    {approved && autoSave === 'idle' && <span className="flex items-center gap-1 text-[9px] text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded-full border border-green-400/20"><CheckCircle size={8} />zatwierdzone</span>}
+                    {autoSave === 'saving' && <span className="text-[9px] text-gray-500">zapisywanie…</span>}
+                    {autoSave === 'saved' && <span className="flex items-center gap-1 text-[9px] text-green-400"><CheckCircle size={8} />zapisano</span>}
+                    {autoSave === 'error' && <span className="flex items-center gap-1 text-[9px] text-red-400"><AlertCircle size={8} />błąd zapisu</span>}
                 </div>
-                <button onClick={() => loadAndParse(true)} title="Parsuj ponownie"
+                <button onClick={() => parseNow(true)} title="Parsuj ponownie"
                     className="p-1 text-gray-500 hover:text-white transition-colors rounded">
                     <RotateCcw size={12} />
                 </button>
@@ -376,9 +486,17 @@ function OfferParsePanel({ documentId, token, onApprove }) {
                         </button>
                     )}
                     <p className="text-[9px] text-gray-600 text-center">
-                        Po zatwierdzeniu wybór oferty wypełni pola automatycznie
+                        {approved ? 'Zmiany w polach zapisują się automatycznie' : 'Po zatwierdzeniu wybór oferty wypełni pola automatycznie'}
                     </p>
                 </div>
+            )}
+
+            {choiceOpen && positions && (
+                <OfferParsedChoiceModal
+                    count={positions.length}
+                    onEdit={() => setChoiceOpen(false)}
+                    onReparse={() => { setChoiceOpen(false); parseNow(true); }}
+                />
             )}
 
             {showMapping && positions && (

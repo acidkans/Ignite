@@ -709,6 +709,16 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | pendingExport (DocSidebar) | apps/frontend/src/components/Documentation/DocumentationSidebar.jsx | @anchor doc-sidebar-pending-export |
 | ui-funkcja | buildDownloadArtifact | apps/frontend/src/utils/downloadPdfWithHighlights.js | @anchor build-download-artifact |
 
+### Moduł Oferty — panel pozycji z oferty (DocumentViewer)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-modal | OfferParsedChoiceModal | apps/frontend/src/components/shared/DocumentViewer.jsx | @anchor offer-parsed-choice-modal |
+| ui-stan | choiceOpen (OfferParsePanel) | apps/frontend/src/components/shared/DocumentViewer.jsx | @anchor offer-choice-open |
+| ui-stan | autoSave (OfferParsePanel) | apps/frontend/src/components/shared/DocumentViewer.jsx | @anchor offer-autosave-state |
+| ui-funkcja | savePositions (OfferParsePanel) | apps/frontend/src/components/shared/DocumentViewer.jsx | @anchor offer-save-positions |
+| ui-funkcja | parseNow (OfferParsePanel) | apps/frontend/src/components/shared/DocumentViewer.jsx | @anchor offer-parse-now |
+
 ### MS To Do connection panel (Etap 10)
 
 | Tag | Nazwa | Plik | Anchor |
