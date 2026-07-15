@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
+import mammoth from 'mammoth';
+import ExcelJS from 'exceljs';
 import { buildDownloadArtifact } from '../../utils/downloadPdfWithHighlights';
 import ExportChoiceModal from './ExportChoiceModal';
 import DocViewer, { DocViewerRenderers } from '@cyntler/react-doc-viewer';
@@ -707,14 +709,17 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
     const ext = fileName?.split('.').pop()?.toLowerCase() || '';
     const isPdf = mimeType === 'application/pdf' || ext === 'pdf';
 
-    const isOffice = [
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    // .docx / .xlsx renderują się lokalnie (mammoth / exceljs) — MS Online Viewer (react-doc-viewer)
+    // wymaga publicznie dostępnego URL-a, którego backend Ignite nie zapewnia (localhost/sieć wewnętrzna).
+    const isDocx = mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || ext === 'docx';
+    const isXlsx = mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || ext === 'xlsx';
+
+    const isOffice = !isDocx && !isXlsx && ([
         'application/msword',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'application/vnd.ms-excel',
         'application/vnd.ms-powerpoint',
         'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-    ].includes(mimeType) || ['docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt'].includes(ext);
+    ].includes(mimeType) || ['doc', 'xls', 'pptx', 'ppt'].includes(ext));
 
     const isImage = mimeType?.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp'].includes(ext);
     const isVideo = mimeType?.startsWith('video/') || ['mp4', 'webm', 'ogg'].includes(ext);
@@ -735,6 +740,69 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
             fetchText();
         }
     }, [fileUrl, isText]);
+
+    // @anchor document-viewer-docx-html
+    const [docxHtml, setDocxHtml] = useState('');
+    const [docxLoading, setDocxLoading] = useState(false);
+    const [docxError, setDocxError] = useState(null);
+
+    useEffect(() => {
+        if (!isDocx || !fileUrl) return;
+        let cancelled = false;
+        (async () => {
+            setDocxLoading(true); setDocxError(null); setDocxHtml('');
+            try {
+                const res = await fetch(fileUrl);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const arrayBuffer = await res.arrayBuffer();
+                const { value } = await mammoth.convertToHtml({ arrayBuffer });
+                if (!cancelled) setDocxHtml(value);
+            } catch (err) {
+                console.error('[DocumentViewer] Błąd renderowania .docx:', err);
+                if (!cancelled) setDocxError('Nie udało się wyświetlić dokumentu .docx.');
+            } finally {
+                if (!cancelled) setDocxLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [fileUrl, isDocx]);
+
+    // @anchor document-viewer-xlsx-sheets
+    const [xlsxSheets, setXlsxSheets] = useState(null); // [{ name, rows: string[][] }]
+    const [xlsxActiveSheet, setXlsxActiveSheet] = useState(0);
+    const [xlsxLoading, setXlsxLoading] = useState(false);
+    const [xlsxError, setXlsxError] = useState(null);
+
+    useEffect(() => {
+        if (!isXlsx || !fileUrl) return;
+        let cancelled = false;
+        (async () => {
+            setXlsxLoading(true); setXlsxError(null); setXlsxSheets(null); setXlsxActiveSheet(0);
+            try {
+                const res = await fetch(fileUrl);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const arrayBuffer = await res.arrayBuffer();
+                const workbook = new ExcelJS.Workbook();
+                await workbook.xlsx.load(arrayBuffer);
+                const sheets = workbook.worksheets.map(ws => {
+                    const rows = [];
+                    ws.eachRow({ includeEmpty: false }, (row) => {
+                        const cells = [];
+                        row.eachCell({ includeEmpty: true }, (cell) => { cells.push(cell.text ?? ''); });
+                        rows.push(cells);
+                    });
+                    return { name: ws.name, rows };
+                });
+                if (!cancelled) setXlsxSheets(sheets);
+            } catch (err) {
+                console.error('[DocumentViewer] Błąd renderowania .xlsx:', err);
+                if (!cancelled) setXlsxError('Nie udało się wyświetlić arkusza .xlsx.');
+            } finally {
+                if (!cancelled) setXlsxLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [fileUrl, isXlsx]);
 
     function onDocumentLoadSuccess({ numPages }) { setNumPages(numPages); }
     const toggleFullscreen = () => setIsFullscreen(!isFullscreen);
@@ -827,7 +895,7 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
         });
     }, [isPdf, highlights, fileUrl, fileName, authToken]);
 
-    const icon = isPdf ? '📕' : isOffice ? '📘' : isImage ? '🖼️' : isVideo ? '🎬' : isText ? '📄' : '📁';
+    const icon = isPdf ? '📕' : isXlsx ? '📗' : (isDocx || isOffice) ? '📘' : isImage ? '🖼️' : isVideo ? '🎬' : isText ? '📄' : '📁';
 
     const viewerContent = (
         <div className={`flex flex-col bg-black/40 border border-white/10 rounded-2xl overflow-hidden shadow-2xl transition-all relative ${isFullscreen ? 'fixed inset-4 z-[9999] bg-gray-900 border-white/20' : 'w-full h-full'}`}>
@@ -919,6 +987,59 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
                                     );
                                 })}
                             </Document>
+                        </div>
+                    ) : isDocx ? (
+                        <div className="w-full h-full overflow-y-auto overflow-x-hidden bg-white">
+                            {docxLoading ? (
+                                <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-500">
+                                    <div className="w-6 h-6 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+                                    <span className="text-xs">Renderowanie dokumentu .docx...</span>
+                                </div>
+                            ) : docxError ? (
+                                <div className="p-10 text-red-500 text-center text-xs">{docxError}</div>
+                            ) : (
+                                <div className="docx-preview max-w-[820px] mx-auto p-10 text-black text-sm leading-relaxed [&_table]:border-collapse [&_td]:border [&_td]:border-gray-300 [&_td]:p-1.5 [&_th]:border [&_th]:border-gray-300 [&_th]:p-1.5 [&_img]:max-w-full [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:text-lg [&_h2]:font-bold [&_h2]:mt-3 [&_h2]:mb-2 [&_p]:mb-2"
+                                    dangerouslySetInnerHTML={{ __html: docxHtml }} />
+                            )}
+                        </div>
+                    ) : isXlsx ? (
+                        <div className="w-full h-full flex flex-col bg-white">
+                            {xlsxLoading ? (
+                                <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-500">
+                                    <div className="w-6 h-6 border-2 border-green-500/30 border-t-green-500 rounded-full animate-spin"></div>
+                                    <span className="text-xs">Renderowanie arkusza .xlsx...</span>
+                                </div>
+                            ) : xlsxError ? (
+                                <div className="p-10 text-red-500 text-center text-xs">{xlsxError}</div>
+                            ) : xlsxSheets && xlsxSheets.length > 0 ? (
+                                <>
+                                    {xlsxSheets.length > 1 && (
+                                        <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-200 bg-gray-50 overflow-x-auto shrink-0">
+                                            {xlsxSheets.map((sheet, i) => (
+                                                <button key={sheet.name} onClick={() => setXlsxActiveSheet(i)}
+                                                    className={`px-2.5 py-1 rounded text-[11px] font-medium whitespace-nowrap transition-colors ${i === xlsxActiveSheet ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-gray-200'}`}>
+                                                    {sheet.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div className="flex-1 overflow-auto p-3">
+                                        <table className="border-collapse text-[11px] text-black">
+                                            <tbody>
+                                                {xlsxSheets[xlsxActiveSheet].rows.map((row, ri) => (
+                                                    <tr key={ri}>
+                                                        {row.map((cell, ci) => (
+                                                            <td key={ci} className="border border-gray-300 px-2 py-1 whitespace-pre-wrap">{cell}</td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="p-10 text-gray-500 text-center text-xs">Arkusz jest pusty.</div>
+                            )}
                         </div>
                     ) : isOffice ? (
                         <div className="w-full h-full bg-white text-black overflow-hidden [&_.react-doc-viewer]:!bg-transparent">
