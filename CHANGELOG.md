@@ -4,6 +4,25 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-19 — feat(quickquote): Faza 2 — dostawca w kanale PDF (parser + modal + snapshoty) (v2026.07.19.709)
+
+### architektura / API
+- zmieniono kształt odpowiedzi `back-endpoint` `POST /material-requirements/parse-offer`: z tablicy pozycji na obiekt `{supplier, positions}` — `supplier` to wystawca oferty z parsera (`{name, nip, address, offerNumber, offerDate, validUntil}`); zapisane pozycje i strukturalne formaty Excel zwracają `supplier: null`; frontend obsługuje oba kształty
+- rozszerzono prompt parsera ofert (`buildOfferParsePrompt`) o obiekt `supplier` z instrukcją: **dostawca = WYSTAWCA oferty, nie adresat** (nabywca/zamawiający); daty wyłącznie ISO YYYY-MM-DD
+- dodano `back-funkcja` `extractParsedOffer` — wspólna ekstrakcja odpowiedzi AI (format obiektowy + fallback tablicowy), używana przez ścieżkę PDF i AI-fallback Excel; test jednostkowy w `test/test-extract-parsed-offer.js`
+- zmieniono sygnaturę `back-endpoint` `POST /offers` — nowe opcjonalne pola `supplierId`, `offerNumber`, `offerDate`, `validUntil`; `OffersService.create` zapisuje metadane tylko gdy przekazane (approve bez meta nie kasuje wcześniejszego dostawcy); `GET /offers` i `GET /offers/node/:nodeId` dołączają relację `supplier {id, name, nip, vatStatus}`
+- `assignOfferPosition` + `autoAssignFromOffer` — do JSON `offerPositionSnapshot` dopisywane `supplier {id, name, nip}` i `offerNumber` (snapshot samowystarczalny — przeżywa usunięcie Offer)
+- `ui-sekcja` blok dostawcy w `OfferParsePanel` (DocumentViewer.jsx): match wykrytego wystawcy po NIP z rejestrem (auto-wybór), fallback po nazwie (podpowiedź „Użyj"), przycisk „Utwórz dostawcę z NIP (Biała lista VAT)" jednym klikiem, `SupplierPicker` (wariant dark) + prefill numeru/dat oferty; meta trafia do POST /offers przy „Zatwierdź dane oferty"
+- `ui-dropdown` `SupplierPicker` — nowy prop `dark` (zestawy klas `THEMES`) dla ciemnych paneli ofert
+
+### słownik
+- dodano sekcję „Moduł kanał PDF — dostawca w ofercie (Faza 2)" — anchory `extract-parsed-offer`, `offer-meta-input`, `offer-supplier-*`, `offer-match-supplier`, `offer-create-supplier-from-nip`, `offers-table-supplier-badge`, `supplier-picker-theme`
+
+### wytyczne
+- `offerPositionSnapshot` — snapshot MUSI pozostać samowystarczalny (dostawca, numer oferty, ceny, kurs); nie zastępować odczytem z relacji Offer, bo Offer bywa kasowana
+- prompt parsera ofert — przy każdej modyfikacji zachować instrukcję rozróżnienia wystawca/adresat; regresja tu oznacza podpinanie klienta jako dostawcy
+- dev Docker nie ma skonfigurowanego `back-env` `AI_MODEL` ani kluczy AI — parsowanie ofert w dev wymaga uzupełnienia `apps/backend/.env` (test promptu z żywym modelem wykonać po konfiguracji)
+
 ## 2026-07-19 — feat(quickquote): Faza 1 — rejestr dostawców + moduł NIP (Biała lista VAT) (v2026.07.19.708)
 
 ### architektura / API

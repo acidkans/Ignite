@@ -2,12 +2,49 @@ import { useState, useEffect, useCallback } from 'react';
 import { ChevronDown, Plus, Search, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { API_URL } from '../../config';
 
+// @anchor supplier-picker-theme
+// Zestawy klas dla jasnego (domyślnego) i ciemnego wariantu — ciemny używany
+// w panelach ofert (DocumentViewer/OffersTab, tło #0f1117).
+const THEMES = {
+  light: {
+    trigger: 'border-gray-300 bg-white hover:border-gray-400',
+    triggerText: 'text-gray-900',
+    triggerPlaceholder: 'text-gray-400',
+    dropdown: 'bg-white border-gray-200',
+    divider: 'border-gray-100',
+    input: 'border-gray-300 bg-white text-gray-900',
+    item: 'hover:bg-gray-50',
+    itemSelected: 'bg-teal-50',
+    itemText: 'text-gray-900',
+    preview: 'bg-gray-50',
+    previewName: 'text-gray-900',
+    addNip: 'text-teal-700 hover:bg-teal-50',
+    addFree: 'text-gray-600 hover:bg-gray-50',
+  },
+  dark: {
+    trigger: 'border-white/10 bg-black/40 hover:border-white/25',
+    triggerText: 'text-gray-200',
+    triggerPlaceholder: 'text-gray-500',
+    dropdown: 'bg-[#0f1117] border-white/10',
+    divider: 'border-white/5',
+    input: 'border-white/10 bg-black/40 text-gray-200',
+    item: 'hover:bg-white/5',
+    itemSelected: 'bg-teal-500/10',
+    itemText: 'text-gray-200',
+    preview: 'bg-white/5',
+    previewName: 'text-gray-200',
+    addNip: 'text-teal-300 hover:bg-teal-500/10',
+    addFree: 'text-gray-400 hover:bg-white/5',
+  },
+};
+
 // @anchor supplier-picker
 // Dropdown wyboru dostawcy z rejestru + tworzenie przez NIP (Biała lista VAT)
 // albo wolny wpis (dostawca zagraniczny bez NIP — wystarczy nazwa).
 // Reużywalny: modal uploadu oferty (F2), panel dostawcy w ProductCard (F6).
 // value: supplierId | null; onChange(supplier | null)
-export default function SupplierPicker({ value, onChange, disabled = false }) {
+export default function SupplierPicker({ value, onChange, disabled = false, dark = false }) {
+  const t = THEMES[dark ? 'dark' : 'light'];
   const [suppliers, setSuppliers] = useState([]);
   const [open, setOpen] = useState(false);
   // @anchor supplier-picker-query
@@ -24,7 +61,7 @@ export default function SupplierPicker({ value, onChange, disabled = false }) {
   const [error, setError] = useState('');
 
   const authHeaders = () => ({
-    Authorization: `Bearer ${localStorage.getItem('token')}`,
+    Authorization: `Bearer ${sessionStorage.getItem('token') || localStorage.getItem('token')}`,
     'Content-Type': 'application/json',
   });
 
@@ -84,26 +121,26 @@ export default function SupplierPicker({ value, onChange, disabled = false }) {
         type="button"
         disabled={disabled}
         onClick={() => { setOpen(!open); resetCreate(); }}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2 border border-gray-300 rounded-lg bg-white hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+        className={`w-full flex items-center justify-between gap-2 px-3 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed ${t.trigger}`}
       >
-        <span className={selected ? 'text-gray-900' : 'text-gray-400'}>
+        <span className={`truncate ${selected ? t.triggerText : t.triggerPlaceholder}`}>
           {selected ? `${selected.name}${selected.nip ? ` (NIP ${selected.nip})` : ''}` : 'Wybierz dostawcę…'}
         </span>
         <ChevronDown size={16} className="text-gray-400 shrink-0" />
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+        <div className={`absolute z-50 mt-1 w-full border rounded-lg shadow-lg overflow-hidden ${t.dropdown}`}>
           {!createMode && (
             <>
-              <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
+              <div className={`flex items-center gap-2 px-3 py-2 border-b ${t.divider}`}>
                 <Search size={14} className="text-gray-400 shrink-0" />
                 <input
                   autoFocus
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Szukaj po nazwie lub NIP…"
-                  className="w-full outline-none text-sm"
+                  className={`w-full outline-none text-sm bg-transparent ${t.triggerText}`}
                 />
               </div>
               <div className="max-h-48 overflow-y-auto">
@@ -112,22 +149,22 @@ export default function SupplierPicker({ value, onChange, disabled = false }) {
                     key={s.id}
                     type="button"
                     onClick={() => { onChange?.(s); setOpen(false); }}
-                    className={`w-full text-left px-3 py-2 hover:bg-gray-50 ${s.id === value ? 'bg-teal-50' : ''}`}
+                    className={`w-full text-left px-3 py-2 ${t.item} ${s.id === value ? t.itemSelected : ''}`}
                   >
-                    <span className={s.isActive ? '' : 'text-gray-400 line-through'}>{s.name}</span>
+                    <span className={s.isActive ? t.itemText : 'text-gray-500 line-through'}>{s.name}</span>
                     {s.nip && <span className="ml-2 text-xs text-gray-400">NIP {s.nip}</span>}
                     {s.vatStatus && (
-                      <span className={`ml-2 text-xs ${s.vatStatus === 'Czynny' ? 'text-teal-600' : 'text-amber-600'}`}>{s.vatStatus}</span>
+                      <span className={`ml-2 text-xs ${s.vatStatus === 'Czynny' ? 'text-teal-500' : 'text-amber-500'}`}>{s.vatStatus}</span>
                     )}
                   </button>
                 ))}
                 {filtered.length === 0 && <div className="px-3 py-2 text-gray-400">Brak dostawców</div>}
               </div>
-              <div className="border-t border-gray-100 flex">
-                <button type="button" onClick={() => { resetCreate(); setCreateMode('nip'); }} className="flex-1 flex items-center gap-1 px-3 py-2 text-teal-700 hover:bg-teal-50">
+              <div className={`border-t flex ${t.divider}`}>
+                <button type="button" onClick={() => { resetCreate(); setCreateMode('nip'); }} className={`flex-1 flex items-center gap-1 px-3 py-2 ${t.addNip}`}>
                   <Plus size={14} /> Dodaj po NIP
                 </button>
-                <button type="button" onClick={() => { resetCreate(); setCreateMode('free'); }} className="flex-1 flex items-center gap-1 px-3 py-2 text-gray-600 hover:bg-gray-50">
+                <button type="button" onClick={() => { resetCreate(); setCreateMode('free'); }} className={`flex-1 flex items-center gap-1 px-3 py-2 ${t.addFree}`}>
                   <Plus size={14} /> Wolny wpis (bez NIP)
                 </button>
               </div>
@@ -143,20 +180,20 @@ export default function SupplierPicker({ value, onChange, disabled = false }) {
                   onChange={(e) => setNipInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && !busy && nipInput.trim() && handleNipLookup()}
                   placeholder="NIP (10 cyfr)"
-                  className="flex-1 px-2 py-1.5 border border-gray-300 rounded outline-none focus:border-teal-500"
+                  className={`flex-1 px-2 py-1.5 border rounded outline-none focus:border-teal-500 ${t.input}`}
                 />
                 <button type="button" onClick={handleNipLookup} disabled={busy || !nipInput.trim()} className="px-3 py-1.5 bg-teal-600 text-white rounded disabled:opacity-50">
                   {busy ? <Loader2 size={14} className="animate-spin" /> : 'Pobierz'}
                 </button>
               </div>
               {nipPreview && (
-                <div className="p-2 bg-gray-50 rounded text-xs space-y-1">
-                  <div className="font-medium text-gray-900">{nipPreview.name}</div>
+                <div className={`p-2 rounded text-xs space-y-1 ${t.preview}`}>
+                  <div className={`font-medium ${t.previewName}`}>{nipPreview.name}</div>
                   {nipPreview.address && <div className="text-gray-500">{nipPreview.address}</div>}
-                  <div className="flex items-center gap-1">
+                  <div className={`flex items-center gap-1 ${t.itemText}`}>
                     {nipPreview.vatStatus === 'Czynny'
-                      ? <CheckCircle2 size={12} className="text-teal-600" />
-                      : <XCircle size={12} className="text-amber-600" />}
+                      ? <CheckCircle2 size={12} className="text-teal-500" />
+                      : <XCircle size={12} className="text-amber-500" />}
                     <span>VAT: {nipPreview.vatStatus || 'brak statusu'}</span>
                   </div>
                   <button type="button" onClick={handleCreate} disabled={busy} className="mt-1 w-full px-2 py-1.5 bg-teal-600 text-white rounded disabled:opacity-50">
@@ -164,8 +201,8 @@ export default function SupplierPicker({ value, onChange, disabled = false }) {
                   </button>
                 </div>
               )}
-              {error && <div className="text-xs text-red-600">{error}</div>}
-              <button type="button" onClick={resetCreate} className="text-xs text-gray-400 hover:text-gray-600">← wróć do listy</button>
+              {error && <div className="text-xs text-red-500">{error}</div>}
+              <button type="button" onClick={resetCreate} className="text-xs text-gray-400 hover:text-gray-500">← wróć do listy</button>
             </div>
           )}
 
@@ -177,13 +214,13 @@ export default function SupplierPicker({ value, onChange, disabled = false }) {
                 onChange={(e) => setFreeName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !busy && freeName.trim() && handleCreate()}
                 placeholder="Nazwa dostawcy (np. zagraniczny bez NIP)"
-                className="w-full px-2 py-1.5 border border-gray-300 rounded outline-none focus:border-teal-500"
+                className={`w-full px-2 py-1.5 border rounded outline-none focus:border-teal-500 ${t.input}`}
               />
               <button type="button" onClick={handleCreate} disabled={busy || !freeName.trim()} className="w-full px-2 py-1.5 bg-teal-600 text-white rounded disabled:opacity-50">
                 Utwórz dostawcę
               </button>
-              {error && <div className="text-xs text-red-600">{error}</div>}
-              <button type="button" onClick={resetCreate} className="text-xs text-gray-400 hover:text-gray-600">← wróć do listy</button>
+              {error && <div className="text-xs text-red-500">{error}</div>}
+              <button type="button" onClick={resetCreate} className="text-xs text-gray-400 hover:text-gray-500">← wróć do listy</button>
             </div>
           )}
         </div>

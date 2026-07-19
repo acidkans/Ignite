@@ -1042,6 +1042,29 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | handleNipLookup | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-nip-lookup |
 | ui-funkcja | handleCreate | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-create |
 
+### Moduł kanał PDF — dostawca w ofercie (Faza 2)
+
+#### Backend
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-funkcja | MaterialRequirementsService.extractParsedOffer | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor extract-parsed-offer |
+| back-funkcja | OffersService.create (meta oferty) | apps/backend/src/offers/offers.service.ts | @anchor offer-meta-input |
+
+#### Frontend
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-stan | supplierMeta | apps/frontend/src/components/shared/DocumentViewer.jsx | @anchor offer-supplier-meta |
+| ui-stan | supplier (OfferParsePanel) | apps/frontend/src/components/shared/DocumentViewer.jsx | @anchor offer-supplier-selected |
+| ui-stan | supplierNotice | apps/frontend/src/components/shared/DocumentViewer.jsx | @anchor offer-supplier-notice |
+| ui-stan | offerMeta | apps/frontend/src/components/shared/DocumentViewer.jsx | @anchor offer-meta |
+| ui-funkcja | matchSupplier | apps/frontend/src/components/shared/DocumentViewer.jsx | @anchor offer-match-supplier |
+| ui-funkcja | createSupplierFromNip | apps/frontend/src/components/shared/DocumentViewer.jsx | @anchor offer-create-supplier-from-nip |
+| ui-sekcja | blok dostawcy w OfferParsePanel | apps/frontend/src/components/shared/DocumentViewer.jsx | @anchor offer-supplier-block |
+| ui-sekcja | badge dostawcy w OffersTable | apps/frontend/src/components/shared/OffersTab.jsx | @anchor offers-table-supplier-badge |
+| ui-stala | THEMES (SupplierPicker) | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-theme |
+
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)

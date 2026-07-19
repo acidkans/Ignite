@@ -447,13 +447,13 @@ export default function DashboardPage() {
         : 'Szukaj po nazwie pliku, dacie…';
 
     // @anchor handle-financial-offer-approve
-    const handleFinancialOfferApprove = useCallback(async (positions, documentId, fileName) => {
+    const handleFinancialOfferApprove = useCallback(async (positions, documentId, fileName, meta) => {
         try {
             const token = sessionStorage.getItem('token');
             await fetch(`${API_URL}/offers`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nodeId: activeAreaId, fileName, positions, documentId }),
+                body: JSON.stringify({ nodeId: activeAreaId, fileName, positions, documentId, ...(meta || {}) }),
             });
         } catch (e) {
             console.error('Błąd zapisu oferty:', e);

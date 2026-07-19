@@ -1338,7 +1338,7 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
     // ─── PRZYPISANIE POZYCJI OFERTY ───────────────────────────────────────────
 
     async assignOfferPosition(id: string, offerId: string, positionIdx: number): Promise<any> {
-        const offer = await this.prisma.offer.findUnique({ where: { id: offerId } });
+        const offer = await this.prisma.offer.findUnique({ where: { id: offerId }, include: { supplier: true } });
         if (!offer) throw new NotFoundException('Oferta nie znaleziona');
         let positions: any[];
         try { positions = JSON.parse(offer.positions); } catch { positions = []; }
@@ -1389,6 +1389,11 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
                     rateComment,
                     unit: pos.unit || '',
                     wbsPath: pos.wbsPath ?? null,
+                    // Snapshot samowystarczalny — dostawca i numer oferty przeżywają usunięcie Offer
+                    supplier: offer.supplier
+                        ? { id: offer.supplier.id, name: offer.supplier.name, nip: offer.supplier.nip }
+                        : null,
+                    offerNumber: (offer as any).offerNumber ?? null,
                 }),
             },
         });
@@ -1402,8 +1407,11 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
     }
 
     async autoAssignFromOffer(offerId: string): Promise<{ assigned: number; skipped: number; notFound: number }> {
-        const offer = await this.prisma.offer.findUnique({ where: { id: offerId } });
+        const offer = await this.prisma.offer.findUnique({ where: { id: offerId }, include: { supplier: true } });
         if (!offer) throw new NotFoundException('Oferta nie znaleziona');
+        const supplierSnapshot = offer.supplier
+            ? { id: offer.supplier.id, name: offer.supplier.name, nip: offer.supplier.nip }
+            : null;
         let positions: any[];
         try { positions = JSON.parse(offer.positions); } catch { positions = []; }
 
@@ -1436,6 +1444,8 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
                         priceNetto: pos.priceNetto,
                         unit: pos.unit || '',
                         wbsPath: pos.wbsPath ?? null,
+                        supplier: supplierSnapshot,
+                        offerNumber: (offer as any).offerNumber ?? null,
                     }),
                 },
             });
@@ -1447,13 +1457,15 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
 
     // ─── PARSOWANIE OFERTY PDF/XLSX ───────────────────────────────────────────
 
-    async parseOfferDocument(documentId: string, force = false): Promise<any[]> {
+    // Zwraca {supplier, positions}: supplier = wystawca oferty z parsera (F2),
+    // null dla zapisanych pozycji (oferta już zatwierdzona) i formatów strukturalnych Excel.
+    async parseOfferDocument(documentId: string, force = false): Promise<{ supplier: any | null; positions: any[] }> {
         const doc = await this.prisma.processNode.findUnique({ where: { id: documentId } });
         if (!doc || !doc.storagePath) throw new NotFoundException('Dokument nie znaleziony lub brak pliku');
 
         // Return pre-approved positions if available (unless force re-parse requested)
         if (!force && (doc as any).parsedPositions) {
-            try { return JSON.parse((doc as any).parsedPositions); } catch {}
+            try { return { supplier: null, positions: JSON.parse((doc as any).parsedPositions) }; } catch {}
         }
 
         const filePath = path.join(process.cwd(), 'uploads', doc.storagePath);
@@ -1467,13 +1479,7 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
         if (!text || text.trim().length < 20) throw new BadRequestException('Nie udało się odczytać tekstu z dokumentu');
 
         const raw = await this.callAiForJson(this.buildOfferParsePrompt(text));
-        const jsonMatch = raw.match(/\[[\s\S]*\]/);
-        if (!jsonMatch) return [];
-        let items: any[];
-        try {
-            items = JSON.parse(jsonMatch[0]);
-            if (!Array.isArray(items)) return [];
-        } catch { return []; }
+        const { supplier, positions: items } = this.extractParsedOffer(raw);
 
         // Przelicz waluty obce na PLN przez NBP
         const foreignCurrencies = [...new Set(
@@ -1485,7 +1491,7 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
             if (r) rateMap[code] = r;
         }
 
-        return items.map(item => {
+        const positions = items.map(item => {
             const currency = (item.currency || 'PLN').toUpperCase();
             const rateInfo = rateMap[currency];
             const priceNettoPln = rateInfo && item.priceNetto != null
@@ -1499,34 +1505,70 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
                 priceNettoPln,
             };
         });
+
+        return { supplier, positions };
     }
 
     private buildOfferParsePrompt(text: string): string {
-        return `Jesteś ekspertem analizującym oferty handlowe. Przeanalizuj poniższy tekst z oferty i wyciągnij wszystkie pozycje materiałowe/urządzenia.
+        return `Jesteś ekspertem analizującym oferty handlowe. Przeanalizuj poniższy tekst z oferty i wyciągnij dane wystawcy oraz wszystkie pozycje materiałowe/urządzenia.
 
 TEKST OFERTY:
 ${text.slice(0, 10000)}
 
-Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
-[
-  {
-    "lp": 1,
-    "name": "pełna nazwa produktu",
-    "description": "pełna nazwa produktu",
-    "manufacturer": "producent lub null",
-    "model": "model/nr katalogowy lub null",
-    "unit": "sztuki",
-    "quantity": 1,
-    "priceNetto": 100.00,
-    "currency": "EUR",
-    "wbsPath": null
-  }
-]
+Zwróć WYŁĄCZNIE obiekt JSON (bez markdown, bez komentarzy):
+{
+  "supplier": {
+    "name": "nazwa firmy wystawiającej ofertę",
+    "nip": "NIP wystawcy (10 cyfr) lub null",
+    "address": "adres wystawcy lub null",
+    "offerNumber": "numer oferty lub null",
+    "offerDate": "data wystawienia YYYY-MM-DD lub null",
+    "validUntil": "termin ważności YYYY-MM-DD lub null"
+  },
+  "positions": [
+    {
+      "lp": 1,
+      "name": "pełna nazwa produktu",
+      "description": "pełna nazwa produktu",
+      "manufacturer": "producent lub null",
+      "model": "model/nr katalogowy lub null",
+      "unit": "sztuki",
+      "quantity": 1,
+      "priceNetto": 100.00,
+      "currency": "EUR",
+      "wbsPath": null
+    }
+  ]
+}
 
-Zasady: ceny jako liczby bez waluty (usuń symbole €, $, PLN, zł, USD, EUR i separatory tysięcy), pole currency to kod ISO waluty (EUR/USD/PLN/GBP itp.) — wstaw PLN jeśli waluta nieznana, null gdy pole nieznane, wyodrębnij wszystkie pozycje.`;
+Zasady: ceny jako liczby bez waluty (usuń symbole €, $, PLN, zł, USD, EUR i separatory tysięcy), pole currency to kod ISO waluty (EUR/USD/PLN/GBP itp.) — wstaw PLN jeśli waluta nieznana, null gdy pole nieznane, wyodrębnij wszystkie pozycje.
+UWAGA — supplier to WYSTAWCA oferty (sprzedawca/dostawca, zwykle w nagłówku/stopce z logo, NIP i danymi kontaktowymi), a NIE adresat (klient/nabywca, często po "dla:", "Nabywca:", "Zamawiający:"). Jeśli nie da się ustalić wystawcy, ustaw "supplier": null. Daty wyłącznie w formacie YYYY-MM-DD.`;
     }
 
-    private async parseExcelOffer(filePath: string): Promise<any[]> {
+    // @anchor extract-parsed-offer — wspólna ekstrakcja odpowiedzi AI parsera ofert:
+    // nowy format obiektowy {supplier, positions}; tablica pozycji jako fallback
+    // (stare odpowiedzi / model zignorował instrukcję).
+    private extractParsedOffer(raw: string): { supplier: any | null; positions: any[] } {
+        const objMatch = raw.match(/\{[\s\S]*\}/);
+        if (objMatch) {
+            try {
+                const obj = JSON.parse(objMatch[0]);
+                if (obj && Array.isArray(obj.positions)) {
+                    return { supplier: obj.supplier ?? null, positions: obj.positions };
+                }
+            } catch { /* spróbuj formatu tablicowego */ }
+        }
+        const arrMatch = raw.match(/\[[\s\S]*\]/);
+        if (arrMatch) {
+            try {
+                const arr = JSON.parse(arrMatch[0]);
+                if (Array.isArray(arr)) return { supplier: null, positions: arr };
+            } catch { /* nieparsowalna odpowiedź */ }
+        }
+        return { supplier: null, positions: [] };
+    }
+
+    private async parseExcelOffer(filePath: string): Promise<{ supplier: any | null; positions: any[] }> {
         const XLSX = require('xlsx');
         const wb = XLSX.readFile(filePath, { cellDates: false, raw: false });
 
@@ -1535,7 +1577,7 @@ Zasady: ceny jako liczby bez waluty (usuń symbole €, $, PLN, zł, USD, EUR i 
         if (matName) {
             const ws = wb.Sheets[matName];
             const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, blankrows: false });
-            if (rows.length < 2) return [];
+            if (rows.length < 2) return { supplier: null, positions: [] };
 
             const hdr = rows[0].map((h: any) => String(h ?? '').toLowerCase());
             const col = (kwds: string[]) => hdr.findIndex((h: string) => kwds.some(k => h.includes(k)));
@@ -1550,7 +1592,7 @@ Zasady: ceny jako liczby bez waluty (usuń symbole €, $, PLN, zł, USD, EUR i 
 
             // Jeśli mamy kolumnę WBS path to to jest nasz format — parsujemy bezpośrednio
             if (wbsIdx >= 0 && nameIdx >= 0) {
-                return rows.slice(1)
+                return { supplier: null, positions: rows.slice(1)
                     .filter((row: any[]) => row[nameIdx] != null && String(row[nameIdx]).trim())
                     .map((row: any[], i: number) => ({
                         lp: i + 1,
@@ -1562,7 +1604,7 @@ Zasady: ceny jako liczby bez waluty (usuń symbole €, $, PLN, zł, USD, EUR i 
                         wbsPath: wbsIdx >= 0 ? String(row[wbsIdx] ?? '').trim() : null,
                         manufacturer: mfrIdx >= 0 && row[mfrIdx] ? String(row[mfrIdx]).trim() : null,
                         model: modIdx >= 0 && row[modIdx] ? String(row[modIdx]).trim() : null,
-                    }));
+                    })) };
             }
         }
 
@@ -1571,7 +1613,7 @@ Zasady: ceny jako liczby bez waluty (usuń symbole €, $, PLN, zł, USD, EUR i 
         if (zamName) {
             const ws = wb.Sheets[zamName];
             const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, blankrows: false });
-            if (rows.length < 2) return [];
+            if (rows.length < 2) return { supplier: null, positions: [] };
 
             const hdr = rows[0].map((h: any) => String(h ?? '').toLowerCase());
             const col = (kwds: string[]) => hdr.findIndex((h: string) => kwds.some(k => h.includes(k)));
@@ -1584,7 +1626,7 @@ Zasady: ceny jako liczby bez waluty (usuń symbole €, $, PLN, zł, USD, EUR i 
             const priceIdx = col(['koszt jednostkowy', 'koszt']);
 
             if (nameIdx >= 0) {
-                return rows.slice(1)
+                return { supplier: null, positions: rows.slice(1)
                     .filter((row: any[]) => lpIdx < 0 || (row[lpIdx] != null && !isNaN(Number(row[lpIdx]))))
                     .filter((row: any[]) => row[nameIdx] != null && String(row[nameIdx]).trim())
                     .map((row: any[], i: number) => ({
@@ -1596,7 +1638,7 @@ Zasady: ceny jako liczby bez waluty (usuń symbole €, $, PLN, zł, USD, EUR i 
                         priceNetto: row[priceIdx] != null && row[priceIdx] !== '' ? Number(row[priceIdx]) || null : null,
                         // "Gdzie wykorzystywany" może mieć kilka ścieżek oddzielonych \n
                         wbsPath: whereIdx >= 0 && row[whereIdx] ? String(row[whereIdx]).split('\n')[0].trim() : null,
-                    }));
+                    })) };
             }
         }
 
@@ -1605,9 +1647,7 @@ Zasady: ceny jako liczby bez waluty (usuń symbole €, $, PLN, zł, USD, EUR i 
             .map((n: string) => `=== ${n} ===\n${XLSX.utils.sheet_to_csv(wb.Sheets[n])}`)
             .join('\n\n');
         const raw = await this.callAiForJson(this.buildOfferParsePrompt(csvText));
-        const match = raw.match(/\[[\s\S]*\]/);
-        if (!match) return [];
-        try { const r = JSON.parse(match[0]); return Array.isArray(r) ? r : []; } catch { return []; }
+        return this.extractParsedOffer(raw);
     }
 
     /** Ekstrakcja tekstu z dokumentu — rozgałęzia na docx (mammoth) albo PDF (pdf-parse/pdf2json) wg rozszerzenia pliku */

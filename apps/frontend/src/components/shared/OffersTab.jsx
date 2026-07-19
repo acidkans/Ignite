@@ -131,6 +131,14 @@ function OffersTable({ nodeId, refreshKey, searchQuery = '', isGlobal = false })
                                 className="text-sm font-semibold text-gray-200 flex-1 truncate cursor-pointer hover:text-white transition-colors"
                                 onClick={() => toggle(doc.id)}
                             >{doc.fileName}</span>
+                            {/* @anchor offers-table-supplier-badge — dostawca oferty (F2) */}
+                            {doc.supplier && (
+                                <span className="text-[10px] text-teal-400/90 bg-teal-500/10 border border-teal-500/20 px-1.5 py-0.5 rounded-full shrink-0 max-w-[180px] truncate"
+                                    title={`${doc.supplier.name}${doc.supplier.nip ? ` · NIP ${doc.supplier.nip}` : ''}${doc.supplier.vatStatus ? ` · VAT ${doc.supplier.vatStatus}` : ''}`}>
+                                    {doc.supplier.name}
+                                </span>
+                            )}
+                            {doc.offerNumber && <span className="text-[10px] text-gray-500 font-mono shrink-0">#{doc.offerNumber}</span>}
                             <span className="text-[10px] text-gray-500 shrink-0">{positions.length} poz.</span>
                             <span className="text-[10px] text-gray-600 shrink-0">{new Date(doc.createdAt).toLocaleDateString('pl-PL')}</span>
                             {positions.some(p => p.wbsPath) && (
@@ -208,13 +216,13 @@ export default function OffersTab({ nodeId, searchQuery = '', isGlobal = false }
     const [focusedSection, setFocusedSection] = useState(null);
     const [refreshKey, setRefreshKey] = useState(0);
 
-    const handleApprove = async (positions, documentId, fileName) => {
+    const handleApprove = async (positions, documentId, fileName, meta) => {
         try {
             const token = sessionStorage.getItem('token');
             await fetch(`${API_URL}/offers`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nodeId, fileName, positions, documentId }),
+                body: JSON.stringify({ nodeId, fileName, positions, documentId, ...(meta || {}) }),
             });
         } catch (e) {
             console.error('Błąd zapisu oferty:', e);

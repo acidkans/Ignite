@@ -12,8 +12,19 @@ export class OffersController {
     ) {}
 
     @Post()
-    create(@Body() body: { nodeId: string; fileName: string; positions: any[]; documentId?: string }, @Req() req: any) {
-        return this.service.create(body.nodeId, body.fileName, body.positions, body.documentId, req.user?.email || req.user?.sub);
+    create(
+        @Body() body: {
+            nodeId: string; fileName: string; positions: any[]; documentId?: string;
+            supplierId?: string | null; offerNumber?: string | null; offerDate?: string | null; validUntil?: string | null;
+        },
+        @Req() req: any,
+    ) {
+        return this.service.create(body.nodeId, body.fileName, body.positions, body.documentId, req.user?.email || req.user?.sub, {
+            supplierId: body.supplierId,
+            offerNumber: body.offerNumber,
+            offerDate: body.offerDate,
+            validUntil: body.validUntil,
+        });
     }
 
     @Get()

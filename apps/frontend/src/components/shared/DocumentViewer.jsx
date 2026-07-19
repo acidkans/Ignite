@@ -11,6 +11,7 @@ import DocViewer, { DocViewerRenderers } from '@cyntler/react-doc-viewer';
 import { Maximize2, Minimize2, Download, X, ZoomIn, ZoomOut, CheckCircle, RotateCcw, FileText, ChevronRight, Link2, AlertCircle, ChevronDown, Sparkles, Trash2, Pencil } from 'lucide-react';
 import { API_URL } from '../../config';
 import PdfPageWithHighlights from './PdfPageWithHighlights';
+import SupplierPicker from './SupplierPicker';
 
 // Set up worker — served locally (no CDN dependency)
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/build/pdf.worker.min.mjs';
@@ -263,6 +264,62 @@ function OfferParsePanel({ documentId, token, onApprove }) {
     const [choiceOpen, setChoiceOpen] = useState(false);
     // @anchor offer-autosave-state
     const [autoSave, setAutoSave] = useState('idle'); // idle | saving | saved | error
+    // @anchor offer-supplier-meta
+    const [supplierMeta, setSupplierMeta] = useState(null); // wystawca z parsera: {name, nip, address}
+    // @anchor offer-supplier-selected
+    const [supplier, setSupplier] = useState(null); // dostawca z rejestru (obiekt Supplier)
+    // @anchor offer-supplier-notice
+    const [supplierNotice, setSupplierNotice] = useState(null); // 'matched' | 'created' | {suggest: Supplier} | null
+    // @anchor offer-meta
+    const [offerMeta, setOfferMeta] = useState({ offerNumber: '', offerDate: '', validUntil: '' });
+    const [creatingSupplier, setCreatingSupplier] = useState(false);
+
+    // @anchor offer-match-supplier — match wykrytego wystawcy z rejestrem: po NIP
+    // (auto-wybór) → fallback po nazwie (tylko podpowiedź, człowiek zatwierdza).
+    const matchSupplier = useCallback(async (parsed) => {
+        if (!parsed) return;
+        setSupplierMeta(parsed);
+        setOfferMeta({
+            offerNumber: parsed.offerNumber || '',
+            offerDate: (parsed.offerDate || '').slice(0, 10),
+            validUntil: (parsed.validUntil || '').slice(0, 10),
+        });
+        try {
+            const res = await fetch(`${API_URL}/suppliers`, { headers: { Authorization: `Bearer ${token}` } });
+            if (!res.ok) return;
+            const all = await res.json();
+            const digits = (v) => (v || '').replace(/\D/g, '');
+            const pNip = digits(parsed.nip);
+            if (pNip) {
+                const byNip = all.find((s) => digits(s.nip) === pNip);
+                if (byNip) { setSupplier(byNip); setSupplierNotice('matched'); return; }
+            }
+            const pName = (parsed.name || '').trim().toLowerCase();
+            if (pName) {
+                const byName = all.find((s) => {
+                    const sn = s.name.trim().toLowerCase();
+                    return sn.includes(pName) || pName.includes(sn);
+                });
+                if (byName) { setSupplierNotice({ suggest: byName }); return; }
+            }
+        } catch { /* rejestr niedostępny — zostaje ręczny wybór */ }
+    }, [token]);
+
+    // @anchor offer-create-supplier-from-nip — „Utwórz dostawcę" jednym klikiem:
+    // POST /suppliers {nip} → backend dociąga Białą listę (dedup po NIP w serwisie).
+    const createSupplierFromNip = async () => {
+        setCreatingSupplier(true);
+        try {
+            const res = await fetch(`${API_URL}/suppliers`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nip: supplierMeta.nip, name: supplierMeta.name, address: supplierMeta.address }),
+            });
+            const data = await res.json();
+            if (res.ok) { setSupplier(data); setSupplierNotice('created'); }
+        } catch { /* przycisk zostaje — można ponowić */ }
+        finally { setCreatingSupplier(false); }
+    };
     const hasStoredRef = useRef(false); // pozycje są już w bazie → edycje zapisują się automatycznie
     const autoSaveTimer = useRef(null);
     const positionsRef = useRef(null);
@@ -304,11 +361,14 @@ function OfferParsePanel({ documentId, token, onApprove }) {
             });
             if (!res.ok) { const err = await res.json().catch(() => ({})); setError(err.message || `Błąd ${res.status}`); return; }
             const data = await res.json();
-            setPositions(data.length > 0 ? data : null);
-            if (data.length === 0) setError('Nie znaleziono pozycji w tym dokumencie');
+            // Nowy format {supplier, positions}; tablica = zapisane pozycje / stary format
+            const pos = Array.isArray(data) ? data : (data?.positions || []);
+            setPositions(pos.length > 0 ? pos : null);
+            if (!Array.isArray(data) && data?.supplier) matchSupplier(data.supplier);
+            if (pos.length === 0) setError('Nie znaleziono pozycji w tym dokumencie');
         } catch (e) { setError(`Błąd: ${e?.message || 'połączenia'}`); }
         finally { setLoading(false); }
-    }, [documentId, token]);
+    }, [documentId, token, matchSupplier]);
 
     // Wejście: jeśli pozycje są już zapisane — pokaż modal wyboru zamiast parsować automatycznie
     useEffect(() => {
@@ -385,7 +445,17 @@ function OfferParsePanel({ documentId, token, onApprove }) {
             clearTimeout(autoSaveTimer.current);
             const pos = positionsRef.current || positions;
             const ok = await savePositions(pos);
-            if (ok) { hasStoredRef.current = true; setApproved(true); onApprove?.(pos); setShowMapping(true); }
+            if (ok) {
+                hasStoredRef.current = true; setApproved(true);
+                // Meta oferty tylko z wypełnionych pól — puste nie nadpisują zapisanych wcześniej
+                const meta = {};
+                if (supplier) meta.supplierId = supplier.id;
+                if (offerMeta.offerNumber.trim()) meta.offerNumber = offerMeta.offerNumber.trim();
+                if (offerMeta.offerDate) meta.offerDate = offerMeta.offerDate;
+                if (offerMeta.validUntil) meta.validUntil = offerMeta.validUntil;
+                onApprove?.(pos, meta);
+                setShowMapping(true);
+            }
             else setError('Błąd zapisu');
         } catch { setError('Błąd połączenia'); }
         finally { setSaving(false); }
@@ -424,6 +494,46 @@ function OfferParsePanel({ documentId, token, onApprove }) {
                     </div>
                 )}
                 {positions && !loading && (
+                    <>
+                    {/* @anchor offer-supplier-block — dostawca (wystawca) + metadane oferty z parsera */}
+                    <div className="p-2 border-b border-white/5 space-y-1.5">
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Dostawca (wystawca oferty)</span>
+                            {supplierNotice === 'matched' && <span className="text-[9px] text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded-full border border-green-400/20">dopasowano z rejestru</span>}
+                            {supplierNotice === 'created' && <span className="text-[9px] text-teal-300 bg-teal-400/10 px-1.5 py-0.5 rounded-full border border-teal-400/20">utworzono</span>}
+                        </div>
+                        {supplierMeta && (
+                            <div className="text-[10px] text-gray-500 leading-snug">
+                                Z PDF: <span className="text-gray-300">{supplierMeta.name}</span>
+                                {supplierMeta.nip && <span className="font-mono"> · NIP {supplierMeta.nip}</span>}
+                            </div>
+                        )}
+                        <SupplierPicker dark value={supplier?.id ?? null} onChange={(s) => { setSupplier(s); setSupplierNotice(null); }} />
+                        {!supplier && supplierMeta?.nip && (
+                            <button onClick={createSupplierFromNip} disabled={creatingSupplier}
+                                className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-teal-600/15 hover:bg-teal-600/25 text-teal-300 text-[10px] font-semibold border border-teal-500/25 transition-all disabled:opacity-50">
+                                {creatingSupplier ? 'Tworzenie…' : `Utwórz dostawcę z NIP ${supplierMeta.nip} (Biała lista VAT)`}
+                            </button>
+                        )}
+                        {!supplier && supplierNotice?.suggest && (
+                            <div className="flex items-center gap-1.5 text-[10px] text-amber-300/90">
+                                <span className="truncate">Podobny w rejestrze: {supplierNotice.suggest.name}</span>
+                                <button onClick={() => { setSupplier(supplierNotice.suggest); setSupplierNotice('matched'); }}
+                                    className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/25 hover:bg-amber-500/20 shrink-0">Użyj</button>
+                            </div>
+                        )}
+                        <div className="grid grid-cols-3 gap-1">
+                            <input value={offerMeta.offerNumber} onChange={e => setOfferMeta(m => ({ ...m, offerNumber: e.target.value }))}
+                                placeholder="Nr oferty" title="Numer oferty"
+                                className="bg-black/40 border border-white/10 rounded px-1.5 py-1 text-[10px] text-gray-300 focus:outline-none focus:border-teal-500" />
+                            <input value={offerMeta.offerDate} onChange={e => setOfferMeta(m => ({ ...m, offerDate: e.target.value }))}
+                                type="date" title="Data wystawienia"
+                                className="bg-black/40 border border-white/10 rounded px-1.5 py-1 text-[10px] text-gray-300 focus:outline-none focus:border-teal-500" />
+                            <input value={offerMeta.validUntil} onChange={e => setOfferMeta(m => ({ ...m, validUntil: e.target.value }))}
+                                type="date" title="Ważna do"
+                                className="bg-black/40 border border-white/10 rounded px-1.5 py-1 text-[10px] text-gray-300 focus:outline-none focus:border-teal-500" />
+                        </div>
+                    </div>
                     <div className="p-2 flex flex-col gap-1.5">
                         {positions.map((pos, i) => (
                             <div key={i} className="rounded-lg border border-white/5 bg-white/[0.02] p-2 space-y-1.5">
@@ -463,6 +573,7 @@ function OfferParsePanel({ documentId, token, onApprove }) {
                             </div>
                         ))}
                     </div>
+                    </>
                 )}
             </div>
 
@@ -1076,7 +1187,7 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
                 </div>
 
                 {/* Offer parse panel */}
-                {showOfferPanel && <OfferParsePanel documentId={documentId} token={token} onApprove={(positions) => onApprove?.(positions, documentId, fileName)} />}
+                {showOfferPanel && <OfferParsePanel documentId={documentId} token={token} onApprove={(positions, meta) => onApprove?.(positions, documentId, fileName, meta)} />}
                 {/* Datasheet parse panel */}
                 {showDatasheetPanel && <DatasheetParsePanel documentId={documentId} fileName={fileName} nodeId={nodeId} token={token} onApprove={(items) => onDatasheetApprove?.(items, documentId)} />}
             </div>
