@@ -38,6 +38,7 @@ import { MsTodoModule } from './ms-todo/ms-todo.module';
 import { UserTasksModule } from './user-tasks/user-tasks.module';
 import { NotificationCronModule } from './notification-cron/notification-cron.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
 
 @Module({
   imports: [
@@ -82,6 +83,7 @@ import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
     UserTasksModule,
     NotificationCronModule,
     ExchangeRatesModule,
+    SuppliersModule,
   ],
   controllers: [AppController],
   providers: [

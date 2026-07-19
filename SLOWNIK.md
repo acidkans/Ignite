@@ -1002,6 +1002,46 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | MaterialRequirement.budgetSource | apps/backend/prisma/schema.prisma | @anchor mat-req-budget-source |
 | schema-relacja | MaterialRequirement.quickQuoteItems | apps/backend/prisma/schema.prisma | @anchor mat-req-quick-quote-items |
 
+### Moduł Suppliers — rejestr dostawców + NIP (Faza 1)
+
+#### Backend (`apps/backend/src/suppliers/`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-modul | SuppliersModule | apps/backend/src/suppliers/suppliers.module.ts | @anchor suppliers-module |
+| back-serwis | SuppliersService | apps/backend/src/suppliers/suppliers.service.ts | @anchor suppliers-service |
+| back-typ | SupplierUpsertInput | apps/backend/src/suppliers/suppliers.service.ts | @anchor supplier-upsert-input |
+| back-funkcja | SuppliersService.findAll | apps/backend/src/suppliers/suppliers.service.ts | @anchor suppliers-find-all |
+| back-funkcja | SuppliersService.findOne | apps/backend/src/suppliers/suppliers.service.ts | @anchor suppliers-find-one |
+| back-funkcja | SuppliersService.create | apps/backend/src/suppliers/suppliers.service.ts | @anchor suppliers-create |
+| back-funkcja | SuppliersService.update | apps/backend/src/suppliers/suppliers.service.ts | @anchor suppliers-update |
+| back-funkcja | SuppliersService.resolveWriteData | apps/backend/src/suppliers/suppliers.service.ts | @anchor suppliers-resolve-write-data |
+| back-serwis | NipLookupService | apps/backend/src/suppliers/nip-lookup.service.ts | @anchor nip-lookup-service |
+| back-typ | NipLookupResult | apps/backend/src/suppliers/nip-lookup.service.ts | @anchor nip-lookup-result |
+| back-funkcja | NipLookupService.normalizeNip | apps/backend/src/suppliers/nip-lookup.service.ts | @anchor normalize-nip |
+| back-funkcja | NipLookupService.validateNipChecksum | apps/backend/src/suppliers/nip-lookup.service.ts | @anchor validate-nip-checksum |
+| back-funkcja | NipLookupService.lookup | apps/backend/src/suppliers/nip-lookup.service.ts | @anchor nip-lookup-fetch |
+| back-controller | SuppliersController | apps/backend/src/suppliers/suppliers.controller.ts | @anchor suppliers-controller |
+| back-endpoint | GET /suppliers | apps/backend/src/suppliers/suppliers.controller.ts | @anchor suppliers-get-endpoint |
+| back-endpoint | GET /suppliers/nip-lookup/:nip | apps/backend/src/suppliers/suppliers.controller.ts | @anchor suppliers-nip-lookup-endpoint |
+| back-endpoint | GET /suppliers/:id | apps/backend/src/suppliers/suppliers.controller.ts | @anchor suppliers-get-one-endpoint |
+| back-endpoint | POST /suppliers | apps/backend/src/suppliers/suppliers.controller.ts | @anchor suppliers-post-endpoint |
+| back-endpoint | PATCH /suppliers/:id | apps/backend/src/suppliers/suppliers.controller.ts | @anchor suppliers-patch-endpoint |
+
+#### Frontend (`apps/frontend/src/components/shared/SupplierPicker.jsx`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-dropdown | SupplierPicker | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker |
+| ui-stan | query | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-query |
+| ui-stan | createMode | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-create-mode |
+| ui-stan | nipInput | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-nip-input |
+| ui-stan | freeName | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-free-name |
+| ui-stan | nipPreview | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-nip-preview |
+| ui-funkcja | fetchSuppliers | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-fetch |
+| ui-funkcja | handleNipLookup | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-nip-lookup |
+| ui-funkcja | handleCreate | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-create |
+
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)

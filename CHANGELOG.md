@@ -4,6 +4,21 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-19 — feat(quickquote): Faza 1 — rejestr dostawców + moduł NIP (Biała lista VAT) (v2026.07.19.708)
+
+### architektura / API
+- dodano `back-modul` `SuppliersModule` (apps/backend/src/suppliers/): CRUD dostawców — `back-endpoint` `GET /suppliers`, `GET /suppliers/:id`, `POST /suppliers`, `PATCH /suppliers/:id`
+- `back-funkcja` `SuppliersService.create` — dedup po NIP: wpis z istniejącym NIP podpina istniejącego dostawcę i odświeża jego dane (bez duplikatu); furtka dla dostawcy zagranicznego bez NIP (wolny wpis, wystarczy `name`)
+- dodano `back-serwis` `NipLookupService` — klon wzorca `ExchangeRatesService` (NBP): `back-endpoint` `GET /suppliers/nip-lookup/:nip` → Biała lista podatników VAT (wl-api.mf.gov.pl, REST, bez klucza) → `{nip, name, address, regon, vatStatus}`; walidacja sumy kontrolnej NIP przed strzałem; przy create/update z NIP dane z Białej listy nadpisują przekazane + stempel `vatStatus`/`verifiedAt`
+- dodano `ui-dropdown` `SupplierPicker` (components/shared/SupplierPicker.jsx) — reużywalny dropdown wyboru dostawcy z wyszukiwaniem + tworzenie przez NIP (prefill z Białej listy, podgląd statusu VAT) lub wolny wpis; do osadzenia w modalu uploadu oferty (F2) i panelu dostawcy ProductCard (F6)
+
+### słownik
+- dodano sekcję „Moduł Suppliers — rejestr dostawców + NIP (Faza 1)" — anchory `suppliers-*`, `nip-lookup-*`, `normalize-nip`, `validate-nip-checksum`, `supplier-picker*`
+
+### wytyczne
+- `back-serwis` `NipLookupService` — jedyne źródło danych z Białej listy VAT; nowe miejsca potrzebujące danych podatnika używają `lookup()`, nie własnych fetchy
+- `back-funkcja` `SuppliersService.create` — NIE tworzyć dostawców bezpośrednio przez `prisma.supplier.create` w innych modułach; zawsze przez `SuppliersService.create` (dedup po NIP musi obowiązywać globalnie — F2 parser też z tego korzysta)
+
 ## 2026-07-19 — feat(quickquote): Faza 0 — fundamenty schematu dla szybkich wycen, baseline i kontroli budżetu (v2026.07.19.707)
 
 ### schema.prisma
