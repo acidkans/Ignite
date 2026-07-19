@@ -930,6 +930,78 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | preview (OneDriveFilesSection) | apps/frontend/src/components/shared/OneDriveFilesSection.jsx | @anchor onedrive-files-preview |
 | ui-funkcja | fileIcon (PropertyPreview) | apps/frontend/src/components/shared/PropertyPreview.jsx | @anchor property-preview-file-icon |
 
+### Moduł QuickQuote / baseline (Faza 0 — schemat)
+
+#### Schema (Prisma — `apps/backend/prisma/schema.prisma`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| schema-model | Supplier | apps/backend/prisma/schema.prisma | @anchor supplier |
+| schema-pole | Supplier.id | apps/backend/prisma/schema.prisma | @anchor supplier-id |
+| schema-pole | Supplier.name | apps/backend/prisma/schema.prisma | @anchor supplier-name |
+| schema-pole | Supplier.nip | apps/backend/prisma/schema.prisma | @anchor supplier-nip |
+| schema-pole | Supplier.address | apps/backend/prisma/schema.prisma | @anchor supplier-address |
+| schema-pole | Supplier.contactPerson | apps/backend/prisma/schema.prisma | @anchor supplier-contact-person |
+| schema-pole | Supplier.contactEmail | apps/backend/prisma/schema.prisma | @anchor supplier-contact-email |
+| schema-pole | Supplier.contactPhone | apps/backend/prisma/schema.prisma | @anchor supplier-contact-phone |
+| schema-pole | Supplier.apiAdapter | apps/backend/prisma/schema.prisma | @anchor supplier-api-adapter |
+| schema-pole | Supplier.isActive | apps/backend/prisma/schema.prisma | @anchor supplier-is-active |
+| schema-pole | Supplier.vatStatus | apps/backend/prisma/schema.prisma | @anchor supplier-vat-status |
+| schema-pole | Supplier.verifiedAt | apps/backend/prisma/schema.prisma | @anchor supplier-verified-at |
+| schema-relacja | Supplier.offers | apps/backend/prisma/schema.prisma | @anchor supplier-offers |
+| schema-relacja | Supplier.quickQuoteItems | apps/backend/prisma/schema.prisma | @anchor supplier-quick-quote-items |
+| schema-model | QuickQuote | apps/backend/prisma/schema.prisma | @anchor quick-quote |
+| schema-pole | QuickQuote.id | apps/backend/prisma/schema.prisma | @anchor quick-quote-id |
+| schema-pole | QuickQuote.nodeId | apps/backend/prisma/schema.prisma | @anchor quick-quote-node-id |
+| schema-pole | QuickQuote.name | apps/backend/prisma/schema.prisma | @anchor quick-quote-name |
+| schema-pole | QuickQuote.status | apps/backend/prisma/schema.prisma | @anchor quick-quote-status |
+| schema-pole | QuickQuote.parentId | apps/backend/prisma/schema.prisma | @anchor quick-quote-parent-id |
+| schema-pole | QuickQuote.validUntil | apps/backend/prisma/schema.prisma | @anchor quick-quote-valid-until |
+| schema-pole | QuickQuote.lockedAt | apps/backend/prisma/schema.prisma | @anchor quick-quote-locked-at |
+| schema-pole | QuickQuote.lockedBy | apps/backend/prisma/schema.prisma | @anchor quick-quote-locked-by |
+| schema-pole | QuickQuote.createdBy | apps/backend/prisma/schema.prisma | @anchor quick-quote-created-by |
+| schema-relacja | QuickQuote.node | apps/backend/prisma/schema.prisma | @anchor quick-quote-node |
+| schema-relacja | QuickQuote.parent | apps/backend/prisma/schema.prisma | @anchor quick-quote-parent |
+| schema-relacja | QuickQuote.children | apps/backend/prisma/schema.prisma | @anchor quick-quote-children |
+| schema-relacja | QuickQuote.items | apps/backend/prisma/schema.prisma | @anchor quick-quote-items |
+| schema-model | QuickQuoteItem | apps/backend/prisma/schema.prisma | @anchor quick-quote-item |
+| schema-pole | QuickQuoteItem.id | apps/backend/prisma/schema.prisma | @anchor qq-item-id |
+| schema-pole | QuickQuoteItem.quickQuoteId | apps/backend/prisma/schema.prisma | @anchor qq-item-quick-quote-id |
+| schema-pole | QuickQuoteItem.materialRequirementId | apps/backend/prisma/schema.prisma | @anchor qq-item-material-requirement-id |
+| schema-pole | QuickQuoteItem.reqName | apps/backend/prisma/schema.prisma | @anchor qq-item-req-name |
+| schema-pole | QuickQuoteItem.qtyAtCapture | apps/backend/prisma/schema.prisma | @anchor qq-item-qty-at-capture |
+| schema-pole | QuickQuoteItem.unit | apps/backend/prisma/schema.prisma | @anchor qq-item-unit |
+| schema-pole | QuickQuoteItem.source | apps/backend/prisma/schema.prisma | @anchor qq-item-source |
+| schema-pole | QuickQuoteItem.supplierId | apps/backend/prisma/schema.prisma | @anchor qq-item-supplier-id |
+| schema-pole | QuickQuoteItem.externalRef | apps/backend/prisma/schema.prisma | @anchor qq-item-external-ref |
+| schema-pole | QuickQuoteItem.sourceUrl | apps/backend/prisma/schema.prisma | @anchor qq-item-source-url |
+| schema-pole | QuickQuoteItem.capturedAt | apps/backend/prisma/schema.prisma | @anchor qq-item-captured-at |
+| schema-pole | QuickQuoteItem.queriedBy | apps/backend/prisma/schema.prisma | @anchor qq-item-queried-by |
+| schema-pole | QuickQuoteItem.priceOriginalNetto | apps/backend/prisma/schema.prisma | @anchor qq-item-price-original-netto |
+| schema-pole | QuickQuoteItem.currency | apps/backend/prisma/schema.prisma | @anchor qq-item-currency |
+| schema-pole | QuickQuoteItem.exchangeRate | apps/backend/prisma/schema.prisma | @anchor qq-item-exchange-rate |
+| schema-pole | QuickQuoteItem.rateDate | apps/backend/prisma/schema.prisma | @anchor qq-item-rate-date |
+| schema-pole | QuickQuoteItem.priceNettoPln | apps/backend/prisma/schema.prisma | @anchor qq-item-price-netto-pln |
+| schema-pole | QuickQuoteItem.priceNettoApi | apps/backend/prisma/schema.prisma | @anchor qq-item-price-netto-api |
+| schema-relacja | QuickQuoteItem.quickQuote | apps/backend/prisma/schema.prisma | @anchor qq-item-quick-quote |
+| schema-relacja | QuickQuoteItem.materialRequirement | apps/backend/prisma/schema.prisma | @anchor qq-item-material-requirement |
+| schema-relacja | QuickQuoteItem.supplier | apps/backend/prisma/schema.prisma | @anchor qq-item-supplier |
+| schema-pole | Offer.supplierId | apps/backend/prisma/schema.prisma | @anchor offer-supplier-id |
+| schema-pole | Offer.offerNumber | apps/backend/prisma/schema.prisma | @anchor offer-offer-number |
+| schema-pole | Offer.offerDate | apps/backend/prisma/schema.prisma | @anchor offer-offer-date |
+| schema-pole | Offer.validUntil | apps/backend/prisma/schema.prisma | @anchor offer-valid-until |
+| schema-relacja | Offer.supplier | apps/backend/prisma/schema.prisma | @anchor offer-supplier |
+| schema-pole | ProcessNode.orderStage | apps/backend/prisma/schema.prisma | @anchor process-node-order-stage |
+| schema-pole | ProcessNode.acceptedVersionId | apps/backend/prisma/schema.prisma | @anchor process-node-accepted-version-id |
+| schema-pole | ProcessNode.acceptedAt | apps/backend/prisma/schema.prisma | @anchor process-node-accepted-at |
+| schema-pole | ProcessNode.acceptedBy | apps/backend/prisma/schema.prisma | @anchor process-node-accepted-by |
+| schema-relacja | ProcessNode.acceptedVersion | apps/backend/prisma/schema.prisma | @anchor process-node-accepted-version |
+| schema-relacja | ProcessNode.quickQuotes | apps/backend/prisma/schema.prisma | @anchor process-node-quick-quotes |
+| schema-relacja | ProjectVersion.acceptedForNodes | apps/backend/prisma/schema.prisma | @anchor project-version-accepted-for-nodes |
+| schema-pole | MaterialRequirement.sourceRequirementId | apps/backend/prisma/schema.prisma | @anchor mat-req-source-requirement-id |
+| schema-pole | MaterialRequirement.budgetSource | apps/backend/prisma/schema.prisma | @anchor mat-req-budget-source |
+| schema-relacja | MaterialRequirement.quickQuoteItems | apps/backend/prisma/schema.prisma | @anchor mat-req-quick-quote-items |
+
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)

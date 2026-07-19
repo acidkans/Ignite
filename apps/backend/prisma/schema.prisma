@@ -189,6 +189,14 @@ model ProcessNode {
   oneDriveDocumentacjaId    String?
   /// @anchor process-node-task-list-slug
   taskListSlug              String?  @unique
+  /// @anchor process-node-order-stage
+  orderStage                String   @default("WYCENA") // WYCENA | ZAAKCEPTOWANE | REALIZACJA | ROZLICZONE — znaczące dla type='order'
+  /// @anchor process-node-accepted-version-id
+  acceptedVersionId         String? // pointer na zaakceptowany ProjectVersion (baseline) — z konstrukcji jedna zaakceptowana wersja
+  /// @anchor process-node-accepted-at
+  acceptedAt                DateTime?
+  /// @anchor process-node-accepted-by
+  acceptedBy                String?
   budgetItems               BudgetLineItem[]
   hardware                  Hardware[]
   permissions               NodePermission[]           @relation("NodeACL")
@@ -209,6 +217,10 @@ model ProcessNode {
   materialRequirementsLists MaterialRequirementsList[]
   documentHighlights        DocumentHighlight[]
   userTasks                 UserTask[]
+  /// @anchor process-node-accepted-version
+  acceptedVersion           ProjectVersion?            @relation("AcceptedVersion", fields: [acceptedVersionId], references: [id], onDelete: SetNull)
+  /// @anchor process-node-quick-quotes
+  quickQuotes               QuickQuote[]
 
   @@map("process_nodes")
 }
@@ -244,6 +256,8 @@ model ProjectVersion {
   subtasks             Subtask[]
   materialRequirements MaterialRequirement[]
   wbsNodes             WbsNode[]
+  /// @anchor project-version-accepted-for-nodes
+  acceptedForNodes     ProcessNode[]         @relation("AcceptedVersion")
 
   @@unique([nodeId, label])
   @@map("project_versions")
@@ -379,6 +393,18 @@ model Offer {
   documentId String? // optional reference to source document (may be deleted)
   createdAt  DateTime @default(now())
   createdBy  String?
+
+  /// @anchor offer-supplier-id
+  supplierId  String? // FK do Supplier — wystawca oferty (nie adresat)
+  /// @anchor offer-offer-number
+  offerNumber String? // numer oferty z parsera, potwierdzany w modalu
+  /// @anchor offer-offer-date
+  offerDate   DateTime? // data wystawienia oferty
+  /// @anchor offer-valid-until
+  validUntil  DateTime? // termin ważności oferty
+
+  /// @anchor offer-supplier
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
 }
 
 model ProcessNodeClosure {
@@ -786,6 +812,14 @@ model MaterialRequirement {
   /// @anchor mat-req-status
   status String @default("PENDING") // PENDING | CONFIRMED | REJECTED | PROPOSAL
 
+  // Parowanie baseline↔żywe (wersjonowanie)
+  /// @anchor mat-req-source-requirement-id
+  sourceRequirementId String? // id oryginału (żywego wiersza) w klonie wersji — klucz parowania baseline↔żywe
+
+  // Proweniencja budgetedPriceNetto
+  /// @anchor mat-req-budget-source
+  budgetSource String? // QUICKQUOTE | MANUAL — skąd pochodzi budgetedPriceNetto
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -801,8 +835,138 @@ model MaterialRequirement {
   wbsNode         WbsNode?                  @relation("WbsNodeMaterialCard", fields: [wbsNodeId], references: [id], onDelete: Cascade)
   /// @anchor mat-req-proposals
   proposals       ProductProposal[]
+  /// @anchor mat-req-quick-quote-items
+  quickQuoteItems QuickQuoteItem[]
 
   @@map("material_requirements")
+}
+
+/// @anchor supplier
+model Supplier {
+  /// @anchor supplier-id
+  id            String    @id @default(uuid())
+  /// @anchor supplier-name
+  name          String
+  /// @anchor supplier-nip
+  nip           String?   @unique // null = dostawca zagraniczny / wolny wpis
+  /// @anchor supplier-address
+  address       String?
+  /// @anchor supplier-contact-person
+  contactPerson String?
+  /// @anchor supplier-contact-email
+  contactEmail  String?
+  /// @anchor supplier-contact-phone
+  contactPhone  String?
+  /// @anchor supplier-api-adapter
+  apiAdapter    String? // identyfikator adaptera API (SupplierGateway) — null = dostawca tylko PDF-owy
+  /// @anchor supplier-is-active
+  isActive      Boolean   @default(true)
+  /// @anchor supplier-vat-status
+  vatStatus     String? // status z Białej listy podatników VAT (np. "Czynny")
+  /// @anchor supplier-verified-at
+  verifiedAt    DateTime? // stempel ostatniej weryfikacji NIP w Białej liście
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  /// @anchor supplier-offers
+  offers          Offer[]
+  /// @anchor supplier-quick-quote-items
+  quickQuoteItems QuickQuoteItem[]
+
+  @@map("suppliers")
+}
+
+/// @anchor quick-quote
+model QuickQuote {
+  /// @anchor quick-quote-id
+  id          String    @id @default(uuid())
+  /// @anchor quick-quote-node-id
+  nodeId      String
+  /// @anchor quick-quote-name
+  name        String
+  /// @anchor quick-quote-status
+  status      String    @default("DRAFT") // DRAFT | VERIFIED | LOCKED | BASELINE | ARCHIVED | EXPIRED
+  /// @anchor quick-quote-parent-id
+  parentId    String? // wersjonowanie jak MaterialRequirementsList.parentId
+  /// @anchor quick-quote-valid-until
+  validUntil  DateTime?
+  /// @anchor quick-quote-locked-at
+  lockedAt    DateTime?
+  /// @anchor quick-quote-locked-by
+  lockedBy    String?
+  /// @anchor quick-quote-created-by
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  /// @anchor quick-quote-node
+  node     ProcessNode  @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  /// @anchor quick-quote-parent
+  parent   QuickQuote?  @relation("QuickQuoteVersions", fields: [parentId], references: [id])
+  /// @anchor quick-quote-children
+  children QuickQuote[] @relation("QuickQuoteVersions")
+  /// @anchor quick-quote-items
+  items    QuickQuoteItem[]
+
+  @@map("quick_quotes")
+}
+
+/// @anchor quick-quote-item
+model QuickQuoteItem {
+  /// @anchor qq-item-id
+  id                    String    @id @default(uuid())
+  /// @anchor qq-item-quick-quote-id
+  quickQuoteId          String
+  /// @anchor qq-item-material-requirement-id
+  materialRequirementId String? // SetNull — baseline przeżywa usunięcie wymagania
+
+  // Zdenormalizowany snapshot wymagania w momencie capture
+  /// @anchor qq-item-req-name
+  reqName      String? // nazwa wymagania w momencie capture
+  /// @anchor qq-item-qty-at-capture
+  qtyAtCapture Float? // zapotrzebowanie w momencie capture
+  /// @anchor qq-item-unit
+  unit         String? // szt, m, kg, kpl
+
+  // Źródło wyceny
+  /// @anchor qq-item-source
+  source      String // API | STOCK | MANUAL
+  /// @anchor qq-item-supplier-id
+  supplierId  String?
+  /// @anchor qq-item-external-ref
+  externalRef String? // identyfikator produktu u dostawcy (API)
+  /// @anchor qq-item-source-url
+  sourceUrl   String?
+  /// @anchor qq-item-captured-at
+  capturedAt  DateTime  @default(now())
+  /// @anchor qq-item-queried-by
+  queriedBy   String?
+
+  // Waluty — kurs NBP zamrożony w momencie capture (wzorzec fetchNbpRate z kanału PDF)
+  /// @anchor qq-item-price-original-netto
+  priceOriginalNetto Float? // cena netto w walucie oryginalnej
+  /// @anchor qq-item-currency
+  currency           String? // PLN | EUR | USD ...
+  /// @anchor qq-item-exchange-rate
+  exchangeRate       Float? // kurs NBP z rateDate
+  /// @anchor qq-item-rate-date
+  rateDate           DateTime?
+  /// @anchor qq-item-price-netto-pln
+  priceNettoPln      Float? // cena efektywna PLN (może zawierać korektę logistyka)
+  /// @anchor qq-item-price-netto-api
+  priceNettoApi      Float? // surowa cena z API/źródła — niemutowalna, osobno od efektywnej
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// @anchor qq-item-quick-quote
+  quickQuote          QuickQuote           @relation(fields: [quickQuoteId], references: [id], onDelete: Cascade)
+  /// @anchor qq-item-material-requirement
+  materialRequirement MaterialRequirement? @relation(fields: [materialRequirementId], references: [id], onDelete: SetNull)
+  /// @anchor qq-item-supplier
+  supplier            Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@map("quick_quote_items")
 }
 
 model DefaultProjectItem {

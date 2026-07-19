@@ -298,6 +298,10 @@ export class VersioningService {
                     offerId: (mr as any).offerId ?? null,
                     offerPositionIdx: (mr as any).offerPositionIdx ?? null,
                     offerPositionSnapshot: (mr as any).offerPositionSnapshot ?? null,
+                    // Klucz parowania baseline↔żywe: klon z baseline dostaje id oryginału,
+                    // klon wersji z wersji dziedziczy pointer na żywy oryginał
+                    sourceRequirementId: (mr as any).sourceRequirementId ?? mr.id,
+                    budgetSource: (mr as any).budgetSource ?? null,
                 }
             });
         }

@@ -4,6 +4,28 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-19 — feat(quickquote): Faza 0 — fundamenty schematu dla szybkich wycen, baseline i kontroli budżetu (v2026.07.19.707)
+
+### schema.prisma
+- dodano `schema-model` `Supplier` — rejestr dostawców: `nip String? @unique` (null = zagraniczny/wolny wpis), `apiAdapter` (identyfikator adaptera API, null = dostawca tylko PDF-owy), `vatStatus` + `verifiedAt` (stempel weryfikacji w Białej liście VAT), dane adresowo-kontaktowe, `isActive`
+- dodano `schema-model` `QuickQuote` — nagłówek szybkiej wyceny: `nodeId` FK ProcessNode (Cascade), `status` (`DRAFT`/`VERIFIED`/`LOCKED`/`BASELINE`/`ARCHIVED`/`EXPIRED`), `parentId` (wersjonowanie wzorcem `MaterialRequirementsList`), `validUntil`, `lockedAt/lockedBy`, `createdBy`
+- dodano `schema-model` `QuickQuoteItem` — pozycja wyceny: `materialRequirementId` FK z **onDelete: SetNull** (baseline przeżywa usunięcie wymagania), zdenormalizowany snapshot (`reqName`, `qtyAtCapture`, `unit`), źródło (`source` `API`/`STOCK`/`MANUAL`, `supplierId`, `externalRef`, `sourceUrl`, `capturedAt`, `queriedBy`), waluty (`priceOriginalNetto`, `currency`, `exchangeRate`, `rateDate`, `priceNettoPln`) oraz `priceNettoApi` (surowa cena źródła, niemutowalna) osobno od efektywnej `priceNettoPln`
+- dodano pola `schema-pole` `Offer.supplierId` (FK Supplier, SetNull), `Offer.offerNumber`, `Offer.offerDate`, `Offer.validUntil` — metadane oferty z parsera potwierdzane w modalu
+- dodano `schema-pole` `ProcessNode.orderStage` (`WYCENA` default / `ZAAKCEPTOWANE` / `REALIZACJA` / `ROZLICZONE`; znaczące dla `type='order'`) oraz `ProcessNode.acceptedVersionId` + `acceptedAt` + `acceptedBy` — pointer na zaakceptowany `ProjectVersion` (baseline); relacja nazwana `AcceptedVersion`, SetNull
+- dodano `schema-pole` `MaterialRequirement.sourceRequirementId` — id żywego oryginału w klonie wersji, klucz parowania baseline↔żywe
+- dodano `schema-pole` `MaterialRequirement.budgetSource` (`QUICKQUOTE`/`MANUAL`) — proweniencja `budgetedPriceNetto`
+
+### architektura / API
+- `back-funkcja` `cloneVersionData` (versioning.service.ts) — klon wymagań wypełnia `sourceRequirementId`: klon z baseline dostaje `id` oryginału, klon wersji z wersji dziedziczy istniejący pointer (`?? mr.id`); `budgetSource` przenoszony 1:1 (reguła kompletności klonu)
+
+### słownik
+- dodano sekcję „Moduł QuickQuote / baseline (Faza 0 — schemat)" — komplet anchorów nowych modeli i pól: `supplier*`, `quick-quote*`, `qq-item-*`, `offer-supplier-id`, `offer-offer-number`, `offer-offer-date`, `offer-valid-until`, `process-node-order-stage`, `process-node-accepted-version-id/-at/-by`, `mat-req-source-requirement-id`, `mat-req-budget-source`
+
+### wytyczne
+- `schema-pole` `MaterialRequirement.sourceRequirementId` — NIE nadpisywać po utworzeniu klonu; to jedyny klucz parowania wierszy baseline z żywymi w endpointzie porównawczym (Faza 5)
+- `schema-pole` `QuickQuoteItem.priceNettoApi` — niemutowalna surowa cena ze źródła; korekty logistyka wyłącznie w `priceNettoPln`
+- `schema-model` `Supplier` — wyniki zapytań API dostawców NIE trafiają do katalogu `Material` (ryzyko duplikatów na `@@unique(manufacturer, model)`) — tylko do `QuickQuoteItem`
+
 ## 2026-07-15 — feat(oferty): edycja zapisanych pozycji oferty z autozapisem + modal wyboru zamiast auto-parsowania (v2026.07.15.702)
 
 ### architektura / API
