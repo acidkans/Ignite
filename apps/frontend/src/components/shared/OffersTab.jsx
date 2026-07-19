@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { ChevronDown, Package, Zap, Trash2 } from 'lucide-react';
 import { API_URL } from '../../config';
 import PropertyPreview from './PropertyPreview';
+import QuickQuotesSection from './QuickQuotesSection';
 
 
 // ─── Sekcja zwijalna ──────────────────────────────────────────────────────────
@@ -262,6 +263,20 @@ export default function OffersTab({ nodeId, searchQuery = '', isGlobal = false }
                     onHeaderDblClick={handleDblClick}
                 >
                     <OffersTable nodeId={nodeId} refreshKey={refreshKey} searchQuery={searchQuery} isGlobal={isGlobal} />
+                </CollapsibleSection>
+            )}
+
+            {/* @anchor offers-tab-quick-quotes-section — sekcja „Szybkie wyceny" (F3) */}
+            {(focusedSection === null || focusedSection === 'quick') && (
+                <CollapsibleSection
+                    title="Szybkie wyceny"
+                    accent="amber"
+                    open={focusedSection === 'quick'}
+                    focused={focusedSection === 'quick'}
+                    onHeaderClick={() => handleClick('quick')}
+                    onHeaderDblClick={handleDblClick}
+                >
+                    <QuickQuotesSection nodeId={nodeId} isGlobal={isGlobal} searchQuery={searchQuery} />
                 </CollapsibleSection>
             )}
         </div>

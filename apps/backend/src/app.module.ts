@@ -39,6 +39,7 @@ import { UserTasksModule } from './user-tasks/user-tasks.module';
 import { NotificationCronModule } from './notification-cron/notification-cron.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
+import { QuickQuotesModule } from './quick-quotes/quick-quotes.module';
 
 @Module({
   imports: [
@@ -84,6 +85,7 @@ import { SuppliersModule } from './suppliers/suppliers.module';
     NotificationCronModule,
     ExchangeRatesModule,
     SuppliersModule,
+    QuickQuotesModule,
   ],
   controllers: [AppController],
   providers: [

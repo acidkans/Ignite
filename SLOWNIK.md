@@ -1065,6 +1065,70 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-sekcja | badge dostawcy w OffersTable | apps/frontend/src/components/shared/OffersTab.jsx | @anchor offers-table-supplier-badge |
 | ui-stala | THEMES (SupplierPicker) | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-theme |
 
+### Moduł QuickQuotes — silnik szybkich wycen (Faza 3)
+
+#### Backend (`apps/backend/src/quick-quotes/`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-modul | QuickQuotesModule | apps/backend/src/quick-quotes/quick-quotes.module.ts | @anchor quick-quotes-module |
+| back-serwis | QuickQuotesService | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quotes-service |
+| back-typ | QuickQuoteItemInput | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quote-item-input |
+| back-stala | TRANSITIONS | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quote-transitions |
+| back-funkcja | QuickQuotesService.list | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quotes-list |
+| back-funkcja | QuickQuotesService.get | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quotes-get |
+| back-funkcja | QuickQuotesService.create | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quotes-create |
+| back-funkcja | QuickQuotesService.update | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quotes-update |
+| back-funkcja | QuickQuotesService.remove | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quotes-delete |
+| back-funkcja | QuickQuotesService.changeStatus | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quotes-change-status |
+| back-funkcja | QuickQuotesService.lock | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quotes-lock |
+| back-funkcja | QuickQuotesService.createNewVersion | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quotes-new-version |
+| back-funkcja | QuickQuotesService.addItem | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quotes-add-item |
+| back-funkcja | QuickQuotesService.updateItem | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quotes-update-item |
+| back-funkcja | QuickQuotesService.removeItem | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quotes-remove-item |
+| back-funkcja | QuickQuotesService.addStockItems | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quotes-add-stock-items |
+| back-funkcja | QuickQuotesService.queryApi | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quotes-query-api |
+| back-funkcja | QuickQuotesService.requireEditable | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quotes-require-editable |
+| back-funkcja | QuickQuotesService.freezePrice | apps/backend/src/quick-quotes/quick-quotes.service.ts | @anchor quick-quotes-freeze-price |
+| back-typ | SupplierGatewayQuery | apps/backend/src/quick-quotes/supplier-gateway.ts | @anchor supplier-gateway-query |
+| back-typ | SupplierGatewayResult | apps/backend/src/quick-quotes/supplier-gateway.ts | @anchor supplier-gateway-result |
+| back-typ | SupplierGateway (interfejs) | apps/backend/src/quick-quotes/supplier-gateway.ts | @anchor supplier-gateway |
+| back-stala | SUPPLIER_GATEWAYS | apps/backend/src/quick-quotes/supplier-gateway.ts | @anchor supplier-gateways-token |
+| back-controller | QuickQuotesController | apps/backend/src/quick-quotes/quick-quotes.controller.ts | @anchor quick-quotes-controller |
+| back-endpoint | GET /quick-quotes | apps/backend/src/quick-quotes/quick-quotes.controller.ts | @anchor quick-quotes-get-endpoint |
+| back-endpoint | GET /quick-quotes/:id | apps/backend/src/quick-quotes/quick-quotes.controller.ts | @anchor quick-quotes-get-one-endpoint |
+| back-endpoint | POST /quick-quotes | apps/backend/src/quick-quotes/quick-quotes.controller.ts | @anchor quick-quotes-post-endpoint |
+| back-endpoint | PATCH /quick-quotes/:id | apps/backend/src/quick-quotes/quick-quotes.controller.ts | @anchor quick-quotes-patch-endpoint |
+| back-endpoint | DELETE /quick-quotes/:id | apps/backend/src/quick-quotes/quick-quotes.controller.ts | @anchor quick-quotes-delete-endpoint |
+| back-endpoint | PATCH /quick-quotes/:id/status | apps/backend/src/quick-quotes/quick-quotes.controller.ts | @anchor quick-quotes-status-endpoint |
+| back-endpoint | POST /quick-quotes/:id/new-version | apps/backend/src/quick-quotes/quick-quotes.controller.ts | @anchor quick-quotes-new-version-endpoint |
+| back-endpoint | POST /quick-quotes/:id/items | apps/backend/src/quick-quotes/quick-quotes.controller.ts | @anchor quick-quotes-post-item-endpoint |
+| back-endpoint | PATCH /quick-quotes/:id/items/:itemId | apps/backend/src/quick-quotes/quick-quotes.controller.ts | @anchor quick-quotes-patch-item-endpoint |
+| back-endpoint | DELETE /quick-quotes/:id/items/:itemId | apps/backend/src/quick-quotes/quick-quotes.controller.ts | @anchor quick-quotes-delete-item-endpoint |
+| back-endpoint | POST /quick-quotes/:id/items/from-stock | apps/backend/src/quick-quotes/quick-quotes.controller.ts | @anchor quick-quotes-stock-endpoint |
+| back-endpoint | POST /quick-quotes/:id/items/query-api | apps/backend/src/quick-quotes/quick-quotes.controller.ts | @anchor quick-quotes-query-api-endpoint |
+
+#### Frontend (`apps/frontend/src/components/shared/QuickQuotesSection.jsx`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-sekcja | QuickQuotesSection | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor quick-quotes-section |
+| ui-stala | STATUS_STYLES | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-status-styles |
+| ui-stala | SOURCE_STYLES | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-source-styles |
+| ui-stan | expandedId | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-expanded-id |
+| ui-stan | detail | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-detail |
+| ui-stan | requirements | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-requirements |
+| ui-stan | newItem | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-new-item |
+| ui-funkcja | fetchList | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-fetch-list |
+| ui-funkcja | fetchDetail | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-fetch-detail |
+| ui-funkcja | handleCreate | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-create |
+| ui-funkcja | changeStatus | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-change-status |
+| ui-funkcja | handleNewVersion | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-new-version |
+| ui-funkcja | handleFromStock | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-from-stock |
+| ui-funkcja | handleAddItem | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-add-item |
+| ui-funkcja | handlePriceEdit | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-update-item-price |
+| ui-sekcja | sekcja Szybkie wyceny w OffersTab | apps/frontend/src/components/shared/OffersTab.jsx | @anchor offers-tab-quick-quotes-section |
+
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)

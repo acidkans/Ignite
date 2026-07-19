@@ -4,6 +4,25 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-19 — feat(quickquote): Faza 3 — silnik szybkich wycen (magazyn / API / MANUAL, blokada, wersjonowanie) (v2026.07.19.710)
+
+### architektura / API
+- dodano `back-modul` `QuickQuotesModule` (apps/backend/src/quick-quotes/): CRUD wycen + pozycji — `GET/POST /quick-quotes`, `GET/PATCH/DELETE /quick-quotes/:id`, `PATCH /quick-quotes/:id/status`, `POST /quick-quotes/:id/new-version`, `POST/PATCH/DELETE .../items[/:itemId]`, `POST .../items/from-stock`, `POST .../items/query-api`
+- przejścia statusów wg `back-stala` `TRANSITIONS` (DRAFT↔VERIFIED→LOCKED→ARCHIVED; EXPIRED→DRAFT); `BASELINE` nadawany wyłącznie w Fazie 4 (akceptacja); mutacje nagłówka/pozycji tylko w `DRAFT` (`requireEditable`); DELETE tylko dla szkiców
+- `back-funkcja` `QuickQuotesService.lock` — przejście `LOCKED` w transakcji: (1) re-walidacja pokrycia magazynowego pozycji STOCK z odjęciem rezerwacji innych LOCKED/BASELINE wycen (ochrona przed podwójnym liczeniem między równoległymi szkicami), (2) zapis najtańszej ceny per wymaganie do `budgetedPriceNetto` + `budgetSource=QUICKQUOTE`, (3) stempel `lockedAt/lockedBy`
+- `back-funkcja` `addStockItems` — kandydaci z magazynu tylko przy PEŁNYM pokryciu (Σ `MaterialStock.quantity` ≥ zapotrzebowanie, bez splitów), wycena wg `Material.priceNetto` (brak ceny/0 → skip z powodem); idempotentne
+- `back-funkcja` `freezePrice` — zamrożenie kursu NBP w momencie capture (wzorzec 1:1 z kanału PDF, `fetchNbpRate`); edycja ceny oryginalnej = nowy capture; bezpośrednia edycja `priceNettoPln` = korekta logistyka (`priceNettoApi` nigdy nie nadpisywane)
+- dodano `back-typ` `SupplierGateway` (supplier-gateway.ts) — interfejs adaptera API dostawcy + token DI `SUPPLIER_GATEWAYS` (pusta lista; pierwszy adapter po wyborze dostawcy startowego — otwarta decyzja); `queryApi` zapisuje wyniki wyłącznie do `QuickQuoteItem` (surowa cena w `priceNettoApi`), nigdy do katalogu `Material`
+- dodano `ui-sekcja` `QuickQuotesSection` — trzecia sekcja `CollapsibleSection` (akcent amber) „Szybkie wyceny" w `OffersTab`: tabela nagłówków QQ (status badge, licznik pozycji, akcje wg statusu), rozwijana tabela pozycji z inline-edycją ceny PLN (tylko DRAFT), dodawanie MANUAL (dropdown wymagań + `SupplierPicker` dark + waluta z NBP), przycisk „Z magazynu", suma wartości
+
+### słownik
+- dodano sekcję „Moduł QuickQuotes — silnik szybkich wycen (Faza 3)" — komplet anchorów `quick-quotes-*`, `supplier-gateway*`, `qq-*`, `offers-tab-quick-quotes-section`
+
+### wytyczne
+- `back-funkcja` `QuickQuotesService.lock` — jedyne miejsce zapisu `budgetSource=QUICKQUOTE`; nowe źródła cen budżetowych mają ustawiać własny `budgetSource`, nie nadpisywać QQ po cichu
+- `back-typ` `SupplierGateway` — nowe adaptery API dostawców rejestrować w `QuickQuotesModule` pod tokenem `SUPPLIER_GATEWAYS` z `adapterId` = `Supplier.apiAdapter`; wyniki API NIGDY nie trafiają do katalogu `Material`
+- `schema-pole` `QuickQuoteItem.qtyAtCapture` — przy pozycjach STOCK to wielkość rezerwacji magazynu liczona w `lock`; nie zmieniać po zamrożeniu
+
 ## 2026-07-19 — feat(quickquote): Faza 2 — dostawca w kanale PDF (parser + modal + snapshoty) (v2026.07.19.709)
 
 ### architektura / API
