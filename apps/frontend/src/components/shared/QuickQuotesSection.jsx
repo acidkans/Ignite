@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ChevronDown, Plus, Package, Lock, RotateCcw, Trash2, Zap, GitBranch } from 'lucide-react';
 import { API_URL } from '../../config';
 import SupplierPicker from './SupplierPicker';
+import ComparisonPanel from './ComparisonPanel';
 
 // @anchor qq-status-styles
 const STATUS_STYLES = {
@@ -320,6 +321,13 @@ export default function QuickQuotesSection({ nodeId, isGlobal = false, searchQue
                                                 )}
                                             </table>
                                         </div>
+
+                                        {/* @anchor qq-comparison-embed — pełny panel porównawczy dla wyceny BASELINE (F5) */}
+                                        {qq.status === 'BASELINE' && (
+                                            <div className="border-t border-teal-500/20">
+                                                <ComparisonPanel nodeId={d.nodeId} />
+                                            </div>
+                                        )}
 
                                         {editable && (
                                             <div className="px-3 py-2.5 border-t border-white/5 bg-black/20 space-y-2">

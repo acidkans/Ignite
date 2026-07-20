@@ -12,6 +12,7 @@ import UnifiedWbsPanel from './components/shared/wbs/UnifiedWbsPanel';
 import CommentsSlideOver from './components/shared/CommentsSlideOver';
 import MyTasksModal from './components/shared/MyTasksModal';
 import TaskReminderToast from './components/shared/TaskReminderToast';
+import ComparisonPanel from './components/shared/ComparisonPanel';
 import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink, Coins, ThumbsUp, Undo2 } from 'lucide-react';
 import { API_URL } from './config';
 import { APP_VERSION } from './version';
@@ -156,6 +157,10 @@ export default function DashboardPage() {
     const [acceptModal, setAcceptModal] = useState(null); // { versionId, versionLabel, preview, quickQuoteId, busy, error }
     // @anchor dashboard-revoke-modal
     const [revokeModal, setRevokeModal] = useState(null); // { reason, busy, error }
+    // @anchor dashboard-comparison-kpi — KPI porównania baseline↔żywe do chipa w nagłówku (F5)
+    const [comparisonKpi, setComparisonKpi] = useState(null);
+    // @anchor dashboard-show-comparison
+    const [showComparison, setShowComparison] = useState(false);
 
     // Sprawdź typ aktywnego węzła
     const activeNode = useMemo(() => findNodeById(menuTree, activeAreaId), [menuTree, activeAreaId]);
@@ -185,6 +190,22 @@ export default function DashboardPage() {
         setAcceptance(null);
         if (isOrder) fetchAcceptance();
     }, [isOrder, fetchAcceptance]);
+
+    // @anchor dashboard-fetch-comparison-kpi — KPI do chipa „Δ % · pokrycie" (F5);
+    // pobierane dopiero gdy węzeł ma zaakceptowany baseline
+    useEffect(() => {
+        setComparisonKpi(null);
+        setShowComparison(false);
+        if (!acceptance?.acceptedVersionId || !activeAreaId) return;
+        let cancelled = false;
+        fetch(`${API_URL}/orders/${activeAreaId}/comparison`, {
+            headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+        })
+            .then(r => r.ok ? r.json() : null)
+            .then(d => { if (!cancelled && d?.accepted) setComparisonKpi(d.kpi); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [acceptance?.acceptedVersionId, activeAreaId]);
 
     // Fetch requirements for comments #tags
     useEffect(() => {
@@ -734,6 +755,22 @@ export default function DashboardPage() {
                             </span>
                         )}
 
+                        {/* @anchor dashboard-comparison-chip — „Δ +x% · pokrycie n/m", klik → pełny panel (F5) */}
+                        {comparisonKpi && (
+                            <button
+                                onClick={() => setShowComparison(true)}
+                                className={`flex items-center gap-1.5 text-[9px] font-bold px-2.5 py-1 rounded-full border shrink-0 transition-all hover:brightness-125 ${
+                                    comparisonKpi.deltaSum > 0
+                                        ? 'bg-red-500/10 text-red-300 border-red-500/20'
+                                        : 'bg-teal-500/10 text-teal-300 border-teal-500/20'
+                                }`}
+                                title="Porównanie baseline vs żywe dane — kliknij po szczegóły"
+                            >
+                                Δ {comparisonKpi.deltaPct != null ? `${comparisonKpi.deltaPct >= 0 ? '+' : ''}${comparisonKpi.deltaPct.toFixed(1)}%` : `${comparisonKpi.deltaSum >= 0 ? '+' : ''}${comparisonKpi.deltaSum.toFixed(2)} zł`}
+                                {' · '}pokrycie {comparisonKpi.coveragePriced}/{comparisonKpi.coverageTotal}
+                            </button>
+                        )}
+
                     </div>
                 )}
 
@@ -1159,6 +1196,21 @@ export default function DashboardPage() {
                             className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 text-[11px] font-semibold border border-amber-500/30 transition-all disabled:opacity-50">
                             <Undo2 size={12} />{revokeModal.busy ? 'Cofanie…' : 'Cofnij akceptację'}
                         </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* @anchor dashboard-comparison-modal — pełny panel porównawczy per zamówienie (F5) */}
+        {showComparison && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-6" onClick={() => setShowComparison(false)}>
+                <div className="bg-gray-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
+                        <span className="text-sm font-bold text-white">Porównanie baseline vs żywe dane — {activeNode?.name}</span>
+                        <button onClick={() => setShowComparison(false)} className="p-1 text-gray-500 hover:text-white"><X size={16} /></button>
+                    </div>
+                    <div className="overflow-y-auto">
+                        <ComparisonPanel nodeId={activeAreaId} />
                     </div>
                 </div>
             </div>

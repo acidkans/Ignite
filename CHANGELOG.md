@@ -4,6 +4,22 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-20 — feat(quickquote): Faza 5 — endpoint porównawczy baseline↔żywe + widoki agregujące (v2026.07.20.715)
+
+### architektura / API
+- dodano `back-endpoint` `GET /orders/:nodeId/comparison` (`OrdersService.comparison`): parowanie żywych `MaterialRequirement` z klonami zaakceptowanej wersji **po `sourceRequirementId`**; cena aktualna wg hierarchii `offerPositionSnapshot` (źródło `FO`) → `budgetedPriceNetto` (`QQ`/`MAN` wg `budgetSource`); dołącza kolumny dostawcy z pozycji wyceny BASELINE i ze snapshotu oferty; `{accepted:false}` gdy brak baseline
+- KPI odpowiedzi: `baselineSum`, `currentSum`, **`forecastSum` = Σ(aktualna wartość gdzie wyceniona) + Σ(baseline gdzie sparowane bez ceny aktualnej)** (zakres− poza prognozą), `deltaSum`/`deltaPct`, pokrycie `coveragePriced/coverageTotal`, rozkład odchyleń per wiersz: **CENOWE / ILOSCIOWE / ZAKRES_PLUS / ZAKRES_MINUS / KURSOWE** (kursowe = ta sama cena w walucie oryginalnej, różny kurs NBP)
+- dodano `ui-panel` `ComparisonPanel` (components/shared/ComparisonPanel.jsx) — pasek KPI + tabela wierszy (baseline | aktualnie ze źródłem ceny i dostawcą | Δ | badges odchyleń) + eksport Excel: **kolumny Δ i wartości aktualne jako żywe formuły, baseline jako wartości stałe**
+- osadzenia (wszystkie z jednego endpointu): rozwinięcie wyceny BASELINE w sekcji „Szybkie wyceny" (`qq-comparison-embed`), chip „Δ +x% · pokrycie n/m" w nagłówku zamówienia (`dashboard-comparison-chip`, kolor wg znaku Δ) → klik otwiera `ui-modal` z pełnym panelem per zamówienie
+- powiadomienie PM przy przekroczeniu progu Δ% — ODŁOŻONE (otwarta decyzja nr 3: wartość progu i czy w ogóle na start)
+
+### słownik
+- dodano sekcję „Moduł Comparison — porównanie baseline vs żywe (Faza 5)" — anchory `orders-comparison`, `comparison-*`, `qq-comparison-embed`, `dashboard-comparison-*`
+
+### wytyczne
+- `back-funkcja` `OrdersService.comparison` — JEDYNE źródło liczb baseline/aktualny/Δ; kolejne widoki (F6 split ProductCard, F7 tryby Budżetu) konsumują ten endpoint zamiast liczyć po swojemu
+- odchylenie KURSOWE rozpoznawane tylko gdy pozycja BASELINE wyceny i snapshot FO mają tę samą walutę i cenę oryginalną — przy zmianie logiki walut aktualizować oba końce (freezePrice w QQ i snapshot w assignOfferPosition)
+
 ## 2026-07-20 — feat(quickquote): Faza 4 — akceptacja wersji (baseline) i etapy zamówienia (v2026.07.20.713)
 
 ### architektura / API

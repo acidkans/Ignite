@@ -1166,6 +1166,31 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-modal | modal akceptacji wersji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-accept-version-modal |
 | ui-modal | modal cofnięcia akceptacji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-revoke-accept-modal |
 
+### Moduł Comparison — porównanie baseline vs żywe (Faza 5)
+
+#### Backend (`apps/backend/src/orders/`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-funkcja | OrdersService.comparison | apps/backend/src/orders/orders.service.ts | @anchor orders-comparison |
+| back-endpoint | GET /orders/:nodeId/comparison | apps/backend/src/orders/orders.controller.ts | @anchor orders-comparison-endpoint |
+
+#### Frontend
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-panel | ComparisonPanel | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-panel |
+| ui-stala | DEV_STYLES | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-dev-styles |
+| ui-stala | SOURCE_STYLES (comparison) | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-source-styles |
+| ui-funkcja | fetchComparison | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-fetch |
+| ui-funkcja | exportExcel (comparison) | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-export-excel |
+| ui-sekcja | osadzenie panelu w wycenie BASELINE | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-comparison-embed |
+| ui-stan | comparisonKpi | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-comparison-kpi |
+| ui-stan | showComparison | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-show-comparison |
+| ui-funkcja | fetch KPI porównania (effect) | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-fetch-comparison-kpi |
+| ui-przycisk | chip Δ/pokrycie w nagłówku | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-comparison-chip |
+| ui-modal | modal panelu porównawczego | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-comparison-modal |
+
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)

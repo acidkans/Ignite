@@ -24,6 +24,14 @@ export class OrdersController {
         return this.service.acceptPreview(nodeId, versionId);
     }
 
+    // @anchor orders-comparison-endpoint — GET /orders/:nodeId/comparison →
+    // wiersze baseline↔żywe (parowanie po sourceRequirementId) + KPI (Δ, prognoza,
+    // pokrycie, rozkład odchyleń); {accepted:false} gdy brak zaakceptowanej wersji.
+    @Get(':nodeId/comparison')
+    comparison(@Param('nodeId') nodeId: string) {
+        return this.service.comparison(nodeId);
+    }
+
     // @anchor orders-accept-endpoint — POST /orders/:nodeId/accept {versionId, quickQuoteId?}
     // — tylko manager/admin; jedna transakcja (pointer + etap + BASELINE + AuditLog).
     @Post(':nodeId/accept')
