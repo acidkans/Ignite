@@ -1191,6 +1191,25 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-przycisk | chip Δ/pokrycie w nagłówku | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-comparison-chip |
 | ui-modal | modal panelu porównawczego | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-comparison-modal |
 
+### Moduł split ProductCard — baseline vs żywa karta (Faza 6)
+
+#### Frontend (`apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-stan | acceptance (MaterialReqExpandPanel) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-acceptance-state |
+| ui-stan | baselineCard | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-baseline-card |
+| ui-stan | cmpRow | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-cmp-row |
+| ui-stan | splitOpen | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-open |
+| ui-stan | supplierOpen (split) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-supplier-open |
+| ui-funkcja | refreshSplitData | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-fetch |
+| ui-funkcja | handleCopyAll | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-copy-all |
+| ui-funkcja | handleCopyProduct | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-copy-product |
+| ui-funkcja | setLiveSupplier | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-set-live-supplier |
+| ui-przycisk | zwinięty pasek Wycena·Final·Δ | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-bar |
+| ui-sekcja | panel dostawcy żywej karty | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-supplier-panel |
+| ui-sekcja | przyciski na linii podziału | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-line-buttons |
+
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)

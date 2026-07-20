@@ -4,6 +4,23 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-20 — feat(quickquote): Faza 6 — split ProductCard: baseline (kłódka) vs żywa karta (v2026.07.20.716)
+
+### architektura / API
+- `back-funkcja` `OrdersService.comparison` — wiersze rozszerzone o `liveId` (id żywego wymagania; null dla zakres−) — klucz dla widoków per-karta (F6) do znalezienia swojego wiersza bez powtarzania logiki parowania
+- `ui-sekcja` split w `MaterialReqExpandPanel` (WBSHybridTable.jsx), aktywny tylko gdy zamówienie ma zaakceptowany baseline: domyślnie **zwinięty pasek** „Wycena X · Final Y · Δ badge" (liczby z `GET /orders/:id/comparison` — te same co w panelu i chipie); po rozwinięciu split 50/50: lewo — `ProductCard` klonu z wersji baseline (`readOnly`, kłódka, dostawca z snapshotu FO lub wyceny BASELINE, odczyt), prawo — żywa karta (istniejący picker produktu + `handlePropagatePrice` → `unitCost` WBS) + panel dostawcy (`SupplierPicker` dark: rejestr / NIP-autofill / wolny wpis)
+- przyciski **na linii podziału** (absolute, left:50%, bez osobnej kolumny): kciuk (teal) — kopiuje CAŁĄ pozycję z baseline (produkt + snapshot dostawcy + cena → Δ=0; disabled gdy brak odpowiednika w baseline); strzałka (amber) — kopiuje tylko dane produktu i otwiera panel dostawcy; nadpisanie wypełnionej prawej strony z potwierdzeniem; zmiana ceny po akceptacji przechodzi przez guard F4 (AuditLog automatycznie)
+- dostawca żywej karty zapisywany przez merge do JSON `offerPositionSnapshot` (`split-set-live-supplier`) — snapshot pozostaje samowystarczalny, pozostałe pola nietknięte
+- tooltippy rozróżniają kciuk „pozycji" (kopiowanie z baseline) od kciuka „snapshotu" (akceptacja wersji, F4)
+- zamówienie bez baseline: karta renderuje się jak dotąd (pełna szerokość, bez paska) — zero zmian w dotychczasowym flow
+
+### słownik
+- dodano sekcję „Moduł split ProductCard — baseline vs żywa karta (Faza 6)" — anchory `split-*`
+
+### wytyczne
+- `ui-funkcja` `handleCopyAll` — kopiuje też `offerId`/`offerPositionIdx`/`offerPositionSnapshot` 1:1; NIE budować snapshotu od nowa (utrata pól walutowych = fałszywe odchylenie KURSOWE)
+- pasek i split czytają liczby WYŁĄCZNIE z `orders/comparison` (wiersz po `liveId`) — bez lokalnego liczenia Δ
+
 ## 2026-07-20 — feat(quickquote): Faza 5 — endpoint porównawczy baseline↔żywe + widoki agregujące (v2026.07.20.715)
 
 ### architektura / API

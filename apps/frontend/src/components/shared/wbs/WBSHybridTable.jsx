@@ -37,7 +37,7 @@ function AutoResizeTextarea({ value, onChange, onBlur, onKeyDown, placeholder, c
         />
     );
 }
-import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo } from 'lucide-react';
+import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, Lock, ThumbsUp, ArrowRight } from 'lucide-react';
 import AddTaskModal from '../AddTaskModal';
 
 // ── Q&A cell — zagnieżdżona tabela Pytanie / Odpowiedź per WBS node ───────────
@@ -254,6 +254,7 @@ function QaBranchModal({ node, onClose }) {
 
 import { UNIT_OPTIONS, sanitizeQtyInput, evalQtyFormula, suggestDefaultUnit, getLeafDefault } from './wbsConstants';
 import { ProductCard } from './WbsMaterialsPanel';
+import SupplierPicker from '../SupplierPicker';
 
 const API_URL = '/api';
 
@@ -266,6 +267,106 @@ function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, 
     const [card, setCard] = React.useState(req || null);
     const [materialDb, setMaterialDb] = React.useState([]);
     const [offers, setOffers] = React.useState([]);
+
+    // @anchor split-acceptance-state — split ProductCard (F6): baseline z zaakceptowanej
+    // wersji po lewej (read-only), żywa karta po prawej. Aktywny tylko gdy zamówienie
+    // ma zaakceptowany snapshot (acceptedVersionId).
+    const [acceptance, setAcceptanceInfo] = React.useState(null); // {acceptedVersionId, acceptedVersion:{label}}
+    // @anchor split-baseline-card — klon wymagania z wersji baseline (parowanie po sourceRequirementId)
+    const [baselineCard, setBaselineCard] = React.useState(null);
+    // @anchor split-cmp-row — wiersz z GET /orders/:id/comparison dla tej karty (te same liczby co wszędzie)
+    const [cmpRow, setCmpRow] = React.useState(null);
+    // @anchor split-open
+    const [splitOpen, setSplitOpen] = React.useState(false);
+    // @anchor split-supplier-open — rozwinięty panel dostawcy żywej karty
+    const [supplierOpen, setSupplierOpen] = React.useState(false);
+
+    const reloadCard = React.useCallback(async () => {
+        if (!card?.id) return;
+        const res = await fetch(`${API_URL}/material-requirements/${card.id}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) { const updated = await res.json(); setCard(updated); onSaved?.(updated); }
+    }, [card?.id, token, onSaved]);
+
+    // @anchor split-fetch — stan akceptacji + klon baseline + wiersz porównania
+    const refreshSplitData = React.useCallback(async () => {
+        const auth = { Authorization: `Bearer ${token}` };
+        try {
+            const accRes = await fetch(`${API_URL}/orders/${processNodeId}/acceptance`, { headers: auth });
+            const acc = accRes.ok ? await accRes.json() : null;
+            if (!acc?.acceptedVersionId) { setAcceptanceInfo(null); setBaselineCard(null); setCmpRow(null); return; }
+            setAcceptanceInfo(acc);
+            if (!card?.id) return;
+            const [reqsRes, cmpRes] = await Promise.all([
+                fetch(`${API_URL}/material-requirements/node/${processNodeId}?versionId=${acc.acceptedVersionId}`, { headers: auth }),
+                fetch(`${API_URL}/orders/${processNodeId}/comparison`, { headers: auth }),
+            ]);
+            if (reqsRes.ok) {
+                const reqs = await reqsRes.json();
+                // Klucz parowania baseline↔żywe + twardy filtr wersji (endpoint bywa z fallbackiem baseline)
+                setBaselineCard((Array.isArray(reqs) ? reqs : []).find(
+                    r => r.sourceRequirementId === card.id && r.versionId === acc.acceptedVersionId
+                ) || null);
+            }
+            if (cmpRes.ok) {
+                const cmp = await cmpRes.json();
+                setCmpRow(cmp?.accepted ? (cmp.rows.find(r => r.liveId === card.id) || null) : null);
+            }
+        } catch { /* split zostaje ukryty */ }
+    }, [processNodeId, card?.id, token]);
+
+    React.useEffect(() => { refreshSplitData(); }, [refreshSplitData]);
+
+    // @anchor split-copy-all — kciuk „pozycji" (nie mylić z kciukiem akceptacji snapshotu):
+    // kopiuje CAŁĄ pozycję z baseline — produkt + dostawca (snapshot) + cena → Δ=0.
+    const handleCopyAll = async () => {
+        if (!baselineCard) return;
+        const rightFilled = card?.materialId || card?.budgetedPriceNetto != null;
+        if (rightFilled && !window.confirm('Prawa strona jest wypełniona — nadpisać produktem, dostawcą i ceną z baseline?')) return;
+        await fetch(`${API_URL}/material-requirements/${card.id}`, {
+            method: 'PATCH', headers,
+            body: JSON.stringify({
+                materialId: baselineCard.materialId ?? null,
+                offerPositionSnapshot: baselineCard.offerPositionSnapshot ?? null,
+                offerId: baselineCard.offerId ?? null,
+                offerPositionIdx: baselineCard.offerPositionIdx ?? null,
+            }),
+        });
+        if (baselineCard.budgetedPriceNetto != null) {
+            await handlePropagatePrice({ id: card.id }, null, baselineCard.budgetedPriceNetto);
+        }
+        await reloadCard();
+        await refreshSplitData();
+    };
+
+    // @anchor split-copy-product — strzałka: kopiuje tylko dane produktu, otwiera panel dostawcy
+    const handleCopyProduct = async () => {
+        if (!baselineCard) return;
+        if (card?.materialId && !window.confirm('Prawa strona ma już produkt — nadpisać danymi produktu z baseline?')) return;
+        await fetch(`${API_URL}/material-requirements/${card.id}`, {
+            method: 'PATCH', headers,
+            body: JSON.stringify({ materialId: baselineCard.materialId ?? null }),
+        });
+        setSupplierOpen(true);
+        await reloadCard();
+        await refreshSplitData();
+    };
+
+    // @anchor split-set-live-supplier — dostawca żywej karty: merge do offerPositionSnapshot
+    // (snapshot samowystarczalny; pozostałe pola snapshotu nietknięte)
+    const setLiveSupplier = async (s) => {
+        let snap = {};
+        try { snap = card?.offerPositionSnapshot ? JSON.parse(card.offerPositionSnapshot) : {}; } catch { snap = {}; }
+        snap.supplier = s ? { id: s.id, name: s.name, nip: s.nip } : null;
+        await fetch(`${API_URL}/material-requirements/${card.id}`, {
+            method: 'PATCH', headers,
+            body: JSON.stringify({ offerPositionSnapshot: JSON.stringify(snap) }),
+        });
+        await reloadCard();
+        await refreshSplitData();
+    };
+
+    const parseSnap = (s) => { try { return s ? JSON.parse(s) : null; } catch { return null; } };
+    const zl = (v) => v != null ? v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 
     // Jeśli nie ma karty — utwórz ją automatycznie (tylko gdy naprawdę nie istnieje).
     // WAŻNE: versionId=null (baseline), nie snapshot — requirement musi być widoczny we wszystkich wersjach.
@@ -328,23 +429,113 @@ function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, 
                     <Trash2 size={10} /> Usuń z WBS
                 </button>
             </div>
-            {card ? (
+            {card && acceptance?.acceptedVersionId ? (
+                <>
+                    {/* @anchor split-bar — domyślnie zwinięty pasek „Wycena · Final · Δ" (F6) */}
+                    <button
+                        onClick={() => setSplitOpen(o => !o)}
+                        className="w-full flex items-center gap-3 px-4 py-2 text-[13px] hover:bg-white/[0.03] transition-colors select-none"
+                    >
+                        <ChevronDown size={12} className={`text-teal-400 transition-transform ${splitOpen ? '' : '-rotate-90'}`} />
+                        <span className="text-gray-400">Wycena: <span className="font-mono text-gray-200">{zl(cmpRow?.baseline?.value)} zł</span></span>
+                        <span className="text-gray-400">Final: <span className="font-mono text-gray-200">{zl(cmpRow?.current?.value)} zł</span></span>
+                        {cmpRow?.delta != null && (
+                            <span className={`text-[11px] font-bold font-mono px-2 py-0.5 rounded-full border ${cmpRow.delta > 0 ? 'text-red-300 bg-red-500/10 border-red-500/25' : cmpRow.delta < 0 ? 'text-teal-300 bg-teal-500/10 border-teal-500/25' : 'text-gray-400 bg-white/5 border-white/10'}`}>
+                                Δ {cmpRow.delta >= 0 ? '+' : ''}{zl(cmpRow.delta)}
+                            </span>
+                        )}
+                        {!baselineCard && <span className="text-[10px] text-teal-300/80">poza baseline (zakres+)</span>}
+                        <span className="ml-auto flex items-center gap-1 text-[10px] text-gray-600"><Lock size={9} />baseline „{acceptance.acceptedVersion?.label || ''}"</span>
+                    </button>
+
+                    {splitOpen && (
+                        <div className="relative grid grid-cols-2">
+                            {/* LEWO: zamrożony baseline (read-only, kłódka) */}
+                            <div className="border-r border-white/10 opacity-90">
+                                <div className="flex items-center gap-2 px-4 py-1.5 bg-teal-500/5 border-y border-teal-500/10">
+                                    <Lock size={10} className="text-teal-400" />
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-teal-300/90">Baseline „{acceptance.acceptedVersion?.label || ''}"</span>
+                                    {/* panel dostawcy baseline (odczyt): snapshot FO → wycena QQ */}
+                                    <span className="ml-auto text-[10px] text-gray-500 truncate max-w-[45%]">
+                                        {parseSnap(baselineCard?.offerPositionSnapshot)?.supplier?.name || cmpRow?.qqSupplier?.name || 'dostawca: —'}
+                                    </span>
+                                </div>
+                                {baselineCard ? (
+                                    <ProductCard
+                                        card={baselineCard}
+                                        wbsNode={{ id: node.id, name: node.name }}
+                                        token={token}
+                                        materialDb={materialDb}
+                                        offers={offers}
+                                        onRefresh={() => {}}
+                                        onPropagatePrice={() => {}}
+                                        readOnly={true}
+                                    />
+                                ) : (
+                                    <div className="px-4 py-6 text-[12px] text-gray-600 text-center">Brak odpowiednika w baseline — pozycja dodana po akceptacji (zakres+)</div>
+                                )}
+                            </div>
+
+                            {/* PRAWO: żywa karta */}
+                            <div>
+                                <div className="flex items-center gap-2 px-4 py-1.5 bg-white/[0.02] border-y border-white/5">
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Żywa karta</span>
+                                    <button onClick={() => setSupplierOpen(o => !o)}
+                                        className="ml-auto text-[10px] text-gray-400 hover:text-white truncate max-w-[55%]">
+                                        dostawca: {parseSnap(card?.offerPositionSnapshot)?.supplier?.name || '— wybierz'}
+                                    </button>
+                                </div>
+                                {/* @anchor split-supplier-panel — panel dostawcy żywej karty: rejestr / NIP-autofill / wolny wpis */}
+                                {supplierOpen && (
+                                    <div className="px-4 py-2 border-b border-white/5 bg-black/20">
+                                        <SupplierPicker dark
+                                            value={parseSnap(card?.offerPositionSnapshot)?.supplier?.id ?? null}
+                                            onChange={(s) => { setLiveSupplier(s); setSupplierOpen(false); }}
+                                        />
+                                    </div>
+                                )}
+                                <ProductCard
+                                    card={card}
+                                    wbsNode={{ id: node.id, name: node.name }}
+                                    token={token}
+                                    materialDb={materialDb}
+                                    offers={offers}
+                                    onRefresh={async () => { await reloadCard(); await refreshSplitData(); }}
+                                    onPropagatePrice={handlePropagatePrice}
+                                    readOnly={false}
+                                />
+                            </div>
+
+                            {/* @anchor split-line-buttons — przyciski NA LINII podziału (bez osobnej kolumny) */}
+                            <div className="absolute left-1/2 top-14 -translate-x-1/2 flex flex-col gap-2 z-10">
+                                <button
+                                    onClick={handleCopyAll}
+                                    disabled={!baselineCard}
+                                    title="Kciuk POZYCJI (nie akceptacji snapshotu): kopiuje całą pozycję z baseline — produkt + dostawca + cena, Δ=0"
+                                    className="p-1.5 rounded-full bg-gray-900 border border-teal-500/40 text-teal-300 hover:bg-teal-500/20 shadow-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                >
+                                    <ThumbsUp size={13} />
+                                </button>
+                                <button
+                                    onClick={handleCopyProduct}
+                                    disabled={!baselineCard}
+                                    title="Kopiuje tylko dane produktu z baseline i otwiera panel dostawcy"
+                                    className="p-1.5 rounded-full bg-gray-900 border border-amber-500/40 text-amber-300 hover:bg-amber-500/20 shadow-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                >
+                                    <ArrowRight size={13} />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </>
+            ) : card ? (
                 <ProductCard
                     card={card}
                     wbsNode={{ id: node.id, name: node.name }}
                     token={token}
                     materialDb={materialDb}
                     offers={offers}
-                    onRefresh={async () => {
-                        const res = await fetch(`${API_URL}/material-requirements/${card.id}`, {
-                            headers: { Authorization: `Bearer ${token}` },
-                        });
-                        if (res.ok) {
-                            const updated = await res.json();
-                            setCard(updated);
-                            onSaved?.(updated);
-                        }
-                    }}
+                    onRefresh={async () => { await reloadCard(); }}
                     onPropagatePrice={handlePropagatePrice}
                     readOnly={false}
                 />

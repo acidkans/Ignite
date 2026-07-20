@@ -191,7 +191,7 @@ export class OrdersService {
                 value: b.budgetedPriceNetto != null ? Math.round(b.quantity * b.budgetedPriceNetto * 100) / 100 : null,
             };
             if (!live) {
-                rows.push({ key: b.id, name: b.name, unit: b.unit, baseline, current: null, qqSupplier: null, deviations: ['ZAKRES_MINUS'], delta: null });
+                rows.push({ key: b.id, liveId: null, name: b.name, unit: b.unit, baseline, current: null, qqSupplier: null, deviations: ['ZAKRES_MINUS'], delta: null });
                 continue;
             }
             pairedLiveIds.add(live.id);
@@ -213,7 +213,7 @@ export class OrdersService {
                 ? Math.round((current.value - baseline.value) * 100) / 100
                 : null;
             rows.push({
-                key: b.id, name: live.name ?? b.name, unit: live.unit ?? b.unit,
+                key: b.id, liveId: live.id, name: live.name ?? b.name, unit: live.unit ?? b.unit,
                 baseline, current,
                 qqSupplier: qq ? { name: qq.supplier?.name ?? null, priceNettoPln: qq.priceNettoPln } : null,
                 deviations, delta,
@@ -226,7 +226,7 @@ export class OrdersService {
             const { snap, ...current } = buildCurrent(live);
             const qq = qqByLiveId.get(live.id) ?? null;
             rows.push({
-                key: live.id, name: live.name, unit: live.unit,
+                key: live.id, liveId: live.id, name: live.name, unit: live.unit,
                 baseline: null, current,
                 qqSupplier: qq ? { name: qq.supplier?.name ?? null, priceNettoPln: qq.priceNettoPln } : null,
                 deviations: ['ZAKRES_PLUS'], delta: current.value,
