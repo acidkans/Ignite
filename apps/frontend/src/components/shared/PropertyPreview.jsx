@@ -438,6 +438,9 @@ export default function PropertyPreview({ nodeId, versionId = null, searchQuery 
                     )}
                 </div>
 
+                {/* Dropdown plików OneDrive */}
+                <OneDriveFilesSection nodeId={nodeId} category={isFinancialTab ? 'finanse' : 'dokumentacja'} />
+
                 {/* Prev/next navigation */}
                 {files.length > 1 && (() => {
                     const idx = files.findIndex(f => f.id === selectedFile?.id);
@@ -510,7 +513,6 @@ export default function PropertyPreview({ nodeId, versionId = null, searchQuery 
                 )}
             </div>
         </div>
-        <OneDriveFilesSection nodeId={nodeId} category={isFinancialTab ? 'finanse' : 'dokumentacja'} />
         </div>
     );
 }

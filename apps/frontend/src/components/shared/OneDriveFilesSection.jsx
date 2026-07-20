@@ -1,21 +1,22 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Cloud, FileText, FileSpreadsheet, FileImage, File, ExternalLink, RefreshCw, ChevronDown, ChevronRight, X } from 'lucide-react';
+import { Cloud, FileText, FileSpreadsheet, FileImage, File, ExternalLink, RefreshCw, ChevronDown } from 'lucide-react';
 import { API_URL } from '../../config';
 import DocumentViewer from './DocumentViewer';
 
 // @anchor onedrive-files-section
-// Sekcja z listą plików z folderu OneDrive powiązanego z węzłem.
+// Dropdown z listą plików z folderu OneDrive powiązanego z węzłem — w górnej belce, obok wyboru dokumentu.
 // category: 'finanse' | 'dokumentacja'
-// Jeśli folder niepowiązany lub brak plików — sekcja ukryta.
+// Jeśli folder niepowiązany lub brak plików — dropdown ukryty.
 export default function OneDriveFilesSection({ nodeId, category = 'finanse' }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [expanded, setExpanded] = useState(true);
+  const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   // @anchor onedrive-files-preview
   const [preview, setPreview] = useState(null); // { id, name, mimeType }
+  const dropdownRef = useRef(null);
 
   const fetchFiles = useCallback(async () => {
     if (!nodeId) return;
@@ -38,7 +39,16 @@ export default function OneDriveFilesSection({ nodeId, category = 'finanse' }) {
 
   useEffect(() => { fetchFiles(); }, [fetchFiles]);
 
-  // Nie pokazuj sekcji jeśli załadowano i brak plików
+  // Click-outside zamyka dropdown
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  // Nie pokazuj dropdownu jeśli załadowano i brak plików
   if (loaded && !loading && files.length === 0 && !error) return null;
   if (!loaded && !loading) return null;
 
@@ -72,72 +82,79 @@ export default function OneDriveFilesSection({ nodeId, category = 'finanse' }) {
     : null;
 
   return (
-    <div className="mt-3 border border-white/8 rounded-xl overflow-hidden bg-white/[0.02]">
-      {/* Nagłówek sekcji */}
-      <div
-        className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-white/5 transition-colors"
-        onClick={() => setExpanded(v => !v)}
+    <div className="relative shrink-0" ref={dropdownRef}>
+      {/* Przycisk dropdownu — styl jak wybór dokumentu */}
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`w-[220px] flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+          open ? 'bg-white/10 border-white/20 text-white' : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:text-white'
+        }`}
       >
-        <div className="flex items-center gap-2">
-          <Cloud size={13} className="text-blue-400 shrink-0" />
-          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">OneDrive — {folderLabel}</span>
-          {files.length > 0 && (
-            <span className="text-[10px] bg-blue-500/15 text-blue-400 px-1.5 py-0.5 rounded-full font-bold">{files.length}</span>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={(e) => { e.stopPropagation(); fetchFiles(); }}
-            className="p-1 rounded hover:bg-white/10 text-gray-500 hover:text-gray-300 transition-colors"
-            title="Odśwież"
-          >
-            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
-          </button>
-          {expanded ? <ChevronDown size={13} className="text-gray-500" /> : <ChevronRight size={13} className="text-gray-500" />}
-        </div>
-      </div>
+        <Cloud size={13} className="text-blue-400 shrink-0" />
+        <span className="flex-1 truncate text-left">OneDrive — {folderLabel}</span>
+        <span className="text-[10px] text-gray-500 shrink-0">({files.length})</span>
+        <ChevronDown size={12} className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
 
-      {/* Lista plików */}
-      {expanded && (
-        <div className="border-t border-white/8 max-h-56 overflow-y-auto custom-scrollbar">
-          {loading && (
-            <div className="px-4 py-3 text-[11px] text-gray-500 flex items-center gap-2">
-              <RefreshCw size={11} className="animate-spin" /> Ładowanie…
-            </div>
-          )}
-          {error && (
-            <div className="px-4 py-2 text-[11px] text-red-400">{error}</div>
-          )}
-          {!loading && files.map((f) => (
-            <div
-              key={f.id}
-              className="flex items-center gap-2 px-3 py-2 hover:bg-white/5 transition-colors group border-b border-white/[0.04] last:border-0"
+      {open && (
+        <div className="absolute top-full left-0 mt-1 w-96 bg-gray-900 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+          {/* Pasek akcji dropdownu */}
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/8">
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Pliki OneDrive</span>
+            <button
+              onClick={(e) => { e.stopPropagation(); fetchFiles(); }}
+              className="p-1 rounded hover:bg-white/10 text-gray-500 hover:text-gray-300 transition-colors"
+              title="Odśwież"
             >
-              {fileIcon(f.name)}
-              <button
-                type="button"
-                onClick={() => setPreview({ id: f.id, name: f.name, mimeType: f.file?.mimeType || '' })}
-                className="flex-1 min-w-0 text-left text-[12px] text-gray-300 truncate hover:text-blue-300 transition-colors"
-                title={`Podgląd: ${f.name}`}
+              <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+
+          {/* Lista plików */}
+          <div className="max-h-72 overflow-y-auto custom-scrollbar">
+            {loading && (
+              <div className="px-4 py-3 text-[11px] text-gray-500 flex items-center gap-2">
+                <RefreshCw size={11} className="animate-spin" /> Ładowanie…
+              </div>
+            )}
+            {error && (
+              <div className="px-4 py-2 text-[11px] text-red-400">{error}</div>
+            )}
+            {!loading && !error && files.length === 0 && (
+              <div className="text-xs text-gray-500 text-center py-4">Brak plików.</div>
+            )}
+            {!loading && files.map((f) => (
+              <div
+                key={f.id}
+                className="flex items-center gap-2 px-3 py-2 hover:bg-white/5 transition-colors group border-b border-white/[0.04] last:border-0"
               >
-                {f.name}
-              </button>
-              <span className="text-[10px] text-gray-600 shrink-0 hidden group-hover:inline">{fmtDate(f.lastModifiedDateTime)}</span>
-              <span className="text-[10px] text-gray-600 shrink-0 w-12 text-right">{fmtSize(f.size)}</span>
-              {f.webUrl && (
-                <a
-                  href={f.webUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-1 rounded hover:bg-blue-500/20 text-gray-600 hover:text-blue-400 transition-colors shrink-0"
-                  title="Otwórz w OneDrive"
-                  onClick={(e) => e.stopPropagation()}
+                {fileIcon(f.name)}
+                <button
+                  type="button"
+                  onClick={() => { setPreview({ id: f.id, name: f.name, mimeType: f.file?.mimeType || '' }); setOpen(false); }}
+                  className="flex-1 min-w-0 text-left text-[12px] text-gray-300 truncate hover:text-blue-300 transition-colors"
+                  title={`Podgląd: ${f.name}`}
                 >
-                  <ExternalLink size={12} />
-                </a>
-              )}
-            </div>
-          ))}
+                  {f.name}
+                </button>
+                <span className="text-[10px] text-gray-600 shrink-0 hidden group-hover:inline">{fmtDate(f.lastModifiedDateTime)}</span>
+                <span className="text-[10px] text-gray-600 shrink-0 w-12 text-right">{fmtSize(f.size)}</span>
+                {f.webUrl && (
+                  <a
+                    href={f.webUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1 rounded hover:bg-blue-500/20 text-gray-600 hover:text-blue-400 transition-colors shrink-0"
+                    title="Otwórz w OneDrive"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink size={12} />
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
