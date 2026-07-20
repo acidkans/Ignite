@@ -4,6 +4,23 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-20 — feat(quickquote): Faza 7 — tryby zakładki Budżet: baseline / wykonanie / porównanie (v2026.07.20.717)
+
+### architektura / API
+- `back-funkcja` `OrdersService.comparison` — `qqSupplier` rozszerzony o `source` pozycji wyceny BASELINE (API/STOCK/MANUAL) — mapowanie na badge MAG w trybie Wykonanie
+- dodano `ui-panel` `BudgetModesPanel` (wbs/BudgetModesPanel.jsx) + `ui-sekcja` segmented control w sekcji Budżet (`UnifiedWbsPanel`), **widoczny wyłącznie po akceptacji wersji** (wcześniej zakładka bez zmian): tryby `Budżet (żywy)` (dotychczasowa `BudgetTable` bez zmian — funkcjonalność zachowana) / `Budżet (baseline)` / `Wykonanie` / `Porównanie`
+- tryb **Budżet (baseline)**: tabela z drzewa WBS zaakceptowanej wersji (`GET /wbs-nodes/unified/:id?versionId=`) — read-only z kłódką, kolumny i formuła ceny ofertowej 1:1 z `BudgetTable.calcDerived`, sumy kosztów i cen ofertowych
+- tryb **Wykonanie**: żywe wymagania z ceną wg hierarchii: `FO` (finalna z oferty, komórka read-only) / `FO✎` (skorygowana ręcznie) / `QQ` (z wyceny — edytowalna) / `MAG` (pozycja STOCK wyceny) / `MAN`; edycja ceny przechodzi przez guard F4 (po akceptacji manager + AuditLog)
+- tryb **Porównanie**: wiersze pogrupowane gałęziami baseline WBS (kolejność drzewa, nagłówki gałęzi z sumami OBU kolumn), pary kosztów + Δ + **marża plan → efektywna** (cena ofertowa zamrożona w baseline z `calcDerived` klonu WBS; koszt żywy → erozja marży per wiersz w p.p., czerwień przy erozji); liczby wyłącznie z `GET /orders/:id/comparison`
+- eksport Excel trybu Porównanie (`budget-comparison-export`): baseline jako wartości stałe, koszt aktualny / Δ / marża efektywna jako **żywe formuły**, sumy gałęzi jako `SUM(...)`; istniejące walidacje cen eksportów oferty/budżetu nietknięte (eksport porównania analityczny — bez blokady)
+
+### słownik
+- dodano sekcję „Moduł tryby Budżetu — baseline / wykonanie / porównanie (Faza 7)" — anchory `budget-modes-*`, `budget-mode-*`, `budget-comparison-*`, `budget-acceptance`
+
+### wytyczne
+- `ui-panel` `BudgetModesPanel` — tryb Porównanie i Wykonanie czytają liczby z `orders/comparison` (wiersz po `liveId`); baseline liczony z klonów WBS formułą `calcDerived` — przy zmianie formuły budżetu aktualizować oba miejsca
+- `ui-sekcja` segmented control Budżetu — tryb `live` (dotychczasowa tabela) musi pozostać dostępny po akceptacji; baseline read-only NIE zastępuje edycji żywego budżetu
+
 ## 2026-07-20 — feat(quickquote): Faza 6 — split ProductCard: baseline (kłódka) vs żywa karta (v2026.07.20.716)
 
 ### architektura / API

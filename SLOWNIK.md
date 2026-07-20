@@ -1210,6 +1210,23 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-sekcja | panel dostawcy żywej karty | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-supplier-panel |
 | ui-sekcja | przyciski na linii podziału | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-line-buttons |
 
+### Moduł tryby Budżetu — baseline / wykonanie / porównanie (Faza 7)
+
+#### Frontend
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-panel | BudgetModesPanel | apps/frontend/src/components/shared/wbs/BudgetModesPanel.jsx | @anchor budget-modes-panel |
+| ui-stala | SOURCE_STYLES (tryby budżetu) | apps/frontend/src/components/shared/wbs/BudgetModesPanel.jsx | @anchor budget-mode-source-styles |
+| ui-funkcja | fetchAll (tryby budżetu) | apps/frontend/src/components/shared/wbs/BudgetModesPanel.jsx | @anchor budget-modes-fetch |
+| ui-funkcja | sourceOf | apps/frontend/src/components/shared/wbs/BudgetModesPanel.jsx | @anchor budget-mode-source |
+| ui-funkcja | savePrice (Wykonanie) | apps/frontend/src/components/shared/wbs/BudgetModesPanel.jsx | @anchor budget-mode-price-edit |
+| ui-funkcja | exportComparison | apps/frontend/src/components/shared/wbs/BudgetModesPanel.jsx | @anchor budget-comparison-export |
+| ui-sekcja | FragmentGroup (gałąź z sumami) | apps/frontend/src/components/shared/wbs/BudgetModesPanel.jsx | @anchor budget-comparison-group |
+| ui-stan | budgetAcceptance | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor budget-acceptance |
+| ui-stan | budgetMode | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor budget-mode |
+| ui-sekcja | segmented control trybów Budżetu | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor budget-mode-switch |
+
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)

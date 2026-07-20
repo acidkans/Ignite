@@ -146,7 +146,7 @@ export class OrdersService {
                 where: { quickQuote: { nodeId, status: 'BASELINE' }, materialRequirementId: { not: null } },
                 select: {
                     materialRequirementId: true, priceNettoPln: true, priceOriginalNetto: true,
-                    currency: true, exchangeRate: true,
+                    currency: true, exchangeRate: true, source: true,
                     supplier: { select: { id: true, name: true } },
                 },
             }),
@@ -215,7 +215,7 @@ export class OrdersService {
             rows.push({
                 key: b.id, liveId: live.id, name: live.name ?? b.name, unit: live.unit ?? b.unit,
                 baseline, current,
-                qqSupplier: qq ? { name: qq.supplier?.name ?? null, priceNettoPln: qq.priceNettoPln } : null,
+                qqSupplier: qq ? { name: qq.supplier?.name ?? null, priceNettoPln: qq.priceNettoPln, source: qq.source } : null,
                 deviations, delta,
             });
         }
@@ -228,7 +228,7 @@ export class OrdersService {
             rows.push({
                 key: live.id, liveId: live.id, name: live.name, unit: live.unit,
                 baseline: null, current,
-                qqSupplier: qq ? { name: qq.supplier?.name ?? null, priceNettoPln: qq.priceNettoPln } : null,
+                qqSupplier: qq ? { name: qq.supplier?.name ?? null, priceNettoPln: qq.priceNettoPln, source: qq.source } : null,
                 deviations: ['ZAKRES_PLUS'], delta: current.value,
             });
         }

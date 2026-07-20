@@ -16,6 +16,7 @@ import { buildSchematSectionHtml, SCHEMAT_SECTION_CSS } from '../../../utils/sch
 import ExportChoiceModal from '../ExportChoiceModal';
 import WBSHybridTable from './WBSHybridTable';
 import BudgetTable from './BudgetTable';
+import BudgetModesPanel from './BudgetModesPanel';
 
 
 const VIEWS = {
@@ -98,6 +99,23 @@ function BranchStrategyField({ name, value, onSave }) {
 export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsDataLoad, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible, oneDriveFolderName = null }) {
     const [wbsData, setWbsData] = useState([]);
     const wbsDataRef = useRef(wbsData);
+
+    // @anchor budget-acceptance — stan akceptacji zamówienia (F7): segmented control
+    // trybów Budżetu widoczny dopiero po akceptacji; wcześniej zakładka bez zmian
+    const [budgetAcceptance, setBudgetAcceptance] = useState(null);
+    // @anchor budget-mode — 'live' (dotychczasowa tabela) | 'baseline' | 'wykonanie' | 'porownanie'
+    const [budgetMode, setBudgetMode] = useState('live');
+    useEffect(() => {
+        setBudgetAcceptance(null);
+        setBudgetMode('live');
+        if (!nodeId) return;
+        fetch(`/api/orders/${nodeId}/acceptance`, {
+            headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+        })
+            .then(r => r.ok ? r.json() : null)
+            .then(d => setBudgetAcceptance(d?.acceptedVersionId ? d : null))
+            .catch(() => {});
+    }, [nodeId]);
     wbsDataRef.current = wbsData;
     const [expandedSection, setExpandedSection] = useState(null);
     const [fullscreenSection, setFullscreenSection] = useState(null);
@@ -5734,15 +5752,43 @@ ${ganttSectionHtml}
                 if (key === 'budget') {
                     if (!isManagerOrAdmin) return null;
                     return renderSection('budget', 'Budżet', DollarSign, 'green', (
-                        <BudgetTable
-                            rows={budgetRows}
-                            onFieldChange={onBudgetFieldChange}
-                            onDeleteRow={(id) => deleteNodeByIdRef.current?.(id)}
-                            discountPercent={budgetDiscountPercent}
-                            discountAmount={budgetDiscountAmount}
-                            onDiscountPercentChange={setBudgetDiscountPercent}
-                            onDiscountAmountChange={setBudgetDiscountAmount}
-                        />
+                        <>
+                            {/* @anchor budget-mode-switch — segmented control trybów Budżetu (F7);
+                                widoczny wyłącznie po akceptacji wersji (baseline) */}
+                            {budgetAcceptance?.acceptedVersionId && (
+                                <div className="flex items-center gap-1 px-3 py-2 border-b border-white/5 bg-white/[0.01]">
+                                    {[
+                                        ['live', 'Budżet (żywy)'],
+                                        ['baseline', `Budżet (baseline)`],
+                                        ['wykonanie', 'Wykonanie'],
+                                        ['porownanie', 'Porównanie'],
+                                    ].map(([m, label]) => (
+                                        <button key={m}
+                                            onClick={(e) => { e.stopPropagation(); setBudgetMode(m); }}
+                                            className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all ${
+                                                budgetMode === m
+                                                    ? 'bg-teal-500/20 text-teal-300 border-teal-500/30'
+                                                    : 'bg-white/[0.02] text-gray-500 border-white/5 hover:text-gray-300 hover:bg-white/5'
+                                            }`}
+                                        >{label}</button>
+                                    ))}
+                                    <span className="ml-auto text-[9px] text-gray-600">baseline: „{budgetAcceptance.acceptedVersion?.label}"</span>
+                                </div>
+                            )}
+                            {(!budgetAcceptance?.acceptedVersionId || budgetMode === 'live') ? (
+                                <BudgetTable
+                                    rows={budgetRows}
+                                    onFieldChange={onBudgetFieldChange}
+                                    onDeleteRow={(id) => deleteNodeByIdRef.current?.(id)}
+                                    discountPercent={budgetDiscountPercent}
+                                    discountAmount={budgetDiscountAmount}
+                                    onDiscountPercentChange={setBudgetDiscountPercent}
+                                    onDiscountAmountChange={setBudgetDiscountAmount}
+                                />
+                            ) : (
+                                <BudgetModesPanel nodeId={nodeId} mode={budgetMode} acceptance={budgetAcceptance} />
+                            )}
+                        </>
                     ), null, (
                         <div className="flex items-center gap-2">
                             <button onClick={(e) => { e.stopPropagation(); const invalid = validateBudgetPricing(); if (invalid.length) { alert(`Eksport wstrzymany — ${invalid.length} pozycji wymaga uzupełnienia:\n\n${invalid.join('\n')}\n\nUzupełnij koszt jednostkowy i narzut tych pozycji, po czym ponów eksport.`); return; } openExport({ title: 'Analiza projektu (Excel)', defaultFilename: `${safeFileBase()}_budzet.xlsx`, makeArtifact: handleExportBudgetExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-lg text-green-300 text-[10px] font-bold uppercase tracking-widest transition-all">
