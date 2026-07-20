@@ -12,7 +12,7 @@ import UnifiedWbsPanel from './components/shared/wbs/UnifiedWbsPanel';
 import CommentsSlideOver from './components/shared/CommentsSlideOver';
 import MyTasksModal from './components/shared/MyTasksModal';
 import TaskReminderToast from './components/shared/TaskReminderToast';
-import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink, Coins } from 'lucide-react';
+import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink, Coins, ThumbsUp, Undo2 } from 'lucide-react';
 import { API_URL } from './config';
 import { APP_VERSION } from './version';
 
@@ -150,6 +150,13 @@ export default function DashboardPage() {
         return () => { clearInterval(interval); window.removeEventListener('reminder-handled', onHandled); };
     }, []);
 
+    // @anchor dashboard-acceptance — stan akceptacji zamówienia: baseline pointer + etap (F4)
+    const [acceptance, setAcceptance] = useState(null);
+    // @anchor dashboard-accept-modal
+    const [acceptModal, setAcceptModal] = useState(null); // { versionId, versionLabel, preview, quickQuoteId, busy, error }
+    // @anchor dashboard-revoke-modal
+    const [revokeModal, setRevokeModal] = useState(null); // { reason, busy, error }
+
     // Sprawdź typ aktywnego węzła
     const activeNode = useMemo(() => findNodeById(menuTree, activeAreaId), [menuTree, activeAreaId]);
     const parentNode = useMemo(() => findParentById(menuTree, activeAreaId), [menuTree, activeAreaId]);
@@ -162,6 +169,22 @@ export default function DashboardPage() {
     const pendingTabRef = contextPendingTabRef || localPendingTabRef;
 
     const [focusedRequirementId, setFocusedRequirementId] = useState(null);
+
+    // @anchor dashboard-fetch-acceptance — stan akceptacji węzła (badge BASELINE, etap)
+    const fetchAcceptance = useCallback(async () => {
+        if (!activeAreaId) return;
+        try {
+            const res = await fetch(`${API_URL}/orders/${activeAreaId}/acceptance`, {
+                headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+            });
+            setAcceptance(res.ok ? await res.json() : null);
+        } catch { setAcceptance(null); }
+    }, [activeAreaId]);
+
+    useEffect(() => {
+        setAcceptance(null);
+        if (isOrder) fetchAcceptance();
+    }, [isOrder, fetchAcceptance]);
 
     // Fetch requirements for comments #tags
     useEffect(() => {
@@ -288,6 +311,60 @@ export default function DashboardPage() {
         } catch (err) {
             console.error('Failed to delete version:', err);
         }
+    };
+
+    // @anchor dashboard-open-accept-modal — kciuk managera: modal potwierdzenia
+    // z sumą budżetu wersji i wyborem zamrożonej wyceny na BASELINE
+    const openAcceptModal = async (version) => {
+        setShowVersionMenu(false);
+        setAcceptModal({ versionId: version.id, versionLabel: version.label, preview: null, quickQuoteId: '', busy: false, error: '' });
+        try {
+            const res = await fetch(`${API_URL}/orders/${activeAreaId}/accept-preview?versionId=${version.id}`, {
+                headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+            });
+            if (res.ok) { const p = await res.json(); setAcceptModal(m => m ? { ...m, preview: p } : m); }
+            else { const e = await res.json().catch(() => ({})); setAcceptModal(m => m ? { ...m, error: e.message || 'Błąd podglądu' } : m); }
+        } catch { setAcceptModal(m => m ? { ...m, error: 'Błąd połączenia' } : m); }
+    };
+
+    // @anchor dashboard-confirm-accept
+    const confirmAccept = async () => {
+        if (!acceptModal) return;
+        setAcceptModal(m => ({ ...m, busy: true, error: '' }));
+        try {
+            const res = await fetch(`${API_URL}/orders/${activeAreaId}/accept`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ versionId: acceptModal.versionId, quickQuoteId: acceptModal.quickQuoteId || null }),
+            });
+            if (!res.ok) {
+                const e = await res.json().catch(() => ({}));
+                setAcceptModal(m => ({ ...m, busy: false, error: e.message || 'Błąd akceptacji' }));
+                return;
+            }
+            setAcceptModal(null);
+            await fetchAcceptance();
+        } catch { setAcceptModal(m => ({ ...m, busy: false, error: 'Błąd połączenia' })); }
+    };
+
+    // @anchor dashboard-confirm-revoke — cofnięcie akceptacji z obowiązkowym powodem
+    const confirmRevoke = async () => {
+        if (!revokeModal?.reason?.trim()) { setRevokeModal(m => ({ ...m, error: 'Podaj powód cofnięcia' })); return; }
+        setRevokeModal(m => ({ ...m, busy: true, error: '' }));
+        try {
+            const res = await fetch(`${API_URL}/orders/${activeAreaId}/revoke-accept`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason: revokeModal.reason.trim() }),
+            });
+            if (!res.ok) {
+                const e = await res.json().catch(() => ({}));
+                setRevokeModal(m => ({ ...m, busy: false, error: e.message || 'Błąd cofnięcia akceptacji' }));
+                return;
+            }
+            setRevokeModal(null);
+            await fetchAcceptance();
+        } catch { setRevokeModal(m => ({ ...m, busy: false, error: 'Błąd połączenia' })); }
     };
 
     const handleRenameVersion = async (versionId, newLabel) => {
@@ -586,10 +663,32 @@ export default function DashboardPage() {
                                                         <>
                                                             <span className="flex-1 break-words">{v.label}</span>
                                                             {v.isActive && <span className="text-[8px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full shrink-0">ACTIVE</span>}
+                                                            {/* @anchor dashboard-baseline-badge — ACTIVE ≠ BASELINE: kciuk nie zmienia wersji aktywnej */}
+                                                            {acceptance?.acceptedVersionId === v.id && <span className="text-[8px] px-1.5 py-0.5 bg-teal-500/10 text-teal-300 border border-teal-500/20 rounded-full shrink-0">BASELINE</span>}
                                                         </>
                                                     )}
                                                 </button>
                                                 <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all pr-1 shrink-0">
+                                                    {/* @anchor dashboard-thumbs-up — akceptacja wersji (baseline), tylko manager */}
+                                                    {isManagerOrAdmin && !acceptance?.acceptedVersionId && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); openAcceptModal(v); }}
+                                                            className="p-1 text-teal-500 hover:text-teal-300"
+                                                            title="Zaakceptuj wersję jako baseline"
+                                                        >
+                                                            <ThumbsUp size={11} />
+                                                        </button>
+                                                    )}
+                                                    {/* @anchor dashboard-revoke-button — cofnięcie akceptacji: osobna głośna akcja z powodem */}
+                                                    {isManagerOrAdmin && acceptance?.acceptedVersionId === v.id && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); setShowVersionMenu(false); setRevokeModal({ reason: '', busy: false, error: '' }); }}
+                                                            className="p-1 text-amber-500 hover:text-amber-300"
+                                                            title="Cofnij akceptację (wymaga powodu)"
+                                                        >
+                                                            <Undo2 size={11} />
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); setRenamingVersionId(v.id); setRenameValue(v.label); }}
                                                         className="p-1 text-gray-500 hover:text-yellow-300"
@@ -607,9 +706,13 @@ export default function DashboardPage() {
                                                         </button>
                                                     )}
                                                     <button
-                                                        onClick={(e) => { e.stopPropagation(); handleDeleteVersion(v.id); }}
-                                                        className="p-1 text-gray-600 hover:text-red-400"
-                                                        title="Usuń wersję"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (acceptance?.acceptedVersionId === v.id) { alert('Wersja jest zaakceptowanym baseline — najpierw cofnij akceptację.'); return; }
+                                                            handleDeleteVersion(v.id);
+                                                        }}
+                                                        className={`p-1 ${acceptance?.acceptedVersionId === v.id ? 'text-gray-700 cursor-not-allowed' : 'text-gray-600 hover:text-red-400'}`}
+                                                        title={acceptance?.acceptedVersionId === v.id ? 'Baseline — najpierw cofnij akceptację' : 'Usuń wersję'}
                                                     >
                                                         <X size={11} />
                                                     </button>
@@ -620,6 +723,16 @@ export default function DashboardPage() {
                                 </div>
                             )}
                         </div>
+
+                        {/* @anchor dashboard-order-stage-badge — etap zamówienia po akceptacji (F4) */}
+                        {acceptance?.acceptedVersionId && (
+                            <span
+                                className="flex items-center gap-1.5 text-[9px] font-bold px-2.5 py-1 bg-teal-500/10 text-teal-300 border border-teal-500/20 rounded-full shrink-0"
+                                title={`Baseline: „${acceptance.acceptedVersion?.label || ''}" · ${acceptance.acceptedBy || ''} · ${acceptance.acceptedAt ? new Date(acceptance.acceptedAt).toLocaleDateString('pl-PL') : ''}`}
+                            >
+                                <ThumbsUp size={9} /> {acceptance.orderStage}
+                            </span>
+                        )}
 
                     </div>
                 )}
@@ -953,6 +1066,102 @@ export default function DashboardPage() {
                 requirements={orderRequirements}
                 onClose={() => setShowComments(false)}
             />
+        )}
+
+        {/* @anchor dashboard-accept-version-modal — potwierdzenie akceptacji wersji (baseline, F4) */}
+        {acceptModal && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                <div className="bg-gray-900 border border-white/10 rounded-2xl shadow-2xl w-[480px] overflow-hidden">
+                    <div className="flex items-center gap-2.5 px-5 py-4 border-b border-white/5">
+                        <ThumbsUp size={15} className="text-teal-400" />
+                        <span className="text-sm font-bold text-white">Akceptacja wersji „{acceptModal.versionLabel}"</span>
+                    </div>
+                    <div className="px-5 py-4 space-y-3">
+                        {!acceptModal.preview && !acceptModal.error && <p className="text-xs text-gray-500">Ładowanie podglądu…</p>}
+                        {acceptModal.preview && (
+                            <>
+                                <div className="grid grid-cols-3 gap-2 text-center">
+                                    <div className="bg-white/[0.03] border border-white/5 rounded-lg p-2">
+                                        <div className="text-lg font-bold text-teal-300 font-mono">{acceptModal.preview.budgetSum.toLocaleString('pl-PL', { minimumFractionDigits: 2 })}</div>
+                                        <div className="text-[9px] text-gray-500 uppercase tracking-wider">budżet netto zł</div>
+                                    </div>
+                                    <div className="bg-white/[0.03] border border-white/5 rounded-lg p-2">
+                                        <div className="text-lg font-bold text-gray-200 font-mono">{acceptModal.preview.requirementsCount}</div>
+                                        <div className="text-[9px] text-gray-500 uppercase tracking-wider">wymagań</div>
+                                    </div>
+                                    <div className="bg-white/[0.03] border border-white/5 rounded-lg p-2">
+                                        <div className="text-lg font-bold text-gray-200 font-mono">{acceptModal.preview.pricedCount}/{acceptModal.preview.requirementsCount}</div>
+                                        <div className="text-[9px] text-gray-500 uppercase tracking-wider">wycenionych</div>
+                                    </div>
+                                </div>
+                                {acceptModal.preview.lockedQuickQuotes.length > 0 && (
+                                    <div>
+                                        <label className="text-[10px] text-gray-500 uppercase tracking-wider">Zamrożona wycena → BASELINE (opcjonalnie)</label>
+                                        <select
+                                            value={acceptModal.quickQuoteId}
+                                            onChange={e => setAcceptModal(m => ({ ...m, quickQuoteId: e.target.value }))}
+                                            className="mt-1 w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-teal-500"
+                                        >
+                                            <option value="">— bez wskazania wyceny —</option>
+                                            {acceptModal.preview.lockedQuickQuotes.map(q => (
+                                                <option key={q.id} value={q.id}>{q.name} ({q._count.items} poz.)</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+                                <p className="text-[10px] text-gray-500 leading-relaxed">
+                                    Skutki: wersja zostaje zamrożonym baseline do porównań (pointer, wersja aktywna BEZ zmian),
+                                    etap zamówienia → ZAAKCEPTOWANE, edycja cen budżetowych tylko dla managera (ślad w AuditLog).
+                                </p>
+                            </>
+                        )}
+                        {acceptModal.error && <p className="text-xs text-red-400">{acceptModal.error}</p>}
+                    </div>
+                    <div className="px-5 py-4 border-t border-white/5 bg-black/20 flex items-center gap-3">
+                        <button onClick={() => setAcceptModal(null)} disabled={acceptModal.busy}
+                            className="flex-1 py-2 rounded-xl text-[11px] text-gray-400 font-semibold border border-white/10 hover:bg-white/5 transition-all">Anuluj</button>
+                        <button onClick={confirmAccept} disabled={acceptModal.busy || !acceptModal.preview}
+                            className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 text-[11px] font-semibold border border-teal-500/30 transition-all disabled:opacity-50">
+                            <ThumbsUp size={12} />{acceptModal.busy ? 'Akceptowanie…' : 'Zaakceptuj (baseline)'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* @anchor dashboard-revoke-accept-modal — cofnięcie akceptacji z powodem (osobna głośna akcja) */}
+        {revokeModal && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                <div className="bg-gray-900 border border-white/10 rounded-2xl shadow-2xl w-[440px] overflow-hidden">
+                    <div className="flex items-center gap-2.5 px-5 py-4 border-b border-white/5">
+                        <Undo2 size={15} className="text-amber-400" />
+                        <span className="text-sm font-bold text-white">Cofnięcie akceptacji</span>
+                    </div>
+                    <div className="px-5 py-4 space-y-2">
+                        <p className="text-xs text-gray-400 leading-relaxed">
+                            Baseline „{acceptance?.acceptedVersion?.label}" przestanie obowiązywać, etap wróci do WYCENA,
+                            wyceny BASELINE wrócą do LOCKED. Operacja zostanie zapisana w dzienniku audytu z powodem.
+                        </p>
+                        <textarea
+                            autoFocus
+                            value={revokeModal.reason}
+                            onChange={e => setRevokeModal(m => ({ ...m, reason: e.target.value }))}
+                            placeholder="Powód cofnięcia (wymagany)…"
+                            rows={3}
+                            className="w-full bg-black/40 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-amber-500 resize-none"
+                        />
+                        {revokeModal.error && <p className="text-xs text-red-400">{revokeModal.error}</p>}
+                    </div>
+                    <div className="px-5 py-4 border-t border-white/5 bg-black/20 flex items-center gap-3">
+                        <button onClick={() => setRevokeModal(null)} disabled={revokeModal.busy}
+                            className="flex-1 py-2 rounded-xl text-[11px] text-gray-400 font-semibold border border-white/10 hover:bg-white/5 transition-all">Anuluj</button>
+                        <button onClick={confirmRevoke} disabled={revokeModal.busy || !revokeModal.reason.trim()}
+                            className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 text-[11px] font-semibold border border-amber-500/30 transition-all disabled:opacity-50">
+                            <Undo2 size={12} />{revokeModal.busy ? 'Cofanie…' : 'Cofnij akceptację'}
+                        </button>
+                    </div>
+                </div>
+            </div>
         )}
 
         {/* Modal zadań osobistych — otwarty kliknięciem kalendarza w headerze */}

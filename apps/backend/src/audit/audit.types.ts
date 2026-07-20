@@ -4,6 +4,8 @@ export enum AuditAction {
   UPDATE = 'UPDATE',
   DELETE = 'DELETE',
   MOVE = 'MOVE', // specific for tree operations
+  ACCEPT = 'ACCEPT', // akceptacja wersji zamówienia (baseline) — F4
+  REVOKE_ACCEPT = 'REVOKE_ACCEPT', // cofnięcie akceptacji z powodem — F4
 }
 
 export interface AuditContext {

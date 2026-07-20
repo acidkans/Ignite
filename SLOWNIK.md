@@ -1129,6 +1129,43 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | handlePriceEdit | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-update-item-price |
 | ui-sekcja | sekcja Szybkie wyceny w OffersTab | apps/frontend/src/components/shared/OffersTab.jsx | @anchor offers-tab-quick-quotes-section |
 
+### Moduł Orders — akceptacja wersji i etapy zamówienia (Faza 4)
+
+#### Backend (`apps/backend/src/orders/`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-modul | OrdersModule | apps/backend/src/orders/orders.module.ts | @anchor orders-module |
+| back-serwis | OrdersService | apps/backend/src/orders/orders.service.ts | @anchor orders-service |
+| back-funkcja | OrdersService.getAcceptance | apps/backend/src/orders/orders.service.ts | @anchor orders-get-acceptance |
+| back-funkcja | OrdersService.acceptPreview | apps/backend/src/orders/orders.service.ts | @anchor orders-accept-preview |
+| back-funkcja | OrdersService.accept | apps/backend/src/orders/orders.service.ts | @anchor orders-accept |
+| back-funkcja | OrdersService.revokeAccept | apps/backend/src/orders/orders.service.ts | @anchor orders-revoke-accept |
+| back-controller | OrdersController | apps/backend/src/orders/orders.controller.ts | @anchor orders-controller |
+| back-endpoint | GET /orders/:nodeId/acceptance | apps/backend/src/orders/orders.controller.ts | @anchor orders-acceptance-endpoint |
+| back-endpoint | GET /orders/:nodeId/accept-preview | apps/backend/src/orders/orders.controller.ts | @anchor orders-accept-preview-endpoint |
+| back-endpoint | POST /orders/:nodeId/accept | apps/backend/src/orders/orders.controller.ts | @anchor orders-accept-endpoint |
+| back-endpoint | POST /orders/:nodeId/revoke-accept | apps/backend/src/orders/orders.controller.ts | @anchor orders-revoke-accept-endpoint |
+| back-funkcja | guard edycji budżetu po akceptacji | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-budget-guard |
+
+#### Frontend (`apps/frontend/src/DashboardPage.jsx`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-stan | acceptance | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-acceptance |
+| ui-stan | acceptModal | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-accept-modal |
+| ui-stan | revokeModal | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-revoke-modal |
+| ui-funkcja | fetchAcceptance | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-fetch-acceptance |
+| ui-funkcja | openAcceptModal | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-open-accept-modal |
+| ui-funkcja | confirmAccept | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-confirm-accept |
+| ui-funkcja | confirmRevoke | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-confirm-revoke |
+| ui-sekcja | badge BASELINE na wierszu wersji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-baseline-badge |
+| ui-przycisk | kciuk akceptacji wersji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-thumbs-up |
+| ui-przycisk | cofnięcie akceptacji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-revoke-button |
+| ui-sekcja | chip etapu zamówienia | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-order-stage-badge |
+| ui-modal | modal akceptacji wersji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-accept-version-modal |
+| ui-modal | modal cofnięcia akceptacji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-revoke-accept-modal |
+
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)

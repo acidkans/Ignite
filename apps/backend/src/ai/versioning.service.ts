@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -431,6 +431,17 @@ export class VersioningService {
     async deleteVersion(versionId: string) {
         const version = await this.prisma.projectVersion.findUnique({ where: { id: versionId } });
         if (!version) throw new NotFoundException('Version not found');
+
+        // Ochrona baseline (F4): wersja wskazywana przez ProcessNode.acceptedVersionId
+        // jest zamrożonym snapshotem akceptacji — usunięcie wymaga wcześniejszego
+        // cofnięcia akceptacji (osobna głośna akcja z AuditLog)
+        const acceptedFor = await this.prisma.processNode.findFirst({
+            where: { acceptedVersionId: versionId },
+            select: { id: true, name: true },
+        });
+        if (acceptedFor) {
+            throw new BadRequestException(`Wersja jest zaakceptowanym baseline zamówienia „${acceptedFor.name}" — najpierw cofnij akceptację`);
+        }
 
         // Records with versionId will be deleted automatically due to Cascade settings in schema
         return this.prisma.projectVersion.delete({

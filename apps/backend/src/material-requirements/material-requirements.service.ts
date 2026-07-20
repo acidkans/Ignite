@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { normalizeManufacturer } from '../common/normalize.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveVersionId } from '../common/version.util';
@@ -470,8 +470,39 @@ export class MaterialRequirementsService {
         offerNumber?: string | null; productUrl?: string | null; stockStatus?: number | null;
         dataSheetUrl?: string | null; dataSheetName?: string | null;
         complianceUrl?: string | null; complianceName?: string | null; availability?: string | null;
-    }>) {
+    }>, user?: { userId?: string; roles?: string[] }) {
         await this.findOne(id);
+
+        // @anchor mat-req-budget-guard — edycja budgetedPriceNetto po akceptacji
+        // zamówienia (F4): wymaga uprawnień managera/admina i zostawia ślad w AuditLog
+        // (baseline zamrożony pointerem acceptedVersionId — zmiany budżetu muszą być głośne)
+        if ((dto as any).priceNetto !== undefined) {
+            const reqRow = await this.prisma.materialRequirement.findUnique({
+                where: { id },
+                select: { budgetedPriceNetto: true, name: true, node: { select: { id: true, acceptedVersionId: true } } },
+            });
+            if (reqRow?.node?.acceptedVersionId) {
+                const roles = user?.roles ?? [];
+                if (!roles.includes('ADMIN') && !roles.includes('MANAGER')) {
+                    throw new ForbiddenException('Zamówienie po akceptacji — edycja ceny budżetowej wymaga uprawnień managera');
+                }
+                await this.prisma.auditLog.create({
+                    data: {
+                        action: 'UPDATE',
+                        entity: 'MaterialRequirement',
+                        entityId: id,
+                        diff: {
+                            field: 'budgetedPriceNetto',
+                            old: reqRow.budgetedPriceNetto,
+                            new: (dto as any).priceNetto,
+                            requirementName: reqRow.name,
+                            context: 'edycja po akceptacji zamówienia',
+                        },
+                        userId: user?.userId ?? null,
+                    },
+                });
+            }
+        }
         // Strip pól katalogowych usuniętych z MaterialRequirement; mapuj priceNetto → budgetedPriceNetto
         const { productName, manufacturer, model, seller, offerNumber, productUrl, stockStatus,
             dataSheetUrl, dataSheetName, complianceUrl, complianceName, availability,

@@ -185,10 +185,11 @@ export class MaterialRequirementsController {
     }
 
     // @anchor mat-req-patch-update
-    /** Aktualizacja wymagania (dane produktu, przypisanie WBS, status) */
+    /** Aktualizacja wymagania (dane produktu, przypisanie WBS, status);
+     *  user przekazywany do guardu edycji budżetu po akceptacji (F4) */
     @Patch(':id')
-    update(@Param('id') id: string, @Body() body: any) {
-        return this.service.update(id, body);
+    update(@Param('id') id: string, @Body() body: any, @Req() req: any) {
+        return this.service.update(id, body, req.user);
     }
 
     // @anchor mat-req-delete-one

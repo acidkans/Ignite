@@ -40,6 +40,7 @@ import { NotificationCronModule } from './notification-cron/notification-cron.mo
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { QuickQuotesModule } from './quick-quotes/quick-quotes.module';
+import { OrdersModule } from './orders/orders.module';
 
 @Module({
   imports: [
@@ -86,6 +87,7 @@ import { QuickQuotesModule } from './quick-quotes/quick-quotes.module';
     ExchangeRatesModule,
     SuppliersModule,
     QuickQuotesModule,
+    OrdersModule,
   ],
   controllers: [AppController],
   providers: [

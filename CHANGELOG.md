@@ -4,6 +4,25 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-20 — feat(quickquote): Faza 4 — akceptacja wersji (baseline) i etapy zamówienia (v2026.07.20.713)
+
+### architektura / API
+- dodano `back-modul` `OrdersModule` (apps/backend/src/orders/): `GET /orders/:nodeId/acceptance` (stan akceptacji), `GET /orders/:nodeId/accept-preview?versionId=` (suma budżetu wersji + zamrożone wyceny do modala), `POST /orders/:nodeId/accept` i `POST /orders/:nodeId/revoke-accept` — oba tylko `@Roles('ADMIN','MANAGER')` (RolesGuard)
+- `back-funkcja` `OrdersService.accept` — JEDNA transakcja: `acceptedVersionId` + `acceptedAt/By` + `orderStage=ZAAKCEPTOWANE` + wskazana `QuickQuote` (tylko LOCKED) → `BASELINE` + wpis `AuditLog` (`ACCEPT`); ACTIVE ≠ BASELINE — kciuk NIE zmienia wersji aktywnej
+- `back-funkcja` `OrdersService.revokeAccept` — cofnięcie akceptacji: osobna głośna akcja z OBOWIĄZKOWYM powodem; transakcja: pointer wyczyszczony, `orderStage=WYCENA`, wyceny BASELINE węzła wracają do LOCKED, `AuditLog` (`REVOKE_ACCEPT` z powodem i poprzednim pointerem)
+- rozszerzono `back-enum` `AuditAction` o `ACCEPT` i `REVOKE_ACCEPT` (audit.types.ts)
+- `back-funkcja` `VersioningService.deleteVersion` — blokada usunięcia wersji wskazywanej przez `ProcessNode.acceptedVersionId` (baseline usuwalny dopiero po cofnięciu akceptacji); analogiczna blokada w `handleDeleteVersion` na froncie
+- `back-funkcja` `MaterialRequirementsService.update` — nowy guard (`mat-req-budget-guard`): edycja `budgetedPriceNetto` (pole `priceNetto` z frontu) w zamówieniu po akceptacji wymaga roli ADMIN/MANAGER i zostawia wpis `AuditLog` (old→new); sygnatura `PATCH /material-requirements/:id` przekazuje teraz `req.user` do serwisu
+- `ui-przycisk` kciuk (`ThumbsUp`, teal) w dropdownie wersji (DashboardPage, obok Pencil/RotateCcw/X, tylko manager/admin) → `ui-modal` potwierdzenia z sumą budżetu wersji, licznikiem wycenionych wymagań i wyborem zamrożonej wyceny na BASELINE; badge „BASELINE" na wierszu wersji obok „ACTIVE"; chip etapu zamówienia przy dropdownie po akceptacji; cofnięcie akceptacji = osobny przycisk (`Undo2`, amber) z modalem powodu
+
+### słownik
+- dodano sekcję „Moduł Orders — akceptacja wersji i etapy zamówienia (Faza 4)" — anchory `orders-*`, `mat-req-budget-guard`, `dashboard-acceptance`, `dashboard-accept-*`, `dashboard-revoke-*`, `dashboard-baseline-badge`, `dashboard-thumbs-up`, `dashboard-order-stage-badge`
+
+### wytyczne
+- `schema-pole` `ProcessNode.acceptedVersionId` — zmieniać WYŁĄCZNIE przez `OrdersService.accept/revokeAccept` (transakcja + AuditLog); żadnych bezpośrednich update'ów pointera z innych serwisów
+- `back-funkcja` `OrdersService.revokeAccept` — uprawnienie ADMIN+MANAGER (otwarta decyzja nr 4 domknięta domyślnie tak; zawężenie do samego ADMIN = zmiana dekoratora `@Roles` na endpointzie)
+- `ui-modal` modal akceptacji — kciuk zawsze przez modal potwierdzenia (suma budżetu + skutki); nie dodawać „szybkiej" akceptacji jednym klikiem
+
 ## 2026-07-19 — feat(quickquote): Faza 3 — silnik szybkich wycen (magazyn / API / MANUAL, blokada, wersjonowanie) (v2026.07.19.710)
 
 ### architektura / API
