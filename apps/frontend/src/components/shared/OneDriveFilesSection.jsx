@@ -99,7 +99,7 @@ export default function OneDriveFilesSection({ nodeId, category = 'finanse' }) {
 
       {/* Lista plików */}
       {expanded && (
-        <div className="border-t border-white/8">
+        <div className="border-t border-white/8 max-h-56 overflow-y-auto custom-scrollbar">
           {loading && (
             <div className="px-4 py-3 text-[11px] text-gray-500 flex items-center gap-2">
               <RefreshCw size={11} className="animate-spin" /> Ładowanie…
