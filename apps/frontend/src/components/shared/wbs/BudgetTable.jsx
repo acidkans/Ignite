@@ -524,13 +524,25 @@ export default function BudgetTable({
                                             key={`${row.id}-unitCost-${syncVersion}`}
                                             defaultValue={row.unitCost != null && row.unitCost !== 0 ? Number(row.unitCost).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
                                             onChange={e => {
-                                                const clean = sanitizeQtyInput(e.target.value);
-                                                if (clean !== e.target.value) { e.target.value = clean; flashWarn(row.id, 'unitCost'); }
+                                                const val = e.target.value;
+                                                if (val.startsWith('=')) {
+                                                    handleChange(row.id, 'unitCost', val);
+                                                    return;
+                                                }
+                                                const clean = sanitizeQtyInput(val);
+                                                if (clean !== val) { e.target.value = clean; flashWarn(row.id, 'unitCost'); }
                                                 handleChange(row.id, 'unitCost', clean);
                                             }}
                                             onBlur={e => {
                                                 handleCellBlur();
-                                                const n = parseLocaleNumber(e.target.value);
+                                                const raw = e.target.value;
+                                                const evaluated = evalQtyFormula(raw);
+                                                if (evaluated !== null && evaluated >= 0) {
+                                                    e.target.value = evaluated.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                                    onFieldChange(row, 'unitCost', e.target.value);
+                                                    return;
+                                                }
+                                                const n = parseLocaleNumber(raw);
                                                 if (n != null) e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                                                 onFieldChange(row, 'unitCost', e.target.value);
                                             }}
