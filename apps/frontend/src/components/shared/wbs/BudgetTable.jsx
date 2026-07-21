@@ -13,8 +13,8 @@ const NUMERIC_COLS = new Set(['unitCost', 'quantity', 'totalCost', 'margin', 'di
 const EDITABLE_COLS = ['name', 'type', 'unitCost', 'quantity', 'unit', 'margin', 'discount', 'comment'];
 // Kolumny słownikowe — filtr jako dropdown wielokrotnego wyboru (OR)
 const DROPDOWN_FILTER_COLS = new Set(['type', 'unit']);
-// Kolumny tekstowe — filtr dopasowuje CAŁĄ wartość komórki; kilka wartości rozdziel `;` (OR)
-const TEXT_EXACT_COLS = new Set(['subjectName', 'name', 'comment']);
+// Kolumny tekstowe — filtr dopasowuje CAŁĄ frazę wpisu jako podciąg (w dowolnym miejscu, nie po słowach); kilka fraz rozdziel `;` (OR)
+const TEXT_FILTER_COLS = new Set(['subjectName', 'name', 'comment']);
 
 function calcDerived(r) {
     const q = Math.max(0, parseLocaleNumber(String(r.quantity ?? '')) ?? 0);
@@ -229,11 +229,11 @@ export default function BudgetTable({
                 if (DROPDOWN_FILTER_COLS.has(k)) {
                     return filt.includes(String(r[k] ?? ''));
                 }
-                // Pole tekstowe: dopasowanie CAŁEJ wartości komórki; kilka wartości OR po `;`
-                if (TEXT_EXACT_COLS.has(k)) {
-                    const cell = String((k === 'subjectName' ? (r.subjectPath || r.subjectName) : r[k]) ?? '').toLowerCase().trim();
+                // Pole tekstowe: fraza dopasowywana jako podciąg (w dowolnym miejscu); kilka fraz OR po `;`
+                if (TEXT_FILTER_COLS.has(k)) {
+                    const cell = String((k === 'subjectName' ? (r.subjectPath || r.subjectName) : r[k]) ?? '').toLowerCase();
                     const terms = String(filt).toLowerCase().split(';').map(t => t.trim()).filter(Boolean);
-                    return terms.some(t => cell === t);
+                    return terms.some(t => cell.includes(t));
                 }
                 // Pozostałe (numeryczne): podciąg, jak dotychczas
                 const val = k === 'type' ? (TYPE_LABELS[r.type] || r.type) : r[k];
@@ -529,7 +529,7 @@ export default function BudgetTable({
                                         <input
                                             value={typeof colFilters[c.key] === 'string' ? colFilters[c.key] : ''}
                                             onChange={e => setColFilters(p => ({ ...p, [c.key]: e.target.value }))}
-                                            placeholder={TEXT_EXACT_COLS.has(c.key) ? 'dokładnie; lub; wiele' : 'filtruj...'}
+                                            placeholder={TEXT_FILTER_COLS.has(c.key) ? 'szukaj; lub; wiele' : 'filtruj...'}
                                             className={FILTER}
                                         />
                                     )}
