@@ -207,6 +207,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | getPendingByType | apps/frontend/src/services/repos/outboxRepo.js | @anchor get-pending-by-type |
 | ui-stala | WBS_QA | apps/frontend/src/services/sync/syncOutbox.js | @anchor wbs-qa-outbox-type |
 | ui-stan | qaTreeOpen (SchematTab) | apps/frontend/src/components/shared/SchematTab.jsx | @anchor schemat-qa-tree-open |
+| ui-funkcja | resolveOfferTokens | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor resolve-offer-tokens |
 
 ### Moduł WBS
 

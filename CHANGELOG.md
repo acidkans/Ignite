@@ -4,6 +4,18 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-21 — fix(oferta): szablony wstawiają surowe tokeny {zmienne} zamiast zamrożonych wartości — auto-aktualizacja (v2026.07.21.718)
+
+### architektura / API
+- `ui-funkcja` `resolveOfferTokens` (UnifiedWbsPanel.jsx) — zastępuje dawny `resolvedPresets`; „WSTAW SZABLON" wstawia teraz surowy token `{wartość oferty}` / `{tabela wbs1}` itd., a nie wyliczoną wartość. Rozwijanie tokenów następuje wyłącznie w podglądzie edytora i przy eksporcie PDF, więc treść oferty auto-aktualizuje się przy zmianie wyceny
+- `ui-propsy` `resolveTokens` (MarkdownEditor.jsx) — opcjonalna funkcja rozwijająca tokeny; używana tylko w `renderHtml` (podgląd), pole edycji zawsze trzyma surowy tekst
+
+### słownik
+- dodano `resolve-offer-tokens` — rozwija tokeny {zmienne} oferty na żywe wartości, UnifiedWbsPanel.jsx
+
+### wytyczne
+- `ui-funkcja` `resolveOfferTokens` — zmienne oferty (`{wartość oferty}`, `{tabela wbs1}`, `{nazwa projektu}`…) przechowuj w treści ZAWSZE jako surowe tokeny; rozwijaj je dopiero przy renderze (podgląd / PDF), nigdy przy wstawianiu do pola — inaczej wartość się „zamraża" i nie odświeża
+
 ## 2026-07-15 — feat(oferty): edycja zapisanych pozycji oferty z autozapisem + modal wyboru zamiast auto-parsowania (v2026.07.15.702)
 
 ### architektura / API

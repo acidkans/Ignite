@@ -5559,18 +5559,19 @@ ${ganttSectionHtml}
                 if (key === 'oferta') {
                     if (!isManagerOrAdmin) return null;
                     const workDaysFmt = workDaysMemo % 1 === 0 ? String(workDaysMemo) : workDaysMemo.toFixed(1);
-                    const resolvedPresets = offerPresets.map(p => ({
-                        ...p,
-                        text: p.text
-                            .replace(/\{nazwa projektu\}/g, orderName || projectName || '')
-                            .replace(/\{wartość oferty\}/g, fmtPLN(offerRevenueTotal) + ' PLN')
-                            .replace(/\{data oferty\}/g, offerDate)
-                            .replace(/\{tabela wbs1\}/gi, wbsTablesByDepth[1] || '')
-                            .replace(/\{tabela wbs2\}/gi, wbsTablesByDepth[2] || '')
-                            .replace(/\{tabela wbs3\}/gi, wbsTablesByDepth[3] || '')
-                            .replace(/\{tabela wbs\}/gi, wbsTablesByDepth[2] || '')
-                            .replace(/\{Roboczo dni w projekcie\}/gi, workDaysFmt),
-                    }));
+                    // @anchor resolve-offer-tokens
+                    // Rozwija tokeny {zmienne} na żywe wartości. NIE używane przy wstawianiu szablonu
+                    // (tam wchodzi surowy token, by treść auto-aktualizowała się) — tylko w podglądzie
+                    // edytora i (osobno) przy eksporcie PDF.
+                    const resolveOfferTokens = (t) => (t || '')
+                        .replace(/\{nazwa projektu\}/g, orderName || projectName || '')
+                        .replace(/\{wartość oferty\}/g, fmtPLN(offerRevenueTotal) + ' PLN')
+                        .replace(/\{data oferty\}/g, offerDate)
+                        .replace(/\{tabela wbs1\}/gi, wbsTablesByDepth[1] || '')
+                        .replace(/\{tabela wbs2\}/gi, wbsTablesByDepth[2] || '')
+                        .replace(/\{tabela wbs3\}/gi, wbsTablesByDepth[3] || '')
+                        .replace(/\{tabela wbs\}/gi, wbsTablesByDepth[2] || '')
+                        .replace(/\{Roboczo dni w projekcie\}/gi, workDaysFmt);
                     return renderSection('oferta', 'Oferta', FileText, 'amber', (
                         <div className="flex flex-col flex-1 min-h-0 p-4 gap-2">
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 py-1 bg-white/3 rounded-lg border border-white/5">
@@ -5613,7 +5614,8 @@ ${ganttSectionHtml}
                                 containerClassName="flex-1 min-h-0"
                                 className="flex-1 min-h-0 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-amber-500 transition-colors custom-scrollbar leading-relaxed resize-none"
                                 saveIndicator={true}
-                                presets={resolvedPresets}
+                                presets={offerPresets}
+                                resolveTokens={resolveOfferTokens}
                                 onManagePresets={() => setPresetManagerOpen(true)}
                             />
                         </div>
