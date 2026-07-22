@@ -932,6 +932,23 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | preview (OneDriveFilesSection) | apps/frontend/src/components/shared/OneDriveFilesSection.jsx | @anchor onedrive-files-preview |
 | ui-funkcja | fileIcon (PropertyPreview) | apps/frontend/src/components/shared/PropertyPreview.jsx | @anchor property-preview-file-icon |
 
+### Moduł SnapshotEditGuard (blokada edycji nieaktywnego snapszota)
+
+#### Frontend (`apps/frontend/src/components/shared/SnapshotEditGuard.jsx` + wpięcie w DashboardPage)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-stan | snapshotGuardState | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor snapshot-guard-state |
+| ui-funkcja | snapshotGuardConfirmFn | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor snapshot-guard-confirm-fn |
+| ui-funkcja | setSnapshotGuardState | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor set-snapshot-guard-state |
+| ui-funkcja | guardSnapshotEdit | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor guard-snapshot-edit |
+| ui-funkcja | isEditableTarget | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor is-editable-target |
+| ui-sekcja | SnapshotEditGuard | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor snapshot-edit-guard |
+| ui-funkcja | requestConfirm (SnapshotEditGuard) | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor snapshot-guard-request-confirm |
+| ui-funkcja | resolve (SnapshotEditGuard) | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor snapshot-guard-resolve |
+| ui-stan | isInactiveSnapshot | apps/frontend/src/DashboardPage.jsx | @anchor is-inactive-snapshot |
+| ui-stan | contentRef (DashboardPage) | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-content-ref |
+
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)

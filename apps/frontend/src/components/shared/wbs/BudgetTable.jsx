@@ -514,7 +514,7 @@ export default function BudgetTable({
                             ))}
                             <th />
                         </tr>
-                        <tr className="border-b border-white/10 bg-[#0b0f17]">
+                        <tr data-guard-ignore className="border-b border-white/10 bg-[#0b0f17]">
                             <th />
                             {COLS.map(c => (
                                 <th key={c.key} className="px-2 py-1">

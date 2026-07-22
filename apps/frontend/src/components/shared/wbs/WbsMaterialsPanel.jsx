@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula } from './wbsConstants';
+import { guardSnapshotEdit } from '../SnapshotEditGuard';
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
 
@@ -319,6 +320,7 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
     useEffect(() => { setProposals(req.proposals || []); }, [req.id, req.proposals]);
 
     const searchAI = async () => {
+        if (!(await guardSnapshotEdit())) return;
         setSearching(true);
         try {
             const res = await fetch(`${API_URL}/material-requirements/${req.id}/search-products`, { method: 'POST', headers });
@@ -327,6 +329,7 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
     };
 
     const selectProposal = async (p) => {
+        if (!(await guardSnapshotEdit())) return;
         await fetch(`${API_URL}/material-requirements/proposals/${p.id}/select`, { method: 'PATCH', headers });
         // Optimistic: zaznacz checkmark natychmiast i zaktualizuj cenę w rodzicu
         setProposals(prev => prev.map(x => ({ ...x, isSelected: x.id === p.id })));
@@ -341,12 +344,14 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
     };
 
     const deleteProposal = async (p) => {
+        if (!(await guardSnapshotEdit())) return;
         await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, { method: 'DELETE', headers });
         setProposals(prev => prev.filter(x => x.id !== p.id));
         onRefresh();
     };
 
     const deleteProposalImage = async (p) => {
+        if (!(await guardSnapshotEdit())) return;
         await fetch(`${API_URL}/material-requirements/proposals/${p.id}/image`, { method: 'DELETE', headers });
         setProposals(prev => prev.map(x => x.id === p.id ? { ...x, imageUrl: null } : x));
         onRefresh();
@@ -547,6 +552,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     }, [card, wbsNode, headers, onRefresh, onPropagatePrice]);
 
     const removeOffer = useCallback(async () => {
+        if (!(await guardSnapshotEdit())) return;
         await fetch(`${API_URL}/material-requirements/${card.id}/offer`, {
             method: 'DELETE', headers,
         });
@@ -662,6 +668,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
 
     const uploadBlob = useCallback(async (blob, filename = 'image.png') => {
         if (readOnly || !card?.id) return;
+        if (!(await guardSnapshotEdit())) return;
         if (localImageUrlRef.current) URL.revokeObjectURL(localImageUrlRef.current);
         const objUrl = URL.createObjectURL(blob);
         localImageUrlRef.current = objUrl;
@@ -1142,6 +1149,7 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
     };
 
     const handleCreateCard = async () => {
+        if (!(await guardSnapshotEdit())) return;
         setCreating(true);
         try { await onCreateCard(node); } finally { setCreating(false); }
     };

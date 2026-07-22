@@ -16,6 +16,7 @@ import { buildSchematSectionHtml, SCHEMAT_SECTION_CSS } from '../../../utils/sch
 import ExportChoiceModal from '../ExportChoiceModal';
 import WBSHybridTable from './WBSHybridTable';
 import BudgetTable from './BudgetTable';
+import { guardSnapshotEdit } from '../SnapshotEditGuard';
 
 
 const VIEWS = {
@@ -333,6 +334,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const handleBudgetImportFileChange = useCallback(async (event) => {
         const file = event.target.files?.[0];
         if (!file) return;
+        if (!(await guardSnapshotEdit())) return;
         try {
             const buffer = await file.arrayBuffer();
             const wb = new ExcelJS.Workbook();
@@ -947,6 +949,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // gdy React nie zdążył odpalić updater-a setState przed tym wywołaniem)
     const handlePasteCloned = useCallback(async (mappings, treeSnapshot) => {
         if (!Array.isArray(mappings) || mappings.length === 0) return;
+        if (!(await guardSnapshotEdit())) return;
         if (hybridSaveTimeout.current) clearTimeout(hybridSaveTimeout.current);
         const treeToSave = treeSnapshot ?? wbsTreeRef.current;
         try {
@@ -988,6 +991,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // @anchor handle-requirement-assign-to-wbs
     const handleRequirementAssignToWbs = useCallback(async (wbsNodeId, reqId) => {
         if (!wbsNodeId || !reqId) return;
+        if (!(await guardSnapshotEdit())) return;
         try {
             const req = unassignedRequirements.find(r => r.id === reqId);
             const qty = parseFloat(req?.quantity) || 1;
@@ -1043,6 +1047,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         const source = unassignedRequirements.find(r => r.id === sourceId);
         const target = unassignedRequirements.find(r => r.id === targetId);
         if (!source || !target) return;
+        if (!(await guardSnapshotEdit())) return;
         const toLines = s => String(s || '').split(/\n/).map(x => x.trim()).filter(Boolean);
         const mergedSpec = Array.from(new Set([...toLines(target.technicalSpec), ...toLines(source.technicalSpec)])).join('\n');
         try {
@@ -1610,8 +1615,8 @@ ${ganttSectionHtml}
 
         // Pełna ścieżka gałęzi pośrednich dla kolumny „Podgałąź": przodkowie węzła
         // bez depth=0 (przedmiotu) i bez samego węzła, top-down, złączeni „ › ".
-        // Gdy węzeł siedzi BEZPOŚREDNIO pod przedmiotem (brak gałęzi pośredniej),
-        // powtarzamy w Podgałęzi nazwę samego węzła — żeby kolumna nie była pusta.
+        // Gdy węzeł siedzi BEZPOŚREDNIO pod przedmiotem, kolumna jest pusta — dzięki
+        // temu re-import (`applyBudgetImport`) jednoznacznie dopasowuje liść po ścieżce.
         const nodeById = {};
         for (const n of wbsData) nodeById[n.id] = n;
         const branchPath = (id) => {
@@ -1623,10 +1628,9 @@ ${ganttSectionHtml}
                 p = p.parentId ? nodeById[p.parentId] : null;
             }
             chain.pop(); // usuń depth=0 (przedmiot)
-            const joined = chain.reverse().map(n => String(n.name || '').trim()).filter(Boolean).join(' › ');
-            if (joined) return joined;
-            // Brak gałęzi pośredniej — powtórz nazwę bieżącego węzła.
-            return String(nodeById[id]?.name || '').trim();
+            // Pełna ścieżka gałęzi pośrednich, lub pusto gdy węzeł siedzi wprost pod
+            // przedmiotem — pusta wartość jest jednoznaczna przy re-imporcie (brak podgałęzi).
+            return chain.reverse().map(n => String(n.name || '').trim()).filter(Boolean).join(' › ');
         };
 
         // Kolejność kolumn: Ilość/Jednostka przed Kosztem jednostkowym; przed
@@ -4165,6 +4169,7 @@ ${ganttSectionHtml}
     };
 
     const addNode = useCallback(async (parentId = null) => {
+        if (!(await guardSnapshotEdit())) return;
         try {
             const res = await fetch(`${API_URL}/wbs-nodes`, {
                 method: 'POST',
@@ -4263,6 +4268,7 @@ ${ganttSectionHtml}
     const handleHybridNodesDeleted = useCallback(async (deletedIds) => {
         const rootId = deletedIds?.[0];
         if (!rootId) return;
+        if (!(await guardSnapshotEdit())) return;
         try {
             const res = await fetch(`${API_URL}/wbs-nodes/${rootId}`, { method: 'DELETE', headers: authHeaders() });
             if (!res.ok) { console.error('[WBS delete] Błąd serwera:', res.status); return; }
@@ -4275,6 +4281,7 @@ ${ganttSectionHtml}
     const deleteNodeByIdRef = useRef(null);
     const deleteNodeById = useCallback(async (id) => {
         if (!id || !window.confirm('Usunąć ten węzeł i wszystkie podgałęzie?')) return;
+        if (!(await guardSnapshotEdit())) return;
         try {
             const res = await fetch(`${API_URL}/wbs-nodes/${id}`, { method: 'DELETE', headers: authHeaders() });
             if (!res.ok) {
@@ -4434,6 +4441,7 @@ ${ganttSectionHtml}
     // @anchor handle-gantt-date-change
     const handleGanttDateChange = useCallback(async (nodeId, startIso, endIso) => {
         if (!nodeId || !startIso || !endIso) return;
+        if (!(await guardSnapshotEdit())) return;
         try {
             await fetch(`${API_URL}/wbs-nodes/${nodeId}`, {
                 method: 'PATCH',
@@ -4448,6 +4456,7 @@ ${ganttSectionHtml}
     // @anchor handle-gantt-duration-change
     const handleGanttDurationChange = useCallback(async (nodeId, days) => {
         if (!nodeId || !Number.isFinite(days)) return;
+        if (!(await guardSnapshotEdit())) return;
         const node = wbsData.find(n => n.id === nodeId);
         const nodeType = String(node?.type || '').toLowerCase();
         const isPacket = nodeType === 'pakiet' || nodeType === 'komplet';
@@ -4570,6 +4579,19 @@ ${ganttSectionHtml}
                 }
                 return current?.name || node.name || '';
             };
+            // Segmenty gałęzi pośrednich węzła (bez przedmiotu depth=0 i bez samego węzła),
+            // top-down — symetryczne do `branchPath()` w eksporcie budżetu do Excela.
+            const branchSegsForNode = (node) => {
+                const chain = [];
+                let p = node?.parentId ? byId.get(node.parentId) : null;
+                let guard = 0;
+                while (p && guard++ < 50) { chain.push(p); p = p.parentId ? byId.get(p.parentId) : null; }
+                chain.pop(); // usuń przedmiot (depth=0)
+                return chain.reverse().map((n) => normKey(n.name)).filter(Boolean);
+            };
+            // Rozbij wartość kolumny „Podgałąź" na segmenty (obsługa separatorów › / >).
+            const parseParentSegsRaw = (raw) => String(raw || '')
+                .split(/›|\/|>/).map((s) => s.trim()).filter(Boolean);
             const subjectRootsByName = new Map();
             for (const item of wbsData) {
                 if (Number(item?.depth) === 0) {
@@ -4611,7 +4633,13 @@ ${ganttSectionHtml}
 
                 const wantedName = normKey(importedRow.name);
                 const wantedSubject = normKey(importedRow.subjectName);
-                const wantedParent = normKey(importedRow.parentName);
+                // „Podgałąź" z eksportu to PEŁNA ścieżka gałęzi pośrednich (np. „A › B").
+                // Starsze eksporty dla liścia bezpośrednio pod przedmiotem powtarzały nazwę
+                // samego liścia — taki przypadek traktujemy jak brak podgałęzi.
+                const parentSegsRaw = parseParentSegsRaw(importedRow.parentName);
+                const effParentSegsRaw = (parentSegsRaw.length === 1 && normKey(parentSegsRaw[0]) === wantedName)
+                    ? [] : parentSegsRaw;
+                const wantedParentPath = effParentSegsRaw.map((s) => normKey(s)).join(' › ');
 
                 let target = null;
                 if (wantedName) {
@@ -4619,9 +4647,14 @@ ${ganttSectionHtml}
                         if (used.has(row.id)) return false;
                         if (normKey(row.name) !== wantedName) return false;
                         if (wantedSubject && normKey(getSubjectNameForNode(row)) !== wantedSubject) return false;
-                        if (wantedParent) {
+                        if (wantedParentPath) {
+                            // Porównaj pełną ścieżkę gałęzi; fallback: sam bezpośredni rodzic.
+                            const segs = branchSegsForNode(row);
                             const directParent = byId.get(row.parentId);
-                            if (!directParent || normKey(directParent.name) !== wantedParent) return false;
+                            const lastSeg = effParentSegsRaw[effParentSegsRaw.length - 1];
+                            const matchesPath = segs.join(' › ') === wantedParentPath;
+                            const matchesDirect = directParent && lastSeg && normKey(directParent.name) === normKey(lastSeg);
+                            if (!matchesPath && !matchesDirect) return false;
                         }
                         return true;
                     });
@@ -4652,23 +4685,25 @@ ${ganttSectionHtml}
 
                     if (!subjectRoot) { skipped += 1; continue; }
 
-                    // Find or create parentName sub-group
+                    // Odtwórz cały łańcuch gałęzi pośrednich („A › B") pod przedmiotem —
+                    // każdy segment osobno, znajdując istniejący lub tworząc brakujący.
                     let createParentId = subjectRoot.id;
-                    if (wantedParent) {
+                    for (const segRaw of effParentSegsRaw) {
+                        const segKey = normKey(segRaw);
                         let parentNode = budgetRows.find((row) =>
-                            normKey(row.name) === wantedParent
-                            && normKey(getSubjectNameForNode(row)) === wantedSubject
+                            normKey(row.name) === segKey
+                            && row.parentId === createParentId
                         );
                         if (!parentNode) {
                             const pgRes = await fetch(`${API_URL}/wbs-nodes`, {
                                 method: 'POST',
                                 headers: authHeaders(),
-                                body: JSON.stringify({ nodeId, versionId: versionId || null, parentId: subjectRoot.id, name: importedRow.parentName.trim() }),
+                                body: JSON.stringify({ nodeId, versionId: versionId || null, parentId: createParentId, name: segRaw }),
                             });
                             if (pgRes.ok) {
                                 const pgNode = await pgRes.json().catch(() => null);
                                 if (pgNode?.id) {
-                                    parentNode = { id: pgNode.id, name: pgNode.name, parentId: subjectRoot.id };
+                                    parentNode = { id: pgNode.id, name: pgNode.name, parentId: createParentId };
                                     budgetRows.push(parentNode);
                                     byId.set(pgNode.id, parentNode);
                                     newNodeIds.add(pgNode.id);
@@ -5939,7 +5974,13 @@ ${ganttSectionHtml}
                                         min="1"
                                         max={Math.max(1, budgetImportRows.length)}
                                         value={budgetImportHeaderRow}
-                                        onChange={(e) => setBudgetImportHeaderRow(Math.max(1, Number(e.target.value) || 1))}
+                                        onChange={(e) => setBudgetImportHeaderRow(e.target.value)}
+                                        onBlur={(e) => {
+                                            const maxRow = Math.max(1, budgetImportRows.length);
+                                            const parsed = Math.floor(Number(e.target.value));
+                                            const safeValue = Number.isFinite(parsed) && parsed >= 1 ? Math.min(maxRow, parsed) : 1;
+                                            setBudgetImportHeaderRow(safeValue);
+                                        }}
                                         className="rounded-lg border border-white/10 bg-black/30 px-2 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
                                     />
                                 </label>
@@ -5995,9 +6036,9 @@ ${ganttSectionHtml}
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {budgetImportRows.slice(Math.max(0, budgetImportHeaderRow), Math.max(0, budgetImportHeaderRow) + 5).map((row, rowIdx) => (
+                                        {budgetImportRows.slice(Math.max(0, Number(budgetImportHeaderRow) || 0), (Math.max(0, Number(budgetImportHeaderRow) || 0)) + 5).map((row, rowIdx) => (
                                             <tr key={rowIdx} className="border-t border-white/5">
-                                                <td className="px-2 py-1 text-gray-500">{budgetImportHeaderRow + rowIdx + 1}</td>
+                                                <td className="px-2 py-1 text-gray-500">{(Number(budgetImportHeaderRow) || 0) + rowIdx + 1}</td>
                                                 {row.slice(0, 8).map((cell, cellIdx) => (
                                                     <td key={cellIdx} className="px-2 py-1 text-gray-200 max-w-[220px] truncate" title={cell}>{cell || '—'}</td>
                                                 ))}
