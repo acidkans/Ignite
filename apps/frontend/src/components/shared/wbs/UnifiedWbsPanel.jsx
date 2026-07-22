@@ -5980,6 +5980,8 @@ ${ganttSectionHtml}
                                             const parsed = Math.floor(Number(e.target.value));
                                             const safeValue = Number.isFinite(parsed) && parsed >= 1 ? Math.min(maxRow, parsed) : 1;
                                             setBudgetImportHeaderRow(safeValue);
+                                            // Przebuduj automapowanie z nowo wskazanego wiersza nagłówka.
+                                            setBudgetImportMapping(buildBudgetImportAutoMapping(budgetImportRows[safeValue - 1] || []));
                                         }}
                                         className="rounded-lg border border-white/10 bg-black/30 px-2 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
                                     />
