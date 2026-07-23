@@ -316,6 +316,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-modal | AddTaskModal | apps/frontend/src/components/shared/AddTaskModal.jsx | @anchor add-task-modal |
 | ui-funkcja | handleSubmit (AddTaskModal) | apps/frontend/src/components/shared/AddTaskModal.jsx | @anchor add-task-modal-submit |
 | ui-funkcja | collectBranchQa | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor collect-branch-qa |
+| ui-funkcja | collectBranchStrategyEntries | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor collect-branch-strategy-entries |
 | ui-funkcja | composeBranchStrategy | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor compose-branch-strategy |
 | ui-funkcja | saveLeafStrategy | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor save-leaf-strategy |
 | ui-stala | canFullscreen | apps/frontend/src/components/shared/SchematTab.jsx | @anchor schemat-can-fullscreen |

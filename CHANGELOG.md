@@ -4,6 +4,16 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-23 — feat(wbs): złożenie strategii — nazwa pozycji bold, strategia od nowego wiersza (v2026.07.23.728)
+
+### architektura / API
+- `ui-funkcja` `collectBranchStrategyEntries` (WBSHybridTable.jsx) — zbiera wypełnione komórki strategii potomków jako `[{ id, name, strategy }]`; baza renderu (bold nazwa w gridzie) i złożenia utrwalanego na top-level
+- `ui-funkcja` `composeBranchStrategy` (WBSHybridTable.jsx) — nowy format utrwalanego złożenia: `nazwa:` a strategia od nowego wiersza, wpisy rozdzielone pustą linią (wcześniej `nazwa: strategia` w jednej linii)
+- komórka Strategia top-level w gridzie: renderuje nazwę pozycji `font-bold`, a jej strategię w osobnym wierszu poniżej
+
+### słownik
+- dodano `ui-funkcja` `collectBranchStrategyEntries` — WBSHybridTable.jsx, @anchor collect-branch-strategy-entries
+
 ## 2026-07-23 — feat(wbs): strategia edytowana na elementach, składana na węźle top-level (v2026.07.23.727)
 
 ### architektura / API

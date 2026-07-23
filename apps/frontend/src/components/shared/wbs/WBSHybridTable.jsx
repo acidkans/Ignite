@@ -195,21 +195,31 @@ function collectBranchQa(node, depth = 0, acc = []) {
     return acc;
 }
 
-// Składa strategię całej gałęzi z wypełnionych komórek potomków (liście + węzły pośrednie).
-// Każdy wypełniony węzeł → linia `nazwa: strategia`. Węzeł top-level sam się pomija.
-// Wynik utrwalany na polu strategy węzła top-level (czytają je eksporty PDF/Excel).
-// @anchor compose-branch-strategy
-function composeBranchStrategy(node) {
-    const parts = [];
+// Zbiera wypełnione komórki strategii potomków (liście + węzły pośrednie) jako
+// [{ id, name, strategy }]. Węzeł top-level sam się pomija. Baza dla renderu (bold nazwa)
+// i dla złożenia utrwalanego na top-level.
+// @anchor collect-branch-strategy-entries
+function collectBranchStrategyEntries(node) {
+    const entries = [];
     const walk = (n) => {
         for (const child of (n?.children || [])) {
             const s = (child.strategy || '').trim();
-            if (s) parts.push(`${(child.name || 'Element WBS').trim()}: ${s}`);
+            if (s) entries.push({ id: child.id, name: (child.name || 'Element WBS').trim(), strategy: s });
             walk(child);
         }
     };
     walk(node);
-    return parts.join('\n');
+    return entries;
+}
+
+// Składa strategię całej gałęzi do utrwalenia na polu strategy węzła top-level (czytają je
+// eksporty PDF/Excel). Format: `nazwa:` a strategia od nowego wiersza; wpisy rozdzielone
+// pustą linią.
+// @anchor compose-branch-strategy
+function composeBranchStrategy(node) {
+    return collectBranchStrategyEntries(node)
+        .map(e => `${e.name}:\n${e.strategy}`)
+        .join('\n\n');
 }
 
 // Read-only modal pokazujący wszystkie Q&A z gałęzi (dzieci danego węzła), grupowane
@@ -1786,9 +1796,21 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     wypełniony potomek. Złożenie jest utrwalane na polu strategy top-level (czytają eksporty). */}
                 <td className="px-3 py-2.5 min-w-[180px]" onClick={e => e.stopPropagation()}>
                     {depth === 0 ? (() => {
-                        const composed = composeBranchStrategy(node) || (node.strategy || '');
-                        return composed
-                            ? <div className={`whitespace-pre-wrap text-base leading-snug text-gray-300 select-text ${d.fieldClass}`}>{composed}</div>
+                        const entries = collectBranchStrategyEntries(node);
+                        if (entries.length) {
+                            return (
+                                <div className={`text-base leading-snug text-gray-300 select-text ${d.fieldClass}`}>
+                                    {entries.map(e => (
+                                        <div key={e.id} className="mb-1.5 last:mb-0">
+                                            <span className="font-bold text-gray-200">{e.name}</span>
+                                            <div className="whitespace-pre-wrap">{e.strategy}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            );
+                        }
+                        return (node.strategy || '')
+                            ? <div className={`whitespace-pre-wrap text-base leading-snug text-gray-300 select-text ${d.fieldClass}`}>{node.strategy}</div>
                             : <span className="text-gray-700 text-base select-none">—</span>;
                     })() : (
                         <AutoResizeTextarea

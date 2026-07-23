@@ -2,17 +2,23 @@
 // Kopia funkcji (frontend nie eksportuje jej samodzielnie) — sprawdza format złożenia:
 // `nazwa: strategia` na każdy wypełniony potomek, węzeł top-level pomija sam siebie.
 
-function composeBranchStrategy(node) {
-    const parts = [];
+function collectBranchStrategyEntries(node) {
+    const entries = [];
     const walk = (n) => {
         for (const child of (n?.children || [])) {
             const s = (child.strategy || '').trim();
-            if (s) parts.push(`${(child.name || 'Element WBS').trim()}: ${s}`);
+            if (s) entries.push({ id: child.id, name: (child.name || 'Element WBS').trim(), strategy: s });
             walk(child);
         }
     };
     walk(node);
-    return parts.join('\n');
+    return entries;
+}
+
+function composeBranchStrategy(node) {
+    return collectBranchStrategyEntries(node)
+        .map(e => `${e.name}:\n${e.strategy}`)
+        .join('\n\n');
 }
 
 let pass = 0, fail = 0;
@@ -28,7 +34,7 @@ eq('dwa liscie', composeBranchStrategy({
         { name: 'Liść 1', strategy: 'montaż', children: [] },
         { name: 'Liść 2', strategy: 'kalibracja', children: [] },
     ],
-}), 'Liść 1: montaż\nLiść 2: kalibracja');
+}), 'Liść 1:\nmontaż\n\nLiść 2:\nkalibracja');
 
 // 2. Węzeł pośredni wypełniony + liść pod nim → oba w złożeniu (każda wypełniona komórka)
 eq('posredni + lisc', composeBranchStrategy({
@@ -38,7 +44,7 @@ eq('posredni + lisc', composeBranchStrategy({
             { name: 'Liść X', strategy: 'spawanie', children: [] },
         ] },
     ],
-}), 'Podgałąź: etapami\nLiść X: spawanie');
+}), 'Podgałąź:\netapami\n\nLiść X:\nspawanie');
 
 // 3. Puste strategie pomijane, brak pustych linii
 eq('pomija puste', composeBranchStrategy({
@@ -47,7 +53,7 @@ eq('pomija puste', composeBranchStrategy({
         { name: 'Liść pusty', strategy: '   ', children: [] },
         { name: 'Liść pełny', strategy: 'ok', children: [] },
     ],
-}), 'Liść pełny: ok');
+}), 'Liść pełny:\nok');
 
 // 4. Nic wypełnione → pusty string (grid pokaże "—" lub starą wartość top-level)
 eq('nic wypelnione', composeBranchStrategy({
@@ -58,7 +64,7 @@ eq('nic wypelnione', composeBranchStrategy({
 // 5. Fallback nazwy gdy brak name
 eq('fallback nazwy', composeBranchStrategy({
     name: 'Gałąź E', children: [{ strategy: 'bez nazwy', children: [] }],
-}), 'Element WBS: bez nazwy');
+}), 'Element WBS:\nbez nazwy');
 
 console.log(`\n${fail === 0 ? 'WSZYSTKIE PRZESZŁY' : 'SĄ BŁĘDY'} — pass=${pass} fail=${fail}`);
 process.exit(fail === 0 ? 0 : 1);
