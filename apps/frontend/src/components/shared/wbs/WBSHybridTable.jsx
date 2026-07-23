@@ -195,6 +195,23 @@ function collectBranchQa(node, depth = 0, acc = []) {
     return acc;
 }
 
+// Składa strategię całej gałęzi z wypełnionych komórek potomków (liście + węzły pośrednie).
+// Każdy wypełniony węzeł → linia `nazwa: strategia`. Węzeł top-level sam się pomija.
+// Wynik utrwalany na polu strategy węzła top-level (czytają je eksporty PDF/Excel).
+// @anchor compose-branch-strategy
+function composeBranchStrategy(node) {
+    const parts = [];
+    const walk = (n) => {
+        for (const child of (n?.children || [])) {
+            const s = (child.strategy || '').trim();
+            if (s) parts.push(`${(child.name || 'Element WBS').trim()}: ${s}`);
+            walk(child);
+        }
+    };
+    walk(node);
+    return parts.join('\n');
+}
+
 // Read-only modal pokazujący wszystkie Q&A z gałęzi (dzieci danego węzła), grupowane
 // po węźle. Czysty podgląd — bez textarea/onChange/zapisu (edycja nietknięta gdzie indziej).
 // @anchor qa-branch-modal
@@ -1030,6 +1047,22 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const handleField = (id, field, value) =>
         setWbsTree(t => ({ ...t, items: updateField(t.items || [], id, field, value) }));
 
+    // Zapis strategii na węźle-elemencie (liść / węzeł pośredni): utrwala własną wartość,
+    // po czym przelicza złożenie całej gałęzi i utrwala je na węźle top-level (depth 0).
+    // Puste złożenie NIE nadpisuje istniejącej strategii top-level (ochrona starych danych).
+    // @anchor save-leaf-strategy
+    const saveLeafStrategy = (nodeId, value) => {
+        onNodeFieldSave?.(nodeId, 'strategy', value);
+        const nextItems = updateField(items, nodeId, 'strategy', value);
+        const root = nextItems.find(r => subtreeContains(r, nodeId));
+        if (!root) return;
+        const composed = composeBranchStrategy(root);
+        if (composed && composed !== (root.strategy || '')) {
+            handleField(root.id, 'strategy', composed);
+            onNodeFieldSave?.(root.id, 'strategy', composed);
+        }
+    };
+
     // Pokaż na chwilę ostrzeżenie "tylko cyfry" przy komórce liczbowej (klucz = `${id}:${field}`).
     const flashWarn = (id, field) => {
         setWarnKey(`${id}:${field}`);
@@ -1748,22 +1781,26 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     />
                 </td>
 
-                {/* Strategia — edytowalna tylko dla gałęzi najwyższego poziomu (depth===0).
-                    Głębsze węzły pokazują wyszarzony placeholder (strategia dotyczy tylko top-level). */}
+                {/* Strategia — edytowalna na węzłach-elementach (liście / pośrednie), read-only na top-level.
+                    Top-level (depth===0) pokazuje złożenie ze składowych: linia `nazwa: strategia` na każdy
+                    wypełniony potomek. Złożenie jest utrwalane na polu strategy top-level (czytają eksporty). */}
                 <td className="px-3 py-2.5 min-w-[180px]" onClick={e => e.stopPropagation()}>
-                    {depth === 0 ? (
+                    {depth === 0 ? (() => {
+                        const composed = composeBranchStrategy(node) || (node.strategy || '');
+                        return composed
+                            ? <div className={`whitespace-pre-wrap text-base leading-snug text-gray-300 select-text ${d.fieldClass}`}>{composed}</div>
+                            : <span className="text-gray-700 text-base select-none">—</span>;
+                    })() : (
                         <AutoResizeTextarea
                             value={node.strategy || ''}
                             onChange={e => handleField(node.id, 'strategy', e.target.value)}
-                            onBlur={e => onNodeFieldSave?.(node.id, 'strategy', e.target.value)}
-                            placeholder="Strategia gałęzi…"
+                            onBlur={e => saveLeafStrategy(node.id, e.target.value)}
+                            placeholder="Strategia elementu…"
                             className={`bg-transparent border-none resize-none focus:outline-none text-base w-full placeholder-gray-700 leading-snug ${d.fieldClass}`}
                             data-nav-row={node.id}
                             data-nav-col="strategia"
                             onKeyDown={e => handleGridKeyDown(e, node.id, 'strategia')}
                         />
-                    ) : (
-                        <span className="text-gray-700 text-base select-none">—</span>
                     )}
                 </td>
 

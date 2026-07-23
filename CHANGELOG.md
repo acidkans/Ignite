@@ -4,6 +4,20 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-23 — feat(wbs): strategia edytowana na elementach, składana na węźle top-level (v2026.07.23.727)
+
+### architektura / API
+- `ui-funkcja` `composeBranchStrategy` (WBSHybridTable.jsx) — składa strategię całej gałęzi z wypełnionych komórek potomków (liście + węzły pośrednie), format `nazwa: strategia` linia na węzeł; węzeł top-level pomija sam siebie
+- `ui-funkcja` `saveLeafStrategy` (WBSHybridTable.jsx) — zapis strategii na węźle-elemencie utrwala własną wartość, po czym przelicza złożenie gałęzi i utrwala je na polu `strategy` węzła top-level (depth 0), skąd czytają je eksporty PDF/Excel; puste złożenie nie nadpisuje istniejącej strategii top-level
+- kolumna Strategia w gridzie WBS: edytowalna na węzłach `depth>0` (liście / pośrednie), read-only złożenie na `depth===0` (wcześniej odwrotnie — edycja tylko na top-level)
+
+### słownik
+- dodano `ui-funkcja` `composeBranchStrategy` — WBSHybridTable.jsx, @anchor compose-branch-strategy
+- dodano `ui-funkcja` `saveLeafStrategy` — WBSHybridTable.jsx, @anchor save-leaf-strategy
+
+### wytyczne
+- `schema-pole` `WbsNode.strategy` — na węźle top-level jest wartością POCHODNĄ (złożenie z potomków przez `composeBranchStrategy`), nie edytuj jej ręcznie; edycja odbywa się na węzłach `depth>0`
+
 ## 2026-07-21 — fix(oferta): szablony wstawiają surowe tokeny {zmienne} zamiast zamrożonych wartości — auto-aktualizacja (v2026.07.21.718)
 
 ### architektura / API
