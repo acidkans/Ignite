@@ -8,7 +8,7 @@ import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import GanttSection from './GanttSection';
-import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, SEED_LEAF_DEFAULTS, loadLeafDefaults, saveLeafDefaults, getLeafDefault } from './wbsConstants';
+import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
@@ -191,7 +191,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const [budgetImportMapping, setBudgetImportMapping] = useState({});
     // @anchor leaf-defaults-modal-state
     const [leafDefaultsOpen, setLeafDefaultsOpen] = useState(false);
-    const [leafDefaultsDraft, setLeafDefaultsDraft] = useState(() => loadLeafDefaults());
+    // @anchor leaf-defaults-state
+    // Aktywne wartości domyślne liści dla BIEŻĄCEGO zamówienia (nodeId). Nowe zamówienie → baza wyzerowana.
+    const [leafDefaults, setLeafDefaults] = useState(() => mergeLeafDefaults({}));
+    const [leafDefaultsDraft, setLeafDefaultsDraft] = useState(() => mergeLeafDefaults({}));
 
     // ── WBS Hybrid Tree state ──
     const [wbsTree, setWbsTree] = useState({ items: [] });
@@ -4481,6 +4484,36 @@ ${ganttSectionHtml}
     // @anchor apply-leaf-defaults
     // Stosuje wartości domyślne typu liścia do świeżo otypowanego węzła: unit przez endpoint drzewa,
     // a unitCost/quantity/margin jednym PATCH-em /budget (z przeliczeniem unitPrice/totalPrice po stronie backendu).
+    // @anchor fetch-leaf-defaults
+    // Pobiera wartości domyślne liści dla bieżącego zamówienia (per nodeId). Brak wpisu → baza wyzerowana.
+    useEffect(() => {
+        if (!nodeId) { setLeafDefaults(mergeLeafDefaults({})); return; }
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch(`${API_URL}/wbs-leaf-defaults/${nodeId}`, { headers: authHeaders() });
+                const stored = res.ok ? await res.json().catch(() => ({})) : {};
+                if (!cancelled) setLeafDefaults(mergeLeafDefaults(stored));
+            } catch {
+                if (!cancelled) setLeafDefaults(mergeLeafDefaults({}));
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [nodeId, authHeaders]);
+
+    // @anchor save-leaf-defaults-to-server
+    // Zapisuje wartości domyślne liści dla bieżącego zamówienia (upsert po nodeId).
+    const saveLeafDefaultsToServer = useCallback(async (defaults) => {
+        const merged = mergeLeafDefaults(defaults);
+        setLeafDefaults(merged);
+        if (!nodeId) return;
+        try {
+            await fetch(`${API_URL}/wbs-leaf-defaults/${nodeId}`, {
+                method: 'PUT', headers: authHeaders(), body: JSON.stringify({ data: merged }),
+            });
+        } catch (e) { console.error('Save leaf defaults error:', e); }
+    }, [nodeId, authHeaders]);
+
     const applyLeafDefaults = useCallback(async (id, defaults) => {
         if (!id || !defaults) return;
         const node = wbsData.find(n => n.id === id) || {};
@@ -4980,7 +5013,7 @@ ${ganttSectionHtml}
                 // zaciąga konfigurowalne wartości domyślne z modalu „Domyślne wartości" — dotyczy
                 // pozycji nowych ORAZ istniejących (edycja później w tabeli nadal możliwa).
                 if (!inheritedFromMaterials) {
-                    const defs = getLeafDefault(row.type);
+                    const defs = getLeafDefaultFrom(leafDefaults, row.type);
                     if (defs) {
                         row.unit = defs.unit ?? row.unit;
                         row.unitCost = Number(defs.unitCost) || 0;
@@ -5143,7 +5176,7 @@ ${ganttSectionHtml}
                 }
             }
         }
-    }, [saveBudgetField, updateNodeField, materialMetaByLookupKey, updateLocalWbsBudgetRow, syncMaterialRequirementsFromWbsQuantity, authHeaders, nodeId, versionId, wbsData, refreshUnified, findRequirementIdsForLookupKey, refreshMaterialCosts]);
+    }, [saveBudgetField, updateNodeField, materialMetaByLookupKey, updateLocalWbsBudgetRow, syncMaterialRequirementsFromWbsQuantity, authHeaders, nodeId, versionId, wbsData, refreshUnified, findRequirementIdsForLookupKey, refreshMaterialCosts, leafDefaults]);
 
     const buildRows = (view) => {
         const byId = new Map(wbsData.map(item => [item.id, item]));
@@ -5750,6 +5783,7 @@ ${ganttSectionHtml}
                                 onPasteCloned={handlePasteCloned}
                                 onNodeExpand={handleNodeExpand}
                                 onApplyLeafDefaults={applyLeafDefaults}
+                                leafDefaults={leafDefaults}
                             />
                         </div>
                     ), null, isManagerOrAdmin ? (
@@ -5762,7 +5796,7 @@ ${ganttSectionHtml}
                                 {extractingForWbs ? <div className="w-3 h-3 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" /> : <Sparkles size={11} />}
                                 Wyciągnij z dokumentów
                             </button>
-                            <button onClick={(e) => { e.stopPropagation(); setLeafDefaultsDraft(loadLeafDefaults()); setLeafDefaultsOpen(true); }} className="flex items-center gap-1.5 px-3 py-1 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-lg text-sky-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
+                            <button onClick={(e) => { e.stopPropagation(); setLeafDefaultsDraft(mergeLeafDefaults(leafDefaults)); setLeafDefaultsOpen(true); }} className="flex items-center gap-1.5 px-3 py-1 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-lg text-sky-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
                                 <SlidersHorizontal size={11} /> Domyślne wartości
                             </button>
                         </div>
@@ -6079,7 +6113,7 @@ ${ganttSectionHtml}
                                 <div className="p-2 rounded-xl bg-sky-500/15 border border-sky-500/20 text-sky-300"><SlidersHorizontal size={16} /></div>
                                 <div>
                                     <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-white">Domyślne wartości pozycji</h3>
-                                    <p className="text-[10px] text-gray-500 uppercase tracking-widest">Nowa pozycja danego typu przyjmie te wartości — zmienisz je potem w tabeli</p>
+                                    <p className="text-[10px] text-gray-500 uppercase tracking-widest">Osobne dla tego zamówienia — nowa pozycja danego typu przyjmie te wartości, zmienisz je potem w tabeli</p>
                                 </div>
                             </div>
                             <button onClick={() => setLeafDefaultsOpen(false)} className="p-2 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 transition-all" aria-label="Zamknij">
@@ -6098,8 +6132,8 @@ ${ganttSectionHtml}
                                 <div className="divide-y divide-white/5">
                                     {/* Materiał i sprzęt wyceniane indywidualnie (wymagania materiałowe) — poza modalem domyślnych */}
                                     {LEAF_TYPE_OPTIONS.filter((t) => t !== 'material' && t !== 'equipment').map((t) => {
-                                        const row = leafDefaultsDraft[t] || SEED_LEAF_DEFAULTS[t] || {};
-                                        const setField = (field, value) => setLeafDefaultsDraft((prev) => ({ ...prev, [t]: { ...(prev[t] || SEED_LEAF_DEFAULTS[t] || {}), [field]: value } }));
+                                        const row = leafDefaultsDraft[t] || ZERO_LEAF_DEFAULTS[t] || {};
+                                        const setField = (field, value) => setLeafDefaultsDraft((prev) => ({ ...prev, [t]: { ...(prev[t] || ZERO_LEAF_DEFAULTS[t] || {}), [field]: value } }));
                                         return (
                                             <div key={t} className="grid grid-cols-[1.4fr,1.2fr,1fr,0.9fr] gap-3 px-4 py-2.5 items-center hover:bg-white/[0.02] transition-colors">
                                                 <div className="text-sm text-white font-medium">{TYPE_LABELS[t] || t}</div>
@@ -6133,17 +6167,17 @@ ${ganttSectionHtml}
 
                         <div className="px-5 py-3 border-t border-white/10 flex items-center justify-between">
                             <button
-                                onClick={() => setLeafDefaultsDraft(structuredClone(SEED_LEAF_DEFAULTS))}
+                                onClick={() => setLeafDefaultsDraft(structuredClone(ZERO_LEAF_DEFAULTS))}
                                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-white/10 text-gray-300 hover:bg-white/10 transition-all text-xs"
                             >
-                                <RotateCcw size={12} /> Przywróć fabryczne
+                                <RotateCcw size={12} /> Wyzeruj
                             </button>
                             <div className="flex items-center gap-2">
                                 <button onClick={() => setLeafDefaultsOpen(false)} className="px-4 py-2 rounded-lg border border-white/10 text-gray-300 hover:bg-white/10 transition-all text-sm">
                                     Anuluj
                                 </button>
                                 <button
-                                    onClick={() => { saveLeafDefaults(leafDefaultsDraft); setLeafDefaultsOpen(false); }}
+                                    onClick={() => { saveLeafDefaultsToServer(leafDefaultsDraft); setLeafDefaultsOpen(false); }}
                                     className="px-4 py-2 rounded-lg border border-sky-500/30 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25 transition-all text-sm font-medium"
                                 >
                                     Zapisz domyślne

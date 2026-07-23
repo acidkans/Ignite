@@ -217,6 +217,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 |-----|-------|------|--------|
 | schema-model | WbsNode | apps/backend/prisma/schema.prisma | @anchor wbs-node |
 | schema-model | WbsNodeMaterial | apps/backend/prisma/schema.prisma | @anchor wbs-node-material |
+| schema-model | WbsLeafDefaults | apps/backend/prisma/schema.prisma | @anchor wbs-leaf-defaults-model |
+| schema-pole | WbsLeafDefaults.nodeId | apps/backend/prisma/schema.prisma | @anchor wbs-leaf-defaults-node-id |
+| schema-pole | WbsLeafDefaults.data | apps/backend/prisma/schema.prisma | @anchor wbs-leaf-defaults-data |
 | schema-pole | WbsNode.id | apps/backend/prisma/schema.prisma | @anchor wbs-node-id |
 | schema-pole | WbsNode.parentId | apps/backend/prisma/schema.prisma | @anchor wbs-node-parent-id |
 | schema-pole | WbsNode.nodeId | apps/backend/prisma/schema.prisma | @anchor wbs-node-node-id |
@@ -354,6 +357,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | handleHybridNodeStatusChange | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-hybrid-node-status-change |
 | ui-funkcja | applyLeafDefaults | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor apply-leaf-defaults |
 | ui-stan | leafDefaultsOpen | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor leaf-defaults-modal-state |
+| ui-stan | leafDefaults | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor leaf-defaults-state |
+| ui-funkcja | fetchLeafDefaults | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor fetch-leaf-defaults |
+| ui-funkcja | saveLeafDefaultsToServer | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor save-leaf-defaults-to-server |
 
 #### Frontend — stałe i utilsy (`wbsConstants.js`)
 
@@ -387,11 +393,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | buildHierarchy | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor build-hierarchy |
 | ui-funkcja | flattenHierarchy | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor flatten-hierarchy |
 | ui-stala | LEAF_TYPE_OPTIONS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor leaf-type-options |
-| ui-stala | WBS_DEFAULTS_STORAGE_KEY | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor wbs-defaults-storage-key |
-| ui-stala | SEED_LEAF_DEFAULTS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor seed-leaf-defaults |
-| ui-funkcja | loadLeafDefaults | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor load-leaf-defaults |
-| ui-funkcja | saveLeafDefaults | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor save-leaf-defaults |
-| ui-funkcja | getLeafDefault | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor get-leaf-default |
+| ui-stala | ZERO_LEAF_DEFAULTS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor zero-leaf-defaults |
+| ui-funkcja | mergeLeafDefaults | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor merge-leaf-defaults |
+| ui-funkcja | getLeafDefaultFrom | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor get-leaf-default-from |
 
 ### Moduł Logistyka — Baza materiałów (`apps/frontend/src/components/shared/MaterialDatabaseTab.jsx`)
 

@@ -279,7 +279,7 @@ function QaBranchModal({ node, onClose }) {
     );
 }
 
-import { UNIT_OPTIONS, sanitizeQtyInput, evalQtyFormula, suggestDefaultUnit, getLeafDefault } from './wbsConstants';
+import { UNIT_OPTIONS, sanitizeQtyInput, evalQtyFormula, suggestDefaultUnit, getLeafDefaultFrom } from './wbsConstants';
 import { ProductCard } from './WbsMaterialsPanel';
 
 const API_URL = '/api';
@@ -871,7 +871,7 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal }) 
 
 // ── Component ─────────────────────────────────────────────────────────────────
 // @anchor wbs-hybrid-table
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null, onApplyLeafDefaults = null }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null, onApplyLeafDefaults = null, leafDefaults = null }) {
     const [expanded, setExpanded] = useState(() => new Set());
     const initialExpandDoneRef = useRef(false);
     // Domyślnie rozwiń tylko do 2. poziomu (root + węzły top-level) przy pierwszym
@@ -1524,14 +1524,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     // Materiał/sprzęt wyceniane indywidualnie (wymagania materiałowe) —
                                     // przy zmianie typu ustaw tylko jednostkę, nie ruszaj ceny.
                                     const suggestedUnit = suggestDefaultUnit(node.name, newType);
-                                    const unitToApply = suggestedUnit || (getLeafDefault(newType) || {}).unit;
+                                    const unitToApply = suggestedUnit || (getLeafDefaultFrom(leafDefaults, newType) || {}).unit;
                                     if (unitToApply != null) { handleField(node.id, 'unit', unitToApply); onNodeFieldSave?.(node.id, 'unit', unitToApply); }
                                 } else if (newType) {
                                     // Praca/usługa/nocleg/paliwo — wartości domyślne z modalu przy KAŻDEJ zmianie typu
                                     // (nowe i istniejące pozycje), od razu w tabeli, edytowalne później.
                                     // Jednostka: nazwa kablowa/światłowodowa ma priorytet nad domyślną z modalu.
                                     // Ilość zachowana (nie przekazujemy jej do defaults) — patrz applyLeafDefaults.
-                                    const defs = getLeafDefault(newType) || {};
+                                    const defs = getLeafDefaultFrom(leafDefaults, newType) || {};
                                     const suggestedUnit = suggestDefaultUnit(node.name, newType);
                                     const unitToApply = suggestedUnit || defs.unit;
                                     if (unitToApply != null) handleField(node.id, 'unit', unitToApply);

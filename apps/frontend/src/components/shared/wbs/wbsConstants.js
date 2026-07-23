@@ -278,42 +278,35 @@ export const flattenHierarchy = (root, depth = 0) => {
 // Typy liści (bez grupującego i pustego) — kolejność = kolejność wierszy w modalu „Domyślne wartości".
 export const LEAF_TYPE_OPTIONS = TYPE_OPTIONS.filter(t => t !== '' && t !== 'group');
 
-// @anchor wbs-defaults-storage-key
-// Klucz localStorage z konfigurowalnymi wartościami domyślnymi liści (globalny per przeglądarka).
-export const WBS_DEFAULTS_STORAGE_KEY = 'ignite:wbsLeafDefaults:v1';
-
-// @anchor seed-leaf-defaults
-// Fabryczne wartości domyślne każdego typu liścia. Stosowane przy nadaniu typu nowemu węzłowi
-// i jako baza modalu (użytkownik nadpisuje je w localStorage). Pola: unit, unitCost (zł), margin (%), quantity.
-export const SEED_LEAF_DEFAULTS = {
-  work:      { unit: 'dni',       unitCost: 0,   margin: 0, quantity: 1 },
-  material:  { unit: 'sztuki',    unitCost: 0,   margin: 0, quantity: 1 },
-  equipment: { unit: 'sztuki',    unitCost: 0,   margin: 0, quantity: 1 },
-  service:   { unit: 'pakiet',    unitCost: 0,   margin: 0, quantity: 1 },
-  lodging:   { unit: 'sztuki',    unitCost: 0,   margin: 0, quantity: 1 },
-  fuel:      { unit: 'kilometry', unitCost: 0.7, margin: 0, quantity: 1 },
+// @anchor zero-leaf-defaults
+// Wyzerowana baza wartości domyślnych każdego typu liścia. Stosowana dla NOWEGO zamówienia
+// (brak wpisu w bazie) — wszystkie wartości liczbowe = 0, jednostka sensowna dla typu.
+// Pola: unit, unitCost (zł), margin (%), quantity.
+export const ZERO_LEAF_DEFAULTS = {
+  work:      { unit: 'dni',       unitCost: 0, margin: 0, quantity: 0 },
+  material:  { unit: 'sztuki',    unitCost: 0, margin: 0, quantity: 0 },
+  equipment: { unit: 'sztuki',    unitCost: 0, margin: 0, quantity: 0 },
+  service:   { unit: 'pakiet',    unitCost: 0, margin: 0, quantity: 0 },
+  lodging:   { unit: 'sztuki',    unitCost: 0, margin: 0, quantity: 0 },
+  fuel:      { unit: 'kilometry', unitCost: 0, margin: 0, quantity: 0 },
 };
 
-// @anchor load-leaf-defaults
-// Zwraca komplet wartości domyślnych (seed nadpisany tym co w localStorage). Brak/uszkodzony wpis → seed.
-export function loadLeafDefaults() {
-  let stored = {};
-  try { stored = JSON.parse(localStorage.getItem(WBS_DEFAULTS_STORAGE_KEY) || '{}') || {}; } catch { stored = {}; }
+// @anchor merge-leaf-defaults
+// Scala wartości domyślne pobrane z backendu (per zamówienie) z bazą wyzerowaną.
+// Brak/uszkodzony wpis → sama baza (wyzerowana). Wynik zawsze ma komplet typów liści.
+export function mergeLeafDefaults(stored) {
+  const src = stored && typeof stored === 'object' ? stored : {};
   const merged = {};
   for (const t of LEAF_TYPE_OPTIONS) {
-    merged[t] = { ...SEED_LEAF_DEFAULTS[t], ...(stored[t] || {}) };
+    merged[t] = { ...ZERO_LEAF_DEFAULTS[t], ...(src[t] || {}) };
   }
   return merged;
 }
 
-// @anchor save-leaf-defaults
-export function saveLeafDefaults(defaults) {
-  try { localStorage.setItem(WBS_DEFAULTS_STORAGE_KEY, JSON.stringify(defaults || {})); } catch { /* localStorage niedostępny */ }
-}
-
-// @anchor get-leaf-default
-// Wartości domyślne dla pojedynczego typu liścia (null gdy typ nie jest liściem).
-export function getLeafDefault(type) {
+// @anchor get-leaf-default-from
+// Wartości domyślne dla pojedynczego typu liścia z przekazanego kompletu (null gdy typ nie jest liściem).
+export function getLeafDefaultFrom(defaults, type) {
   const t = String(type || '').toLowerCase();
-  return loadLeafDefaults()[t] || null;
+  if (!defaults || typeof defaults !== 'object') return ZERO_LEAF_DEFAULTS[t] || null;
+  return defaults[t] || ZERO_LEAF_DEFAULTS[t] || null;
 }

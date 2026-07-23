@@ -24,6 +24,7 @@ import { SchematicsModule } from './schematics/schematics.module';
 import { MaterialRequirementsModule } from './material-requirements/material-requirements.module';
 import { MaterialsModule } from './materials/materials.module';
 import { DefaultProjectItemsModule } from './default-project-items/default-project-items.module';
+import { WbsLeafDefaultsModule } from './wbs-leaf-defaults/wbs-leaf-defaults.module';
 import { CommentsModule } from './comments/comments.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PushModule } from './push/push.module';
@@ -68,6 +69,7 @@ import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
     MaterialRequirementsModule,
     MaterialsModule,
     DefaultProjectItemsModule,
+    WbsLeafDefaultsModule,
     CommentsModule,
     NotificationsModule,
     PushModule,

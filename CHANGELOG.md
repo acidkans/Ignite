@@ -4,6 +4,25 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-23 — feat(wbs): wartości domyślne liści per zamówienie — nowe zamówienie wyzerowane
+
+### schema.prisma
+- dodano model `WbsLeafDefaults` (`nodeId @unique`, `data` JSON) — konfigurowalne wartości domyślne liści budżetowych osobne dla KAŻDEGO zamówienia; brak wpisu = nowe zamówienie = baza wyzerowana
+
+### architektura / API
+- nowy moduł `back-modul` `WbsLeafDefaultsModule` z `back-endpoint` `GET /wbs-leaf-defaults/:nodeId` (zwraca zapis lub `{}`) i `PUT /wbs-leaf-defaults/:nodeId` (upsert po nodeId)
+- `wartości domyślne liści` przeniesione z globalnego localStorage na backend per zamówienie; `ui-funkcja` `getLeafDefault`/`loadLeafDefaults`/`saveLeafDefaults` + stała `WBS_DEFAULTS_STORAGE_KEY` USUNIĘTE, zastąpione czystymi helperami `mergeLeafDefaults`/`getLeafDefaultFrom` operującymi na obiekcie pobranym z API
+- `ui-stala` `SEED_LEAF_DEFAULTS` (fabryczne, fuel 0,70, qty 1) zastąpione `ZERO_LEAF_DEFAULTS` (wszystko 0, jednostka wg typu) — baza nowego zamówienia
+- `WBSHybridTable.jsx` — nowy prop `leafDefaults`; zmiana typu liścia czyta `getLeafDefaultFrom(leafDefaults, type)` zamiast globalnego `getLeafDefault(type)`
+
+### słownik
+- dodano `zero-leaf-defaults`, `merge-leaf-defaults`, `get-leaf-default-from` (wbsConstants.js); `leaf-defaults-state`, `fetch-leaf-defaults`, `save-leaf-defaults-to-server` (UnifiedWbsPanel.jsx); `wbs-leaf-defaults-model`, `wbs-leaf-defaults-node-id`, `wbs-leaf-defaults-data` (schema.prisma)
+- usunięto `wbs-defaults-storage-key`, `seed-leaf-defaults`, `load-leaf-defaults`, `save-leaf-defaults`, `get-leaf-default`
+
+### wytyczne
+- `schema-model` `WbsLeafDefaults` — kluczowany po `nodeId` (zamówienie), NIE po `versionId`; wersjonowanie WBS nie klonuje tego wpisu (defaulty wspólne dla wszystkich wersji zamówienia)
+- `ui-funkcja` `mergeLeafDefaults` — zawsze scala zapis z bazą `ZERO_LEAF_DEFAULTS`; brak/uszkodzony wpis → sama baza wyzerowana
+
 ## 2026-07-23 — feat(wbs): złożenie strategii — nazwa pozycji bold, strategia od nowego wiersza (v2026.07.23.728)
 
 ### architektura / API
