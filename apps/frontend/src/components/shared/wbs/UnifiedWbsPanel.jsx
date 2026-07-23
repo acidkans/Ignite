@@ -338,6 +338,13 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         const file = event.target.files?.[0];
         if (!file) return;
         if (!(await guardSnapshotEdit())) return;
+        // ExcelJS czyta tylko OOXML (.xlsx). Stary binarny .xls to nie-zip → JSZip pada
+        // ("Can't find end of central directory"). Odrzuć z jasnym komunikatem zanim spróbujemy parsować.
+        if (/\.xls$/i.test(file.name)) {
+            alert('Stary format .xls nie jest obsługiwany. Otwórz plik w Excelu i zapisz jako „Skoroszyt programu Excel (*.xlsx)", a następnie zaimportuj ponownie.');
+            if (event.target) event.target.value = '';
+            return;
+        }
         try {
             const buffer = await file.arrayBuffer();
             const wb = new ExcelJS.Workbook();
@@ -379,7 +386,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             setBudgetImportOpen(true);
         } catch (e) {
             console.error('Budget Excel parse error:', e);
-            alert('Nie udało się odczytać pliku Excel.');
+            const notZip = /central directory|zip file/i.test(String(e?.message || ''));
+            alert(notZip
+                ? 'Nie udało się odczytać pliku — to nie jest prawidłowy plik .xlsx (może być uszkodzony lub w innym formacie). Zapisz ponownie w Excelu jako .xlsx.'
+                : 'Nie udało się odczytać pliku Excel.');
         } finally {
             if (event.target) event.target.value = '';
         }
@@ -5619,7 +5629,7 @@ ${ganttSectionHtml}
             <input
                 ref={budgetImportFileInputRef}
                 type="file"
-                accept=".xlsx,.xls"
+                accept=".xlsx"
                 className="hidden"
                 onChange={handleBudgetImportFileChange}
             />
