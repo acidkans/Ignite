@@ -4,6 +4,15 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-24 — wbs/budżet: eksport Excel — nagłówki zakładki „Budżet" (Zakres/Podzakres/Pozycja/Narzut) (v2026.07.24.734)
+
+### architektura / API
+- eksport Excel (`UnifiedWbsPanel.jsx`, `handleExportBudgetExcel` → `BUDGET_COLUMNS`) — nagłówki kolumn zakładki „Budżet" przemianowane: „Przedmiot"→„Zakres", „Podgałąź"→„Podzakres", „Nazwa"→„Pozycja", „Marża (%)"→„Narzut (%)". Klucze kolumn (`subjectName`/`parentName`/`name`/`margin`) i formuły bez zmian; import mapuje po wybranej kolumnie, nie po tekście nagłówka, więc reimport działa
+- kolumna `margin` w zakładce „Budżet" liczy `cena = koszt × (1 + margin/100)` — to narzut od kosztu, stąd nazwa „Narzut" (spójna z `BudgetTable.jsx`); arkusze „Podsumowanie" (per typ / per osoba / marża po rabatach) liczą `Zysk/Przychód` = prawdziwa marża od przychodu i pozostają nazwane „Marża"
+
+### wytyczne
+- eksport Excel budżetu — rozróżniaj: kolumna zakładki „Budżet" = `ui-kolumna` narzut od kosztu („Narzut %"); arkusze podsumowań = marża od przychodu (`Zysk/Przychód`, „Marża %"). Nie ujednolicaj nazw między tymi arkuszami
+
 ## 2026-07-24 — wbs/strategia: usunięcie globalnej strategii projektu, pola strategii gałęzi/liści rosną z tekstem (v2026.07.24.733)
 
 ### architektura / API

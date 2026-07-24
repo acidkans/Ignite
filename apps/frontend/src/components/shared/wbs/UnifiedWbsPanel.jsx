@@ -1692,9 +1692,9 @@ ${ganttSectionHtml}
         const hasRowDiscount = rows.some(r => (Number(r.discount) || 0) !== 0);
         const BUDGET_COLUMNS = [
             { key: 'index', width: 6, header: 'Lp.' },
-            { key: 'subjectName', width: 28, header: 'Przedmiot' },
-            { key: 'parentName', width: 24, header: 'Podgałąź' },
-            { key: 'name', width: 34, header: 'Nazwa' },
+            { key: 'subjectName', width: 28, header: 'Zakres' },
+            { key: 'parentName', width: 24, header: 'Podzakres' },
+            { key: 'name', width: 34, header: 'Pozycja' },
             { key: 'requirementName', width: 36, header: 'Nazwa wymagania technicznego' },
             { key: 'type', width: 16, header: 'Typ' },
             { key: 'owner', width: 22, header: 'Osoba odpowiedzialna' },
@@ -1702,7 +1702,7 @@ ${ganttSectionHtml}
             { key: 'unit', width: 14, header: 'Jednostka' },
             { key: 'unitCost', width: 18, header: 'Koszt jednostkowy' },
             { key: 'totalCost', width: 18, header: 'Koszt całościowy' },
-            { key: 'margin', width: 12, header: 'Marża (%)' },
+            { key: 'margin', width: 12, header: 'Narzut (%)' },
             ...(hasRowDiscount ? [{ key: 'discount', width: 12, header: 'Rabat (%)' }] : []),
             { key: 'unitOfferPrice', width: 20, header: ' ofertowa cena jed.' },
             { key: 'offerPrice', width: 20, header: 'ofertowa cena całość.' },
