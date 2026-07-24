@@ -16,6 +16,7 @@ import { buildSchematSectionHtml, SCHEMAT_SECTION_CSS } from '../../../utils/sch
 import ExportChoiceModal from '../ExportChoiceModal';
 import WBSHybridTable from './WBSHybridTable';
 import BudgetTable from './BudgetTable';
+import QaTreeView from './QaTreeView';
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
 
 
@@ -102,6 +103,18 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     wbsDataRef.current = wbsData;
     const [expandedSection, setExpandedSection] = useState(null);
     const [fullscreenSection, setFullscreenSection] = useState(null);
+    // @anchor wbs-qa-tree-open
+    // Edytowalny widok Q&A całego drzewa (QaTreeView). Otwierany automatycznie raz
+    // na sesję przy pierwszym wejściu w WBS danego projektu — flaga w sessionStorage
+    // (klucz per nodeId), więc nawigacja tam-i-z-powrotem w tej samej karcie już nie nagabuje.
+    const [qaTreeOpen, setQaTreeOpen] = useState(false);
+    useEffect(() => {
+        if (!nodeId) return;
+        const seenKey = `wbsQaAutoShown:${nodeId}`;
+        if (sessionStorage.getItem(seenKey)) return;
+        sessionStorage.setItem(seenKey, '1');
+        setQaTreeOpen(true);
+    }, [nodeId]);
     const [sectionOrder, setSectionOrder] = useState(() => {
         try {
             const saved = localStorage.getItem('unifiedWbsSectionOrder');
@@ -347,6 +360,22 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         }
         try {
             const buffer = await file.arrayBuffer();
+            // Rozpoznanie po magicznych bajtach — .xlsx to ZIP ("PK\x03\x04").
+            // Plik zabezpieczony HASŁEM jest zaszyfrowanym kontenerem OLE (D0 CF 11 E0),
+            // którego ExcelJS nie odczyta ani nie odszyfruje → jasny komunikat zamiast błędu JSZip.
+            const sig = new Uint8Array(buffer.slice(0, 4));
+            const isZip = sig[0] === 0x50 && sig[1] === 0x4b && sig[2] === 0x03 && sig[3] === 0x04;
+            const isOle = sig[0] === 0xd0 && sig[1] === 0xcf && sig[2] === 0x11 && sig[3] === 0xe0;
+            if (isOle) {
+                alert('Plik jest zabezpieczony hasłem (zaszyfrowany) lub w starym formacie .xls. Usuń hasło: otwórz w Excelu → Plik → Informacje → Chroń skoroszyt → Szyfruj hasłem → usuń hasło, zapisz jako .xlsx i zaimportuj ponownie.');
+                if (event.target) event.target.value = '';
+                return;
+            }
+            if (!isZip) {
+                alert('To nie jest prawidłowy plik .xlsx (może być uszkodzony lub zabezpieczony hasłem). Zapisz ponownie w Excelu jako niezaszyfrowany .xlsx.');
+                if (event.target) event.target.value = '';
+                return;
+            }
             const wb = new ExcelJS.Workbook();
             await wb.xlsx.load(buffer);
             const worksheets = wb.worksheets || [];
@@ -5871,6 +5900,10 @@ ${ganttSectionHtml}
                 }
                 return null;
             })}
+
+            {qaTreeOpen && (
+                <QaTreeView nodeId={nodeId} versionId={versionId} onClose={() => setQaTreeOpen(false)} />
+            )}
 
             {pendingExport && (
                 <ExportChoiceModal
