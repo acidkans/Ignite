@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import { useBeforeUnload } from '../../../hooks/useBeforeUnload';
 import ExcelJS from 'exceljs';
 import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays, BarChart3, ChevronUp, FileText, SlidersHorizontal, RotateCcw } from 'lucide-react';
@@ -81,17 +81,38 @@ const DEFAULT_SECTION_ORDER = ['oferta', 'strategy', 'tasks', 'gantt', 'wbs-hybr
 // z propem gdy wartość zmieni się gdzie indziej (np. edycja w kolumnie drzewa WBS).
 function BranchStrategyField({ name, value, onSave }) {
     const [text, setText] = useState(value || '');
+    const ref = useRef(null);
     useEffect(() => { setText(value || ''); }, [value]);
+    // Wysokość dopasowuje się do treści (rośnie z tekstem). Element niewidoczny
+    // (sekcja zwinięta) → scrollHeight=0; nie ustawiaj wtedy wysokości.
+    const adjust = useCallback(() => {
+        const el = ref.current;
+        if (!el) return;
+        if (el.offsetParent === null && el.getClientRects().length === 0) return;
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + 'px';
+    }, []);
+    useLayoutEffect(() => { adjust(); }, [text, adjust]);
+    useEffect(() => {
+        const el = ref.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(() => adjust());
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [adjust]);
     return (
         <div className="flex flex-col gap-1">
             <label className="text-sm font-semibold text-blue-300/80 uppercase tracking-wide">{name || 'Gałąź'}</label>
             <textarea
+                ref={ref}
+                rows={1}
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => { setText(e.target.value); adjust(); }}
+                onFocus={adjust}
                 onBlur={() => { if (text !== (value || '')) onSave(text); }}
                 placeholder="Strategia realizacji tej gałęzi…"
-                rows={2}
-                className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-gray-300 text-base focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed resize-y"
+                style={{ overflow: 'hidden', minHeight: '1.4em', resize: 'none' }}
+                className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-gray-300 text-base focus:outline-none focus:border-blue-500 transition-colors leading-relaxed"
             />
         </div>
     );
@@ -134,9 +155,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         return new Set();
     });
     const [selectedId, setSelectedId] = useState(null);
-    const [wbsDescription, setWbsDescription] = useState('');
-    const [strategySaving, setStrategySaving] = useState(false);
-    const [strategySaved, setStrategySaved] = useState(false);
     const [offerText, setOfferText] = useState('');
     const [offerSaving, setOfferSaving] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
@@ -222,8 +240,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     }, []);
 
     const materialRef = useRef();
-    const strategyLoadedRef = useRef(false);
-    const strategySaveTimeout = useRef(null);
     const offerLoadedRef = useRef(false);
     const offerSaveTimeout = useRef(null);
     const fetchStrategyGenRef = useRef(0);
@@ -798,18 +814,13 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         }
     }, [nodeId, userRoles]);
 
-    const getStrategyText = useCallback(() => wbsDescription, [wbsDescription]);
     const getOfferText = useCallback(() => offerText, [offerText]);
 
-    // Reset strategy state when switching nodes/versions so the new record loads fresh.
-    // Pending autosave timeouts are left intact — they capture the old saveStrategy closure
-    // (with the old nodeId) so typed-but-unsaved text still flushes to the correct record.
+    // Reset offer state when switching nodes/versions so the new record loads fresh.
     useEffect(() => {
-        strategyLoadedRef.current = false;
         offerLoadedRef.current = false;
         offerDateLoadedRef.current = false;
         fetchStrategyGenRef.current += 1;
-        setWbsDescription('');
         setOfferText('');
     }, [nodeId, versionId]);
 
@@ -821,10 +832,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             if (res.ok && gen === fetchStrategyGenRef.current) {
                 const text = await res.text();
                 const data = text ? JSON.parse(text) : null;
-                if (data && !strategyLoadedRef.current) {
-                    setWbsDescription(data.wbsDescription || '');
-                    strategyLoadedRef.current = true;
-                }
                 if (data && !offerLoadedRef.current) {
                     setOfferText(data.offerText || '');
                     offerLoadedRef.current = true;
@@ -1111,21 +1118,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         }
     }, [authHeaders, unassignedRequirements]);
 
-    const saveStrategy = useCallback(async (desc) => {
-        setStrategySaving(true);
-        try {
-            await fetch(`${API_URL}/order-requirements`, {
-                method: 'POST',
-                headers: authHeaders(),
-                body: JSON.stringify({ nodeId, versionId, wbsDescription: desc }),
-            });
-            setStrategySaved(true);
-            setIsDirty(false);
-            setTimeout(() => setStrategySaved(false), 2000);
-        } catch (e) { console.error('Save strategy error:', e); }
-        finally { setStrategySaving(false); }
-    }, [nodeId, versionId, authHeaders]);
-
     const saveOffer = useCallback(async (desc) => {
         setOfferSaving(true);
         try {
@@ -1140,14 +1132,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         } catch (e) { console.error('Save offer error:', e); }
         finally { setOfferSaving(false); }
     }, [nodeId, versionId, authHeaders]);
-
-    // Zachowane dla zewnętrznych wywołań (np. fetchData). MarkdownEditor zapisuje przez własny onSave.
-    // @anchor handle-strategy-save
-    const handleStrategySave = useCallback((immediate = false) => {
-        if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
-        if (immediate) { saveStrategy(wbsDescription); return; }
-        strategySaveTimeout.current = setTimeout(() => saveStrategy(wbsDescription), 1500);
-    }, [wbsDescription, saveStrategy]);
 
     // Wielopoziomowa numeracja: wcięcie 2 spacje = 1 poziom; wynik to 1, 1.1, 1.1.1, 1.2, 2, 2.1 …
     // Listy punktowane (-) zachowują wcięcie wizualnie. Bloki nie-listowe resetują liczniki.
@@ -1346,10 +1330,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             }).join('');
             return `<div class="branch-strategies-title">Opis Zakresów</div>${items}`;
         })();
-        const strategyHtml = (show('strategy') || show('oferta')) ? `
+        const strategyHtml = ((show('strategy') || show('oferta')) && branchStrategiesHtml) ? `
             <div class="section" style="${show('oferta') ? 'page-break-before: always;' : ''}">
-                <div class="section-header">Opis wyceny</div>
-                <div class="strategy-text">${renderStrategyHtml(getStrategyText() || 'Brak treści strategii')}</div>
                 ${branchStrategiesHtml}
             </div>` : '';
 
@@ -3615,17 +3597,13 @@ ${ganttSectionHtml}
         const offerBody = (getOfferText() || '').replace(/^#\s+/, '');
         const offerFull = offerBody.trim() ? `# Oferta\n\n${offerBody}` : '';
         buildMarkdownSheet('Oferta', offerFull, 'Brak treści oferty.');
-        // ── Sheet "Strategia": tekst z sekcji „Jak to chcemy zrobić" + strategie per gałąź ──
+        // ── Sheet "Strategia": strategie per gałąź (globalna strategia projektu usunięta) ──
         const branchStrategyMd = (wbsData || [])
             .filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0 && String(n.strategy || '').trim())
             .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
             .map(n => `## ${n.name || '(bez nazwy)'}\n\n${String(n.strategy).trim()}`)
             .join('\n\n');
-        const generalStrategyText = (getStrategyText() || '').trim();
-        const generalStrategyMd = generalStrategyText ? `# Opis wyceny\n\n${generalStrategyText}` : '';
-        const strategyFull = [generalStrategyMd, branchStrategyMd ? `# Strategie gałęzi\n\n${branchStrategyMd}` : '']
-            .filter(s => String(s).trim())
-            .join('\n\n');
+        const strategyFull = branchStrategyMd ? `# Strategie gałęzi\n\n${branchStrategyMd}` : '';
         buildMarkdownSheet('Strategia', strategyFull, 'Brak treści strategii.');
 
         // ── Sheet Oferta-podział na Typy: ceny ofertowe agregowane wg typu zakresu ──
@@ -5762,19 +5740,10 @@ ${ganttSectionHtml}
                 if (key === 'strategy') {
                     return renderSection('strategy', 'Jak to chcemy zrobić', HelpCircle, 'blue', (
                         <div className="flex flex-col flex-1 min-h-0 p-4 overflow-y-auto custom-scrollbar">
-                            <MarkdownEditor
-                                value={wbsDescription}
-                                onChange={(v) => { setWbsDescription(v); setIsDirty(true); }}
-                                onSave={(v) => saveStrategy(v)}
-                                previewTitle="Jak to chcemy zrobić"
-                                placeholder="Zdefiniuj plan i strategię realizacji projektu..."
-                                containerClassName="flex-1 min-h-[280px] flex-shrink-0"
-                                className="flex-1 min-h-[220px] w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed resize-none"
-                                saveIndicator={true}
-                            />
-                            {/* Strategie per gałąź (tylko węzły top-level) — pod globalną strategią. */}
-                            {wbsData.filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0).length > 0 && (
-                                <div className="mt-4 pt-4 border-t border-white/10 flex flex-col gap-4 flex-shrink-0">
+                            {/* Strategie per gałąź (tylko węzły top-level). Globalna strategia projektu usunięta —
+                                zostają wyłącznie strategie poszczególnych gałęzi i liści. */}
+                            {wbsData.filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0).length > 0 ? (
+                                <div className="flex flex-col gap-4 flex-shrink-0">
                                     <div className="text-sm font-bold uppercase tracking-widest text-gray-500">Strategie gałęzi</div>
                                     {wbsData
                                         .filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0)
@@ -5788,6 +5757,8 @@ ${ganttSectionHtml}
                                             />
                                         ))}
                                 </div>
+                            ) : (
+                                <div className="text-gray-500 text-sm">Brak gałęzi — dodaj elementy w strukturze WBS, aby zdefiniować ich strategie.</div>
                             )}
                         </div>
                     ), null);

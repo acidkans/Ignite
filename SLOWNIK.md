@@ -338,7 +338,6 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | handlePasteCloned | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-paste-cloned |
 | ui-funkcja | handleRequirementAssignToWbs | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-requirement-assign-to-wbs |
 | ui-funkcja | handleRequirementMerge | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-requirement-merge |
-| ui-funkcja | handleStrategySave | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-strategy-save |
 | ui-funkcja | handleExportPDF | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-pdf |
 | ui-funkcja | validateBudgetPricing | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor validate-budget-pricing |
 | ui-funkcja | handleExportBudgetExcel | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-budget-excel |

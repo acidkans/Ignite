@@ -4,6 +4,21 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-24 — wbs/strategia: usunięcie globalnej strategii projektu, pola strategii gałęzi/liści rosną z tekstem (v2026.07.24.733)
+
+### architektura / API
+- `ui-sekcja` sekcja „Jak to chcemy zrobić" (`UnifiedWbsPanel.jsx`) — usunięty globalny edytor strategii całego projektu (`ui-input` `wbsDescription` + `MarkdownEditor`). Zostają wyłącznie `ui-input` `BranchStrategyField` (strategie gałęzi) oraz strategie liści edytowane w tabeli WBS
+- `ui-input` `BranchStrategyField` — textarea auto-resize: `rows=1` + wysokość dopasowana do `scrollHeight` (rośnie z tekstem), `ResizeObserver` przelicza po rozwinięciu sekcji; usunięty `resize-y` i stały `rows=2`
+- eksport PDF (`UnifiedWbsPanel.jsx`, `handleExportPDF` → `strategyHtml`) — usunięty blok globalnej strategii („Opis wyceny" + `getStrategyText`); sekcja renderuje się tylko gdy istnieją strategie gałęzi (`branchStrategiesHtml`)
+- eksport Excel (`handleExportOfertaWbsExcel` → arkusz „Strategia") — usunięty nagłówek „Opis wyceny" z globalną strategią; arkusz zawiera tylko „Strategie gałęzi"
+- usunięte martwe funkcje/stan po globalnej strategii: `ui-funkcja` `getStrategyText`, `saveStrategy`, `handleStrategySave`, stan `wbsDescription`, `strategySaving`, `strategySaved`, refy `strategyLoadedRef`, `strategySaveTimeout`
+
+### słownik
+- usunięto `handleStrategySave` — funkcja debounce zapisu globalnej strategii projektu (już nie istnieje)
+
+### wytyczne
+- `ui-sekcja` strategia WBS — strategia istnieje wyłącznie na poziomie gałęzi (`schema-pole` `WbsNode.strategy` top-level) i liści (`WbsNode.strategy` potomków); nie ma już strategii całego projektu. Eksporty PDF/Excel czytają tylko `n.strategy` per węzeł
+
 ## 2026-07-24 — wbs/oferta: eksport PDF — rysunki Schematu na jednej stronie, nagłówek „Opis Zakresów", pogrubione nazwy liści (v2026.07.24.732)
 
 ### architektura / API
