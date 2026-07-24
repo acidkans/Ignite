@@ -1315,12 +1315,36 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 .filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0 && String(n.strategy || '').trim())
                 .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
             if (!tops.length) return '';
-            const items = tops.map(n => `
+            // Odtwarza wpisy liści gałęzi (nazwa liścia + jego strategia) z płaskiej listy wbsData,
+            // tak jak WBSHybridTable składa strategię na węźle top-level. Dzięki temu w PDF nazwa
+            // liścia jest pogrubiona (jak w widoku na stronie), a nie wtopiona w tekst strategii.
+            const collectLeafStrategyEntries = (rootId) => {
+                const entries = [];
+                const walk = (pid) => {
+                    (wbsData || [])
+                        .filter(c => String(c.parentId) === String(pid))
+                        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+                        .forEach(child => {
+                            const s = String(child.strategy || '').trim();
+                            if (s) entries.push({ name: (child.name || 'Element WBS').trim(), strategy: s });
+                            walk(child.id);
+                        });
+                };
+                walk(rootId);
+                return entries;
+            };
+            const items = tops.map(n => {
+                const entries = collectLeafStrategyEntries(n.id);
+                const bodyHtml = entries.length
+                    ? entries.map(e => `<div class="branch-leaf-entry"><div class="branch-leaf-name">${esc(e.name)}</div>${renderStrategyHtml(e.strategy)}</div>`).join('')
+                    : renderStrategyHtml(n.strategy);
+                return `
                 <div class="branch-strategy">
                     <div class="branch-strategy-name">${esc(n.name || '(bez nazwy)')}</div>
-                    <div class="strategy-text">${renderStrategyHtml(n.strategy)}</div>
-                </div>`).join('');
-            return `<div class="branch-strategies-title">Strategie gałęzi</div>${items}`;
+                    <div class="strategy-text">${bodyHtml}</div>
+                </div>`;
+            }).join('');
+            return `<div class="branch-strategies-title">Opis Zakresów</div>${items}`;
         })();
         const strategyHtml = (show('strategy') || show('oferta')) ? `
             <div class="section" style="${show('oferta') ? 'page-break-before: always;' : ''}">
@@ -1521,6 +1545,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   .branch-strategies-title { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; color: #4b5563; margin: 14px 0 6px 0; break-after: avoid; page-break-after: avoid; }
   .branch-strategy { margin-bottom: 8px; break-inside: avoid; page-break-inside: avoid; }
   .branch-strategy-name { font-size: 11px; font-weight: bold; color: #1a1a2e; margin-bottom: 3px; break-after: avoid; page-break-after: avoid; }
+  .branch-leaf-entry { margin-bottom: 8px; break-inside: avoid; page-break-inside: avoid; }
+  .branch-leaf-entry:last-child { margin-bottom: 0; }
+  .branch-leaf-name { font-weight: bold; color: #111; margin-bottom: 2px; break-after: avoid; page-break-after: avoid; }
   table { border-collapse: collapse; width: 100%; }
   td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; text-align: center; }
   td.num { text-align: center; font-family: monospace; font-size: 10px; }

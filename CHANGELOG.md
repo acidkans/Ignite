@@ -4,6 +4,16 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-07-24 — wbs/oferta: eksport PDF — rysunki Schematu na jednej stronie, nagłówek „Opis Zakresów", pogrubione nazwy liści (v2026.07.24.732)
+
+### architektura / API
+- eksport PDF (`schematPdfExport.js`, `SCHEMAT_SECTION_CSS`) — `.sch-page` height 257mm → 235mm, żeby rysunek Schematu mieścił się na jednej stronie (powtarzany nagłówek dokumentu w thead zabierał ~25mm i wypychał obraz na drugą stronę)
+- eksport PDF (`UnifiedWbsPanel.jsx`, `handleExportPDF` → `branchStrategiesHtml`) — nagłówek sekcji strategii per gałąź zmieniony z „Strategie gałęzi" na „Opis Zakresów"
+- eksport PDF (`branchStrategiesHtml`) — strategia gałęzi odtwarzana z liści (`collectLeafStrategyEntries`), nazwa liścia pogrubiona (`.branch-leaf-name`) tak jak w widoku WBS na stronie, zamiast płaskiego tekstu złożenia
+
+### wytyczne
+- `ui-stala` `SCHEMAT_SECTION_CSS` `.sch-page` — wysokość musi uwzględniać powtarzany nagłówek dokumentu (thead), nie tylko marginesy strony; zbyt duża wartość wypycha rysunek na kolejną stronę
+
 ## 2026-07-23 — feat(wbs): wartości domyślne liści per zamówienie — nowe zamówienie wyzerowane
 
 ### schema.prisma
