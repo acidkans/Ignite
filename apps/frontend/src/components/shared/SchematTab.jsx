@@ -265,6 +265,17 @@ export default function SchematTab({ nodeId, versionId, wbsData: externalWbsData
         requestAnimationFrame(() => { el.scrollTop = 0; el.scrollLeft = 0; });
     };
 
+    // Domyślnie dopasuj cały schemat do ekranu po załadowaniu pliku/strony (jednorazowo per plik+strona)
+    const autoFitKeyRef = useRef(null);
+    useEffect(() => {
+        if (!selectedSchematic || !contentAspect || containerWidth <= 0) return;
+        const key = `${selectedSchematic.id}:${pageNumber}`;
+        if (autoFitKeyRef.current === key) return;
+        autoFitKeyRef.current = key;
+        fitToScreen();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedSchematic?.id, pageNumber, contentAspect, containerWidth]);
+
     const getMarkerPozycja = (m) => {
         const links = m.wbsLinks || [];
         const childLink = links.find(l => l.wbsParentName && l.wbsNodeName);
