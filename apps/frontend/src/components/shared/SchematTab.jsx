@@ -4,7 +4,7 @@ import { enqueueUpload, removeFromQueue, flushPendingUploads } from '../../utils
 import {
     Upload, X, MapPin, Image as ImageIcon, Mic, Trash2,
     MousePointer2, Minus, Type, ZoomIn, ZoomOut, Maximize, Minimize2, Hand, Camera, Download, FileText, Save, FileDown,
-    RefreshCw, HardDrive, FolderOpen, List, CheckSquare, Square, Layers, ChevronDown, Plus, Check, Pencil, Video, Play, HelpCircle
+    RefreshCw, HardDrive, FolderOpen, List, CheckSquare, Square, Layers, ChevronDown, ChevronLeft, ChevronRight, Plus, Check, Pencil, Video, Play, HelpCircle
 } from 'lucide-react';
 import QaTreeView from './wbs/QaTreeView';
 
@@ -237,6 +237,32 @@ export default function SchematTab({ nodeId, versionId, wbsData: externalWbsData
         setSelectedSchematic(sch);
         setPageNumber(1);
         if (lsKey && sch?.id) localStorage.setItem(lsKey, sch.id);
+    };
+
+    // Nawigacja między plikami schematów (poprzedni / następny)
+    const currentSchematicIndex = selectedSchematic
+        ? schematics.findIndex(s => s.id === selectedSchematic.id)
+        : -1;
+    const goToSchematic = (dir) => {
+        if (schematics.length === 0) return;
+        const base = currentSchematicIndex < 0 ? 0 : currentSchematicIndex;
+        const next = base + dir;
+        if (next < 0 || next >= schematics.length) return;
+        selectSchematic(schematics[next]);
+    };
+
+    // Dopasuj cały schemat do widocznego obszaru (szerokość i wysokość), nie tylko 100% szerokości
+    const fitToScreen = () => {
+        const el = containerRef.current;
+        if (!el) { setScale(1.0); return; }
+        const aspect = contentAspect || 1.414;
+        const availW = el.clientWidth - 32;   // p-4 = 16px z każdej strony
+        const availH = el.clientHeight - 32;
+        if (availW <= 0 || availH <= 0 || containerWidth <= 0) { setScale(1.0); return; }
+        const scaleW = availW / containerWidth;
+        const scaleH = availH / (containerWidth * aspect);
+        setScale(Math.max(0.1, Math.min(scaleW, scaleH)));
+        requestAnimationFrame(() => { el.scrollTop = 0; el.scrollLeft = 0; });
     };
 
     const getMarkerPozycja = (m) => {
@@ -1046,6 +1072,33 @@ export default function SchematTab({ nodeId, versionId, wbsData: externalWbsData
 
                 <div className="flex-1" />
 
+                {/* Przewijanie między plikami schematów (poprzedni / następny) — na środku belki */}
+                {schematics.length > 1 && (
+                    <div className="flex items-center gap-1 bg-black/40 px-1.5 py-1 rounded-lg border border-white/10 flex-shrink-0">
+                        <button
+                            onClick={() => goToSchematic(-1)}
+                            disabled={currentSchematicIndex <= 0}
+                            className="p-1 rounded text-gray-300 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                            title="Poprzedni schemat"
+                        >
+                            <ChevronLeft size={16} />
+                        </button>
+                        <span className="text-[10px] text-gray-400 font-medium tabular-nums select-none min-w-[36px] text-center">
+                            {currentSchematicIndex + 1} / {schematics.length}
+                        </span>
+                        <button
+                            onClick={() => goToSchematic(1)}
+                            disabled={currentSchematicIndex >= schematics.length - 1}
+                            className="p-1 rounded text-gray-300 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                            title="Następny schemat"
+                        >
+                            <ChevronRight size={16} />
+                        </button>
+                    </div>
+                )}
+
+                <div className="flex-1" />
+
                 {/* Narzędzia rysowania */}
                 {selectedSchematic && isDesktop && (<>
                     <div className="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-white/10">
@@ -1134,9 +1187,9 @@ export default function SchematTab({ nodeId, versionId, wbsData: externalWbsData
                                 </button>
                             )}
                             <button
-                                onClick={() => setScale(1.0)}
+                                onClick={fitToScreen}
                                 className="pointer-events-auto w-8 h-8 flex items-center justify-center rounded-lg bg-black/25 border border-violet-500 text-violet-400 active:scale-95 transition-transform"
-                                title="Dopasuj (100%)"
+                                title="Dopasuj do ekranu"
                             >
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
