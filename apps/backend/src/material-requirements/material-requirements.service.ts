@@ -1014,7 +1014,9 @@ WYMAGANIE:
 Nazwa: ${requirementLabel}
 Specyfikacja techniczna: ${req.technicalSpec || '—'}
 
-ZADANIE: Znajdź 3 konkretne modele produktów dostępne na rynku europejskim, które spełniają WSZYSTKIE podane parametry techniczne. Dla każdego modelu sprawdź zgodność z każdym punktem specyfikacji. Jeśli jakiś parametr jest niemożliwy do spełnienia, wskaż najbliższą alternatywę i opisz to w polu productName.
+ZADANIE: Wyszukaj w Google 3 konkretne modele produktów dostępne na rynku europejskim, które spełniają WSZYSTKIE podane parametry techniczne. Dla każdego modelu sprawdź zgodność z każdym punktem specyfikacji. Jeśli jakiś parametr jest niemożliwy do spełnienia, wskaż najbliższą alternatywę i opisz to w polu productName.
+
+WAŻNE — LINKI: W polu "sourceUrl" wstaw wyłącznie realny adres strony produktu, który FAKTYCZNIE znalazłeś w wynikach wyszukiwania i który istnieje. Jeśli nie znalazłeś działającego linku, ustaw "sourceUrl": null. NIGDY nie zgaduj ani nie konstruuj adresu URL z nazwy produktu.
 
 Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
 [
@@ -1022,12 +1024,12 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
     "productName": "pełna nazwa handlowa produktu",
     "manufacturer": "producent",
     "model": "symbol modelu",
-    "sourceUrl": null,
+    "sourceUrl": "https://... realny link ze znalezionej strony produktu lub null",
     "matchScore": 0.95
   }
 ]`;
 
-        const rawResponse = await this.callAiForJson(analysisPrompt);
+        const rawResponse = await this.vectorService.generateRawGrounded(analysisPrompt);
         this.logger.log(`[Search] Odpowiedź AI (${rawResponse.length} znaków): ${rawResponse.slice(0, 500)}`);
         const proposals = this.parseAndValidateProposals(rawResponse);
         this.logger.log(`[Search] Sparsowano ${proposals.length} propozycji`);

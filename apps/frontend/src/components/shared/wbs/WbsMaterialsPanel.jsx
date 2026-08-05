@@ -1438,15 +1438,25 @@ export default function WbsMaterialsPanel({
                 const reqs = await reqRes.json();
                 const map = {};
                 const reqById = Object.fromEntries(reqs.map(r => [r.id, r]));
-                for (const r of reqs) { if (r.wbsNodeId) map[r.wbsNodeId] = flattenReq(r); }
-                // Fallback: match via req: tag on WBS node (safer than name-matching)
+                const reqByWbsNodeId = {};
+                const reqByName = {};
+                for (const r of reqs) {
+                    if (r.wbsNodeId) reqByWbsNodeId[r.wbsNodeId] = r;
+                    if (r.name) reqByName[String(r.name).trim().toLowerCase()] = r;
+                }
+                // Ta sama priorytetyzacja dopasowania węzeł↔wymaganie co w WBSHybridTable
+                // (MaterialReqExpandPanel): 1) tag req:<id> — bezpośrednie połączenie liść↔wymaganie
+                // (najwłaściwsze), 2) wbsNodeId — węzeł jest właścicielem wymagania, 3) fallback po nazwie —
+                // węzły snapshot (klonowane ID) i stare bez tagu req:. Bez wspólnej kolejności oba widoki
+                // (WBS/HybridTable i WBS/Materiały) pokazywały różne materiały dla tego samego liścia.
                 const matNodeList = flatNodes.filter(n => n.type === 'material' || n.type === 'equipment');
                 for (const node of matNodeList) {
-                    if (map[node.id]) continue;
                     const reqTag = (node.tags || []).find(t => typeof t === 'string' && t.startsWith('req:'));
-                    if (!reqTag) continue;
-                    const reqId = reqTag.slice(4);
-                    const req = reqById[reqId];
+                    const req =
+                        (reqTag && reqById[reqTag.slice(4)]) ||
+                        reqByWbsNodeId[node.id] ||
+                        reqByName[String(node.name || '').trim().toLowerCase()] ||
+                        null;
                     if (req) map[node.id] = flattenReq(req);
                 }
                 setCards(map);

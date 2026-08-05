@@ -340,6 +340,29 @@ export class VectorService implements OnModuleInit {
      * Wywołuje model AI z surowym promptem — bez opakowywania w kontekst ERP.
      * Używane do ekstrakcji JSON i innych zadań strukturalnych.
      */
+    /**
+     * Jak generateRaw, ale dla Gemini włącza grounding Google Search (tools: googleSearch).
+     * Dzięki temu model realnie wyszukuje w Google i cytuje istniejące strony, zamiast zmyślać
+     * URL-e z pamięci treningowej (źródło linków 404 w wyszukiwarce produktów). Dla pozostałych
+     * providerów i przy błędzie groundingu degraduje się do zwykłego generateRaw.
+     */
+    async generateRawGrounded(prompt: string): Promise<string> {
+        const modelName = this.configService.get<string>('AI_MODEL');
+        if ((modelName?.includes('gemini')) && this.genAI) {
+            try {
+                const model = this.genAI.getGenerativeModel({
+                    model: modelName,
+                    tools: [{ googleSearch: {} }] as any,
+                });
+                const result = await model.generateContent(prompt);
+                return result.response.text();
+            } catch (err) {
+                this.logger.warn(`[GenerateRawGrounded] grounding niedostępny (${err?.message}) — fallback bez Google Search`);
+            }
+        }
+        return this.generateRaw(prompt);
+    }
+
     async generateRaw(prompt: string): Promise<string> {
         const modelName = this.configService.get<string>('AI_MODEL');
         this.logger.log(`[GenerateRaw] model: ${modelName}, prompt length: ${prompt.length}`);
