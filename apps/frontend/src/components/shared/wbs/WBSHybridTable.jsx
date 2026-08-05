@@ -1073,6 +1073,27 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         }
     };
 
+    // Po usunięciu węzła przelicza złożenie strategii gałęzi top-level, do której należał
+    // usunięty węzeł, i utrwala je (także czyści, gdy usunięto ostatni wpis strategii —
+    // top-level jest read-only, więc bez tego stary wpis zostawał w eksportach i nie dało
+    // się go poprawić). Chroni starą ręczną treść top-level: gdy złożenie puste, nadpisuje
+    // tylko jeśli usunięte poddrzewo faktycznie zawierało strategię.
+    // @anchor recompose-branch-strategy-after-delete
+    const recomposeBranchStrategyAfterDelete = (deletedNode, prevRoots, nextItems) => {
+        const root = prevRoots.find(r => subtreeContains(r, deletedNode.id));
+        if (!root || root.id === deletedNode.id) return;
+        const newRoot = nextItems.find(r => r.id === root.id);
+        if (!newRoot) return;
+        let deletedHadStrategy = false;
+        const walk = n => { if ((n?.strategy || '').trim()) deletedHadStrategy = true; (n?.children || []).forEach(walk); };
+        walk(deletedNode);
+        const composed = composeBranchStrategy(newRoot);
+        if (composed === (newRoot.strategy || '')) return;
+        if (!composed && !deletedHadStrategy) return;
+        handleField(newRoot.id, 'strategy', composed);
+        onNodeFieldSave?.(newRoot.id, 'strategy', composed);
+    };
+
     // Pokaż na chwilę ostrzeżenie "tylko cyfry" przy komórce liczbowej (klucz = `${id}:${field}`).
     const flashWarn = (id, field) => {
         setWarnKey(`${id}:${field}`);
@@ -1083,9 +1104,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const handleDelete = (id, e) => {
         e?.stopPropagation();
         if (!window.confirm('Usunąć ten węzeł i wszystkie podgałęzie?')) return;
+        const deletedNode = findNode(items, id);
         const deletedIds = collectIds(items, id);
-        save({ ...wbsTree, items: deleteNode(items, id) });
+        const nextItems = deleteNode(items, id);
+        save({ ...wbsTree, items: nextItems });
         if (deletedIds.length) onNodesDeleted?.(deletedIds);
+        if (deletedNode) recomposeBranchStrategyAfterDelete(deletedNode, items, nextItems);
     };
 
     const handleAddChild = (parentId, e) => {
@@ -1888,9 +1912,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             onNodeFieldLocal={handleField}
                             onSaved={updated => { setMatReqByWbsId(prev => ({ ...prev, [node.id]: updated, ...(updated?.id ? { [updated.id]: updated } : {}) })); onMaterialReqUpdated?.(); }}
                             onDeleteNode={() => {
+                                const deletedNode = findNode(items, node.id);
                                 const deletedIds = collectIds(items, node.id);
-                                save({ ...wbsTree, items: deleteNode(items, node.id) });
+                                const nextItems = deleteNode(items, node.id);
+                                save({ ...wbsTree, items: nextItems });
                                 if (deletedIds.length) onNodesDeleted?.(deletedIds);
+                                if (deletedNode) recomposeBranchStrategyAfterDelete(deletedNode, items, nextItems);
                                 setExpandedMaterialIds(prev => { const n = new Set(prev); n.delete(node.id); return n; });
                             }}
                         />

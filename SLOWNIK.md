@@ -323,6 +323,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | collectBranchStrategyEntries | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor collect-branch-strategy-entries |
 | ui-funkcja | composeBranchStrategy | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor compose-branch-strategy |
 | ui-funkcja | saveLeafStrategy | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor save-leaf-strategy |
+| ui-funkcja | recomposeBranchStrategyAfterDelete | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor recompose-branch-strategy-after-delete |
 | ui-stala | canFullscreen | apps/frontend/src/components/shared/SchematTab.jsx | @anchor schemat-can-fullscreen |
 | ui-funkcja | handleNodeExpand | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-node-expand-refresh |
 | ui-widok | CalendarView | apps/frontend/src/components/shared/wbs/CalendarView.jsx | @anchor calendar-view |
