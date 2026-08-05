@@ -1007,51 +1007,44 @@ Oceń na podstawie typowych parametrów znanych produktów. Jeśli nie możesz o
         const requirementLabel = req.name || req.productName || '';
         this.logger.log(`[Search] Szukam produktów dla: "${requirementLabel}"`);
 
-        // Prompt — LLM na podstawie swojej wiedzy proponuje konkretne produkty
-        const analysisPrompt = `Działasz jako starszy inżynier systemów z 15-letnim doświadczeniem w branży AV, CCTV i instalacji słaboprądowych.
-
-WYMAGANIE:
+        // Jedno zapytanie z groundingiem, w STYLU WYSZUKIWANIA — tylko takie faktycznie odpala tool
+        // googleSearch. KLUCZOWE: produkty i ich strony pochodzą z tego SAMEGO realnego wyszukiwania,
+        // więc model↔URL da się dopasować. Gdy produkty były zmyślane osobno (z pamięci), nie pasowały
+        // do znalezionych stron (np. model proponował LAPP, a Google zwracał Bitner) → zawsze fallback.
+        const searchPrompt = `Jesteś starszym inżynierem systemów (AV, CCTV, słaboprądy). Wyszukaj w Google aktualnie dostępne u europejskich (najlepiej polskich) dystrybutorów produkty pasujące do wymagania.
 Nazwa: ${requirementLabel}
 Specyfikacja techniczna: ${req.technicalSpec || '—'}
 
-ZADANIE: Wyszukaj w Google 3 konkretne modele produktów dostępne na rynku europejskim, które spełniają WSZYSTKIE podane parametry techniczne. Dla każdego modelu sprawdź zgodność z każdym punktem specyfikacji. Jeśli jakiś parametr jest niemożliwy do spełnienia, wskaż najbliższą alternatywę i opisz to w polu productName.
+Znajdź dokładnie 3 konkretne, realne produkty ze stron sklepów/dystrybutorów, które spełniają parametry. Dla KAŻDEGO wypisz jedną linię DOKŁADNIE w formacie:
+producent | model | pełna nazwa handlowa
+Bez numeracji, bez nagłówków, bez komentarzy, bez linków. Opieraj się wyłącznie na produktach, które faktycznie znalazłeś na stronach sklepów.`;
 
-Podaj dokładny symbol modelu i producenta — linki do stron dobierzemy sami z Twoich źródeł wyszukiwania, więc NIE podawaj żadnych URL-i.
-
-Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
-[
-  {
-    "productName": "pełna nazwa handlowa produktu",
-    "manufacturer": "producent",
-    "model": "symbol modelu",
-    "matchScore": 0.95
-  }
-]`;
-
-        // Faza 1: strukturalne dane produktów (JSON). Model odpowiada z wiedzy — nie potrzebuje sieci.
-        const rawResponse = await this.callAiForJson(analysisPrompt);
-        this.logger.log(`[Search] Odpowiedź AI (${rawResponse.length} znaków): ${rawResponse.slice(0, 500)}`);
-        const proposals = this.parseAndValidateProposals(rawResponse);
-
-        // Faza 2: realne linki. Osobne zapytanie w STYLU WYSZUKIWANIA (bez sztywnego JSON) — tylko takie
-        // faktycznie odpala tool googleSearch, więc groundingChunks wypełnia się cytowanymi stronami.
-        // Sam tool na promptcie JSON nie wystarcza: model odpowiada z pamięci i nie szuka (źródeł: 0).
-        const searchQuery = `Wyszukaj w Google aktualnie dostępne u europejskich dystrybutorów produkty pasujące do wymagania: "${requirementLabel}".
-Specyfikacja: ${req.technicalSpec || '—'}.
-Wymień konkretne modele wraz z producentem i podaj adresy stron sklepów/dystrybutorów, na których produkt jest dostępny do kupienia.`;
+        let proposals: any[] = [];
         let resolvedSources: { url: string | null; title: string }[] = [];
         try {
-            const { sources } = await this.vectorService.generateRawGrounded(searchQuery);
-            this.logger.log(`[Search] Sparsowano ${proposals.length} propozycji, źródeł grounding: ${sources.length}`);
+            const { text, sources } = await this.vectorService.generateRawGrounded(searchPrompt);
+            this.logger.log(`[Search] Grounding: źródeł=${sources.length}, odpowiedź=${text.slice(0, 300)}`);
+            proposals = this.parseGroundedProductLines(text);
             // Rozwiń redirecty groundingu (vertexaisearch → docelowa strona) na realne, trwałe URL-e.
             resolvedSources = await Promise.all(
                 sources.map(async s => ({ url: await this.resolveRedirect(s.uri), title: s.title })),
             );
-            for (const s of resolvedSources) {
-                this.logger.log(`[Search][src] title="${s.title}" -> ${s.url || 'NULL'}`);
-            }
+            for (const s of resolvedSources) this.logger.log(`[Search][src] title="${s.title}" -> ${s.url || 'NULL'}`);
         } catch (e) {
-            this.logger.warn(`[Search] Faza 2 (grounding sources) błąd: ${e?.message}`);
+            this.logger.warn(`[Search] Grounding błąd: ${e?.message}`);
+        }
+
+        // Fallback: gdy grounding nic nie zwrócił, propozycje z wiedzy modelu (bez sieci) + linki Google.
+        if (proposals.length === 0) {
+            const analysisPrompt = `Działasz jako starszy inżynier systemów AV/CCTV/słaboprądy.
+WYMAGANIE:
+Nazwa: ${requirementLabel}
+Specyfikacja techniczna: ${req.technicalSpec || '—'}
+Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE tablicę JSON:
+[{"productName":"…","manufacturer":"…","model":"…","matchScore":0.95}]`;
+            const rawResponse = await this.callAiForJson(analysisPrompt);
+            proposals = this.parseAndValidateProposals(rawResponse);
+            this.logger.log(`[Search] Fallback JSON: ${proposals.length} propozycji`);
         }
 
         // Zapisz propozycje do bazy. sourceUrl NIE pochodzi z JSON modelu (zmyślany) — bierzemy
@@ -1231,6 +1224,24 @@ Wymień konkretne modele wraz z producentem i podaj adresy stron sklepów/dystry
     }
 
     // ─── POMOCNICZE ───────────────────────────────────────────────────────────
+
+    // Parsuje odpowiedź groundingową w formacie linii "producent | model | pełna nazwa".
+    // Odporny na bullety/numerację i dodatkowe kolumny. Zwraca max 3 propozycje.
+    private parseGroundedProductLines(raw: string): any[] {
+        const out: any[] = [];
+        for (const line of String(raw || '').split(/\r?\n/)) {
+            const l = line.trim().replace(/^[-*•\d.)\s]+/, '');
+            if (!l.includes('|')) continue;
+            const parts = l.split('|').map(x => x.trim()).filter(Boolean);
+            if (parts.length < 2) continue;
+            const [manufacturer, model, ...rest] = parts;
+            if (!manufacturer || !model) continue;
+            const productName = (rest.join(' ') || `${manufacturer} ${model}`).slice(0, 300);
+            out.push({ manufacturer: manufacturer.slice(0, 200), model: model.slice(0, 200), productName, matchScore: null });
+            if (out.length >= 3) break;
+        }
+        return out;
+    }
 
     // Zawsze-działający link: wyszukiwarka Google po producencie/modelu/nazwie. Nigdy nie 404,
     // nie wygasa, prowadzi do aktualnych wyników. Fallback gdy grounding nie zwrócił dopasowania.
