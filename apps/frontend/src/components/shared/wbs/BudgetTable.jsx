@@ -596,7 +596,7 @@ export default function BudgetTable({
                                     <div className="relative">
                                         <input
                                             key={`${row.id}-unitCost-${syncVersion}`}
-                                            defaultValue={row.unitCost != null && row.unitCost !== 0 ? Number(row.unitCost).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
+                                            defaultValue={row.unitCost != null && row.unitCost !== 0 ? Number(row.unitCost).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' }) : ''}
                                             onChange={e => {
                                                 const val = e.target.value;
                                                 if (val.startsWith('=')) {
@@ -612,12 +612,12 @@ export default function BudgetTable({
                                                 const raw = e.target.value;
                                                 const evaluated = evalQtyFormula(raw);
                                                 if (evaluated !== null && evaluated >= 0) {
-                                                    e.target.value = evaluated.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                                    e.target.value = evaluated.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' });
                                                     onFieldChange(row, 'unitCost', e.target.value);
                                                     return;
                                                 }
                                                 const n = parseLocaleNumber(raw);
-                                                if (n != null) e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                                if (n != null) e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' });
                                                 onFieldChange(row, 'unitCost', e.target.value);
                                             }}
                                             onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}

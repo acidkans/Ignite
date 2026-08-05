@@ -195,7 +195,7 @@ export const STRUCTURE_COMMON_CELL_CLASS = 'text-sm leading-6';
 // @anchor fmt-pln
 export const fmtPLN = v =>
   v != null && v !== 0
-    ? v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    ? v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' })
     : '';
 
 // @anchor fmt-qty
@@ -212,7 +212,7 @@ export const fmtPct = v =>
 
 // @anchor fmt-pln-full
 export const fmtPLNFull = v =>
-  (Number(v) || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  (Number(v) || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' });
 
 // @anchor fmt-pct-full
 export const fmtPctFull = v =>
