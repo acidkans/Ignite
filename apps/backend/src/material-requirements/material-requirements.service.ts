@@ -1047,6 +1047,9 @@ Wymień konkretne modele wraz z producentem i podaj adresy stron sklepów/dystry
             resolvedSources = await Promise.all(
                 sources.map(async s => ({ url: await this.resolveRedirect(s.uri), title: s.title })),
             );
+            for (const s of resolvedSources) {
+                this.logger.log(`[Search][src] title="${s.title}" -> ${s.url || 'NULL'}`);
+            }
         } catch (e) {
             this.logger.warn(`[Search] Faza 2 (grounding sources) błąd: ${e?.message}`);
         }
@@ -1058,6 +1061,7 @@ Wymień konkretne modele wraz z producentem i podaj adresy stron sklepów/dystry
             proposals.map(p => {
                 const matched = this.pickSourceForProposal(p, resolvedSources);
                 const sourceUrl = matched || this.googleSearchUrl(p);
+                this.logger.log(`[Search][match] ${p.manufacturer} ${p.model} -> ${matched ? matched : 'GOOGLE-FALLBACK'}`);
                 return this.prisma.productProposal.create({
                     data: {
                         materialRequirementId: id,
