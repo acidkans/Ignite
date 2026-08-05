@@ -1028,15 +1028,28 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
   }
 ]`;
 
-        const { text: rawResponse, sources } = await this.vectorService.generateRawGrounded(analysisPrompt);
+        // Faza 1: strukturalne dane produktów (JSON). Model odpowiada z wiedzy — nie potrzebuje sieci.
+        const rawResponse = await this.callAiForJson(analysisPrompt);
         this.logger.log(`[Search] Odpowiedź AI (${rawResponse.length} znaków): ${rawResponse.slice(0, 500)}`);
         const proposals = this.parseAndValidateProposals(rawResponse);
-        this.logger.log(`[Search] Sparsowano ${proposals.length} propozycji, źródeł grounding: ${sources.length}`);
 
-        // Rozwiń redirecty groundingu (vertexaisearch → docelowa strona) na realne, trwałe URL-e.
-        const resolvedSources = await Promise.all(
-            sources.map(async s => ({ url: await this.resolveRedirect(s.uri), title: s.title })),
-        );
+        // Faza 2: realne linki. Osobne zapytanie w STYLU WYSZUKIWANIA (bez sztywnego JSON) — tylko takie
+        // faktycznie odpala tool googleSearch, więc groundingChunks wypełnia się cytowanymi stronami.
+        // Sam tool na promptcie JSON nie wystarcza: model odpowiada z pamięci i nie szuka (źródeł: 0).
+        const searchQuery = `Wyszukaj w Google aktualnie dostępne u europejskich dystrybutorów produkty pasujące do wymagania: "${requirementLabel}".
+Specyfikacja: ${req.technicalSpec || '—'}.
+Wymień konkretne modele wraz z producentem i podaj adresy stron sklepów/dystrybutorów, na których produkt jest dostępny do kupienia.`;
+        let resolvedSources: { url: string | null; title: string }[] = [];
+        try {
+            const { sources } = await this.vectorService.generateRawGrounded(searchQuery);
+            this.logger.log(`[Search] Sparsowano ${proposals.length} propozycji, źródeł grounding: ${sources.length}`);
+            // Rozwiń redirecty groundingu (vertexaisearch → docelowa strona) na realne, trwałe URL-e.
+            resolvedSources = await Promise.all(
+                sources.map(async s => ({ url: await this.resolveRedirect(s.uri), title: s.title })),
+            );
+        } catch (e) {
+            this.logger.warn(`[Search] Faza 2 (grounding sources) błąd: ${e?.message}`);
+        }
 
         // Zapisz propozycje do bazy. sourceUrl NIE pochodzi z JSON modelu (zmyślany) — bierzemy
         // realnie cytowaną stronę dopasowaną po tytule do producent/model, a gdy brak dopasowania
@@ -1218,8 +1231,10 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
     // Zawsze-działający link: wyszukiwarka Google po producencie/modelu/nazwie. Nigdy nie 404,
     // nie wygasa, prowadzi do aktualnych wyników. Fallback gdy grounding nie zwrócił dopasowania.
     private googleSearchUrl(p: { manufacturer?: string; model?: string; productName?: string }): string {
-        const q = [p.manufacturer, p.model, p.productName].filter(Boolean).join(' ').trim()
-            || (p.productName || '');
+        // Zwięzłe zapytanie: producent + model (bez całego opisu technicznego, który zaśmieca wyszukiwanie).
+        // Dopiero gdy brak i producenta, i modelu — użyj skróconej nazwy produktu.
+        const q = ([p.manufacturer, p.model].filter(Boolean).join(' ').trim())
+            || String(p.productName || '').split(/[,(]/)[0].trim().slice(0, 80);
         return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
     }
 
