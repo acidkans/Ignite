@@ -3594,7 +3594,19 @@ ${ganttSectionHtml}
         // Wstępne zdanie ("W odpowiedzi na zapytanie...") jest wpisywane jako markdown H1 (patrz
         // snippet „Wstęp"), bo wcześniej pełniło funkcję nagłówka sekcji. Teraz sekcja ma własny
         // nagłówek "Oferta", więc to zdanie demotujemy do zwykłego akapitu.
-        const offerBody = (getOfferText() || '').replace(/^#\s+/, '');
+        // Rozwiń tokeny {zmienne} tak samo jak w podglądzie/eksporcie PDF (resolveOfferTokens, ~5678) —
+        // inaczej {tabela wbs1/2/3}, {nazwa projektu} itd. trafiały do Excela dosłownie zamiast wartości/tabel.
+        const workDaysFmt = workDaysMemo % 1 === 0 ? String(workDaysMemo) : workDaysMemo.toFixed(1);
+        const resolveOfferTokens = (t) => (t || '')
+            .replace(/\{nazwa projektu\}/g, orderName || projectName || '')
+            .replace(/\{wartość oferty\}/g, fmtPLN(offerRevenueTotal) + ' PLN')
+            .replace(/\{data oferty\}/g, offerDate)
+            .replace(/\{tabela wbs1\}/gi, wbsTablesByDepth[1] || '')
+            .replace(/\{tabela wbs2\}/gi, wbsTablesByDepth[2] || '')
+            .replace(/\{tabela wbs3\}/gi, wbsTablesByDepth[3] || '')
+            .replace(/\{tabela wbs\}/gi, wbsTablesByDepth[2] || '')
+            .replace(/\{Roboczo dni w projekcie\}/gi, workDaysFmt);
+        const offerBody = resolveOfferTokens(getOfferText() || '').replace(/^#\s+/, '');
         const offerFull = offerBody.trim() ? `# Oferta\n\n${offerBody}` : '';
         buildMarkdownSheet('Oferta', offerFull, 'Brak treści oferty.');
         // ── Sheet "Strategia": strategie per gałąź (globalna strategia projektu usunięta) ──
