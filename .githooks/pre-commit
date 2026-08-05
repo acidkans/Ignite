@@ -10,6 +10,25 @@
 
 set -e
 
+# ── Auto-stempel daty w numerze wersji ──────────────────────────────────────
+# Wymóg: każdy deploy ma mieć AKTUALNĄ datę w numerze wersji (format vYYYY.MM.DD.BUILD).
+# Gdy version.js jest w commicie, hook nadpisuje część datową dzisiejszą datą,
+# zachowując ręcznie zbumpowany BUILD, i re-stage'uje plik.
+VERSION_FILE="apps/frontend/src/version.js"
+if git diff --cached --name-only --diff-filter=ACM | grep -qx "$VERSION_FILE"; then
+  TODAY=$(date +%Y.%m.%d)
+  CURRENT=$(grep -oE "v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+" "$VERSION_FILE" | head -1 || true)
+  if [ -n "$CURRENT" ]; then
+    BUILD=${CURRENT##*.}
+    NEW="v${TODAY}.${BUILD}"
+    if [ "$CURRENT" != "$NEW" ]; then
+      sed -i -E "s/(APP_VERSION = 'v)[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+')/\1${TODAY}\2/" "$VERSION_FILE"
+      git add "$VERSION_FILE"
+      echo "🗓  pre-commit: data wersji zaktualizowana → ${NEW}"
+    fi
+  fi
+fi
+
 SLOWNIK="SLOWNIK.md"
 MISSING=()
 

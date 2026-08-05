@@ -3615,8 +3615,8 @@ ${ganttSectionHtml}
             .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
             .map(n => `## ${n.name || '(bez nazwy)'}\n\n${String(n.strategy).trim()}`)
             .join('\n\n');
-        const strategyFull = branchStrategyMd ? `# Strategie gałęzi\n\n${branchStrategyMd}` : '';
-        buildMarkdownSheet('Strategia', strategyFull, 'Brak treści strategii.');
+        const strategyFull = branchStrategyMd ? `# Plan działania\n\n${branchStrategyMd}` : '';
+        buildMarkdownSheet('Plan działania', strategyFull, 'Brak treści planu działania.');
 
         // ── Sheet Oferta-podział na Typy: ceny ofertowe agregowane wg typu zakresu ──
         {
