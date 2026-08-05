@@ -341,12 +341,13 @@ export class VectorService implements OnModuleInit {
      * Używane do ekstrakcji JSON i innych zadań strukturalnych.
      */
     /**
-     * Jak generateRaw, ale dla Gemini włącza grounding Google Search (tools: googleSearch).
-     * Dzięki temu model realnie wyszukuje w Google i cytuje istniejące strony, zamiast zmyślać
-     * URL-e z pamięci treningowej (źródło linków 404 w wyszukiwarce produktów). Dla pozostałych
-     * providerów i przy błędzie groundingu degraduje się do zwykłego generateRaw.
+     * Jak generateRaw, ale dla Gemini włącza grounding Google Search (tools: googleSearch) i zwraca
+     * DODATKOWO realnie cytowane źródła (groundingMetadata.groundingChunks[].web). To jest jedyne
+     * wiarygodne źródło URL-i — model w treści JSON i tak potrafi zmyślić link, natomiast
+     * groundingChunks zawiera adresy stron, które faktycznie odwiedził. Dla pozostałych providerów
+     * i przy błędzie groundingu degraduje się do zwykłego generateRaw (sources: []).
      */
-    async generateRawGrounded(prompt: string): Promise<string> {
+    async generateRawGrounded(prompt: string): Promise<{ text: string; sources: { uri: string; title: string }[] }> {
         const modelName = this.configService.get<string>('AI_MODEL');
         if ((modelName?.includes('gemini')) && this.genAI) {
             try {
@@ -355,12 +356,17 @@ export class VectorService implements OnModuleInit {
                     tools: [{ googleSearch: {} }] as any,
                 });
                 const result = await model.generateContent(prompt);
-                return result.response.text();
+                const meta: any = result.response.candidates?.[0]?.groundingMetadata;
+                const sources = (meta?.groundingChunks || [])
+                    .map((c: any) => ({ uri: c?.web?.uri || '', title: c?.web?.title || '' }))
+                    .filter((s: { uri: string }) => s.uri.startsWith('http'));
+                this.logger.log(`[GenerateRawGrounded] grounding OK, źródeł: ${sources.length}`);
+                return { text: result.response.text(), sources };
             } catch (err) {
                 this.logger.warn(`[GenerateRawGrounded] grounding niedostępny (${err?.message}) — fallback bez Google Search`);
             }
         }
-        return this.generateRaw(prompt);
+        return { text: await this.generateRaw(prompt), sources: [] };
     }
 
     async generateRaw(prompt: string): Promise<string> {

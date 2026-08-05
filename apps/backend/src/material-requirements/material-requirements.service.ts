@@ -1016,7 +1016,7 @@ Specyfikacja techniczna: ${req.technicalSpec || '—'}
 
 ZADANIE: Wyszukaj w Google 3 konkretne modele produktów dostępne na rynku europejskim, które spełniają WSZYSTKIE podane parametry techniczne. Dla każdego modelu sprawdź zgodność z każdym punktem specyfikacji. Jeśli jakiś parametr jest niemożliwy do spełnienia, wskaż najbliższą alternatywę i opisz to w polu productName.
 
-WAŻNE — LINKI: W polu "sourceUrl" wstaw wyłącznie realny adres strony produktu, który FAKTYCZNIE znalazłeś w wynikach wyszukiwania i który istnieje. Jeśli nie znalazłeś działającego linku, ustaw "sourceUrl": null. NIGDY nie zgaduj ani nie konstruuj adresu URL z nazwy produktu.
+Podaj dokładny symbol modelu i producenta — linki do stron dobierzemy sami z Twoich źródeł wyszukiwania, więc NIE podawaj żadnych URL-i.
 
 Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
 [
@@ -1024,30 +1024,38 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
     "productName": "pełna nazwa handlowa produktu",
     "manufacturer": "producent",
     "model": "symbol modelu",
-    "sourceUrl": "https://... realny link ze znalezionej strony produktu lub null",
     "matchScore": 0.95
   }
 ]`;
 
-        const rawResponse = await this.vectorService.generateRawGrounded(analysisPrompt);
+        const { text: rawResponse, sources } = await this.vectorService.generateRawGrounded(analysisPrompt);
         this.logger.log(`[Search] Odpowiedź AI (${rawResponse.length} znaków): ${rawResponse.slice(0, 500)}`);
         const proposals = this.parseAndValidateProposals(rawResponse);
-        this.logger.log(`[Search] Sparsowano ${proposals.length} propozycji`);
+        this.logger.log(`[Search] Sparsowano ${proposals.length} propozycji, źródeł grounding: ${sources.length}`);
 
-        // Zapisz propozycje do bazy
+        // Rozwiń redirecty groundingu (vertexaisearch → docelowa strona) na realne, trwałe URL-e.
+        const resolvedSources = await Promise.all(
+            sources.map(async s => ({ url: await this.resolveRedirect(s.uri), title: s.title })),
+        );
+
+        // Zapisz propozycje do bazy. sourceUrl NIE pochodzi z JSON modelu (zmyślany) — bierzemy
+        // realnie cytowaną stronę dopasowaną po tytule do producent/model, a gdy brak dopasowania
+        // twardy fallback na link wyszukiwania Google (zawsze działa, nigdy 404).
         const saved = await Promise.all(
-            proposals.map(p =>
-                this.prisma.productProposal.create({
+            proposals.map(p => {
+                const matched = this.pickSourceForProposal(p, resolvedSources);
+                const sourceUrl = matched || this.googleSearchUrl(p);
+                return this.prisma.productProposal.create({
                     data: {
                         materialRequirementId: id,
                         productName: p.productName,
                         manufacturer: normalizeManufacturer(p.manufacturer),
                         model: p.model || null,
-                        sourceUrl: p.sourceUrl || null,
+                        sourceUrl,
                         matchScore: p.matchScore || null,
                     },
-                }),
-            ),
+                });
+            }),
         );
 
         return saved;
@@ -1206,6 +1214,54 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
     }
 
     // ─── POMOCNICZE ───────────────────────────────────────────────────────────
+
+    // Zawsze-działający link: wyszukiwarka Google po producencie/modelu/nazwie. Nigdy nie 404,
+    // nie wygasa, prowadzi do aktualnych wyników. Fallback gdy grounding nie zwrócił dopasowania.
+    private googleSearchUrl(p: { manufacturer?: string; model?: string; productName?: string }): string {
+        const q = [p.manufacturer, p.model, p.productName].filter(Boolean).join(' ').trim()
+            || (p.productName || '');
+        return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+    }
+
+    // Dopasowuje realnie cytowaną stronę do propozycji po zbieżności modelu/producenta z tytułem
+    // źródła. Zwraca URL najlepszego trafienia albo null (wtedy dzwoniący użyje googleSearchUrl).
+    private pickSourceForProposal(
+        p: { manufacturer?: string; model?: string; productName?: string },
+        sources: { url: string | null; title: string }[],
+    ): string | null {
+        const norm = (s?: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+        const model = norm(p.model);
+        const mfr = norm(p.manufacturer);
+        let best: { url: string; score: number } | null = null;
+        for (const s of sources) {
+            if (!s.url) continue;
+            const hay = norm(s.title) + norm(s.url);
+            let score = 0;
+            if (model && model.length >= 4 && hay.includes(model)) score += 2;
+            if (mfr && hay.includes(mfr)) score += 1;
+            if (score > 0 && (!best || score > best.score)) best = { url: s.url, score };
+        }
+        return best?.url || null;
+    }
+
+    // Rozwija redirect groundingu Gemini (vertexaisearch.cloud.google.com/grounding-api-redirect/…)
+    // do docelowego, trwałego URL-a strony produktu. Redirecty Gemini wygasają (~30 dni), więc
+    // zapisujemy stronę końcową. Best-effort: przy błędzie/timeoucie zwraca oryginalny uri.
+    private async resolveRedirect(uri: string): Promise<string | null> {
+        if (!uri) return null;
+        try {
+            const ctrl = new AbortController();
+            const t = setTimeout(() => ctrl.abort(), 4000);
+            const resp = await fetch(uri, { redirect: 'follow', signal: ctrl.signal });
+            clearTimeout(t);
+            const finalUrl = resp.url || '';
+            // Jeśli nie wyszliśmy poza redirect Gemini (wygasa ~30 dni) — brak trwałego linku.
+            if (!finalUrl.startsWith('http') || finalUrl.includes('vertexaisearch.cloud.google.com')) return null;
+            return finalUrl;
+        } catch {
+            return null;
+        }
+    }
 
     private buildSafeSearchQuery(name: string, spec?: string | null): string {
         const safeName = name.replace(/[^\w\s\u00C0-\u024F,;./\-]/g, ' ').trim();
