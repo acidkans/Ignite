@@ -168,6 +168,8 @@ export const MATERIAL_STATUS_LABELS = {
   ORDERED: 'Zamówione',
   IN_STOCK: 'Na magazynie',
   ISSUED: 'Wydane',
+  DONE: 'Wykonane',
+  INSTALLED: 'Zainstalowane',
 };
 
 // @anchor structure-status-meta
@@ -180,6 +182,8 @@ export const STRUCTURE_STATUS_META = {
   ORDERED: { label: 'Zamowione', color: 'text-violet-400' },
   IN_STOCK: { label: 'Na magazynie', color: 'text-cyan-400' },
   ISSUED: { label: 'Wydane', color: 'text-emerald-400' },
+  DONE: { label: 'Wykonane', color: 'text-teal-400' },
+  INSTALLED: { label: 'Zainstalowane', color: 'text-lime-400' },
   MIXED: { label: 'Mieszany', color: 'text-sky-300' },
 };
 

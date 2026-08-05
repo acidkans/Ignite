@@ -4,6 +4,16 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-08-05 — wbs: statusy liści — dodane „Wykonane"/„Zainstalowane", „Mieszany" tylko jako status zbiorczy (v2026.08.05.746)
+
+### architektura / API
+- `ui-stala` `MATERIAL_STATUS_LABELS` / `STRUCTURE_STATUS_META` (`wbsConstants.js`) — dodane statusy `DONE` („Wykonane") i `INSTALLED` („Zainstalowane"); round-trip label↔code działa przez `MATERIAL_STATUS_LABEL_TO_CODE`
+- `ui-dropdown` `StatusSelect` (`WBSHybridTable.jsx`) — opcja „Mieszany" (MIXED) usunięta z listy wyboru (filtr `code !== 'MIXED'`); MIXED pozostaje w `STRUCT_STATUS_META` wyłącznie do wyświetlania obliczanego statusu zbiorczego gałęzi
+- `ui-modal` `QaModal` (`WBSHybridTable.jsx`) — szerokość zwężona `w-3/4` → `w-[37.5%]`
+
+### wytyczne
+- `ui-dropdown` `StatusSelect` — MIXED to status obliczany (agregacja różnych statusów materiałów w gałęzi, `getInheritedMaterialStatus`), nigdy zapisywany na węźle; nie dodawać go z powrotem do wybieralnych opcji
+
 ## 2026-07-24 — wbs/budżet: eksport Excel — nagłówki zakładki „Budżet" (Zakres/Podzakres/Pozycja/Narzut) (v2026.07.24.734)
 
 ### architektura / API

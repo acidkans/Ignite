@@ -148,7 +148,7 @@ function QaCell({ pairs, onChange, onPersist }) {
     );
 }
 
-// ── Q&A modal — pełnoekranowy edytor pytań/odpowiedzi (3/4 szerokości) ─────────
+// ── Q&A modal — pełnoekranowy edytor pytań/odpowiedzi (3/8 szerokości) ─────────
 // Wąska kolumna w tabeli zawężała długie pytania do nieczytelności. Badge w
 // kolumnie otwiera ten modal, w którym Pytanie/Odpowiedź mają pełną szerokość.
 // @anchor qa-modal
@@ -161,7 +161,7 @@ function QaModal({ node, onChange, onPersist, onClose }) {
     const list = Array.isArray(node?.qa) ? node.qa : [];
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-            <div className="relative bg-gray-950 border border-white/10 rounded-2xl shadow-2xl w-3/4 max-h-[85vh] flex flex-col overflow-hidden"
+            <div className="relative bg-gray-950 border border-white/10 rounded-2xl shadow-2xl w-[37.5%] max-h-[85vh] flex flex-col overflow-hidden"
                 onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
                     <div>
@@ -391,6 +391,8 @@ const STRUCT_STATUS_META = {
     ORDERED:   { label: 'Zamówione',    style: 'bg-violet-500/20 text-violet-300 border-violet-500/30' },
     IN_STOCK:  { label: 'Na magazynie', style: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' },
     ISSUED:    { label: 'Wydane',       style: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+    DONE:      { label: 'Wykonane',     style: 'bg-teal-500/20 text-teal-300 border-teal-500/30' },
+    INSTALLED: { label: 'Zainstalowane', style: 'bg-lime-500/20 text-lime-300 border-lime-500/30' },
     MIXED:     { label: 'Mieszany',     style: 'bg-sky-500/20 text-sky-300 border-sky-500/30' },
 };
 
@@ -405,7 +407,9 @@ function StatusSelect({ value, onChange, onKeyDown, ...rest }) {
             onKeyDown={onKeyDown}
             {...rest}
         >
-            {Object.entries(STRUCT_STATUS_META).map(([code, { label }]) => (
+            {Object.entries(STRUCT_STATUS_META)
+                .filter(([code]) => code !== 'MIXED')
+                .map(([code, { label }]) => (
                 <option key={code} value={code} className="bg-gray-900 text-white">{label}</option>
             ))}
         </select>
