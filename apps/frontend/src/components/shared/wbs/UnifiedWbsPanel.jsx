@@ -5636,6 +5636,14 @@ ${ganttSectionHtml}
                         )}
                         {(key === 'wbs' || key === 'wbs-hybrid') && (
                             <button
+                                onClick={(e) => { e.stopPropagation(); setQaTreeOpen(true); }}
+                                className="flex items-center gap-1.5 px-3 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/25 rounded-lg text-indigo-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
+                            >
+                                <HelpCircle size={11} /> Q&A
+                            </button>
+                        )}
+                        {(key === 'wbs' || key === 'wbs-hybrid') && (
+                            <button
                                 onClick={(e) => { e.stopPropagation(); openExport({ title: 'Q&A PDF', defaultFilename: `Q&A_${safeFileBase()}.pdf`, makeArtifact: () => exportQaFormPdf(wbsData, orderName || projectName || 'Projekt') }); }}
                                 className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                             >
