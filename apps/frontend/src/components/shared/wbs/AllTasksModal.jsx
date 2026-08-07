@@ -70,6 +70,9 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
     // Wykonane UserTaski dociągane leniwie z API (backend domyślnie zwraca tylko OPEN)
     const [doneUserTasks, setDoneUserTasks] = useState([]);
     const [doneLoaded, setDoneLoaded] = useState(false);
+    // @anchor all-tasks-title-edit — inline edycja nazwy wiersza (klucz edytowanego wiersza + bufor)
+    const [editKey, setEditKey] = useState(null);
+    const [editDraft, setEditDraft] = useState('');
 
     const showDone = filter === 'done';
     const token = () => sessionStorage.getItem('token') || localStorage.getItem('token');
@@ -170,6 +173,34 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
         onChanged && onChanged();
     };
 
+    // @anchor all-tasks-rename — zmiana nazwy wiersza: UserTask → PATCH /my-tasks {title}, Subtask → PATCH /subtasks {name}
+    const renameRow = async (row, newName) => {
+        const v = (newName || '').trim();
+        setEditKey(null);
+        if (!v || v === row.name) return;
+        if (row.kind === 'user') {
+            setUserTasks(prev => prev.map(t => t.id === row.id ? { ...t, title: v } : t));
+            setDoneUserTasks(prev => prev.map(t => t.id === row.id ? { ...t, title: v } : t));
+            try {
+                await fetch(`${API_URL}/my-tasks/${row.id}`, {
+                    method: 'PATCH',
+                    headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: v }),
+                });
+            } catch {}
+        } else {
+            setSubtasks(prev => prev.map(s => s.id === row.id ? { ...s, name: v } : s));
+            try {
+                await fetch(`${API_URL}/subtasks/${row.id}`, {
+                    method: 'PATCH',
+                    headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: v }),
+                });
+            } catch {}
+        }
+        onChanged && onChanged();
+    };
+
     // @anchor all-tasks-subtask-status — zmiana statusu subtaska (harmonogram): odznaczenie → FINISHED, przywrócenie → NEW
     const setSubtaskStatus = async (id, status) => {
         setSubtasks(prev => prev.map(s => s.id === id ? { ...s, status } : s));
@@ -246,7 +277,27 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
                                             ? <ListTodo size={13} className="text-amber-400 flex-shrink-0" />
                                             : <Clock size={13} className="text-blue-400 flex-shrink-0" />}
                                         <div className="flex-1 min-w-0">
-                                            <p className={`text-sm font-medium truncate ${row.done ? 'text-gray-400 line-through' : 'text-gray-200'}`}>{row.name}</p>
+                                            {editKey === row.key ? (
+                                                <input
+                                                    autoFocus
+                                                    value={editDraft}
+                                                    onChange={e => setEditDraft(e.target.value)}
+                                                    onBlur={() => renameRow(row, editDraft)}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') { e.preventDefault(); renameRow(row, editDraft); }
+                                                        if (e.key === 'Escape') { setEditKey(null); }
+                                                    }}
+                                                    className="w-full text-sm bg-white/[0.06] border border-blue-500/40 rounded-md px-1.5 py-0.5 text-white focus:outline-none focus:border-blue-500/70"
+                                                />
+                                            ) : (
+                                                <p
+                                                    onClick={() => { setEditKey(row.key); setEditDraft(row.name); }}
+                                                    title="Kliknij, aby edytować nazwę"
+                                                    className={`text-sm font-medium truncate cursor-text hover:text-white transition-colors ${row.done ? 'text-gray-400 line-through' : 'text-gray-200'}`}
+                                                >
+                                                    {row.name}
+                                                </p>
+                                            )}
                                             <div className="flex items-center gap-2 mt-1 flex-wrap">
                                                 {row.done ? (
                                                     <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[9px] font-medium bg-emerald-500/10 border-emerald-500/25 text-emerald-400">

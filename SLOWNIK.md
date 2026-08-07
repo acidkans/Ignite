@@ -786,6 +786,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | formatDeadline | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-modal |
 | ui-karta | TaskCard | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-task-card |
 | ui-funkcja | MyTasksModal.handleDone | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-mark-done |
+| ui-stan | TaskCard.editingTitle | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-title-edit |
+| ui-funkcja | MyTasksModal.handleRename | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-rename |
 | ui-stan | dashboard-my-tasks-open | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-my-tasks-open |
 
 ### Moduł UserTasks + NotificationCron (Etap 4+5)
@@ -979,6 +981,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-modal | AllTasksModal | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-modal |
 | ui-funkcja | fetchOpen (AllTasksModal) | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-fetch-open |
 | ui-funkcja | fetch wykonanych (AllTasksModal) | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-fetch-done |
+| ui-stan | AllTasksModal.editKey | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-title-edit |
+| ui-funkcja | AllTasksModal.renameRow | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-rename |
 | ui-stan | allTasksOpen (UnifiedWbsPanel) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor unified-all-tasks-open |
 | ui-funkcja | handleRestore (AllTasksModal) | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-restore |
 | ui-funkcja | setSubtaskStatus (AllTasksModal) | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-subtask-status |

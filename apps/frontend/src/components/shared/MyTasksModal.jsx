@@ -142,11 +142,21 @@ function formatDeadline(dateStr) {
 }
 
 // @anchor my-tasks-task-card
-function TaskCard({ task, onDone }) {
+function TaskCard({ task, onDone, onRename }) {
     const deadline = formatDeadline(task.plannedEnd);
     const [alarmOpen, setAlarmOpen] = useState(false);
+    // @anchor my-tasks-title-edit — inline edycja tytułu zadania
+    const [editingTitle, setEditingTitle] = useState(false);
+    const [draft, setDraft] = useState(task.title);
     // czy zadanie ma aktywną serię cykliczną (z include reminders w listForUser)
     const hasCyclic = Array.isArray(task.reminders) && task.reminders.some(r => r.recurIntervalMinutes != null && !r.sentAt);
+
+    const saveTitle = () => {
+        const v = draft.trim();
+        setEditingTitle(false);
+        if (v && v !== task.title) onRename(task.id, v);
+        else setDraft(task.title);
+    };
 
     return (
         <div className="p-3.5 rounded-xl bg-white/[0.04] border border-white/[0.07] hover:bg-white/[0.07] transition-all group">
@@ -160,7 +170,27 @@ function TaskCard({ task, onDone }) {
                 </button>
 
                 <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-100 font-medium leading-snug truncate">{task.title}</p>
+                    {editingTitle ? (
+                        <input
+                            autoFocus
+                            value={draft}
+                            onChange={e => setDraft(e.target.value)}
+                            onBlur={saveTitle}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') { e.preventDefault(); saveTitle(); }
+                                if (e.key === 'Escape') { setDraft(task.title); setEditingTitle(false); }
+                            }}
+                            className="w-full text-sm bg-white/[0.06] border border-blue-500/40 rounded-md px-1.5 py-0.5 text-white focus:outline-none focus:border-blue-500/70"
+                        />
+                    ) : (
+                        <p
+                            onClick={() => { setDraft(task.title); setEditingTitle(true); }}
+                            title="Kliknij, aby edytować nazwę"
+                            className="text-sm text-gray-100 font-medium leading-snug truncate cursor-text hover:text-white transition-colors"
+                        >
+                            {task.title}
+                        </p>
+                    )}
 
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                         {deadline && (
@@ -231,6 +261,19 @@ export default function MyTasksModal({ open, onClose }) {
         setTasks(prev => prev.filter(t => t.id !== taskId));
     };
 
+    // @anchor my-tasks-rename
+    const handleRename = async (taskId, title) => {
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, title } : t));
+        const token = sessionStorage.getItem('token');
+        try {
+            await fetch(`${API_URL}/my-tasks/${taskId}`, {
+                method: 'PATCH',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title }),
+            });
+        } catch {}
+    };
+
     if (!open) return null;
 
     return (
@@ -279,7 +322,7 @@ export default function MyTasksModal({ open, onClose }) {
                         </div>
                     )}
                     {!loading && tasks.map(task => (
-                        <TaskCard key={task.id} task={task} onDone={handleDone} />
+                        <TaskCard key={task.id} task={task} onDone={handleDone} onRename={handleRename} />
                     ))}
                 </div>
 
