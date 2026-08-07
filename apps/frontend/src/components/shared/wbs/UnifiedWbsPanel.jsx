@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import { useBeforeUnload } from '../../../hooks/useBeforeUnload';
 import ExcelJS from 'exceljs';
-import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays, BarChart3, ChevronUp, FileText, SlidersHorizontal, RotateCcw } from 'lucide-react';
+import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays, BarChart3, ChevronUp, FileText, SlidersHorizontal, RotateCcw, LayoutList } from 'lucide-react';
 import MarkdownEditor from '../MarkdownEditor';
 import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
@@ -17,6 +17,7 @@ import ExportChoiceModal from '../ExportChoiceModal';
 import WBSHybridTable from './WBSHybridTable';
 import BudgetTable from './BudgetTable';
 import QaTreeView from './QaTreeView';
+import AllTasksModal from './AllTasksModal';
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
 
 
@@ -129,6 +130,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // na sesję przy pierwszym wejściu w WBS danego projektu — flaga w sessionStorage
     // (klucz per nodeId), więc nawigacja tam-i-z-powrotem w tej samej karcie już nie nagabuje.
     const [qaTreeOpen, setQaTreeOpen] = useState(false);
+    // @anchor unified-all-tasks-open — modal pełnej listy zadań (ten sam co „Pełna lista" w zakładce Zadania)
+    const [allTasksOpen, setAllTasksOpen] = useState(false);
     useEffect(() => {
         if (!nodeId) return;
         const seenKey = `wbsQaAutoShown:${nodeId}`;
@@ -5636,6 +5639,14 @@ ${ganttSectionHtml}
                         )}
                         {(key === 'wbs' || key === 'wbs-hybrid') && (
                             <button
+                                onClick={(e) => { e.stopPropagation(); setAllTasksOpen(true); }}
+                                className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
+                            >
+                                <LayoutList size={11} /> Pokaż zadania
+                            </button>
+                        )}
+                        {(key === 'wbs' || key === 'wbs-hybrid') && (
+                            <button
                                 onClick={(e) => { e.stopPropagation(); setQaTreeOpen(true); }}
                                 className="flex items-center gap-1.5 px-3 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/25 rounded-lg text-indigo-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                             >
@@ -5921,6 +5932,10 @@ ${ganttSectionHtml}
 
             {qaTreeOpen && (
                 <QaTreeView nodeId={nodeId} versionId={versionId} onClose={() => setQaTreeOpen(false)} />
+            )}
+
+            {allTasksOpen && (
+                <AllTasksModal nodeId={nodeId} versionId={versionId} onChanged={onWbsUpdate} onClose={() => setAllTasksOpen(false)} />
             )}
 
             {pendingExport && (

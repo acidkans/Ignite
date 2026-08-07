@@ -98,3 +98,6 @@ coverage/
 .env.*.local
 ERP- planowanie projektu.docx
 ERP- planowanie perojektu.docx
+# Generowany output grafu (skill graphify)
+graphify-out/
+apps/graphify-out/

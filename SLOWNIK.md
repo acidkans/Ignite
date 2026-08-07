@@ -769,6 +769,14 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-endpoint | PATCH /my-tasks/reminders/:id | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-reminder-handle-endpoint |
 | back-funkcja | UserTasksService.getDueReminders | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-due-reminders |
 | back-funkcja | UserTasksService.handleReminder | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-handle-reminder |
+| back-funkcja | UserTasksService.createReminder | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-create-reminder |
+| back-funkcja | UserTasksService.getRemindersForTask | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-list-reminders |
+| back-funkcja | UserTasksService.deleteReminder | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-delete-reminder |
+| back-endpoint | DELETE /my-tasks/reminders/:id | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-reminder-delete-endpoint |
+| back-endpoint | GET /my-tasks/:id/reminders | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-reminders-list-endpoint |
+| back-endpoint | POST /my-tasks/:id/reminders | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-reminder-create-endpoint |
+| ui-stala | ALARM_INTERVALS | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-alarm-interval-options |
+| ui-modal | CyclicAlarmEditor | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-cyclic-alarm-editor |
 
 ### MyTasksModal — frontend (Etap 6)
 
@@ -870,6 +878,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | TaskReminder.remindAt | apps/backend/prisma/schema.prisma | @anchor task-reminder-remind-at |
 | schema-pole | TaskReminder.sentAt | apps/backend/prisma/schema.prisma | @anchor task-reminder-sent-at |
 | schema-pole | TaskReminder.snoozedFrom | apps/backend/prisma/schema.prisma | @anchor task-reminder-snoozed-from |
+| schema-pole | TaskReminder.recurIntervalMinutes | apps/backend/prisma/schema.prisma | @anchor task-reminder-recur-interval-minutes |
+| schema-pole | TaskReminder.recurEnd | apps/backend/prisma/schema.prisma | @anchor task-reminder-recur-end |
+| schema-pole | TaskReminder.lastFiredAt | apps/backend/prisma/schema.prisma | @anchor task-reminder-last-fired-at |
 | schema-model | MsTodoSyncState | apps/backend/prisma/schema.prisma | @anchor ms-todo-sync-state |
 | schema-pole | MsTodoSyncState.deltaLink | apps/backend/prisma/schema.prisma | @anchor ms-todo-sync-state-delta-link |
 | schema-pole | MsTodoSyncState.lastSyncAt | apps/backend/prisma/schema.prisma | @anchor ms-todo-sync-state-last-sync-at |
@@ -956,6 +967,24 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | resolve (SnapshotEditGuard) | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor snapshot-guard-resolve |
 | ui-stan | isInactiveSnapshot | apps/frontend/src/DashboardPage.jsx | @anchor is-inactive-snapshot |
 | ui-stan | contentRef (DashboardPage) | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-content-ref |
+| ui-funkcja | getUserTasksForDate | apps/frontend/src/components/shared/wbs/CalendarView.jsx | @anchor calendar-user-tasks-for-date |
+| ui-funkcja | renderUserTask | apps/frontend/src/components/shared/wbs/CalendarView.jsx | @anchor calendar-render-user-task |
+| ui-stan | userTasks (TasksCalendarSection) | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-user-tasks |
+| ui-stan | taskScope | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-scope |
+| ui-stan | allTasksOpen | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-all-modal |
+| ui-funkcja | fetchUserTasks | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-fetch-user-tasks |
+| ui-funkcja | markUserTaskDone | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-user-task-done |
+| ui-funkcja | rescheduleUserTask | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-user-task-reschedule |
+| ui-sekcja | toolbar zadań (zakres/legenda/pełna lista) | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-toolbar |
+| ui-modal | AllTasksModal | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-modal |
+| ui-funkcja | fetchOpen (AllTasksModal) | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-fetch-open |
+| ui-funkcja | fetch wykonanych (AllTasksModal) | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-fetch-done |
+| ui-stan | allTasksOpen (UnifiedWbsPanel) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor unified-all-tasks-open |
+| ui-funkcja | handleRestore (AllTasksModal) | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-restore |
+| ui-funkcja | setSubtaskStatus (AllTasksModal) | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-subtask-status |
+| ui-panel | DueTasksBell | apps/frontend/src/components/shared/DueTasksBell.jsx | @anchor due-tasks-bell |
+| ui-funkcja | markDone (DueTasksBell) | apps/frontend/src/components/shared/DueTasksBell.jsx | @anchor due-tasks-bell-done |
+| ui-funkcja | snooze (DueTasksBell) | apps/frontend/src/components/shared/DueTasksBell.jsx | @anchor due-tasks-bell-snooze |
 
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)

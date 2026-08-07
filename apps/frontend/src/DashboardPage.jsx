@@ -11,6 +11,7 @@ import OffersTab from './components/shared/OffersTab';
 import UnifiedWbsPanel from './components/shared/wbs/UnifiedWbsPanel';
 import CommentsSlideOver from './components/shared/CommentsSlideOver';
 import MyTasksModal from './components/shared/MyTasksModal';
+import DueTasksBell from './components/shared/DueTasksBell';
 import TaskReminderToast from './components/shared/TaskReminderToast';
 import SnapshotEditGuard from './components/shared/SnapshotEditGuard';
 import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink, Coins } from 'lucide-react';
@@ -486,6 +487,13 @@ export default function DashboardPage() {
                         <span className="text-[10px] text-gray-500 font-mono uppercase tracking-wider">Tydzień {weekNumber}</span>
                     </div>
                 </div>
+
+                {/* Dzwonek wypadających zadań — trwałe uzupełnienie toastów */}
+                <DueTasksBell
+                    reminders={dueReminders}
+                    onHandled={id => setDueReminders(prev => prev.filter(r => r.id !== id))}
+                    onOpenAll={() => setMyTasksOpen(true)}
+                />
 
                 {/* @anchor dashboard-exchange-rates-box — kursy NBP obok daty (ten sam rozmiar co kontener daty) */}
                 <div

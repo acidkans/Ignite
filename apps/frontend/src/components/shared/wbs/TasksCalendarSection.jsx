@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Save, CheckCircle, FileDown } from 'lucide-react';
+import { Save, CheckCircle, FileDown, Clock, ListTodo, LayoutList } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { TASK_CATEGORIES } from './wbsConstants';
 import CalendarView from './CalendarView';
 import SubtaskModal from '../SubtaskModal';
+import AllTasksModal from './AllTasksModal';
 
 const CATEGORIES = TASK_CATEGORIES;
 
@@ -15,6 +16,12 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
     const [saved, setSaved] = useState(false);
     const [selectedTask, setSelectedTask] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    // @anchor tasks-calendar-user-tasks — zadania węzłów (UserTask) nakładane na kalendarz
+    const [userTasks, setUserTasks] = useState([]);
+    // @anchor tasks-calendar-scope — 'project' = zadania tego projektu, 'all' = wszystkie moje
+    const [taskScope, setTaskScope] = useState('project');
+    // @anchor tasks-calendar-all-modal
+    const [allTasksOpen, setAllTasksOpen] = useState(false);
     const latestSubtasksRef = useRef([]);
     const isSavingRef = useRef(false);
     const saveTimeoutRef = useRef(null);
@@ -39,14 +46,61 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
         } catch {}
     };
 
+    // @anchor tasks-calendar-fetch-user-tasks — wszystkie moje UserTaski (filtr zakresu po stronie klienta)
+    const fetchUserTasks = async () => {
+        try {
+            const res = await fetch(`${API_URL}/my-tasks`, { headers: { Authorization: `Bearer ${token()}` } });
+            if (res.ok) {
+                const data = await res.json();
+                setUserTasks(Array.isArray(data) ? data : []);
+            }
+        } catch {}
+    };
+
     useEffect(() => {
         if (!nodeId) return;
         fetchSubtasks();
+        fetchUserTasks();
         fetch(`${API_URL}/users/by-role/LOGISTYK`, { headers: { Authorization: `Bearer ${token()}` } })
             .then(r => r.ok ? r.json() : [])
             .then(setLogistykUsers)
             .catch(() => {});
     }, [nodeId, versionId]);
+
+    // UserTaski widoczne w kalendarzu wg wybranego zakresu.
+    // UserTask.nodeId to id ProcessNode (order) — przycisk „Dodaj zadanie" zawsze
+    // zapisuje processNodeId projektu, tożsamy z `nodeId` tego panelu.
+    const visibleUserTasks = taskScope === 'all'
+        ? userTasks
+        : userTasks.filter(t => t.nodeId === nodeId);
+
+    // @anchor tasks-calendar-user-task-done — oznacz UserTask jako wykonane
+    const markUserTaskDone = async (taskId) => {
+        setUserTasks(prev => prev.filter(t => t.id !== taskId));
+        try {
+            await fetch(`${API_URL}/my-tasks/${taskId}`, {
+                method: 'PATCH',
+                headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'DONE' }),
+            });
+        } catch { fetchUserTasks(); }
+    };
+
+    // @anchor tasks-calendar-user-task-reschedule — przełożenie UserTask przez drag na inny dzień
+    const rescheduleUserTask = async (taskId, date) => {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        const endStr = `${y}-${m}-${d}T12:00:00`;
+        setUserTasks(prev => prev.map(t => t.id === taskId ? { ...t, plannedEnd: endStr } : t));
+        try {
+            await fetch(`${API_URL}/my-tasks/${taskId}`, {
+                method: 'PATCH',
+                headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ plannedEnd: new Date(endStr).toISOString() }),
+            });
+        } catch { fetchUserTasks(); }
+    };
 
     const saveSubtasks = async (tasks, immediate = false) => {
         if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -90,6 +144,7 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
         e.preventDefault();
         try {
             const data = JSON.parse(e.dataTransfer.getData('application/json'));
+            if (data._kind === 'user' && data.id) { rescheduleUserTask(data.id, date); return; }
             const y = date.getFullYear();
             const m = String(date.getMonth() + 1).padStart(2, '0');
             const d = String(date.getDate()).padStart(2, '0');
@@ -157,10 +212,36 @@ ${rows}
     };
 
     return (
-        <div className="flex gap-6 px-5 pb-5 flex-1 overflow-y-auto">
-            <div className="flex-1 flex flex-col">
+        <div className="flex flex-col gap-3 px-5 pb-5 flex-1 overflow-y-auto">
+            {/* @anchor tasks-calendar-toolbar — zakres UserTasków, legenda typów, pełna lista */}
+            <div className="flex items-center gap-3 flex-wrap flex-shrink-0">
+                <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
+                    <button
+                        onClick={() => setTaskScope('project')}
+                        className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${taskScope === 'project' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+                    >Ten projekt</button>
+                    <button
+                        onClick={() => setTaskScope('all')}
+                        className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${taskScope === 'all' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+                    >Wszystkie moje</button>
+                </div>
+                <div className="flex items-center gap-3 text-[10px] text-gray-500">
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-blue-500/40 border border-blue-500/50" /><Clock size={10} className="text-blue-400" /> Harmonogram</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-amber-500/40 border border-amber-500/50" /><ListTodo size={10} className="text-amber-400" /> Zadania węzłów</span>
+                </div>
+                <button
+                    onClick={() => setAllTasksOpen(true)}
+                    className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 rounded-lg text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
+                >
+                    <LayoutList size={12} /> Pełna lista
+                </button>
+            </div>
+            <div className="flex-1 flex flex-col min-h-[420px]">
                 <CalendarView
                     subtasks={subtasks}
+                    userTasks={visibleUserTasks}
+                    onUserTaskDone={markUserTaskDone}
+                    onUserTaskReschedule={(task, date) => rescheduleUserTask(task.id, date)}
                     categories={CATEGORIES}
                     onDrop={handleDrop}
                     onDateClick={(date) => {
@@ -193,6 +274,14 @@ ${rows}
                     subtask={selectedTask}
                     onClose={() => setIsModalOpen(false)}
                     onSuccess={() => { setIsModalOpen(false); fetchSubtasks(); }}
+                />
+            )}
+            {allTasksOpen && (
+                <AllTasksModal
+                    nodeId={nodeId}
+                    versionId={versionId}
+                    onChanged={() => { fetchUserTasks(); fetchSubtasks(); }}
+                    onClose={() => setAllTasksOpen(false)}
                 />
             )}
         </div>

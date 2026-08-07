@@ -4,6 +4,72 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-08-07 — Alarmy cykliczne UserTask (jeden wiersz-reguła, toasty z zegara) (v2026.08.07.752)
+
+### schema.prisma
+- dodano pole `recurIntervalMinutes Int?` w modelu `TaskReminder` — interwał serii cyklicznej w minutach; `null` = alarm jednorazowy (dotychczasowe zachowanie)
+- dodano pole `recurEnd DateTime?` w modelu `TaskReminder` — koniec okna serii, po tej dacie alarm nie odpala
+- dodano pole `lastFiredAt DateTime?` w modelu `TaskReminder` — kursor ostatniego wyświetlonego wystąpienia, zapobiega ponownemu odpaleniu tego samego wystąpienia w obrębie interwału
+
+### architektura / API
+- `back-funkcja` `UserTasksService.getDueReminders` — dla alarmów cyklicznych bieżące wystąpienie liczone z zegara (`remindAt` = start, siatka `start + interwał·k`), zwracane raz per interwał; zaznacza `lastFiredAt`. Jednorazowe bez zmian.
+- `back-funkcja` `UserTasksService.createReminder` — nowy: tworzy alarm dla zadania; `intervalMinutes` → seria cykliczna (jeden wiersz-reguła), zastępuje poprzednią serię tego zadania
+- `back-funkcja` `UserTasksService.handleReminder` — `dismiss` na alarmie cyklicznym ubija całą serię (`sentAt`); `snooze` cykliczny przesuwa tylko `lastFiredAt` (nie rusza startu serii)
+- `back-funkcja` `UserTasksService.syncReminderForTask` — auto-sync z `plannedEnd` dotyka wyłącznie alarmów jednorazowych (`recurIntervalMinutes: null`), nie kasuje serii cyklicznych
+- dodano `back-endpoint` `POST /my-tasks/:id/reminders`, `GET /my-tasks/:id/reminders`, `DELETE /my-tasks/reminders/:id`
+- `ui-modal` `CyclicAlarmEditor` w `MyTasksModal` — ustawianie serii (od/do + interwał 30 min/1 h/2 h/1 dzień), podgląd liczby wystąpień; badge „Cykl" na karcie zadania
+
+### słownik
+- dodano `TaskReminder.recurIntervalMinutes`, `TaskReminder.recurEnd`, `TaskReminder.lastFiredAt` — pola serii cyklicznej
+- dodano `UserTasksService.createReminder / getRemindersForTask / deleteReminder` oraz 3 endpointy alarmów
+- dodano `CyclicAlarmEditor`, `ALARM_INTERVALS` (frontend)
+
+### wytyczne
+- `schema-pole` `TaskReminder.recurIntervalMinutes` — dyskryminator: `null` = alarm jednorazowy (auto-sync z `plannedEnd`), ustawione = seria cykliczna. Każda operacja auto-sync MUSI filtrować `recurIntervalMinutes: null`, by nie skasować serii.
+- `back-funkcja` `getDueReminders` — cykliczne wystąpienia liczone z zegara, NIE materializowane jako wiersze; jeden `TaskReminder` = cała seria. Rozdzielczość odpalania = interwał pollingu 60 s.
+
+## 2026-08-06 — Sterowanie statusem subtasków (harmonogram) w AllTasksModal (v2026.08.06.751)
+
+### architektura / API
+- `ui-modal` `AllTasksModal` — subtaski (harmonogram) mają teraz chip statusu (Nowy/Zaplanowany/W trakcie/Zakończony/Wstrzymany/Anulowany) i akcję odznaczenia: checkbox → `PATCH /subtasks/:id { status:'FINISHED' }` (`all-tasks-subtask-status`), a w filtrze „Wykonane" przycisk „Zaplanuj" → `status:'NEW'`. Wcześniej akcja była tylko dla UserTasków.
+
+### wytyczne
+- `schema-pole` `Subtask.status` — „wykonane" subtaska = `FINISHED` (spójne z `CalendarView` które po `FINISHED` rysuje styl zakończonego); UserTask używa `DONE`. Dwa różne pola statusu dla dwóch typów zadań.
+
+---
+
+## 2026-08-06 — Przycisk „Pokaż zadania" w nagłówku Struktury projektu (obok Q&A) + samowystarczalny AllTasksModal (v2026.08.06.750)
+
+### architektura / API
+- `ui-modal` `AllTasksModal` — przerobiony na samowystarczalny: pobiera własne dane po `nodeId`/`versionId` (`all-tasks-fetch-open`: `GET /subtasks/node/:id` + `GET /my-tasks`); props uproszczone do `{ nodeId, versionId, onChanged, onClose }`. `onChanged` powiadamia rodzica po done/restore.
+- `ui-przycisk` „Pokaż zadania" (`UnifiedWbsPanel`, `unified-all-tasks-open`) — w nagłówku sekcji „Struktura projektu" obok przycisku Q&A; otwiera ten sam modal co „Pełna lista" w zakładce Zadania.
+
+---
+
+## 2026-08-06 — Filtr „Wykonane" w modalu pełnej listy + powrót zadania do statusu zaplanowane (v2026.08.06.749)
+
+### architektura / API
+- `back-endpoint` `GET /my-tasks` — dodany opcjonalny query `?status=OPEN|DONE` (`back-serwis` `listForUser(userId, status)`); domyślnie OPEN (bez zmian dla istniejących wywołań), `DONE` → wykonane sortowane po `updatedAt desc`. Zasila filtr „Wykonane".
+- `ui-modal` `AllTasksModal` — nowy filtr „Wykonane" (leniwy fetch `?status=DONE`) pokazujący wykonane UserTaski (+ Subtaski `status=FINISHED`) z zielonym badge; przycisk „Zaplanuj" (`all-tasks-restore`) przywraca UserTask do `status:'OPEN'` przez `PATCH /my-tasks/:id` i odświeża kalendarz.
+
+### wytyczne
+- `schema-pole` `UserTask.status` — `listForUser` domyślnie filtruje `OPEN`; wykonane pobiera się jawnie `?status=DONE`. Zmiana statusu przez `PATCH /my-tasks/:id { status }` synchronizuje też MS To Do (`completed`/`notStarted`).
+
+---
+
+## 2026-08-06 — Zadania węzłów (UserTask) w kalendarzu zakładki Zadania + modal pełnej listy + dzwonek due (v2026.08.06.748)
+
+### architektura / API
+- `ui-funkcja` `CalendarView` (`calendar-render-user-task`) — kalendarz renderuje dwa typy zadań: Subtaski (harmonogram, kolor kategorii, resize) i UserTaski (zadania węzłów, bursztyn, checkbox „zrobione", drag do przełożenia terminu). Nowe propsy: `userTasks`, `onUserTaskDone`, `onUserTaskReschedule`, `onUserTaskClick`.
+- `ui-sekcja` `TasksCalendarSection` — nakłada moje UserTaski (`GET /my-tasks`) na kalendarz z togglem zakresu „Ten projekt / Wszystkie moje" (filtr po zbiorze węzłów WBS z `GET /wbs-nodes/unified/:id`). Reschedule → `PATCH /my-tasks/:id { plannedEnd }`, done → `PATCH /my-tasks/:id { status:'DONE' }`.
+- `ui-modal` `AllTasksModal` (`all-tasks-modal`) — pełna lista obu typów zadań w formacie „Q&A całe drzewo": grupowanie po gałęzi top-level WBS (UserTaski) + osobna grupa „Harmonogram — podzadania" (Subtaski), sticky nagłówki, szukajka + filtr daty (Przeterminowane/Dziś/Tydzień/Później).
+- `ui-panel` `DueTasksBell` (`due-tasks-bell`) — trwały dzwonek wypadających zadań w górnej belce (badge = liczba due z `GET /my-tasks/reminders/due`), dropdown z akcjami done/drzemka 1h; uzupełnia ulotny `TaskReminderToast`.
+
+### wytyczne
+- `schema-pole` `UserTask.nodeId` — wskazuje na `WbsNode` (indywidualny węzeł drzewa), NIE na `ProcessNode`; `Subtask.nodeId` wskazuje na `ProcessNode` (order/projekt). Dlatego w kalendarzu/modalu oba typy trzyma się rozdzielnie i UserTaski grupuje po gałęzi WBS, a Subtaski w osobnej grupie projektu.
+
+---
+
 ## 2026-08-05 — wbs: statusy liści — dodane „Wykonane"/„Zainstalowane", „Mieszany" tylko jako status zbiorczy (v2026.08.05.746)
 
 ### architektura / API

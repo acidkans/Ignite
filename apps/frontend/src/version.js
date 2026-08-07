@@ -1,2 +1,2 @@
 // @anchor app-version
-export const APP_VERSION = 'v2026.08.06.747';
+export const APP_VERSION = 'v2026.08.07.752';

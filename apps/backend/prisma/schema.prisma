@@ -1095,6 +1095,12 @@ model TaskReminder {
   sentAt      DateTime?
   /// @anchor task-reminder-snoozed-from
   snoozedFrom DateTime?
+  /// @anchor task-reminder-recur-interval-minutes
+  recurIntervalMinutes Int? // null = alarm jednorazowy; ustawione = interwał serii cyklicznej (min)
+  /// @anchor task-reminder-recur-end
+  recurEnd    DateTime? // koniec okna serii cyklicznej; po tej dacie alarm nie odpala
+  /// @anchor task-reminder-last-fired-at
+  lastFiredAt DateTime? // ostatnie wyświetlone wystąpienie serii — kursor „już pokazane"
   createdAt   DateTime  @default(now())
 
   /// @anchor task-reminder-user-task

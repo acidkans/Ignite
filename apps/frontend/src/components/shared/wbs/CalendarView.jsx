@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, X, ListTodo, Check } from 'lucide-react';
 
 // @anchor calendar-view
-export default function CalendarView({ subtasks, categories, onDrop, onDateClick, onTaskClick, onRemoveTask, onUpdateTask }) {
+export default function CalendarView({ subtasks, userTasks = [], categories, onDrop, onDateClick, onTaskClick, onRemoveTask, onUpdateTask, onUserTaskReschedule, onUserTaskDone, onUserTaskClick }) {
     const [viewDate, setViewDate] = useState(new Date());
     const [viewMode, setViewMode] = useState('month'); // 'month' | 'week'
     const [resizingTask, setResizingTask] = useState(null);
@@ -136,6 +136,38 @@ export default function CalendarView({ subtasks, categories, onDrop, onDateClick
         );
     };
 
+    // @anchor calendar-user-tasks-for-date — UserTaski (zadania węzła) na dany dzień; termin = plannedEnd, fallback plannedStart
+    const getUserTasksForDate = (date) => {
+        const targetStr = formatDateToYYYYMMDD(date);
+        return userTasks.filter(t => {
+            const ref = t.plannedEnd || t.plannedStart;
+            if (!ref) return false;
+            return ref.split('T')[0] === targetStr;
+        });
+    };
+
+    // @anchor calendar-render-user-task — kafelek zadania węzła: bursztyn, ikona ListTodo, checkbox „zrobione", drag do przełożenia
+    const renderUserTask = (task) => (
+        <div
+            key={`ut_${task.id}`}
+            draggable
+            onDragStart={(e) => e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, _kind: 'user', isMove: true }))}
+            onClick={(e) => { e.stopPropagation(); onUserTaskClick && onUserTaskClick(task); }}
+            className="group/ut relative px-2 py-1.5 border border-amber-500/30 bg-amber-500/15 text-amber-100 hover:border-amber-400/60 hover:bg-amber-500/25 rounded-lg text-[10px] font-bold leading-tight transition-all cursor-pointer flex items-center gap-2 pointer-events-auto shadow-sm"
+            title={task.node?.name ? `Zadanie węzła: ${task.node.name}` : 'Zadanie węzła'}
+        >
+            <button
+                onClick={(e) => { e.stopPropagation(); onUserTaskDone && onUserTaskDone(task.id); }}
+                className="flex-shrink-0 w-3.5 h-3.5 rounded-full border border-amber-400/50 hover:bg-emerald-400/20 hover:border-emerald-400 flex items-center justify-center transition-all"
+                title="Oznacz jako wykonane"
+            >
+                <Check size={8} className="text-amber-300/40 group-hover/ut:text-emerald-300 transition-colors" />
+            </button>
+            <ListTodo size={10} className="flex-shrink-0 text-amber-400" />
+            <span className="truncate flex-1">{task.title}</span>
+        </div>
+    );
+
     const weekRangeLabel = (() => {
         const s = weekDates[0], e = weekDates[6];
         const sm = String(s.getMonth() + 1).padStart(2, '0');
@@ -218,6 +250,7 @@ export default function CalendarView({ subtasks, categories, onDrop, onDateClick
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5 scrollbar-hide pointer-events-none">
                                     {dateTasks.map((task) => renderTask(task, day.date))}
+                                    {getUserTasksForDate(day.date).map((task) => renderUserTask(task))}
                                 </div>
                                 <div className="absolute inset-0 border-2 border-transparent group-hover:border-blue-500/40 pointer-events-none transition-all" />
                             </div>
@@ -239,7 +272,8 @@ export default function CalendarView({ subtasks, categories, onDrop, onDateClick
                             >
                                 <div className="flex-1 p-1.5 space-y-1.5">
                                     {dateTasks.map((task) => renderTask(task, date))}
-                                    {dateTasks.length === 0 && (
+                                    {getUserTasksForDate(date).map((task) => renderUserTask(task))}
+                                    {dateTasks.length === 0 && getUserTasksForDate(date).length === 0 && (
                                         <div className="h-8 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
                                             <span className="text-[9px] text-gray-600">+ dodaj</span>
                                         </div>
