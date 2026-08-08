@@ -1,6 +1,8 @@
 {
   "permissions": {
+    "defaultMode": "bypassPermissions",
     "allow": [
+      "Bash(ssh gigatel:*)",
       "Bash(git *)",
       "Bash(git init:*)",
       "Bash(find . -type f -name *.json -o -name *.sh -o -name *.md -o -name .env* -o -name docker-compose* -o -name Dockerfile)",

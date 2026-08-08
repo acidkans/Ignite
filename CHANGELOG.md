@@ -4,6 +4,17 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-08-08 — Eksport Excel: suma dni pracy w Podsumowaniu + auto-Q&A tylko przy nieodpowiedzianych (v2026.08.08.754)
+
+### architektura / API
+- `ui-funkcja` eksport „Analiza projektu do Excel" (`UnifiedWbsPanel`) — w arkuszu „Podsumowanie", sekcja „Budżet projektu", dodano wiersz 11 „Liczba dni pracy" (A11/B11) = suma ilości wszystkich liści typu `work` z jednostką dni (`dni`/`dzień`); sekcja „Podsumowanie per typ" i kolejne przesunięte o wiersz w dół (dynamiczne `addRow`, formuły niezmienione)
+- `ui-stan` `qaTreeOpen` (`UnifiedWbsPanel`) — auto-otwarcie `QaTreeView` przy pierwszym wejściu w sesji tylko gdy istnieje pytanie bez odpowiedzi; puste Q&A i w pełni odpowiedziane nie wyskakują
+
+### wytyczne
+- `ui-funkcja` eksport Excel „Podsumowanie" — górny blok (wiersze 3–11) ma stałe referencje `B3`–`B10` w formułach; nowe wiersze dodawać POD nimi, a sekcje per-typ/per-osoba trzymać na `addRow`/`rowCount` żeby przesuwały się same
+
+---
+
 ## 2026-08-07 — Alarmy cykliczne UserTask (jeden wiersz-reguła, toasty z zegara) (v2026.08.07.752)
 
 ### schema.prisma

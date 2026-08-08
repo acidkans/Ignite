@@ -129,16 +129,23 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // Edytowalny widok Q&A całego drzewa (QaTreeView). Otwierany automatycznie raz
     // na sesję przy pierwszym wejściu w WBS danego projektu — flaga w sessionStorage
     // (klucz per nodeId), więc nawigacja tam-i-z-powrotem w tej samej karcie już nie nagabuje.
+    // Nie otwiera się, gdy Q&A jest puste lub wszystkie pytania mają już odpowiedzi.
     const [qaTreeOpen, setQaTreeOpen] = useState(false);
     // @anchor unified-all-tasks-open — modal pełnej listy zadań (ten sam co „Pełna lista" w zakładce Zadania)
     const [allTasksOpen, setAllTasksOpen] = useState(false);
     useEffect(() => {
         if (!nodeId) return;
+        // Czekaj aż drzewo się załaduje — dopiero wtedy da się sprawdzić stan Q&A.
+        if (!wbsData || wbsData.length === 0) return;
         const seenKey = `wbsQaAutoShown:${nodeId}`;
         if (sessionStorage.getItem(seenKey)) return;
         sessionStorage.setItem(seenKey, '1');
-        setQaTreeOpen(true);
-    }, [nodeId]);
+        // Auto-otwieraj tylko gdy istnieje choć jedno pytanie bez odpowiedzi.
+        const hasUnanswered = wbsData.some(n =>
+            Array.isArray(n.qa) && n.qa.some(p => (p?.question || '').trim() && !(p?.answer || '').trim())
+        );
+        if (hasUnanswered) setQaTreeOpen(true);
+    }, [nodeId, wbsData]);
     const [sectionOrder, setSectionOrder] = useState(() => {
         try {
             const saved = localStorage.getItem('unifiedWbsSectionOrder');
@@ -2697,6 +2704,16 @@ ${ganttSectionHtml}
         summarySheet.addRow(['Przychód po rabatach', { formula: '=MAX(0,B4-B7)', result: exportedRevenueAfterDiscount }]);
         summarySheet.addRow(['Zysk po rabatach', { formula: '=B8-B3', result: exportedProfitAfterDiscount }]);
         summarySheet.addRow(['Marża po rabatach', { formula: '=IF(B8=0,0,B9/B8)', result: exportedMarginAfterDiscount / 100 }]);
+        // Suma dni: wszystkie liście typu „praca" z jednostką dni (dni/dzień) — sumowana ilość.
+        const workDaysTotal = rows.reduce((s, r) => {
+            if (r.type !== 'work') return s;
+            const u = String(r.unit || '').trim().toLowerCase();
+            if (u === 'dni' || u === 'dzień' || u === 'dzien' || u === 'd') {
+                return s + (Math.max(0, parseFloat(r.quantity) || 0));
+            }
+            return s;
+        }, 0);
+        summarySheet.addRow(['Liczba dni pracy', workDaysTotal]);
 
         summarySheet.getCell('B3').numFmt = '#,##0.00';
         summarySheet.getCell('B4').numFmt = '#,##0.00';
@@ -2706,6 +2723,7 @@ ${ganttSectionHtml}
         summarySheet.getCell('B8').numFmt = '#,##0.00';
         summarySheet.getCell('B9').numFmt = '#,##0.00';
         summarySheet.getCell('B10').numFmt = '0.00%';
+        summarySheet.getCell('B11').numFmt = '#,##0.##';
         summarySheet.getRow(1).font = { bold: true, size: 14 };
 
         // Per-type aggregation: jeden wiersz na typ — koszty agregowane BEZ rozróżniania
