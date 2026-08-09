@@ -18,6 +18,7 @@ export default function MarkdownEditor({
     saveIndicator = false,
     presets = null,
     onManagePresets = null,
+    resolveTokens = null,
 }) {
     const taRef = useRef(null);
     const saveTimeoutRef = useRef(null);
@@ -198,7 +199,10 @@ export default function MarkdownEditor({
     const renderHtml = (text) => {
         const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const bold = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        const lines = (text || '').split('\n');
+        // Podgląd rozwija tokeny {zmienne} na żywe wartości (jeśli podano resolveTokens);
+        // w samym polu edycji token zostaje surowy i auto-aktualizuje się przy eksporcie.
+        const source = resolveTokens ? resolveTokens(text) : text;
+        const lines = (source || '').split('\n');
         const indentLevel = (ws) => Math.floor((ws || '').replace(/\t/g, '  ').length / 2);
         const isTableRow = (l) => l.trimStart().startsWith('|');
         const isSepRow = (l) => /^\s*\|[\s\-:|]+\|\s*$/.test(l);

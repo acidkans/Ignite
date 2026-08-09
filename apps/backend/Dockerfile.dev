@@ -1,4 +1,6 @@
-FROM node:18-alpine
+# Pinujemy wersję Alpine (nie floating node:18-alpine) — dzięki temu snapshot repo apk
+# jest spójny i rotacja pakietów Alpine (np. bump chromium) nie wywali buildu w trakcie deployu.
+FROM node:18-alpine3.20
 
 WORKDIR /usr/src/app
 

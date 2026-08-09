@@ -207,6 +207,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | getPendingByType | apps/frontend/src/services/repos/outboxRepo.js | @anchor get-pending-by-type |
 | ui-stala | WBS_QA | apps/frontend/src/services/sync/syncOutbox.js | @anchor wbs-qa-outbox-type |
 | ui-stan | qaTreeOpen (SchematTab) | apps/frontend/src/components/shared/SchematTab.jsx | @anchor schemat-qa-tree-open |
+| ui-stan | qaTreeOpen (UnifiedWbsPanel) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor wbs-qa-tree-open |
+| ui-funkcja | resolveOfferTokens | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor resolve-offer-tokens |
 
 ### Moduł WBS
 
@@ -216,6 +218,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 |-----|-------|------|--------|
 | schema-model | WbsNode | apps/backend/prisma/schema.prisma | @anchor wbs-node |
 | schema-model | WbsNodeMaterial | apps/backend/prisma/schema.prisma | @anchor wbs-node-material |
+| schema-model | WbsLeafDefaults | apps/backend/prisma/schema.prisma | @anchor wbs-leaf-defaults-model |
+| schema-pole | WbsLeafDefaults.nodeId | apps/backend/prisma/schema.prisma | @anchor wbs-leaf-defaults-node-id |
+| schema-pole | WbsLeafDefaults.data | apps/backend/prisma/schema.prisma | @anchor wbs-leaf-defaults-data |
 | schema-pole | WbsNode.id | apps/backend/prisma/schema.prisma | @anchor wbs-node-id |
 | schema-pole | WbsNode.parentId | apps/backend/prisma/schema.prisma | @anchor wbs-node-parent-id |
 | schema-pole | WbsNode.nodeId | apps/backend/prisma/schema.prisma | @anchor wbs-node-node-id |
@@ -308,6 +313,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | ProductProposal.isOffer | apps/backend/prisma/schema.prisma | @anchor product-proposal-is-offer |
 | schema-pole | ProductProposal.isPurchase | apps/backend/prisma/schema.prisma | @anchor product-proposal-is-purchase |
 | schema-pole | ProductProposal.purchasePriceNetto | apps/backend/prisma/schema.prisma | @anchor product-proposal-purchase-price-netto |
+| ui-dropdown | FilterDropdown | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-filter-dropdown |
 | ui-tabela | WBSHybridTable | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-table |
 | ui-funkcja | sumChildrenCost | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor sum-children-cost |
 | ui-funkcja | sumChildrenOfferPrice | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor sum-children-offer-price |
@@ -332,6 +338,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-modal | AddTaskModal | apps/frontend/src/components/shared/AddTaskModal.jsx | @anchor add-task-modal |
 | ui-funkcja | handleSubmit (AddTaskModal) | apps/frontend/src/components/shared/AddTaskModal.jsx | @anchor add-task-modal-submit |
 | ui-funkcja | collectBranchQa | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor collect-branch-qa |
+| ui-funkcja | collectBranchStrategyEntries | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor collect-branch-strategy-entries |
+| ui-funkcja | composeBranchStrategy | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor compose-branch-strategy |
+| ui-funkcja | saveLeafStrategy | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor save-leaf-strategy |
+| ui-funkcja | recomposeBranchStrategyAfterDelete | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor recompose-branch-strategy-after-delete |
 | ui-stala | canFullscreen | apps/frontend/src/components/shared/SchematTab.jsx | @anchor schemat-can-fullscreen |
 | ui-funkcja | handleNodeExpand | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-node-expand-refresh |
 | ui-widok | CalendarView | apps/frontend/src/components/shared/wbs/CalendarView.jsx | @anchor calendar-view |
@@ -347,7 +357,6 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | handlePasteCloned | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-paste-cloned |
 | ui-funkcja | handleRequirementAssignToWbs | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-requirement-assign-to-wbs |
 | ui-funkcja | handleRequirementMerge | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-requirement-merge |
-| ui-funkcja | handleStrategySave | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-strategy-save |
 | ui-funkcja | handleExportPDF | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-pdf |
 | ui-funkcja | validateBudgetPricing | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor validate-budget-pricing |
 | ui-funkcja | handleExportBudgetExcel | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-budget-excel |
@@ -367,6 +376,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | handleHybridNodeStatusChange | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-hybrid-node-status-change |
 | ui-funkcja | applyLeafDefaults | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor apply-leaf-defaults |
 | ui-stan | leafDefaultsOpen | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor leaf-defaults-modal-state |
+| ui-stan | leafDefaults | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor leaf-defaults-state |
+| ui-funkcja | fetchLeafDefaults | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor fetch-leaf-defaults |
+| ui-funkcja | saveLeafDefaultsToServer | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor save-leaf-defaults-to-server |
 
 #### Frontend — stałe i utilsy (`wbsConstants.js`)
 
@@ -400,11 +412,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | buildHierarchy | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor build-hierarchy |
 | ui-funkcja | flattenHierarchy | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor flatten-hierarchy |
 | ui-stala | LEAF_TYPE_OPTIONS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor leaf-type-options |
-| ui-stala | WBS_DEFAULTS_STORAGE_KEY | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor wbs-defaults-storage-key |
-| ui-stala | SEED_LEAF_DEFAULTS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor seed-leaf-defaults |
-| ui-funkcja | loadLeafDefaults | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor load-leaf-defaults |
-| ui-funkcja | saveLeafDefaults | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor save-leaf-defaults |
-| ui-funkcja | getLeafDefault | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor get-leaf-default |
+| ui-stala | ZERO_LEAF_DEFAULTS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor zero-leaf-defaults |
+| ui-funkcja | mergeLeafDefaults | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor merge-leaf-defaults |
+| ui-funkcja | getLeafDefaultFrom | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor get-leaf-default-from |
 
 ### Moduł Logistyka — Baza materiałów (`apps/frontend/src/components/shared/MaterialDatabaseTab.jsx`)
 
@@ -777,6 +787,14 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-endpoint | PATCH /my-tasks/reminders/:id | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-reminder-handle-endpoint |
 | back-funkcja | UserTasksService.getDueReminders | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-due-reminders |
 | back-funkcja | UserTasksService.handleReminder | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-handle-reminder |
+| back-funkcja | UserTasksService.createReminder | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-create-reminder |
+| back-funkcja | UserTasksService.getRemindersForTask | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-list-reminders |
+| back-funkcja | UserTasksService.deleteReminder | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-delete-reminder |
+| back-endpoint | DELETE /my-tasks/reminders/:id | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-reminder-delete-endpoint |
+| back-endpoint | GET /my-tasks/:id/reminders | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-reminders-list-endpoint |
+| back-endpoint | POST /my-tasks/:id/reminders | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-reminder-create-endpoint |
+| ui-stala | ALARM_INTERVALS | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-alarm-interval-options |
+| ui-modal | CyclicAlarmEditor | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-cyclic-alarm-editor |
 
 ### MyTasksModal — frontend (Etap 6)
 
@@ -786,6 +804,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | formatDeadline | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-modal |
 | ui-karta | TaskCard | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-task-card |
 | ui-funkcja | MyTasksModal.handleDone | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-mark-done |
+| ui-stan | TaskCard.editingTitle | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-title-edit |
+| ui-funkcja | MyTasksModal.handleRename | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-rename |
 | ui-stan | dashboard-my-tasks-open | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-my-tasks-open |
 
 ### Moduł UserTasks + NotificationCron (Etap 4+5)
@@ -878,6 +898,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | TaskReminder.remindAt | apps/backend/prisma/schema.prisma | @anchor task-reminder-remind-at |
 | schema-pole | TaskReminder.sentAt | apps/backend/prisma/schema.prisma | @anchor task-reminder-sent-at |
 | schema-pole | TaskReminder.snoozedFrom | apps/backend/prisma/schema.prisma | @anchor task-reminder-snoozed-from |
+| schema-pole | TaskReminder.recurIntervalMinutes | apps/backend/prisma/schema.prisma | @anchor task-reminder-recur-interval-minutes |
+| schema-pole | TaskReminder.recurEnd | apps/backend/prisma/schema.prisma | @anchor task-reminder-recur-end |
+| schema-pole | TaskReminder.lastFiredAt | apps/backend/prisma/schema.prisma | @anchor task-reminder-last-fired-at |
 | schema-model | MsTodoSyncState | apps/backend/prisma/schema.prisma | @anchor ms-todo-sync-state |
 | schema-pole | MsTodoSyncState.deltaLink | apps/backend/prisma/schema.prisma | @anchor ms-todo-sync-state-delta-link |
 | schema-pole | MsTodoSyncState.lastSyncAt | apps/backend/prisma/schema.prisma | @anchor ms-todo-sync-state-last-sync-at |
@@ -1244,6 +1267,43 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | budgetAcceptance | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor budget-acceptance |
 | ui-stan | budgetMode | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor budget-mode |
 | ui-sekcja | segmented control trybów Budżetu | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor budget-mode-switch |
+
+### Moduł SnapshotEditGuard (blokada edycji nieaktywnego snapszota)
+
+#### Frontend (`apps/frontend/src/components/shared/SnapshotEditGuard.jsx` + wpięcie w DashboardPage)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-stan | snapshotGuardState | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor snapshot-guard-state |
+| ui-funkcja | snapshotGuardConfirmFn | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor snapshot-guard-confirm-fn |
+| ui-funkcja | setSnapshotGuardState | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor set-snapshot-guard-state |
+| ui-funkcja | guardSnapshotEdit | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor guard-snapshot-edit |
+| ui-funkcja | isEditableTarget | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor is-editable-target |
+| ui-sekcja | SnapshotEditGuard | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor snapshot-edit-guard |
+| ui-funkcja | requestConfirm (SnapshotEditGuard) | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor snapshot-guard-request-confirm |
+| ui-funkcja | resolve (SnapshotEditGuard) | apps/frontend/src/components/shared/SnapshotEditGuard.jsx | @anchor snapshot-guard-resolve |
+| ui-stan | isInactiveSnapshot | apps/frontend/src/DashboardPage.jsx | @anchor is-inactive-snapshot |
+| ui-stan | contentRef (DashboardPage) | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-content-ref |
+| ui-funkcja | getUserTasksForDate | apps/frontend/src/components/shared/wbs/CalendarView.jsx | @anchor calendar-user-tasks-for-date |
+| ui-funkcja | renderUserTask | apps/frontend/src/components/shared/wbs/CalendarView.jsx | @anchor calendar-render-user-task |
+| ui-stan | userTasks (TasksCalendarSection) | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-user-tasks |
+| ui-stan | taskScope | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-scope |
+| ui-stan | allTasksOpen | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-all-modal |
+| ui-funkcja | fetchUserTasks | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-fetch-user-tasks |
+| ui-funkcja | markUserTaskDone | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-user-task-done |
+| ui-funkcja | rescheduleUserTask | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-user-task-reschedule |
+| ui-sekcja | toolbar zadań (zakres/legenda/pełna lista) | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-toolbar |
+| ui-modal | AllTasksModal | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-modal |
+| ui-funkcja | fetchOpen (AllTasksModal) | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-fetch-open |
+| ui-funkcja | fetch wykonanych (AllTasksModal) | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-fetch-done |
+| ui-stan | AllTasksModal.editKey | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-title-edit |
+| ui-funkcja | AllTasksModal.renameRow | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-rename |
+| ui-stan | allTasksOpen (UnifiedWbsPanel) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor unified-all-tasks-open |
+| ui-funkcja | handleRestore (AllTasksModal) | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-restore |
+| ui-funkcja | setSubtaskStatus (AllTasksModal) | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-subtask-status |
+| ui-panel | DueTasksBell | apps/frontend/src/components/shared/DueTasksBell.jsx | @anchor due-tasks-bell |
+| ui-funkcja | markDone (DueTasksBell) | apps/frontend/src/components/shared/DueTasksBell.jsx | @anchor due-tasks-bell-done |
+| ui-funkcja | snooze (DueTasksBell) | apps/frontend/src/components/shared/DueTasksBell.jsx | @anchor due-tasks-bell-snooze |
 
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)

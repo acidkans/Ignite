@@ -794,7 +794,9 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
     const [textContent, setTextContent] = useState('');
     const [textLoading, setTextLoading] = useState(false);
     const [pdfContainerWidth, setPdfContainerWidth] = useState(800);
+    const [firstPageAspect, setFirstPageAspect] = useState(null); // height/width pierwszej strony PDF
     const pdfScrollRef = useRef(null);
+    const autoFitRef = useRef(null); // fileUrl dla którego zastosowano już domyślne dopasowanie
 
     // Highlights
     const [highlights, setHighlights] = useState([]);
@@ -915,7 +917,37 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
         return () => { cancelled = true; };
     }, [fileUrl, isXlsx]);
 
-    function onDocumentLoadSuccess({ numPages }) { setNumPages(numPages); }
+    async function onDocumentLoadSuccess(pdf) {
+        setNumPages(pdf.numPages);
+        try {
+            const page = await pdf.getPage(1);
+            const vp = page.getViewport({ scale: 1 });
+            setFirstPageAspect(vp.height / vp.width);
+        } catch { /* brak wymiarów — pomiń auto-dopasowanie */ }
+    }
+
+    // Dopasuj całą (pierwszą) stronę PDF do widocznego obszaru — wysokość jest wiążąca,
+    // szerokości nie powiększamy ponad 100% (clamp do 1.0)
+    const fitToScreen = useCallback(() => {
+        const el = pdfScrollRef.current;
+        if (!el || !firstPageAspect || pdfContainerWidth <= 0) { setScale(1.0); return; }
+        const availH = el.clientHeight - 32; // p-4 = 16px góra/dół
+        if (availH <= 0) { setScale(1.0); return; }
+        const s = availH / (pdfContainerWidth * firstPageAspect);
+        setScale(Math.max(0.2, Math.min(1.0, s)));
+    }, [firstPageAspect, pdfContainerWidth]);
+
+    // Reset dopasowania przy zmianie pliku
+    useEffect(() => { setFirstPageAspect(null); autoFitRef.current = null; }, [fileUrl]);
+
+    // Domyślnie pokaż całą stronę na ekranie po załadowaniu PDF (jednorazowo per plik)
+    useEffect(() => {
+        if (!isPdf || !firstPageAspect || pdfContainerWidth <= 0) return;
+        if (autoFitRef.current === fileUrl) return;
+        autoFitRef.current = fileUrl;
+        fitToScreen();
+    }, [isPdf, firstPageAspect, pdfContainerWidth, fileUrl, fitToScreen]);
+
     const toggleFullscreen = () => setIsFullscreen(!isFullscreen);
     const docs = [{ uri: fileUrl, fileType: ext, fileName }];
 
@@ -1046,9 +1078,9 @@ export default function DocumentViewer({ fileUrl, fileName, mimeType, onClose, d
                         {isFullscreen ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}
                     </button>
                     {isPdf && <>
-                        <button onClick={() => setScale(1.0)}
+                        <button onClick={fitToScreen}
                             className="pointer-events-auto w-11 h-11 flex items-center justify-center rounded-xl bg-black/70 backdrop-blur border border-white/15 text-white shadow-lg active:scale-95 transition-transform"
-                            title="Dopasuj (100%)">
+                            title="Dopasuj do ekranu">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
                             </svg>

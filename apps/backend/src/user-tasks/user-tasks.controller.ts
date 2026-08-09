@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Req, UseGuards, Query } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UserTasksService, CreateUserTaskDto, UpdateUserTaskDto } from './user-tasks.service';
 import { TaskSyncService } from './task-sync.service';
@@ -14,8 +14,8 @@ export class UserTasksController {
 
   // @anchor user-tasks-get-endpoint
   @Get()
-  list(@Req() req: any) {
-    return this.userTasks.listForUser(req.user.userId);
+  list(@Req() req: any, @Query('status') status?: string) {
+    return this.userTasks.listForUser(req.user.userId, status);
   }
 
   // @anchor user-tasks-create-endpoint
@@ -50,5 +50,27 @@ export class UserTasksController {
     @Body() body: { action: 'dismiss' | 'snooze'; minutes?: number },
   ) {
     return this.userTasks.handleReminder(req.user.userId, reminderId, body.action, body.minutes);
+  }
+
+  // @anchor user-tasks-reminder-delete-endpoint
+  @Delete('reminders/:reminderId')
+  deleteReminder(@Req() req: any, @Param('reminderId') reminderId: string) {
+    return this.userTasks.deleteReminder(req.user.userId, reminderId);
+  }
+
+  // @anchor user-tasks-reminders-list-endpoint
+  @Get(':id/reminders')
+  listReminders(@Req() req: any, @Param('id') id: string) {
+    return this.userTasks.getRemindersForTask(req.user.userId, id);
+  }
+
+  // @anchor user-tasks-reminder-create-endpoint
+  @Post(':id/reminders')
+  createReminder(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: { start?: string; end?: string; intervalMinutes?: number },
+  ) {
+    return this.userTasks.createReminder(req.user.userId, id, body);
   }
 }

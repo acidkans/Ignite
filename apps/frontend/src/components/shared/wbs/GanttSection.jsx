@@ -513,6 +513,8 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
     }, [wbsTree, items]);
     const [editCell, setEditCell] = useState(null); // { taskId, field: 'start'|'end' } | null
     const [nonWorkingWarn, setNonWorkingWarn] = useState(null); // { taskId, field, dateStr } | null
+    // Popup info: liść typ=praca zmienił liczbę dni po rozciągnięciu w timeline/edycji daty
+    const [durationChangeInfo, setDurationChangeInfo] = useState(null); // { name, oldDays, newDays } | null
 
     const [branchWorkOnHolidays, setBranchWorkOnHolidays] = useState({});
     const [popup, setPopup] = useState(null); // { x, y, branchId } | null
@@ -583,7 +585,25 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
             return next;
         });
         const origTask = tasks.find(t => t && t.id === taskId);
-        if (task.type !== 'project' && origTask?._canUpdateDuration !== false) onNodeDurationChange?.(taskId, notifyDays);
+        if (task.type !== 'project' && origTask?._canUpdateDuration !== false) {
+            onNodeDurationChange?.(taskId, notifyDays);
+            // Tylko praca w dniach faktycznie zmienia ilość liścia — poinformuj gdy dni się zmieniły
+            if (origTask?._canUpdateDuration === true) {
+                const os = new Date(task.start); os.setHours(0, 0, 0, 0);
+                const oe = new Date(task.end);   oe.setHours(0, 0, 0, 0);
+                let oldDays;
+                if (wow) {
+                    oldDays = Math.max(1, Math.round((oe - os) / DAY_MS));
+                } else {
+                    let c = 0; const cur = new Date(os);
+                    while (cur < oe) { if (!isNonWorkingDay(cur)) c++; cur.setDate(cur.getDate() + 1); }
+                    oldDays = Math.max(1, c);
+                }
+                if (oldDays !== notifyDays) {
+                    setDurationChangeInfo({ name: task.name, oldDays, newDays: notifyDays });
+                }
+            }
+        }
         onGanttDateChange?.(taskId, newStart.toISOString(), newEnd.toISOString());
     }, [tasks, taskBranchMap, branchWorkOnHolidays, onNodeDurationChange, onGanttDateChange]);
 
@@ -659,6 +679,21 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         });
         if (task.id !== '__root__' && task.type !== 'project' && origTask?._canUpdateDuration !== false) {
             onNodeDurationChange?.(task.id, notifyDays);
+            // Tylko praca w dniach faktycznie zmienia ilość liścia — poinformuj gdy dni się zmieniły
+            if (origTask?._canUpdateDuration === true && origStart && origTask?.end) {
+                const oe = new Date(origTask.end); oe.setHours(0, 0, 0, 0);
+                let oldDays;
+                if (effectiveWow) {
+                    oldDays = Math.max(1, Math.round((oe - origStart) / DAY_MS));
+                } else {
+                    let c = 0; const cur = new Date(origStart);
+                    while (cur < oe) { if (!isNonWorkingDay(cur)) c++; cur.setDate(cur.getDate() + 1); }
+                    oldDays = Math.max(1, c);
+                }
+                if (oldDays !== notifyDays) {
+                    setDurationChangeInfo({ name: task.name, oldDays, newDays: notifyDays });
+                }
+            }
         }
         onGanttDateChange?.(task.id, start.toISOString(), end.toISOString());
     }, [onNodeDurationChange, onGanttDateChange, branchWorkOnHolidays, taskBranchMap, tasks]);
@@ -814,6 +849,13 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
             if (scrollEl) { try { delete scrollEl.scrollLeft; } catch (_) {} }
         };
     }, []);
+
+    // Auto-znikanie popupu o zmianie liczby dni (typ=praca)
+    useEffect(() => {
+        if (!durationChangeInfo) return;
+        const t = setTimeout(() => setDurationChangeInfo(null), 4500);
+        return () => clearTimeout(t);
+    }, [durationChangeInfo]);
 
     // Zamknij popup po kliknięciu poza nim
     useEffect(() => {
@@ -1451,6 +1493,28 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                     </label>
                 </div>
             )}
+        {durationChangeInfo && (
+            <div
+                style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 10001 }}
+                className="bg-[#0d1520] border border-cyan-500/40 rounded-xl px-4 py-3 shadow-2xl max-w-sm w-[340px] flex items-start gap-3"
+            >
+                <div className="text-cyan-300 text-lg leading-none mt-0.5">↔</div>
+                <div className="flex-1 min-w-0">
+                    <div className="text-[10px] text-cyan-400 uppercase tracking-widest font-bold mb-1">Zmieniono liczbę dni</div>
+                    <p className="text-xs text-gray-200 leading-snug">
+                        <span className="font-semibold text-white truncate">{durationChangeInfo.name}</span>:{' '}
+                        <span className="text-gray-400">{durationChangeInfo.oldDays}</span>
+                        <span className="text-cyan-300 font-bold mx-1">→ {durationChangeInfo.newDays}</span>
+                        {durationChangeInfo.newDays === 1 ? 'dzień' : 'dni'} roboczych.
+                    </p>
+                </div>
+                <button
+                    onClick={() => setDurationChangeInfo(null)}
+                    className="text-gray-500 hover:text-white text-sm leading-none"
+                    title="Zamknij"
+                >✕</button>
+            </div>
+        )}
         {nonWorkingWarn && (() => {
             const d = new Date(nonWorkingWarn.dateStr);
             const dow = d.getDay();

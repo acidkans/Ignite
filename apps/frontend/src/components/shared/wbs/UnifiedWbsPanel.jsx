@@ -1,14 +1,14 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import { useBeforeUnload } from '../../../hooks/useBeforeUnload';
 import ExcelJS from 'exceljs';
-import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays, BarChart3, ChevronUp, FileText, SlidersHorizontal, RotateCcw } from 'lucide-react';
+import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays, BarChart3, ChevronUp, FileText, SlidersHorizontal, RotateCcw, LayoutList } from 'lucide-react';
 import MarkdownEditor from '../MarkdownEditor';
 import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import GanttSection from './GanttSection';
-import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, SEED_LEAF_DEFAULTS, loadLeafDefaults, saveLeafDefaults, getLeafDefault } from './wbsConstants';
+import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
@@ -17,6 +17,9 @@ import ExportChoiceModal from '../ExportChoiceModal';
 import WBSHybridTable from './WBSHybridTable';
 import BudgetTable from './BudgetTable';
 import BudgetModesPanel from './BudgetModesPanel';
+import QaTreeView from './QaTreeView';
+import AllTasksModal from './AllTasksModal';
+import { guardSnapshotEdit } from '../SnapshotEditGuard';
 
 
 const VIEWS = {
@@ -80,17 +83,38 @@ const DEFAULT_SECTION_ORDER = ['oferta', 'strategy', 'tasks', 'gantt', 'wbs-hybr
 // z propem gdy wartość zmieni się gdzie indziej (np. edycja w kolumnie drzewa WBS).
 function BranchStrategyField({ name, value, onSave }) {
     const [text, setText] = useState(value || '');
+    const ref = useRef(null);
     useEffect(() => { setText(value || ''); }, [value]);
+    // Wysokość dopasowuje się do treści (rośnie z tekstem). Element niewidoczny
+    // (sekcja zwinięta) → scrollHeight=0; nie ustawiaj wtedy wysokości.
+    const adjust = useCallback(() => {
+        const el = ref.current;
+        if (!el) return;
+        if (el.offsetParent === null && el.getClientRects().length === 0) return;
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + 'px';
+    }, []);
+    useLayoutEffect(() => { adjust(); }, [text, adjust]);
+    useEffect(() => {
+        const el = ref.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(() => adjust());
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [adjust]);
     return (
         <div className="flex flex-col gap-1">
             <label className="text-sm font-semibold text-blue-300/80 uppercase tracking-wide">{name || 'Gałąź'}</label>
             <textarea
+                ref={ref}
+                rows={1}
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => { setText(e.target.value); adjust(); }}
+                onFocus={adjust}
                 onBlur={() => { if (text !== (value || '')) onSave(text); }}
                 placeholder="Strategia realizacji tej gałęzi…"
-                rows={2}
-                className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-gray-300 text-base focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed resize-y"
+                style={{ overflow: 'hidden', minHeight: '1.4em', resize: 'none' }}
+                className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-gray-300 text-base focus:outline-none focus:border-blue-500 transition-colors leading-relaxed"
             />
         </div>
     );
@@ -119,6 +143,27 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     wbsDataRef.current = wbsData;
     const [expandedSection, setExpandedSection] = useState(null);
     const [fullscreenSection, setFullscreenSection] = useState(null);
+    // @anchor wbs-qa-tree-open
+    // Edytowalny widok Q&A całego drzewa (QaTreeView). Otwierany automatycznie raz
+    // na sesję przy pierwszym wejściu w WBS danego projektu — flaga w sessionStorage
+    // (klucz per nodeId), więc nawigacja tam-i-z-powrotem w tej samej karcie już nie nagabuje.
+    // Nie otwiera się, gdy Q&A jest puste lub wszystkie pytania mają już odpowiedzi.
+    const [qaTreeOpen, setQaTreeOpen] = useState(false);
+    // @anchor unified-all-tasks-open — modal pełnej listy zadań (ten sam co „Pełna lista" w zakładce Zadania)
+    const [allTasksOpen, setAllTasksOpen] = useState(false);
+    useEffect(() => {
+        if (!nodeId) return;
+        // Czekaj aż drzewo się załaduje — dopiero wtedy da się sprawdzić stan Q&A.
+        if (!wbsData || wbsData.length === 0) return;
+        const seenKey = `wbsQaAutoShown:${nodeId}`;
+        if (sessionStorage.getItem(seenKey)) return;
+        sessionStorage.setItem(seenKey, '1');
+        // Auto-otwieraj tylko gdy istnieje choć jedno pytanie bez odpowiedzi.
+        const hasUnanswered = wbsData.some(n =>
+            Array.isArray(n.qa) && n.qa.some(p => (p?.question || '').trim() && !(p?.answer || '').trim())
+        );
+        if (hasUnanswered) setQaTreeOpen(true);
+    }, [nodeId, wbsData]);
     const [sectionOrder, setSectionOrder] = useState(() => {
         try {
             const saved = localStorage.getItem('unifiedWbsSectionOrder');
@@ -138,9 +183,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         return new Set();
     });
     const [selectedId, setSelectedId] = useState(null);
-    const [wbsDescription, setWbsDescription] = useState('');
-    const [strategySaving, setStrategySaving] = useState(false);
-    const [strategySaved, setStrategySaved] = useState(false);
     const [offerText, setOfferText] = useState('');
     const [offerSaving, setOfferSaving] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
@@ -208,7 +250,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const [budgetImportMapping, setBudgetImportMapping] = useState({});
     // @anchor leaf-defaults-modal-state
     const [leafDefaultsOpen, setLeafDefaultsOpen] = useState(false);
-    const [leafDefaultsDraft, setLeafDefaultsDraft] = useState(() => loadLeafDefaults());
+    // @anchor leaf-defaults-state
+    // Aktywne wartości domyślne liści dla BIEŻĄCEGO zamówienia (nodeId). Nowe zamówienie → baza wyzerowana.
+    const [leafDefaults, setLeafDefaults] = useState(() => mergeLeafDefaults({}));
+    const [leafDefaultsDraft, setLeafDefaultsDraft] = useState(() => mergeLeafDefaults({}));
 
     // ── WBS Hybrid Tree state ──
     const [wbsTree, setWbsTree] = useState({ items: [] });
@@ -223,8 +268,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     }, []);
 
     const materialRef = useRef();
-    const strategyLoadedRef = useRef(false);
-    const strategySaveTimeout = useRef(null);
     const offerLoadedRef = useRef(false);
     const offerSaveTimeout = useRef(null);
     const fetchStrategyGenRef = useRef(0);
@@ -351,8 +394,32 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const handleBudgetImportFileChange = useCallback(async (event) => {
         const file = event.target.files?.[0];
         if (!file) return;
+        if (!(await guardSnapshotEdit())) return;
+        // ExcelJS czyta tylko OOXML (.xlsx). Stary binarny .xls to nie-zip → JSZip pada
+        // ("Can't find end of central directory"). Odrzuć z jasnym komunikatem zanim spróbujemy parsować.
+        if (/\.xls$/i.test(file.name)) {
+            alert('Stary format .xls nie jest obsługiwany. Otwórz plik w Excelu i zapisz jako „Skoroszyt programu Excel (*.xlsx)", a następnie zaimportuj ponownie.');
+            if (event.target) event.target.value = '';
+            return;
+        }
         try {
             const buffer = await file.arrayBuffer();
+            // Rozpoznanie po magicznych bajtach — .xlsx to ZIP ("PK\x03\x04").
+            // Plik zabezpieczony HASŁEM jest zaszyfrowanym kontenerem OLE (D0 CF 11 E0),
+            // którego ExcelJS nie odczyta ani nie odszyfruje → jasny komunikat zamiast błędu JSZip.
+            const sig = new Uint8Array(buffer.slice(0, 4));
+            const isZip = sig[0] === 0x50 && sig[1] === 0x4b && sig[2] === 0x03 && sig[3] === 0x04;
+            const isOle = sig[0] === 0xd0 && sig[1] === 0xcf && sig[2] === 0x11 && sig[3] === 0xe0;
+            if (isOle) {
+                alert('Plik jest zabezpieczony hasłem (zaszyfrowany) lub w starym formacie .xls. Usuń hasło: otwórz w Excelu → Plik → Informacje → Chroń skoroszyt → Szyfruj hasłem → usuń hasło, zapisz jako .xlsx i zaimportuj ponownie.');
+                if (event.target) event.target.value = '';
+                return;
+            }
+            if (!isZip) {
+                alert('To nie jest prawidłowy plik .xlsx (może być uszkodzony lub zabezpieczony hasłem). Zapisz ponownie w Excelu jako niezaszyfrowany .xlsx.');
+                if (event.target) event.target.value = '';
+                return;
+            }
             const wb = new ExcelJS.Workbook();
             await wb.xlsx.load(buffer);
             const worksheets = wb.worksheets || [];
@@ -392,7 +459,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             setBudgetImportOpen(true);
         } catch (e) {
             console.error('Budget Excel parse error:', e);
-            alert('Nie udało się odczytać pliku Excel.');
+            const notZip = /central directory|zip file/i.test(String(e?.message || ''));
+            alert(notZip
+                ? 'Nie udało się odczytać pliku — to nie jest prawidłowy plik .xlsx (może być uszkodzony lub w innym formacie). Zapisz ponownie w Excelu jako .xlsx.'
+                : 'Nie udało się odczytać pliku Excel.');
         } finally {
             if (event.target) event.target.value = '';
         }
@@ -772,18 +842,13 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         }
     }, [nodeId, userRoles]);
 
-    const getStrategyText = useCallback(() => wbsDescription, [wbsDescription]);
     const getOfferText = useCallback(() => offerText, [offerText]);
 
-    // Reset strategy state when switching nodes/versions so the new record loads fresh.
-    // Pending autosave timeouts are left intact — they capture the old saveStrategy closure
-    // (with the old nodeId) so typed-but-unsaved text still flushes to the correct record.
+    // Reset offer state when switching nodes/versions so the new record loads fresh.
     useEffect(() => {
-        strategyLoadedRef.current = false;
         offerLoadedRef.current = false;
         offerDateLoadedRef.current = false;
         fetchStrategyGenRef.current += 1;
-        setWbsDescription('');
         setOfferText('');
     }, [nodeId, versionId]);
 
@@ -795,10 +860,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             if (res.ok && gen === fetchStrategyGenRef.current) {
                 const text = await res.text();
                 const data = text ? JSON.parse(text) : null;
-                if (data && !strategyLoadedRef.current) {
-                    setWbsDescription(data.wbsDescription || '');
-                    strategyLoadedRef.current = true;
-                }
                 if (data && !offerLoadedRef.current) {
                     setOfferText(data.offerText || '');
                     offerLoadedRef.current = true;
@@ -965,6 +1026,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // gdy React nie zdążył odpalić updater-a setState przed tym wywołaniem)
     const handlePasteCloned = useCallback(async (mappings, treeSnapshot) => {
         if (!Array.isArray(mappings) || mappings.length === 0) return;
+        if (!(await guardSnapshotEdit())) return;
         if (hybridSaveTimeout.current) clearTimeout(hybridSaveTimeout.current);
         const treeToSave = treeSnapshot ?? wbsTreeRef.current;
         try {
@@ -1006,6 +1068,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // @anchor handle-requirement-assign-to-wbs
     const handleRequirementAssignToWbs = useCallback(async (wbsNodeId, reqId) => {
         if (!wbsNodeId || !reqId) return;
+        if (!(await guardSnapshotEdit())) return;
         try {
             const req = unassignedRequirements.find(r => r.id === reqId);
             const qty = parseFloat(req?.quantity) || 1;
@@ -1061,6 +1124,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         const source = unassignedRequirements.find(r => r.id === sourceId);
         const target = unassignedRequirements.find(r => r.id === targetId);
         if (!source || !target) return;
+        if (!(await guardSnapshotEdit())) return;
         const toLines = s => String(s || '').split(/\n/).map(x => x.trim()).filter(Boolean);
         const mergedSpec = Array.from(new Set([...toLines(target.technicalSpec), ...toLines(source.technicalSpec)])).join('\n');
         try {
@@ -1082,21 +1146,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         }
     }, [authHeaders, unassignedRequirements]);
 
-    const saveStrategy = useCallback(async (desc) => {
-        setStrategySaving(true);
-        try {
-            await fetch(`${API_URL}/order-requirements`, {
-                method: 'POST',
-                headers: authHeaders(),
-                body: JSON.stringify({ nodeId, versionId, wbsDescription: desc }),
-            });
-            setStrategySaved(true);
-            setIsDirty(false);
-            setTimeout(() => setStrategySaved(false), 2000);
-        } catch (e) { console.error('Save strategy error:', e); }
-        finally { setStrategySaving(false); }
-    }, [nodeId, versionId, authHeaders]);
-
     const saveOffer = useCallback(async (desc) => {
         setOfferSaving(true);
         try {
@@ -1111,14 +1160,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         } catch (e) { console.error('Save offer error:', e); }
         finally { setOfferSaving(false); }
     }, [nodeId, versionId, authHeaders]);
-
-    // Zachowane dla zewnętrznych wywołań (np. fetchData). MarkdownEditor zapisuje przez własny onSave.
-    // @anchor handle-strategy-save
-    const handleStrategySave = useCallback((immediate = false) => {
-        if (strategySaveTimeout.current) clearTimeout(strategySaveTimeout.current);
-        if (immediate) { saveStrategy(wbsDescription); return; }
-        strategySaveTimeout.current = setTimeout(() => saveStrategy(wbsDescription), 1500);
-    }, [wbsDescription, saveStrategy]);
 
     // Wielopoziomowa numeracja: wcięcie 2 spacje = 1 poziom; wynik to 1, 1.1, 1.1.1, 1.2, 2, 2.1 …
     // Listy punktowane (-) zachowują wcięcie wizualnie. Bloki nie-listowe resetują liczniki.
@@ -1286,17 +1327,39 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 .filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0 && String(n.strategy || '').trim())
                 .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
             if (!tops.length) return '';
-            const items = tops.map(n => `
+            // Odtwarza wpisy liści gałęzi (nazwa liścia + jego strategia) z płaskiej listy wbsData,
+            // tak jak WBSHybridTable składa strategię na węźle top-level. Dzięki temu w PDF nazwa
+            // liścia jest pogrubiona (jak w widoku na stronie), a nie wtopiona w tekst strategii.
+            const collectLeafStrategyEntries = (rootId) => {
+                const entries = [];
+                const walk = (pid) => {
+                    (wbsData || [])
+                        .filter(c => String(c.parentId) === String(pid))
+                        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+                        .forEach(child => {
+                            const s = String(child.strategy || '').trim();
+                            if (s) entries.push({ name: (child.name || 'Element WBS').trim(), strategy: s });
+                            walk(child.id);
+                        });
+                };
+                walk(rootId);
+                return entries;
+            };
+            const items = tops.map(n => {
+                const entries = collectLeafStrategyEntries(n.id);
+                const bodyHtml = entries.length
+                    ? entries.map(e => `<div class="branch-leaf-entry"><div class="branch-leaf-name">${esc(e.name)}</div>${renderStrategyHtml(e.strategy)}</div>`).join('')
+                    : renderStrategyHtml(n.strategy);
+                return `
                 <div class="branch-strategy">
                     <div class="branch-strategy-name">${esc(n.name || '(bez nazwy)')}</div>
-                    <div class="strategy-text">${renderStrategyHtml(n.strategy)}</div>
-                </div>`).join('');
-            return `<div class="branch-strategies-title">Strategie gałęzi</div>${items}`;
+                    <div class="strategy-text">${bodyHtml}</div>
+                </div>`;
+            }).join('');
+            return `<div class="branch-strategies-title">Opis Zakresów</div>${items}`;
         })();
-        const strategyHtml = (show('strategy') || show('oferta')) ? `
+        const strategyHtml = ((show('strategy') || show('oferta')) && branchStrategiesHtml) ? `
             <div class="section" style="${show('oferta') ? 'page-break-before: always;' : ''}">
-                <div class="section-header">Opis wyceny</div>
-                <div class="strategy-text">${renderStrategyHtml(getStrategyText() || 'Brak treści strategii')}</div>
                 ${branchStrategiesHtml}
             </div>` : '';
 
@@ -1492,6 +1555,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
   .branch-strategies-title { font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em; color: #4b5563; margin: 14px 0 6px 0; break-after: avoid; page-break-after: avoid; }
   .branch-strategy { margin-bottom: 8px; break-inside: avoid; page-break-inside: avoid; }
   .branch-strategy-name { font-size: 11px; font-weight: bold; color: #1a1a2e; margin-bottom: 3px; break-after: avoid; page-break-after: avoid; }
+  .branch-leaf-entry { margin-bottom: 8px; break-inside: avoid; page-break-inside: avoid; }
+  .branch-leaf-entry:last-child { margin-bottom: 0; }
+  .branch-leaf-name { font-weight: bold; color: #111; margin-bottom: 2px; break-after: avoid; page-break-after: avoid; }
   table { border-collapse: collapse; width: 100%; }
   td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; text-align: center; }
   td.num { text-align: center; font-family: monospace; font-size: 10px; }
@@ -1628,8 +1694,8 @@ ${ganttSectionHtml}
 
         // Pełna ścieżka gałęzi pośrednich dla kolumny „Podgałąź": przodkowie węzła
         // bez depth=0 (przedmiotu) i bez samego węzła, top-down, złączeni „ › ".
-        // Gdy węzeł siedzi BEZPOŚREDNIO pod przedmiotem (brak gałęzi pośredniej),
-        // powtarzamy w Podgałęzi nazwę samego węzła — żeby kolumna nie była pusta.
+        // Gdy węzeł siedzi BEZPOŚREDNIO pod przedmiotem, kolumna jest pusta — dzięki
+        // temu re-import (`applyBudgetImport`) jednoznacznie dopasowuje liść po ścieżce.
         const nodeById = {};
         for (const n of wbsData) nodeById[n.id] = n;
         const branchPath = (id) => {
@@ -1641,10 +1707,9 @@ ${ganttSectionHtml}
                 p = p.parentId ? nodeById[p.parentId] : null;
             }
             chain.pop(); // usuń depth=0 (przedmiot)
-            const joined = chain.reverse().map(n => String(n.name || '').trim()).filter(Boolean).join(' › ');
-            if (joined) return joined;
-            // Brak gałęzi pośredniej — powtórz nazwę bieżącego węzła.
-            return String(nodeById[id]?.name || '').trim();
+            // Pełna ścieżka gałęzi pośrednich, lub pusto gdy węzeł siedzi wprost pod
+            // przedmiotem — pusta wartość jest jednoznaczna przy re-imporcie (brak podgałęzi).
+            return chain.reverse().map(n => String(n.name || '').trim()).filter(Boolean).join(' › ');
         };
 
         // Kolejność kolumn: Ilość/Jednostka przed Kosztem jednostkowym; przed
@@ -1655,9 +1720,9 @@ ${ganttSectionHtml}
         const hasRowDiscount = rows.some(r => (Number(r.discount) || 0) !== 0);
         const BUDGET_COLUMNS = [
             { key: 'index', width: 6, header: 'Lp.' },
-            { key: 'subjectName', width: 28, header: 'Przedmiot' },
-            { key: 'parentName', width: 24, header: 'Podgałąź' },
-            { key: 'name', width: 34, header: 'Nazwa' },
+            { key: 'subjectName', width: 28, header: 'Zakres' },
+            { key: 'parentName', width: 24, header: 'Podzakres' },
+            { key: 'name', width: 34, header: 'Pozycja' },
             { key: 'requirementName', width: 36, header: 'Nazwa wymagania technicznego' },
             { key: 'type', width: 16, header: 'Typ' },
             { key: 'owner', width: 22, header: 'Osoba odpowiedzialna' },
@@ -1665,7 +1730,7 @@ ${ganttSectionHtml}
             { key: 'unit', width: 14, header: 'Jednostka' },
             { key: 'unitCost', width: 18, header: 'Koszt jednostkowy' },
             { key: 'totalCost', width: 18, header: 'Koszt całościowy' },
-            { key: 'margin', width: 12, header: 'Marża (%)' },
+            { key: 'margin', width: 12, header: 'Narzut (%)' },
             ...(hasRowDiscount ? [{ key: 'discount', width: 12, header: 'Rabat (%)' }] : []),
             { key: 'unitOfferPrice', width: 20, header: ' ofertowa cena jed.' },
             { key: 'offerPrice', width: 20, header: 'ofertowa cena całość.' },
@@ -2657,6 +2722,16 @@ ${ganttSectionHtml}
         summarySheet.addRow(['Przychód po rabatach', { formula: '=MAX(0,B4-B7)', result: exportedRevenueAfterDiscount }]);
         summarySheet.addRow(['Zysk po rabatach', { formula: '=B8-B3', result: exportedProfitAfterDiscount }]);
         summarySheet.addRow(['Marża po rabatach', { formula: '=IF(B8=0,0,B9/B8)', result: exportedMarginAfterDiscount / 100 }]);
+        // Suma dni: wszystkie liście typu „praca" z jednostką dni (dni/dzień) — sumowana ilość.
+        const workDaysTotal = rows.reduce((s, r) => {
+            if (r.type !== 'work') return s;
+            const u = String(r.unit || '').trim().toLowerCase();
+            if (u === 'dni' || u === 'dzień' || u === 'dzien' || u === 'd') {
+                return s + (Math.max(0, parseFloat(r.quantity) || 0));
+            }
+            return s;
+        }, 0);
+        summarySheet.addRow(['Liczba dni pracy', workDaysTotal]);
 
         summarySheet.getCell('B3').numFmt = '#,##0.00';
         summarySheet.getCell('B4').numFmt = '#,##0.00';
@@ -2666,6 +2741,7 @@ ${ganttSectionHtml}
         summarySheet.getCell('B8').numFmt = '#,##0.00';
         summarySheet.getCell('B9').numFmt = '#,##0.00';
         summarySheet.getCell('B10').numFmt = '0.00%';
+        summarySheet.getCell('B11').numFmt = '#,##0.##';
         summarySheet.getRow(1).font = { bold: true, size: 14 };
 
         // Per-type aggregation: jeden wiersz na typ — koszty agregowane BEZ rozróżniania
@@ -3557,21 +3633,29 @@ ${ganttSectionHtml}
         // Wstępne zdanie ("W odpowiedzi na zapytanie...") jest wpisywane jako markdown H1 (patrz
         // snippet „Wstęp"), bo wcześniej pełniło funkcję nagłówka sekcji. Teraz sekcja ma własny
         // nagłówek "Oferta", więc to zdanie demotujemy do zwykłego akapitu.
-        const offerBody = (getOfferText() || '').replace(/^#\s+/, '');
+        // Rozwiń tokeny {zmienne} tak samo jak w podglądzie/eksporcie PDF (resolveOfferTokens, ~5678) —
+        // inaczej {tabela wbs1/2/3}, {nazwa projektu} itd. trafiały do Excela dosłownie zamiast wartości/tabel.
+        const workDaysFmt = workDaysMemo % 1 === 0 ? String(workDaysMemo) : workDaysMemo.toFixed(1);
+        const resolveOfferTokens = (t) => (t || '')
+            .replace(/\{nazwa projektu\}/g, orderName || projectName || '')
+            .replace(/\{wartość oferty\}/g, fmtPLN(offerRevenueTotal) + ' PLN')
+            .replace(/\{data oferty\}/g, offerDate)
+            .replace(/\{tabela wbs1\}/gi, wbsTablesByDepth[1] || '')
+            .replace(/\{tabela wbs2\}/gi, wbsTablesByDepth[2] || '')
+            .replace(/\{tabela wbs3\}/gi, wbsTablesByDepth[3] || '')
+            .replace(/\{tabela wbs\}/gi, wbsTablesByDepth[2] || '')
+            .replace(/\{Roboczo dni w projekcie\}/gi, workDaysFmt);
+        const offerBody = resolveOfferTokens(getOfferText() || '').replace(/^#\s+/, '');
         const offerFull = offerBody.trim() ? `# Oferta\n\n${offerBody}` : '';
         buildMarkdownSheet('Oferta', offerFull, 'Brak treści oferty.');
-        // ── Sheet "Strategia": tekst z sekcji „Jak to chcemy zrobić" + strategie per gałąź ──
+        // ── Sheet "Strategia": strategie per gałąź (globalna strategia projektu usunięta) ──
         const branchStrategyMd = (wbsData || [])
             .filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0 && String(n.strategy || '').trim())
             .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
             .map(n => `## ${n.name || '(bez nazwy)'}\n\n${String(n.strategy).trim()}`)
             .join('\n\n');
-        const generalStrategyText = (getStrategyText() || '').trim();
-        const generalStrategyMd = generalStrategyText ? `# Opis wyceny\n\n${generalStrategyText}` : '';
-        const strategyFull = [generalStrategyMd, branchStrategyMd ? `# Strategie gałęzi\n\n${branchStrategyMd}` : '']
-            .filter(s => String(s).trim())
-            .join('\n\n');
-        buildMarkdownSheet('Strategia', strategyFull, 'Brak treści strategii.');
+        const strategyFull = branchStrategyMd ? `# Plan działania\n\n${branchStrategyMd}` : '';
+        buildMarkdownSheet('Plan działania', strategyFull, 'Brak treści planu działania.');
 
         // ── Sheet Oferta-podział na Typy: ceny ofertowe agregowane wg typu zakresu ──
         {
@@ -4183,6 +4267,7 @@ ${ganttSectionHtml}
     };
 
     const addNode = useCallback(async (parentId = null) => {
+        if (!(await guardSnapshotEdit())) return;
         try {
             const res = await fetch(`${API_URL}/wbs-nodes`, {
                 method: 'POST',
@@ -4281,6 +4366,7 @@ ${ganttSectionHtml}
     const handleHybridNodesDeleted = useCallback(async (deletedIds) => {
         const rootId = deletedIds?.[0];
         if (!rootId) return;
+        if (!(await guardSnapshotEdit())) return;
         try {
             const res = await fetch(`${API_URL}/wbs-nodes/${rootId}`, { method: 'DELETE', headers: authHeaders() });
             if (!res.ok) { console.error('[WBS delete] Błąd serwera:', res.status); return; }
@@ -4293,6 +4379,7 @@ ${ganttSectionHtml}
     const deleteNodeByIdRef = useRef(null);
     const deleteNodeById = useCallback(async (id) => {
         if (!id || !window.confirm('Usunąć ten węzeł i wszystkie podgałęzie?')) return;
+        if (!(await guardSnapshotEdit())) return;
         try {
             const res = await fetch(`${API_URL}/wbs-nodes/${id}`, { method: 'DELETE', headers: authHeaders() });
             if (!res.ok) {
@@ -4452,6 +4539,7 @@ ${ganttSectionHtml}
     // @anchor handle-gantt-date-change
     const handleGanttDateChange = useCallback(async (nodeId, startIso, endIso) => {
         if (!nodeId || !startIso || !endIso) return;
+        if (!(await guardSnapshotEdit())) return;
         try {
             await fetch(`${API_URL}/wbs-nodes/${nodeId}`, {
                 method: 'PATCH',
@@ -4466,6 +4554,7 @@ ${ganttSectionHtml}
     // @anchor handle-gantt-duration-change
     const handleGanttDurationChange = useCallback(async (nodeId, days) => {
         if (!nodeId || !Number.isFinite(days)) return;
+        if (!(await guardSnapshotEdit())) return;
         const node = wbsData.find(n => n.id === nodeId);
         const nodeType = String(node?.type || '').toLowerCase();
         const isPacket = nodeType === 'pakiet' || nodeType === 'komplet';
@@ -4490,6 +4579,36 @@ ${ganttSectionHtml}
     // @anchor apply-leaf-defaults
     // Stosuje wartości domyślne typu liścia do świeżo otypowanego węzła: unit przez endpoint drzewa,
     // a unitCost/quantity/margin jednym PATCH-em /budget (z przeliczeniem unitPrice/totalPrice po stronie backendu).
+    // @anchor fetch-leaf-defaults
+    // Pobiera wartości domyślne liści dla bieżącego zamówienia (per nodeId). Brak wpisu → baza wyzerowana.
+    useEffect(() => {
+        if (!nodeId) { setLeafDefaults(mergeLeafDefaults({})); return; }
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch(`${API_URL}/wbs-leaf-defaults/${nodeId}`, { headers: authHeaders() });
+                const stored = res.ok ? await res.json().catch(() => ({})) : {};
+                if (!cancelled) setLeafDefaults(mergeLeafDefaults(stored));
+            } catch {
+                if (!cancelled) setLeafDefaults(mergeLeafDefaults({}));
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [nodeId, authHeaders]);
+
+    // @anchor save-leaf-defaults-to-server
+    // Zapisuje wartości domyślne liści dla bieżącego zamówienia (upsert po nodeId).
+    const saveLeafDefaultsToServer = useCallback(async (defaults) => {
+        const merged = mergeLeafDefaults(defaults);
+        setLeafDefaults(merged);
+        if (!nodeId) return;
+        try {
+            await fetch(`${API_URL}/wbs-leaf-defaults/${nodeId}`, {
+                method: 'PUT', headers: authHeaders(), body: JSON.stringify({ data: merged }),
+            });
+        } catch (e) { console.error('Save leaf defaults error:', e); }
+    }, [nodeId, authHeaders]);
+
     const applyLeafDefaults = useCallback(async (id, defaults) => {
         if (!id || !defaults) return;
         const node = wbsData.find(n => n.id === id) || {};
@@ -4588,6 +4707,19 @@ ${ganttSectionHtml}
                 }
                 return current?.name || node.name || '';
             };
+            // Segmenty gałęzi pośrednich węzła (bez przedmiotu depth=0 i bez samego węzła),
+            // top-down — symetryczne do `branchPath()` w eksporcie budżetu do Excela.
+            const branchSegsForNode = (node) => {
+                const chain = [];
+                let p = node?.parentId ? byId.get(node.parentId) : null;
+                let guard = 0;
+                while (p && guard++ < 50) { chain.push(p); p = p.parentId ? byId.get(p.parentId) : null; }
+                chain.pop(); // usuń przedmiot (depth=0)
+                return chain.reverse().map((n) => normKey(n.name)).filter(Boolean);
+            };
+            // Rozbij wartość kolumny „Podgałąź" na segmenty (obsługa separatorów › / >).
+            const parseParentSegsRaw = (raw) => String(raw || '')
+                .split(/›|\/|>/).map((s) => s.trim()).filter(Boolean);
             const subjectRootsByName = new Map();
             for (const item of wbsData) {
                 if (Number(item?.depth) === 0) {
@@ -4629,7 +4761,13 @@ ${ganttSectionHtml}
 
                 const wantedName = normKey(importedRow.name);
                 const wantedSubject = normKey(importedRow.subjectName);
-                const wantedParent = normKey(importedRow.parentName);
+                // „Podgałąź" z eksportu to PEŁNA ścieżka gałęzi pośrednich (np. „A › B").
+                // Starsze eksporty dla liścia bezpośrednio pod przedmiotem powtarzały nazwę
+                // samego liścia — taki przypadek traktujemy jak brak podgałęzi.
+                const parentSegsRaw = parseParentSegsRaw(importedRow.parentName);
+                const effParentSegsRaw = (parentSegsRaw.length === 1 && normKey(parentSegsRaw[0]) === wantedName)
+                    ? [] : parentSegsRaw;
+                const wantedParentPath = effParentSegsRaw.map((s) => normKey(s)).join(' › ');
 
                 let target = null;
                 if (wantedName) {
@@ -4637,9 +4775,14 @@ ${ganttSectionHtml}
                         if (used.has(row.id)) return false;
                         if (normKey(row.name) !== wantedName) return false;
                         if (wantedSubject && normKey(getSubjectNameForNode(row)) !== wantedSubject) return false;
-                        if (wantedParent) {
+                        if (wantedParentPath) {
+                            // Porównaj pełną ścieżkę gałęzi; fallback: sam bezpośredni rodzic.
+                            const segs = branchSegsForNode(row);
                             const directParent = byId.get(row.parentId);
-                            if (!directParent || normKey(directParent.name) !== wantedParent) return false;
+                            const lastSeg = effParentSegsRaw[effParentSegsRaw.length - 1];
+                            const matchesPath = segs.join(' › ') === wantedParentPath;
+                            const matchesDirect = directParent && lastSeg && normKey(directParent.name) === normKey(lastSeg);
+                            if (!matchesPath && !matchesDirect) return false;
                         }
                         return true;
                     });
@@ -4670,23 +4813,25 @@ ${ganttSectionHtml}
 
                     if (!subjectRoot) { skipped += 1; continue; }
 
-                    // Find or create parentName sub-group
+                    // Odtwórz cały łańcuch gałęzi pośrednich („A › B") pod przedmiotem —
+                    // każdy segment osobno, znajdując istniejący lub tworząc brakujący.
                     let createParentId = subjectRoot.id;
-                    if (wantedParent) {
+                    for (const segRaw of effParentSegsRaw) {
+                        const segKey = normKey(segRaw);
                         let parentNode = budgetRows.find((row) =>
-                            normKey(row.name) === wantedParent
-                            && normKey(getSubjectNameForNode(row)) === wantedSubject
+                            normKey(row.name) === segKey
+                            && row.parentId === createParentId
                         );
                         if (!parentNode) {
                             const pgRes = await fetch(`${API_URL}/wbs-nodes`, {
                                 method: 'POST',
                                 headers: authHeaders(),
-                                body: JSON.stringify({ nodeId, versionId: versionId || null, parentId: subjectRoot.id, name: importedRow.parentName.trim() }),
+                                body: JSON.stringify({ nodeId, versionId: versionId || null, parentId: createParentId, name: segRaw }),
                             });
                             if (pgRes.ok) {
                                 const pgNode = await pgRes.json().catch(() => null);
                                 if (pgNode?.id) {
-                                    parentNode = { id: pgNode.id, name: pgNode.name, parentId: subjectRoot.id };
+                                    parentNode = { id: pgNode.id, name: pgNode.name, parentId: createParentId };
                                     budgetRows.push(parentNode);
                                     byId.set(pgNode.id, parentNode);
                                     newNodeIds.add(pgNode.id);
@@ -4963,7 +5108,7 @@ ${ganttSectionHtml}
                 // zaciąga konfigurowalne wartości domyślne z modalu „Domyślne wartości" — dotyczy
                 // pozycji nowych ORAZ istniejących (edycja później w tabeli nadal możliwa).
                 if (!inheritedFromMaterials) {
-                    const defs = getLeafDefault(row.type);
+                    const defs = getLeafDefaultFrom(leafDefaults, row.type);
                     if (defs) {
                         row.unit = defs.unit ?? row.unit;
                         row.unitCost = Number(defs.unitCost) || 0;
@@ -5126,7 +5271,7 @@ ${ganttSectionHtml}
                 }
             }
         }
-    }, [saveBudgetField, updateNodeField, materialMetaByLookupKey, updateLocalWbsBudgetRow, syncMaterialRequirementsFromWbsQuantity, authHeaders, nodeId, versionId, wbsData, refreshUnified, findRequirementIdsForLookupKey, refreshMaterialCosts]);
+    }, [saveBudgetField, updateNodeField, materialMetaByLookupKey, updateLocalWbsBudgetRow, syncMaterialRequirementsFromWbsQuantity, authHeaders, nodeId, versionId, wbsData, refreshUnified, findRequirementIdsForLookupKey, refreshMaterialCosts, leafDefaults]);
 
     const buildRows = (view) => {
         const byId = new Map(wbsData.map(item => [item.id, item]));
@@ -5530,6 +5675,22 @@ ${ganttSectionHtml}
                         )}
                         {(key === 'wbs' || key === 'wbs-hybrid') && (
                             <button
+                                onClick={(e) => { e.stopPropagation(); setAllTasksOpen(true); }}
+                                className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
+                            >
+                                <LayoutList size={11} /> Pokaż zadania
+                            </button>
+                        )}
+                        {(key === 'wbs' || key === 'wbs-hybrid') && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setQaTreeOpen(true); }}
+                                className="flex items-center gap-1.5 px-3 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/25 rounded-lg text-indigo-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
+                            >
+                                <HelpCircle size={11} /> Q&A
+                            </button>
+                        )}
+                        {(key === 'wbs' || key === 'wbs-hybrid') && (
+                            <button
                                 onClick={(e) => { e.stopPropagation(); openExport({ title: 'Q&A PDF', defaultFilename: `Q&A_${safeFileBase()}.pdf`, makeArtifact: () => exportQaFormPdf(wbsData, orderName || projectName || 'Projekt') }); }}
                                 className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                             >
@@ -5569,7 +5730,7 @@ ${ganttSectionHtml}
             <input
                 ref={budgetImportFileInputRef}
                 type="file"
-                accept=".xlsx,.xls"
+                accept=".xlsx"
                 className="hidden"
                 onChange={handleBudgetImportFileChange}
             />
@@ -5577,18 +5738,19 @@ ${ganttSectionHtml}
                 if (key === 'oferta') {
                     if (!isManagerOrAdmin) return null;
                     const workDaysFmt = workDaysMemo % 1 === 0 ? String(workDaysMemo) : workDaysMemo.toFixed(1);
-                    const resolvedPresets = offerPresets.map(p => ({
-                        ...p,
-                        text: p.text
-                            .replace(/\{nazwa projektu\}/g, orderName || projectName || '')
-                            .replace(/\{wartość oferty\}/g, fmtPLN(offerRevenueTotal) + ' PLN')
-                            .replace(/\{data oferty\}/g, offerDate)
-                            .replace(/\{tabela wbs1\}/gi, wbsTablesByDepth[1] || '')
-                            .replace(/\{tabela wbs2\}/gi, wbsTablesByDepth[2] || '')
-                            .replace(/\{tabela wbs3\}/gi, wbsTablesByDepth[3] || '')
-                            .replace(/\{tabela wbs\}/gi, wbsTablesByDepth[2] || '')
-                            .replace(/\{Roboczo dni w projekcie\}/gi, workDaysFmt),
-                    }));
+                    // @anchor resolve-offer-tokens
+                    // Rozwija tokeny {zmienne} na żywe wartości. NIE używane przy wstawianiu szablonu
+                    // (tam wchodzi surowy token, by treść auto-aktualizowała się) — tylko w podglądzie
+                    // edytora i (osobno) przy eksporcie PDF.
+                    const resolveOfferTokens = (t) => (t || '')
+                        .replace(/\{nazwa projektu\}/g, orderName || projectName || '')
+                        .replace(/\{wartość oferty\}/g, fmtPLN(offerRevenueTotal) + ' PLN')
+                        .replace(/\{data oferty\}/g, offerDate)
+                        .replace(/\{tabela wbs1\}/gi, wbsTablesByDepth[1] || '')
+                        .replace(/\{tabela wbs2\}/gi, wbsTablesByDepth[2] || '')
+                        .replace(/\{tabela wbs3\}/gi, wbsTablesByDepth[3] || '')
+                        .replace(/\{tabela wbs\}/gi, wbsTablesByDepth[2] || '')
+                        .replace(/\{Roboczo dni w projekcie\}/gi, workDaysFmt);
                     return renderSection('oferta', 'Oferta', FileText, 'amber', (
                         <div className="flex flex-col flex-1 min-h-0 p-4 gap-2">
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 py-1 bg-white/3 rounded-lg border border-white/5">
@@ -5631,7 +5793,8 @@ ${ganttSectionHtml}
                                 containerClassName="flex-1 min-h-0"
                                 className="flex-1 min-h-0 w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-amber-500 transition-colors custom-scrollbar leading-relaxed resize-none"
                                 saveIndicator={true}
-                                presets={resolvedPresets}
+                                presets={offerPresets}
+                                resolveTokens={resolveOfferTokens}
                                 onManagePresets={() => setPresetManagerOpen(true)}
                             />
                         </div>
@@ -5644,19 +5807,10 @@ ${ganttSectionHtml}
                 if (key === 'strategy') {
                     return renderSection('strategy', 'Jak to chcemy zrobić', HelpCircle, 'blue', (
                         <div className="flex flex-col flex-1 min-h-0 p-4 overflow-y-auto custom-scrollbar">
-                            <MarkdownEditor
-                                value={wbsDescription}
-                                onChange={(v) => { setWbsDescription(v); setIsDirty(true); }}
-                                onSave={(v) => saveStrategy(v)}
-                                previewTitle="Jak to chcemy zrobić"
-                                placeholder="Zdefiniuj plan i strategię realizacji projektu..."
-                                containerClassName="flex-1 min-h-[280px] flex-shrink-0"
-                                className="flex-1 min-h-[220px] w-full bg-black/40 border border-white/10 rounded-xl p-6 text-gray-300 text-lg focus:outline-none focus:border-blue-500 transition-colors custom-scrollbar leading-relaxed resize-none"
-                                saveIndicator={true}
-                            />
-                            {/* Strategie per gałąź (tylko węzły top-level) — pod globalną strategią. */}
-                            {wbsData.filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0).length > 0 && (
-                                <div className="mt-4 pt-4 border-t border-white/10 flex flex-col gap-4 flex-shrink-0">
+                            {/* Strategie per gałąź (tylko węzły top-level). Globalna strategia projektu usunięta —
+                                zostają wyłącznie strategie poszczególnych gałęzi i liści. */}
+                            {wbsData.filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0).length > 0 ? (
+                                <div className="flex flex-col gap-4 flex-shrink-0">
                                     <div className="text-sm font-bold uppercase tracking-widest text-gray-500">Strategie gałęzi</div>
                                     {wbsData
                                         .filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0)
@@ -5670,6 +5824,8 @@ ${ganttSectionHtml}
                                             />
                                         ))}
                                 </div>
+                            ) : (
+                                <div className="text-gray-500 text-sm">Brak gałęzi — dodaj elementy w strukturze WBS, aby zdefiniować ich strategie.</div>
                             )}
                         </div>
                     ), null);
@@ -5731,6 +5887,7 @@ ${ganttSectionHtml}
                                 onPasteCloned={handlePasteCloned}
                                 onNodeExpand={handleNodeExpand}
                                 onApplyLeafDefaults={applyLeafDefaults}
+                                leafDefaults={leafDefaults}
                             />
                         </div>
                     ), null, isManagerOrAdmin ? (
@@ -5743,7 +5900,7 @@ ${ganttSectionHtml}
                                 {extractingForWbs ? <div className="w-3 h-3 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" /> : <Sparkles size={11} />}
                                 Wyciągnij z dokumentów
                             </button>
-                            <button onClick={(e) => { e.stopPropagation(); setLeafDefaultsDraft(loadLeafDefaults()); setLeafDefaultsOpen(true); }} className="flex items-center gap-1.5 px-3 py-1 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-lg text-sky-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
+                            <button onClick={(e) => { e.stopPropagation(); setLeafDefaultsDraft(mergeLeafDefaults(leafDefaults)); setLeafDefaultsOpen(true); }} className="flex items-center gap-1.5 px-3 py-1 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-lg text-sky-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
                                 <SlidersHorizontal size={11} /> Domyślne wartości
                             </button>
                         </div>
@@ -5839,6 +5996,14 @@ ${ganttSectionHtml}
                 }
                 return null;
             })}
+
+            {qaTreeOpen && (
+                <QaTreeView nodeId={nodeId} versionId={versionId} onClose={() => setQaTreeOpen(false)} />
+            )}
+
+            {allTasksOpen && (
+                <AllTasksModal nodeId={nodeId} versionId={versionId} onChanged={onWbsUpdate} onClose={() => setAllTasksOpen(false)} />
+            )}
 
             {pendingExport && (
                 <ExportChoiceModal
@@ -5986,7 +6151,15 @@ ${ganttSectionHtml}
                                         min="1"
                                         max={Math.max(1, budgetImportRows.length)}
                                         value={budgetImportHeaderRow}
-                                        onChange={(e) => setBudgetImportHeaderRow(Math.max(1, Number(e.target.value) || 1))}
+                                        onChange={(e) => setBudgetImportHeaderRow(e.target.value)}
+                                        onBlur={(e) => {
+                                            const maxRow = Math.max(1, budgetImportRows.length);
+                                            const parsed = Math.floor(Number(e.target.value));
+                                            const safeValue = Number.isFinite(parsed) && parsed >= 1 ? Math.min(maxRow, parsed) : 1;
+                                            setBudgetImportHeaderRow(safeValue);
+                                            // Przebuduj automapowanie z nowo wskazanego wiersza nagłówka.
+                                            setBudgetImportMapping(buildBudgetImportAutoMapping(budgetImportRows[safeValue - 1] || []));
+                                        }}
                                         className="rounded-lg border border-white/10 bg-black/30 px-2 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
                                     />
                                 </label>
@@ -6042,9 +6215,9 @@ ${ganttSectionHtml}
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {budgetImportRows.slice(Math.max(0, budgetImportHeaderRow), Math.max(0, budgetImportHeaderRow) + 5).map((row, rowIdx) => (
+                                        {budgetImportRows.slice(Math.max(0, Number(budgetImportHeaderRow) || 0), (Math.max(0, Number(budgetImportHeaderRow) || 0)) + 5).map((row, rowIdx) => (
                                             <tr key={rowIdx} className="border-t border-white/5">
-                                                <td className="px-2 py-1 text-gray-500">{budgetImportHeaderRow + rowIdx + 1}</td>
+                                                <td className="px-2 py-1 text-gray-500">{(Number(budgetImportHeaderRow) || 0) + rowIdx + 1}</td>
                                                 {row.slice(0, 8).map((cell, cellIdx) => (
                                                     <td key={cellIdx} className="px-2 py-1 text-gray-200 max-w-[220px] truncate" title={cell}>{cell || '—'}</td>
                                                 ))}
@@ -6083,7 +6256,7 @@ ${ganttSectionHtml}
                                 <div className="p-2 rounded-xl bg-sky-500/15 border border-sky-500/20 text-sky-300"><SlidersHorizontal size={16} /></div>
                                 <div>
                                     <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-white">Domyślne wartości pozycji</h3>
-                                    <p className="text-[10px] text-gray-500 uppercase tracking-widest">Nowa pozycja danego typu przyjmie te wartości — zmienisz je potem w tabeli</p>
+                                    <p className="text-[10px] text-gray-500 uppercase tracking-widest">Osobne dla tego zamówienia — nowa pozycja danego typu przyjmie te wartości, zmienisz je potem w tabeli</p>
                                 </div>
                             </div>
                             <button onClick={() => setLeafDefaultsOpen(false)} className="p-2 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 transition-all" aria-label="Zamknij">
@@ -6102,8 +6275,8 @@ ${ganttSectionHtml}
                                 <div className="divide-y divide-white/5">
                                     {/* Materiał i sprzęt wyceniane indywidualnie (wymagania materiałowe) — poza modalem domyślnych */}
                                     {LEAF_TYPE_OPTIONS.filter((t) => t !== 'material' && t !== 'equipment').map((t) => {
-                                        const row = leafDefaultsDraft[t] || SEED_LEAF_DEFAULTS[t] || {};
-                                        const setField = (field, value) => setLeafDefaultsDraft((prev) => ({ ...prev, [t]: { ...(prev[t] || SEED_LEAF_DEFAULTS[t] || {}), [field]: value } }));
+                                        const row = leafDefaultsDraft[t] || ZERO_LEAF_DEFAULTS[t] || {};
+                                        const setField = (field, value) => setLeafDefaultsDraft((prev) => ({ ...prev, [t]: { ...(prev[t] || ZERO_LEAF_DEFAULTS[t] || {}), [field]: value } }));
                                         return (
                                             <div key={t} className="grid grid-cols-[1.4fr,1.2fr,1fr,0.9fr] gap-3 px-4 py-2.5 items-center hover:bg-white/[0.02] transition-colors">
                                                 <div className="text-sm text-white font-medium">{TYPE_LABELS[t] || t}</div>
@@ -6137,17 +6310,17 @@ ${ganttSectionHtml}
 
                         <div className="px-5 py-3 border-t border-white/10 flex items-center justify-between">
                             <button
-                                onClick={() => setLeafDefaultsDraft(structuredClone(SEED_LEAF_DEFAULTS))}
+                                onClick={() => setLeafDefaultsDraft(structuredClone(ZERO_LEAF_DEFAULTS))}
                                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-white/10 text-gray-300 hover:bg-white/10 transition-all text-xs"
                             >
-                                <RotateCcw size={12} /> Przywróć fabryczne
+                                <RotateCcw size={12} /> Wyzeruj
                             </button>
                             <div className="flex items-center gap-2">
                                 <button onClick={() => setLeafDefaultsOpen(false)} className="px-4 py-2 rounded-lg border border-white/10 text-gray-300 hover:bg-white/10 transition-all text-sm">
                                     Anuluj
                                 </button>
                                 <button
-                                    onClick={() => { saveLeafDefaults(leafDefaultsDraft); setLeafDefaultsOpen(false); }}
+                                    onClick={() => { saveLeafDefaultsToServer(leafDefaultsDraft); setLeafDefaultsOpen(false); }}
                                     className="px-4 py-2 rounded-lg border border-sky-500/30 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25 transition-all text-sm font-medium"
                                 >
                                     Zapisz domyślne

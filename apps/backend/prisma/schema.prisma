@@ -982,6 +982,24 @@ model DefaultProjectItem {
   @@map("default_project_items")
 }
 
+/// @anchor wbs-leaf-defaults-model
+/// Konfigurowalne wartości domyślne liści budżetowych — osobne dla KAŻDEGO zamówienia
+/// (ProcessNode). Nowe zamówienie nie ma wpisu → frontend stosuje bazę wyzerowaną.
+model WbsLeafDefaults {
+  id String @id @default(uuid())
+
+  /// @anchor wbs-leaf-defaults-node-id
+  nodeId String @unique // ProcessNode.id (zamówienie)
+
+  /// @anchor wbs-leaf-defaults-data
+  data String // JSON: { work:{unit,unitCost,margin,quantity}, service:{...}, ... }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("wbs_leaf_defaults")
+}
+
 /// @anchor product-proposal
 model ProductProposal {
   /// @anchor product-proposal-id
@@ -1250,6 +1268,12 @@ model TaskReminder {
   sentAt      DateTime?
   /// @anchor task-reminder-snoozed-from
   snoozedFrom DateTime?
+  /// @anchor task-reminder-recur-interval-minutes
+  recurIntervalMinutes Int? // null = alarm jednorazowy; ustawione = interwał serii cyklicznej (min)
+  /// @anchor task-reminder-recur-end
+  recurEnd    DateTime? // koniec okna serii cyklicznej; po tej dacie alarm nie odpala
+  /// @anchor task-reminder-last-fired-at
+  lastFiredAt DateTime? // ostatnie wyświetlone wystąpienie serii — kursor „już pokazane"
   createdAt   DateTime  @default(now())
 
   /// @anchor task-reminder-user-task

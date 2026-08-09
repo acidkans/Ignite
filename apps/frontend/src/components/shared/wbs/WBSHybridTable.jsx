@@ -148,7 +148,7 @@ function QaCell({ pairs, onChange, onPersist }) {
     );
 }
 
-// ── Q&A modal — pełnoekranowy edytor pytań/odpowiedzi (3/4 szerokości) ─────────
+// ── Q&A modal — pełnoekranowy edytor pytań/odpowiedzi (3/8 szerokości) ─────────
 // Wąska kolumna w tabeli zawężała długie pytania do nieczytelności. Badge w
 // kolumnie otwiera ten modal, w którym Pytanie/Odpowiedź mają pełną szerokość.
 // @anchor qa-modal
@@ -161,7 +161,7 @@ function QaModal({ node, onChange, onPersist, onClose }) {
     const list = Array.isArray(node?.qa) ? node.qa : [];
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-            <div className="relative bg-gray-950 border border-white/10 rounded-2xl shadow-2xl w-3/4 max-h-[85vh] flex flex-col overflow-hidden"
+            <div className="relative bg-gray-950 border border-white/10 rounded-2xl shadow-2xl w-[37.5%] max-h-[85vh] flex flex-col overflow-hidden"
                 onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
                     <div>
@@ -193,6 +193,33 @@ function collectBranchQa(node, depth = 0, acc = []) {
         collectBranchQa(child, depth + 1, acc);
     }
     return acc;
+}
+
+// Zbiera wypełnione komórki strategii potomków (liście + węzły pośrednie) jako
+// [{ id, name, strategy }]. Węzeł top-level sam się pomija. Baza dla renderu (bold nazwa)
+// i dla złożenia utrwalanego na top-level.
+// @anchor collect-branch-strategy-entries
+function collectBranchStrategyEntries(node) {
+    const entries = [];
+    const walk = (n) => {
+        for (const child of (n?.children || [])) {
+            const s = (child.strategy || '').trim();
+            if (s) entries.push({ id: child.id, name: (child.name || 'Element WBS').trim(), strategy: s });
+            walk(child);
+        }
+    };
+    walk(node);
+    return entries;
+}
+
+// Składa strategię całej gałęzi do utrwalenia na polu strategy węzła top-level (czytają je
+// eksporty PDF/Excel). Format: `nazwa:` a strategia od nowego wiersza; wpisy rozdzielone
+// pustą linią.
+// @anchor compose-branch-strategy
+function composeBranchStrategy(node) {
+    return collectBranchStrategyEntries(node)
+        .map(e => `${e.name}:\n${e.strategy}`)
+        .join('\n\n');
 }
 
 // Read-only modal pokazujący wszystkie Q&A z gałęzi (dzieci danego węzła), grupowane
@@ -252,7 +279,7 @@ function QaBranchModal({ node, onClose }) {
     );
 }
 
-import { UNIT_OPTIONS, sanitizeQtyInput, evalQtyFormula, suggestDefaultUnit, getLeafDefault } from './wbsConstants';
+import { UNIT_OPTIONS, sanitizeQtyInput, evalQtyFormula, suggestDefaultUnit, getLeafDefaultFrom } from './wbsConstants';
 import { BaselineSplitCard } from './WbsMaterialsPanel';
 
 const API_URL = '/api';
@@ -362,6 +389,8 @@ const STRUCT_STATUS_META = {
     ORDERED:   { label: 'Zamówione',    style: 'bg-violet-500/20 text-violet-300 border-violet-500/30' },
     IN_STOCK:  { label: 'Na magazynie', style: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' },
     ISSUED:    { label: 'Wydane',       style: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+    DONE:      { label: 'Wykonane',     style: 'bg-teal-500/20 text-teal-300 border-teal-500/30' },
+    INSTALLED: { label: 'Zainstalowane', style: 'bg-lime-500/20 text-lime-300 border-lime-500/30' },
     MIXED:     { label: 'Mieszany',     style: 'bg-sky-500/20 text-sky-300 border-sky-500/30' },
 };
 
@@ -376,7 +405,9 @@ function StatusSelect({ value, onChange, onKeyDown, ...rest }) {
             onKeyDown={onKeyDown}
             {...rest}
         >
-            {Object.entries(STRUCT_STATUS_META).map(([code, { label }]) => (
+            {Object.entries(STRUCT_STATUS_META)
+                .filter(([code]) => code !== 'MIXED')
+                .map(([code, { label }]) => (
                 <option key={code} value={code} className="bg-gray-900 text-white">{label}</option>
             ))}
         </select>
@@ -842,7 +873,7 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal }) 
 
 // ── Component ─────────────────────────────────────────────────────────────────
 // @anchor wbs-hybrid-table
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null, onApplyLeafDefaults = null }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null, onApplyLeafDefaults = null, leafDefaults = null }) {
     const [expanded, setExpanded] = useState(() => new Set());
     const initialExpandDoneRef = useRef(false);
     // Domyślnie rozwiń tylko do 2. poziomu (root + węzły top-level) przy pierwszym
@@ -1028,6 +1059,43 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const handleField = (id, field, value) =>
         setWbsTree(t => ({ ...t, items: updateField(t.items || [], id, field, value) }));
 
+    // Zapis strategii na węźle-elemencie (liść / węzeł pośredni): utrwala własną wartość,
+    // po czym przelicza złożenie całej gałęzi i utrwala je na węźle top-level (depth 0).
+    // Puste złożenie NIE nadpisuje istniejącej strategii top-level (ochrona starych danych).
+    // @anchor save-leaf-strategy
+    const saveLeafStrategy = (nodeId, value) => {
+        onNodeFieldSave?.(nodeId, 'strategy', value);
+        const nextItems = updateField(items, nodeId, 'strategy', value);
+        const root = nextItems.find(r => subtreeContains(r, nodeId));
+        if (!root) return;
+        const composed = composeBranchStrategy(root);
+        if (composed && composed !== (root.strategy || '')) {
+            handleField(root.id, 'strategy', composed);
+            onNodeFieldSave?.(root.id, 'strategy', composed);
+        }
+    };
+
+    // Po usunięciu węzła przelicza złożenie strategii gałęzi top-level, do której należał
+    // usunięty węzeł, i utrwala je (także czyści, gdy usunięto ostatni wpis strategii —
+    // top-level jest read-only, więc bez tego stary wpis zostawał w eksportach i nie dało
+    // się go poprawić). Chroni starą ręczną treść top-level: gdy złożenie puste, nadpisuje
+    // tylko jeśli usunięte poddrzewo faktycznie zawierało strategię.
+    // @anchor recompose-branch-strategy-after-delete
+    const recomposeBranchStrategyAfterDelete = (deletedNode, prevRoots, nextItems) => {
+        const root = prevRoots.find(r => subtreeContains(r, deletedNode.id));
+        if (!root || root.id === deletedNode.id) return;
+        const newRoot = nextItems.find(r => r.id === root.id);
+        if (!newRoot) return;
+        let deletedHadStrategy = false;
+        const walk = n => { if ((n?.strategy || '').trim()) deletedHadStrategy = true; (n?.children || []).forEach(walk); };
+        walk(deletedNode);
+        const composed = composeBranchStrategy(newRoot);
+        if (composed === (newRoot.strategy || '')) return;
+        if (!composed && !deletedHadStrategy) return;
+        handleField(newRoot.id, 'strategy', composed);
+        onNodeFieldSave?.(newRoot.id, 'strategy', composed);
+    };
+
     // Pokaż na chwilę ostrzeżenie "tylko cyfry" przy komórce liczbowej (klucz = `${id}:${field}`).
     const flashWarn = (id, field) => {
         setWarnKey(`${id}:${field}`);
@@ -1038,9 +1106,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const handleDelete = (id, e) => {
         e?.stopPropagation();
         if (!window.confirm('Usunąć ten węzeł i wszystkie podgałęzie?')) return;
+        const deletedNode = findNode(items, id);
         const deletedIds = collectIds(items, id);
-        save({ ...wbsTree, items: deleteNode(items, id) });
+        const nextItems = deleteNode(items, id);
+        save({ ...wbsTree, items: nextItems });
         if (deletedIds.length) onNodesDeleted?.(deletedIds);
+        if (deletedNode) recomposeBranchStrategyAfterDelete(deletedNode, items, nextItems);
     };
 
     const handleAddChild = (parentId, e) => {
@@ -1479,14 +1550,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     // Materiał/sprzęt wyceniane indywidualnie (wymagania materiałowe) —
                                     // przy zmianie typu ustaw tylko jednostkę, nie ruszaj ceny.
                                     const suggestedUnit = suggestDefaultUnit(node.name, newType);
-                                    const unitToApply = suggestedUnit || (getLeafDefault(newType) || {}).unit;
+                                    const unitToApply = suggestedUnit || (getLeafDefaultFrom(leafDefaults, newType) || {}).unit;
                                     if (unitToApply != null) { handleField(node.id, 'unit', unitToApply); onNodeFieldSave?.(node.id, 'unit', unitToApply); }
                                 } else if (newType) {
                                     // Praca/usługa/nocleg/paliwo — wartości domyślne z modalu przy KAŻDEJ zmianie typu
                                     // (nowe i istniejące pozycje), od razu w tabeli, edytowalne później.
                                     // Jednostka: nazwa kablowa/światłowodowa ma priorytet nad domyślną z modalu.
                                     // Ilość zachowana (nie przekazujemy jej do defaults) — patrz applyLeafDefaults.
-                                    const defs = getLeafDefault(newType) || {};
+                                    const defs = getLeafDefaultFrom(leafDefaults, newType) || {};
                                     const suggestedUnit = suggestDefaultUnit(node.name, newType);
                                     const unitToApply = suggestedUnit || defs.unit;
                                     if (unitToApply != null) handleField(node.id, 'unit', unitToApply);
@@ -1746,22 +1817,38 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     />
                 </td>
 
-                {/* Strategia — edytowalna tylko dla gałęzi najwyższego poziomu (depth===0).
-                    Głębsze węzły pokazują wyszarzony placeholder (strategia dotyczy tylko top-level). */}
+                {/* Strategia — edytowalna na węzłach-elementach (liście / pośrednie), read-only na top-level.
+                    Top-level (depth===0) pokazuje złożenie ze składowych: linia `nazwa: strategia` na każdy
+                    wypełniony potomek. Złożenie jest utrwalane na polu strategy top-level (czytają eksporty). */}
                 <td className="px-3 py-2.5 min-w-[180px]" onClick={e => e.stopPropagation()}>
-                    {depth === 0 ? (
+                    {depth === 0 ? (() => {
+                        const entries = collectBranchStrategyEntries(node);
+                        if (entries.length) {
+                            return (
+                                <div className={`text-base leading-snug text-gray-300 select-text ${d.fieldClass}`}>
+                                    {entries.map(e => (
+                                        <div key={e.id} className="mb-1.5 last:mb-0">
+                                            <span className="font-bold text-gray-200">{e.name}</span>
+                                            <div className="whitespace-pre-wrap">{e.strategy}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            );
+                        }
+                        return (node.strategy || '')
+                            ? <div className={`whitespace-pre-wrap text-base leading-snug text-gray-300 select-text ${d.fieldClass}`}>{node.strategy}</div>
+                            : <span className="text-gray-700 text-base select-none">—</span>;
+                    })() : (
                         <AutoResizeTextarea
                             value={node.strategy || ''}
                             onChange={e => handleField(node.id, 'strategy', e.target.value)}
-                            onBlur={e => onNodeFieldSave?.(node.id, 'strategy', e.target.value)}
-                            placeholder="Strategia gałęzi…"
+                            onBlur={e => saveLeafStrategy(node.id, e.target.value)}
+                            placeholder="Strategia elementu…"
                             className={`bg-transparent border-none resize-none focus:outline-none text-base w-full placeholder-gray-700 leading-snug ${d.fieldClass}`}
                             data-nav-row={node.id}
                             data-nav-col="strategia"
                             onKeyDown={e => handleGridKeyDown(e, node.id, 'strategia')}
                         />
-                    ) : (
-                        <span className="text-gray-700 text-base select-none">—</span>
                     )}
                 </td>
 
@@ -1827,9 +1914,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             onNodeFieldLocal={handleField}
                             onSaved={updated => { setMatReqByWbsId(prev => ({ ...prev, [node.id]: updated, ...(updated?.id ? { [updated.id]: updated } : {}) })); onMaterialReqUpdated?.(); }}
                             onDeleteNode={() => {
+                                const deletedNode = findNode(items, node.id);
                                 const deletedIds = collectIds(items, node.id);
-                                save({ ...wbsTree, items: deleteNode(items, node.id) });
+                                const nextItems = deleteNode(items, node.id);
+                                save({ ...wbsTree, items: nextItems });
                                 if (deletedIds.length) onNodesDeleted?.(deletedIds);
+                                if (deletedNode) recomposeBranchStrategyAfterDelete(deletedNode, items, nextItems);
                                 setExpandedMaterialIds(prev => { const n = new Set(prev); n.delete(node.id); return n; });
                             }}
                         />

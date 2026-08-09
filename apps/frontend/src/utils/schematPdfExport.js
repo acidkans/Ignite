@@ -38,7 +38,9 @@ export const SCHEMAT_SECTION_CSS = `
     break-inside: avoid;
     display: flex;
     flex-direction: column;
-    height: 257mm;
+    /* 269mm = A4 (297) − marginesy 2×14; minus powtarzany nagłówek dokumentu (~25mm w thead).
+       Wyższa wartość wypychała rysunek na drugą stronę pod spodem. */
+    height: 235mm;
     box-sizing: border-box;
     padding: 4px 0;
   }

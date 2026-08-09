@@ -34,14 +34,20 @@ export class UserTasksService {
   ) {}
 
   // @anchor user-tasks-list
-  // Zwraca tylko OPEN i nie-usunięte, sortowane po plannedEnd ASC (null na końcu)
-  async listForUser(userId: string) {
+  // Domyślnie OPEN i nie-usunięte, sortowane po plannedEnd ASC (null na końcu).
+  // status='DONE' → wykonane (najświeższe pierwsze) do podglądu w filtrze „Wykonane".
+  async listForUser(userId: string, status: string = 'OPEN') {
+    const wanted = status === 'DONE' ? 'DONE' : 'OPEN';
     return this.prisma.userTask.findMany({
-      where: { userId, status: 'OPEN', deletedAt: null },
-      orderBy: [{ plannedEnd: 'asc' }],
+      where: { userId, status: wanted, deletedAt: null },
+      orderBy: wanted === 'DONE' ? [{ updatedAt: 'desc' }] : [{ plannedEnd: 'asc' }],
       include: {
         node: { select: { id: true, name: true } },
-        reminders: { where: { sentAt: null }, orderBy: { remindAt: 'asc' }, take: 1 },
+        reminders: {
+          where: { sentAt: null },
+          orderBy: { remindAt: 'asc' },
+          select: { id: true, remindAt: true, recurIntervalMinutes: true, recurEnd: true, sentAt: true },
+        },
       },
     });
   }
@@ -101,9 +107,10 @@ export class UserTasksService {
 
   // @anchor user-tasks-sync-reminder
   // Tworzy/aktualizuje/usuwa TaskReminder wg plannedEnd. Bez konkretnej godziny (00:00) → alarm o defaultReminderHour.
+  // Dotyka WYŁĄCZNIE alarmów jednorazowych (recurIntervalMinutes: null) — serie cykliczne są niezależne od plannedEnd.
   async syncReminderForTask(taskId: string, userId: string, plannedEnd: Date | null | undefined): Promise<void> {
     if (!plannedEnd) {
-      await this.prisma.taskReminder.deleteMany({ where: { userTaskId: taskId, sentAt: null } });
+      await this.prisma.taskReminder.deleteMany({ where: { userTaskId: taskId, sentAt: null, recurIntervalMinutes: null } });
       return;
     }
 
@@ -112,7 +119,7 @@ export class UserTasksService {
     const remindAt = new Date(plannedEnd);
     if (!hasTime) remindAt.setHours(settings.defaultReminderHour, 0, 0, 0);
 
-    const existing = await this.prisma.taskReminder.findFirst({ where: { userTaskId: taskId, sentAt: null } });
+    const existing = await this.prisma.taskReminder.findFirst({ where: { userTaskId: taskId, sentAt: null, recurIntervalMinutes: null } });
     if (existing) {
       if (existing.remindAt.getTime() !== remindAt.getTime()) {
         await this.prisma.taskReminder.update({
@@ -196,22 +203,102 @@ export class UserTasksService {
   }
 
   // @anchor user-tasks-due-reminders
-  // Alerty wymagające wyświetlenia — remindAt <= teraz, sentAt=null, zadanie OPEN
+  // Alerty wymagające wyświetlenia. Jednorazowe: remindAt <= teraz, sentAt=null.
+  // Cykliczne (recurIntervalMinutes != null): bieżące wystąpienie liczone z zegara
+  // (remindAt=start serii), pokazywane raz per interwał — kursor lastFiredAt zapobiega
+  // ponownemu odpaleniu tego samego wystąpienia aż do kolejnego interwału.
   async getDueReminders(userId: string) {
-    return this.prisma.taskReminder.findMany({
+    const now = new Date();
+    const rows = await this.prisma.taskReminder.findMany({
       where: {
         userId,
-        remindAt: { lte: new Date() },
         sentAt: null,
         userTask: { status: 'OPEN', deletedAt: null },
       },
       include: { userTask: { select: { id: true, title: true, plannedEnd: true } } },
       orderBy: { remindAt: 'asc' },
     });
+
+    const due: typeof rows = [];
+    const toAdvance: { id: string; at: Date }[] = [];
+
+    for (const r of rows) {
+      if (r.recurIntervalMinutes == null) {
+        if (r.remindAt.getTime() <= now.getTime()) due.push(r);
+        continue;
+      }
+      // cykliczny: policz bieżące wystąpienie z siatki start + interwał·k
+      const start = r.remindAt.getTime();
+      if (start > now.getTime()) continue; // seria jeszcze nie ruszyła
+      if (r.recurEnd && now.getTime() > r.recurEnd.getTime()) continue; // seria zakończona
+      const intervalMs = r.recurIntervalMinutes * 60000;
+      const idx = Math.floor((now.getTime() - start) / intervalMs);
+      const currentOcc = new Date(start + idx * intervalMs);
+      if (r.recurEnd && currentOcc.getTime() > r.recurEnd.getTime()) continue;
+      if (!r.lastFiredAt || currentOcc.getTime() > r.lastFiredAt.getTime()) {
+        due.push(r);
+        toAdvance.push({ id: r.id, at: currentOcc });
+      }
+    }
+
+    // oznacz wyświetlone wystąpienia cykliczne → znikną do kolejnego interwału
+    await Promise.all(
+      toAdvance.map((t) =>
+        this.prisma.taskReminder.update({ where: { id: t.id }, data: { lastFiredAt: t.at } }),
+      ),
+    );
+
+    return due;
+  }
+
+  // @anchor user-tasks-create-reminder
+  // Tworzy alarm dla zadania. intervalMinutes ustawione → seria cykliczna (jeden wiersz-reguła),
+  // zastępuje istniejącą serię cykliczną tego zadania. Bez intervalMinutes → alarm jednorazowy o `start`.
+  async createReminder(
+    userId: string,
+    taskId: string,
+    dto: { start?: string | Date; end?: string | Date; intervalMinutes?: number },
+  ) {
+    const task = await this.prisma.userTask.findFirst({ where: { id: taskId, userId, deletedAt: null } });
+    if (!task) return null;
+
+    const start = dto.start ? new Date(dto.start) : new Date();
+    const interval = dto.intervalMinutes ?? null;
+
+    if (interval != null) {
+      // jedna aktywna seria cykliczna per zadanie — usuń poprzednią
+      await this.prisma.taskReminder.deleteMany({
+        where: { userTaskId: taskId, recurIntervalMinutes: { not: null } },
+      });
+    }
+
+    return this.prisma.taskReminder.create({
+      data: {
+        userTaskId: taskId,
+        userId,
+        remindAt: start,
+        recurIntervalMinutes: interval,
+        recurEnd: dto.end ? new Date(dto.end) : null,
+      },
+    });
+  }
+
+  // @anchor user-tasks-list-reminders
+  async getRemindersForTask(userId: string, taskId: string) {
+    return this.prisma.taskReminder.findMany({
+      where: { userTaskId: taskId, userId },
+      orderBy: { remindAt: 'asc' },
+    });
+  }
+
+  // @anchor user-tasks-delete-reminder
+  async deleteReminder(userId: string, reminderId: string) {
+    return this.prisma.taskReminder.deleteMany({ where: { id: reminderId, userId } });
   }
 
   // @anchor user-tasks-handle-reminder
-  // action='dismiss' → sentAt=now; action='snooze' → nowy remindAt, snoozedFrom=stary remindAt
+  // action='dismiss' → sentAt=now (ubija też całą serię cykliczną — kolejne wystąpienia znikają).
+  // action='snooze' jednorazowy → nowy remindAt; cykliczny → pomiń bieżące wystąpienie na `minutes`.
   async handleReminder(userId: string, reminderId: string, action: 'dismiss' | 'snooze', minutes?: number) {
     const reminder = await this.prisma.taskReminder.findFirst({
       where: { id: reminderId, userId },
@@ -224,14 +311,22 @@ export class UserTasksService {
         data: { sentAt: new Date() },
       });
     } else if (action === 'snooze' && minutes) {
-      await this.prisma.taskReminder.update({
-        where: { id: reminderId },
-        data: {
-          snoozedFrom: reminder.remindAt,
-          remindAt: new Date(Date.now() + minutes * 60000),
-          sentAt: null,
-        },
-      });
+      if (reminder.recurIntervalMinutes != null) {
+        // cykliczny: nie ruszaj startu serii, tylko przesuń kursor „pokazane" w przyszłość
+        await this.prisma.taskReminder.update({
+          where: { id: reminderId },
+          data: { lastFiredAt: new Date(Date.now() + minutes * 60000) },
+        });
+      } else {
+        await this.prisma.taskReminder.update({
+          where: { id: reminderId },
+          data: {
+            snoozedFrom: reminder.remindAt,
+            remindAt: new Date(Date.now() + minutes * 60000),
+            sentAt: null,
+          },
+        });
+      }
     }
   }
 

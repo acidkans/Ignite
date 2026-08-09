@@ -11,8 +11,10 @@ import OffersTab from './components/shared/OffersTab';
 import UnifiedWbsPanel from './components/shared/wbs/UnifiedWbsPanel';
 import CommentsSlideOver from './components/shared/CommentsSlideOver';
 import MyTasksModal from './components/shared/MyTasksModal';
+import DueTasksBell from './components/shared/DueTasksBell';
 import TaskReminderToast from './components/shared/TaskReminderToast';
 import ComparisonPanel from './components/shared/ComparisonPanel';
+import SnapshotEditGuard from './components/shared/SnapshotEditGuard';
 import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink, Coins, ThumbsUp, Undo2 } from 'lucide-react';
 import { API_URL } from './config';
 import { APP_VERSION } from './version';
@@ -536,6 +538,10 @@ export default function DashboardPage() {
     };
 
     const currentVersion = versions.find(v => v.id === selectedVersionId);
+    // @anchor is-inactive-snapshot — czy oglądany snapszot NIE jest aktywny (blokada edycji z ostrzeżeniem)
+    const isInactiveSnapshot = !!currentVersion && currentVersion.isActive === false;
+    // @anchor dashboard-content-ref — kontener treści zakładek, do capture-guardu edycji snapszota
+    const contentRef = useRef(null);
 
     const showSearch = activeTab !== 'requirements';
     const searchPlaceholder = activeTab === 'unified'
@@ -579,6 +585,13 @@ export default function DashboardPage() {
                         <span className="text-[10px] text-gray-500 font-mono uppercase tracking-wider">Tydzień {weekNumber}</span>
                     </div>
                 </div>
+
+                {/* Dzwonek wypadających zadań — trwałe uzupełnienie toastów */}
+                <DueTasksBell
+                    reminders={dueReminders}
+                    onHandled={id => setDueReminders(prev => prev.filter(r => r.id !== id))}
+                    onOpenAll={() => setMyTasksOpen(true)}
+                />
 
                 {/* @anchor dashboard-exchange-rates-box — kursy NBP obok daty (ten sam rozmiar co kontener daty) */}
                 <div
@@ -995,7 +1008,7 @@ export default function DashboardPage() {
                     Wybierz element z drzewa
                 </div>
             ) : (
-            <div className="flex-1 overflow-y-auto min-h-0 relative scroll-smooth p-3 pb-10">
+            <div ref={contentRef} className="flex-1 overflow-y-auto min-h-0 relative scroll-smooth p-3 pb-10">
                     <div className="w-full h-full">
                         {activeTab === 'materialLists' && isLogistykaArea && (
                             <LogistykaMaterialListsTab
@@ -1215,6 +1228,13 @@ export default function DashboardPage() {
                 </div>
             </div>
         )}
+
+        {/* Guard edycji nieaktywnego snapszota — capture-guard pól + modal potwierdzenia */}
+        <SnapshotEditGuard
+            inactive={isInactiveSnapshot}
+            versionLabel={currentVersion?.label}
+            containerRef={contentRef}
+        />
 
         {/* Modal zadań osobistych — otwarty kliknięciem kalendarza w headerze */}
         <MyTasksModal open={myTasksOpen} onClose={() => setMyTasksOpen(false)} />

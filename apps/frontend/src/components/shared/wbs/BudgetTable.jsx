@@ -11,6 +11,10 @@ const FILTER = 'w-full bg-black/30 border border-white/10 rounded px-2 py-0.5 te
 
 const NUMERIC_COLS = new Set(['unitCost', 'quantity', 'totalCost', 'margin', 'discount', 'offerPrice']);
 const EDITABLE_COLS = ['name', 'type', 'unitCost', 'quantity', 'unit', 'margin', 'discount', 'comment'];
+// Kolumny słownikowe — filtr jako dropdown wielokrotnego wyboru (OR)
+const DROPDOWN_FILTER_COLS = new Set(['type', 'unit']);
+// Kolumny tekstowe — filtr dopasowuje CAŁĄ frazę wpisu jako podciąg (w dowolnym miejscu, nie po słowach); kilka fraz rozdziel `;` (OR)
+const TEXT_FILTER_COLS = new Set(['subjectName', 'name', 'comment']);
 
 function calcDerived(r) {
     const q = Math.max(0, parseLocaleNumber(String(r.quantity ?? '')) ?? 0);
@@ -50,6 +54,46 @@ function AutoTextarea({ defaultValue, onBlur, onFocus, onKeyDown, className, dat
             className={className}
             style={{ overflow: 'hidden', minHeight: '1.4em' }}
         />
+    );
+}
+
+// @anchor budget-filter-dropdown
+function FilterDropdown({ options, selected, onChange, labelFor }) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef(null);
+    useEffect(() => {
+        if (!open) return;
+        const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener('mousedown', h);
+        return () => document.removeEventListener('mousedown', h);
+    }, [open]);
+    const toggle = (val) => onChange(selected.includes(val) ? selected.filter(v => v !== val) : [...selected, val]);
+    const summary = selected.length === 0 ? 'filtruj...' : `${selected.length} zazn.`;
+    return (
+        <div ref={ref} className="relative">
+            <button
+                type="button"
+                onClick={() => setOpen(o => !o)}
+                className={`${FILTER} text-left flex items-center justify-between ${selected.length ? 'text-white' : 'text-gray-700'}`}
+            >
+                <span className="truncate">{summary}</span>
+                <span className="ml-1 text-gray-500 shrink-0">▾</span>
+            </button>
+            {open && (
+                <div className="absolute left-0 top-full mt-1 z-30 min-w-full max-h-56 overflow-auto bg-[#0b0f17] border border-white/15 rounded shadow-xl py-1">
+                    {selected.length > 0 && (
+                        <button type="button" onClick={() => onChange([])} className="w-full text-left px-2 py-1 text-[11px] text-red-300/70 hover:bg-white/5">wyczyść</button>
+                    )}
+                    {options.length === 0 && <div className="px-2 py-1 text-[11px] text-gray-600">brak wartości</div>}
+                    {options.map(opt => (
+                        <label key={opt} className="flex items-center gap-2 px-2 py-1 text-xs text-white hover:bg-white/5 cursor-pointer">
+                            <input type="checkbox" checked={selected.includes(opt)} onChange={() => toggle(opt)} className="accent-blue-500" />
+                            <span className="truncate">{labelFor ? labelFor(opt) : opt}</span>
+                        </label>
+                    ))}
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -169,21 +213,42 @@ export default function BudgetTable({
         });
     };
 
-    const filteredRows = useMemo(() => {
-        const keys = Object.keys(colFilters).filter(k => String(colFilters[k] ?? '').trim() !== '');
-        if (keys.length === 0) return localRows;
-        const match = (val, q) => String(val ?? '').toLowerCase().includes(q);
-        const matchTokens = (val, q) => {
-            const text = String(val ?? '').toLowerCase();
-            return q.split(/[\s/]+/).filter(Boolean).every(t => text.includes(t));
+    // Wartości do dropdownów słownikowych (Typ, Jednostki) — unikalne, obecne w danych
+    const dropdownOptions = useMemo(() => {
+        const type = new Set(), unit = new Set();
+        for (const r of localRows) {
+            if (r.type != null && r.type !== '') type.add(String(r.type));
+            if (r.unit != null && r.unit !== '') unit.add(String(r.unit));
+        }
+        return {
+            type: [...type].sort((a, b) => (TYPE_LABELS[a] || a).localeCompare(TYPE_LABELS[b] || b, 'pl')),
+            unit: [...unit].sort((a, b) => a.localeCompare(b, 'pl')),
         };
+    }, [localRows]);
+
+    const filteredRows = useMemo(() => {
+        const activeKeys = Object.keys(colFilters).filter(k => {
+            const v = colFilters[k];
+            return Array.isArray(v) ? v.length > 0 : String(v ?? '').trim() !== '';
+        });
+        if (activeKeys.length === 0) return localRows;
         return localRows.filter(r => {
             if (r.id === focusedRowId) return true;
-            return keys.every(k => {
-                const q = String(colFilters[k]).toLowerCase().trim();
-                if (k === 'subjectName') return matchTokens(r.subjectPath || r.subjectName, q);
+            return activeKeys.every(k => {
+                const filt = colFilters[k];
+                // Dropdown słownikowy: OR — wartość surowa komórki należy do zaznaczonych
+                if (DROPDOWN_FILTER_COLS.has(k)) {
+                    return filt.includes(String(r[k] ?? ''));
+                }
+                // Pole tekstowe: fraza dopasowywana jako podciąg (w dowolnym miejscu); kilka fraz OR po `;`
+                if (TEXT_FILTER_COLS.has(k)) {
+                    const cell = String((k === 'subjectName' ? (r.subjectPath || r.subjectName) : r[k]) ?? '').toLowerCase();
+                    const terms = String(filt).toLowerCase().split(';').map(t => t.trim()).filter(Boolean);
+                    return terms.some(t => cell.includes(t));
+                }
+                // Pozostałe (numeryczne): podciąg, jak dotychczas
                 const val = k === 'type' ? (TYPE_LABELS[r.type] || r.type) : r[k];
-                return match(val, q);
+                return String(val ?? '').toLowerCase().includes(String(filt).toLowerCase().trim());
             });
         });
     }, [localRows, colFilters, focusedRowId]);
@@ -471,16 +536,25 @@ export default function BudgetTable({
                             ))}
                             <th />
                         </tr>
-                        <tr className="border-b border-white/10 bg-[#0b0f17]">
+                        <tr data-guard-ignore className="border-b border-white/10 bg-[#0b0f17]">
                             <th />
                             {COLS.map(c => (
                                 <th key={c.key} className="px-2 py-1">
-                                    <input
-                                        value={colFilters[c.key] || ''}
-                                        onChange={e => setColFilters(p => ({ ...p, [c.key]: e.target.value }))}
-                                        placeholder="filtruj..."
-                                        className={FILTER}
-                                    />
+                                    {DROPDOWN_FILTER_COLS.has(c.key) ? (
+                                        <FilterDropdown
+                                            options={dropdownOptions[c.key] || []}
+                                            selected={Array.isArray(colFilters[c.key]) ? colFilters[c.key] : []}
+                                            onChange={vals => setColFilters(p => ({ ...p, [c.key]: vals }))}
+                                            labelFor={c.key === 'type' ? (v => TYPE_LABELS[v] || v) : undefined}
+                                        />
+                                    ) : (
+                                        <input
+                                            value={typeof colFilters[c.key] === 'string' ? colFilters[c.key] : ''}
+                                            onChange={e => setColFilters(p => ({ ...p, [c.key]: e.target.value }))}
+                                            placeholder={TEXT_FILTER_COLS.has(c.key) ? 'szukaj; lub; wiele' : 'filtruj...'}
+                                            className={FILTER}
+                                        />
+                                    )}
                                 </th>
                             ))}
                             <th />
@@ -544,16 +618,28 @@ export default function BudgetTable({
                                     <div className="relative">
                                         <input
                                             key={`${row.id}-unitCost-${syncVersion}`}
-                                            defaultValue={row.unitCost != null && row.unitCost !== 0 ? Number(row.unitCost).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
+                                            defaultValue={row.unitCost != null && row.unitCost !== 0 ? Number(row.unitCost).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' }) : ''}
                                             onChange={e => {
-                                                const clean = sanitizeQtyInput(e.target.value);
-                                                if (clean !== e.target.value) { e.target.value = clean; flashWarn(row.id, 'unitCost'); }
+                                                const val = e.target.value;
+                                                if (val.startsWith('=')) {
+                                                    handleChange(row.id, 'unitCost', val);
+                                                    return;
+                                                }
+                                                const clean = sanitizeQtyInput(val);
+                                                if (clean !== val) { e.target.value = clean; flashWarn(row.id, 'unitCost'); }
                                                 handleChange(row.id, 'unitCost', clean);
                                             }}
                                             onBlur={e => {
                                                 handleCellBlur();
-                                                const n = parseLocaleNumber(e.target.value);
-                                                if (n != null) e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                                const raw = e.target.value;
+                                                const evaluated = evalQtyFormula(raw);
+                                                if (evaluated !== null && evaluated >= 0) {
+                                                    e.target.value = evaluated.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' });
+                                                    onFieldChange(row, 'unitCost', e.target.value);
+                                                    return;
+                                                }
+                                                const n = parseLocaleNumber(raw);
+                                                if (n != null) e.target.value = n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' });
                                                 onFieldChange(row, 'unitCost', e.target.value);
                                             }}
                                             onFocus={e => handleCellFocus(row.id, e)} onMouseUp={e => handleCellMouseUp(e)}

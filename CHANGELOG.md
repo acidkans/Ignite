@@ -169,6 +169,184 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 - `schema-pole` `QuickQuoteItem.priceNettoApi` — niemutowalna surowa cena ze źródła; korekty logistyka wyłącznie w `priceNettoPln`
 - `schema-model` `Supplier` — wyniki zapytań API dostawców NIE trafiają do katalogu `Material` (ryzyko duplikatów na `@@unique(manufacturer, model)`) — tylko do `QuickQuoteItem`
 
+---
+
+## 2026-08-08 — Eksport Excel: suma dni pracy w Podsumowaniu + auto-Q&A tylko przy nieodpowiedzianych (v2026.08.08.754)
+
+### architektura / API
+- `ui-funkcja` eksport „Analiza projektu do Excel" (`UnifiedWbsPanel`) — w arkuszu „Podsumowanie", sekcja „Budżet projektu", dodano wiersz 11 „Liczba dni pracy" (A11/B11) = suma ilości wszystkich liści typu `work` z jednostką dni (`dni`/`dzień`); sekcja „Podsumowanie per typ" i kolejne przesunięte o wiersz w dół (dynamiczne `addRow`, formuły niezmienione)
+- `ui-stan` `qaTreeOpen` (`UnifiedWbsPanel`) — auto-otwarcie `QaTreeView` przy pierwszym wejściu w sesji tylko gdy istnieje pytanie bez odpowiedzi; puste Q&A i w pełni odpowiedziane nie wyskakują
+
+### wytyczne
+- `ui-funkcja` eksport Excel „Podsumowanie" — górny blok (wiersze 3–11) ma stałe referencje `B3`–`B10` w formułach; nowe wiersze dodawać POD nimi, a sekcje per-typ/per-osoba trzymać na `addRow`/`rowCount` żeby przesuwały się same
+
+---
+
+## 2026-08-07 — Alarmy cykliczne UserTask (jeden wiersz-reguła, toasty z zegara) (v2026.08.07.752)
+
+### schema.prisma
+- dodano pole `recurIntervalMinutes Int?` w modelu `TaskReminder` — interwał serii cyklicznej w minutach; `null` = alarm jednorazowy (dotychczasowe zachowanie)
+- dodano pole `recurEnd DateTime?` w modelu `TaskReminder` — koniec okna serii, po tej dacie alarm nie odpala
+- dodano pole `lastFiredAt DateTime?` w modelu `TaskReminder` — kursor ostatniego wyświetlonego wystąpienia, zapobiega ponownemu odpaleniu tego samego wystąpienia w obrębie interwału
+
+### architektura / API
+- `back-funkcja` `UserTasksService.getDueReminders` — dla alarmów cyklicznych bieżące wystąpienie liczone z zegara (`remindAt` = start, siatka `start + interwał·k`), zwracane raz per interwał; zaznacza `lastFiredAt`. Jednorazowe bez zmian.
+- `back-funkcja` `UserTasksService.createReminder` — nowy: tworzy alarm dla zadania; `intervalMinutes` → seria cykliczna (jeden wiersz-reguła), zastępuje poprzednią serię tego zadania
+- `back-funkcja` `UserTasksService.handleReminder` — `dismiss` na alarmie cyklicznym ubija całą serię (`sentAt`); `snooze` cykliczny przesuwa tylko `lastFiredAt` (nie rusza startu serii)
+- `back-funkcja` `UserTasksService.syncReminderForTask` — auto-sync z `plannedEnd` dotyka wyłącznie alarmów jednorazowych (`recurIntervalMinutes: null`), nie kasuje serii cyklicznych
+- dodano `back-endpoint` `POST /my-tasks/:id/reminders`, `GET /my-tasks/:id/reminders`, `DELETE /my-tasks/reminders/:id`
+- `ui-modal` `CyclicAlarmEditor` w `MyTasksModal` — ustawianie serii (od/do + interwał 30 min/1 h/2 h/1 dzień), podgląd liczby wystąpień; badge „Cykl" na karcie zadania
+
+### słownik
+- dodano `TaskReminder.recurIntervalMinutes`, `TaskReminder.recurEnd`, `TaskReminder.lastFiredAt` — pola serii cyklicznej
+- dodano `UserTasksService.createReminder / getRemindersForTask / deleteReminder` oraz 3 endpointy alarmów
+- dodano `CyclicAlarmEditor`, `ALARM_INTERVALS` (frontend)
+
+### wytyczne
+- `schema-pole` `TaskReminder.recurIntervalMinutes` — dyskryminator: `null` = alarm jednorazowy (auto-sync z `plannedEnd`), ustawione = seria cykliczna. Każda operacja auto-sync MUSI filtrować `recurIntervalMinutes: null`, by nie skasować serii.
+- `back-funkcja` `getDueReminders` — cykliczne wystąpienia liczone z zegara, NIE materializowane jako wiersze; jeden `TaskReminder` = cała seria. Rozdzielczość odpalania = interwał pollingu 60 s.
+
+## 2026-08-06 — Sterowanie statusem subtasków (harmonogram) w AllTasksModal (v2026.08.06.751)
+
+### architektura / API
+- `ui-modal` `AllTasksModal` — subtaski (harmonogram) mają teraz chip statusu (Nowy/Zaplanowany/W trakcie/Zakończony/Wstrzymany/Anulowany) i akcję odznaczenia: checkbox → `PATCH /subtasks/:id { status:'FINISHED' }` (`all-tasks-subtask-status`), a w filtrze „Wykonane" przycisk „Zaplanuj" → `status:'NEW'`. Wcześniej akcja była tylko dla UserTasków.
+
+### wytyczne
+- `schema-pole` `Subtask.status` — „wykonane" subtaska = `FINISHED` (spójne z `CalendarView` które po `FINISHED` rysuje styl zakończonego); UserTask używa `DONE`. Dwa różne pola statusu dla dwóch typów zadań.
+
+---
+
+## 2026-08-06 — Przycisk „Pokaż zadania" w nagłówku Struktury projektu (obok Q&A) + samowystarczalny AllTasksModal (v2026.08.06.750)
+
+### architektura / API
+- `ui-modal` `AllTasksModal` — przerobiony na samowystarczalny: pobiera własne dane po `nodeId`/`versionId` (`all-tasks-fetch-open`: `GET /subtasks/node/:id` + `GET /my-tasks`); props uproszczone do `{ nodeId, versionId, onChanged, onClose }`. `onChanged` powiadamia rodzica po done/restore.
+- `ui-przycisk` „Pokaż zadania" (`UnifiedWbsPanel`, `unified-all-tasks-open`) — w nagłówku sekcji „Struktura projektu" obok przycisku Q&A; otwiera ten sam modal co „Pełna lista" w zakładce Zadania.
+
+---
+
+## 2026-08-06 — Filtr „Wykonane" w modalu pełnej listy + powrót zadania do statusu zaplanowane (v2026.08.06.749)
+
+### architektura / API
+- `back-endpoint` `GET /my-tasks` — dodany opcjonalny query `?status=OPEN|DONE` (`back-serwis` `listForUser(userId, status)`); domyślnie OPEN (bez zmian dla istniejących wywołań), `DONE` → wykonane sortowane po `updatedAt desc`. Zasila filtr „Wykonane".
+- `ui-modal` `AllTasksModal` — nowy filtr „Wykonane" (leniwy fetch `?status=DONE`) pokazujący wykonane UserTaski (+ Subtaski `status=FINISHED`) z zielonym badge; przycisk „Zaplanuj" (`all-tasks-restore`) przywraca UserTask do `status:'OPEN'` przez `PATCH /my-tasks/:id` i odświeża kalendarz.
+
+### wytyczne
+- `schema-pole` `UserTask.status` — `listForUser` domyślnie filtruje `OPEN`; wykonane pobiera się jawnie `?status=DONE`. Zmiana statusu przez `PATCH /my-tasks/:id { status }` synchronizuje też MS To Do (`completed`/`notStarted`).
+
+---
+
+## 2026-08-06 — Zadania węzłów (UserTask) w kalendarzu zakładki Zadania + modal pełnej listy + dzwonek due (v2026.08.06.748)
+
+### architektura / API
+- `ui-funkcja` `CalendarView` (`calendar-render-user-task`) — kalendarz renderuje dwa typy zadań: Subtaski (harmonogram, kolor kategorii, resize) i UserTaski (zadania węzłów, bursztyn, checkbox „zrobione", drag do przełożenia terminu). Nowe propsy: `userTasks`, `onUserTaskDone`, `onUserTaskReschedule`, `onUserTaskClick`.
+- `ui-sekcja` `TasksCalendarSection` — nakłada moje UserTaski (`GET /my-tasks`) na kalendarz z togglem zakresu „Ten projekt / Wszystkie moje" (filtr po zbiorze węzłów WBS z `GET /wbs-nodes/unified/:id`). Reschedule → `PATCH /my-tasks/:id { plannedEnd }`, done → `PATCH /my-tasks/:id { status:'DONE' }`.
+- `ui-modal` `AllTasksModal` (`all-tasks-modal`) — pełna lista obu typów zadań w formacie „Q&A całe drzewo": grupowanie po gałęzi top-level WBS (UserTaski) + osobna grupa „Harmonogram — podzadania" (Subtaski), sticky nagłówki, szukajka + filtr daty (Przeterminowane/Dziś/Tydzień/Później).
+- `ui-panel` `DueTasksBell` (`due-tasks-bell`) — trwały dzwonek wypadających zadań w górnej belce (badge = liczba due z `GET /my-tasks/reminders/due`), dropdown z akcjami done/drzemka 1h; uzupełnia ulotny `TaskReminderToast`.
+
+### wytyczne
+- `schema-pole` `UserTask.nodeId` — wskazuje na `WbsNode` (indywidualny węzeł drzewa), NIE na `ProcessNode`; `Subtask.nodeId` wskazuje na `ProcessNode` (order/projekt). Dlatego w kalendarzu/modalu oba typy trzyma się rozdzielnie i UserTaski grupuje po gałęzi WBS, a Subtaski w osobnej grupie projektu.
+
+---
+
+## 2026-08-05 — wbs: statusy liści — dodane „Wykonane"/„Zainstalowane", „Mieszany" tylko jako status zbiorczy (v2026.08.05.746)
+
+### architektura / API
+- `ui-stala` `MATERIAL_STATUS_LABELS` / `STRUCTURE_STATUS_META` (`wbsConstants.js`) — dodane statusy `DONE` („Wykonane") i `INSTALLED` („Zainstalowane"); round-trip label↔code działa przez `MATERIAL_STATUS_LABEL_TO_CODE`
+- `ui-dropdown` `StatusSelect` (`WBSHybridTable.jsx`) — opcja „Mieszany" (MIXED) usunięta z listy wyboru (filtr `code !== 'MIXED'`); MIXED pozostaje w `STRUCT_STATUS_META` wyłącznie do wyświetlania obliczanego statusu zbiorczego gałęzi
+- `ui-modal` `QaModal` (`WBSHybridTable.jsx`) — szerokość zwężona `w-3/4` → `w-[37.5%]`
+
+### wytyczne
+- `ui-dropdown` `StatusSelect` — MIXED to status obliczany (agregacja różnych statusów materiałów w gałęzi, `getInheritedMaterialStatus`), nigdy zapisywany na węźle; nie dodawać go z powrotem do wybieralnych opcji
+
+## 2026-07-24 — wbs/budżet: eksport Excel — nagłówki zakładki „Budżet" (Zakres/Podzakres/Pozycja/Narzut) (v2026.07.24.734)
+
+### architektura / API
+- eksport Excel (`UnifiedWbsPanel.jsx`, `handleExportBudgetExcel` → `BUDGET_COLUMNS`) — nagłówki kolumn zakładki „Budżet" przemianowane: „Przedmiot"→„Zakres", „Podgałąź"→„Podzakres", „Nazwa"→„Pozycja", „Marża (%)"→„Narzut (%)". Klucze kolumn (`subjectName`/`parentName`/`name`/`margin`) i formuły bez zmian; import mapuje po wybranej kolumnie, nie po tekście nagłówka, więc reimport działa
+- kolumna `margin` w zakładce „Budżet" liczy `cena = koszt × (1 + margin/100)` — to narzut od kosztu, stąd nazwa „Narzut" (spójna z `BudgetTable.jsx`); arkusze „Podsumowanie" (per typ / per osoba / marża po rabatach) liczą `Zysk/Przychód` = prawdziwa marża od przychodu i pozostają nazwane „Marża"
+
+### wytyczne
+- eksport Excel budżetu — rozróżniaj: kolumna zakładki „Budżet" = `ui-kolumna` narzut od kosztu („Narzut %"); arkusze podsumowań = marża od przychodu (`Zysk/Przychód`, „Marża %"). Nie ujednolicaj nazw między tymi arkuszami
+
+## 2026-07-24 — wbs/strategia: usunięcie globalnej strategii projektu, pola strategii gałęzi/liści rosną z tekstem (v2026.07.24.733)
+
+### architektura / API
+- `ui-sekcja` sekcja „Jak to chcemy zrobić" (`UnifiedWbsPanel.jsx`) — usunięty globalny edytor strategii całego projektu (`ui-input` `wbsDescription` + `MarkdownEditor`). Zostają wyłącznie `ui-input` `BranchStrategyField` (strategie gałęzi) oraz strategie liści edytowane w tabeli WBS
+- `ui-input` `BranchStrategyField` — textarea auto-resize: `rows=1` + wysokość dopasowana do `scrollHeight` (rośnie z tekstem), `ResizeObserver` przelicza po rozwinięciu sekcji; usunięty `resize-y` i stały `rows=2`
+- eksport PDF (`UnifiedWbsPanel.jsx`, `handleExportPDF` → `strategyHtml`) — usunięty blok globalnej strategii („Opis wyceny" + `getStrategyText`); sekcja renderuje się tylko gdy istnieją strategie gałęzi (`branchStrategiesHtml`)
+- eksport Excel (`handleExportOfertaWbsExcel` → arkusz „Strategia") — usunięty nagłówek „Opis wyceny" z globalną strategią; arkusz zawiera tylko „Strategie gałęzi"
+- usunięte martwe funkcje/stan po globalnej strategii: `ui-funkcja` `getStrategyText`, `saveStrategy`, `handleStrategySave`, stan `wbsDescription`, `strategySaving`, `strategySaved`, refy `strategyLoadedRef`, `strategySaveTimeout`
+
+### słownik
+- usunięto `handleStrategySave` — funkcja debounce zapisu globalnej strategii projektu (już nie istnieje)
+
+### wytyczne
+- `ui-sekcja` strategia WBS — strategia istnieje wyłącznie na poziomie gałęzi (`schema-pole` `WbsNode.strategy` top-level) i liści (`WbsNode.strategy` potomków); nie ma już strategii całego projektu. Eksporty PDF/Excel czytają tylko `n.strategy` per węzeł
+
+## 2026-07-24 — wbs/oferta: eksport PDF — rysunki Schematu na jednej stronie, nagłówek „Opis Zakresów", pogrubione nazwy liści (v2026.07.24.732)
+
+### architektura / API
+- eksport PDF (`schematPdfExport.js`, `SCHEMAT_SECTION_CSS`) — `.sch-page` height 257mm → 235mm, żeby rysunek Schematu mieścił się na jednej stronie (powtarzany nagłówek dokumentu w thead zabierał ~25mm i wypychał obraz na drugą stronę)
+- eksport PDF (`UnifiedWbsPanel.jsx`, `handleExportPDF` → `branchStrategiesHtml`) — nagłówek sekcji strategii per gałąź zmieniony z „Strategie gałęzi" na „Opis Zakresów"
+- eksport PDF (`branchStrategiesHtml`) — strategia gałęzi odtwarzana z liści (`collectLeafStrategyEntries`), nazwa liścia pogrubiona (`.branch-leaf-name`) tak jak w widoku WBS na stronie, zamiast płaskiego tekstu złożenia
+
+### wytyczne
+- `ui-stala` `SCHEMAT_SECTION_CSS` `.sch-page` — wysokość musi uwzględniać powtarzany nagłówek dokumentu (thead), nie tylko marginesy strony; zbyt duża wartość wypycha rysunek na kolejną stronę
+
+## 2026-07-23 — feat(wbs): wartości domyślne liści per zamówienie — nowe zamówienie wyzerowane
+
+### schema.prisma
+- dodano model `WbsLeafDefaults` (`nodeId @unique`, `data` JSON) — konfigurowalne wartości domyślne liści budżetowych osobne dla KAŻDEGO zamówienia; brak wpisu = nowe zamówienie = baza wyzerowana
+
+### architektura / API
+- nowy moduł `back-modul` `WbsLeafDefaultsModule` z `back-endpoint` `GET /wbs-leaf-defaults/:nodeId` (zwraca zapis lub `{}`) i `PUT /wbs-leaf-defaults/:nodeId` (upsert po nodeId)
+- `wartości domyślne liści` przeniesione z globalnego localStorage na backend per zamówienie; `ui-funkcja` `getLeafDefault`/`loadLeafDefaults`/`saveLeafDefaults` + stała `WBS_DEFAULTS_STORAGE_KEY` USUNIĘTE, zastąpione czystymi helperami `mergeLeafDefaults`/`getLeafDefaultFrom` operującymi na obiekcie pobranym z API
+- `ui-stala` `SEED_LEAF_DEFAULTS` (fabryczne, fuel 0,70, qty 1) zastąpione `ZERO_LEAF_DEFAULTS` (wszystko 0, jednostka wg typu) — baza nowego zamówienia
+- `WBSHybridTable.jsx` — nowy prop `leafDefaults`; zmiana typu liścia czyta `getLeafDefaultFrom(leafDefaults, type)` zamiast globalnego `getLeafDefault(type)`
+
+### słownik
+- dodano `zero-leaf-defaults`, `merge-leaf-defaults`, `get-leaf-default-from` (wbsConstants.js); `leaf-defaults-state`, `fetch-leaf-defaults`, `save-leaf-defaults-to-server` (UnifiedWbsPanel.jsx); `wbs-leaf-defaults-model`, `wbs-leaf-defaults-node-id`, `wbs-leaf-defaults-data` (schema.prisma)
+- usunięto `wbs-defaults-storage-key`, `seed-leaf-defaults`, `load-leaf-defaults`, `save-leaf-defaults`, `get-leaf-default`
+
+### wytyczne
+- `schema-model` `WbsLeafDefaults` — kluczowany po `nodeId` (zamówienie), NIE po `versionId`; wersjonowanie WBS nie klonuje tego wpisu (defaulty wspólne dla wszystkich wersji zamówienia)
+- `ui-funkcja` `mergeLeafDefaults` — zawsze scala zapis z bazą `ZERO_LEAF_DEFAULTS`; brak/uszkodzony wpis → sama baza wyzerowana
+
+## 2026-07-23 — feat(wbs): złożenie strategii — nazwa pozycji bold, strategia od nowego wiersza (v2026.07.23.728)
+
+### architektura / API
+- `ui-funkcja` `collectBranchStrategyEntries` (WBSHybridTable.jsx) — zbiera wypełnione komórki strategii potomków jako `[{ id, name, strategy }]`; baza renderu (bold nazwa w gridzie) i złożenia utrwalanego na top-level
+- `ui-funkcja` `composeBranchStrategy` (WBSHybridTable.jsx) — nowy format utrwalanego złożenia: `nazwa:` a strategia od nowego wiersza, wpisy rozdzielone pustą linią (wcześniej `nazwa: strategia` w jednej linii)
+- komórka Strategia top-level w gridzie: renderuje nazwę pozycji `font-bold`, a jej strategię w osobnym wierszu poniżej
+
+### słownik
+- dodano `ui-funkcja` `collectBranchStrategyEntries` — WBSHybridTable.jsx, @anchor collect-branch-strategy-entries
+
+## 2026-07-23 — feat(wbs): strategia edytowana na elementach, składana na węźle top-level (v2026.07.23.727)
+
+### architektura / API
+- `ui-funkcja` `composeBranchStrategy` (WBSHybridTable.jsx) — składa strategię całej gałęzi z wypełnionych komórek potomków (liście + węzły pośrednie), format `nazwa: strategia` linia na węzeł; węzeł top-level pomija sam siebie
+- `ui-funkcja` `saveLeafStrategy` (WBSHybridTable.jsx) — zapis strategii na węźle-elemencie utrwala własną wartość, po czym przelicza złożenie gałęzi i utrwala je na polu `strategy` węzła top-level (depth 0), skąd czytają je eksporty PDF/Excel; puste złożenie nie nadpisuje istniejącej strategii top-level
+- kolumna Strategia w gridzie WBS: edytowalna na węzłach `depth>0` (liście / pośrednie), read-only złożenie na `depth===0` (wcześniej odwrotnie — edycja tylko na top-level)
+
+### słownik
+- dodano `ui-funkcja` `composeBranchStrategy` — WBSHybridTable.jsx, @anchor compose-branch-strategy
+- dodano `ui-funkcja` `saveLeafStrategy` — WBSHybridTable.jsx, @anchor save-leaf-strategy
+
+### wytyczne
+- `schema-pole` `WbsNode.strategy` — na węźle top-level jest wartością POCHODNĄ (złożenie z potomków przez `composeBranchStrategy`), nie edytuj jej ręcznie; edycja odbywa się na węzłach `depth>0`
+
+## 2026-07-21 — fix(oferta): szablony wstawiają surowe tokeny {zmienne} zamiast zamrożonych wartości — auto-aktualizacja (v2026.07.21.718)
+
+### architektura / API
+- `ui-funkcja` `resolveOfferTokens` (UnifiedWbsPanel.jsx) — zastępuje dawny `resolvedPresets`; „WSTAW SZABLON" wstawia teraz surowy token `{wartość oferty}` / `{tabela wbs1}` itd., a nie wyliczoną wartość. Rozwijanie tokenów następuje wyłącznie w podglądzie edytora i przy eksporcie PDF, więc treść oferty auto-aktualizuje się przy zmianie wyceny
+- `ui-propsy` `resolveTokens` (MarkdownEditor.jsx) — opcjonalna funkcja rozwijająca tokeny; używana tylko w `renderHtml` (podgląd), pole edycji zawsze trzyma surowy tekst
+
+### słownik
+- dodano `resolve-offer-tokens` — rozwija tokeny {zmienne} oferty na żywe wartości, UnifiedWbsPanel.jsx
+
+### wytyczne
+- `ui-funkcja` `resolveOfferTokens` — zmienne oferty (`{wartość oferty}`, `{tabela wbs1}`, `{nazwa projektu}`…) przechowuj w treści ZAWSZE jako surowe tokeny; rozwijaj je dopiero przy renderze (podgląd / PDF), nigdy przy wstawianiu do pola — inaczej wartość się „zamraża" i nie odświeża
+
 ## 2026-07-15 — feat(oferty): edycja zapisanych pozycji oferty z autozapisem + modal wyboru zamiast auto-parsowania (v2026.07.15.702)
 
 ### architektura / API

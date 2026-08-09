@@ -340,6 +340,35 @@ export class VectorService implements OnModuleInit {
      * Wywołuje model AI z surowym promptem — bez opakowywania w kontekst ERP.
      * Używane do ekstrakcji JSON i innych zadań strukturalnych.
      */
+    /**
+     * Jak generateRaw, ale dla Gemini włącza grounding Google Search (tools: googleSearch) i zwraca
+     * DODATKOWO realnie cytowane źródła (groundingMetadata.groundingChunks[].web). To jest jedyne
+     * wiarygodne źródło URL-i — model w treści JSON i tak potrafi zmyślić link, natomiast
+     * groundingChunks zawiera adresy stron, które faktycznie odwiedził. Dla pozostałych providerów
+     * i przy błędzie groundingu degraduje się do zwykłego generateRaw (sources: []).
+     */
+    async generateRawGrounded(prompt: string): Promise<{ text: string; sources: { uri: string; title: string }[] }> {
+        const modelName = this.configService.get<string>('AI_MODEL');
+        if ((modelName?.includes('gemini')) && this.genAI) {
+            try {
+                const model = this.genAI.getGenerativeModel({
+                    model: modelName,
+                    tools: [{ googleSearch: {} }] as any,
+                });
+                const result = await model.generateContent(prompt);
+                const meta: any = result.response.candidates?.[0]?.groundingMetadata;
+                const sources = (meta?.groundingChunks || [])
+                    .map((c: any) => ({ uri: c?.web?.uri || '', title: c?.web?.title || '' }))
+                    .filter((s: { uri: string }) => s.uri.startsWith('http'));
+                this.logger.log(`[GenerateRawGrounded] grounding OK, źródeł: ${sources.length}`);
+                return { text: result.response.text(), sources };
+            } catch (err) {
+                this.logger.warn(`[GenerateRawGrounded] grounding niedostępny (${err?.message}) — fallback bez Google Search`);
+            }
+        }
+        return { text: await this.generateRaw(prompt), sources: [] };
+    }
+
     async generateRaw(prompt: string): Promise<string> {
         const modelName = this.configService.get<string>('AI_MODEL');
         this.logger.log(`[GenerateRaw] model: ${modelName}, prompt length: ${prompt.length}`);
