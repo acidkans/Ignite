@@ -242,10 +242,16 @@ export class OrdersService {
             });
         }
 
-        // KPI. Prognoza = Σ(aktualna wartość gdzie wyceniona) + Σ(baseline gdzie
+        // KPI. Baseline = tylko materiały nadal obecne w żywych danych (sparowane) —
+        // pozycje ZAKRES_MINUS to materiały wycenione w ofercie, ale usunięte w
+        // kolejnych snapshotach, więc nie liczą się już do baseline.
+        // Prognoza = Σ(aktualna wartość gdzie wyceniona) + Σ(baseline gdzie
         // sparowane ale bez ceny aktualnej); zakres− (usunięty z żywych) nie wchodzi.
         const r2 = (x: number) => Math.round(x * 100) / 100;
-        const baselineSum = r2(rows.reduce((s, r) => s + (r.baseline?.value ?? 0), 0));
+        const baselineSum = r2(rows.reduce((s, r) => {
+            if (r.deviations.includes('ZAKRES_MINUS')) return s;
+            return s + (r.baseline?.value ?? 0);
+        }, 0));
         const currentSum = r2(rows.reduce((s, r) => s + (r.current?.value ?? 0), 0));
         const forecastSum = r2(rows.reduce((s, r) => {
             if (!r.current) return s; // zakres− — poza prognozą

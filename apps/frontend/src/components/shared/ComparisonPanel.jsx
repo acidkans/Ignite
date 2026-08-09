@@ -149,16 +149,24 @@ export default function ComparisonPanel({ nodeId }) {
             </div>
 
             {/* Tabela */}
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
                 <table className="w-full text-xs">
-                    <thead>
-                        <tr className="bg-white/[0.02] border-b border-white/5">
-                            <th className="text-left px-3 py-2 text-gray-500 font-semibold uppercase tracking-wider">Pozycja</th>
-                            <th className="text-right px-2 py-2 text-gray-500 font-semibold uppercase tracking-wider" colSpan={3}>Baseline (ilość · cena · wartość)</th>
-                            <th className="text-right px-2 py-2 text-gray-500 font-semibold uppercase tracking-wider" colSpan={3}>Aktualnie (ilość · cena · wartość)</th>
-                            <th className="text-left px-2 py-2 text-gray-500 font-semibold uppercase tracking-wider">Dostawca</th>
-                            <th className="text-right px-3 py-2 text-gray-500 font-semibold uppercase tracking-wider">Δ</th>
-                            <th className="text-left px-2 py-2 text-gray-500 font-semibold uppercase tracking-wider">Odchylenia</th>
+                    <thead className="sticky top-0 z-10">
+                        <tr className="bg-gray-900 border-b border-white/5">
+                            <th rowSpan={2} className="text-left px-3 py-2 text-gray-500 font-semibold uppercase tracking-wider align-bottom">Pozycja</th>
+                            <th className="text-right px-2 py-1 text-gray-500 font-semibold uppercase tracking-wider" colSpan={3}>Baseline (ilość · cena · wartość)</th>
+                            <th className="text-right px-2 py-1 text-gray-500 font-semibold uppercase tracking-wider" colSpan={3}>Aktualnie (ilość · cena · wartość)</th>
+                            <th rowSpan={2} className="text-left px-2 py-2 text-gray-500 font-semibold uppercase tracking-wider align-bottom">Dostawca</th>
+                            <th rowSpan={2} className="text-right px-3 py-2 text-gray-500 font-semibold uppercase tracking-wider align-bottom">Δ</th>
+                            <th rowSpan={2} className="text-left px-2 py-2 text-gray-500 font-semibold uppercase tracking-wider align-bottom">Odchylenia</th>
+                        </tr>
+                        <tr className="bg-gray-900 border-b border-white/5">
+                            <th className="text-right px-2 py-1.5 text-gray-600 font-medium normal-case" title="Ilość materiału w wersji zaakceptowanej jako baseline">Ilość</th>
+                            <th className="text-right px-2 py-1.5 text-gray-600 font-medium normal-case">Cena</th>
+                            <th className="text-right px-2 py-1.5 text-gray-600 font-medium normal-case">Wartość</th>
+                            <th className="text-right px-2 py-1.5 text-gray-600 font-medium normal-case" title="Aktualna ilość materiału w żywych danych">Ilość</th>
+                            <th className="text-right px-2 py-1.5 text-gray-600 font-medium normal-case">Cena</th>
+                            <th className="text-right px-2 py-1.5 text-gray-600 font-medium normal-case">Wartość</th>
                         </tr>
                     </thead>
                     <tbody>
