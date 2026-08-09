@@ -33,17 +33,26 @@ export class OrdersService {
         return node;
     }
 
-    // @anchor orders-accept-preview — dane do modala potwierdzenia: suma budżetu
-    // wymagań wskazanej wersji + zamrożone wyceny (kandydatki na BASELINE).
+    // @anchor orders-accept-preview — dane do modala potwierdzenia: pełny koszt całościowy
+    // z oferty (Σ unitCost×quantity po całym drzewie WBS wersji, formuła IDENTYCZNA z
+    // BudgetTable.calcDerived — akceptacja blokuje CAŁY projekt, nie tylko wycenione materiały)
+    // + osobno licznik wycenionych wymagań materiałowych (pricedCount, informacyjnie).
     async acceptPreview(nodeId: string, versionId: string) {
         const version = await this.prisma.projectVersion.findUnique({ where: { id: versionId } });
         if (!version || version.nodeId !== nodeId) throw new BadRequestException('Wersja nie należy do tego węzła');
 
+        const wbsLeaves = await this.prisma.wbsNode.findMany({
+            where: { nodeId, versionId, type: { not: 'group' } },
+            select: { unitCost: true, quantity: true },
+        });
+        const budgetSum = wbsLeaves.reduce(
+            (s, n) => s + Math.max(0, n.unitCost ?? 0) * Math.max(0, n.quantity ?? 0), 0,
+        );
+
         const reqs = await this.prisma.materialRequirement.findMany({
             where: { nodeId, versionId },
-            select: { quantity: true, budgetedPriceNetto: true },
+            select: { budgetedPriceNetto: true },
         });
-        const budgetSum = reqs.reduce((s, r) => s + (r.budgetedPriceNetto != null ? r.budgetedPriceNetto * r.quantity : 0), 0);
         const pricedCount = reqs.filter((r) => r.budgetedPriceNetto != null).length;
 
         const lockedQuickQuotes = await this.prisma.quickQuote.findMany({

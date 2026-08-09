@@ -4,6 +4,16 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-08-09 — fix(orders): modal akceptacji baseline liczy pełny koszt WBS zamiast tylko wycenionych materiałów (v2026.08.09.756)
+
+### architektura / API
+- `back-funkcja` `OrdersService.acceptPreview` (`GET /orders/:nodeId/accept-preview`) — `budgetSum` liczony teraz z Σ `unitCost×quantity` po wszystkich liściach drzewa WBS wersji (`type != 'group'`), formuła identyczna z `BudgetTable.calcDerived`/`summary.totalCost`. Wcześniej sumował wyłącznie `MaterialRequirement.budgetedPriceNetto×quantity` — pomijał liście `work`/`service`/`lodging`/`fuel` i wymagania bez przypisanej ceny, przez co modal akceptacji pokazywał wielokrotnie zaniżoną liczbę względem zakładki Budżet (np. 102 653 zł vs 415 070 zł realnego kosztu). `pricedCount`/`requirementsCount` (wycenione materiały) zostają bez zmian jako osobna, informacyjna metryka
+
+### wytyczne
+- `back-endpoint` `orders-accept-preview` — akceptacja blokuje CAŁY projekt (wszystkie typy liści WBS), więc podgląd budżetu przed akceptacją musi liczyć z pełnego drzewa WBS, nie tylko z tabeli `MaterialRequirement` — przy kolejnych zmianach formuły kosztu w `BudgetTable.calcDerived` aktualizować oba miejsca
+
+---
+
 ## 2026-08-09 — feat(wbs): split Wycena↔Zakup w Materiałach + kafle Oferta/Rzeczywiste w Budżecie (v2026.07.20.718)
 
 ### schema.prisma
