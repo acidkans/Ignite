@@ -235,7 +235,7 @@ export class MaterialRequirementsService {
         const items = await this.prisma.materialRequirement.findMany({
             where,
             include: {
-                proposals: true,
+                proposals: { include: { supplier: true } },
                 assignedSubtask: { select: { id: true, name: true } },
                 material: { select: { id: true, productName: true, manufacturer: true, model: true, dataSheetUrl: true, dataSheetName: true, complianceUrl: true, imageUrl: true, priceNetto: true, productUrl: true, seller: true } },
             },
@@ -357,7 +357,7 @@ export class MaterialRequirementsService {
         const item = await this.prisma.materialRequirement.findUnique({
             where: { id },
             include: {
-                proposals: true,
+                proposals: { include: { supplier: true } },
                 assignedSubtask: { select: { id: true, name: true } },
                 material: { select: { id: true, productName: true, manufacturer: true, model: true, dataSheetUrl: true, dataSheetName: true, complianceUrl: true, complianceName: true, imageUrl: true, priceNetto: true, productUrl: true, seller: true } },
             },
@@ -1161,9 +1161,9 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
         });
     }
 
-    async updateProposal(proposalId: string, dto: Partial<{ productName: string; manufacturer: string; model: string; sourceUrl: string; priceNetto: number | null; purchasePriceNetto: number | null; seller: string | null; offerNumber: string | null; availability: string | null; isRejected: boolean; }>) {
+    async updateProposal(proposalId: string, dto: Partial<{ productName: string; manufacturer: string; model: string; sourceUrl: string; priceNetto: number | null; purchasePriceNetto: number | null; seller: string | null; offerNumber: string | null; availability: string | null; isRejected: boolean; supplierId: string | null; }>) {
         if (dto.manufacturer !== undefined) dto.manufacturer = normalizeManufacturer(dto.manufacturer) ?? undefined;
-        const updated = await this.prisma.productProposal.update({ where: { id: proposalId }, data: dto });
+        const updated = await this.prisma.productProposal.update({ where: { id: proposalId }, data: dto, include: { supplier: true } });
         // Zmiana ceny wyceny na propozycji-offer synchronizuje budżet WBS (= cena wyceny).
         if (dto.priceNetto !== undefined && updated.isOffer && updated.priceNetto != null) {
             await this.prisma.materialRequirement.update({
@@ -1211,9 +1211,11 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
         if (!proposal) throw new NotFoundException(`Proposal ${proposalId} not found`);
         const willSelect = !proposal.isSelected;
         if (willSelect) {
+            // Wybór produktu na etapie ofertowania JEST wyborem produktu strony „Wycena" —
+            // bez isOffer split Wycena/Zakup nie widzi produktu i lewy panel zostaje pusty.
             await this.prisma.productProposal.updateMany({
                 where: { materialRequirementId: proposal.materialRequirementId, id: { not: proposalId } },
-                data: { isSelected: false },
+                data: { isSelected: false, isOffer: false },
             });
             // Upsert do tabeli materials — zaakceptowany produkt trafia do katalogu
             const existingMaterial = await this.prisma.material.findFirst({
@@ -1246,7 +1248,7 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
         }
         return this.prisma.productProposal.update({
             where: { id: proposalId },
-            data: { isSelected: willSelect },
+            data: { isSelected: willSelect, isOffer: willSelect },
         });
     }
 

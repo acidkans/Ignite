@@ -872,6 +872,8 @@ model Supplier {
   offers          Offer[]
   /// @anchor supplier-quick-quote-items
   quickQuoteItems QuickQuoteItem[]
+  /// @anchor supplier-product-proposals
+  productProposals ProductProposal[]
 
   @@map("suppliers")
 }
@@ -1060,10 +1062,16 @@ model ProductProposal {
   /// @anchor product-proposal-purchase-price-netto
   purchasePriceNetto Float? // cena zakupu gdy ta sama propozycja pełni obie role (Δ = purchasePriceNetto − priceNetto)
 
+  // Dostawca produktu tej propozycji (rejestr Supplier — wybór po NIP lub wolny wpis po nazwie)
+  /// @anchor product-proposal-supplier-id
+  supplierId String?
+
   createdAt DateTime @default(now())
 
   /// @anchor product-proposal-material-requirement
   materialRequirement MaterialRequirement @relation(fields: [materialRequirementId], references: [id], onDelete: Cascade)
+  /// @anchor product-proposal-supplier
+  supplier             Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
 
   @@map("product_proposals")
 }

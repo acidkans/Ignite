@@ -536,6 +536,12 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | ProductProposal.isSelected | apps/backend/prisma/schema.prisma | @anchor product-proposal-is-selected |
 | schema-pole | ProductProposal.isRejected | apps/backend/prisma/schema.prisma | @anchor product-proposal-is-rejected |
 | schema-relacja | ProductProposal.materialRequirement | apps/backend/prisma/schema.prisma | @anchor product-proposal-material-requirement |
+| schema-pole | ProductProposal.supplierId | apps/backend/prisma/schema.prisma | @anchor product-proposal-supplier-id |
+| schema-relacja | ProductProposal.supplier | apps/backend/prisma/schema.prisma | @anchor product-proposal-supplier |
+| schema-relacja | Supplier.productProposals | apps/backend/prisma/schema.prisma | @anchor supplier-product-proposals |
+| ui-funkcja | supplierChange | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-supplier-change |
+| ui-funkcja | copySupplierToPurchase | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor baseline-split-copy-supplier-to-purchase |
+| ui-funkcja | ensureProposal | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-ensure-proposal |
 
 #### Backend (`apps/backend/src/material-requirements/`)
 

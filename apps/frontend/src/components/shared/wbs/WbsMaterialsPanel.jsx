@@ -1121,28 +1121,75 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
     const setF = (k, v) => setFields(f => ({ ...f, [k]: v }));
 
     const [searching, setSearching] = useState(false);
-    const [showAdd, setShowAdd] = useState(false);
-    const [newProd, setNewProd] = useState({ productName: '', manufacturer: '', model: '', priceNetto: '' });
+    // Promise w locie, dedupliku­je równoległe onBlur na kilku polach zanim propozycja istnieje —
+    // inaczej szybkie Tab przez Producent→Model→Nazwa tworzyłoby kilka pustych propozycji naraz.
+    const creatingRef = useRef(null);
 
+    const assignRole = async (proposalId) => {
+        await fetch(`${API_URL}/material-requirements/proposals/${proposalId}/${roleEndpoint}`, { method: 'PATCH', headers });
+        await onRefresh?.();
+    };
+    // @anchor product-side-card-ensure-proposal — tworzy propozycję „w locie" z aktualnie wpisanych pól
+    // (Producent/Model/Nazwa/Cena/Dostępność/Adres WWW) i przypisuje ją do roli tej strony splitu, gdy
+    // użytkownik zaczyna edytować pola zanim jakikolwiek produkt istniał. Pola są więc zawsze widoczne
+    // i edytowalne — propozycja powstaje niejawnie przy pierwszym opuszczeniu pola.
+    const ensureProposal = async () => {
+        if (proposal) return proposal;
+        if (creatingRef.current) return creatingRef.current;
+        creatingRef.current = (async () => {
+            const raw = String(fields.price ?? '').trim().replace(',', '.');
+            const priceNetto = raw === '' ? null : (parseFloat(raw) || null);
+            const res = await fetch(`${API_URL}/material-requirements/${requirement.id}/proposals`, {
+                method: 'POST', headers,
+                body: JSON.stringify({
+                    productName: fields.productName || '', manufacturer: fields.manufacturer || '',
+                    model: fields.model || undefined, sourceUrl: fields.sourceUrl || undefined,
+                    availability: fields.availability || undefined, priceNetto,
+                }),
+            });
+            if (!res.ok) return null;
+            const created = await res.json();
+            await fetch(`${API_URL}/material-requirements/proposals/${created.id}/${roleEndpoint}`, { method: 'PATCH', headers });
+            return created;
+        })();
+        const result = await creatingRef.current;
+        creatingRef.current = null;
+        return result;
+    };
     const patchField = async (key, value) => {
-        if (!proposal) return;
-        await fetch(`${API_URL}/material-requirements/proposals/${proposal.id}`, {
-            method: 'PATCH', headers, body: JSON.stringify({ [key]: value }),
+        const p = await ensureProposal();
+        if (!p) return;
+        // ensureProposal już zapisała bieżącą wartość pola przy tworzeniu — dodatkowy PATCH tylko gdy propozycja już istniała.
+        if (proposal) {
+            await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, {
+                method: 'PATCH', headers, body: JSON.stringify({ [key]: value }),
+            });
+        }
+        await onRefresh?.();
+    };
+    // @anchor product-side-card-supplier-change — dostawca produktu tej strony (Wycena/Zakup), niezależny
+    // od drugiej strony splitu; wybór po NIP z rejestru lub wolny wpis po nazwie (SupplierPicker). Działa
+    // też zanim wybrano produkt — tworzy pustą propozycję tylko po to, by przypiąć dostawcę.
+    const supplierChange = async (supplier) => {
+        const p = await ensureProposal();
+        if (!p) return;
+        await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, {
+            method: 'PATCH', headers, body: JSON.stringify({ supplierId: supplier?.id ?? null }),
         });
         await onRefresh?.();
     };
     const priceBlur = async () => {
-        if (!proposal) return;
         const raw = String(fields.price ?? '').trim().replace(',', '.');
         const val = raw === '' ? null : (parseFloat(raw) || null);
-        await fetch(`${API_URL}/material-requirements/proposals/${proposal.id}`, {
-            method: 'PATCH', headers, body: JSON.stringify({ [priceField]: val }),
-        });
+        const hadProposal = !!proposal;
+        const p = await ensureProposal();
+        if (!p) return;
+        if (hadProposal) {
+            await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, {
+                method: 'PATCH', headers, body: JSON.stringify({ [priceField]: val }),
+            });
+        }
         if (!isPurchase && val != null) onPropagatePrice?.(requirement, wbsNode, val);
-        await onRefresh?.();
-    };
-    const assignRole = async (proposalId) => {
-        await fetch(`${API_URL}/material-requirements/proposals/${proposalId}/${roleEndpoint}`, { method: 'PATCH', headers });
         await onRefresh?.();
     };
     const searchAI = async () => {
@@ -1152,74 +1199,20 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
             if (res.ok) await onRefresh?.();
         } finally { setSearching(false); }
     };
-    const addManual = async () => {
-        if (!newProd.productName || !newProd.manufacturer) return;
-        const raw = String(newProd.priceNetto ?? '').trim().replace(',', '.');
-        const res = await fetch(`${API_URL}/material-requirements/${requirement.id}/proposals`, {
-            method: 'POST', headers,
-            body: JSON.stringify({ ...newProd, priceNetto: raw === '' ? null : (parseFloat(raw) || null) }),
-        });
-        if (res.ok) { const created = await res.json(); setShowAdd(false); setNewProd({ productName: '', manufacturer: '', model: '', priceNetto: '' }); await assignRole(created.id); }
-    };
 
     const allProposals = requirement.proposals || [];
     const priceLabel = isPurchase ? 'Koszt zakupu' : 'Koszt jedn.';
 
-    if (!proposal) {
-        // Brak produktu dla tej strony — wybór z istniejących lub AI/ręcznie.
-        return (
-            <div className="px-4 py-3 flex flex-col gap-2">
-                <p className="text-[11px] text-gray-500 italic">Brak produktu dla strony „{isPurchase ? 'Zakup' : 'Wycena'}".</p>
-                {!readOnly && (
-                    <>
-                        <div className="flex items-center gap-1.5">
-                            <button onClick={searchAI} disabled={searching}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 disabled:opacity-40">
-                                <Sparkles size={10} /> {searching ? 'Szukam…' : 'Szukaj AI'}
-                            </button>
-                            <button onClick={() => setShowAdd(v => !v)}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10">
-                                <Plus size={10} /> Dodaj ręcznie
-                            </button>
-                        </div>
-                        {showAdd && (
-                            <div className="p-2 rounded border border-blue-500/20 bg-blue-500/5 flex flex-col gap-1.5">
-                                <input value={newProd.productName} onChange={e => setNewProd(p => ({ ...p, productName: e.target.value }))} placeholder="Nazwa produktu *" autoFocus className={SIDE_IC} />
-                                <div className="grid grid-cols-2 gap-1.5">
-                                    <input value={newProd.manufacturer} onChange={e => setNewProd(p => ({ ...p, manufacturer: e.target.value }))} placeholder="Producent *" className={SIDE_IC} />
-                                    <input value={newProd.model} onChange={e => setNewProd(p => ({ ...p, model: e.target.value }))} placeholder="Model" className={SIDE_IC} />
-                                </div>
-                                <input value={newProd.priceNetto} onChange={e => setNewProd(p => ({ ...p, priceNetto: e.target.value }))} placeholder="Cena netto" className={SIDE_IC} />
-                                <button onClick={addManual} disabled={!newProd.productName || !newProd.manufacturer}
-                                    className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-semibold disabled:opacity-40 self-end">Dodaj i przypisz</button>
-                            </div>
-                        )}
-                        {allProposals.length > 0 && (
-                            <div className="flex flex-col gap-1">
-                                <span className="text-[9px] uppercase tracking-widest text-gray-600">lub wybierz istniejącą propozycję:</span>
-                                {allProposals.map(p => (
-                                    <button key={p.id} onClick={() => assignRole(p.id)}
-                                        className="text-left px-2 py-1 rounded border border-white/5 bg-white/[0.02] hover:bg-white/5 text-[11px] text-gray-300">
-                                        {p.manufacturer} {p.model} — {p.productName}{p.priceNetto != null ? ` · ${Number(p.priceNetto).toFixed(2)} zł` : ''}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </>
-                )}
-            </div>
-        );
-    }
-
     return (
         <div className="px-4 py-3 flex flex-col gap-2">
+            {!proposal && <p className="text-[11px] text-gray-500 italic">Brak produktu dla strony „{isPurchase ? 'Zakup' : 'Wycena'}" — uzupełnij pola poniżej.</p>}
             <div className="grid grid-cols-3 gap-2">
                 <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Producent</label>
-                    <input value={fields.manufacturer} disabled={readOnly} onChange={e => setF('manufacturer', e.target.value)} onBlur={e => e.target.value !== (proposal.manufacturer || '') && patchField('manufacturer', e.target.value)} placeholder="Producent" className={SIDE_IC} /></div>
+                    <input value={fields.manufacturer} disabled={readOnly} onChange={e => setF('manufacturer', e.target.value)} onBlur={e => e.target.value !== (proposal?.manufacturer || '') && patchField('manufacturer', e.target.value)} placeholder="Producent" className={SIDE_IC} /></div>
                 <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Model</label>
-                    <input value={fields.model} disabled={readOnly} onChange={e => setF('model', e.target.value)} onBlur={e => e.target.value !== (proposal.model || '') && patchField('model', e.target.value)} placeholder="Model" className={SIDE_IC} /></div>
+                    <input value={fields.model} disabled={readOnly} onChange={e => setF('model', e.target.value)} onBlur={e => e.target.value !== (proposal?.model || '') && patchField('model', e.target.value)} placeholder="Model" className={SIDE_IC} /></div>
                 <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Nazwa handlowa</label>
-                    <input value={fields.productName} disabled={readOnly} onChange={e => setF('productName', e.target.value)} onBlur={e => e.target.value !== (proposal.productName || '') && patchField('productName', e.target.value)} placeholder="Nazwa handlowa" className={SIDE_IC} /></div>
+                    <input value={fields.productName} disabled={readOnly} onChange={e => setF('productName', e.target.value)} onBlur={e => e.target.value !== (proposal?.productName || '') && patchField('productName', e.target.value)} placeholder="Nazwa handlowa" className={SIDE_IC} /></div>
             </div>
             <div className="grid grid-cols-2 gap-2">
                 <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">{priceLabel}</label>
@@ -1228,32 +1221,29 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
                         <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-[10px]">zł</span>
                     </div></div>
                 <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Dostępność</label>
-                    <input value={fields.availability} disabled={readOnly} onChange={e => setF('availability', e.target.value)} onBlur={e => e.target.value !== (proposal.availability || '') && patchField('availability', e.target.value)} placeholder="np. 7 dni" className={SIDE_IC} /></div>
+                    <input value={fields.availability} disabled={readOnly} onChange={e => setF('availability', e.target.value)} onBlur={e => e.target.value !== (proposal?.availability || '') && patchField('availability', e.target.value)} placeholder="np. 7 dni" className={SIDE_IC} /></div>
             </div>
             <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Adres WWW</label>
-                <input value={fields.sourceUrl} disabled={readOnly} onChange={e => setF('sourceUrl', e.target.value)} onBlur={e => e.target.value !== (proposal.sourceUrl || '') && patchField('sourceUrl', e.target.value)} placeholder="https://…" className={SIDE_IC} /></div>
+                <input value={fields.sourceUrl} disabled={readOnly} onChange={e => setF('sourceUrl', e.target.value)} onBlur={e => e.target.value !== (proposal?.sourceUrl || '') && patchField('sourceUrl', e.target.value)} placeholder="https://…" className={SIDE_IC} /></div>
+            <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">{isPurchase ? 'Dostawca' : 'Dostawca (oferent)'}</label>
+                <SupplierPicker dark value={proposal?.supplierId ?? null} onChange={supplierChange} disabled={readOnly} /></div>
             {!readOnly && (
                 <div className="flex items-center gap-1.5 pt-1">
                     <button onClick={searchAI} disabled={searching}
                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 disabled:opacity-40">
                         <Sparkles size={9} /> {searching ? 'Szukam…' : 'Szukaj AI'}
                     </button>
-                    <button onClick={() => setShowAdd(v => !v)}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10">
-                        <Plus size={9} /> Inny produkt
-                    </button>
                 </div>
             )}
-            {showAdd && !readOnly && (
-                <div className="p-2 rounded border border-blue-500/20 bg-blue-500/5 flex flex-col gap-1.5">
-                    <input value={newProd.productName} onChange={e => setNewProd(p => ({ ...p, productName: e.target.value }))} placeholder="Nazwa produktu *" autoFocus className={SIDE_IC} />
-                    <div className="grid grid-cols-2 gap-1.5">
-                        <input value={newProd.manufacturer} onChange={e => setNewProd(p => ({ ...p, manufacturer: e.target.value }))} placeholder="Producent *" className={SIDE_IC} />
-                        <input value={newProd.model} onChange={e => setNewProd(p => ({ ...p, model: e.target.value }))} placeholder="Model" className={SIDE_IC} />
-                    </div>
-                    <input value={newProd.priceNetto} onChange={e => setNewProd(p => ({ ...p, priceNetto: e.target.value }))} placeholder="Cena netto" className={SIDE_IC} />
-                    <button onClick={addManual} disabled={!newProd.productName || !newProd.manufacturer}
-                        className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-semibold disabled:opacity-40 self-end">Dodaj i przypisz</button>
+            {!proposal && allProposals.length > 0 && (
+                <div className="flex flex-col gap-1">
+                    <span className="text-[9px] uppercase tracking-widest text-gray-600">lub wybierz istniejącą propozycję:</span>
+                    {allProposals.map(p => (
+                        <button key={p.id} onClick={() => assignRole(p.id)}
+                            className="text-left px-2 py-1 rounded border border-white/5 bg-white/[0.02] hover:bg-white/5 text-[11px] text-gray-300">
+                            {p.manufacturer} {p.model} — {p.productName}{p.priceNetto != null ? ` · ${Number(p.priceNetto).toFixed(2)} zł` : ''}
+                        </button>
+                    ))}
                 </div>
             )}
         </div>
@@ -1309,6 +1299,30 @@ export function BaselineSplitCard({
         if (purchaseProposal && purchaseProposal.id !== offerProposal.id &&
             !window.confirm('Strona Zakup ma już inny produkt — zastąpić produktem z Wyceny?')) return;
         await fetch(`${API_URL}/material-requirements/proposals/${offerProposal.id}/set-purchase`, { method: 'PATCH', headers });
+        await onRefresh?.();
+    };
+
+    // @anchor baseline-split-copy-supplier-to-purchase — kciuk: kopiuje TYLKO dostawcę z Wyceny do
+    // Zakupu, bez ruszania produktu; jeśli strona Zakup nie ma jeszcze żadnej propozycji, tworzy pustą
+    // (jak przy wyborze dostawcy bez produktu) i przypisuje ją do roli Zakup.
+    const copySupplierToPurchase = async () => {
+        if (!offerProposal) return;
+        if (purchaseProposal) {
+            await fetch(`${API_URL}/material-requirements/proposals/${purchaseProposal.id}`, {
+                method: 'PATCH', headers, body: JSON.stringify({ supplierId: offerProposal.supplierId ?? null }),
+            });
+        } else {
+            const res = await fetch(`${API_URL}/material-requirements/${card.id}/proposals`, {
+                method: 'POST', headers, body: JSON.stringify({ productName: '', manufacturer: '' }),
+            });
+            if (res.ok) {
+                const created = await res.json();
+                await fetch(`${API_URL}/material-requirements/proposals/${created.id}`, {
+                    method: 'PATCH', headers, body: JSON.stringify({ supplierId: offerProposal.supplierId ?? null }),
+                });
+                await fetch(`${API_URL}/material-requirements/proposals/${created.id}/set-purchase`, { method: 'PATCH', headers });
+            }
+        }
         await onRefresh?.();
     };
 
@@ -1389,12 +1403,24 @@ export function BaselineSplitCard({
                     </div>
 
                     {/* Kciuk na linii podziału: produkt Wyceny → Zakup */}
-                    <div className="absolute left-1/2 top-9 -translate-x-1/2 flex flex-col gap-2 z-10">
+                    <div className="absolute left-1/2 top-9 -translate-x-1/2 z-10">
                         <button
                             onClick={copyOfferToPurchase}
                             disabled={!offerProposal}
                             title="Kopiuje produkt z Wyceny do Zakupu (ta sama propozycja; cenę zakupu ustawisz osobno)"
                             className="p-1.5 rounded-full bg-gray-900 border border-teal-500/40 text-teal-300 hover:bg-teal-500/20 shadow-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                            <ThumbsUp size={13} />
+                        </button>
+                    </div>
+
+                    {/* Kciuk na linii podziału: dostawca Wyceny → Zakup (na wysokości pola „Dostawca") */}
+                    <div className="absolute left-1/2 top-[210px] -translate-x-1/2 z-10">
+                        <button
+                            onClick={copySupplierToPurchase}
+                            disabled={!offerProposal?.supplierId}
+                            title="Kopiuje tylko dostawcę z Wyceny do Zakupu (bez zmiany produktu)"
+                            className="p-1.5 rounded-full bg-gray-900 border border-orange-500/40 text-orange-300 hover:bg-orange-500/20 shadow-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                         >
                             <ThumbsUp size={13} />
                         </button>
@@ -1554,7 +1580,7 @@ function WbsMaterialRow({ node, card, accepted = false, isExpanded, onToggle, on
                     </div>
                 ) : (
                     <span onClick={() => !readOnly && card && setEditPrice(true)}
-                        className={`text-green-400 ${!readOnly && card ? 'cursor-pointer hover:text-green-300' : ''}`}>
+                        className={`text-orange-400 ${!readOnly && card ? 'cursor-pointer hover:text-orange-300' : ''}`}>
                         {card?.priceNetto != null ? `${Number(card.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—'}
                     </span>
                 )}
@@ -1564,7 +1590,7 @@ function WbsMaterialRow({ node, card, accepted = false, isExpanded, onToggle, on
                 const pu = purchaseUnitOf(card);
                 return (
                     <td className="px-3 py-2.5 text-sm font-mono whitespace-nowrap text-right">
-                        <span className="text-amber-300/90">
+                        <span className="text-red-400">
                             {pu != null ? `${Number(pu).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—'}
                         </span>
                     </td>

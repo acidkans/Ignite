@@ -4,6 +4,66 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-08-09 — fix(materials): produkty z etapu ofertowania nie trafiały na stronę „Wycena" splitu (v2026.08.09.765)
+
+### architektura / API
+- `back-funkcja` `selectProposal` — wybór produktu na etapie ofertowania ustawia teraz także `isOffer` (i zdejmuje `isOffer` z rodzeństwa). Wcześniej ustawiał wyłącznie `isSelected`, a `BaselineSplitCard` szuka produktu po `isOffer` — przez to po akceptacji baseline lewy panel „Wycena" był pusty mimo wybranego wcześniej produktu, który lądował dopiero na liście „lub wybierz istniejącą propozycję"
+- `back-funkcja` `cloneVersionData` — klon `ProductProposal` przenosi teraz `isOffer`, `isPurchase`, `purchasePriceNetto` i `supplierId`. Bez tego snapshot wersji gubił role splitu Wycena/Zakup oraz dostawcę
+
+### migracje
+- `20260809150000_backfill_is_offer_from_is_selected` — backfill 57 istniejących propozycji: `isSelected` bez `isOffer` → `isOffer = true` (pomija wymagania mające już jawnie wskazaną propozycję ofertową)
+- `20260809151000_dedupe_is_offer_per_requirement` — legacy duplikaty (dwa identyczne rekordy propozycji) dostały po backfillu obie flagę; zostaje najstarsza, reszta traci `isOffer`
+
+### wytyczne
+- `schema-pole` `ProductProposal.isOffer` — jedyne źródło prawdy o produkcie strony „Wycena". Każda ścieżka wyboru produktu (`selectProposal`, `setOffer`, tworzenie propozycji z `ProductSideCard`) MUSI ustawić tę flagę, inaczej produkt jest niewidoczny w splicie. `isSelected` zostaje jako flaga legacy/katalogowa
+- `back-funkcja` `cloneVersionData` — potwierdzenie istniejącej zasady: każda nowa kolumna `ProductProposal` musi zostać dopisana do klonu, inaczej znika w snapshotach wersji
+
+## 2026-08-09 — feat(materials): pola produktu zawsze widoczne w ProductSideCard, propozycja tworzona niejawnie (v2026.08.09.764)
+
+### architektura / API
+- `ProductSideCard` (obie strony splitu Wycena/Zakup) pokazuje teraz zawsze pełny zestaw pól (Producent/Model/Nazwa handlowa/Koszt/Dostępność/Adres WWW/Dostawca), niezależnie od tego czy strona ma już przypisaną propozycję — wcześniej pusty stan pokazywał tylko dostawcę i przyciski AI/ręcznie
+- nowa funkcja `ensureProposal` — pierwsza edycja dowolnego pola (albo wybór dostawcy) na stronie bez produktu tworzy propozycję z aktualnie wypełnionych pól i przypisuje ją do roli tej strony (`set-offer`/`set-purchase`); deduplikowana przez `creatingRef` żeby szybkie Tab przez kilka pól nie stworzyło kilku propozycji naraz
+- usunięto mini-formularz „Dodaj ręcznie"/„Inny produkt" (zbędny — pola są teraz zawsze edytowalne wprost)
+
+### słownik
+- dodano `product-side-card-ensure-proposal`
+- usunięto `product-side-card-pick-supplier-only` (scalone z `ensureProposal`/`supplierChange`)
+
+## 2026-08-09 — feat(materials): osobny kciuk kopiujący dostawcę Wycena→Zakup w BaselineSplitCard (v2026.08.09.761)
+
+### architektura / API
+- `BaselineSplitCard.copySupplierToPurchase` — nowy przycisk (kciuk) przy polu „Dostawca" strony Wycena, niezależny od kciuka kopiującego cały produkt: kopiuje wyłącznie `supplierId` do propozycji strony Zakup; jeśli Zakup nie ma jeszcze żadnej propozycji, tworzy pustą (jak przy wyborze dostawcy bez produktu) i przypisuje ją do roli Zakup
+
+### słownik
+- dodano `baseline-split-copy-supplier-to-purchase`
+
+## 2026-08-09 — feat(materials): wybór potencjalnego dostawcy (oferenta) zanim wybrano produkt w BaselineSplitCard (v2026.08.09.760)
+
+### architektura / API
+- `ProductSideCard` (stan „Brak produktu") pozwala teraz wybrać dostawcę zanim jeszcze wybrano/dodano produkt — tworzy pustą propozycję (`productName`/`manufacturer` = '') z ustawionym `supplierId` i przypisuje ją do roli tej strony (`set-offer`/`set-purchase`)
+- kciuk „kopiuj Wycena → Zakup" (`copyOfferToPurchase`) przenosi dostawcę automatycznie — operuje na tej samej propozycji (ta sama kolumna `supplierId`), bez dodatkowej logiki
+
+### słownik
+- dodano `product-side-card-pick-supplier-only` — handler wyboru dostawcy bez wybranego produktu
+
+## 2026-08-09 — feat(materials): wybór dostawcy produktu po obu stronach BaselineSplitCard (v2026.08.09.759)
+
+### schema.prisma
+- dodano pole `supplierId` w modelu `ProductProposal` — FK do `Supplier` (SetNull), niezależny dostawca produktu dla każdej strony splitu Wycena/Zakup
+- dodano relację `ProductProposal.supplier` → `Supplier` oraz odwrotną `Supplier.productProposals`
+
+### architektura / API
+- `PATCH /material-requirements/proposals/:proposalId` przyjmuje teraz `supplierId` (string | null) w DTO `updateProposal`; zwraca propozycję z dołączoną relacją `supplier`
+- `GET /material-requirements/node/:nodeId` i `GET /material-requirements/:id` dołączają teraz `proposals.supplier` (wcześniej `proposals: true` bez relacji)
+
+### słownik
+- dodano `product-proposal-supplier-id`, `product-proposal-supplier`, `supplier-product-proposals` — nowe pole/relacje w schema.prisma
+- dodano `product-side-card-supplier-change` — handler wyboru dostawcy w `ProductSideCard` (`WbsMaterialsPanel.jsx`)
+
+### wytyczne
+- `schema-pole` `ProductProposal.supplierId` — dostawca jest atrybutem propozycji (produktu), nie wymagania; strona Wycena i strona Zakup mogą mieć różnych dostawców nawet gdy to ta sama propozycja (rzadki przypadek — wtedy pole jest współdzielone)
+- `ui-funkcja` `supplierChange` w `ProductSideCard` — używa istniejącego `SupplierPicker` (wyszukiwanie po NIP z Białej listy VAT + wolny wpis po nazwie), bez duplikowania logiki wyboru dostawcy
+
 ## 2026-08-09 — fix(orders): modal akceptacji baseline liczy pełny koszt WBS zamiast tylko wycenionych materiałów (v2026.08.09.756)
 
 ### architektura / API

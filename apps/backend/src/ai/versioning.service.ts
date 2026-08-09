@@ -357,6 +357,10 @@ export class VersioningService {
                     matchScore: pp.matchScore,
                     isSelected: pp.isSelected,
                     isRejected: pp.isRejected,
+                    isOffer: pp.isOffer,
+                    isPurchase: pp.isPurchase,
+                    purchasePriceNetto: pp.purchasePriceNetto,
+                    supplierId: pp.supplierId,
                 },
             });
         }
