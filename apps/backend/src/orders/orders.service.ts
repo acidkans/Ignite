@@ -191,18 +191,17 @@ export class OrdersService {
             };
         };
 
-        // Wiersze sparowane + zakres− (baseline bez żywego odpowiednika)
+        // Wiersze sparowane. Baseline bez żywego odpowiednika (materiał usunięty
+        // w kolejnym snapshocie po akceptacji) — pomijamy całkowicie, nie liczy
+        // się już do porównania (nie jest częścią aktualnego zakresu zamówienia).
         for (const b of baselineRows) {
             const live = b.sourceRequirementId ? byLiveId.get(b.sourceRequirementId) : undefined;
+            if (!live) continue;
             const baseline = {
                 qty: b.quantity,
                 price: b.budgetedPriceNetto,
                 value: b.budgetedPriceNetto != null ? Math.round(b.quantity * b.budgetedPriceNetto * 100) / 100 : null,
             };
-            if (!live) {
-                rows.push({ key: b.id, liveId: null, name: b.name, unit: b.unit, baseline, current: null, qqSupplier: null, deviations: ['ZAKRES_MINUS'], delta: null });
-                continue;
-            }
             pairedLiveIds.add(live.id);
             const { snap, ...current } = buildCurrent(live);
             const qq = qqByLiveId.get(live.id) ?? null;
