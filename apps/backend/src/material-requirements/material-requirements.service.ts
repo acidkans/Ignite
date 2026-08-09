@@ -1141,9 +1141,17 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
         });
     }
 
-    async updateProposal(proposalId: string, dto: Partial<{ productName: string; manufacturer: string; model: string; sourceUrl: string; priceNetto: number | null; seller: string | null; offerNumber: string | null; availability: string | null; isRejected: boolean; }>) {
+    async updateProposal(proposalId: string, dto: Partial<{ productName: string; manufacturer: string; model: string; sourceUrl: string; priceNetto: number | null; purchasePriceNetto: number | null; seller: string | null; offerNumber: string | null; availability: string | null; isRejected: boolean; }>) {
         if (dto.manufacturer !== undefined) dto.manufacturer = normalizeManufacturer(dto.manufacturer) ?? undefined;
-        return this.prisma.productProposal.update({ where: { id: proposalId }, data: dto });
+        const updated = await this.prisma.productProposal.update({ where: { id: proposalId }, data: dto });
+        // Zmiana ceny wyceny na propozycji-offer synchronizuje budżet WBS (= cena wyceny).
+        if (dto.priceNetto !== undefined && updated.isOffer && updated.priceNetto != null) {
+            await this.prisma.materialRequirement.update({
+                where: { id: updated.materialRequirementId },
+                data: { budgetedPriceNetto: updated.priceNetto },
+            });
+        }
+        return updated;
     }
 
     async uploadProposalImage(proposalId: string, file: Express.Multer.File) {
@@ -1220,6 +1228,73 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
             where: { id: proposalId },
             data: { isSelected: willSelect },
         });
+    }
+
+    // @anchor mat-req-set-offer — propozycja jako produkt strony „Wycena" (isOffer).
+    // Max jedna isOffer na wymaganie; budżet WBS (budgetedPriceNetto) = cena wyceny = priceNetto.
+    async setOffer(proposalId: string) {
+        const proposal = await this.prisma.productProposal.findUnique({ where: { id: proposalId } });
+        if (!proposal) throw new NotFoundException(`Proposal ${proposalId} not found`);
+        await this.prisma.productProposal.updateMany({
+            where: { materialRequirementId: proposal.materialRequirementId, id: { not: proposalId } },
+            data: { isOffer: false },
+        });
+        if (proposal.priceNetto != null) {
+            await this.prisma.materialRequirement.update({
+                where: { id: proposal.materialRequirementId },
+                data: { budgetedPriceNetto: proposal.priceNetto },
+            });
+        }
+        return this.prisma.productProposal.update({ where: { id: proposalId }, data: { isOffer: true } });
+    }
+
+    // @anchor mat-req-set-purchase — propozycja jako produkt strony „Zakup" (isPurchase).
+    // Obsługuje oba przypadki: kciuk (ta sama propozycja co offer → init purchasePriceNetto=priceNetto)
+    // oraz inny produkt (osobna propozycja). Max jedna isPurchase na wymaganie; offer nietknięty.
+    async setPurchase(proposalId: string) {
+        const proposal = await this.prisma.productProposal.findUnique({ where: { id: proposalId } });
+        if (!proposal) throw new NotFoundException(`Proposal ${proposalId} not found`);
+        await this.prisma.productProposal.updateMany({
+            where: { materialRequirementId: proposal.materialRequirementId, id: { not: proposalId } },
+            data: { isPurchase: false },
+        });
+        const initPurchasePrice = proposal.isOffer && proposal.purchasePriceNetto == null && proposal.priceNetto != null;
+        return this.prisma.productProposal.update({
+            where: { id: proposalId },
+            data: { isPurchase: true, ...(initPurchasePrice ? { purchasePriceNetto: proposal.priceNetto } : {}) },
+        });
+    }
+
+    // @anchor mat-req-clear-purchase — zdejmuje flagę Zakup z propozycji (offer zostaje).
+    async clearPurchase(proposalId: string) {
+        return this.prisma.productProposal.update({ where: { id: proposalId }, data: { isPurchase: false } });
+    }
+
+    // @anchor mat-req-budget-sums — sumy dla widoku budżetu: Σ wyceny (priceNetto isOffer)
+    // i Σ zakupu (purchasePriceNetto ?? priceNetto isPurchase), oba × ilość wymagania.
+    // accepted = zamówienie ma zaakceptowany snapshot (wtedy front pokazuje oba pola).
+    async budgetSums(nodeId: string, versionId?: string) {
+        const node = await this.prisma.processNode.findUnique({
+            where: { id: nodeId }, select: { acceptedVersionId: true },
+        });
+        const reqs = await this.prisma.materialRequirement.findMany({
+            where: { nodeId, versionId: versionId ?? null },
+            select: {
+                quantity: true, budgetedPriceNetto: true,
+                proposals: { select: { isOffer: true, isPurchase: true, priceNetto: true, purchasePriceNetto: true } },
+            },
+        });
+        let sumWycena = 0, sumZakup = 0;
+        for (const r of reqs) {
+            const qty = r.quantity ?? 0;
+            const offer = r.proposals.find(p => p.isOffer);
+            const purchase = r.proposals.find(p => p.isPurchase);
+            const offerPrice = offer?.priceNetto ?? r.budgetedPriceNetto ?? 0;
+            const purchasePrice = purchase ? (purchase.purchasePriceNetto ?? purchase.priceNetto ?? 0) : offerPrice;
+            sumWycena += offerPrice * qty;
+            sumZakup += purchasePrice * qty;
+        }
+        return { accepted: !!node?.acceptedVersionId, sumWycena, sumZakup };
     }
 
     async uploadProposalFile(proposalId: string, file: Express.Multer.File, type: 'datasheet' | 'compliance') {

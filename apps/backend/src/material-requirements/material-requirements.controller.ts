@@ -328,6 +328,34 @@ export class MaterialRequirementsController {
         return this.service.selectProposal(proposalId);
     }
 
+    // @anchor mat-req-patch-set-offer
+    /** Ustawia propozycję jako produkt strony „Wycena" (isOffer) */
+    @Patch('proposals/:proposalId/set-offer')
+    setOffer(@Param('proposalId') proposalId: string) {
+        return this.service.setOffer(proposalId);
+    }
+
+    // @anchor mat-req-patch-set-purchase
+    /** Ustawia propozycję jako produkt strony „Zakup" (isPurchase); kciuk lub inny produkt */
+    @Patch('proposals/:proposalId/set-purchase')
+    setPurchase(@Param('proposalId') proposalId: string) {
+        return this.service.setPurchase(proposalId);
+    }
+
+    // @anchor mat-req-patch-clear-purchase
+    /** Zdejmuje flagę Zakup z propozycji */
+    @Patch('proposals/:proposalId/clear-purchase')
+    clearPurchase(@Param('proposalId') proposalId: string) {
+        return this.service.clearPurchase(proposalId);
+    }
+
+    // @anchor mat-req-get-budget-sums
+    /** Sumy budżetu: Σ wyceny i Σ zakupu dla węzła (+ flaga accepted) */
+    @Get('node/:nodeId/budget-sums')
+    budgetSums(@Param('nodeId') nodeId: string, @Query('versionId') versionId?: string) {
+        return this.service.budgetSums(nodeId, versionId);
+    }
+
     // @anchor mat-req-post-add-proposal
     /** Ręczne dodanie propozycji produktu */
     @Post(':id/proposals')

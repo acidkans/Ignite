@@ -5778,6 +5778,8 @@ ${ganttSectionHtml}
                             {(!budgetAcceptance?.acceptedVersionId || budgetMode === 'live') ? (
                                 <BudgetTable
                                     rows={budgetRows}
+                                    nodeId={nodeId}
+                                    versionId={versionId}
                                     onFieldChange={onBudgetFieldChange}
                                     onDeleteRow={(id) => deleteNodeByIdRef.current?.(id)}
                                     discountPercent={budgetDiscountPercent}
@@ -5812,6 +5814,7 @@ ${ganttSectionHtml}
                             nodeId={nodeId}
                             versionId={versionId}
                             readOnly={!isManagerOrAdmin && !isLogistyk}
+                            accepted={!!budgetAcceptance?.acceptedVersionId}
                             externalWbsNodes={wbsData}
                             onPatchNode={(id, data) => setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))}
                             onQuantityChange={async (id, qty, name) => {

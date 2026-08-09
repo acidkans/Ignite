@@ -1033,6 +1033,15 @@ model ProductProposal {
   /// @anchor product-proposal-is-rejected
   isRejected Boolean @default(false)
 
+  // Role w splicie Wycena↔Zakup (niezależne od wersji/akceptacji).
+  // Max jedna isOffer i jedna isPurchase na wymaganie (pilnowane w serwisie).
+  /// @anchor product-proposal-is-offer
+  isOffer Boolean @default(false) // produkt strony „Wycena"; cena wyceny = priceNetto
+  /// @anchor product-proposal-is-purchase
+  isPurchase Boolean @default(false) // produkt strony „Zakup"
+  /// @anchor product-proposal-purchase-price-netto
+  purchasePriceNetto Float? // cena zakupu gdy ta sama propozycja pełni obie role (Δ = purchasePriceNetto − priceNetto)
+
   createdAt DateTime @default(now())
 
   /// @anchor product-proposal-material-requirement

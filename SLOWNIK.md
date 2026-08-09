@@ -290,6 +290,24 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-sekcja | TasksCalendarSection | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-section |
 | ui-sekcja | ProjectItemsPanel | apps/frontend/src/components/shared/wbs/ProjectItemsPanel.jsx | @anchor project-items-panel |
 | ui-tabela | BudgetTable | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table |
+| ui-funkcja | real (podsumowanie rzeczywiste) | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-real-summary |
+| ui-funkcja | purchaseUnitOf | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor purchase-unit-of |
+| ui-sekcja | budget-oz-sums (fetch Oferta/Zakup do kafli KPI) | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table-oz-sums |
+| ui-sekcja | budget-kpi-tiles (siatka kafli KPI Budżetu) | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-kpi-tiles |
+| ui-karta | ProductSideCard | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card |
+| ui-karta | BaselineSplitCard | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor baseline-split-card |
+| ui-funkcja | copyOfferToPurchase | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor baseline-split-copy-to-purchase |
+| back-endpoint | PATCH /material-requirements/proposals/:id/set-offer | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-patch-set-offer |
+| back-endpoint | PATCH /material-requirements/proposals/:id/set-purchase | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-patch-set-purchase |
+| back-endpoint | PATCH /material-requirements/proposals/:id/clear-purchase | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-patch-clear-purchase |
+| back-endpoint | GET /material-requirements/node/:nodeId/budget-sums | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-budget-sums |
+| back-funkcja | setOffer | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-set-offer |
+| back-funkcja | setPurchase | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-set-purchase |
+| back-funkcja | clearPurchase | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-clear-purchase |
+| back-funkcja | budgetSums | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-budget-sums |
+| schema-pole | ProductProposal.isOffer | apps/backend/prisma/schema.prisma | @anchor product-proposal-is-offer |
+| schema-pole | ProductProposal.isPurchase | apps/backend/prisma/schema.prisma | @anchor product-proposal-is-purchase |
+| schema-pole | ProductProposal.purchasePriceNetto | apps/backend/prisma/schema.prisma | @anchor product-proposal-purchase-price-netto |
 | ui-tabela | WBSHybridTable | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-table |
 | ui-funkcja | sumChildrenCost | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor sum-children-cost |
 | ui-funkcja | sumChildrenOfferPrice | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor sum-children-offer-price |

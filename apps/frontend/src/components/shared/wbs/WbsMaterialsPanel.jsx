@@ -6,8 +6,10 @@ import {
     CheckCircle, Clock, XCircle, Star, Trash2, AlertCircle,
     ShoppingCart, Warehouse, LogOut, Plus, Search, Sparkles,
     FileText, Link as LinkIcon, Download, BookOpen, X, Database, Paperclip,
+    Lock, ThumbsUp, ArrowRight,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
+import SupplierPicker from '../SupplierPicker';
 import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula } from './wbsConstants';
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
@@ -531,6 +533,10 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     const offerSnap = useMemo(() => {
         try { return card?.offerPositionSnapshot ? JSON.parse(card.offerPositionSnapshot) : null; } catch { return null; }
     }, [card?.offerPositionSnapshot]);
+    // offerPositionSnapshot jest samowystarczalnym workiem: trzyma i dostawcę, i pozycję oferty.
+    // Pole „Koszt jedn." wolno zablokować TYLKO gdy snapshot niesie realną pozycję oferty (cena/lp),
+    // nie gdy zawiera sam dostawcę — inaczej dodanie dostawcy blokuje ręczną edycję ceny.
+    const hasOfferPos = !!offerSnap && (offerSnap.priceNetto != null || offerSnap.lp != null);
 
     const assignOffer = useCallback(async (offerId, positionIdx) => {
         setOfferPicker(false);
@@ -842,7 +848,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                     })}
                     <div className="flex-1 min-w-[90px]">
                         <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Koszt jedn.</label>
-                        {offerSnap ? (
+                        {hasOfferPos ? (
                             <div>
                                 <div className="flex items-center gap-1">
                                     <div className="flex-1 bg-black/30 border border-amber-500/30 rounded px-2 py-1.5 text-xs text-amber-300 font-mono truncate">
@@ -1085,9 +1091,316 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     );
 }
 
+const SIDE_IC = 'w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50';
+
+// @anchor product-side-card — jedna strona splitu (Wycena=offer / Zakup=purchase). Pola produktu
+// związane z PROPOZYCJĄ (nie wymaganiem — technicalSpec jest wspólny, poza tym panelem). Wybór/dodanie
+// produktu ustawia rolę (set-offer / set-purchase). Cena zakupu na tej samej propozycji co wycena
+// idzie w purchasePriceNetto (Δ), inaczej w priceNetto.
+function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefresh, onPropagatePrice, readOnly = false }) {
+    const isPurchase = side === 'purchase';
+    const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
+    const roleEndpoint = isPurchase ? 'set-purchase' : 'set-offer';
+    // Cena zakupu gdy ta sama propozycja pełni obie role → purchasePriceNetto; inaczej priceNetto.
+    const priceField = (isPurchase && proposal?.isOffer && proposal?.isPurchase) ? 'purchasePriceNetto' : 'priceNetto';
+
+    const toFields = (p) => ({
+        manufacturer: p?.manufacturer || '', model: p?.model || '', productName: p?.productName || '',
+        price: p?.[priceField] != null ? String(p[priceField]) : '',
+        availability: p?.availability || '', sourceUrl: p?.sourceUrl || '',
+    });
+    const [fields, setFields] = useState(() => toFields(proposal));
+    useEffect(() => { setFields(toFields(proposal)); /* eslint-disable-next-line */ }, [proposal?.id, proposal?.manufacturer, proposal?.model, proposal?.productName, proposal?.[priceField], proposal?.availability, proposal?.sourceUrl]);
+    const setF = (k, v) => setFields(f => ({ ...f, [k]: v }));
+
+    const [searching, setSearching] = useState(false);
+    const [showAdd, setShowAdd] = useState(false);
+    const [newProd, setNewProd] = useState({ productName: '', manufacturer: '', model: '', priceNetto: '' });
+
+    const patchField = async (key, value) => {
+        if (!proposal) return;
+        await fetch(`${API_URL}/material-requirements/proposals/${proposal.id}`, {
+            method: 'PATCH', headers, body: JSON.stringify({ [key]: value }),
+        });
+        await onRefresh?.();
+    };
+    const priceBlur = async () => {
+        if (!proposal) return;
+        const raw = String(fields.price ?? '').trim().replace(',', '.');
+        const val = raw === '' ? null : (parseFloat(raw) || null);
+        await fetch(`${API_URL}/material-requirements/proposals/${proposal.id}`, {
+            method: 'PATCH', headers, body: JSON.stringify({ [priceField]: val }),
+        });
+        if (!isPurchase && val != null) onPropagatePrice?.(requirement, wbsNode, val);
+        await onRefresh?.();
+    };
+    const assignRole = async (proposalId) => {
+        await fetch(`${API_URL}/material-requirements/proposals/${proposalId}/${roleEndpoint}`, { method: 'PATCH', headers });
+        await onRefresh?.();
+    };
+    const searchAI = async () => {
+        setSearching(true);
+        try {
+            const res = await fetch(`${API_URL}/material-requirements/${requirement.id}/search-products`, { method: 'POST', headers });
+            if (res.ok) await onRefresh?.();
+        } finally { setSearching(false); }
+    };
+    const addManual = async () => {
+        if (!newProd.productName || !newProd.manufacturer) return;
+        const raw = String(newProd.priceNetto ?? '').trim().replace(',', '.');
+        const res = await fetch(`${API_URL}/material-requirements/${requirement.id}/proposals`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ ...newProd, priceNetto: raw === '' ? null : (parseFloat(raw) || null) }),
+        });
+        if (res.ok) { const created = await res.json(); setShowAdd(false); setNewProd({ productName: '', manufacturer: '', model: '', priceNetto: '' }); await assignRole(created.id); }
+    };
+
+    const allProposals = requirement.proposals || [];
+    const priceLabel = isPurchase ? 'Koszt zakupu' : 'Koszt jedn.';
+
+    if (!proposal) {
+        // Brak produktu dla tej strony — wybór z istniejących lub AI/ręcznie.
+        return (
+            <div className="px-4 py-3 flex flex-col gap-2">
+                <p className="text-[11px] text-gray-500 italic">Brak produktu dla strony „{isPurchase ? 'Zakup' : 'Wycena'}".</p>
+                {!readOnly && (
+                    <>
+                        <div className="flex items-center gap-1.5">
+                            <button onClick={searchAI} disabled={searching}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 disabled:opacity-40">
+                                <Sparkles size={10} /> {searching ? 'Szukam…' : 'Szukaj AI'}
+                            </button>
+                            <button onClick={() => setShowAdd(v => !v)}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10">
+                                <Plus size={10} /> Dodaj ręcznie
+                            </button>
+                        </div>
+                        {showAdd && (
+                            <div className="p-2 rounded border border-blue-500/20 bg-blue-500/5 flex flex-col gap-1.5">
+                                <input value={newProd.productName} onChange={e => setNewProd(p => ({ ...p, productName: e.target.value }))} placeholder="Nazwa produktu *" autoFocus className={SIDE_IC} />
+                                <div className="grid grid-cols-2 gap-1.5">
+                                    <input value={newProd.manufacturer} onChange={e => setNewProd(p => ({ ...p, manufacturer: e.target.value }))} placeholder="Producent *" className={SIDE_IC} />
+                                    <input value={newProd.model} onChange={e => setNewProd(p => ({ ...p, model: e.target.value }))} placeholder="Model" className={SIDE_IC} />
+                                </div>
+                                <input value={newProd.priceNetto} onChange={e => setNewProd(p => ({ ...p, priceNetto: e.target.value }))} placeholder="Cena netto" className={SIDE_IC} />
+                                <button onClick={addManual} disabled={!newProd.productName || !newProd.manufacturer}
+                                    className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-semibold disabled:opacity-40 self-end">Dodaj i przypisz</button>
+                            </div>
+                        )}
+                        {allProposals.length > 0 && (
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[9px] uppercase tracking-widest text-gray-600">lub wybierz istniejącą propozycję:</span>
+                                {allProposals.map(p => (
+                                    <button key={p.id} onClick={() => assignRole(p.id)}
+                                        className="text-left px-2 py-1 rounded border border-white/5 bg-white/[0.02] hover:bg-white/5 text-[11px] text-gray-300">
+                                        {p.manufacturer} {p.model} — {p.productName}{p.priceNetto != null ? ` · ${Number(p.priceNetto).toFixed(2)} zł` : ''}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+        );
+    }
+
+    return (
+        <div className="px-4 py-3 flex flex-col gap-2">
+            <div className="grid grid-cols-3 gap-2">
+                <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Producent</label>
+                    <input value={fields.manufacturer} disabled={readOnly} onChange={e => setF('manufacturer', e.target.value)} onBlur={e => e.target.value !== (proposal.manufacturer || '') && patchField('manufacturer', e.target.value)} placeholder="Producent" className={SIDE_IC} /></div>
+                <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Model</label>
+                    <input value={fields.model} disabled={readOnly} onChange={e => setF('model', e.target.value)} onBlur={e => e.target.value !== (proposal.model || '') && patchField('model', e.target.value)} placeholder="Model" className={SIDE_IC} /></div>
+                <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Nazwa handlowa</label>
+                    <input value={fields.productName} disabled={readOnly} onChange={e => setF('productName', e.target.value)} onBlur={e => e.target.value !== (proposal.productName || '') && patchField('productName', e.target.value)} placeholder="Nazwa handlowa" className={SIDE_IC} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+                <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">{priceLabel}</label>
+                    <div className="relative">
+                        <input value={fields.price} disabled={readOnly} inputMode="decimal" onChange={e => setF('price', sanitizeQtyInput(e.target.value))} onBlur={priceBlur} placeholder="0.00" className={`${SIDE_IC} pr-6`} />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-[10px]">zł</span>
+                    </div></div>
+                <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Dostępność</label>
+                    <input value={fields.availability} disabled={readOnly} onChange={e => setF('availability', e.target.value)} onBlur={e => e.target.value !== (proposal.availability || '') && patchField('availability', e.target.value)} placeholder="np. 7 dni" className={SIDE_IC} /></div>
+            </div>
+            <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Adres WWW</label>
+                <input value={fields.sourceUrl} disabled={readOnly} onChange={e => setF('sourceUrl', e.target.value)} onBlur={e => e.target.value !== (proposal.sourceUrl || '') && patchField('sourceUrl', e.target.value)} placeholder="https://…" className={SIDE_IC} /></div>
+            {!readOnly && (
+                <div className="flex items-center gap-1.5 pt-1">
+                    <button onClick={searchAI} disabled={searching}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 disabled:opacity-40">
+                        <Sparkles size={9} /> {searching ? 'Szukam…' : 'Szukaj AI'}
+                    </button>
+                    <button onClick={() => setShowAdd(v => !v)}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10">
+                        <Plus size={9} /> Inny produkt
+                    </button>
+                </div>
+            )}
+            {showAdd && !readOnly && (
+                <div className="p-2 rounded border border-blue-500/20 bg-blue-500/5 flex flex-col gap-1.5">
+                    <input value={newProd.productName} onChange={e => setNewProd(p => ({ ...p, productName: e.target.value }))} placeholder="Nazwa produktu *" autoFocus className={SIDE_IC} />
+                    <div className="grid grid-cols-2 gap-1.5">
+                        <input value={newProd.manufacturer} onChange={e => setNewProd(p => ({ ...p, manufacturer: e.target.value }))} placeholder="Producent *" className={SIDE_IC} />
+                        <input value={newProd.model} onChange={e => setNewProd(p => ({ ...p, model: e.target.value }))} placeholder="Model" className={SIDE_IC} />
+                    </div>
+                    <input value={newProd.priceNetto} onChange={e => setNewProd(p => ({ ...p, priceNetto: e.target.value }))} placeholder="Cena netto" className={SIDE_IC} />
+                    <button onClick={addManual} disabled={!newProd.productName || !newProd.manufacturer}
+                        className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-semibold disabled:opacity-40 self-end">Dodaj i przypisz</button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// @anchor baseline-split-card — wspólny split Wycena↔Zakup: wspólne okno „Wymagania techniczne" na
+// górze (z wymagania), pod spodem dwie kolumny produktu — Wycena = propozycja isOffer, Zakup =
+// propozycja isPurchase. Kciuk na linii podziału kopiuje produkt Wyceny do Zakupu (set-purchase na
+// propozycji offer). Używany w rozwinięciu wiersza WBSHybridTable i w zakładce Materials.
+export function BaselineSplitCard({
+    card, wbsNode, processNodeId, token, materialDb, offers,
+    readOnly = false, onRefresh, onPropagatePrice, onRefreshOffers, onPatch,
+}) {
+    const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
+    const zl = (v) => v != null ? v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+
+    const [splitOpen, setSplitOpen] = useState(true);
+    const [techSpec, setTechSpec] = useState(card?.technicalSpec || '');
+    useEffect(() => { setTechSpec(card?.technicalSpec || ''); }, [card?.id, card?.technicalSpec]);
+    // Auto-wysokość okna „Wymagania techniczne" — pokazuje całą treść bez zwijania/scrolla.
+    const techRef = useRef(null);
+    useLayoutEffect(() => {
+        const el = techRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = `${el.scrollHeight}px`;
+    }, [techSpec]);
+
+    const proposals = card?.proposals || [];
+    const offerProposal = proposals.find(p => p.isOffer) || null;
+    const purchaseProposal = proposals.find(p => p.isPurchase) || null;
+
+    const qty = card?.quantity ?? 0;
+    const offerPrice = offerProposal?.priceNetto ?? null;
+    const purchasePrice = purchaseProposal
+        ? ((purchaseProposal.isOffer && purchaseProposal.isPurchase) ? (purchaseProposal.purchasePriceNetto ?? purchaseProposal.priceNetto) : purchaseProposal.priceNetto)
+        : null;
+    const delta = (offerPrice != null && purchasePrice != null) ? (purchasePrice - offerPrice) * qty : null;
+
+    const saveTechSpec = async () => {
+        if (!card?.id || techSpec === (card.technicalSpec || '')) return;
+        await fetch(`${API_URL}/material-requirements/${card.id}`, {
+            method: 'PATCH', headers, body: JSON.stringify({ technicalSpec: techSpec }),
+        });
+        await onRefresh?.();
+    };
+
+    // @anchor baseline-split-copy-to-purchase — kciuk: produkt Wyceny staje się też produktem Zakupu
+    // (set-purchase na propozycji offer; bez nowego rekordu, purchasePriceNetto init = priceNetto).
+    const copyOfferToPurchase = async () => {
+        if (!offerProposal) return;
+        if (purchaseProposal && purchaseProposal.id !== offerProposal.id &&
+            !window.confirm('Strona Zakup ma już inny produkt — zastąpić produktem z Wyceny?')) return;
+        await fetch(`${API_URL}/material-requirements/proposals/${offerProposal.id}/set-purchase`, { method: 'PATCH', headers });
+        await onRefresh?.();
+    };
+
+    // Tryb read-only lub brak karty — pojedyncza karta produktu jak dotychczas.
+    if (readOnly || !card) {
+        return card ? (
+            <ProductCard card={card} wbsNode={wbsNode} token={token} materialDb={materialDb}
+                offers={offers} onRefresh={onRefresh} onRefreshOffers={onRefreshOffers}
+                onPropagatePrice={onPropagatePrice} readOnly={readOnly} onPatch={onPatch} />
+        ) : null;
+    }
+
+    return (
+        <div className="bg-blue-500/10">
+            {/* Wspólne okno „Wymagania techniczne" (z wymagania — te same dla obu stron) */}
+            <div className="px-4 py-2 border-b border-white/5">
+                <label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Wymagania techniczne (wspólne)</label>
+                <textarea
+                    ref={techRef}
+                    value={techSpec}
+                    onChange={e => setTechSpec(e.target.value)}
+                    onBlur={saveTechSpec}
+                    rows={1}
+                    placeholder="Wymagania techniczne — spełniane przez produkty po obu stronach"
+                    className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50 resize-none overflow-hidden"
+                />
+            </div>
+
+            {/* Pasek podsumowania Wycena · Zakup · Δ */}
+            <button
+                onClick={() => setSplitOpen(o => !o)}
+                className="w-full flex items-center gap-3 px-4 py-2 text-[13px] hover:bg-white/[0.03] transition-colors select-none"
+            >
+                <ChevronDown size={12} className={`text-teal-400 transition-transform ${splitOpen ? '' : '-rotate-90'}`} />
+                <span className="text-gray-400">Wycena: <span className="font-mono text-gray-200">{offerPrice != null ? `${zl(offerPrice * qty)} zł` : '—'}</span></span>
+                <span className="text-gray-400">Zakup: <span className="font-mono text-gray-200">{purchasePrice != null ? `${zl(purchasePrice * qty)} zł` : '—'}</span></span>
+                {delta != null && (
+                    <span className={`text-[11px] font-bold font-mono px-2 py-0.5 rounded-full border ${delta > 0 ? 'text-red-300 bg-red-500/10 border-red-500/25' : delta < 0 ? 'text-teal-300 bg-teal-500/10 border-teal-500/25' : 'text-gray-400 bg-white/5 border-white/10'}`}>
+                        Δ {delta >= 0 ? '+' : ''}{zl(delta)}
+                    </span>
+                )}
+            </button>
+
+            {splitOpen && (
+                <div className="relative grid grid-cols-2">
+                    {/* LEWO: Wycena (produkt isOffer) */}
+                    <div className="border-r border-white/10">
+                        <div className="flex items-center gap-2 px-4 py-1.5 bg-teal-500/5 border-y border-teal-500/10">
+                            <span className="text-[12px] font-bold uppercase tracking-widest text-teal-300/90">Wycena</span>
+                        </div>
+                        <ProductSideCard
+                            requirement={card}
+                            side="offer"
+                            proposal={offerProposal}
+                            token={token}
+                            wbsNode={wbsNode}
+                            onRefresh={onRefresh}
+                            onPropagatePrice={onPropagatePrice}
+                        />
+                    </div>
+
+                    {/* PRAWO: Zakup (produkt isPurchase) */}
+                    <div>
+                        <div className="flex items-center gap-2 px-4 py-1.5 bg-white/[0.02] border-y border-white/5">
+                            <span className="text-[12px] font-bold uppercase tracking-widest text-gray-400">Zakup</span>
+                            {purchaseProposal && offerProposal && purchaseProposal.id === offerProposal.id &&
+                                <span className="text-[9px] text-teal-400/70">= produkt z wyceny</span>}
+                        </div>
+                        <ProductSideCard
+                            requirement={card}
+                            side="purchase"
+                            proposal={purchaseProposal}
+                            token={token}
+                            wbsNode={wbsNode}
+                            onRefresh={onRefresh}
+                            onPropagatePrice={onPropagatePrice}
+                        />
+                    </div>
+
+                    {/* Kciuk na linii podziału: produkt Wyceny → Zakup */}
+                    <div className="absolute left-1/2 top-9 -translate-x-1/2 flex flex-col gap-2 z-10">
+                        <button
+                            onClick={copyOfferToPurchase}
+                            disabled={!offerProposal}
+                            title="Kopiuje produkt z Wyceny do Zakupu (ta sama propozycja; cenę zakupu ustawisz osobno)"
+                            className="p-1.5 rounded-full bg-gray-900 border border-teal-500/40 text-teal-300 hover:bg-teal-500/20 shadow-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                            <ThumbsUp size={13} />
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ─── Row ──────────────────────────────────────────────────────────────────────
 
-function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreateCard, materialDb, offers, token, readOnly, onRefresh, onPatchCard, onPropagatePrice }) {
+function WbsMaterialRow({ node, card, accepted = false, isExpanded, onToggle, onPatchNode, onCreateCard, materialDb, offers, token, readOnly, onRefresh, onPatchCard, onPropagatePrice }) {
     const meta = TYPE_META[node.type] || TYPE_META.material;
     const TypeIcon = meta.icon;
     const reqStatus = card?.status;
@@ -1238,6 +1551,17 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
                     </span>
                 )}
             </td>
+            {/* Koszt jedn. zakupu — tylko baseline; wartość tylko dla liści z realnym kosztem zakupu */}
+            {accepted && (() => {
+                const pu = purchaseUnitOf(card);
+                return (
+                    <td className="px-3 py-2.5 text-sm font-mono whitespace-nowrap text-right">
+                        <span className="text-amber-300/90">
+                            {pu != null ? `${Number(pu).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—'}
+                        </span>
+                    </td>
+                );
+            })()}
             {/* Status — edytowalny dropdown */}
             <td className="px-3 py-2.5">
                 {card ? (
@@ -1264,15 +1588,26 @@ function WbsMaterialRow({ node, card, isExpanded, onToggle, onPatchNode, onCreat
 
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
+// Kolumna `purchasePrice` (Koszt jedn. zakupu) pojawia się TYLKO po akceptacji baseline
+// (baselineOnly) — odfiltrowywana w `visibleCols`. Etap ofertowania: sam „Koszt jedn. oferty".
 const COL_DEFS = [
-    { key: 'parent',   label: 'Przedmiot projektu',     defaultW: 144 },
-    { key: 'name',     label: 'Nazwa',                  defaultW: 220 },
-    { key: 'techSpec', label: 'Wymagania techniczne',   defaultW: 200 },
-    { key: 'qty',      label: 'Ilość',                  defaultW: 88  },
-    { key: 'product',  label: 'Produkt',                defaultW: 160 },
-    { key: 'price',    label: 'Koszt jedn.',            defaultW: 112 },
-    { key: 'status',   label: 'Status oferty',          defaultW: 148 },
+    { key: 'parent',        label: 'Przedmiot projektu',   defaultW: 144 },
+    { key: 'name',          label: 'Nazwa',                defaultW: 220 },
+    { key: 'techSpec',      label: 'Wymagania techniczne', defaultW: 200 },
+    { key: 'qty',           label: 'Ilość',                defaultW: 88  },
+    { key: 'product',       label: 'Produkt',              defaultW: 160 },
+    { key: 'price',         label: 'Koszt jedn. oferty',   defaultW: 128, align: 'right' },
+    { key: 'purchasePrice', label: 'Koszt jedn. zakupu',   defaultW: 128, align: 'right', baselineOnly: true },
+    { key: 'status',        label: 'Status oferty',        defaultW: 148 },
 ];
+
+// @anchor purchase-unit-of — koszt jedn. zakupu z propozycji isPurchase (purchasePriceNetto gdy
+// ta sama propozycja pełni obie role, inaczej priceNetto). null = brak realnego kosztu zakupu.
+function purchaseUnitOf(card) {
+    const p = card?.proposals?.find(x => x.isPurchase);
+    if (!p) return null;
+    return (p.isOffer && p.isPurchase) ? (p.purchasePriceNetto ?? p.priceNetto ?? null) : (p.priceNetto ?? null);
+}
 
 // Spłaszcza zagnieżdżony obiekt material na wymaganie — po migracji katalog jest w relacji,
 // ale reszta frontendu nadal czyta card.manufacturer / card.priceNetto (stary schemat).
@@ -1299,6 +1634,7 @@ export default function WbsMaterialsPanel({
     nodeId,
     versionId,
     readOnly = false,
+    accepted = false,
     onWbsUpdate,
     onWbsNodeUnitCostChange,
     onPatchNode,
@@ -1328,6 +1664,9 @@ export default function WbsMaterialsPanel({
         () => Object.fromEntries(COL_DEFS.map(c => [c.key, c.defaultW]))
     );
     const resizeDrag = useRef(null);
+
+    // Kolumny widoczne: „Koszt jedn. zakupu" tylko po akceptacji baseline (accepted).
+    const visibleCols = useMemo(() => COL_DEFS.filter(c => !c.baselineOnly || accepted), [accepted]);
 
     const matNodes = useMemo(() =>
         wbsNodes.filter(n => n.type === 'material' || n.type === 'equipment'),
@@ -1367,6 +1706,7 @@ export default function WbsMaterialsPanel({
                 if (key === 'qty')    return String(n.quantity ?? '').includes(q);
                 if (key === 'product') return `${c?.manufacturer || ''} ${c?.model || ''}`.toLowerCase().includes(q);
                 if (key === 'price')  return String(c?.priceNetto ?? '').includes(q);
+                if (key === 'purchasePrice') return String(purchaseUnitOf(c) ?? '').includes(q);
                 if (key === 'techSpec') return (c?.technicalSpec || '').toLowerCase().includes(q);
                 if (key === 'status') return (STATUS_META[c?.status]?.label || c?.status || '').toLowerCase().includes(q);
                 return true;
@@ -1392,6 +1732,8 @@ export default function WbsMaterialsPanel({
                 cmp = pa.localeCompare(pb, 'pl');
             } else if (sortConfig.key === 'price') {
                 cmp = (ca?.priceNetto ?? Infinity) - (cb?.priceNetto ?? Infinity);
+            } else if (sortConfig.key === 'purchasePrice') {
+                cmp = (purchaseUnitOf(ca) ?? Infinity) - (purchaseUnitOf(cb) ?? Infinity);
             } else if (sortConfig.key === 'techSpec') {
                 cmp = (ca?.technicalSpec || '').localeCompare(cb?.technicalSpec || '', 'pl');
             } else if (sortConfig.key === 'status') {
@@ -1887,7 +2229,7 @@ export default function WbsMaterialsPanel({
                 <table className="table-fixed w-full">
                     <colgroup>
                         <col style={{ width: 36 }} />
-                        {COL_DEFS.map(c => (
+                        {visibleCols.map(c => (
                             <col key={c.key} style={{ width: colWidths[c.key] }} />
                         ))}
                     </colgroup>
@@ -1895,11 +2237,11 @@ export default function WbsMaterialsPanel({
                         {/* Sort row */}
                         <tr className="border-b border-white/10 bg-gray-950">
                             <th className="w-9 bg-gray-950" />
-                            {COL_DEFS.map(c => (
-                                <th key={c.key} className={`px-3 py-2 ${c.key === 'price' ? 'text-right' : 'text-left'} bg-gray-950 select-none relative`}>
+                            {visibleCols.map(c => (
+                                <th key={c.key} className={`px-3 py-2 ${c.align === 'right' ? 'text-right' : 'text-left'} bg-gray-950 select-none relative`}>
                                     <button
                                         onClick={() => toggleSort(c.key)}
-                                        className={`inline-flex items-center gap-1 text-base font-bold uppercase tracking-widest text-white hover:text-gray-200 transition-colors w-full ${c.key === 'price' ? 'justify-end' : ''}`}
+                                        className={`inline-flex items-center gap-1 text-base font-bold uppercase tracking-widest text-white hover:text-gray-200 transition-colors w-full ${c.align === 'right' ? 'justify-end' : ''}`}
                                     >
                                         <span className="truncate">{c.label}</span>
                                         <span className={sortConfig.key === c.key ? 'text-blue-400 flex-shrink-0' : 'text-gray-600 flex-shrink-0'}>
@@ -1917,7 +2259,7 @@ export default function WbsMaterialsPanel({
                         {/* Filter row */}
                         <tr className="border-b border-white/5 bg-gray-950">
                             <th className="bg-gray-950" />
-                            {COL_DEFS.map(c => (
+                            {visibleCols.map(c => (
                                 <th key={c.key} className="px-2 py-1 bg-gray-950">
                                     <input
                                         value={colFilters[c.key] || ''}
@@ -1938,6 +2280,7 @@ export default function WbsMaterialsPanel({
                                     <WbsMaterialRow
                                         node={node}
                                         card={card}
+                                        accepted={accepted}
                                         isExpanded={isExpanded}
                                         onPropagatePrice={propagatePriceNetto}
                                         onToggle={async () => {
@@ -1960,10 +2303,11 @@ export default function WbsMaterialsPanel({
                                     />
                                     {isExpanded && card && (
                                         <tr>
-                                            <td colSpan={8} className="p-0 bg-black/20 border-b border-white/5">
-                                                <ProductCard
+                                            <td colSpan={visibleCols.length + 1} className="p-0 bg-black/20 border-b border-white/5">
+                                                <BaselineSplitCard
                                                     card={card}
                                                     wbsNode={node}
+                                                    processNodeId={nodeId}
                                                     token={token}
                                                     materialDb={materialDb}
                                                     offers={offers}

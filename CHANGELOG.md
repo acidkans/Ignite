@@ -4,6 +4,27 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-08-09 — feat(wbs): split Wycena↔Zakup w Materiałach + kafle Oferta/Rzeczywiste w Budżecie (v2026.07.20.718)
+
+### schema.prisma
+- dodano pole `isOffer Boolean` w modelu `ProductProposal` — flaguje propozycję jako produkt strony „Wycena" (max jedna na wymaganie)
+- dodano pole `isPurchase Boolean` w modelu `ProductProposal` — flaguje propozycję jako produkt strony „Zakup" (max jedna na wymaganie)
+- dodano pole `purchasePriceNetto Float?` w modelu `ProductProposal` — cena zakupu gdy ta sama propozycja pełni obie role (Δ = purchasePriceNetto − priceNetto)
+
+### architektura / API
+- `back-endpoint` `PATCH /material-requirements/proposals/:id/set-offer` — ustawia propozycję jako produkt strony Wycena
+- `back-endpoint` `PATCH /material-requirements/proposals/:id/set-purchase` — ustawia propozycję jako produkt strony Zakup (init `purchasePriceNetto` = `priceNetto` gdy ta sama propozycja pełni obie role)
+- `back-endpoint` `PATCH /material-requirements/proposals/:id/clear-purchase` — zdejmuje flagę Zakup (offer nietknięty)
+- `back-endpoint` `GET /material-requirements/node/:nodeId/budget-sums` — sumy Σ wyceny (`priceNetto` propozycji `isOffer`) i Σ zakupu (`purchasePriceNetto ?? priceNetto` propozycji `isPurchase`), każda × ilość wymagania
+- `ui-sekcja` `BaselineSplitCard` (`WbsMaterialsPanel.jsx`) — rozwinięcie wiersza materiału na dwie kolumny: `ProductSideCard` Wycena (propozycja `isOffer`) / Zakup (propozycja `isPurchase`), kciuk kopiujący produkt Wyceny do Zakupu; backend `set-offer`/`set-purchase` pilnuje że dodanie produktu po stronie Zakup nigdy nie ustawia `isOffer` (Wycena nietknięta)
+- `ui-tabela` kolumny Materiałów: `Koszt jedn.` → `Koszt jedn. oferty`; po akceptacji baseline dochodzi `Koszt jedn. zakupu` (`purchaseUnitOf`) — wartość tylko dla liści z realnym kosztem zakupu, reszta puste
+- `ui-sekcja` kafle KPI `BudgetTable` (Koszt/Przychód/Zysk/Marża): każdy kafel dostał drugi wiersz „Rzeczywiste" obok „Oferta" — Rzeczywisty koszt podmienia koszt liści typ `material`/`equipment` na Σ cen zakupu (`sumZakup` z `budget-sums`), przychód pozostaje ofertowy (cena dla klienta stała); usunięto liczniki wierszy i blok „częściowy" (filtr), Rabat % i zł scalone w jeden kafel
+
+### wytyczne
+- `back-endpoint` `mat-req-patch-set-purchase` — dodanie/wybór produktu po stronie Zakup nie może ustawiać `isOffer`; separacja ról pilnowana w serwisie, UI nie powinno dublować blokady zamrażaniem pól (psuje dodawanie produktu gdy liść nie ma jeszcze żadnej propozycji)
+
+---
+
 ## 2026-07-20 — feat(quickquote): Faza 7 — tryby zakładki Budżet: baseline / wykonanie / porównanie (v2026.07.20.717)
 
 ### architektura / API

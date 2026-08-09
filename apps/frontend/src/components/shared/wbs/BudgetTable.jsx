@@ -76,7 +76,18 @@ export default function BudgetTable({
     discountAmount,
     onDiscountPercentChange,
     onDiscountAmountChange,
+    nodeId,
+    versionId,
 }) {
+    // @anchor budget-table-oz-sums — sumy Oferta/Zakup z propozycji (isOffer/isPurchase) do kafli KPI
+    const [ozSums, setOzSums] = useState(null); // { accepted, sumWycena, sumZakup }
+    useEffect(() => {
+        if (!nodeId) return;
+        const url = `/api/material-requirements/node/${nodeId}/budget-sums${versionId ? `?versionId=${versionId}` : ''}`;
+        fetch(url, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || localStorage.getItem('token')}` } })
+            .then(r => r.ok ? r.json() : null).then(setOzSums).catch(() => {});
+    }, [nodeId, versionId]);
+
     const [localRows, setLocalRows] = useState(() => rows.map(calcDerived));
     const [syncVersion, setSyncVersion] = useState(0);
     const [colFilters, setColFilters] = useState({});
@@ -230,8 +241,22 @@ export default function BudgetTable({
     }, [discountPercent, discountAmount]);
 
     const summary = useMemo(() => calcSummary(localRows), [localRows, calcSummary]);
-    const filteredSummary = useMemo(() => calcSummary(filteredRows), [filteredRows, calcSummary]);
-    const isFiltered = filteredRows.length !== localRows.length;
+
+    // @anchor budget-real-summary — podsumowanie „rzeczywiste": koszt liści mat/sprzęt
+    // podmieniony na sumZakup (realne ceny zakupu z propozycji), reszta liści = oferta;
+    // przychód bez zmian (cena dla klienta stała), zysk/marża przeliczone na koszcie realnym.
+    const real = useMemo(() => {
+        const MAT_TYPES = new Set(['material', 'equipment']);
+        const offerMatCost = localRows.reduce(
+            (s, r) => (MAT_TYPES.has(r.type) ? s + (parseFloat(r.totalCost) || 0) : s), 0
+        );
+        const realMatCost = ozSums ? (ozSums.sumZakup ?? 0) : offerMatCost; // brak danych → fallback do oferty
+        const cost = summary.totalCost - offerMatCost + realMatCost;
+        const revenue = summary.totalRevenue; // przychód ofertowy bez zmian
+        const profit = revenue - cost;
+        const marginPct = revenue > 0 ? (profit / revenue) * 100 : 0;
+        return { cost, revenue, profit, marginPct };
+    }, [localRows, summary, ozSums]);
 
     const handleCellFocus = useCallback((rowId, e) => {
         clearTimeout(blurTimer.current);
@@ -323,88 +348,85 @@ export default function BudgetTable({
         <div className="flex flex-col gap-3 h-full">
             {/* Karty summary */}
             <div className="rounded-2xl border border-white/10 bg-black/30 p-2.5">
-                <div className="grid grid-cols-2 xl:grid-cols-6 gap-2">
-                    <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 flex justify-between items-start gap-2">
-                        <div>
-                            <div className="text-[10px] uppercase tracking-widest text-red-300/90 font-bold">Koszt</div>
-                            <div className="text-sm font-black text-red-200">{fmtPLNFull(summary.totalCost)} PLN</div>
+                {/* @anchor budget-kpi-tiles — kafle KPI: każdy z wierszem Oferta + Rzeczywiste
+                    (koszt/przychód/zysk/marża); Koszt i Przychód szersze, Marża węższa,
+                    Rabat %/zł scalony w jednym kaflu (tylko etap ofertowania) */}
+                <div className="grid grid-cols-2 xl:grid-cols-12 gap-2">
+                    <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 xl:col-span-3">
+                        <div className="text-[10px] uppercase tracking-widest text-red-300/90 font-bold mb-1">Koszt</div>
+                        <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-[10px] uppercase tracking-wider text-red-300/60">Oferta</span>
+                            <span className="text-sm font-black text-red-200">{fmtPLNFull(summary.totalCost)} PLN</span>
                         </div>
-                        {isFiltered && (
-                            <div className="text-right shrink-0">
-                                <div className="text-[10px] uppercase tracking-widest text-red-300/60">Koszt częściowy</div>
-                                <div className="text-sm text-red-200/70">{fmtPLNFull(filteredSummary.totalCost)} PLN</div>
-                                <div className="text-[10px] text-red-300/50">{filteredSummary.rows} wierszy</div>
-                            </div>
-                        )}
-                    </div>
-                    <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2 flex justify-between items-start gap-2">
-                        <div>
-                            <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Przychód</div>
-                            <div className="text-sm font-black text-green-200">{fmtPLNFull(summary.totalRevenue)} PLN</div>
+                        <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-[10px] uppercase tracking-wider text-red-300/60">Rzeczywiste</span>
+                            <span className="text-sm font-bold text-red-200/80">{fmtPLNFull(real.cost)} PLN</span>
                         </div>
-                        {isFiltered && (
-                            <div className="text-right shrink-0">
-                                <div className="text-[10px] uppercase tracking-widest text-green-300/60">Przychód częściowy</div>
-                                <div className="text-sm text-green-200/70">{fmtPLNFull(filteredSummary.totalRevenue)} PLN</div>
-                            </div>
-                        )}
                     </div>
-                    <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2 flex justify-between items-start gap-2">
-                        <div>
-                            <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Zysk</div>
-                            <div className="text-sm font-black text-green-200">{fmtPLNFull(summary.profit)} PLN</div>
+                    <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2 xl:col-span-3">
+                        <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold mb-1">Przychód</div>
+                        <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-[10px] uppercase tracking-wider text-green-300/60">Oferta</span>
+                            <span className="text-sm font-black text-green-200">{fmtPLNFull(summary.totalRevenue)} PLN</span>
                         </div>
-                        {isFiltered && (
-                            <div className="text-right shrink-0">
-                                <div className="text-[10px] uppercase tracking-widest text-green-300/60">Zysk częściowy</div>
-                                <div className="text-sm text-green-200/70">{fmtPLNFull(filteredSummary.profit)} PLN</div>
-                            </div>
-                        )}
-                    </div>
-                    <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2 flex justify-between items-start gap-2">
-                        <div>
-                            <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold">Marża</div>
-                            <div className="text-sm font-black text-green-200">{fmtPctFull(summary.marginPct)}</div>
-                            <div className="text-[10px] text-green-200/70 mt-0.5">{isFiltered ? `${filteredSummary.rows} / ${summary.rows} wierszy` : `${summary.rows} wierszy`}</div>
+                        <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-[10px] uppercase tracking-wider text-green-300/60">Rzeczywiste</span>
+                            <span className="text-sm font-bold text-green-200/80">{fmtPLNFull(real.revenue)} PLN</span>
                         </div>
-                        {isFiltered && (
-                            <div className="text-right shrink-0">
-                                <div className="text-[10px] uppercase tracking-widest text-green-300/60">Marża częściowa</div>
-                                <div className="text-sm text-green-200/70">{fmtPctFull(filteredSummary.marginPct)}</div>
-                            </div>
-                        )}
                     </div>
-                    <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 px-3 py-2">
-                        <div className="text-[10px] uppercase tracking-widest text-orange-300/90 font-bold">Rabat — %</div>
-                        <div className="relative mt-1">
+                    <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2 xl:col-span-2">
+                        <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold mb-1">Zysk</div>
+                        <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-[10px] uppercase tracking-wider text-green-300/60">Oferta</span>
+                            <span className="text-sm font-black text-green-200">{fmtPLNFull(summary.profit)} PLN</span>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-[10px] uppercase tracking-wider text-green-300/60">Rzeczywiste</span>
+                            <span className="text-sm font-bold text-green-200/80">{fmtPLNFull(real.profit)} PLN</span>
+                        </div>
+                    </div>
+                    <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2 xl:col-span-2">
+                        <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold mb-1">Marża</div>
+                        <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-[10px] uppercase tracking-wider text-green-300/60">Oferta</span>
+                            <span className="text-sm font-black text-green-200">{fmtPctFull(summary.marginPct)}</span>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-[10px] uppercase tracking-wider text-green-300/60">Rzeczywiste</span>
+                            <span className="text-sm font-bold text-green-200/80">{fmtPctFull(real.marginPct)}</span>
+                        </div>
+                    </div>
+                    <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 px-3 py-2 col-span-2 xl:col-span-2">
+                        <div className="text-[10px] uppercase tracking-widest text-orange-300/90 font-bold mb-1">Rabat</div>
+                        <div className="relative">
                             <input
                                 type="number" min="0" max="100" step="0.01"
                                 value={discountPercent ?? ''}
                                 onChange={e => onDiscountPercentChange?.(e.target.value)}
                                 onClick={e => e.stopPropagation()}
-                                className="w-full rounded-lg border border-orange-400/25 bg-black/30 px-2 py-1.5 pr-8 text-sm font-black text-orange-100 focus:outline-none focus:border-orange-400"
+                                className="w-full rounded-lg border border-orange-400/25 bg-black/30 px-2 py-1 pr-7 text-sm font-black text-orange-100 focus:outline-none focus:border-orange-400"
                                 placeholder="0,00"
                             />
-                            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-black text-orange-200/80">%</span>
+                            <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-xs font-black text-orange-200/80">%</span>
                         </div>
                         {discountPercent !== '' && discountPercent != null && (
-                            <div className="text-[10px] text-orange-200/70 mt-0.5">
+                            <div className="text-[9px] text-orange-200/70 mt-0.5">
                                 = {fmtPLNFull(Number.isFinite(Number(String(discountPercent).replace(',', '.'))) ? summary.rawRevenue * Math.max(0, Number(String(discountPercent).replace(',', '.'))) / 100 : 0)} PLN
                             </div>
                         )}
-                    </div>
-                    <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 px-3 py-2">
-                        <div className="text-[10px] uppercase tracking-widest text-orange-300/90 font-bold">Rabat — zł</div>
-                        <input
-                            type="number" min="0" step="0.01"
-                            value={discountAmount ?? ''}
-                            onChange={e => onDiscountAmountChange?.(e.target.value)}
-                            onClick={e => e.stopPropagation()}
-                            className="mt-1 w-full rounded-lg border border-orange-400/25 bg-black/30 px-2 py-1.5 text-sm font-black text-orange-100 focus:outline-none focus:border-orange-400"
-                            placeholder="0,00"
-                        />
+                        <div className="relative mt-1">
+                            <input
+                                type="number" min="0" step="0.01"
+                                value={discountAmount ?? ''}
+                                onChange={e => onDiscountAmountChange?.(e.target.value)}
+                                onClick={e => e.stopPropagation()}
+                                className="w-full rounded-lg border border-orange-400/25 bg-black/30 px-2 py-1 pr-7 text-sm font-black text-orange-100 focus:outline-none focus:border-orange-400"
+                                placeholder="0,00"
+                            />
+                            <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-xs font-black text-orange-200/80">zł</span>
+                        </div>
                         {discountAmount !== '' && discountAmount != null && (
-                            <div className="text-[10px] text-orange-200/70 mt-0.5">
+                            <div className="text-[9px] text-orange-200/70 mt-0.5">
                                 = {fmtPctFull(summary.rawRevenue > 0 ? Math.max(0, Number(String(discountAmount).replace(',', '.'))) / summary.rawRevenue * 100 : 0)}
                             </div>
                         )}
