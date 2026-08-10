@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditAction } from '../audit/audit.types';
+import { resolveVersionId } from '../common/version.util';
 
 // @anchor orders-service
 // Akceptacja wersji zamówienia (baseline) + etapy zamówienia (Faza 4).
@@ -121,12 +122,17 @@ export class OrdersService {
     }
 
     // @anchor orders-comparison — serce F5: parowanie żywych wymagań z klonami
-    // zaakceptowanej wersji PO sourceRequirementId. Jeden endpoint — wiele widoków
-    // (panel w Logistyce, panel per zamówienie, chip w nagłówku): te same liczby
-    // baseline / aktualny / Δ na różnych poziomach agregacji.
-    // Cena aktualna wg hierarchii: offerPositionSnapshot (FO — finalna z oferty)
-    // → budgetedPriceNetto (QQ/MAN wg budgetSource). Odchylenia per wiersz:
-    // CENOWE / ILOSCIOWE / ZAKRES_PLUS / ZAKRES_MINUS / KURSOWE.
+    // zaakceptowanej wersji po korzeniu klonu (sourceRequirementId ?? id).
+    // „Żywe" = wiersze AKTYWNEJ wersji (tam trafiają edycje), nie versionId=null —
+    // baseline null to legacy sprzed wersjonowania i zawiera nieaktualny zakres.
+    // Jeden endpoint — wiele widoków (panel w Logistyce, panel per zamówienie,
+    // chip w sekcji Materiały): te same liczby na różnych poziomach agregacji.
+    // Obie strony to split Wycena↔Zakup z `ProductProposal`, nie to samo pole:
+    // WYCENA = propozycja `isOffer` klonu baseline (fallback `budgetedPriceNetto`),
+    // ZAKUP = propozycja `isPurchase` żywego wiersza (bez fallbacku — brak produktu
+    // zakupowego znaczy „jeszcze nie zakupiony", a nie „tyle samo co w wycenie").
+    // Dostawca jest atrybutem propozycji, więc każda strona ma własnego.
+    // Odchylenia per wiersz: CENOWE / ILOSCIOWE / ZAKRES_PLUS / ZAKRES_MINUS.
     async comparison(nodeId: string) {
         const node = await this.prisma.processNode.findUnique({
             where: { id: nodeId },
@@ -139,17 +145,20 @@ export class OrdersService {
         if (!node) throw new NotFoundException('Węzeł nie znaleziony');
         if (!node.acceptedVersionId) return { accepted: false, orderStage: node.orderStage };
 
-        const [baselineRows, liveRows, baselineQqItems] = await Promise.all([
+        const liveVersionId = await resolveVersionId(this.prisma, nodeId);
+        const findLive = (versionId: string | null) => this.prisma.materialRequirement.findMany({
+            where: { nodeId, versionId },
+            select: { id: true, name: true, unit: true, quantity: true, budgetedPriceNetto: true, budgetSource: true, offerPositionSnapshot: true, sourceRequirementId: true },
+            orderBy: { createdAt: 'asc' },
+        });
+
+        const [baselineRows, liveVersionRows, baselineQqItems] = await Promise.all([
             this.prisma.materialRequirement.findMany({
                 where: { nodeId, versionId: node.acceptedVersionId },
                 select: { id: true, name: true, unit: true, quantity: true, budgetedPriceNetto: true, sourceRequirementId: true },
                 orderBy: { createdAt: 'asc' },
             }),
-            this.prisma.materialRequirement.findMany({
-                where: { nodeId, versionId: null },
-                select: { id: true, name: true, unit: true, quantity: true, budgetedPriceNetto: true, budgetSource: true, offerPositionSnapshot: true },
-                orderBy: { createdAt: 'asc' },
-            }),
+            findLive(liveVersionId),
             // Pozycje wyceny BASELINE (kolumny dostawcy QQ) — klucz: id żywego wymagania
             this.prisma.quickQuoteItem.findMany({
                 where: { quickQuote: { nodeId, status: 'BASELINE' }, materialRequirementId: { not: null } },
@@ -161,33 +170,73 @@ export class OrdersService {
             }),
         ]);
 
-        const parseSnap = (s: string | null): any | null => { try { return s ? JSON.parse(s) : null; } catch { return null; } };
-        const byLiveId = new Map(liveRows.map((r) => [r.id, r]));
+        // Aktywna wersja bez własnych wierszy → dane wciąż leżą na baseline (null).
+        const liveRows = liveVersionRows.length > 0 || liveVersionId == null
+            ? liveVersionRows
+            : await findLive(null);
+
+        // Korzeń klonu — wspólny identyfikator wiersza w całym łańcuchu wersji.
+        const rootOf = (r: { id: string; sourceRequirementId: string | null }) => r.sourceRequirementId ?? r.id;
+        const byLiveRoot = new Map(liveRows.map((r) => [rootOf(r), r]));
         const qqByLiveId = new Map(baselineQqItems.map((i) => [i.materialRequirementId as string, i]));
         const pairedLiveIds = new Set<string>();
         const rows: any[] = [];
 
-        const buildCurrent = (live: (typeof liveRows)[number]) => {
-            const snap = parseSnap(live.offerPositionSnapshot);
-            let price: number | null = null;
-            let source: string | null = null;
-            let supplier: string | null = null;
-            if (snap?.priceNetto != null) {
-                price = snap.priceNetto;
-                source = 'FO';
-                supplier = snap.supplier?.name ?? null;
-            } else if (live.budgetedPriceNetto != null) {
-                price = live.budgetedPriceNetto;
-                source = live.budgetSource === 'QUICKQUOTE' ? 'QQ' : 'MAN';
-                supplier = qqByLiveId.get(live.id)?.supplier?.name ?? null;
-            }
+        // Propozycje obu ról splitu: `isOffer` po stronie baseline, `isPurchase` po
+        // stronie żywej. Serwis pilnuje max jednej z każdej roli na wymaganie.
+        const splitProposals = await this.prisma.productProposal.findMany({
+            where: {
+                materialRequirementId: { in: [...baselineRows.map((r) => r.id), ...liveRows.map((r) => r.id)] },
+                OR: [{ isOffer: true }, { isPurchase: true }],
+            },
+            select: {
+                materialRequirementId: true, isOffer: true, isPurchase: true,
+                priceNetto: true, purchasePriceNetto: true,
+                productName: true, manufacturer: true, model: true,
+                supplier: { select: { name: true } },
+            },
+        });
+        const offerByReq = new Map<string, (typeof splitProposals)[number]>();
+        const purchaseByReq = new Map<string, (typeof splitProposals)[number]>();
+        for (const p of splitProposals) {
+            if (p.isOffer && !offerByReq.has(p.materialRequirementId)) offerByReq.set(p.materialRequirementId, p);
+            if (p.isPurchase && !purchaseByReq.has(p.materialRequirementId)) purchaseByReq.set(p.materialRequirementId, p);
+        }
+        const productLabel = (p?: { manufacturer: string; model: string | null; productName: string }) =>
+            p ? [p.manufacturer, p.model, p.productName].map((x) => (x || '').trim()).filter(Boolean).join(' ') || null : null;
+        const r2 = (x: number) => Math.round(x * 100) / 100;
+
+        // @anchor comparison-build-offer — strona WYCENA: cena z propozycji `isOffer`,
+        // fallback na `budgetedPriceNetto` wymagania (cena wpisana wprost w tabeli
+        // Materials nie tworzy propozycji — patrz `product-side-card-offer-price-fallback`).
+        const buildOffer = (b: (typeof baselineRows)[number]) => {
+            const p = offerByReq.get(b.id);
+            const price = p?.priceNetto ?? b.budgetedPriceNetto ?? null;
+            return {
+                qty: b.quantity,
+                price,
+                value: price != null ? r2(b.quantity * price) : null,
+                supplier: p?.supplier?.name ?? null,
+                product: productLabel(p),
+            };
+        };
+
+        // @anchor comparison-build-purchase — strona ZAKUP: wyłącznie propozycja
+        // `isPurchase`; gdy ta sama propozycja pełni obie role, cena zakupu siedzi
+        // w `purchasePriceNetto`. Brak propozycji lub ceny → null = „jeszcze nie
+        // zakupiony". Fallbacku na cenę wyceny NIE ma — inaczej obie kolumny
+        // pokazywałyby to samo i Δ zawsze wychodziłaby zero.
+        const buildPurchase = (live: (typeof liveRows)[number]) => {
+            const p = purchaseByReq.get(live.id);
+            if (!p) return null;
+            const price = p.isOffer ? p.purchasePriceNetto : p.priceNetto;
+            if (price == null) return null;
             return {
                 qty: live.quantity,
                 price,
-                value: price != null ? Math.round(live.quantity * price * 100) / 100 : null,
-                priceSource: source,
-                supplier,
-                snap,
+                value: r2(live.quantity * price),
+                supplier: p.supplier?.name ?? null,
+                product: productLabel(p),
             };
         };
 
@@ -195,30 +244,19 @@ export class OrdersService {
         // w kolejnym snapshocie po akceptacji) — pomijamy całkowicie, nie liczy
         // się już do porównania (nie jest częścią aktualnego zakresu zamówienia).
         for (const b of baselineRows) {
-            const live = b.sourceRequirementId ? byLiveId.get(b.sourceRequirementId) : undefined;
+            const live = byLiveRoot.get(rootOf(b));
             if (!live) continue;
-            const baseline = {
-                qty: b.quantity,
-                price: b.budgetedPriceNetto,
-                value: b.budgetedPriceNetto != null ? Math.round(b.quantity * b.budgetedPriceNetto * 100) / 100 : null,
-            };
             pairedLiveIds.add(live.id);
-            const { snap, ...current } = buildCurrent(live);
-            const qq = qqByLiveId.get(live.id) ?? null;
+            const baseline = buildOffer(b);
+            const current = buildPurchase(live);
+            const qq = qqByLiveId.get(live.id) ?? qqByLiveId.get(rootOf(live)) ?? null;
             const deviations: string[] = [];
             if (live.quantity !== b.quantity) deviations.push('ILOSCIOWE');
-            if (current.price != null && baseline.price != null && current.price !== baseline.price) {
-                // Kursowe: ta sama cena w walucie oryginalnej co w wycenie BASELINE,
-                // różnica wyłącznie z kursu NBP zamrożonego w innym momencie
-                const isFx = snap?.currency && snap.currency !== 'PLN'
-                    && qq && qq.currency === snap.currency
-                    && qq.priceOriginalNetto != null && snap.priceOriginal != null
-                    && Math.abs(qq.priceOriginalNetto - snap.priceOriginal) < 0.005
-                    && qq.exchangeRate !== snap.exchangeRate;
-                deviations.push(isFx ? 'KURSOWE' : 'CENOWE');
-            }
-            const delta = current.value != null && baseline.value != null
-                ? Math.round((current.value - baseline.value) * 100) / 100
+            // CENOWE tylko gdy OBIE strony mają cenę — pozycja bez ceny wyceny to
+            // dziura w ofercie, nie odchylenie cenowe zakupu.
+            if (current && baseline.price != null && current.price !== baseline.price) deviations.push('CENOWE');
+            const delta = current?.value != null && baseline.value != null
+                ? r2(current.value - baseline.value)
                 : null;
             rows.push({
                 key: b.id, liveId: live.id, name: live.name ?? b.name, unit: live.unit ?? b.unit,
@@ -231,35 +269,35 @@ export class OrdersService {
         // Zakres+ (żywe wymagania spoza baseline)
         for (const live of liveRows) {
             if (pairedLiveIds.has(live.id)) continue;
-            const { snap, ...current } = buildCurrent(live);
-            const qq = qqByLiveId.get(live.id) ?? null;
+            const current = buildPurchase(live);
+            const qq = qqByLiveId.get(live.id) ?? qqByLiveId.get(rootOf(live)) ?? null;
             rows.push({
                 key: live.id, liveId: live.id, name: live.name, unit: live.unit,
                 baseline: null, current,
                 qqSupplier: qq ? { name: qq.supplier?.name ?? null, priceNettoPln: qq.priceNettoPln, source: qq.source } : null,
-                deviations: ['ZAKRES_PLUS'], delta: current.value,
+                deviations: ['ZAKRES_PLUS'], delta: current?.value ?? null,
             });
         }
 
-        // KPI. Baseline = tylko materiały nadal obecne w żywych danych (sparowane) —
-        // pozycje ZAKRES_MINUS to materiały wycenione w ofercie, ale usunięte w
-        // kolejnych snapshotach, więc nie liczą się już do baseline.
-        // Prognoza = Σ(aktualna wartość gdzie wyceniona) + Σ(baseline gdzie
-        // sparowane ale bez ceny aktualnej); zakres− (usunięty z żywych) nie wchodzi.
-        const r2 = (x: number) => Math.round(x * 100) / 100;
+        // KPI. Wycena = tylko materiały nadal obecne w żywych danych (sparowane).
+        // Zakup = wyłącznie pozycje z realnym produktem `isPurchase` — pozycje bez
+        // zakupu NIE są prognozowane ceną wyceny, tylko wypadają z sumy (inaczej
+        // Δ udawałaby zero na czymś, czego jeszcze nie kupiono).
+        // Δ = suma kolumny Δ, czyli wyłącznie wiersze z OBIEMA wartościami; Δ%
+        // wobec wyceny tych samych wierszy — inaczej porównywałaby ułamek zakupów
+        // do pełnego budżetu oferty albo doliczała zakup bez ceny ofertowej.
+        const purchased = rows.filter((r) => r.current?.value != null);
+        const comparable = purchased.filter((r) => r.baseline?.value != null);
         const baselineSum = r2(rows.reduce((s, r) => {
             if (r.deviations.includes('ZAKRES_MINUS')) return s;
             return s + (r.baseline?.value ?? 0);
         }, 0));
-        const currentSum = r2(rows.reduce((s, r) => s + (r.current?.value ?? 0), 0));
-        const forecastSum = r2(rows.reduce((s, r) => {
-            if (!r.current) return s; // zakres− — poza prognozą
-            return s + (r.current.value ?? r.baseline?.value ?? 0);
-        }, 0));
+        const currentSum = r2(purchased.reduce((s, r) => s + r.current.value, 0));
+        const purchasedOfferSum = r2(comparable.reduce((s, r) => s + r.baseline.value, 0));
         const liveCount = liveRows.length;
-        const pricedCount = rows.filter((r) => r.current?.value != null).length;
-        const deltaSum = r2(forecastSum - baselineSum);
-        const deltaPct = baselineSum > 0 ? r2((deltaSum / baselineSum) * 100) : null;
+        const pricedCount = purchased.length;
+        const deltaSum = r2(comparable.reduce((s, r) => s + (r.delta ?? 0), 0));
+        const deltaPct = purchasedOfferSum > 0 ? r2((deltaSum / purchasedOfferSum) * 100) : null;
         const countDev = (t: string) => rows.filter((r) => r.deviations.includes(t)).length;
 
         return {
@@ -271,14 +309,13 @@ export class OrdersService {
             acceptedAt: node.acceptedAt,
             acceptedBy: node.acceptedBy,
             kpi: {
-                baselineSum, currentSum, forecastSum, deltaSum, deltaPct,
+                baselineSum, currentSum, purchasedOfferSum, deltaSum, deltaPct,
                 coveragePriced: pricedCount, coverageTotal: liveCount,
                 deviations: {
                     cenowe: countDev('CENOWE'),
                     ilosciowe: countDev('ILOSCIOWE'),
                     zakresPlus: countDev('ZAKRES_PLUS'),
                     zakresMinus: countDev('ZAKRES_MINUS'),
-                    kursowe: countDev('KURSOWE'),
                 },
             },
             rows,

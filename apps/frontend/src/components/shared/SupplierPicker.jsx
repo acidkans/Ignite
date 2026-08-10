@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ChevronDown, Plus, Search, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { ChevronDown, Plus, Search, Loader2, CheckCircle2, XCircle, X } from 'lucide-react';
 import { API_URL } from '../../config';
 
 // @anchor supplier-picker-theme
@@ -20,6 +20,7 @@ const THEMES = {
     previewName: 'text-gray-900',
     addNip: 'text-teal-700 hover:bg-teal-50',
     addFree: 'text-gray-600 hover:bg-gray-50',
+    clear: 'text-gray-400 hover:text-gray-700 hover:bg-gray-100',
   },
   dark: {
     trigger: 'border-white/10 bg-black/40 hover:border-white/25',
@@ -35,6 +36,7 @@ const THEMES = {
     previewName: 'text-gray-200',
     addNip: 'text-teal-300 hover:bg-teal-500/10',
     addFree: 'text-gray-400 hover:bg-white/5',
+    clear: 'text-gray-500 hover:text-gray-200 hover:bg-white/10',
   },
 };
 
@@ -115,19 +117,36 @@ export default function SupplierPicker({ value, onChange, disabled = false, dark
 
   const resetCreate = () => { setCreateMode(false); setNipInput(''); setFreeName(''); setNipPreview(null); setError(''); };
 
+  // @anchor supplier-picker-clear — wyczyszczenie wyboru: pole wraca do pustego
+  // („Wybierz dostawcę…"), consumer dostaje `onChange(null)`. Dwie drogi: krzyżyk
+  // przy wybranej wartości i pozycja „bez dostawcy" na szczycie listy.
+  const clearSupplier = () => { onChange?.(null); setOpen(false); resetCreate(); };
+  const clearable = !!selected && !disabled;
+
   return (
     <div className="relative text-sm">
       <button
         type="button"
         disabled={disabled}
         onClick={() => { setOpen(!open); resetCreate(); }}
-        className={`w-full flex items-center justify-between gap-2 px-3 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed ${t.trigger}`}
+        className={`w-full flex items-center justify-between gap-2 py-2 pl-3 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed ${clearable ? 'pr-12' : 'pr-3'} ${t.trigger}`}
       >
         <span className={`truncate ${selected ? t.triggerText : t.triggerPlaceholder}`}>
           {selected ? `${selected.name}${selected.nip ? ` (NIP ${selected.nip})` : ''}` : 'Wybierz dostawcę…'}
         </span>
         <ChevronDown size={16} className="text-gray-400 shrink-0" />
       </button>
+      {clearable && (
+        <button
+          type="button"
+          onClick={clearSupplier}
+          title="Usuń dostawcę"
+          aria-label="Usuń dostawcę"
+          className={`absolute right-8 top-1/2 -translate-y-1/2 p-1 rounded transition-colors ${t.clear}`}
+        >
+          <X size={14} />
+        </button>
+      )}
 
       {open && (
         <div className={`absolute z-50 mt-1 w-full border rounded-lg shadow-lg overflow-hidden ${t.dropdown}`}>
@@ -144,6 +163,13 @@ export default function SupplierPicker({ value, onChange, disabled = false, dark
                 />
               </div>
               <div className="max-h-48 overflow-y-auto">
+                <button
+                  type="button"
+                  onClick={clearSupplier}
+                  className={`w-full text-left px-3 py-2 ${t.item} ${value ? '' : t.itemSelected}`}
+                >
+                  <span className="italic text-gray-500">— bez dostawcy —</span>
+                </button>
                 {filtered.map((s) => (
                   <button
                     key={s.id}

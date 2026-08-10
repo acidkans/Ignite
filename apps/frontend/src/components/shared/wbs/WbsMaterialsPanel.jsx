@@ -12,6 +12,7 @@ import { API_URL } from '../../../config';
 import SupplierPicker from '../SupplierPicker';
 import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula } from './wbsConstants';
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
+import { guardOfferEdit, requestOfferUnlock, offerLockInputProps } from '../OfferLockGuard';
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
 
@@ -1104,8 +1105,13 @@ const SIDE_IC = 'w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 t
 // związane z PROPOZYCJĄ (nie wymaganiem — technicalSpec jest wspólny, poza tym panelem). Wybór/dodanie
 // produktu ustawia rolę (set-offer / set-purchase). Cena zakupu na tej samej propozycji co wycena
 // idzie w purchasePriceNetto (Δ), inaczej w priceNetto.
-function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefresh, onPropagatePrice, readOnly = false }) {
+function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefresh, onPropagatePrice, readOnly = false, locked = false, sharedWithLockedOffer = false }) {
     const isPurchase = side === 'purchase';
+    // @anchor product-side-card-lock — strona „Wycena" po akceptacji baseline: pola zostają
+    // widoczne, ale nie przyjmują wpisu; kliknięcie otwiera modal `OfferLockGuard` (manager może
+    // odblokować). Strona „Zakup" nie jest blokowana nigdy — tam ma się dziać praca po akceptacji.
+    const lockProps = offerLockInputProps(locked);
+    const lockCls = locked ? ' cursor-not-allowed opacity-70' : '';
     const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
     const roleEndpoint = isPurchase ? 'set-purchase' : 'set-offer';
     // Cena zakupu gdy ta sama propozycja pełni obie role → purchasePriceNetto; inaczej priceNetto.
@@ -1197,7 +1203,46 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
         creatingRef.current = null;
         return result;
     };
+    // @anchor product-side-card-fork-purchase — gdy Zakup dzieli propozycję z Wyceną (kciuk „ten sam
+    // produkt"), a oferta jest już zamrożona akceptacją, edycja produktu po stronie Zakupu
+    // przepisywałaby produkt OFERTOWY — backend odrzuciłby ją jako edycję oferty. Zamiast blokować
+    // pracę zakupową odczepiamy stronę Zakup: kopia propozycji (z ceną zakupu jako `priceNetto`)
+    // przejmuje rolę `isPurchase`, a propozycja ofertowa zostaje nietknięta.
+    const forkPurchaseFromOffer = async () => {
+        const res = await fetch(`${API_URL}/material-requirements/${requirement.id}/proposals`, {
+            method: 'POST', headers,
+            body: JSON.stringify({
+                productName: proposal.productName || '', manufacturer: proposal.manufacturer || '',
+                model: proposal.model || undefined, sourceUrl: proposal.sourceUrl || undefined,
+                availability: proposal.availability || undefined,
+                priceNetto: proposal.purchasePriceNetto ?? proposal.priceNetto ?? null,
+            }),
+        });
+        if (!res.ok) return null;
+        const created = await res.json();
+        if (proposal.supplierId) {
+            await fetch(`${API_URL}/material-requirements/proposals/${created.id}`, {
+                method: 'PATCH', headers, body: JSON.stringify({ supplierId: proposal.supplierId }),
+            });
+        }
+        await fetch(`${API_URL}/material-requirements/proposals/${created.id}/set-purchase`, { method: 'PATCH', headers });
+        return created;
+    };
+    // Strona Zakupu na współdzielonej propozycji przy zamrożonej ofercie — patrz `forkPurchaseFromOffer`.
+    const needsPurchaseFork = () => isPurchase && sharedWithLockedOffer && !!proposal;
+
     const patchField = async (key, value) => {
+        if (locked && !(await guardOfferEdit())) return;
+        if (needsPurchaseFork()) {
+            pendingRef.current[key] = value ?? '';
+            const forked = await forkPurchaseFromOffer();
+            if (!forked) { clearPending(key); return; }
+            await fetch(`${API_URL}/material-requirements/proposals/${forked.id}`, {
+                method: 'PATCH', headers, body: JSON.stringify({ [key]: value }),
+            });
+            await onRefresh?.();
+            return;
+        }
         pendingRef.current[key] = value ?? '';
         const p = await ensureProposal();
         if (!p) { clearPending(key); return; }
@@ -1216,9 +1261,22 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
     // od drugiej strony splitu; wybór po NIP z rejestru lub wolny wpis po nazwie (SupplierPicker). Działa
     // też zanim wybrano produkt — tworzy pustą propozycję tylko po to, by przypiąć dostawcę.
     const supplierChange = async (supplier) => {
+        if (locked && !(await guardOfferEdit())) return;
         const next = supplier?.id ?? null;
+        // Wyczyszczenie dostawcy tam, gdzie nie ma jeszcze propozycji, nie ma czego
+        // czyścić — nie zakładaj pustej propozycji tylko po to, by zapisać null.
+        if (next === null && !proposal) { setSupplierId(null); return; }
         pendingRef.current.supplierId = next;
         setSupplierId(next);
+        if (needsPurchaseFork()) {
+            const forked = await forkPurchaseFromOffer();
+            if (!forked) { clearPending('supplierId'); return; }
+            await fetch(`${API_URL}/material-requirements/proposals/${forked.id}`, {
+                method: 'PATCH', headers, body: JSON.stringify({ supplierId: next }),
+            });
+            await onRefresh?.();
+            return;
+        }
         const p = await ensureProposal();
         if (!p) { clearPending('supplierId'); return; }
         const res = await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, {
@@ -1237,6 +1295,7 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
         : null;
 
     const priceBlur = async () => {
+        if (locked && !(await guardOfferEdit())) { setF('price', toFields(proposal).price); return; }
         const input = String(fields.price ?? '').trim();
         let raw;
         if (input.startsWith('=')) {
@@ -1285,11 +1344,11 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
             {!proposal && <p className="text-[11px] text-gray-500 italic">Brak produktu dla strony „{isPurchase ? 'Zakup' : 'Wycena'}" — uzupełnij pola poniżej.</p>}
             <div className="grid grid-cols-3 gap-2">
                 <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Producent</label>
-                    <input value={fields.manufacturer} disabled={readOnly} onChange={e => setF('manufacturer', e.target.value)} onBlur={e => e.target.value !== (proposal?.manufacturer || '') && patchField('manufacturer', e.target.value)} placeholder="Producent" className={SIDE_IC} /></div>
+                    <input value={fields.manufacturer} disabled={readOnly} {...lockProps} onChange={e => setF('manufacturer', e.target.value)} onBlur={e => e.target.value !== (proposal?.manufacturer || '') && patchField('manufacturer', e.target.value)} placeholder="Producent" className={`${SIDE_IC}${lockCls}`} /></div>
                 <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Model</label>
-                    <input value={fields.model} disabled={readOnly} onChange={e => setF('model', e.target.value)} onBlur={e => e.target.value !== (proposal?.model || '') && patchField('model', e.target.value)} placeholder="Model" className={SIDE_IC} /></div>
+                    <input value={fields.model} disabled={readOnly} {...lockProps} onChange={e => setF('model', e.target.value)} onBlur={e => e.target.value !== (proposal?.model || '') && patchField('model', e.target.value)} placeholder="Model" className={`${SIDE_IC}${lockCls}`} /></div>
                 <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Nazwa handlowa</label>
-                    <input value={fields.productName} disabled={readOnly} onChange={e => setF('productName', e.target.value)} onBlur={e => e.target.value !== (proposal?.productName || '') && patchField('productName', e.target.value)} placeholder="Nazwa handlowa" className={SIDE_IC} /></div>
+                    <input value={fields.productName} disabled={readOnly} {...lockProps} onChange={e => setF('productName', e.target.value)} onBlur={e => e.target.value !== (proposal?.productName || '') && patchField('productName', e.target.value)} placeholder="Nazwa handlowa" className={`${SIDE_IC}${lockCls}`} /></div>
             </div>
             <div className="grid grid-cols-2 gap-2">
                 <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">{priceLabel}</label>
@@ -1302,7 +1361,8 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
                                 if (e.key === 'Escape') { setF('price', toFields(proposal).price); e.currentTarget.blur(); }
                             }}
                             title="Możesz wpisać działanie po znaku „=”, np. =1200/4+50"
-                            placeholder="0.00 lub =12*3" className={`${SIDE_IC} pr-6`} />
+                            {...lockProps}
+                            placeholder="0.00 lub =12*3" className={`${SIDE_IC} pr-6${lockCls}`} />
                         <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-[10px]">zł</span>
                         {String(fields.price ?? '').trim().startsWith('=') && (
                             <span className={`absolute left-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] px-1.5 py-0.5 rounded border shadow-lg ${priceFormulaResult != null && priceFormulaResult >= 0 ? 'text-teal-300 bg-teal-900/90 border-teal-500/40' : 'text-red-300 bg-red-900/90 border-red-500/40'}`}>
@@ -1311,13 +1371,15 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
                         )}
                     </div></div>
                 <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Dostępność</label>
-                    <input value={fields.availability} disabled={readOnly} onChange={e => setF('availability', e.target.value)} onBlur={e => e.target.value !== (proposal?.availability || '') && patchField('availability', e.target.value)} placeholder="np. 7 dni" className={SIDE_IC} /></div>
+                    <input value={fields.availability} disabled={readOnly} {...lockProps} onChange={e => setF('availability', e.target.value)} onBlur={e => e.target.value !== (proposal?.availability || '') && patchField('availability', e.target.value)} placeholder="np. 7 dni" className={`${SIDE_IC}${lockCls}`} /></div>
             </div>
             <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Adres WWW</label>
-                <input value={fields.sourceUrl} disabled={readOnly} onChange={e => setF('sourceUrl', e.target.value)} onBlur={e => e.target.value !== (proposal?.sourceUrl || '') && patchField('sourceUrl', e.target.value)} placeholder="https://…" className={SIDE_IC} /></div>
+                <input value={fields.sourceUrl} disabled={readOnly} {...lockProps} onChange={e => setF('sourceUrl', e.target.value)} onBlur={e => e.target.value !== (proposal?.sourceUrl || '') && patchField('sourceUrl', e.target.value)} placeholder="https://…" className={`${SIDE_IC}${lockCls}`} /></div>
             <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">{isPurchase ? 'Dostawca' : 'Dostawca (oferent)'}</label>
-                <SupplierPicker dark value={supplierId} onChange={supplierChange} disabled={readOnly} /></div>
-            {!readOnly && (
+                <div onMouseDownCapture={locked ? (e) => { e.preventDefault(); e.stopPropagation(); requestOfferUnlock(); } : undefined}>
+                    <SupplierPicker dark value={supplierId} onChange={supplierChange} disabled={readOnly} />
+                </div></div>
+            {!readOnly && !locked && (
                 <div className="flex items-center gap-1.5 pt-1">
                     <button onClick={searchAI} disabled={searching}
                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 disabled:opacity-40">
@@ -1325,7 +1387,7 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
                     </button>
                 </div>
             )}
-            {!proposal && allProposals.length > 0 && (
+            {!proposal && !locked && allProposals.length > 0 && (
                 <div className="flex flex-col gap-1">
                     <span className="text-[9px] uppercase tracking-widest text-gray-600">lub wybierz istniejącą propozycję:</span>
                     {allProposals.map(p => (
@@ -1340,13 +1402,140 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
     );
 }
 
+// @anchor requirement-image-box — podgląd produktu POZYCJI (wspólny dla obu stron splitu).
+// Zachowuje się jak kafel zdjęcia w ProductCard: klik = wybór pliku, najechanie + Ctrl+V = wklejenie
+// ze schowka (ukryty input przechwytuje `paste`, bo `document` nie dostaje zdarzenia bez focusu).
+// Obrazek trzymany jest na wymaganiu (`MaterialRequirement.imageUrl`), więc działa też zanim
+// pozycja ma produkt katalogowy; odczyt spada na obrazek z katalogu, gdy własnego nie ma.
+function RequirementImageBox({ card, token, onRefresh, className = '' }) {
+    const [localUrl, setLocalUrl] = useState(null);
+    const [fetchedUrl, setFetchedUrl] = useState(null);
+    const [imageKey, setImageKey] = useState(0);
+    const [uploading, setUploading] = useState(false);
+    const localRef = useRef(null);
+    const fetchedRef = useRef(null);
+    const fileInputRef = useRef(null);
+    const pasteInputRef = useRef(null);
+
+    // Blob URL zamiast <img src> — endpoint wymaga nagłówka Authorization.
+    useEffect(() => {
+        if (!card?.id) { setFetchedUrl(null); return; }
+        let cancelled = false;
+        fetch(`${API_URL}/material-requirements/${card.id}/image?t=${imageKey}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        }).then(async res => {
+            if (!res.ok || cancelled) { if (!cancelled) setFetchedUrl(null); return; }
+            const blob = await res.blob();
+            if (cancelled) return;
+            if (fetchedRef.current) URL.revokeObjectURL(fetchedRef.current);
+            const url = URL.createObjectURL(blob);
+            fetchedRef.current = url;
+            setFetchedUrl(url);
+        }).catch(() => { if (!cancelled) setFetchedUrl(null); });
+        return () => { cancelled = true; };
+    }, [card?.id, card?.imageUrl, imageKey, token]);
+
+    useEffect(() => () => {
+        if (localRef.current) URL.revokeObjectURL(localRef.current);
+        if (fetchedRef.current) URL.revokeObjectURL(fetchedRef.current);
+    }, []);
+
+    const uploadBlob = useCallback(async (blob, filename = 'screenshot.png') => {
+        if (!card?.id || !blob) return;
+        if (!(await guardSnapshotEdit())) return;
+        // Natychmiastowy podgląd — upload i odświeżenie idą w tle.
+        if (localRef.current) URL.revokeObjectURL(localRef.current);
+        const objUrl = URL.createObjectURL(blob);
+        localRef.current = objUrl;
+        setLocalUrl(objUrl);
+        setUploading(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', blob, filename);
+            const res = await fetch(`${API_URL}/material-requirements/${card.id}/upload-image`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+                body: formData,
+            });
+            if (res.ok) {
+                setImageKey(k => k + 1);
+                await onRefresh?.({ silent: true });
+            }
+        } finally { setUploading(false); }
+    }, [card?.id, token, onRefresh]);
+
+    const handlePaste = useCallback((e) => {
+        const item = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith('image/'));
+        if (!item) return;
+        e.preventDefault();
+        const blob = item.getAsFile();
+        if (blob) uploadBlob(blob, 'screenshot.png');
+    }, [uploadBlob]);
+
+    const handleFileSelect = useCallback(async (e) => {
+        const file = e.target.files?.[0];
+        if (file) await uploadBlob(file, file.name);
+        e.target.value = '';
+    }, [uploadBlob]);
+
+    const removeImage = useCallback(async (e) => {
+        e.stopPropagation();
+        if (!card?.id) return;
+        if (!(await guardSnapshotEdit())) return;
+        await fetch(`${API_URL}/material-requirements/${card.id}/image`, {
+            method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
+        });
+        if (localRef.current) { URL.revokeObjectURL(localRef.current); localRef.current = null; }
+        setLocalUrl(null);
+        setImageKey(k => k + 1);
+        await onRefresh?.({ silent: true });
+    }, [card?.id, token, onRefresh]);
+
+    const src = localUrl || fetchedUrl;
+
+    return (
+        <div
+            onMouseEnter={() => pasteInputRef.current?.focus()}
+            onClick={() => fileInputRef.current?.click()}
+            title="Kliknij aby wybrać plik | Najedź i Ctrl+V aby wkleić ze schowka"
+            className={`group relative w-44 h-[86px] flex-shrink-0 rounded border border-white/10 bg-black/30 cursor-pointer hover:border-blue-500/40 hover:bg-blue-500/5 transition-colors ${className}`}
+        >
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} style={{ display: 'none' }} />
+            {/* pułapka na wklejenie — niewidoczny input dostaje focus po najechaniu myszą */}
+            <input
+                ref={pasteInputRef} type="text" onPaste={handlePaste} tabIndex={-1} aria-hidden="true"
+                data-guard-ignore
+                style={{ position: 'absolute', opacity: 0, width: 0, height: 0, border: 'none', outline: 'none', padding: 0 }}
+            />
+            {src ? (
+                <>
+                    <img src={src} alt="podgląd produktu" className="absolute inset-0 w-full h-full object-contain p-1.5" />
+                    <button
+                        onClick={removeImage} title="Usuń obrazek"
+                        className="absolute top-0.5 right-0.5 p-1 rounded bg-black/70 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                        <Trash2 size={11} />
+                    </button>
+                </>
+            ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-gray-600 pointer-events-none">
+                    <Search size={16} />
+                    <span className="text-[10px] text-center px-2 leading-tight">
+                        {uploading ? 'Wysyłam…' : <>Kliknij aby wybrać<br />lub Ctrl+V</>}
+                    </span>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // @anchor baseline-split-card — wspólny split Wycena↔Zakup: wspólne okno „Wymagania techniczne" na
 // górze (z wymagania), pod spodem dwie kolumny produktu — Wycena = propozycja isOffer, Zakup =
 // propozycja isPurchase. Kciuk na linii podziału kopiuje produkt Wyceny do Zakupu (set-purchase na
 // propozycji offer). Używany w rozwinięciu wiersza WBSHybridTable i w zakładce Materials.
 export function BaselineSplitCard({
     card, wbsNode, processNodeId, token, materialDb, offers,
-    readOnly = false, onRefresh, onPropagatePrice, onRefreshOffers, onPatch,
+    readOnly = false, offerLocked = false, onRefresh, onPropagatePrice, onRefreshOffers, onPatch,
 }) {
     const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
     const zl = (v) => v != null ? v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
@@ -1450,18 +1639,25 @@ export function BaselineSplitCard({
 
     return (
         <div className="bg-blue-500/10">
-            {/* Wspólne okno „Wymagania techniczne" (z wymagania — te same dla obu stron) */}
-            <div className="px-4 py-2 border-b border-white/5">
-                <label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Wymagania techniczne (wspólne)</label>
-                <textarea
-                    ref={techRef}
-                    value={techSpec}
-                    onChange={e => setTechSpec(e.target.value)}
-                    onBlur={saveTechSpec}
-                    rows={1}
-                    placeholder="Wymagania techniczne — spełniane przez produkty po obu stronach"
-                    className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50 resize-none overflow-hidden"
-                />
+            {/* Wspólne okno „Wymagania techniczne" (z wymagania — te same dla obu stron)
+                + kafel podglądu produktu po prawej (wklejenie print screena ze schowka) */}
+            <div className="px-4 py-2 border-b border-white/5 flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                    <label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Wymagania techniczne (wspólne)</label>
+                    <textarea
+                        ref={techRef}
+                        value={techSpec}
+                        onChange={e => setTechSpec(e.target.value)}
+                        onBlur={saveTechSpec}
+                        rows={1}
+                        placeholder="Wymagania techniczne — spełniane przez produkty po obu stronach"
+                        className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50 resize-none overflow-hidden"
+                    />
+                </div>
+                <div className="flex flex-col">
+                    <label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Podgląd produktu</label>
+                    <RequirementImageBox card={card} token={token} onRefresh={onRefresh} />
+                </div>
             </div>
 
             {/* Pasek podsumowania Wycena · Zakup · Δ */}
@@ -1485,6 +1681,12 @@ export function BaselineSplitCard({
                     <div className="border-r border-white/10">
                         <div className="flex items-center gap-2 px-4 py-1.5 bg-teal-500/5 border-y border-teal-500/10">
                             <span className="text-[12px] font-bold uppercase tracking-widest text-teal-300/90">Wycena</span>
+                            {offerLocked && (
+                                <span className="inline-flex items-center gap-1 text-[9px] uppercase tracking-widest text-amber-300/80 bg-amber-500/10 border border-amber-500/25 rounded-full px-1.5 py-0.5"
+                                    title="Zamówienie zaakceptowane — wartości ofertowe zamrożone">
+                                    <Lock size={8} /> zamrożone
+                                </span>
+                            )}
                         </div>
                         <ProductSideCard
                             requirement={card}
@@ -1494,6 +1696,7 @@ export function BaselineSplitCard({
                             wbsNode={wbsNode}
                             onRefresh={onRefresh}
                             onPropagatePrice={onPropagatePrice}
+                            locked={offerLocked}
                         />
                     </div>
 
@@ -1512,6 +1715,7 @@ export function BaselineSplitCard({
                             wbsNode={wbsNode}
                             onRefresh={onRefresh}
                             onPropagatePrice={onPropagatePrice}
+                            sharedWithLockedOffer={offerLocked && !!offerProposal && purchaseProposal?.id === offerProposal.id}
                         />
                     </div>
 
@@ -1546,7 +1750,7 @@ export function BaselineSplitCard({
 
 // ─── Row ──────────────────────────────────────────────────────────────────────
 
-function WbsMaterialRow({ node, card, accepted = false, isExpanded, onToggle, onPatchNode, onCreateCard, materialDb, offers, token, readOnly, onRefresh, onPatchCard, onPropagatePrice }) {
+function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isExpanded, onToggle, onPatchNode, onCreateCard, materialDb, offers, token, readOnly, onRefresh, onPatchCard, onPropagatePrice }) {
     const meta = TYPE_META[node.type] || TYPE_META.material;
     const TypeIcon = meta.icon;
     const reqStatus = card?.status;
@@ -1651,9 +1855,13 @@ function WbsMaterialRow({ node, card, accepted = false, isExpanded, onToggle, on
                         )}
                     </div>
                 ) : (
-                    <span onClick={() => !readOnly && setEditQty(true)}
-                        className={`text-sm text-gray-200 whitespace-nowrap ${!readOnly ? 'cursor-pointer hover:text-white' : ''}`}>
+                    // Po akceptacji baseline ilość jest wartością ofertową — klik nie wchodzi w edycję,
+                    // tylko otwiera modal blokady (manager może odblokować na sesję).
+                    <span onClick={() => { if (readOnly) return; if (offerLocked) { requestOfferUnlock(); return; } setEditQty(true); }}
+                        title={offerLocked ? 'Ilość zamrożona akceptacją baseline' : undefined}
+                        className={`text-sm text-gray-200 whitespace-nowrap ${!readOnly ? (offerLocked ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:text-white') : ''}`}>
                         {node.quantity ?? 0} <span className="text-xs text-gray-500">{node.unit || 'szt'}</span>
+                        {offerLocked && <Lock size={9} className="inline-block ml-1 -mt-0.5 text-amber-400/60" />}
                     </span>
                 )}
             </td>
@@ -1692,9 +1900,11 @@ function WbsMaterialRow({ node, card, accepted = false, isExpanded, onToggle, on
                         )}
                     </div>
                 ) : (
-                    <span onClick={() => !readOnly && card && setEditPrice(true)}
-                        className={`text-orange-400 ${!readOnly && card ? 'cursor-pointer hover:text-orange-300' : ''}`}>
+                    <span onClick={() => { if (readOnly || !card) return; if (offerLocked) { requestOfferUnlock(); return; } setEditPrice(true); }}
+                        title={offerLocked ? 'Koszt jedn. oferty zamrożony akceptacją baseline' : undefined}
+                        className={`text-orange-400 ${!readOnly && card ? (offerLocked ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:text-orange-300') : ''}`}>
                         {card?.priceNetto != null ? `${Number(card.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—'}
+                        {offerLocked && <Lock size={9} className="inline-block ml-1 -mt-0.5 text-amber-400/60" />}
                     </span>
                 )}
             </td>
@@ -1782,6 +1992,11 @@ export default function WbsMaterialsPanel({
     versionId,
     readOnly = false,
     accepted = false,
+    // @anchor wbs-materials-offer-locked — akceptacja baseline zamraża kolumny „Ilość" i
+    // „Koszt jedn. oferty" oraz stronę „Wycena" splitu; kolumna „Koszt jedn. zakupu" i cała
+    // strona „Zakup" zostają edytowalne. Rozdzielone od `accepted` (ta steruje widocznością
+    // kolumny zakupowej), bo manager może odblokować edycję nie zmieniając stanu akceptacji.
+    offerLocked = false,
     onWbsUpdate,
     onWbsNodeUnitCostChange,
     onPatchNode,
@@ -2447,6 +2662,7 @@ export default function WbsMaterialsPanel({
                                         node={node}
                                         card={card}
                                         accepted={accepted}
+                                        offerLocked={offerLocked}
                                         isExpanded={isExpanded}
                                         onPropagatePrice={propagatePriceNetto}
                                         onToggle={async () => {
@@ -2481,6 +2697,7 @@ export default function WbsMaterialsPanel({
                                                     onRefreshOffers={fetchOffers}
                                                     onPropagatePrice={propagatePriceNetto}
                                                     readOnly={readOnly}
+                                                    offerLocked={offerLocked}
                                                     onPatch={(cardId, data) => setCards(prev => {
                                                         const entry = Object.entries(prev).find(([, c]) => c.id === cardId);
                                                         if (!entry) return prev;

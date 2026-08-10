@@ -281,12 +281,13 @@ function QaBranchModal({ node, onClose }) {
 
 import { UNIT_OPTIONS, sanitizeQtyInput, evalQtyFormula, suggestDefaultUnit, getLeafDefaultFrom } from './wbsConstants';
 import { BaselineSplitCard } from './WbsMaterialsPanel';
+import { offerLockInputProps } from '../OfferLockGuard';
 
 const API_URL = '/api';
 
 // ─── MaterialReqExpandPanel ───────────────────────────────────────────────────
 
-function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, onDeleteNode, onNodeFieldSave, onNodeFieldLocal, reqsLoaded }) {
+function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, onDeleteNode, onNodeFieldSave, onNodeFieldLocal, reqsLoaded, offerLocked = false }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     const headers = React.useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
 
@@ -388,6 +389,7 @@ function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, 
                     onRefresh={reloadCard}
                     onPropagatePrice={handlePropagatePrice}
                     readOnly={false}
+                    offerLocked={offerLocked}
                 />
             ) : (
                 <div className="px-4 py-3 text-[14px] text-gray-600">Tworzenie karty materiałowej…</div>
@@ -889,7 +891,10 @@ function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal }) 
 
 // ── Component ─────────────────────────────────────────────────────────────────
 // @anchor wbs-hybrid-table
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null, onApplyLeafDefaults = null, leafDefaults = null }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null, onApplyLeafDefaults = null, leafDefaults = null, offerLocked = false }) {
+    // @anchor wbs-hybrid-offer-lock — po akceptacji baseline kolumny Ilość / Koszt jedn. / Narzut %
+    // przestają przyjmować wpis (każdy typ liścia); kliknięcie otwiera modal `OfferLockGuard`.
+    const offerLockProps = offerLockInputProps(offerLocked);
     const [expanded, setExpanded] = useState(() => new Set());
     const initialExpandDoneRef = useRef(false);
     // Domyślnie rozwiń tylko do 2. poziomu (root + węzły top-level) przy pierwszym
@@ -1630,7 +1635,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     handleField(node.id, 'quantity', clean);
                                     onRequirementsQtyChange?.(node.id, clean, node.name);
                                 }}
-                                placeholder="0" className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}`}
+                                placeholder="0" {...offerLockProps}
+                                className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}${offerLocked ? ' cursor-not-allowed opacity-70' : ''}`}
                                 data-nav-row={node.id}
                                 data-nav-col="ilosc" />
                             {warnKey === `${node.id}:quantity` && (
@@ -1699,7 +1705,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     }}
                                     onKeyDown={e => handleGridKeyDown(e, node.id, 'cena_netto')}
                                     placeholder="0,00"
-                                    className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}`}
+                                    {...offerLockProps}
+                                    className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}${offerLocked ? ' cursor-not-allowed opacity-70' : ''}`}
                                     data-nav-row={node.id}
                                     data-nav-col="cena_netto"
                                 />
@@ -1738,7 +1745,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     }}
                                     onKeyDown={e => handleGridKeyDown(e, node.id, 'narzut')}
                                     placeholder="—"
-                                    className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}`}
+                                    {...offerLockProps}
+                                    className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}${offerLocked ? ' cursor-not-allowed opacity-70' : ''}`}
                                     data-nav-row={node.id}
                                     data-nav-col="narzut"
                                 />
@@ -1930,6 +1938,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             processNodeId={processNodeId}
                             versionId={versionId}
                             reqsLoaded={matReqsLoaded}
+                            offerLocked={offerLocked}
                             onNodeFieldSave={onNodeFieldSave}
                             onNodeFieldLocal={handleField}
                             onSaved={(updated, opts) => {

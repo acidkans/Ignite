@@ -1,0 +1,32 @@
+id,nodeId,versionId,type,quantity,unit,technicalSpec,sourceDocument,assignedSubtaskId,isAiAssigned,aiConfidence,status,createdAt,updatedAt,complianceData,listId,budgetedPriceNetto,wbsNodeId,wbsNodeIds,wbsNodeAllocations,materialId,name,availability,offerId,offerPositionIdx,offerPositionSnapshot,budgetSource,sourceRequirementId
+fd32c620-d22b-40c9-829d-7b5343be2166,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,metry,,,,f,,PENDING,2026-08-04 07:51:30.803,2026-08-04 07:51:30.803,,,,,,,0141f22b-f2ef-4498-b02a-c5e9dfe132dd,kabel uziemiający ,,,,,,
+c8287602-60b4-40fa-ac35-65081b01ea7a,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,sztuki,,,,f,,PENDING,2026-08-04 07:51:30.811,2026-08-04 07:51:30.811,,,,,,,,analizator sieci,,,,,,
+ceeb6374-a843-490d-b689-c0a1bab3a6c4,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,sztuki,"minimum 3,3m wysokości",,,f,,PENDING,2026-08-04 07:51:30.814,2026-08-04 07:51:30.814,,,,,,,,OPCJA-elementy do osadzenia słupków,,,,,,
+de2e8ab3-93e9-480e-8080-0e3e7a9e62e0,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,sztuki,,,,f,,PENDING,2026-08-04 07:51:30.817,2026-08-04 07:51:30.817,,,,,,,,OPCJA-kotwy,,,,,,
+4ad78f6b-1121-4ff9-9f22-bbd75bb01050,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,kpl,"3m wysokości
+brama szerokość 1m
+słupki wysokość 3,3 ",,,f,,PENDING,2026-08-04 07:51:30.819,2026-08-04 07:51:30.819,,,,,,,,OPCJA-Ogrodzenie modułowe serwerowni,,,,,,
+0b1c29a4-9f42-48dd-aff8-40be41e25fba,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,sztuki,podtrzymanie 1h przy 20kW,,,f,,PENDING,2026-08-04 07:51:30.822,2026-08-04 07:51:30.822,,,,,,,,baterie,,,,,,
+3d347e2a-a75f-4bdc-8540-e90908d6b2be,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,equipment,0,pakiet,,,,f,,PENDING,2026-08-04 07:51:30.825,2026-08-04 07:51:30.825,,,,,,,,UPS,,,,,,
+2b2ac1e0-e776-4835-8d92-6ffbfe7dafbb,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,equipment,0,sztuki,,,,f,,PENDING,2026-08-04 07:51:30.838,2026-08-04 07:51:30.838,,,,,,,,szafa SZR ,,,,,,
+30501188-ac1e-4f5a-a023-56691d42e88d,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,sztuki,,,,f,,PENDING,2026-08-04 07:51:30.844,2026-08-04 07:51:30.844,,,,,,,,jakies kabelki,,,,,,
+a6eb19fe-509c-4000-b054-af96fc7e39e6,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,sztuki,,,,f,,PENDING,2026-08-04 07:51:30.848,2026-08-04 07:51:30.848,,,,,,,,szafa?,,,,,,
+d05f0a3c-758d-49d7-bb46-45fd921f8d06,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,metry,"czarna APC
+800x1200 42U,
+bez podlogi
+na kółkach i nóżkach
+4 szyny wspornikowe per szafa",,,f,,PENDING,2026-08-04 07:51:30.853,2026-08-04 07:51:30.853,,,,,,,,kabel zasilający,,,,,,
+d7e68bc3-6aaf-4785-87ff-001c500a1077,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,sztuki,,,,f,,PENDING,2026-08-04 07:51:30.855,2026-08-04 07:51:30.855,,,,,,,,,,,,,,
+cb8ee491-f740-489a-84c2-796d7a7a8c9a,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,sztuki,"APC 
+3fazowe
+pionowe 0U",,,f,,PENDING,2026-08-04 07:51:30.858,2026-08-04 07:51:30.858,,,,,,,,,,,,,,
+f47ef96d-88b1-40d0-9f9f-b9bf49a212b7,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,sztuki,,,,f,,PENDING,2026-08-04 07:51:30.86,2026-08-04 07:51:30.86,,,,,,,,,,,,,,
+68598241-3f74-4457-a481-7543f046a9bd,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,sztuki,ZPAS,,,f,,PENDING,2026-08-04 07:51:30.876,2026-08-04 07:51:30.876,,,,,,,,brama szerokość 1m,,,,,,
+e4ef8c05-c75e-4997-a952-141905e62f08,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,sztuki,,,,f,,PENDING,2026-08-04 07:51:30.879,2026-08-04 07:51:30.879,,,,,,,,"słupki wysokość 3,3 ",,,,,,
+e8ae56a3-ef2a-4aa0-b560-0ff034ef12c0,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,sztuki,,,,f,,PENDING,2026-08-04 07:51:30.882,2026-08-04 07:51:30.882,,,,,,,,,,,,,,
+110bd734-8070-4b26-a6bf-711bfd8c53b2,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,sztuki,,,,f,,PENDING,2026-08-04 07:51:30.909,2026-08-04 07:51:30.909,,,,,,,10e00a0b-b1a2-479a-ac05-37a7c98e38cc,test,,,,,,
+a90f79e7-e5ff-4ac7-a1f8-172be4defe59,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,equipment,0,sztuki,,,,f,,PENDING,2026-08-04 07:51:30.917,2026-08-04 07:51:30.917,,,2492.61,,,"{""4abd1b3b-cf33-4897-9c74-69f309b3b9f9"":3}",9fac12d5-3a66-4a7d-9e10-d8725cb03db7,karta komunikacyjna,,,,,,
+c94dfba6-634d-4066-8bad-545190fa2441,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,equipment,0,sztuki,,,,f,,PENDING,2026-08-04 07:51:30.939,2026-08-04 07:51:30.939,,,,,,,,Rack bateryjny Schneider,,,,,,
+f85ba390-6d07-48eb-83a4-6d5f170dd582,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,material,0,sztuki,,,,f,,PENDING,2026-08-04 07:51:30.941,2026-08-04 07:51:30.941,,,,,,,,instalacja racka bateryjnego Schneider,,,,,,
+24ca1526-8b72-443f-9674-d4a9ef784051,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,equipment,0,sztuki,,,,f,,PENDING,2026-08-04 07:51:30.943,2026-08-04 07:51:30.943,,,3000,,,,,Karta Modbus Eth,,,,,,
+3967d24e-5406-4bfe-868f-1c86593028ab,219f64a5-515e-45a3-b1c0-0ded85e2a85d,ed89e3e9-cb7d-4d7e-984c-eca394f53049,equipment,0,sztuki,dla 120kVA,,,f,,PENDING,2026-08-04 07:51:30.932,2026-08-04 07:51:54.03,,,8000,,,,,Bypass,,,,,,

@@ -4,6 +4,119 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-08-10 — fix(wbs): usunięcie węzła kasuje kartę materiałową, gdy traci ostatnie powiązanie
+
+### architektura / API
+- `back-funkcja` `deleteNode` — karta materiałowa, której po usunięciu węzłów nie zostaje ŻADNE powiązanie WBS, jest teraz usuwana zamiast odczepiana (`wbsNodeId: null`, `quantity: 0`). Odczepiona karta była widmem: panel Materiały kluczuje po `wbsNodeId`, więc znikała z UI i nie dało się jej otworzyć ani skasować, ale nadal liczyła się w porównaniu Wycena↔Zakup. Karta przypisana do kilku węzłów przeżywa usunięcie części z nich — zostaje przepięta na pozostałe, z przeliczonymi `wbsNodeIds` i `wbsNodeAllocations`
+- `DELETE /wbs-nodes/:id` zwraca dodatkowo `deletedRequirements` — ile kart poszło razem z węzłami
+- kasowanie karty zdejmuje kaskadą jej `ProductProposal`; `QuickQuoteItem.materialRequirementId` ma `SetNull`, więc zamrożone wyceny baseline przeżywają
+
+### słownik
+- dodano `delete-node-orphan-cards` — usuwanie osieroconych kart w `deleteNode`
+
+### wytyczne
+- `back-funkcja` `deleteNode` — karta materiałowa bez `wbsNodeId` jest nieosiągalna w UI (panel Materiały kluczuje wyłącznie po tym polu), więc „zachowanie" jej przy usuwaniu węzła jest pozorną ochroną — nie zostawiaj takich wierszy
+
+---
+
+## 2026-08-10 — feat(orders): sumy Wycena / Zakup / Δ przeniesione do nagłówków kolumn
+
+### architektura / API
+- pasek KPI panelu porównawczego oddał sumy do nagłówka tabeli: Δ trafiła do nagłówka kolumny Δ (zamiast samej litery), a sumy stron nad kolumny „Wartość". W pasku zostały tylko etykieta baseline, licznik `zakupione n/m`, chipy odchyleń i akcje
+- z nagłówków grup zniknęły opisy „Wycena (ilość · cena · wartość · dostawca)" / „Zakup (…)" — powielały wiersz podnagłówków; strony rozróżnia teraz kolor podnagłówków (pomarańcz = Wycena, czerwień = Zakup)
+- `ui-modal` `materials-comparison-modal` — szerokość `max-w-5xl` → `max-w-[72vw]`, wysokość `85vh` → `92vh`; tabela porównania `max-h-70vh` → `78vh`; czcionka panelu +4px
+
+### słownik
+- dodano `comparison-delta-summary` — `deltaSummary` w `ComparisonPanel.jsx`
+- dodano `comparison-side-sums` — sumy stron w nagłówkach grup kolumn
+
+### wytyczne
+- `ui-kolumna` `comparison-delta-summary`, `comparison-side-sums` — każda suma stoi w nagłówku kolumny (grupy), którą sumuje, i nigdzie indziej; jedno miejsce prawdy, żeby wartość nie rozjechała się z sumowaną kolumną
+
+---
+
+## 2026-08-10 — feat(suppliers): usunięcie dostawcy i powrót pola do pustego
+
+### architektura / API
+- `ui-dropdown` `SupplierPicker` — dwie drogi wyczyszczenia wyboru: krzyżyk przy wybranej wartości i pozycja „— bez dostawcy —" na szczycie listy. Obie wołają `onChange(null)`, pole wraca do „Wybierz dostawcę…". Wcześniej kontrakt `onChange(supplier | null)` deklarował null, ale żadna ścieżka UI go nie wywoływała — raz wybranego dostawcy nie dało się zdjąć
+- `PATCH /material-requirements/proposals/:proposalId` z `{"supplierId": null}` czyści `ProductProposal.supplierId` (relacja `onDelete: SetNull`) — bez zmian w backendzie, ścieżka działała, brakowało tylko wywołania z UI
+- `ui-funkcja` `supplierChange` w `ProductSideCard` nie zakłada już pustej propozycji, gdy czyszczony jest dostawca na pozycji bez produktu
+
+### słownik
+- dodano `supplier-picker-clear` — `clearSupplier` w `SupplierPicker.jsx`
+
+### wytyczne
+- `ui-dropdown` `SupplierPicker` — po akceptacji baseline zdjęcie dostawcy po stronie Wyceny przechodzi przez `assertProposalOfferEditable` (guard oferty, manager może odblokować); strona Zakupu czyści się bez przeszkód
+
+---
+
+## 2026-08-10 — feat(orders): panel porównawczy to split Wycena↔Zakup, nie dwie kopie tej samej ceny
+
+### architektura / API
+- `GET /orders/:nodeId/comparison` — obie strony pochodzą teraz z `ProductProposal`, nie z jednego `MaterialRequirement.budgetedPriceNetto`. Lewa (WYCENA) = propozycja `isOffer` klonu baseline, fallback na `budgetedPriceNetto` wymagania. Prawa (ZAKUP) = propozycja `isPurchase` żywego wiersza; gdy ta sama propozycja pełni obie role, cena zakupu to `purchasePriceNetto`. Wcześniej obie kolumny czytały to samo pole i pokazywały identyczne liczby
+- strona Zakupu **nie ma fallbacku** na cenę wyceny — brak produktu `isPurchase` daje `current: null` (UI: „jeszcze nie zakupiony"), a pozycja wypada z sum. Usunięto `kpi.forecastSum` (prognozował zakup ceną wyceny)
+- `kpi.deltaSum` = suma kolumny Δ, czyli wyłącznie wiersze mające OBIE wartości; nowe `kpi.purchasedOfferSum` to ich wycena i mianownik `deltaPct`. `coveragePriced` znaczy teraz „ile pozycji ma produkt zakupu"
+- wiersz zwraca `baseline.supplier` / `baseline.product` i `current.supplier` / `current.product` — dostawca jest atrybutem propozycji, więc każda strona ma własnego
+- odchylenie `KURSOWE` usunięte: `ProductProposal` nie ma waluty ani kursu, więc detekcja była nieosiągalna. `CENOWE` odpala tylko gdy obie strony mają cenę
+- `ui-sekcja` `BudgetModesPanel` — żywe wymagania czyta z aktywnej wersji (`versionId` niepuste, fallback na `null`) zamiast wyłącznie `versionId=null`; tryb Wykonanie liczy cenę i wartość z samego wymagania, nie ze strony Zakup porównania
+
+### słownik
+- dodano `comparison-build-offer`, `comparison-build-purchase` — budowa stron Wycena/Zakup w `OrdersService.comparison`
+- dodano `comparison-side-styles`, `comparison-not-purchased` — kolory stron (Wycena pomarańczowa, Zakup czerwony) i komórka „jeszcze nie zakupiony"
+- usunięto `comparison-source-styles` — badge źródła ceny (FO/QQ/MAN) nie dotyczy strony Zakupu
+
+### wytyczne
+- `schema-pole` `ProductProposal.purchasePriceNetto` — czytaj cenę zakupu jako `isOffer ? purchasePriceNetto : priceNetto`; jedna propozycja może pełnić obie role splitu i wtedy `priceNetto` należy do WYCENY
+- `back-funkcja` `OrdersService.comparison` — strona Zakupu nigdy nie dostaje fallbacku na cenę wyceny; brak zakupu ma zostać widoczny jako brak, nie jako zero-odchylenie
+
+---
+
+## 2026-08-10 — fix(orders): porównanie baseline↔żywe czyta aktywną wersję zamiast legacy baseline
+
+### architektura / API
+- `GET /orders/:nodeId/comparison` — „żywe dane" to teraz wiersze AKTYWNEJ wersji (`resolveVersionId`), a nie `versionId=null`. Baseline null to legacy sprzed wersjonowania i niósł nieaktualny zakres (materiały wycofane w kolejnych snapshotach wracały do porównania jako `ZAKRES_PLUS`). Fallback na `null` zostaje, gdy aktywna wersja nie ma własnych wierszy
+- parowanie baseline↔żywe po korzeniu klonu `sourceRequirementId ?? id` po obu stronach zamiast jednostronnego `baseline.sourceRequirementId → live.id`. Poprzednia wersja nie parowała nic, gdy `sourceRequirementId` był NULL (dane sprzed wprowadzenia pola) → `baselineSum` wychodził 0 zł
+- panel porównawczy przeniesiony z nagłówka zamówienia (DashboardPage) do nagłówka sekcji **Materiały** w `UnifiedWbsPanel`
+
+### słownik
+- zmieniono `materials-comparison-kpi`, `materials-show-comparison`, `materials-comparison-chip`, `materials-comparison-modal` — przeniesione z `DashboardPage.jsx` (dawne `dashboard-*`) do `UnifiedWbsPanel.jsx`
+- usunięto `dashboard-fetch-comparison-kpi`
+
+### wytyczne
+- `back-funkcja` `OrdersService.comparison` — „żywe dane" wymagań materiałowych czytaj przez `resolveVersionId`, nigdy na sztywno `versionId: null`; ten drugi to legacy sprzed wersjonowania
+- `schema-pole` `MaterialRequirement.sourceRequirementId` — jest NULL w danych sprzed wprowadzenia pola; każde parowanie klon↔oryginał licz jako `sourceRequirementId ?? id` (korzeń łańcucha), inaczej stare projekty nie sparują się wcale
+
+---
+
+## 2026-08-10 — feat(orders,materials): akceptacja baseline blokuje wartości ofertowe + podgląd produktu w splicie (v2026.08.10.770)
+
+### schema.prisma
+- dodano pole `imageUrl` w modelu `MaterialRequirement` — print screen / zdjęcie POZYCJI, wspólne dla obu stron splitu Wycena/Zakup. Osobne od `Material.imageUrl`: katalog jest globalny (jeden zrzut podmieniałby zdjęcie produktu we wszystkich projektach), a obrazek pozycji musi działać zanim wybrany zostanie jakikolwiek produkt katalogowy
+
+### migracje
+- `20260810120000_add_image_url_to_material_requirement` — kolumna `imageUrl` na `material_requirements`
+
+### architektura / API
+- dodano `back-funkcja` `assertOfferEditable` + `back-funkcja` `pickOfferChanges` (`common/offer-lock.util.ts`) — jedna reguła blokady wartości ofertowych po akceptacji baseline dla całego backendu: brak akceptacji → przechodzi bez śladu, manager/admin → przechodzi z wpisem w `AuditLog`, reszta → 403. Zastępuje lokalny guard F4 obsługujący samo `budgetedPriceNetto`
+- `back-endpoint` `PATCH /wbs-nodes/:id/budget` i `PATCH /wbs-nodes/:id` przyjmują `req.user` i przepuszczają przez guard zmiany `unitCost`, `margin`, `discount`, `quantity`, `unitPrice` oraz zerowanie wyceny przy zmianie typu liścia na `group` — blokada obejmuje WSZYSTKIE typy liści (praca, usługa, paliwo, nocleg), nie tylko materiał/sprzęt
+- `back-endpoint` `PATCH /material-requirements/:id` — guard rozszerzony z `priceNetto` na `quantity`; `PATCH /material-requirements/proposals/:id`, `.../set-offer`, `.../select`, `PATCH|DELETE /material-requirements/:id/offer` — guard odpala gdy propozycja pełni rolę `isOffer` (strona „Zakup" i `purchasePriceNetto` pozostają wolne)
+- `back-funkcja` `uploadImage` zapisuje obrazek na `MaterialRequirement.imageUrl` zamiast `Material.imageUrl`; wcześniej pozycja bez `materialId` dostawała 400 („Brak przypisanego materiału"). Odczyt (`getImageStream`, flatten w `findOne`) czyta własny obrazek pozycji, a gdy go brak — spada na katalogowy
+- dodano `back-endpoint` `DELETE /material-requirements/:id/image` — kasuje obrazek pozycji (katalogowy wraca jako fallback)
+- `back-funkcja` `cloneVersionData` przenosi `MaterialRequirement.imageUrl` do klonu wersji
+- dodano `ui-sekcja` `OfferLockGuard` (`components/shared/OfferLockGuard.jsx`) — module-store blokady + modal: manager odblokowuje edycję na czas sesji, użytkownik bez uprawnień dostaje komunikat. `ui-funkcja` `guardOfferEdit` wołana w lejkach zapisu (`updateNodeField`, `saveBudgetField`, `applyLeafDefaults`, `patchField`/`priceBlur`/`supplierChange` w `ProductSideCard`), `ui-funkcja` `offerLockInputProps` wpinana w pola ofertowe `BudgetTable`, `WBSHybridTable` i `WbsMaterialsPanel`
+- `ui-sekcja` `BaselineSplitCard` — nowe pole „Podgląd produktu" obok zwężonego okna „Wymagania techniczne (wspólne)": klik = wybór pliku, najechanie + Ctrl+V = wklejenie zrzutu ze schowka (`ui-sekcja` `RequirementImageBox`), kosz na hoverze usuwa obrazek
+
+### słownik
+- dodano `offer-lock-util`, `assert-offer-editable`, `pick-offer-changes`, `offer-locked-wbs-fields`, `offer-lock-user` — backendowa reguła blokady
+- dodano `offer-lock-guard`, `guard-offer-edit`, `use-offer-lock`, `set-offer-lock-state`, `offer-lock-input-props`, `request-offer-unlock`, `offer-lock-state`, `offer-lock-request-fn`, `offer-value-fields`, `offer-locked`, `update-node-field-offer-lock`, `budget-table-offer-locked`, `wbs-hybrid-offer-lock`, `wbs-materials-offer-locked`, `product-side-card-lock` — blokada po stronie UI
+- dodano `mat-req-image-url`, `mat-req-upload-image`, `mat-req-delete-image`, `mat-req-delete-image-endpoint`, `requirement-image-box` — obrazek pozycji
+- dodano `wbs-budget-offer-lock`, `wbs-node-offer-lock`, `proposal-offer-lock`, `assert-proposal-offer-editable` — punkty wpięcia guardu
+
+### wytyczne
+- akceptacja baseline blokuje WARTOŚCI, nie STRUKTURĘ — dodawanie i usuwanie liści, nazwy, komentarze, statusy i cała strona „Zakup" zostają edytowalne. Każdy nowy endpoint zapisujący nośnik ceny/ilości ofertowej musi zawołać `assertOfferEditable`, inaczej powstaje obejście blokady
+- `ui-funkcja` `guardOfferEdit` — wołaj PRZED optimistic update, nie po; odrzucona zmiana zostawałaby inaczej na ekranie do najbliższego odświeżenia
+- `schema-pole` `MaterialRequirement.imageUrl` — obrazek pozycji ma pierwszeństwo nad `Material.imageUrl`; katalogowy zostaje wyłącznie jako fallback odczytu (nie zapisujemy już zrzutów do katalogu globalnego)
+
 ## 2026-08-10 — fix(wbs): ilość synchronizowana relacją 1:1, nie tabelą alokacji (v2026.08.10.769)
 
 ### architektura / API

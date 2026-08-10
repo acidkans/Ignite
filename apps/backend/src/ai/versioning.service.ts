@@ -294,6 +294,9 @@ export class VersioningService {
                     listId: null,
                     materialId: mr.materialId ?? null,
                     availability: (mr as any).availability ?? null,
+                    // Obrazek pozycji (print screen w BaselineSplitCard) — bez tego snapshot wersji
+                    // traci podgląd produktu, choć plik dalej leży w uploads/.
+                    imageUrl: (mr as any).imageUrl ?? null,
                     budgetedPriceNetto: (mr as any).budgetedPriceNetto ?? null,
                     offerId: (mr as any).offerId ?? null,
                     offerPositionIdx: (mr as any).offerPositionIdx ?? null,

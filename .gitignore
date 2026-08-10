@@ -101,3 +101,6 @@ ERP- planowanie perojektu.docx
 # Generowany output grafu (skill graphify)
 graphify-out/
 apps/graphify-out/
+
+# Zrzuty bazy z /test — lokalne backupy, nie do repo
+test/*.dump

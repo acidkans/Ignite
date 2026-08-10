@@ -1,7 +1,8 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { normalizeManufacturer } from '../common/normalize.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveVersionId } from '../common/version.util';
+import { assertOfferEditable, OfferLockUser } from '../common/offer-lock.util';
 import { VectorService } from '../ai/vector.service';
 import { ProcessTreeService } from '../process-tree/process-tree.service';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
@@ -373,7 +374,8 @@ export class MaterialRequirementsService {
             dataSheetName: item.material?.dataSheetName ?? null,
             complianceUrl: item.material?.complianceUrl ?? null,
             complianceName: item.material?.complianceName ?? null,
-            imageUrl: item.material?.imageUrl ?? null,
+            // Obrazek pozycji ma pierwszeństwo przed katalogowym (patrz `mat-req-upload-image`).
+            imageUrl: item.imageUrl ?? item.material?.imageUrl ?? null,
             priceNetto: item.budgetedPriceNetto ?? null,
             productUrl: item.material?.productUrl ?? null,
             seller: item.material?.seller ?? null,
@@ -473,33 +475,32 @@ export class MaterialRequirementsService {
     }>, user?: { userId?: string; roles?: string[] }) {
         await this.findOne(id);
 
-        // @anchor mat-req-budget-guard — edycja budgetedPriceNetto po akceptacji
-        // zamówienia (F4): wymaga uprawnień managera/admina i zostawia ślad w AuditLog
-        // (baseline zamrożony pointerem acceptedVersionId — zmiany budżetu muszą być głośne)
-        if ((dto as any).priceNetto !== undefined) {
+        // @anchor mat-req-budget-guard — cena ofertowa (`budgetedPriceNetto`) i ILOŚĆ po akceptacji
+        // baseline: wspólny guard `assertOfferEditable` — manager przechodzi zostawiając wpis w
+        // AuditLog, reszta dostaje 403. Ilość dołączona, bo z ceną tworzy wartość ofertową pozycji
+        // i po v769 płynie tą samą ścieżką na `WbsNode.quantity`.
+        if ((dto as any).priceNetto !== undefined || dto.quantity !== undefined) {
             const reqRow = await this.prisma.materialRequirement.findUnique({
                 where: { id },
-                select: { budgetedPriceNetto: true, name: true, node: { select: { id: true, acceptedVersionId: true } } },
+                select: { budgetedPriceNetto: true, quantity: true, name: true, nodeId: true },
             });
-            if (reqRow?.node?.acceptedVersionId) {
-                const roles = user?.roles ?? [];
-                if (!roles.includes('ADMIN') && !roles.includes('MANAGER')) {
-                    throw new ForbiddenException('Zamówienie po akceptacji — edycja ceny budżetowej wymaga uprawnień managera');
-                }
-                await this.prisma.auditLog.create({
-                    data: {
-                        action: 'UPDATE',
-                        entity: 'MaterialRequirement',
-                        entityId: id,
-                        diff: {
-                            field: 'budgetedPriceNetto',
-                            old: reqRow.budgetedPriceNetto,
-                            new: (dto as any).priceNetto,
-                            requirementName: reqRow.name,
-                            context: 'edycja po akceptacji zamówienia',
-                        },
-                        userId: user?.userId ?? null,
-                    },
+            const changes: Record<string, unknown> = { requirementName: reqRow?.name };
+            if ((dto as any).priceNetto !== undefined
+                && Math.abs(Number(reqRow?.budgetedPriceNetto ?? 0) - Number((dto as any).priceNetto ?? 0)) >= 0.005) {
+                changes.budgetedPriceNetto = { old: reqRow?.budgetedPriceNetto ?? null, new: (dto as any).priceNetto };
+            }
+            if (dto.quantity !== undefined
+                && Math.abs(Number(reqRow?.quantity ?? 0) - Number(dto.quantity ?? 0)) >= 0.005) {
+                changes.quantity = { old: reqRow?.quantity ?? null, new: dto.quantity };
+            }
+            // Sam `requirementName` w obiekcie = brak realnej zmiany wartości → guard nie odpala.
+            if (Object.keys(changes).length > 1) {
+                await assertOfferEditable(this.prisma, {
+                    processNodeId: reqRow?.nodeId,
+                    user,
+                    entity: 'MaterialRequirement',
+                    entityId: id,
+                    changes,
                 });
             }
         }
@@ -1173,17 +1174,34 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
         return saved;
     }
 
+    // @anchor mat-req-upload-image — print screen / zdjęcie POZYCJI. Obrazek ląduje na wymaganiu
+    // (`MaterialRequirement.imageUrl`), nie w katalogu globalnym: wklejenie zrzutu ma działać
+    // zanim pozycja ma jakikolwiek produkt katalogowy (wcześniej brak `materialId` = błąd 400),
+    // a jeden zrzut z konkretnej oferty nie powinien podmieniać zdjęcia produktu we wszystkich
+    // projektach. Odczyt (`getImageStream`) nadal spada na `Material.imageUrl` — stare obrazki
+    // katalogowe zostają widoczne.
     async uploadImage(id: string, file: Express.Multer.File) {
-        const req = await this.findOne(id);
+        await this.findOne(id);
         const ext = path.extname(file.originalname) || '.jpg';
         const fileName = `${randomUUID()}${ext}`;
         const filePath = path.join(UPLOADS_DIR, fileName);
         if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
         fs.writeFileSync(filePath, file.buffer);
-        if (req.materialId) {
-            return this.prisma.material.update({ where: { id: req.materialId }, data: { imageUrl: fileName } });
+        return this.prisma.materialRequirement.update({ where: { id }, data: { imageUrl: fileName } });
+    }
+
+    // @anchor mat-req-delete-image — kasuje wyłącznie obrazek pozycji; katalogowy zostaje nietknięty
+    // (i po usunięciu znów staje się widoczny jako fallback).
+    async deleteImage(id: string) {
+        const req = await this.prisma.materialRequirement.findUnique({
+            where: { id }, select: { imageUrl: true },
+        });
+        if (!req) throw new NotFoundException(`MaterialRequirement ${id} not found`);
+        if (req.imageUrl) {
+            const filePath = this.resolveUploadPath(req.imageUrl);
+            if (fs.existsSync(filePath)) { try { fs.unlinkSync(filePath); } catch { /* plik mógł zniknąć */ } }
         }
-        throw new BadRequestException('Brak przypisanego materiału — najpierw zaakceptuj propozycję produktu');
+        return this.prisma.materialRequirement.update({ where: { id }, data: { imageUrl: null } });
     }
 
     // @anchor resolve-upload-path
@@ -1215,6 +1233,7 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
     }
 
     async getImageStream(id: string) {
+        // findOne flattenuje `imageUrl` w kolejności: własny obrazek pozycji → katalogowy.
         const req = await this.findOne(id);
         if (!req.imageUrl) throw new NotFoundException('No image for this requirement');
         const filePath = this.resolveUploadPath(req.imageUrl);
@@ -1232,7 +1251,12 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
         });
     }
 
-    async updateProposal(proposalId: string, dto: Partial<{ productName: string; manufacturer: string; model: string; sourceUrl: string; priceNetto: number | null; purchasePriceNetto: number | null; seller: string | null; offerNumber: string | null; availability: string | null; isRejected: boolean; supplierId: string | null; }>) {
+    async updateProposal(proposalId: string, dto: Partial<{ productName: string; manufacturer: string; model: string; sourceUrl: string; priceNetto: number | null; purchasePriceNetto: number | null; seller: string | null; offerNumber: string | null; availability: string | null; isRejected: boolean; supplierId: string | null; }>, user?: OfferLockUser) {
+        // @anchor proposal-offer-lock — propozycja z rolą „Wycena" (`isOffer`) jest produktem
+        // ofertowym: po akceptacji baseline jej edycja idzie przez ten sam guard co ceny w WBS.
+        // Strona „Zakup" (również `purchasePriceNetto` na propozycji pełniącej obie role) zostaje
+        // w pełni edytowalna — to jedyne miejsce, w którym po akceptacji ma się dziać praca.
+        await this.assertProposalOfferEditable(proposalId, dto, user);
         if (dto.manufacturer !== undefined) dto.manufacturer = normalizeManufacturer(dto.manufacturer) ?? undefined;
         const updated = await this.prisma.productProposal.update({ where: { id: proposalId }, data: dto, include: { supplier: true } });
         // Zmiana ceny wyceny na propozycji-offer synchronizuje budżet WBS (= cena wyceny).
@@ -1243,6 +1267,37 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
             });
         }
         return updated;
+    }
+
+    // @anchor assert-proposal-offer-editable — wspólny wstęp dla mutacji propozycji: guard odpala
+    // wyłącznie gdy propozycja pełni rolę „Wycena" i zmieniane pole należy do oferty. Pole
+    // `purchasePriceNetto` jest wyłączone z blokady nawet na propozycji ofertowej (ta sama
+    // propozycja po obu stronach splitu → cena zakupu to osobna kolumna).
+    private async assertProposalOfferEditable(
+        proposalId: string,
+        dto: Record<string, any>,
+        user?: OfferLockUser,
+    ) {
+        const offerKeys = Object.keys(dto ?? {}).filter(k => k !== 'purchasePriceNetto');
+        if (offerKeys.length === 0) return;
+        const proposal = await this.prisma.productProposal.findUnique({
+            where: { id: proposalId },
+            select: {
+                isOffer: true,
+                materialRequirement: { select: { nodeId: true, name: true } },
+            },
+        });
+        if (!proposal?.isOffer) return;
+        await assertOfferEditable(this.prisma, {
+            processNodeId: proposal.materialRequirement?.nodeId,
+            user,
+            entity: 'ProductProposal',
+            entityId: proposalId,
+            changes: {
+                requirementName: proposal.materialRequirement?.name,
+                fields: offerKeys.reduce((acc, k) => ({ ...acc, [k]: dto[k] }), {} as Record<string, any>),
+            },
+        });
     }
 
     async uploadProposalImage(proposalId: string, file: Express.Multer.File) {
@@ -1277,11 +1332,22 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
         return this.prisma.productProposal.delete({ where: { id: proposalId } });
     }
 
-    async selectProposal(proposalId: string) {
+    async selectProposal(proposalId: string, user?: OfferLockUser) {
         const proposal = await this.prisma.productProposal.findUnique({ where: { id: proposalId } });
         if (!proposal) throw new NotFoundException(`Proposal ${proposalId} not found`);
         const willSelect = !proposal.isSelected;
         if (willSelect) {
+            // Wybór produktu ustawia też `isOffer` (v765) — po akceptacji baseline to zmiana oferty.
+            const req = await this.prisma.materialRequirement.findUnique({
+                where: { id: proposal.materialRequirementId }, select: { nodeId: true, name: true },
+            });
+            await assertOfferEditable(this.prisma, {
+                processNodeId: req?.nodeId,
+                user,
+                entity: 'ProductProposal',
+                entityId: proposalId,
+                changes: { requirementName: req?.name, isSelected: { old: false, new: true } },
+            });
             // Wybór produktu na etapie ofertowania JEST wyborem produktu strony „Wycena" —
             // bez isOffer split Wycena/Zakup nie widzi produktu i lewy panel zostaje pusty.
             await this.prisma.productProposal.updateMany({
@@ -1325,9 +1391,20 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
 
     // @anchor mat-req-set-offer — propozycja jako produkt strony „Wycena" (isOffer).
     // Max jedna isOffer na wymaganie; budżet WBS (budgetedPriceNetto) = cena wyceny = priceNetto.
-    async setOffer(proposalId: string) {
+    async setOffer(proposalId: string, user?: OfferLockUser) {
         const proposal = await this.prisma.productProposal.findUnique({ where: { id: proposalId } });
         if (!proposal) throw new NotFoundException(`Proposal ${proposalId} not found`);
+        // Podmiana produktu strony „Wycena" po akceptacji = podmiana tego, co wyceniono klientowi.
+        const req = await this.prisma.materialRequirement.findUnique({
+            where: { id: proposal.materialRequirementId }, select: { nodeId: true, name: true },
+        });
+        await assertOfferEditable(this.prisma, {
+            processNodeId: req?.nodeId,
+            user,
+            entity: 'ProductProposal',
+            entityId: proposalId,
+            changes: { requirementName: req?.name, isOffer: { old: proposal.isOffer, new: true } },
+        });
         await this.prisma.productProposal.updateMany({
             where: { materialRequirementId: proposal.materialRequirementId, id: { not: proposalId } },
             data: { isOffer: false },
@@ -1604,9 +1681,20 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
 
     // ─── PRZYPISANIE POZYCJI OFERTY ───────────────────────────────────────────
 
-    async assignOfferPosition(id: string, offerId: string, positionIdx: number): Promise<any> {
+    async assignOfferPosition(id: string, offerId: string, positionIdx: number, user?: OfferLockUser): Promise<any> {
         const offer = await this.prisma.offer.findUnique({ where: { id: offerId }, include: { supplier: true } });
         if (!offer) throw new NotFoundException('Oferta nie znaleziona');
+        // Przypisanie pozycji z oferty nadpisuje `budgetedPriceNetto` — to wartość ofertowa.
+        const reqRow = await this.prisma.materialRequirement.findUnique({
+            where: { id }, select: { nodeId: true, name: true },
+        });
+        await assertOfferEditable(this.prisma, {
+            processNodeId: reqRow?.nodeId,
+            user,
+            entity: 'MaterialRequirement',
+            entityId: id,
+            changes: { requirementName: reqRow?.name, offerId, offerPositionIdx: positionIdx },
+        });
         let positions: any[];
         try { positions = JSON.parse(offer.positions); } catch { positions = []; }
         const pos = positions[positionIdx];
@@ -1666,7 +1754,19 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
         });
     }
 
-    async removeOfferPosition(id: string): Promise<any> {
+    async removeOfferPosition(id: string, user?: OfferLockUser): Promise<any> {
+        const reqRow = await this.prisma.materialRequirement.findUnique({
+            where: { id }, select: { nodeId: true, name: true, offerId: true },
+        });
+        if (reqRow?.offerId) {
+            await assertOfferEditable(this.prisma, {
+                processNodeId: reqRow.nodeId,
+                user,
+                entity: 'MaterialRequirement',
+                entityId: id,
+                changes: { requirementName: reqRow.name, offerId: { old: reqRow.offerId, new: null } },
+            });
+        }
         return this.prisma.materialRequirement.update({
             where: { id },
             data: { offerId: null, offerPositionIdx: null, offerPositionSnapshot: null },

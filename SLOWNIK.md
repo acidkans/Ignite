@@ -1101,6 +1101,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | fetchSuppliers | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-fetch |
 | ui-funkcja | handleNipLookup | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-nip-lookup |
 | ui-funkcja | handleCreate | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-create |
+| ui-funkcja | clearSupplier | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-clear |
 
 ### Moduł kanał PDF — dostawca w ofercie (Faza 2)
 
@@ -1241,15 +1242,20 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 |-----|-------|------|--------|
 | ui-panel | ComparisonPanel | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-panel |
 | ui-stala | DEV_STYLES | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-dev-styles |
-| ui-stala | SOURCE_STYLES (comparison) | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-source-styles |
+| ui-stala | OFFER_CLS / PURCHASE_CLS | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-side-styles |
+| ui-wiersz | strona Zakupu bez produktu isPurchase | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-not-purchased |
+| ui-kolumna | podsumowanie Δ w nagłówku kolumny | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-delta-summary |
+| ui-kolumna | sumy stron Wycena/Zakup w nagłówkach grup | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-side-sums |
+| back-funkcja | usuwanie kart bez powiązania WBS w deleteNode | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor delete-node-orphan-cards |
+| back-funkcja | buildOffer (strona Wycena) | apps/backend/src/orders/orders.service.ts | @anchor comparison-build-offer |
+| back-funkcja | buildPurchase (strona Zakup) | apps/backend/src/orders/orders.service.ts | @anchor comparison-build-purchase |
 | ui-funkcja | fetchComparison | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-fetch |
 | ui-funkcja | exportExcel (comparison) | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-export-excel |
 | ui-sekcja | osadzenie panelu w wycenie BASELINE | apps/frontend/src/components/shared/QuickQuotesSection.jsx | @anchor qq-comparison-embed |
-| ui-stan | comparisonKpi | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-comparison-kpi |
-| ui-stan | showComparison | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-show-comparison |
-| ui-funkcja | fetch KPI porównania (effect) | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-fetch-comparison-kpi |
-| ui-przycisk | chip Δ/pokrycie w nagłówku | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-comparison-chip |
-| ui-modal | modal panelu porównawczego | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-comparison-modal |
+| ui-stan | comparisonKpi | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor materials-comparison-kpi |
+| ui-stan | showComparison | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor materials-show-comparison |
+| ui-przycisk | chip Δ/pokrycie w nagłówku sekcji Materiały | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor materials-comparison-chip |
+| ui-modal | modal panelu porównawczego | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor materials-comparison-modal |
 
 ### Moduł split ProductCard — baseline vs żywa karta (Faza 6)
 
@@ -1286,6 +1292,53 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | budgetAcceptance | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor budget-acceptance |
 | ui-stan | budgetMode | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor budget-mode |
 | ui-sekcja | segmented control trybów Budżetu | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor budget-mode-switch |
+
+### Moduł OfferLock (blokada wartości ofertowych po akceptacji baseline)
+
+#### Backend (`apps/backend/src/common/offer-lock.util.ts` + wpięcia)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-funkcja | offerLockUtil (moduł reguły blokady) | apps/backend/src/common/offer-lock.util.ts | @anchor offer-lock-util |
+| back-funkcja | assertOfferEditable | apps/backend/src/common/offer-lock.util.ts | @anchor assert-offer-editable |
+| back-funkcja | pickOfferChanges | apps/backend/src/common/offer-lock.util.ts | @anchor pick-offer-changes |
+| back-stala | OFFER_LOCKED_WBS_FIELDS | apps/backend/src/common/offer-lock.util.ts | @anchor offer-locked-wbs-fields |
+| back-typ | OfferLockUser | apps/backend/src/common/offer-lock.util.ts | @anchor offer-lock-user |
+| back-funkcja | guard budżetu WBS | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-budget-offer-lock |
+| back-funkcja | guard pól węzła WBS | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-node-offer-lock |
+| back-funkcja | assertProposalOfferEditable | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor assert-proposal-offer-editable |
+| back-funkcja | guard propozycji isOffer | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor proposal-offer-lock |
+
+#### Frontend (`apps/frontend/src/components/shared/OfferLockGuard.jsx` + wpięcia)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-sekcja | OfferLockGuard | apps/frontend/src/components/shared/OfferLockGuard.jsx | @anchor offer-lock-guard |
+| ui-stan | offerLockState | apps/frontend/src/components/shared/OfferLockGuard.jsx | @anchor offer-lock-state |
+| ui-funkcja | offerLockRequestFn | apps/frontend/src/components/shared/OfferLockGuard.jsx | @anchor offer-lock-request-fn |
+| ui-funkcja | setOfferLockState | apps/frontend/src/components/shared/OfferLockGuard.jsx | @anchor set-offer-lock-state |
+| ui-hook | useOfferLock | apps/frontend/src/components/shared/OfferLockGuard.jsx | @anchor use-offer-lock |
+| ui-funkcja | guardOfferEdit | apps/frontend/src/components/shared/OfferLockGuard.jsx | @anchor guard-offer-edit |
+| ui-funkcja | requestOfferUnlock | apps/frontend/src/components/shared/OfferLockGuard.jsx | @anchor request-offer-unlock |
+| ui-funkcja | offerLockInputProps | apps/frontend/src/components/shared/OfferLockGuard.jsx | @anchor offer-lock-input-props |
+| ui-stala | OFFER_VALUE_FIELDS | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor offer-value-fields |
+| ui-stan | offerLocked (UnifiedWbsPanel) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor offer-locked |
+| ui-funkcja | guard w updateNodeField | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor update-node-field-offer-lock |
+| ui-propsy | BudgetTable.offerLocked | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table-offer-locked |
+| ui-propsy | WBSHybridTable.offerLocked | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-offer-lock |
+| ui-propsy | WbsMaterialsPanel.offerLocked | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-offer-locked |
+| ui-propsy | ProductSideCard.locked | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-lock |
+| ui-funkcja | forkPurchaseFromOffer | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-fork-purchase |
+
+### Moduł obrazek pozycji (podgląd produktu w BaselineSplitCard)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| schema-pole | MaterialRequirement.imageUrl | apps/backend/prisma/schema.prisma | @anchor mat-req-image-url |
+| back-funkcja | uploadImage (pozycja) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-upload-image |
+| back-funkcja | deleteImage (pozycja) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-delete-image |
+| back-endpoint | DELETE /material-requirements/:id/image | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-delete-image-endpoint |
+| ui-sekcja | RequirementImageBox | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor requirement-image-box |
 
 ### Moduł SnapshotEditGuard (blokada edycji nieaktywnego snapszota)
 

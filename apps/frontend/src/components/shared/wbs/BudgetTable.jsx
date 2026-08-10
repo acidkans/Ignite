@@ -1,6 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, TYPE_OPTIONS, TYPE_LABELS, UNIT_OPTIONS, parseLocaleNumber, sanitizeQtyInput, evalQtyFormula } from './wbsConstants';
+import { offerLockInputProps } from '../OfferLockGuard';
 
 const TH_BASE = 'text-left px-3 py-2.5 text-[17px] font-bold uppercase tracking-widest text-white whitespace-normal break-words select-none relative align-bottom';
 const TD = 'px-2 py-1.5 align-top break-words';
@@ -122,7 +123,12 @@ export default function BudgetTable({
     onDiscountAmountChange,
     nodeId,
     versionId,
+    // @anchor budget-table-offer-locked — akceptacja baseline zamraża kolumny wartości ofertowej
+    // (Koszt jedn., Ilość, Narzut %, Rabat %) i rabat globalny; opis/komentarz/jednostka zostają.
+    offerLocked = false,
 }) {
+    const lockProps = offerLockInputProps(offerLocked);
+    const lockCls = offerLocked ? ' cursor-not-allowed opacity-70' : '';
     // @anchor budget-table-oz-sums — sumy Oferta/Zakup z propozycji (isOffer/isPurchase) do kafli KPI
     const [ozSums, setOzSums] = useState(null); // { accepted, sumWycena, sumZakup }
     useEffect(() => {
@@ -469,7 +475,8 @@ export default function BudgetTable({
                                 value={discountPercent ?? ''}
                                 onChange={e => onDiscountPercentChange?.(e.target.value)}
                                 onClick={e => e.stopPropagation()}
-                                className="w-full rounded-lg border border-orange-400/25 bg-black/30 px-2 py-1 pr-7 text-sm font-black text-orange-100 focus:outline-none focus:border-orange-400"
+                                {...lockProps}
+                                className={`w-full rounded-lg border border-orange-400/25 bg-black/30 px-2 py-1 pr-7 text-sm font-black text-orange-100 focus:outline-none focus:border-orange-400${lockCls}`}
                                 placeholder="0,00"
                             />
                             <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-xs font-black text-orange-200/80">%</span>
@@ -485,7 +492,8 @@ export default function BudgetTable({
                                 value={discountAmount ?? ''}
                                 onChange={e => onDiscountAmountChange?.(e.target.value)}
                                 onClick={e => e.stopPropagation()}
-                                className="w-full rounded-lg border border-orange-400/25 bg-black/30 px-2 py-1 pr-7 text-sm font-black text-orange-100 focus:outline-none focus:border-orange-400"
+                                {...lockProps}
+                                className={`w-full rounded-lg border border-orange-400/25 bg-black/30 px-2 py-1 pr-7 text-sm font-black text-orange-100 focus:outline-none focus:border-orange-400${lockCls}`}
                                 placeholder="0,00"
                             />
                             <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-xs font-black text-orange-200/80">zł</span>
@@ -646,7 +654,8 @@ export default function BudgetTable({
                                             onKeyDown={e => handleKeyDown(e, row.id, 'unitCost')}
                                             data-row-id={row.id}
                                             data-col="unitCost"
-                                            className={`${INPUT} text-center tabular-nums font-mono ${row.inheritedFromMaterials ? 'text-amber-300' : 'text-red-400'}`}
+                                            {...lockProps}
+                                            className={`${INPUT} text-center tabular-nums font-mono ${row.inheritedFromMaterials ? 'text-amber-300' : 'text-red-400'}${lockCls}`}
                                         />
                                         {warnCell === `${row.id}:unitCost` && (
                                             <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
@@ -691,7 +700,8 @@ export default function BudgetTable({
                                             onKeyDown={e => handleKeyDown(e, row.id, 'quantity')}
                                             data-row-id={row.id}
                                             data-col="quantity"
-                                            className={`${INPUT} text-center tabular-nums`}
+                                            {...lockProps}
+                                            className={`${INPUT} text-center tabular-nums${lockCls}`}
                                         />
                                         {warnCell === `${row.id}:quantity` && (
                                             <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
@@ -734,7 +744,8 @@ export default function BudgetTable({
                                             onKeyDown={e => handleKeyDown(e, row.id, 'margin')}
                                             data-row-id={row.id}
                                             data-col="margin"
-                                            className={`${INPUT} text-center tabular-nums text-green-300`}
+                                            {...lockProps}
+                                            className={`${INPUT} text-center tabular-nums text-green-300${lockCls}`}
                                         />
                                         {warnCell === `${row.id}:margin` && (
                                             <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
@@ -757,7 +768,8 @@ export default function BudgetTable({
                                             onKeyDown={e => handleKeyDown(e, row.id, 'discount')}
                                             data-row-id={row.id}
                                             data-col="discount"
-                                            className={`${INPUT} text-center tabular-nums text-orange-300`}
+                                            {...lockProps}
+                                            className={`${INPUT} text-center tabular-nums text-orange-300${lockCls}`}
                                         />
                                         {warnCell === `${row.id}:discount` && (
                                             <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>

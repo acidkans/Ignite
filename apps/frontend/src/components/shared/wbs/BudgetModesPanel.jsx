@@ -13,7 +13,7 @@ const SOURCE_STYLES = {
     'MAN':  { label: 'MAN', cls: 'text-gray-300 bg-white/5 border-white/10', title: 'Cena wpisana ręcznie' },
 };
 
-const DEV_LABELS = { CENOWE: 'cenowe', ILOSCIOWE: 'ilościowe', ZAKRES_PLUS: 'zakres+', ZAKRES_MINUS: 'zakres−', KURSOWE: 'kursowe' };
+const DEV_LABELS = { CENOWE: 'cenowe', ILOSCIOWE: 'ilościowe', ZAKRES_PLUS: 'zakres+', ZAKRES_MINUS: 'zakres−' };
 
 const zl = (v) => v != null ? v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 const parseSnap = (s) => { try { return s ? JSON.parse(s) : null; } catch { return null; } };
@@ -61,8 +61,13 @@ export default function BudgetModesPanel({ nodeId, mode, acceptance }) {
             setBaselineWbs(Array.isArray(wbs) ? wbs : (wbs?.nodes || []));
             const bReqs = bReqRes.ok ? await bReqRes.json() : [];
             setBaselineReqs((Array.isArray(bReqs) ? bReqs : []).filter(r => r.versionId === acceptance.acceptedVersionId));
-            const lReqs = lReqRes.ok ? await lReqRes.json() : [];
-            setLiveReqs((Array.isArray(lReqs) ? lReqs : []).filter(r => !r.versionId));
+            // Żywe wymagania = wiersze AKTYWNEJ wersji. Endpoint dokłada wiersze
+            // `versionId=null` jako legacy sprzed wersjonowania — bierzemy je dopiero
+            // gdy aktywna wersja nie ma własnych (ta sama zasada co w `comparison`).
+            const lReqsRaw = lReqRes.ok ? await lReqRes.json() : [];
+            const lAll = Array.isArray(lReqsRaw) ? lReqsRaw : [];
+            const lVersioned = lAll.filter(r => r.versionId);
+            setLiveReqs(lVersioned.length ? lVersioned : lAll.filter(r => !r.versionId));
             const c = cmpRes.ok ? await cmpRes.json() : null;
             setCmp(c?.accepted ? c : null);
         } catch { /* zostaje poprzedni stan */ }
@@ -267,10 +272,11 @@ export default function BudgetModesPanel({ nodeId, mode, acceptance }) {
     // ─── TRYB: WYKONANIE (żywe ceny z badge źródła) ───────────────────────────
     if (mode === 'wykonanie') {
         const cmpByLive = new Map((cmp?.rows || []).filter(r => r.liveId).map(r => [r.liveId, r]));
-        const total = liveReqs.reduce((s, r) => {
-            const row = cmpByLive.get(r.id);
-            return s + (row?.current?.value ?? 0);
-        }, 0);
+        // Wykonanie pokazuje cenę SAMEGO wymagania (badge FO/QQ/MAN), nie cenę
+        // strony Zakup z porównania — to osobny tryb i osobne źródło.
+        const execPrice = (r) => r.budgetedPriceNetto ?? null;
+        const execValue = (r) => (execPrice(r) != null ? Math.round(r.quantity * execPrice(r) * 100) / 100 : null);
+        const total = liveReqs.reduce((s, r) => s + (execValue(r) ?? 0), 0);
         return (
             <div className="overflow-x-auto">
                 <table className="w-full text-xs">
@@ -287,7 +293,7 @@ export default function BudgetModesPanel({ nodeId, mode, acceptance }) {
                             const src = sourceOf(r, row);
                             const st = src ? SOURCE_STYLES[src] : null;
                             const editable = src !== 'FO'; // FO read-only; FO✎/QQ/MAG/MAN edytowalne
-                            const price = row?.current?.price ?? null;
+                            const price = execPrice(r);
                             return (
                                 <tr key={r.id} className="border-b border-white/5 hover:bg-white/[0.02]">
                                     <td className="px-3 py-1.5 text-gray-200 max-w-[260px]"><span className="line-clamp-2">{r.name || '—'}</span></td>
@@ -305,7 +311,7 @@ export default function BudgetModesPanel({ nodeId, mode, acceptance }) {
                                     <td className="px-3 py-1.5">
                                         {st && <span title={st.title} className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${st.cls}`}>{st.label}</span>}
                                     </td>
-                                    <td className="px-3 py-1.5 text-right font-mono text-gray-300">{zl(row?.current?.value)}</td>
+                                    <td className="px-3 py-1.5 text-right font-mono text-gray-300">{zl(execValue(r))}</td>
                                     <td className="px-3 py-1.5 text-gray-400 truncate max-w-[160px]">{row?.current?.supplier || row?.qqSupplier?.name || '—'}</td>
                                 </tr>
                             );
@@ -328,8 +334,8 @@ export default function BudgetModesPanel({ nodeId, mode, acceptance }) {
     return (
         <div>
             <div className="flex items-center gap-3 px-3 py-2 border-b border-white/5">
-                <span className="text-[10px] text-gray-500">Baseline <span className="font-mono text-gray-300">{zl(cmp.kpi.baselineSum)} zł</span></span>
-                <span className="text-[10px] text-gray-500">Prognoza <span className="font-mono text-gray-300">{zl(cmp.kpi.forecastSum)} zł</span></span>
+                <span className="text-[10px] text-gray-500">Wycena <span className="font-mono text-orange-300">{zl(cmp.kpi.baselineSum)} zł</span></span>
+                <span className="text-[10px] text-gray-500" title="Suma wyłącznie pozycji, które mają już produkt zakupu">Zakup <span className="font-mono text-red-300">{zl(cmp.kpi.currentSum)} zł</span></span>
                 <span className={`text-[10px] font-bold font-mono ${cmp.kpi.deltaSum > 0 ? 'text-red-300' : 'text-teal-300'}`}>
                     Δ {cmp.kpi.deltaSum >= 0 ? '+' : ''}{zl(cmp.kpi.deltaSum)} zł{cmp.kpi.deltaPct != null ? ` (${cmp.kpi.deltaPct >= 0 ? '+' : ''}${cmp.kpi.deltaPct.toFixed(1)}%)` : ''}
                 </span>
@@ -343,7 +349,7 @@ export default function BudgetModesPanel({ nodeId, mode, acceptance }) {
                 <table className="w-full text-xs">
                     <thead>
                         <tr className="bg-white/[0.02] border-b border-white/5">
-                            {['Pozycja', 'Koszt baseline', 'Koszt aktualny', 'Δ', 'Cena ofert. (baseline)', 'Marża plan → efekt.', 'Odchylenia'].map(h => (
+                            {['Pozycja', 'Koszt wyceny', 'Koszt zakupu', 'Δ', 'Cena ofert. (baseline)', 'Marża plan → efekt.', 'Odchylenia'].map(h => (
                                 <th key={h} className="text-left px-3 py-2 text-gray-500 font-semibold uppercase tracking-wider">{h}</th>
                             ))}
                         </tr>

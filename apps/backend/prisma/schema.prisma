@@ -796,6 +796,12 @@ model MaterialRequirement {
   /// @anchor mat-req-availability
   availability String? // dostępność wpisana w ProductCard (czas dostawy / stan)
 
+  // Podgląd produktu wklejony na pozycji (wspólny dla obu stron splitu Wycena/Zakup).
+  // Osobny od Material.imageUrl: katalog jest globalny, ten obrazek dotyczy TEJ pozycji
+  // i działa zanim jakikolwiek produkt katalogowy zostanie wybrany.
+  /// @anchor mat-req-image-url
+  imageUrl String? // nazwa pliku w uploads/ — print screen / zdjęcie pozycji
+
   // Budżet wymagania (niezależny od ceny referencyjnej w materials)
   /// @anchor mat-req-budgeted-price-netto
   budgetedPriceNetto Float? // zabudżetowana cena netto za sztukę (do kalkulacji kosztów WBS)

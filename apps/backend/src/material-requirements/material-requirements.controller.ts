@@ -202,16 +202,16 @@ export class MaterialRequirementsController {
     // @anchor mat-req-patch-offer
     /** Przypisuje pozycję oferty — nadpisuje cenę przez snapshot */
     @Patch(':id/offer')
-    assignOffer(@Param('id') id: string, @Body() body: { offerId: string; positionIdx: number }) {
+    assignOffer(@Param('id') id: string, @Body() body: { offerId: string; positionIdx: number }, @Req() req: any) {
         if (!body.offerId || body.positionIdx == null) throw new BadRequestException('offerId i positionIdx wymagane');
-        return this.service.assignOfferPosition(id, body.offerId, body.positionIdx);
+        return this.service.assignOfferPosition(id, body.offerId, body.positionIdx, req.user);
     }
 
     // @anchor mat-req-delete-offer
     /** Usuwa przypisanie pozycji oferty */
     @Delete(':id/offer')
-    removeOffer(@Param('id') id: string) {
-        return this.service.removeOfferPosition(id);
+    removeOffer(@Param('id') id: string, @Req() req: any) {
+        return this.service.removeOfferPosition(id, req.user);
     }
 
     // ─── UPLOAD PLIKÓW ─────────────────────────────────────────────────────────
@@ -260,6 +260,13 @@ export class MaterialRequirementsController {
         const { stream, mimeType } = await this.service.getImageStream(id);
         res.set({ 'Content-Type': mimeType });
         stream.pipe(res);
+    }
+
+    // @anchor mat-req-delete-image-endpoint
+    /** Usuwa obrazek pozycji (katalogowy zostaje jako fallback) */
+    @Delete(':id/image')
+    deleteImage(@Param('id') id: string) {
+        return this.service.deleteImage(id);
     }
 
     /** Parsowanie pozycji z PDF oferty; force=true pomija zapisane pozycje i parsuje od nowa */
@@ -324,15 +331,15 @@ export class MaterialRequirementsController {
     // @anchor mat-req-patch-select-proposal
     /** Zaznacza wybraną propozycję i przepisuje dane produktu do wymagania */
     @Patch('proposals/:proposalId/select')
-    selectProposal(@Param('proposalId') proposalId: string) {
-        return this.service.selectProposal(proposalId);
+    selectProposal(@Param('proposalId') proposalId: string, @Req() req: any) {
+        return this.service.selectProposal(proposalId, req.user);
     }
 
     // @anchor mat-req-patch-set-offer
     /** Ustawia propozycję jako produkt strony „Wycena" (isOffer) */
     @Patch('proposals/:proposalId/set-offer')
-    setOffer(@Param('proposalId') proposalId: string) {
-        return this.service.setOffer(proposalId);
+    setOffer(@Param('proposalId') proposalId: string, @Req() req: any) {
+        return this.service.setOffer(proposalId, req.user);
     }
 
     // @anchor mat-req-patch-set-purchase
@@ -376,8 +383,8 @@ export class MaterialRequirementsController {
     // @anchor mat-req-patch-update-proposal
     /** Aktualizacja propozycji */
     @Patch('proposals/:proposalId')
-    updateProposal(@Param('proposalId') proposalId: string, @Body() body: any) {
-        return this.service.updateProposal(proposalId, body);
+    updateProposal(@Param('proposalId') proposalId: string, @Body() body: any, @Req() req: any) {
+        return this.service.updateProposal(proposalId, body, req.user);
     }
 
     /** Upload karty katalogowej dla propozycji */

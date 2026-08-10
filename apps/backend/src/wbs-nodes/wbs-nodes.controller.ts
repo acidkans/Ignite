@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Query, Body, UseGuards, Req } from '@nestjs/common';
 import { WbsNodesService } from './wbs-nodes.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -45,17 +45,18 @@ export class WbsNodesController {
      */
     // @anchor wbs-nodes-update
     @Patch(':id')
-    update(@Param('id') id: string, @Body() data: any) {
-        return this.service.updateNode(id, data);
+    update(@Param('id') id: string, @Body() data: any, @Req() req: any) {
+        return this.service.updateNode(id, data, req.user);
     }
 
     /**
      * Aktualizuje pola budżetowe na węźle WBS (inline edit z tabeli).
+     * `req.user` — guard blokady wartości ofertowych po akceptacji baseline.
      */
     // @anchor wbs-nodes-update-budget
     @Patch(':id/budget')
-    updateBudget(@Param('id') id: string, @Body() data: any) {
-        return this.service.updateBudgetFields(id, data);
+    updateBudget(@Param('id') id: string, @Body() data: any, @Req() req: any) {
+        return this.service.updateBudgetFields(id, data, req.user);
     }
 
     /**

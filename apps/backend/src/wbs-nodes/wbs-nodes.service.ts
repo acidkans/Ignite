@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveVersionId } from '../common/version.util';
+import { assertOfferEditable, pickOfferChanges, OfferLockUser } from '../common/offer-lock.util';
 
 // @anchor qa-pair
 export interface QaPair {
@@ -28,6 +29,8 @@ export interface WbsTreeItem {
 // @anchor wbs-nodes-service
 @Injectable()
 export class WbsNodesService {
+    private readonly logger = new Logger(WbsNodesService.name);
+
     constructor(private prisma: PrismaService) {}
 
     /**
@@ -461,7 +464,7 @@ export class WbsNodesService {
      * Gdy quantity się zmienia, synchronizuje powiązane MaterialRequirement
      * (jedno źródło prawdy: WbsNode.quantity → WbsNodeMaterial → MaterialRequirement).
      */
-    async updateNode(id: string, data: any) {
+    async updateNode(id: string, data: any, user?: OfferLockUser) {
         const allowed: Record<string, any> = {};
         for (const key of ['name', 'type', 'status', 'owner', 'resources', 'cost', 'parentId', 'sortOrder', 'comment', 'strategy', 'unit', 'unitPrice']) {
             if (data[key] !== undefined) allowed[key] = data[key];
@@ -506,6 +509,34 @@ export class WbsNodesService {
             allowed.unitPrice = 0;
             allowed.totalPrice = 0;
         }
+
+        // @anchor wbs-node-offer-lock — ta sama blokada co na `/budget`: ilość i cena jednostkowa
+        // idą też tędy (edycja z drzewa, drag paska Gantta), a zmiana typu na `group` po cichu
+        // zeruje całą wycenę węzła — po akceptacji baseline wszystkie trzy drogi wymagają zgody.
+        if (allowed.quantity !== undefined || allowed.unitPrice !== undefined
+            || String(allowed.type || '').toLowerCase() === 'group') {
+            const existing = await this.prisma.wbsNode.findUnique({
+                where: { id },
+                select: { nodeId: true, quantity: true, unitCost: true, margin: true, discount: true, unitPrice: true },
+            });
+            if (existing) {
+                const changes = pickOfferChanges(existing, allowed);
+                // Etykieta dla dziennika: sama zmiana typu na `group` nie jest polem cenowym,
+                // ale to ona zeruje wycenę węzła — bez tego wpis w AuditLog nie tłumaczyłby, skąd zera.
+                if (String(allowed.type || '').toLowerCase() === 'group'
+                    && ((existing.unitCost ?? 0) !== 0 || (existing.unitPrice ?? 0) !== 0)) {
+                    changes.type = { old: 'leaf', new: 'group (zerowanie wyceny węzła)' } as any;
+                }
+                await assertOfferEditable(this.prisma, {
+                    processNodeId: existing.nodeId,
+                    user,
+                    entity: 'WbsNode',
+                    entityId: id,
+                    changes,
+                });
+            }
+        }
+
         let updated;
         try {
             updated = await this.prisma.wbsNode.update({ where: { id }, data: allowed });
@@ -603,32 +634,44 @@ export class WbsNodesService {
             }
         }
 
-        // 4. Wyczyść legacy pola JSON na materiałach (wbsNodeId bez relacyjnej alokacji)
+        // 4. Karty materiałowe usuwanych węzłów: przepnij na pozostałe alokacje,
+        // a gdy nie zostaje żadna — USUŃ kartę razem z węzłem.
+        // @anchor delete-node-orphan-cards — samo odczepienie (`wbsNodeId: null`,
+        // `quantity: 0`) zostawiało kartę-widmo: panel Materiały kluczuje po
+        // `wbsNodeId`, więc taka karta znikała z UI, ale wciąż liczyła się w
+        // porównaniu Wycena↔Zakup i nie dało się jej już otworzyć ani skasować.
+        // Kaskada zdejmuje też ProductProposal; QuickQuoteItem ma SetNull, więc
+        // zamrożone wyceny baseline przeżywają.
         const allIdsSet = new Set(allIds);
         const legacyMats = await this.prisma.materialRequirement.findMany({
             where: { wbsNodeId: { in: allIds } },
             select: { id: true, wbsNodeIds: true, wbsNodeAllocations: true },
         });
+        const orphanedIds: string[] = [];
         for (const mat of legacyMats) {
             let ids: string[] = [];
             try { ids = JSON.parse(mat.wbsNodeIds || '[]'); } catch {}
             const nextIds = ids.filter(i => !allIdsSet.has(i));
+            if (nextIds.length === 0) { orphanedIds.push(mat.id); continue; }
             let nextAlloc: Record<string, number> = {};
             try { const a = JSON.parse(mat.wbsNodeAllocations || '{}'); for (const k of Object.keys(a)) { if (!allIdsSet.has(k)) nextAlloc[k] = a[k]; } } catch {}
             await this.prisma.materialRequirement.update({
                 where: { id: mat.id },
                 data: {
-                    wbsNodeId: nextIds[0] || null,
-                    wbsNodeIds: nextIds.length ? JSON.stringify(nextIds) : null,
+                    wbsNodeId: nextIds[0],
+                    wbsNodeIds: JSON.stringify(nextIds),
                     wbsNodeAllocations: Object.keys(nextAlloc).length ? JSON.stringify(nextAlloc) : null,
-                    ...(nextIds.length === 0 ? { quantity: 0 } : {}),
                 },
             }).catch(() => {});
+        }
+        if (orphanedIds.length > 0) {
+            await this.prisma.materialRequirement.deleteMany({ where: { id: { in: orphanedIds } } });
+            this.logger.log(`deleteNode(${id}): usunięto ${orphanedIds.length} kart materiałowych bez pozostałych powiązań WBS`);
         }
 
         // 5. Usuń węzły WBS
         await this.prisma.wbsNode.deleteMany({ where: { id: { in: allIds } } });
-        return { deleted: allIds.length };
+        return { deleted: allIds.length, deletedRequirements: orphanedIds.length };
     }
 
     private async collectDescendantIds(id: string): Promise<string[]> {
@@ -646,7 +689,7 @@ export class WbsNodesService {
     /**
      * Aktualizuje pola budżetowe na pojedynczym węźle WBS.
      */
-    async updateBudgetFields(id: string, data: any) {
+    async updateBudgetFields(id: string, data: any, user?: OfferLockUser) {
         // Partial update: gdy caller przysyła tylko część pól (np. samą `quantity`
         // z edycji ilości w WBS), pozostałe pola budżetu (unit, unitCost, margin,
         // discount, comment, phase) NIE są zerowane — czytamy je z istniejącego wiersza.
@@ -654,6 +697,16 @@ export class WbsNodesService {
         // jednostkę na 'sztuki' przy zapisie samej ilości (bug: jednostki same się zmieniały).
         const existing = await this.prisma.wbsNode.findUnique({ where: { id } });
         if (!existing) throw new NotFoundException(`WbsNode ${id} not found`);
+
+        // @anchor wbs-budget-offer-lock — po akceptacji baseline pola cenowe i ilość są
+        // zamrożone dla KAŻDEGO typu liścia; przechodzi tylko manager (z wpisem w AuditLog).
+        await assertOfferEditable(this.prisma, {
+            processNodeId: existing.nodeId,
+            user,
+            entity: 'WbsNode',
+            entityId: id,
+            changes: pickOfferChanges(existing, data),
+        });
 
         const has = (k: string) => data[k] !== undefined && data[k] !== null && data[k] !== '';
         const sentPricing = has('unitCost') || has('margin') || has('discount') || has('unitPrice');

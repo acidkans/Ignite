@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import { useBeforeUnload } from '../../../hooks/useBeforeUnload';
 import ExcelJS from 'exceljs';
-import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays, BarChart3, ChevronUp, FileText, SlidersHorizontal, RotateCcw, LayoutList } from 'lucide-react';
+import { Layers, Package, DollarSign, ChevronRight, ChevronDown, Plus, Trash2, FolderPlus, RefreshCw, HelpCircle, Save, CheckCircle, FileDown, X, Zap, Sparkles, ListTree, CalendarDays, BarChart3, ChevronUp, FileText, SlidersHorizontal, RotateCcw, LayoutList, Scale } from 'lucide-react';
 import MarkdownEditor from '../MarkdownEditor';
 import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
@@ -17,9 +17,11 @@ import ExportChoiceModal from '../ExportChoiceModal';
 import WBSHybridTable from './WBSHybridTable';
 import BudgetTable from './BudgetTable';
 import BudgetModesPanel from './BudgetModesPanel';
+import ComparisonPanel from '../ComparisonPanel';
 import QaTreeView from './QaTreeView';
 import AllTasksModal from './AllTasksModal';
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
+import OfferLockGuard, { guardOfferEdit, useOfferLock } from '../OfferLockGuard';
 
 
 const VIEWS = {
@@ -27,6 +29,12 @@ const VIEWS = {
     MATERIALS: 'materials',
     BUDGET: 'budget',
 };
+
+// @anchor offer-value-fields — pola węzła WBS niosące wartość ofertową; po akceptacji baseline
+// każdy zapis któregokolwiek z nich przechodzi przez `guardOfferEdit` (lustro backendowego
+// `OFFER_LOCKED_WBS_FIELDS`). Nie ma tu pól opisowych (nazwa, komentarz, status) ani struktury —
+// dodawanie i opisywanie pozycji po akceptacji zostaje wolne.
+const OFFER_VALUE_FIELDS = new Set(['unitCost', 'margin', 'discount', 'quantity', 'unitPrice']);
 
 
 const getStatusLabel = (code, fallback = '') => {
@@ -140,6 +148,25 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             .then(d => setBudgetAcceptance(d?.acceptedVersionId ? d : null))
             .catch(() => {});
     }, [nodeId]);
+
+    // @anchor materials-comparison-kpi — KPI porównania baseline↔żywe do chipa
+    // w nagłówku sekcji Materiały (F5); pobierane po akceptacji baseline
+    const [comparisonKpi, setComparisonKpi] = useState(null);
+    // @anchor materials-show-comparison
+    const [showComparison, setShowComparison] = useState(false);
+    useEffect(() => {
+        setComparisonKpi(null);
+        setShowComparison(false);
+        if (!budgetAcceptance?.acceptedVersionId || !nodeId) return;
+        let cancelled = false;
+        fetch(`${API_URL}/orders/${nodeId}/comparison`, {
+            headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+        })
+            .then(r => r.ok ? r.json() : null)
+            .then(d => { if (!cancelled && d?.accepted) setComparisonKpi(d.kpi); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [budgetAcceptance?.acceptedVersionId, nodeId]);
     wbsDataRef.current = wbsData;
     const [expandedSection, setExpandedSection] = useState(null);
     const [fullscreenSection, setFullscreenSection] = useState(null);
@@ -277,6 +304,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const isLogistyk = userRoles.includes('LOGISTYK');
     const isManagerOrAdmin = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
     const normalizedSearchQuery = String(searchQuery || '').trim().toLowerCase();
+    // @anchor offer-locked — akceptacja baseline zamraża wartości ofertowe (koszt jedn., narzut,
+    // rabat, ilość, strona „Wycena") na WSZYSTKICH typach liści. Manager może odblokować na sesję
+    // przez modal `OfferLockGuard`; dodawanie nowych pozycji pozostaje wolne.
+    const { locked: offerLocked } = useOfferLock();
 
     const [extractingForWbs, setExtractingForWbs] = useState(false);
     const [unassignedRequirements, setUnassignedRequirements] = useState([]);
@@ -4416,6 +4447,10 @@ ${ganttSectionHtml}
     }, [wbsData, authHeaders, refreshMaterialCosts]);
 
     const updateNodeField = useCallback(async (id, field, value) => {
+        // @anchor update-node-field-offer-lock — pola niosące wartość ofertową przechodzą przez
+        // guard akceptacji baseline ZANIM ruszy optimistic update (inaczej odrzucona zmiana
+        // zostałaby na ekranie do najbliższego odświeżenia).
+        if (OFFER_VALUE_FIELDS.has(field) && !(await guardOfferEdit())) return;
         // Anuluj pending refresh z handleNodeExpand — mógłby nadpisać nasz optimistic update starymi danymi z API
         if (expandRefreshTimeout.current) {
             clearTimeout(expandRefreshTimeout.current);
@@ -4567,6 +4602,8 @@ ${ganttSectionHtml}
     }, [updateNodeField, wbsData]);
 
     const saveBudgetField = useCallback(async (wbsNodeId, data) => {
+        // Wspólne wyjście zapisu budżetu (tabela Budżet, ilość z Materiałów) — ten sam guard.
+        if (Object.keys(data || {}).some(k => OFFER_VALUE_FIELDS.has(k)) && !(await guardOfferEdit())) return;
         try {
             await fetch(`${API_URL}/wbs-nodes/${wbsNodeId}/budget`, {
                 method: 'PATCH',
@@ -4611,6 +4648,8 @@ ${ganttSectionHtml}
 
     const applyLeafDefaults = useCallback(async (id, defaults) => {
         if (!id || !defaults) return;
+        // Wartości domyślne nadpisują koszt jedn., ilość i narzut — po akceptacji tylko za zgodą.
+        if (!(await guardOfferEdit())) return;
         const node = wbsData.find(n => n.id === id) || {};
         const unit = defaults.unit ?? node.unit;
         const unitCost = Number(defaults.unitCost) || 0;
@@ -5872,6 +5911,7 @@ ${ganttSectionHtml}
                                 users={assignedUsers}
                                 onRequirementDrop={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
                                 isManager={isManagerOrAdmin}
+                                offerLocked={offerLocked}
                                 onNodesDeleted={handleHybridNodesDeleted}
                                 onMaterialNodeCreated={handleMaterialNodeCreated}
                                 requirementsQtyByNode={requirementsQtyByNode}
@@ -5937,6 +5977,7 @@ ${ganttSectionHtml}
                                     rows={budgetRows}
                                     nodeId={nodeId}
                                     versionId={versionId}
+                                    offerLocked={offerLocked}
                                     onFieldChange={onBudgetFieldChange}
                                     onDeleteRow={(id) => deleteNodeByIdRef.current?.(id)}
                                     discountPercent={budgetDiscountPercent}
@@ -5972,6 +6013,7 @@ ${ganttSectionHtml}
                             versionId={versionId}
                             readOnly={!isManagerOrAdmin && !isLogistyk}
                             accepted={!!budgetAcceptance?.acceptedVersionId}
+                            offerLocked={offerLocked}
                             externalWbsNodes={wbsData}
                             onPatchNode={(id, data) => setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))}
                             onQuantityChange={async (id, qty, name) => {
@@ -5989,13 +6031,53 @@ ${ganttSectionHtml}
                             onExportReady={fn => { materialsExportFn.current = fn; }}
                         />
                     ), null, (
-                        <button onClick={e => { e.stopPropagation(); openExport({ title: 'Materiały (Excel)', defaultFilename: `${safeFileBase()}_materialy.xlsx`, makeArtifact: () => materialsExportFn.current?.() }); }} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
-                            <FileDown size={11} /> Excel
-                        </button>
+                        <>
+                            <button onClick={e => { e.stopPropagation(); openExport({ title: 'Materiały (Excel)', defaultFilename: `${safeFileBase()}_materialy.xlsx`, makeArtifact: () => materialsExportFn.current?.() }); }} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
+                                <FileDown size={11} /> Excel
+                            </button>
+                            {/* @anchor materials-comparison-chip — „Δ +x% · pokrycie n/m", klik → panel porównawczy (F5) */}
+                            {comparisonKpi && (
+                                <button
+                                    onClick={e => { e.stopPropagation(); setShowComparison(true); }}
+                                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap hover:brightness-125 ${
+                                        comparisonKpi.deltaSum > 0
+                                            ? 'bg-red-500/10 text-red-300 border-red-500/25'
+                                            : 'bg-teal-500/10 text-teal-300 border-teal-500/25'
+                                    }`}
+                                    title="Porównanie baseline vs żywe dane — kliknij po szczegóły"
+                                >
+                                    <Scale size={11} />
+                                    Δ {comparisonKpi.deltaPct != null ? `${comparisonKpi.deltaPct >= 0 ? '+' : ''}${comparisonKpi.deltaPct.toFixed(1)}%` : `${comparisonKpi.deltaSum >= 0 ? '+' : ''}${comparisonKpi.deltaSum.toFixed(2)} zł`}
+                                    {' · '}pokrycie {comparisonKpi.coveragePriced}/{comparisonKpi.coverageTotal}
+                                </button>
+                            )}
+                        </>
                     ));
                 }
                 return null;
             })}
+
+            {/* Blokada wartości ofertowych po akceptacji baseline — modal + rejestracja stanu w module-store */}
+            <OfferLockGuard
+                accepted={!!budgetAcceptance?.acceptedVersionId}
+                versionLabel={budgetAcceptance?.acceptedVersion?.label}
+                canOverride={isManagerOrAdmin}
+            />
+
+            {/* @anchor materials-comparison-modal — pełny panel porównawczy baseline↔żywe (F5) */}
+            {showComparison && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setShowComparison(false)}>
+                    <div className="bg-gray-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-[72vw] max-h-[92vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5">
+                            <span className="text-lg font-bold text-white">Porównanie Wycena ↔ Zakup — {orderName || projectName}</span>
+                            <button onClick={() => setShowComparison(false)} className="p-1 text-gray-500 hover:text-white"><X size={20} /></button>
+                        </div>
+                        <div className="overflow-y-auto">
+                            <ComparisonPanel nodeId={nodeId} />
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {qaTreeOpen && (
                 <QaTreeView nodeId={nodeId} versionId={versionId} onClose={() => setQaTreeOpen(false)} />

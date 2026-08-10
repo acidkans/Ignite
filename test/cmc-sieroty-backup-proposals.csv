@@ -1,0 +1,2 @@
+id,materialRequirementId,productName,manufacturer,model,sourceUrl,matchScore,isSelected,createdAt,complianceName,complianceUrl,dataSheetName,dataSheetUrl,imageUrl,isManual,offerNumber,priceNetto,seller,availability,isRejected,isOffer,isPurchase,purchasePriceNetto,supplierId
+696364c0-778c-417d-a3b2-e29fc06ddc65,a90f79e7-e5ff-4ac7-a1f8-172be4defe59,"APC Network Management Card LCES2 with Modbus, Ethernet and Aux Sensors",Apc,AP9644,,,t,2026-08-04 07:51:30.991,,,,,,t,,2492.61,,,f,t,f,,
