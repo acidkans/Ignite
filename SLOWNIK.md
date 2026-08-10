@@ -547,6 +547,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | supplierChange | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-supplier-change |
 | ui-funkcja | copySupplierToPurchase | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor baseline-split-copy-supplier-to-purchase |
 | ui-funkcja | ensureProposal | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-ensure-proposal |
+| ui-stan | priceFormulaResult | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-price-formula |
+| ui-stala | offerPriceFallback | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-offer-price-fallback |
+| back-funkcja | syncOfferProposalPrice | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-sync-offer-proposal-price |
+| back-funkcja | syncOfferPriceFromWbsNode | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-sync-offer-price-from-node |
 
 #### Backend (`apps/backend/src/material-requirements/`)
 

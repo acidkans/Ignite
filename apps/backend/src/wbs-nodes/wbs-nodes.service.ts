@@ -718,6 +718,60 @@ export class WbsNodesService {
         // Sync: WbsNode.quantity → WbsNodeMaterial → MaterialRequirement
         await this.syncMaterialsFromWbsNode(id, quantity).catch(() => {});
 
+        // Sync: WbsNode.unitCost → MaterialRequirement.budgetedPriceNetto → propozycja isOffer
+        if (sentPricing && effectiveType !== 'group') {
+            await this.syncOfferPriceFromWbsNode(id, unitCost).catch(() => {});
+        }
+
         return updated;
+    }
+
+    // @anchor wbs-sync-offer-price-from-node — brakujący kierunek przepływu ceny. Do tej pory
+    // cena szła tylko propozycja → wymaganie → WbsNode.unitCost; edycja kosztu jednostkowego
+    // w budżecie WBS nie wracała do wymagania, więc widok Materials pokazywał „—" mimo w pełni
+    // wycenionego WBS (i taki rozjazd zamrażał się w snapszocie przy akceptacji baseline).
+    // Synchronizuje tylko wymaganie powiązane 1:1 (`MaterialRequirement.wbsNodeId`) — pozycje
+    // rozdzielone na wiele gałęzi zostawiamy, bo tam cena nie jest własnością jednego węzła.
+    private async syncOfferPriceFromWbsNode(wbsNodeId: string, unitCost: number) {
+        if (!(unitCost > 0)) return;
+        const req = await this.prisma.materialRequirement.findFirst({
+            where: { wbsNodeId },
+            select: { id: true, budgetedPriceNetto: true },
+        });
+        if (!req || req.budgetedPriceNetto === unitCost) return;
+
+        await this.prisma.materialRequirement.update({
+            where: { id: req.id },
+            data: { budgetedPriceNetto: unitCost },
+        });
+
+        const offer = await this.prisma.productProposal.findFirst({
+            where: { materialRequirementId: req.id, isOffer: true },
+            select: { id: true, priceNetto: true },
+        });
+        if (offer) {
+            if (offer.priceNetto !== unitCost) {
+                await this.prisma.productProposal.update({ where: { id: offer.id }, data: { priceNetto: unitCost } });
+            }
+            return;
+        }
+        const candidate = await this.prisma.productProposal.findFirst({
+            where: { materialRequirementId: req.id, isSelected: true, isPurchase: false },
+            select: { id: true },
+        });
+        if (candidate) {
+            await this.prisma.productProposal.update({
+                where: { id: candidate.id },
+                data: { isOffer: true, priceNetto: unitCost },
+            });
+            return;
+        }
+        await this.prisma.productProposal.create({
+            data: {
+                materialRequirementId: req.id,
+                productName: '', manufacturer: '',
+                isManual: true, isOffer: true, priceNetto: unitCost,
+            },
+        });
     }
 }

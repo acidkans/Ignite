@@ -1111,9 +1111,16 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
     // Cena zakupu gdy ta sama propozycja pełni obie role → purchasePriceNetto; inaczej priceNetto.
     const priceField = (isPurchase && proposal?.isOffer && proposal?.isPurchase) ? 'purchasePriceNetto' : 'priceNetto';
 
+    // @anchor product-side-card-offer-price-fallback — cena wpisana wprost w tabeli Materials
+    // („Koszt jedn. oferty" → budgetedPriceNetto wymagania) nie tworzy propozycji, więc strona
+    // Wyceny nie miała czego pokazać i pole zostawało puste mimo ceny w wierszu. Strona Wyceny
+    // czyta więc cenę wymagania jako fallback; pierwszy blur materializuje ją w propozycji isOffer.
+    // Strona Zakupu fallbacku NIE ma — koszt zakupu jest niezależny od ceny ofertowej.
+    const offerPriceFallback = isPurchase ? null : (requirement?.priceNetto ?? null);
+
     const toFields = (p) => ({
         manufacturer: p?.manufacturer || '', model: p?.model || '', productName: p?.productName || '',
-        price: p?.[priceField] != null ? String(p[priceField]) : '',
+        price: p?.[priceField] != null ? String(p[priceField]) : (offerPriceFallback != null ? String(offerPriceFallback) : ''),
         availability: p?.availability || '', sourceUrl: p?.sourceUrl || '',
     });
     const [fields, setFields] = useState(() => toFields(proposal));
@@ -1150,7 +1157,7 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
         if (pendSupplier === undefined) setSupplierId(incSupplier);
         else if (incSupplier === pendSupplier) { delete pendingRef.current.supplierId; setSupplierId(incSupplier); }
     /* eslint-disable-next-line */
-    }, [proposal?.id, proposal?.manufacturer, proposal?.model, proposal?.productName, proposal?.[priceField], proposal?.availability, proposal?.sourceUrl, proposal?.supplierId]);
+    }, [proposal?.id, proposal?.manufacturer, proposal?.model, proposal?.productName, proposal?.[priceField], proposal?.availability, proposal?.sourceUrl, proposal?.supplierId, offerPriceFallback]);
     const setF = (k, v) => setFields(f => ({ ...f, [k]: v }));
     const clearPending = (k) => { delete pendingRef.current[k]; };
 
@@ -1220,8 +1227,26 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
         if (!res.ok) clearPending('supplierId');
         await onRefresh?.({ silent: true });
     };
+    // @anchor product-side-card-price-formula — pole ceny („Koszt jedn." po stronie Wyceny,
+    // „Koszt zakupu" po stronie Zakupu) przyjmuje wyrażenie matematyczne rozpoczęte znakiem „=",
+    // np. „=1200/4+50". Na blur/Enter wyrażenie jest liczone (evalQtyFormula) i w polu zostaje sam
+    // wynik — do bazy zawsze idzie liczba, nigdy tekst formuły. Błędne lub ujemne wyrażenie nie
+    // zapisuje nic i przywraca poprzednią wartość.
+    const priceFormulaResult = String(fields.price ?? '').trim().startsWith('=')
+        ? evalQtyFormula(fields.price)
+        : null;
+
     const priceBlur = async () => {
-        const raw = String(fields.price ?? '').trim().replace(',', '.');
+        const input = String(fields.price ?? '').trim();
+        let raw;
+        if (input.startsWith('=')) {
+            const evaluated = evalQtyFormula(input);
+            if (evaluated === null || evaluated < 0) { setF('price', toFields(proposal).price); return; }
+            raw = String(evaluated);
+            setF('price', raw);
+        } else {
+            raw = input.replace(',', '.');
+        }
         const val = raw === '' ? null : (parseFloat(raw) || null);
         pendingRef.current.price = val == null ? '' : String(val);
         const hadProposal = !!proposal;
@@ -1269,8 +1294,21 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
             <div className="grid grid-cols-2 gap-2">
                 <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">{priceLabel}</label>
                     <div className="relative">
-                        <input value={fields.price} disabled={readOnly} inputMode="decimal" onChange={e => setF('price', sanitizeQtyInput(e.target.value))} onBlur={priceBlur} placeholder="0.00" className={`${SIDE_IC} pr-6`} />
+                        <input value={fields.price} disabled={readOnly} inputMode="decimal"
+                            onChange={e => setF('price', sanitizeQtyInput(e.target.value))}
+                            onBlur={priceBlur}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') e.currentTarget.blur();
+                                if (e.key === 'Escape') { setF('price', toFields(proposal).price); e.currentTarget.blur(); }
+                            }}
+                            title="Możesz wpisać działanie po znaku „=”, np. =1200/4+50"
+                            placeholder="0.00 lub =12*3" className={`${SIDE_IC} pr-6`} />
                         <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-[10px]">zł</span>
+                        {String(fields.price ?? '').trim().startsWith('=') && (
+                            <span className={`absolute left-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] px-1.5 py-0.5 rounded border shadow-lg ${priceFormulaResult != null && priceFormulaResult >= 0 ? 'text-teal-300 bg-teal-900/90 border-teal-500/40' : 'text-red-300 bg-red-900/90 border-red-500/40'}`}>
+                                {priceFormulaResult != null && priceFormulaResult >= 0 ? `= ${priceFormulaResult.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł` : 'błędne działanie'}
+                            </span>
+                        )}
                     </div></div>
                 <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Dostępność</label>
                     <input value={fields.availability} disabled={readOnly} onChange={e => setF('availability', e.target.value)} onBlur={e => e.target.value !== (proposal?.availability || '') && patchField('availability', e.target.value)} placeholder="np. 7 dni" className={SIDE_IC} /></div>
@@ -1344,7 +1382,9 @@ export function BaselineSplitCard({
     const purchaseProposal = proposals.find(p => p.isPurchase) || null;
 
     const qty = card?.quantity ?? 0;
-    const offerPrice = offerProposal?.priceNetto ?? null;
+    // Cena wyceny: propozycja isOffer, a gdy jej brak — cena wpisana wprost w tabeli Materials
+    // (budgetedPriceNetto wymagania). Bez tego fallbacku pasek pokazywał „Wycena: —" mimo ceny w wierszu.
+    const offerPrice = offerProposal?.priceNetto ?? card?.priceNetto ?? null;
     const purchasePrice = purchaseProposal
         ? ((purchaseProposal.isOffer && purchaseProposal.isPurchase) ? (purchaseProposal.purchasePriceNetto ?? purchaseProposal.priceNetto) : purchaseProposal.priceNetto)
         : null;

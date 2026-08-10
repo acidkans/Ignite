@@ -4,6 +4,17 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-08-10 — feat(materials): dwukierunkowa propagacja ceny jednostkowej + działania matematyczne w splicie (v2026.08.10.768)
+
+### architektura / API
+- `back-endpoint` `PATCH /material-requirements/:id` z polem `priceNetto` dodatkowo synchronizuje propozycję `isOffer` (`back-funkcja` `syncOfferProposalPrice`) — cena wpisana w kolumnie „Koszt jedn. oferty" tworzy/aktualizuje nośnik ceny, zamiast zostawiać pustą stronę „Wycena" w `ui-sekcja` `BaselineSplitCard`
+- `back-endpoint` `PATCH /wbs-nodes/:id` (pola budżetowe) propaguje `schema-pole` `WbsNode.unitCost` → `schema-pole` `MaterialRequirement.budgetedPriceNetto` → propozycja `isOffer` (`back-funkcja` `syncOfferPriceFromWbsNode`). Do tej pory przepływ był jednokierunkowy i koszt jednostkowy wpisany w budżecie WBS nie wracał do widoku Materials
+- `ui-sekcja` `BaselineSplitCard` — pola „Koszt jedn." i „Koszt zakupu" przyjmują wyrażenia matematyczne po `=` (`ui-funkcja` `evalQtyFormula`), z podglądem wyniku; do bazy trafia wyłącznie liczba
+
+### wytyczne
+- cena materiału ma trzy nośniki — `ProductProposal(isOffer).priceNetto`, `MaterialRequirement.budgetedPriceNetto`, `WbsNode.unitCost`. Każda nowa ścieżka zapisu ceny musi domykać wszystkie trzy, inaczej rozjazd zamraża się w snapszocie wersji i przechodzi do baseline przy akceptacji
+- `schema-pole` `MaterialRequirement.sourceRequirementId` — jedyny klucz parowania baseline↔żywe w `back-funkcja` `comparison`; klon wersja→wersja musi wskazywać na żywy wiersz (`versionId = null`), nie na klon poprzedniej wersji
+
 ## 2026-08-09 — fix(materials): BaselineSplitCard — koniec restartu widoku i cofania wartości przy wypełnianiu pól (v2026.08.09.766)
 
 ### architektura / API

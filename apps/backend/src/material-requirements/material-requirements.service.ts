@@ -652,7 +652,52 @@ export class MaterialRequirementsService {
             }).catch(() => {});
         }
 
+        // Propagacja w górę: cena budżetowa wymagania musi mieć nośnik w propozycji strony
+        // „Wycena", inaczej split Wycena/Zakup pokazuje pustą lewą stronę mimo ceny w tabeli.
+        if (priceNetto !== undefined) {
+            await this.syncOfferProposalPrice(id, priceNetto).catch(() => {});
+        }
+
         return updated;
+    }
+
+    // @anchor mat-req-sync-offer-proposal-price — odwrotność `setOffer`: cena zapisana wprost
+    // na wymaganiu (kolumna „Koszt jedn. oferty" w Materials, propagacja z WBS) ląduje też w
+    // propozycji `isOffer`. Bez tego przepływ ceny był jednokierunkowy (propozycja → wymaganie)
+    // i lewa strona `BaselineSplitCard` zostawała pusta. Kolejność wyboru nośnika:
+    // istniejąca propozycja isOffer → wybrana propozycja (isSelected, nie będąca produktem
+    // Zakupu) → nowa pusta propozycja. Cena `null` niczego nie tworzy — tylko czyści isOffer.
+    private async syncOfferProposalPrice(requirementId: string, priceNetto: number | null) {
+        const offer = await this.prisma.productProposal.findFirst({
+            where: { materialRequirementId: requirementId, isOffer: true },
+            select: { id: true, priceNetto: true },
+        });
+        if (offer) {
+            if (offer.priceNetto !== priceNetto) {
+                await this.prisma.productProposal.update({ where: { id: offer.id }, data: { priceNetto } });
+            }
+            return;
+        }
+        if (priceNetto == null) return;
+
+        const candidate = await this.prisma.productProposal.findFirst({
+            where: { materialRequirementId: requirementId, isSelected: true, isPurchase: false },
+            select: { id: true },
+        });
+        if (candidate) {
+            await this.prisma.productProposal.update({
+                where: { id: candidate.id },
+                data: { isOffer: true, priceNetto },
+            });
+            return;
+        }
+        await this.prisma.productProposal.create({
+            data: {
+                materialRequirementId: requirementId,
+                productName: '', manufacturer: '',
+                isManual: true, isOffer: true, priceNetto,
+            },
+        });
     }
 
     /**
