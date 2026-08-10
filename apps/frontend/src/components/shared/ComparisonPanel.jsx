@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import ExcelJS from 'exceljs';
 import { Scale, RefreshCw, FileSpreadsheet } from 'lucide-react';
 import { API_URL } from '../../config';
@@ -16,6 +16,30 @@ const OFFER_CLS = 'text-orange-300';
 const PURCHASE_CLS = 'text-red-300';
 
 const zl = (v) => v != null ? v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+
+// @anchor comparison-fit-font — tabela ma 11 kolumn i musi się zmieścić w szerokości
+// panelu bez poziomego suwaka, a panel bywa osadzony w różnie szerokich miejscach
+// (modal 72vw, rozwinięcie w Logistyce). Czcionka jest więc dobierana pomiarem:
+// startujemy od MAX i schodzimy proporcją `dostępna szerokość / szerokość treści`.
+// Kilka przebiegów, bo zawijanie tekstu nie skaluje się liniowo z rozmiarem fontu.
+// Rozmiary wewnątrz tabeli są w `em`, więc schodzą razem z bazą.
+const FONT_MAX = 16;
+const FONT_MIN = 9;
+const fitTableFont = (wrap, table) => {
+    if (!wrap || !table) return;
+    let size = FONT_MAX;
+    table.style.fontSize = `${size}px`;
+    for (let pass = 0; pass < 5; pass++) {
+        const available = wrap.clientWidth;
+        const needed = table.scrollWidth;
+        if (!available || needed <= available) break;
+        const next = Math.max(FONT_MIN, Math.floor(size * (available / needed) * 20) / 20);
+        if (next >= size) break; // proporcja niczego już nie zmienia — dalej tylko pętla
+        size = next;
+        table.style.fontSize = `${size}px`;
+        if (size <= FONT_MIN) break;
+    }
+};
 
 // @anchor comparison-panel
 // Panel porównawczy Wycena↔Zakup (F5) — jeden endpoint
@@ -41,6 +65,19 @@ export default function ComparisonPanel({ nodeId }) {
     }, [nodeId]);
 
     useEffect(() => { fetchComparison(); }, [fetchComparison]);
+
+    const wrapRef = useRef(null);
+    const tableRef = useRef(null);
+    // Dopasowanie po każdym renderze danych i przy każdej zmianie szerokości panelu.
+    useLayoutEffect(() => {
+        const wrap = wrapRef.current;
+        if (!wrap) return;
+        const run = () => fitTableFont(wrapRef.current, tableRef.current);
+        run();
+        const ro = new ResizeObserver(run);
+        ro.observe(wrap);
+        return () => ro.disconnect();
+    }, [data]);
 
     // @anchor comparison-export-excel — eksport: wycena jako wartości stałe,
     // wartości zakupu i kolumny Δ jako ŻYWE formuły (zasada eksportów Excel).
@@ -150,81 +187,81 @@ export default function ComparisonPanel({ nodeId }) {
             </div>
 
             {/* Tabela */}
-            <div className="overflow-x-auto max-h-[78vh] overflow-y-auto">
-                <table className="w-full text-base">
+            <div ref={wrapRef} className="overflow-x-auto max-h-[78vh] overflow-y-auto">
+                <table ref={tableRef} className="w-full">
                     <thead className="sticky top-0 z-10">
                         <tr className="bg-gray-900 border-b border-white/5">
-                            <th rowSpan={2} className="text-left px-3 py-2 text-gray-500 font-semibold uppercase tracking-wider align-bottom">Pozycja</th>
+                            <th rowSpan={2} className="text-left px-[0.75em] py-2 text-gray-500 font-semibold uppercase tracking-wider align-bottom">Pozycja</th>
                             {/* @anchor comparison-side-sums — z nagłówka grupy została sama kwota,
                                 postawiona wprost nad kolumną „Wartość", którą sumuje. Opis grupy
                                 („Wycena (ilość · cena …)") powielał wiersz niżej, więc zniknął —
                                 strony rozróżnia kolor: pomarańcz = Wycena, czerwień = Zakup. */}
                             <th colSpan={2} />
-                            <th className={`text-right px-2 py-1 font-mono font-bold whitespace-nowrap ${OFFER_CLS}`}
+                            <th className={`text-right px-[0.5em] py-1 font-mono font-bold whitespace-nowrap ${OFFER_CLS}`}
                                 title="Σ wyceny: produkty isOffer z zaakceptowanego snapshotu">
                                 {zl(k.baselineSum)} zł
                             </th>
                             <th />
                             <th colSpan={2} />
-                            <th className={`text-right px-2 py-1 font-mono font-bold whitespace-nowrap ${PURCHASE_CLS}`}
+                            <th className={`text-right px-[0.5em] py-1 font-mono font-bold whitespace-nowrap ${PURCHASE_CLS}`}
                                 title="Σ zakupu: wyłącznie pozycje, które mają już produkt isPurchase">
                                 {zl(k.currentSum)} zł
                             </th>
                             <th />
-                            <th rowSpan={2} className={`text-right px-3 py-2 font-mono font-bold whitespace-nowrap align-bottom ${deltaCls}`}
+                            <th rowSpan={2} className={`text-right px-[0.75em] py-2 font-mono font-bold whitespace-nowrap align-bottom ${deltaCls}`}
                                 title="Δ liczona na pozycjach, które mają już zakup — wobec ich wyceny">
                                 {deltaSummary}
                             </th>
-                            <th rowSpan={2} className="text-left px-2 py-2 text-gray-500 font-semibold uppercase tracking-wider align-bottom">Odchylenia</th>
+                            <th rowSpan={2} className="text-left px-[0.5em] py-2 text-gray-500 font-semibold uppercase tracking-wider align-bottom">Odchylenia</th>
                         </tr>
                         <tr className="bg-gray-900 border-b border-white/5">
-                            <th className={`text-right px-2 py-1.5 font-medium normal-case ${OFFER_CLS}`} title="Wycena — ilość z zaakceptowanego snapshotu">Ilość</th>
-                            <th className={`text-right px-2 py-1.5 font-medium normal-case ${OFFER_CLS}`}>Cena</th>
-                            <th className={`text-right px-2 py-1.5 font-medium normal-case ${OFFER_CLS}`}>Wartość</th>
-                            <th className={`text-left px-2 py-1.5 font-medium normal-case ${OFFER_CLS}`}>Dostawca</th>
-                            <th className={`text-right px-2 py-1.5 font-medium normal-case ${PURCHASE_CLS}`} title="Zakup — ilość z wersji aktywnej">Ilość</th>
-                            <th className={`text-right px-2 py-1.5 font-medium normal-case ${PURCHASE_CLS}`}>Cena</th>
-                            <th className={`text-right px-2 py-1.5 font-medium normal-case ${PURCHASE_CLS}`}>Wartość</th>
-                            <th className={`text-left px-2 py-1.5 font-medium normal-case ${PURCHASE_CLS}`}>Dostawca</th>
+                            <th className={`text-right px-[0.5em] py-1.5 font-medium normal-case ${OFFER_CLS}`} title="Wycena — ilość z zaakceptowanego snapshotu">Ilość</th>
+                            <th className={`text-right px-[0.5em] py-1.5 font-medium normal-case ${OFFER_CLS}`}>Cena</th>
+                            <th className={`text-right px-[0.5em] py-1.5 font-medium normal-case ${OFFER_CLS}`}>Wartość</th>
+                            <th className={`text-left px-[0.5em] py-1.5 font-medium normal-case ${OFFER_CLS}`}>Dostawca</th>
+                            <th className={`text-right px-[0.5em] py-1.5 font-medium normal-case ${PURCHASE_CLS}`} title="Zakup — ilość z wersji aktywnej">Ilość</th>
+                            <th className={`text-right px-[0.5em] py-1.5 font-medium normal-case ${PURCHASE_CLS}`}>Cena</th>
+                            <th className={`text-right px-[0.5em] py-1.5 font-medium normal-case ${PURCHASE_CLS}`}>Wartość</th>
+                            <th className={`text-left px-[0.5em] py-1.5 font-medium normal-case ${PURCHASE_CLS}`}>Dostawca</th>
                         </tr>
                     </thead>
                     <tbody>
                         {data.rows.map((r) => (
                             <tr key={r.key} className={`border-b border-white/5 hover:bg-white/[0.02] ${r.deviations.includes('ZAKRES_MINUS') ? 'opacity-50' : ''}`}>
-                                <td className="px-3 py-2 text-gray-200 max-w-[320px]">
+                                <td className="px-[0.75em] py-2 text-gray-200 max-w-[20em]">
                                     <span className={`line-clamp-2 ${r.deviations.includes('ZAKRES_MINUS') ? 'line-through' : ''}`}>{r.name || '—'}</span>
-                                    <span className="text-[13px] text-gray-600">{r.unit || ''}</span>
+                                    <span className="text-[0.8em] text-gray-600">{r.unit || ''}</span>
                                 </td>
-                                <td className="px-2 py-2 text-right text-gray-400 font-mono">{r.baseline?.qty ?? '—'}</td>
-                                <td className={`px-2 py-2 text-right font-mono ${OFFER_CLS}`}>{zl(r.baseline?.price)}</td>
-                                <td className={`px-2 py-2 text-right font-mono ${OFFER_CLS}`}>{zl(r.baseline?.value)}</td>
-                                <td className="px-2 py-2 text-gray-400 truncate max-w-[170px]" title={r.baseline?.product || ''}>{r.baseline?.supplier || '—'}</td>
+                                <td className="px-[0.5em] py-2 text-right text-gray-400 font-mono">{r.baseline?.qty ?? '—'}</td>
+                                <td className={`px-[0.5em] py-2 text-right font-mono ${OFFER_CLS}`}>{zl(r.baseline?.price)}</td>
+                                <td className={`px-[0.5em] py-2 text-right font-mono ${OFFER_CLS}`}>{zl(r.baseline?.value)}</td>
+                                <td className="px-[0.5em] py-2 text-gray-400 truncate max-w-[10.5em]" title={r.baseline?.product || ''}>{r.baseline?.supplier || '—'}</td>
                                 {/* @anchor comparison-not-purchased — brak produktu isPurchase: żadnej
                                     prognozy, wprost „jeszcze nie zakupiony" na całej stronie Zakupu */}
                                 {r.current ? (
                                     <>
-                                        <td className="px-2 py-2 text-right text-gray-400 font-mono">{r.current.qty ?? '—'}</td>
-                                        <td className={`px-2 py-2 text-right font-mono ${PURCHASE_CLS}`}>{zl(r.current.price)}</td>
-                                        <td className={`px-2 py-2 text-right font-mono ${PURCHASE_CLS}`}>{zl(r.current.value)}</td>
-                                        <td className="px-2 py-2 text-gray-400 truncate max-w-[170px]" title={r.current.product || ''}>{r.current.supplier || r.qqSupplier?.name || '—'}</td>
+                                        <td className="px-[0.5em] py-2 text-right text-gray-400 font-mono">{r.current.qty ?? '—'}</td>
+                                        <td className={`px-[0.5em] py-2 text-right font-mono ${PURCHASE_CLS}`}>{zl(r.current.price)}</td>
+                                        <td className={`px-[0.5em] py-2 text-right font-mono ${PURCHASE_CLS}`}>{zl(r.current.value)}</td>
+                                        <td className="px-[0.5em] py-2 text-gray-400 truncate max-w-[10.5em]" title={r.current.product || ''}>{r.current.supplier || r.qqSupplier?.name || '—'}</td>
                                     </>
                                 ) : (
-                                    <td colSpan={4} className="px-2 py-2 text-center text-gray-600 italic">jeszcze nie zakupiony</td>
+                                    <td colSpan={4} className="px-[0.5em] py-2 text-center text-gray-600 italic">jeszcze nie zakupiony</td>
                                 )}
-                                <td className={`px-3 py-2 text-right font-mono font-semibold ${r.delta > 0 ? 'text-red-300' : r.delta < 0 ? 'text-teal-300' : 'text-gray-500'}`}>
+                                <td className={`px-[0.75em] py-2 text-right font-mono font-semibold ${r.delta > 0 ? 'text-red-300' : r.delta < 0 ? 'text-teal-300' : 'text-gray-500'}`}>
                                     {r.delta != null ? `${r.delta >= 0 ? '+' : ''}${zl(r.delta)}` : '—'}
                                 </td>
-                                <td className="px-2 py-2">
+                                <td className="px-[0.5em] py-2">
                                     <div className="flex flex-wrap gap-1">
                                         {r.deviations.map((d) => (
-                                            <span key={d} className={`text-[12px] font-bold px-1.5 py-0.5 rounded-full border ${DEV_STYLES[d]?.cls}`}>{DEV_STYLES[d]?.label || d}</span>
+                                            <span key={d} className={`text-[0.75em] font-bold px-[0.4em] py-0.5 rounded-full border ${DEV_STYLES[d]?.cls}`}>{DEV_STYLES[d]?.label || d}</span>
                                         ))}
                                     </div>
                                 </td>
                             </tr>
                         ))}
                         {data.rows.length === 0 && (
-                            <tr><td colSpan={11} className="px-3 py-4 text-center text-gray-600">Brak wymagań do porównania</td></tr>
+                            <tr><td colSpan={11} className="px-[0.75em] py-4 text-center text-gray-600">Brak wymagań do porównania</td></tr>
                         )}
                     </tbody>
                 </table>

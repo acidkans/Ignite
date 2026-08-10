@@ -4,6 +4,20 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-08-10 — feat(orders): czcionka panelu porównawczego dopasowywana do szerokości
+
+### architektura / API
+- `ui-funkcja` `fitTableFont` — czcionka tabeli porównania dobierana pomiarem: start od 16px, zejście proporcją `szerokość panelu / szerokość treści`, dolna granica 9px. Kilka przebiegów, bo zawijanie tekstu nie skaluje się liniowo. Przeliczenie po zmianie danych i przez `ResizeObserver` na kontenerze, więc panel dopasowuje się też przy zmianie rozmiaru okna
+- wszystkie rozmiary WEWNĄTRZ tabeli (czcionki pomocnicze, `max-w` kolumn, padding poziomy) przeliczone z px na `em` — inaczej ~200px stałego paddingu z 11 kolumn nie schodziło razem z fontem i tabela nie mieściła się w węższych osadzeniach. Pasek KPI nad tabelą zostaje w px, nie skaluje się
+
+### słownik
+- dodano `comparison-fit-font` — `fitTableFont` w `ComparisonPanel.jsx`
+
+### wytyczne
+- `ui-funkcja` `comparison-fit-font` — nowe elementy w tabeli porównania wymiaruj w `em`, nie w px; wartość w px nie zmniejszy się razem z czcionką i przywróci poziomy suwak
+
+---
+
 ## 2026-08-10 — fix(wbs): usunięcie węzła kasuje kartę materiałową, gdy traci ostatnie powiązanie
 
 ### architektura / API

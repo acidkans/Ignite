@@ -1246,6 +1246,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-wiersz | strona Zakupu bez produktu isPurchase | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-not-purchased |
 | ui-kolumna | podsumowanie Δ w nagłówku kolumny | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-delta-summary |
 | ui-kolumna | sumy stron Wycena/Zakup w nagłówkach grup | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-side-sums |
+| ui-funkcja | fitTableFont | apps/frontend/src/components/shared/ComparisonPanel.jsx | @anchor comparison-fit-font |
 | back-funkcja | usuwanie kart bez powiązania WBS w deleteNode | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor delete-node-orphan-cards |
 | back-funkcja | buildOffer (strona Wycena) | apps/backend/src/orders/orders.service.ts | @anchor comparison-build-offer |
 | back-funkcja | buildPurchase (strona Zakup) | apps/backend/src/orders/orders.service.ts | @anchor comparison-build-purchase |
