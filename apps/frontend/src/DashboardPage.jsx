@@ -154,6 +154,10 @@ export default function DashboardPage() {
 
     // @anchor dashboard-acceptance — stan akceptacji zamówienia: baseline pointer + etap (F4)
     const [acceptance, setAcceptance] = useState(null);
+    // @anchor dashboard-baseline-accepted — zamówienie ma zaakceptowany baseline. Jedyny nośnik tej
+    // informacji w headerze: chip „ZAAKCEPTOWANE" zniknął, a przełącznik wersji (snapshotu) robi się
+    // zielony zamiast niebieskiego. Szczegóły akceptacji (wersja, kto, kiedy) siedzą w jego tooltipie.
+    const baselineAccepted = !!acceptance?.acceptedVersionId;
     // @anchor dashboard-accept-modal
     const [acceptModal, setAcceptModal] = useState(null); // { versionId, versionLabel, preview, quickQuoteId, busy, error }
     // @anchor dashboard-revoke-modal
@@ -635,15 +639,20 @@ export default function DashboardPage() {
                         <div className="relative">
                             <button
                                 onClick={() => setShowVersionMenu(!showVersionMenu)}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-all group"
+                                title={baselineAccepted
+                                    ? `Zaakceptowany baseline: „${acceptance.acceptedVersion?.label || ''}" · ${acceptance.acceptedBy || ''} · ${acceptance.acceptedAt ? new Date(acceptance.acceptedAt).toLocaleDateString('pl-PL') : ''}`
+                                    : undefined}
+                                className={`flex items-center gap-2 px-3 py-1.5 border rounded-lg transition-all group ${baselineAccepted
+                                    ? 'bg-emerald-500/10 border-emerald-500/25 hover:bg-emerald-500/20'
+                                    : 'bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20'}`}
                             >
-                                <Layers size={12} className="text-blue-400" />
-                                <span className="text-[11px] font-bold text-blue-300">Wersja: {currentVersion?.label || 'pierwszy'}</span>
-                                <ChevronDown size={10} className={`text-blue-400/50 transition-transform ${showVersionMenu ? 'rotate-180' : ''}`} />
+                                <Layers size={12} className={baselineAccepted ? 'text-emerald-400' : 'text-blue-400'} />
+                                <span className={`text-[11px] font-bold ${baselineAccepted ? 'text-emerald-300' : 'text-blue-300'}`}>Wersja: {currentVersion?.label || 'pierwszy'}</span>
+                                <ChevronDown size={10} className={`transition-transform ${baselineAccepted ? 'text-emerald-400/50' : 'text-blue-400/50'} ${showVersionMenu ? 'rotate-180' : ''}`} />
                             </button>
 
                             {showVersionMenu && (
-                                <div className="absolute left-0 mt-2 w-max min-w-[12rem] max-w-xs bg-gray-900 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden backdrop-blur-xl">
+                                <div className={`absolute left-0 mt-2 w-max min-w-[12rem] max-w-xs bg-gray-900 border rounded-xl shadow-2xl z-50 overflow-hidden backdrop-blur-xl ${baselineAccepted ? 'border-emerald-500/25' : 'border-white/10'}`}>
                                     <div className="p-2 border-b border-white/5 bg-white/[0.02]">
                                         <button
                                             onClick={() => { handleCreateVersion(); setShowVersionMenu(false); }}
@@ -736,16 +745,6 @@ export default function DashboardPage() {
                                 </div>
                             )}
                         </div>
-
-                        {/* @anchor dashboard-order-stage-badge — etap zamówienia po akceptacji (F4) */}
-                        {acceptance?.acceptedVersionId && (
-                            <span
-                                className="flex items-center gap-1.5 text-[9px] font-bold px-2.5 py-1 bg-teal-500/10 text-teal-300 border border-teal-500/20 rounded-full shrink-0"
-                                title={`Baseline: „${acceptance.acceptedVersion?.label || ''}" · ${acceptance.acceptedBy || ''} · ${acceptance.acceptedAt ? new Date(acceptance.acceptedAt).toLocaleDateString('pl-PL') : ''}`}
-                            >
-                                <ThumbsUp size={9} /> {acceptance.orderStage}
-                            </span>
-                        )}
 
                     </div>
                 )}

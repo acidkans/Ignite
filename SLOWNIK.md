@@ -1225,7 +1225,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-sekcja | badge BASELINE na wierszu wersji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-baseline-badge |
 | ui-przycisk | kciuk akceptacji wersji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-thumbs-up |
 | ui-przycisk | cofnięcie akceptacji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-revoke-button |
-| ui-sekcja | chip etapu zamówienia | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-order-stage-badge |
+| ui-stan | baselineAccepted | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-baseline-accepted |
 | ui-modal | modal akceptacji wersji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-accept-version-modal |
 | ui-modal | modal cofnięcia akceptacji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-revoke-accept-modal |
 

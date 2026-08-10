@@ -4,6 +4,18 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-08-10 — feat(dashboard): akceptacja baseline sygnalizowana kolorem przełącznika wersji
+
+### architektura / API
+- usunięty chip `ZAAKCEPTOWANE` z headera (`dashboard-order-stage-badge`) — etap zamówienia (`acceptance.orderStage`) nie jest już nigdzie renderowany w headerze
+- `ui-stan` `baselineAccepted` — przełącznik wersji (snapshotu) i jego rozwijana lista są zielone (emerald) zamiast niebieskich, gdy zamówienie ma zaakceptowany baseline; szczegóły akceptacji (wersja · kto · kiedy) przeniesione do tooltipa przycisku, żeby nie zginęły razem z chipem
+
+### słownik
+- usunięto `dashboard-order-stage-badge` — chip zniknął z headera
+- dodano `dashboard-baseline-accepted` — `baselineAccepted` w `DashboardPage.jsx`
+
+---
+
 ## 2026-08-10 — fix(materials): kciuk kopiuje produkt Wyceny do Zakupu jako OSOBNY wpis
 
 ### architektura / API
