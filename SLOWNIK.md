@@ -326,6 +326,11 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | matReqByWbsId | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-req-by-wbs-id |
 | ui-stan | matReqByName | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-req-by-name |
 | ui-stan | matReqsLoaded | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-reqs-loaded |
+| ui-stan | reloadSeq | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-req-reload-seq |
+| ui-stan | fetchMatSeq | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor fetch-mat-seq |
+| ui-stan | pendingRef | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-pending-writes |
+| ui-stan | techPendingRef | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor baseline-split-techspec-pending |
+| ui-stan | refreshCardsSeq | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor refresh-cards-seq |
 | ui-stan | tableWrapperRef | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor grid-nav-table-ref |
 | ui-stan | navRowOrder | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor grid-nav-row-order |
 | ui-stala | GRID_COLUMN_ORDER | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor grid-nav-column-order |

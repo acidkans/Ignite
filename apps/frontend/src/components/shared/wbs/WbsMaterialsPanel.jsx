@@ -1117,8 +1117,42 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
         availability: p?.availability || '', sourceUrl: p?.sourceUrl || '',
     });
     const [fields, setFields] = useState(() => toFields(proposal));
-    useEffect(() => { setFields(toFields(proposal)); /* eslint-disable-next-line */ }, [proposal?.id, proposal?.manufacturer, proposal?.model, proposal?.productName, proposal?.[priceField], proposal?.availability, proposal?.sourceUrl]);
+    const [supplierId, setSupplierId] = useState(proposal?.supplierId ?? null);
+    // @anchor product-side-card-pending-writes — wartości wysłane właśnie PATCH-em, jeszcze nie
+    // potwierdzone przez serwer (klucz pola → oczekiwana wartość w formie wyświetlanej). Odczyt
+    // (onRefresh → GET) potrafi wyprzedzić własny PATCH — przy realnym opóźnieniu sieci (produkcja)
+    // pole wracało wtedy na chwilę do starej wartości. Dopóki serwer nie odda tego, co zapisaliśmy,
+    // trzymamy wartość lokalną; gdy odda — wpis znika i pole znów podąża za serwerem.
+    const pendingRef = useRef({});
+    const lastProposalId = useRef(proposal?.id ?? null);
+    useEffect(() => {
+        // Inna propozycja w slocie → porzuć oczekujące zapisy poprzedniej i przyjmij dane wprost.
+        if ((proposal?.id ?? null) !== lastProposalId.current) {
+            lastProposalId.current = proposal?.id ?? null;
+            pendingRef.current = {};
+            setFields(toFields(proposal));
+            setSupplierId(proposal?.supplierId ?? null);
+            return;
+        }
+        const incoming = toFields(proposal);
+        setFields(prev => {
+            const next = { ...incoming };
+            for (const k of Object.keys(incoming)) {
+                const pend = pendingRef.current[k];
+                if (pend === undefined) continue;
+                if (incoming[k] === pend) delete pendingRef.current[k];  // serwer dogonił
+                else next[k] = prev[k];                                   // stary odczyt — trzymaj lokalne
+            }
+            return next;
+        });
+        const incSupplier = proposal?.supplierId ?? null;
+        const pendSupplier = pendingRef.current.supplierId;
+        if (pendSupplier === undefined) setSupplierId(incSupplier);
+        else if (incSupplier === pendSupplier) { delete pendingRef.current.supplierId; setSupplierId(incSupplier); }
+    /* eslint-disable-next-line */
+    }, [proposal?.id, proposal?.manufacturer, proposal?.model, proposal?.productName, proposal?.[priceField], proposal?.availability, proposal?.sourceUrl, proposal?.supplierId]);
     const setF = (k, v) => setFields(f => ({ ...f, [k]: v }));
+    const clearPending = (k) => { delete pendingRef.current[k]; };
 
     const [searching, setSearching] = useState(false);
     // Promise w locie, dedupliku­je równoległe onBlur na kilku polach zanim propozycja istnieje —
@@ -1157,40 +1191,58 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
         return result;
     };
     const patchField = async (key, value) => {
+        pendingRef.current[key] = value ?? '';
         const p = await ensureProposal();
-        if (!p) return;
+        if (!p) { clearPending(key); return; }
         // ensureProposal już zapisała bieżącą wartość pola przy tworzeniu — dodatkowy PATCH tylko gdy propozycja już istniała.
         if (proposal) {
-            await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, {
+            const res = await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, {
                 method: 'PATCH', headers, body: JSON.stringify({ [key]: value }),
             });
+            if (!res.ok) clearPending(key);
         }
-        await onRefresh?.();
+        // silent — edycja pola tekstowego propozycji nie zmienia budżetu WBS, więc odświeżamy samą
+        // kartę zamiast przeładowywać całe drzewo (to powodowało „restart" widoku przy każdym polu).
+        await onRefresh?.({ silent: true });
     };
     // @anchor product-side-card-supplier-change — dostawca produktu tej strony (Wycena/Zakup), niezależny
     // od drugiej strony splitu; wybór po NIP z rejestru lub wolny wpis po nazwie (SupplierPicker). Działa
     // też zanim wybrano produkt — tworzy pustą propozycję tylko po to, by przypiąć dostawcę.
     const supplierChange = async (supplier) => {
+        const next = supplier?.id ?? null;
+        pendingRef.current.supplierId = next;
+        setSupplierId(next);
         const p = await ensureProposal();
-        if (!p) return;
-        await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, {
-            method: 'PATCH', headers, body: JSON.stringify({ supplierId: supplier?.id ?? null }),
+        if (!p) { clearPending('supplierId'); return; }
+        const res = await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, {
+            method: 'PATCH', headers, body: JSON.stringify({ supplierId: next }),
         });
-        await onRefresh?.();
+        if (!res.ok) clearPending('supplierId');
+        await onRefresh?.({ silent: true });
     };
     const priceBlur = async () => {
         const raw = String(fields.price ?? '').trim().replace(',', '.');
         const val = raw === '' ? null : (parseFloat(raw) || null);
+        pendingRef.current.price = val == null ? '' : String(val);
         const hadProposal = !!proposal;
         const p = await ensureProposal();
-        if (!p) return;
+        if (!p) { clearPending('price'); return; }
         if (hadProposal) {
-            await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, {
+            const res = await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, {
                 method: 'PATCH', headers, body: JSON.stringify({ [priceField]: val }),
             });
+            if (!res.ok) clearPending('price');
         }
-        if (!isPurchase && val != null) onPropagatePrice?.(requirement, wbsNode, val);
-        await onRefresh?.();
+        // Propagacja ceny (PATCH priceNetto wymagania + budżet węzła WBS) MUSI się zakończyć przed
+        // odświeżeniem — bez await GET wyprzedzał własny PATCH i karta wracała do poprzedniej ceny.
+        // Propagacja sama przeładowuje już karty i drzewo WBS, więc kolejne pełne odświeżenie tylko
+        // powielałoby lawinę zapytań — po niej wystarczy silent.
+        if (!isPurchase && val != null) {
+            await onPropagatePrice?.(requirement, wbsNode, val);
+            await onRefresh?.({ silent: true });
+        } else {
+            await onRefresh?.();
+        }
     };
     const searchAI = async () => {
         setSearching(true);
@@ -1226,7 +1278,7 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
             <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Adres WWW</label>
                 <input value={fields.sourceUrl} disabled={readOnly} onChange={e => setF('sourceUrl', e.target.value)} onBlur={e => e.target.value !== (proposal?.sourceUrl || '') && patchField('sourceUrl', e.target.value)} placeholder="https://…" className={SIDE_IC} /></div>
             <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">{isPurchase ? 'Dostawca' : 'Dostawca (oferent)'}</label>
-                <SupplierPicker dark value={proposal?.supplierId ?? null} onChange={supplierChange} disabled={readOnly} /></div>
+                <SupplierPicker dark value={supplierId} onChange={supplierChange} disabled={readOnly} /></div>
             {!readOnly && (
                 <div className="flex items-center gap-1.5 pt-1">
                     <button onClick={searchAI} disabled={searching}
@@ -1263,7 +1315,21 @@ export function BaselineSplitCard({
 
     const [splitOpen, setSplitOpen] = useState(true);
     const [techSpec, setTechSpec] = useState(card?.technicalSpec || '');
-    useEffect(() => { setTechSpec(card?.technicalSpec || ''); }, [card?.id, card?.technicalSpec]);
+    // @anchor baseline-split-techspec-pending — wartość wysłana PATCH-em i jeszcze niepotwierdzona.
+    // Bez tego stary odczyt (GET wyprzedzający własny PATCH) cofał treść wymagań technicznych.
+    const techPendingRef = useRef(undefined);
+    const techLastCardId = useRef(card?.id ?? null);
+    useEffect(() => {
+        const incoming = card?.technicalSpec || '';
+        if ((card?.id ?? null) !== techLastCardId.current) {
+            techLastCardId.current = card?.id ?? null;
+            techPendingRef.current = undefined;
+            setTechSpec(incoming);
+            return;
+        }
+        if (techPendingRef.current === undefined) { setTechSpec(incoming); return; }
+        if (incoming === techPendingRef.current) { techPendingRef.current = undefined; setTechSpec(incoming); }
+    }, [card?.id, card?.technicalSpec]);
     // Auto-wysokość okna „Wymagania techniczne" — pokazuje całą treść bez zwijania/scrolla.
     const techRef = useRef(null);
     useLayoutEffect(() => {
@@ -1286,10 +1352,12 @@ export function BaselineSplitCard({
 
     const saveTechSpec = async () => {
         if (!card?.id || techSpec === (card.technicalSpec || '')) return;
-        await fetch(`${API_URL}/material-requirements/${card.id}`, {
+        techPendingRef.current = techSpec;
+        const res = await fetch(`${API_URL}/material-requirements/${card.id}`, {
             method: 'PATCH', headers, body: JSON.stringify({ technicalSpec: techSpec }),
         });
-        await onRefresh?.();
+        if (!res.ok) techPendingRef.current = undefined;
+        await onRefresh?.({ silent: true });
     };
 
     // @anchor baseline-split-copy-to-purchase — kciuk: produkt Wyceny staje się też produktem Zakupu
@@ -1781,6 +1849,11 @@ export default function WbsMaterialsPanel({
 
     // ─ Data fetching ─────────────────────────────────────────────────────────
 
+    // @anchor refresh-cards-seq — numer ostatniego odświeżenia listy kart. Odpowiedzi wracają w innej
+    // kolejności niż wysłane (widoczne dopiero przy realnym opóźnieniu sieci na produkcji) — starsza
+    // nadpisywała nowszą i pola panelu wracały do poprzednich wartości.
+    const refreshCardsSeq = useRef(0);
+
     const fetchCards = useCallback(async () => {
         if (!nodeId) return;
         if (!externalWbsNodes) setLoading(true);
@@ -1934,13 +2007,17 @@ export default function WbsMaterialsPanel({
         setExpandedId(node.id);
     }, [nodeId, versionId]);
 
-    const refreshCards = useCallback(async () => {
+    // `opts.silent` — edycja pola propozycji, która nie zmienia budżetu. Pomija onWbsUpdate
+    // (reqRefreshKey + refreshMaterialCosts + refreshWbsNodes), bo ten łańcuch przeładowuje całą
+    // sekcję i przy każdym opuszczonym polu wyglądał jak restart widoku.
+    const refreshCards = useCallback(async (opts) => {
         if (!nodeId) return;
+        const seq = ++refreshCardsSeq.current;
         const res = await fetch(
             `${API_URL}/material-requirements/node/${nodeId}${versionId ? `?versionId=${versionId}` : ''}`,
             { headers: { Authorization: `Bearer ${token}` } }
         );
-        if (res.ok) {
+        if (res.ok && seq === refreshCardsSeq.current) {
             const reqs = await res.json();
             const map = {};
             for (const r of reqs) { if (r.wbsNodeId) map[r.wbsNodeId] = flattenReq(r); }
@@ -1957,7 +2034,7 @@ export default function WbsMaterialsPanel({
                 if (match) map[match.id] = flattenReq(r);
             }
             setCards(map);
-            onWbsUpdate?.();
+            if (!opts?.silent) onWbsUpdate?.();
         }
     }, [nodeId, versionId, token, onWbsUpdate, externalWbsNodes, internalWbsNodes]);
 

@@ -294,10 +294,20 @@ function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, 
     const [materialDb, setMaterialDb] = React.useState([]);
     const [offers, setOffers] = React.useState([]);
 
-    const reloadCard = React.useCallback(async () => {
+    // @anchor mat-req-reload-seq — numer ostatniego żądania GET karty. Odpowiedzi potrafią wrócić
+    // w innej kolejności niż wysłane (na produkcji, przy realnym opóźnieniu sieci); starsza
+    // odpowiedź nadpisywała wtedy świeższy stan i pola panelu wracały do poprzednich wartości.
+    const reloadSeq = React.useRef(0);
+    // `opts.silent` — odśwież tylko tę kartę, bez bumpu reqRefreshKey i przeładowania drzewa WBS.
+    const reloadCard = React.useCallback(async (opts) => {
         if (!card?.id) return;
+        const seq = ++reloadSeq.current;
         const res = await fetch(`${API_URL}/material-requirements/${card.id}`, { headers: { Authorization: `Bearer ${token}` } });
-        if (res.ok) { const updated = await res.json(); setCard(updated); onSaved?.(updated); }
+        if (!res.ok) return;
+        const updated = await res.json();
+        if (seq !== reloadSeq.current) return; // wyprzedzona przez nowsze żądanie — odrzuć
+        setCard(updated);
+        onSaved?.(updated, opts);
     }, [card?.id, token, onSaved]);
 
     // Jeśli nie ma karty — utwórz ją automatycznie (tylko gdy naprawdę nie istnieje).
@@ -309,7 +319,7 @@ function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, 
     // material-requirements/node/{processNodeId} — inaczej `req` bywa chwilowo null i powstaje
     // duplikat (ghost-requirement), bo prawdziwe wymaganie i tak zaraz przyjdzie z fetcha.
     React.useEffect(() => {
-        if (card) { setCard(req); return; }
+        if (card) { if (req) setCard(req); return; }
         if (!node.id || !reqsLoaded) return;
         const reqType = wbsTypeFromAny(node.type) === 'equipment' ? 'equipment' : 'material';
         fetch(`${API_URL}/material-requirements`, {
@@ -322,7 +332,10 @@ function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [node.id, reqsLoaded]);
 
-    React.useEffect(() => { setCard(req); }, [req]);
+    // `req` z rodzica nadpisuje kartę tylko gdy istnieje. Chwilowe null (rozwiązanie węzeł→wymaganie
+    // nie trafia po odświeżeniu listy) zwijało cały panel do „Tworzenie karty materiałowej…" —
+    // to właśnie wyglądało jak restart widoku w trakcie wypełniania.
+    React.useEffect(() => { if (req) setCard(req); }, [req]);
 
     React.useEffect(() => {
         const auth = { Authorization: `Bearer ${token}` };
@@ -341,13 +354,16 @@ function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, 
     // na karcie materiałowej (inaczej KOSZT JEDN wraca do starej wartości po onRefresh).
     const handlePropagatePrice = React.useCallback(async (c, w, price) => {
         onNodeFieldLocal?.(node.id, 'unitCost', price);
-        onNodeFieldSave?.(node.id, 'unitCost', price);
         if (c?.id) {
             setCard(prev => (prev ? { ...prev, priceNetto: price } : prev));
             await fetch(`${API_URL}/material-requirements/${c.id}`, {
                 method: 'PATCH', headers, body: JSON.stringify({ priceNetto: price }),
             });
         }
+        // await, nie fire-and-forget: updateNodeField robi PATCH /budget i dopiero potem
+        // refreshWbsNodes. Bez oczekiwania odczyty odpalone przez wołającego wyprzedzały ten
+        // zapis i cena w karcie oraz w kolumnie WBS wracała do poprzedniej wartości.
+        await onNodeFieldSave?.(node.id, 'unitCost', price);
     }, [node.id, headers, onNodeFieldLocal, onNodeFieldSave]);
 
     return (
@@ -952,16 +968,20 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         document.addEventListener('mouseup', onUp);
     };
 
+    // @anchor fetch-mat-seq — numer ostatniego fetcha listy wymagań; starsza odpowiedź (kolejny bump
+    // materialRefreshKey wyprzedzony przez wolniejsze pierwsze żądanie) nie może nadpisać nowszej mapy.
+    const fetchMatSeq = useRef(0);
     // materialStatuses kept for InheritedStatusBadge display only (no longer syncs to wbsTree)
     useEffect(() => {
         if (!processNodeId) return;
         const fetchMat = async () => {
+            const seq = ++fetchMatSeq.current;
             try {
                 const token = sessionStorage.getItem('token') || localStorage.getItem('token');
                 const res = await fetch(`${API_URL}/material-requirements/node/${processNodeId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                if (res.ok) {
+                if (res.ok && seq === fetchMatSeq.current) {
                     const data = await res.json();
                     const map = {};
                     const reqMap = {};
@@ -1912,7 +1932,16 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             reqsLoaded={matReqsLoaded}
                             onNodeFieldSave={onNodeFieldSave}
                             onNodeFieldLocal={handleField}
-                            onSaved={updated => { setMatReqByWbsId(prev => ({ ...prev, [node.id]: updated, ...(updated?.id ? { [updated.id]: updated } : {}) })); onMaterialReqUpdated?.(); }}
+                            onSaved={(updated, opts) => {
+                                setMatReqByWbsId(prev => ({ ...prev, [node.id]: updated, ...(updated?.id ? { [updated.id]: updated } : {}) }));
+                                if (updated?.name) setMatReqByName(prev => ({ ...prev, [String(updated.name).trim().toLowerCase()]: updated }));
+                                // silent = edycja pola propozycji/wymagania bez wpływu na budżet. Pełny
+                                // onMaterialReqUpdated przeładowuje całe drzewo WBS i listę wymagań —
+                                // przy każdym polu wyglądało to jak restart widoku, a wyścig tego
+                                // odczytu z własnym PATCH-em cofał świeżo wpisane wartości.
+                                if (opts?.silent) return;
+                                onMaterialReqUpdated?.();
+                            }}
                             onDeleteNode={() => {
                                 const deletedNode = findNode(items, node.id);
                                 const deletedIds = collectIds(items, node.id);

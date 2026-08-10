@@ -4,6 +4,17 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-08-09 — fix(materials): BaselineSplitCard — koniec restartu widoku i cofania wartości przy wypełnianiu pól (v2026.08.09.766)
+
+### architektura / API
+- `ui-funkcja` `refreshCards` (WbsMaterialsPanel) i `ui-funkcja` `reloadCard` (WBSHybridTable) przyjmują opcję `{ silent: true }` — odświeżają samą kartę, bez `onWbsUpdate` / `onMaterialReqUpdated`. Edycja pola tekstowego propozycji nie zmienia budżetu, a wcześniej każde opuszczone pole ciągnęło pełne przeładowanie drzewa WBS, listy wymagań, `/materials` i `/offers` (19 zapytań na 4 pola → 9)
+- `ui-funkcja` `priceBlur` czeka teraz na `onPropagatePrice` przed odświeżeniem; `ui-funkcja` `handlePropagatePrice` czeka na `onNodeFieldSave`. Wcześniej zapisy szły fire-and-forget i odczyt wyprzedzał własny PATCH
+
+### wytyczne
+- `ui-funkcja` `onRefresh` w `BaselineSplitCard` / `ProductSideCard` — wołaj z `{ silent: true }` dla pól, które nie zmieniają budżetu (producent, model, nazwa, dostępność, adres WWW, dostawca, wymagania techniczne). Pełne odświeżenie zostaw dla ceny i zmian ról Wycena/Zakup
+- każdy `useEffect` synchronizujący lokalny stan pola z danymi z serwera musi mieć bufor „zapis w locie" (`pendingRef`) — bez niego spóźniony odczyt cofa świeżo wpisaną wartość; objaw widoczny tylko przy realnym opóźnieniu sieci, na localhoście nie występuje
+- każdy `fetch` odświeżający listę/kartę potrzebuje licznika sekwencji — odpowiedzi wracają w innej kolejności niż wysłane i starsza nadpisuje nowszą
+
 ## 2026-08-09 — fix(materials): produkty z etapu ofertowania nie trafiały na stronę „Wycena" splitu (v2026.08.09.765)
 
 ### architektura / API
