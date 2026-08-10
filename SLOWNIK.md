@@ -308,6 +308,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-endpoint | GET /material-requirements/node/:nodeId/budget-sums | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-budget-sums |
 | back-funkcja | setOffer | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-set-offer |
 | back-funkcja | setPurchase | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-set-purchase |
+| back-funkcja | materializePurchaseCopy | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-materialize-purchase-copy |
 | back-funkcja | clearPurchase | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-clear-purchase |
 | back-funkcja | budgetSums | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-budget-sums |
 | schema-pole | ProductProposal.isOffer | apps/backend/prisma/schema.prisma | @anchor product-proposal-is-offer |
@@ -547,6 +548,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | supplierChange | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-supplier-change |
 | ui-funkcja | copySupplierToPurchase | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor baseline-split-copy-supplier-to-purchase |
 | ui-funkcja | ensureProposal | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-ensure-proposal |
+| ui-funkcja | deleteProduct | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-delete-product |
 | ui-stan | priceFormulaResult | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-price-formula |
 | ui-stala | offerPriceFallback | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-offer-price-fallback |
 | back-funkcja | syncOfferProposalPrice | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-sync-offer-proposal-price |

@@ -1383,10 +1383,17 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
                 },
             });
         }
-        return this.prisma.productProposal.update({
+        const updated = await this.prisma.productProposal.update({
             where: { id: proposalId },
             data: { isSelected: willSelect, isOffer: willSelect },
         });
+        // Wybór produktu = produkt strony „Wycena"; jeśli ten sam rekord był dotąd produktem
+        // Zakupu, rola zakupowa przechodzi na jego kopię (patrz `materializePurchaseCopy`).
+        if (willSelect && proposal.isPurchase) {
+            await this.materializePurchaseCopy(updated);
+            return this.prisma.productProposal.findUnique({ where: { id: proposalId } });
+        }
+        return updated;
     }
 
     // @anchor mat-req-set-offer — propozycja jako produkt strony „Wycena" (isOffer).
@@ -1415,23 +1422,82 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
                 data: { budgetedPriceNetto: proposal.priceNetto },
             });
         }
-        return this.prisma.productProposal.update({ where: { id: proposalId }, data: { isOffer: true } });
+        const updated = await this.prisma.productProposal.update({ where: { id: proposalId }, data: { isOffer: true } });
+        // Propozycja pełniąca dotąd rolę „Zakup" oddaje ją własnej kopii — jeden rekord nigdy nie
+        // obsługuje obu stron splitu (patrz `materializePurchaseCopy`).
+        if (proposal.isPurchase) {
+            await this.materializePurchaseCopy(updated);
+            return this.prisma.productProposal.findUnique({ where: { id: proposalId } });
+        }
+        return updated;
+    }
+
+    // @anchor mat-req-materialize-purchase-copy — produkt strony „Zakup" ZAWSZE mieszka we własnym
+    // rekordzie. Przepisuje dane produktu z propozycji ofertowej do osobnej propozycji zakupowej:
+    // gdy strona Zakup ma już swój (nieofertowy) rekord — nadpisuje go w miejscu (powtórny kciuk nie
+    // mnoży propozycji), inaczej zakłada nowy. Rola `isPurchase` i `purchasePriceNetto` schodzą przy
+    // tym z propozycji ofertowej, więc jeden rekord nigdy nie pełni obu ról — usunięcie albo edycja
+    // po stronie Zakupu nie może skasować produktu Wyceny.
+    // Pola plikowe (obrazek, karta katalogowa, deklaracja) NIE są kopiowane — dwa rekordy
+    // wskazywałyby jeden plik na dysku i usunięcie z jednej strony zabrałoby obrazek drugiej.
+    private async materializePurchaseCopy(offer: {
+        id: string; materialRequirementId: string; productName: string; manufacturer: string;
+        model: string | null; sourceUrl: string | null; availability: string | null;
+        seller: string | null; offerNumber: string | null; matchScore: number | null;
+        supplierId: string | null; priceNetto: number | null; purchasePriceNetto: number | null;
+    }) {
+        const data = {
+            productName: offer.productName,
+            manufacturer: offer.manufacturer,
+            model: offer.model,
+            sourceUrl: offer.sourceUrl,
+            availability: offer.availability,
+            seller: offer.seller,
+            offerNumber: offer.offerNumber,
+            matchScore: offer.matchScore,
+            supplierId: offer.supplierId,
+            // Cena startowa zakupu = cena wyceny (albo cena zakupu ze starego, współdzielonego rekordu).
+            priceNetto: offer.purchasePriceNetto ?? offer.priceNetto,
+            isPurchase: true,
+        };
+        const existing = await this.prisma.productProposal.findFirst({
+            where: {
+                materialRequirementId: offer.materialRequirementId,
+                isPurchase: true, isOffer: false, id: { not: offer.id },
+            },
+        });
+        const copy = existing
+            ? await this.prisma.productProposal.update({ where: { id: existing.id }, data })
+            : await this.prisma.productProposal.create({
+                data: { materialRequirementId: offer.materialRequirementId, isManual: true, ...data },
+            });
+        await this.prisma.productProposal.updateMany({
+            where: { materialRequirementId: offer.materialRequirementId, id: { not: copy.id }, isPurchase: true },
+            data: { isPurchase: false },
+        });
+        if (offer.purchasePriceNetto != null) {
+            await this.prisma.productProposal.update({
+                where: { id: offer.id }, data: { purchasePriceNetto: null },
+            });
+        }
+        return copy;
     }
 
     // @anchor mat-req-set-purchase — propozycja jako produkt strony „Zakup" (isPurchase).
-    // Obsługuje oba przypadki: kciuk (ta sama propozycja co offer → init purchasePriceNetto=priceNetto)
-    // oraz inny produkt (osobna propozycja). Max jedna isPurchase na wymaganie; offer nietknięty.
+    // Kciuk „produkt z Wyceny → Zakup" NIE flaguje propozycji ofertowej, tylko jej kopię
+    // (`materializePurchaseCopy`) — inaczej obie strony splitu pokazywałyby ten sam wiersz.
+    // Max jedna isPurchase na wymaganie; propozycja ofertowa zostaje nietknięta.
     async setPurchase(proposalId: string) {
         const proposal = await this.prisma.productProposal.findUnique({ where: { id: proposalId } });
         if (!proposal) throw new NotFoundException(`Proposal ${proposalId} not found`);
+        if (proposal.isOffer) return this.materializePurchaseCopy(proposal);
         await this.prisma.productProposal.updateMany({
             where: { materialRequirementId: proposal.materialRequirementId, id: { not: proposalId } },
             data: { isPurchase: false },
         });
-        const initPurchasePrice = proposal.isOffer && proposal.purchasePriceNetto == null && proposal.priceNetto != null;
         return this.prisma.productProposal.update({
             where: { id: proposalId },
-            data: { isPurchase: true, ...(initPurchasePrice ? { purchasePriceNetto: proposal.priceNetto } : {}) },
+            data: { isPurchase: true },
         });
     }
 

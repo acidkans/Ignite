@@ -4,6 +4,28 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-08-10 — fix(materials): kciuk kopiuje produkt Wyceny do Zakupu jako OSOBNY wpis
+
+### architektura / API
+- `back-funkcja` `setPurchase` — `PATCH /material-requirements/proposals/:id/set-purchase` wywołane na propozycji `isOffer` nie flaguje już tego samego rekordu, tylko zakłada jego kopię (`materializePurchaseCopy`) i to jej nadaje rolę `isPurchase`. Dotąd jeden `ProductProposal` pełnił obie role, więc split pokazywał po obu stronach TEN SAM wiersz: edycja albo usunięcie produktu po stronie Zakupu kasowała produkt Wyceny
+- `back-funkcja` `materializePurchaseCopy` — kopia produktu ofertowego do osobnej propozycji zakupowej. Gdy strona Zakup ma już swój (nieofertowy) rekord, kopia go nadpisuje w miejscu, więc powtórne kliknięcie kciuka nie mnoży propozycji. Cena startowa zakupu = `purchasePriceNetto ?? priceNetto` oferty; z rekordu ofertowego schodzi `isPurchase` i `purchasePriceNetto`. Pola plikowe (`imageUrl`, `dataSheet*`, `compliance*`) NIE są kopiowane — dwa rekordy wskazywałyby jeden plik na dysku
+- `back-funkcja` `setOffer` i `selectProposal` — kierunek odwrotny domknięty: propozycja przejmująca rolę „Wycena" oddaje rolę „Zakup" własnej kopii
+- `ui-funkcja` `deleteProduct` (`ProductSideCard`) — nowy przycisk „Usuń produkt" na każdej stronie splitu; kasuje wyłącznie propozycję tej strony (stary, współdzielony wpis traci tylko rolę Zakupu przez `clear-purchase`)
+- `ui-karta` `BaselineSplitCard` — plakietka `= produkt z wyceny` zamieniona na ostrzegawcze `wspólny wpis z wyceną`; oznacza wyłącznie dane sprzed rozdzielenia ról
+
+### migracje
+- `20260810140000_split_shared_offer_purchase_proposal` — rozdziela istniejące propozycje pełniące obie role: kopia zakupowa z ceną `COALESCE(purchasePriceNetto, priceNetto)`, rekord ofertowy traci `isPurchase` i `purchasePriceNetto`
+
+### słownik
+- dodano `mat-req-materialize-purchase-copy` — `materializePurchaseCopy` w `material-requirements.service.ts`
+- dodano `product-side-card-delete-product` — `deleteProduct` w `WbsMaterialsPanel.jsx`
+
+### wytyczne
+- `schema-pole` `ProductProposal.isOffer` / `isPurchase` — jeden rekord = jedna rola. Żadna ścieżka nie może ustawić obu flag na tej samej propozycji; produkt wspólny dla obu stron powstaje przez kopię, nie przez współdzielenie wiersza. Inaczej usunięcie/edycja po jednej stronie splitu niszczy drugą
+- `schema-pole` `ProductProposal.purchasePriceNetto` — pole legacy, obsługuje wyłącznie wpisy sprzed rozdzielenia ról; nowe ceny zakupu idą w `priceNetto` propozycji zakupowej
+
+---
+
 ## 2026-08-10 — feat(orders): czcionka panelu porównawczego dopasowywana do szerokości
 
 ### architektura / API

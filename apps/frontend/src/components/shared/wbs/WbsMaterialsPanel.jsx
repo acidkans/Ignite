@@ -1103,8 +1103,8 @@ const SIDE_IC = 'w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 t
 
 // @anchor product-side-card — jedna strona splitu (Wycena=offer / Zakup=purchase). Pola produktu
 // związane z PROPOZYCJĄ (nie wymaganiem — technicalSpec jest wspólny, poza tym panelem). Wybór/dodanie
-// produktu ustawia rolę (set-offer / set-purchase). Cena zakupu na tej samej propozycji co wycena
-// idzie w purchasePriceNetto (Δ), inaczej w priceNetto.
+// produktu ustawia rolę (set-offer / set-purchase). Każda strona ma własny rekord propozycji, więc
+// cena zakupu idzie w priceNetto; purchasePriceNetto obsługuje już tylko stare, współdzielone wpisy.
 function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefresh, onPropagatePrice, readOnly = false, locked = false, sharedWithLockedOffer = false }) {
     const isPurchase = side === 'purchase';
     // @anchor product-side-card-lock — strona „Wycena" po akceptacji baseline: pola zostają
@@ -1114,7 +1114,7 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
     const lockCls = locked ? ' cursor-not-allowed opacity-70' : '';
     const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
     const roleEndpoint = isPurchase ? 'set-purchase' : 'set-offer';
-    // Cena zakupu gdy ta sama propozycja pełni obie role → purchasePriceNetto; inaczej priceNetto.
+    // Legacy: stary wpis pełniący obie role trzyma cenę zakupu w purchasePriceNetto; nowe (rozdzielone) w priceNetto.
     const priceField = (isPurchase && proposal?.isOffer && proposal?.isPurchase) ? 'purchasePriceNetto' : 'priceNetto';
 
     // @anchor product-side-card-offer-price-fallback — cena wpisana wprost w tabeli Materials
@@ -1336,6 +1336,23 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
         } finally { setSearching(false); }
     };
 
+    // @anchor product-side-card-delete-product — usuwa produkt TYLKO tej strony splitu. Role są
+    // rozdzielone na osobne propozycje (kciuk kopiuje, nie współdzieli rekordu), więc kasowanie
+    // propozycji zakupowej nie rusza Wyceny. Wyjątek: stary wpis pełniący obie role — tam sam
+    // rekord zostaje, schodzi z niego wyłącznie rola Zakupu (`clear-purchase`).
+    const deleteProduct = async () => {
+        if (!proposal) return;
+        if (locked && !(await guardOfferEdit())) return;
+        const shared = proposal.isOffer && proposal.isPurchase;
+        if (!window.confirm(`Usunąć produkt strony „${isPurchase ? 'Zakup' : 'Wycena'}"?`)) return;
+        if (isPurchase && shared) {
+            await fetch(`${API_URL}/material-requirements/proposals/${proposal.id}/clear-purchase`, { method: 'PATCH', headers });
+        } else {
+            await fetch(`${API_URL}/material-requirements/proposals/${proposal.id}`, { method: 'DELETE', headers });
+        }
+        await onRefresh?.();
+    };
+
     const allProposals = requirement.proposals || [];
     const priceLabel = isPurchase ? 'Koszt zakupu' : 'Koszt jedn.';
 
@@ -1385,6 +1402,13 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 disabled:opacity-40">
                         <Sparkles size={9} /> {searching ? 'Szukam…' : 'Szukaj AI'}
                     </button>
+                    {proposal && (
+                        <button onClick={deleteProduct}
+                            title={`Usuwa produkt wyłącznie strony „${isPurchase ? 'Zakup' : 'Wycena'}"`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20">
+                            <Trash2 size={9} /> Usuń produkt
+                        </button>
+                    )}
                 </div>
             )}
             {!proposal && !locked && allProposals.length > 0 && (
@@ -1531,8 +1555,10 @@ function RequirementImageBox({ card, token, onRefresh, className = '' }) {
 
 // @anchor baseline-split-card — wspólny split Wycena↔Zakup: wspólne okno „Wymagania techniczne" na
 // górze (z wymagania), pod spodem dwie kolumny produktu — Wycena = propozycja isOffer, Zakup =
-// propozycja isPurchase. Kciuk na linii podziału kopiuje produkt Wyceny do Zakupu (set-purchase na
-// propozycji offer). Używany w rozwinięciu wiersza WBSHybridTable i w zakładce Materials.
+// propozycja isPurchase — ZAWSZE dwa osobne rekordy. Kciuk na linii podziału kopiuje produkt Wyceny
+// do Zakupu (set-purchase na propozycji offer zakłada jej kopię, patrz `materializePurchaseCopy`),
+// więc zmiana lub usunięcie po stronie Zakupu nie rusza Wyceny.
+// Używany w rozwinięciu wiersza WBSHybridTable i w zakładce Materials.
 export function BaselineSplitCard({
     card, wbsNode, processNodeId, token, materialDb, offers,
     readOnly = false, offerLocked = false, onRefresh, onPropagatePrice, onRefreshOffers, onPatch,
@@ -1594,8 +1620,10 @@ export function BaselineSplitCard({
         await onRefresh?.({ silent: true });
     };
 
-    // @anchor baseline-split-copy-to-purchase — kciuk: produkt Wyceny staje się też produktem Zakupu
-    // (set-purchase na propozycji offer; bez nowego rekordu, purchasePriceNetto init = priceNetto).
+    // @anchor baseline-split-copy-to-purchase — kciuk: produkt Wyceny zostaje SKOPIOWANY na stronę
+    // Zakupu. Backend (`set-purchase` na propozycji ofertowej) zakłada osobny rekord propozycji —
+    // dwa niezależne wpisy, nie jeden wiersz pokazywany po obu stronach. Dzięki temu skopiowany
+    // zakup można potem zmienić albo usunąć, a produkt Wyceny zostaje nietknięty.
     const copyOfferToPurchase = async () => {
         if (!offerProposal) return;
         if (purchaseProposal && purchaseProposal.id !== offerProposal.id &&
@@ -1705,7 +1733,10 @@ export function BaselineSplitCard({
                         <div className="flex items-center gap-2 px-4 py-1.5 bg-white/[0.02] border-y border-white/5">
                             <span className="text-[12px] font-bold uppercase tracking-widest text-gray-400">Zakup</span>
                             {purchaseProposal && offerProposal && purchaseProposal.id === offerProposal.id &&
-                                <span className="text-[9px] text-teal-400/70">= produkt z wyceny</span>}
+                                <span className="text-[9px] text-amber-400/80"
+                                    title="Wpis sprzed rozdzielenia stron — ten sam rekord po obu stronach splitu. Kliknij kciuk, aby rozdzielić na osobne wpisy.">
+                                    wspólny wpis z wyceną
+                                </span>}
                         </div>
                         <ProductSideCard
                             requirement={card}
@@ -1724,7 +1755,7 @@ export function BaselineSplitCard({
                         <button
                             onClick={copyOfferToPurchase}
                             disabled={!offerProposal}
-                            title="Kopiuje produkt z Wyceny do Zakupu (ta sama propozycja; cenę zakupu ustawisz osobno)"
+                            title="Kopiuje produkt z Wyceny do Zakupu jako OSOBNY wpis — zmiana lub usunięcie po stronie Zakupu nie rusza Wyceny"
                             className="p-1.5 rounded-full bg-gray-900 border border-teal-500/40 text-teal-300 hover:bg-teal-500/20 shadow-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                         >
                             <ThumbsUp size={13} />
