@@ -551,6 +551,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | offerPriceFallback | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-offer-price-fallback |
 | back-funkcja | syncOfferProposalPrice | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-sync-offer-proposal-price |
 | back-funkcja | syncOfferPriceFromWbsNode | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-sync-offer-price-from-node |
+| back-funkcja | syncMaterialsFromWbsNode | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-sync-qty-direct-link |
+| back-funkcja | writeWbsNodeQuantity | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-write-wbs-node-quantity |
+| back-funkcja | update (gałąź quantity bez alokacji) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-qty-to-wbs |
+| ui-stala | qty | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor baseline-split-qty |
 
 #### Backend (`apps/backend/src/material-requirements/`)
 

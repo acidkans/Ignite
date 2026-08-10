@@ -1381,7 +1381,12 @@ export function BaselineSplitCard({
     const offerProposal = proposals.find(p => p.isOffer) || null;
     const purchaseProposal = proposals.find(p => p.isPurchase) || null;
 
-    const qty = card?.quantity ?? 0;
+    // @anchor baseline-split-qty — ilość liczona z węzła WBS, czyli DOKŁADNIE ta z kolumny „Ilość"
+    // rozwiniętego wiersza. Split jest rozwinięciem wiersza, więc musi pokazywać te same liczby.
+    // Wcześniej brał `card.quantity` (ilość wymagania), a te dwa nośniki potrafią się rozjechać —
+    // wtedy na jednym ekranie wiersz mówił 2 szt, a pasek Wycena/Zakup/Δ liczył z 12 szt.
+    // Fallback na wymaganie tylko gdy węzeł nie niesie ilości (wywołania spoza tabeli Materials).
+    const qty = wbsNode?.quantity ?? card?.quantity ?? 0;
     // Cena wyceny: propozycja isOffer, a gdy jej brak — cena wpisana wprost w tabeli Materials
     // (budgetedPriceNetto wymagania). Bez tego fallbacku pasek pokazywał „Wycena: —" mimo ceny w wierszu.
     const offerPrice = offerProposal?.priceNetto ?? card?.priceNetto ?? null;

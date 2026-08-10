@@ -606,17 +606,14 @@ export class MaterialRequirementsService {
 
         // Jedno źródło prawdy dla quantity: WbsNode.
         // - 1 alokacja → update WbsNode.quantity (cascade: WbsNodeMaterial + MR.quantity + JSON)
-        // - 0 alokacji → direct update (legacy/standalone wymaganie bez WBS)
+        // - 0 alokacji → zapis na węźle z relacji 1:1 `wbsNodeId`, wymaganie dostaje odbicie
         // - >1 alokacji → ignoruj quantity (edycja per gałąź w ExpandedDetail)
         if (dto.quantity !== undefined) {
             const qty = parseFloat(String(dto.quantity));
             if (Number.isFinite(qty) && qty >= 0) {
                 const allocs = await this.prisma.wbsNodeMaterial.findMany({ where: { materialId: id } });
                 if (allocs.length === 1) {
-                    await this.prisma.wbsNode.update({
-                        where: { id: allocs[0].wbsNodeId },
-                        data: { quantity: qty },
-                    }).catch(() => {});
+                    await this.writeWbsNodeQuantity(allocs[0].wbsNodeId, qty);
                     await this.prisma.wbsNodeMaterial.update({
                         where: { id: allocs[0].id },
                         data: { quantity: qty },
@@ -625,6 +622,16 @@ export class MaterialRequirementsService {
                     data.wbsNodeAllocations = JSON.stringify({ [allocs[0].wbsNodeId]: qty });
                 } else if (allocs.length > 1) {
                     delete data.quantity;
+                } else {
+                    // @anchor mat-req-qty-to-wbs — brak alokacji: pozycja wisi na węźle przez relację 1:1
+                    // `wbsNodeId`. Wcześniej ilość lądowała wtedy WYŁĄCZNIE na wymaganiu, a WBS się o niej
+                    // nie dowiadywał — stąd rozjazd ilości między wierszem tabeli a kartą pod nim. Zasada:
+                    // zapis idzie najpierw na `WbsNode` (źródło prawdy), wymaganie dostaje odbicie.
+                    const req = await this.prisma.materialRequirement.findUnique({
+                        where: { id }, select: { wbsNodeId: true },
+                    });
+                    if (req?.wbsNodeId) await this.writeWbsNodeQuantity(req.wbsNodeId, qty);
+                    data.quantity = qty;
                 }
             }
         }
@@ -659,6 +666,25 @@ export class MaterialRequirementsService {
         }
 
         return updated;
+    }
+
+    // @anchor mat-req-write-wbs-node-quantity — zapis ilości na węźle WBS wraz z przeliczeniem
+    // totali. Sam `quantity` nie wystarcza: `totalCost` i `totalPrice` to iloczyny z ilością i bez
+    // przeliczenia budżet gałęzi rozjeżdża się z jej własnymi pozycjami.
+    private async writeWbsNodeQuantity(wbsNodeId: string, quantity: number) {
+        const node = await this.prisma.wbsNode.findUnique({
+            where: { id: wbsNodeId },
+            select: { unitCost: true, unitPrice: true },
+        });
+        if (!node) return;
+        await this.prisma.wbsNode.update({
+            where: { id: wbsNodeId },
+            data: {
+                quantity,
+                totalCost: (node.unitCost ?? 0) * quantity,
+                totalPrice: (node.unitPrice ?? 0) * quantity,
+            },
+        }).catch(() => {});
     }
 
     // @anchor mat-req-sync-offer-proposal-price — odwrotność `setOffer`: cena zapisana wprost

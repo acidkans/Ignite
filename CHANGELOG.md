@@ -4,6 +4,18 @@ Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie s�
 
 ---
 
+## 2026-08-10 — fix(wbs): ilość synchronizowana relacją 1:1, nie tabelą alokacji (v2026.08.10.769)
+
+### architektura / API
+- `back-funkcja` `syncMaterialsFromWbsNode` przy braku wiersza w `WbsNodeMaterial` spada na relację `MaterialRequirement.wbsNodeId` i zapisuje tam ilość. Wcześniej kończyła się na `if (allocs.length === 0) return`, więc dla ~81% pozycji ilość z WBS nie docierała do wymagania
+- `back-endpoint` `PATCH /material-requirements/:id` z polem `quantity` przy braku alokacji kieruje zapis na powiązany `schema-model` `WbsNode` (`back-funkcja` `writeWbsNodeQuantity`), a wymaganie dostaje odbicie — zamiast zapisu wyłącznie po stronie wymagania
+- `back-funkcja` `writeWbsNodeQuantity` przelicza `schema-pole` `WbsNode.totalCost` i `WbsNode.totalPrice` przy każdej zmianie ilości; wcześniej zapis ilości zostawiał totale nieprzeliczone
+- `ui-sekcja` `BaselineSplitCard` liczy ilość z węzła WBS (`ui-propsy` `wbsNode.quantity`), czyli z tej samej wartości co kolumna „Ilość" rozwiniętego wiersza; `WBSHybridTable` przekazuje `quantity` w propsie `wbsNode`
+
+### wytyczne
+- `schema-pole` `WbsNode.quantity` — jedyne źródło prawdy dla ilości; `MaterialRequirement.quantity` jest jego odbiciem. Każda ścieżka zapisu ilości musi trafiać najpierw na węzeł
+- `ui-sekcja` `BaselineSplitCard` jest rozwinięciem wiersza tabeli Materials — każda liczba w splicie musi pochodzić z tego samego nośnika co odpowiadająca jej kolumna wiersza
+
 ## 2026-08-10 — feat(materials): dwukierunkowa propagacja ceny jednostkowej + działania matematyczne w splicie (v2026.08.10.768)
 
 ### architektura / API

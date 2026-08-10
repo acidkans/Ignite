@@ -530,7 +530,18 @@ export class WbsNodesService {
      */
     private async syncMaterialsFromWbsNode(wbsNodeId: string, newQuantity: number) {
         const allocs = await this.prisma.wbsNodeMaterial.findMany({ where: { wbsNodeId } });
-        if (allocs.length === 0) return;
+        // @anchor wbs-sync-qty-direct-link — most między `WbsNode.quantity` a `MaterialRequirement.quantity`
+        // opierał się wyłącznie na tabeli alokacji `WbsNodeMaterial` (mechanizm rozdzielania materiału na
+        // kilka gałęzi), a ta pokrywa mniejszość pozycji. Przy jej braku funkcja kończyła się tutaj i ilość
+        // NIE docierała do wymagania — mimo że łączy je relacja 1:1 `MaterialRequirement.wbsNodeId`.
+        // Zasada: `WbsNode.quantity` jest źródłem prawdy, `MaterialRequirement.quantity` jego odbiciem.
+        if (allocs.length === 0) {
+            await this.prisma.materialRequirement.updateMany({
+                where: { wbsNodeId },
+                data: { quantity: newQuantity },
+            });
+            return;
+        }
 
         await this.prisma.wbsNodeMaterial.updateMany({
             where: { wbsNodeId },

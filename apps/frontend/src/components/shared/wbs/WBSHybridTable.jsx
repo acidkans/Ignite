@@ -380,7 +380,7 @@ function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, 
             {card ? (
                 <BaselineSplitCard
                     card={card}
-                    wbsNode={{ id: node.id, name: node.name }}
+                    wbsNode={{ id: node.id, name: node.name, quantity: node.quantity }}
                     processNodeId={processNodeId}
                     token={token}
                     materialDb={materialDb}
