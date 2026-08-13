@@ -18,5 +18,9 @@ RUN npx prisma generate
 
 COPY . .
 
-# Push schema, seed roles + users (dev only), build and start
-CMD ["sh", "-c", "npx prisma generate && npx prisma db push && node prisma/seed.js && ([ \"$NODE_ENV\" != \"production\" ] && node prisma/seed-users-from-json.js || true) && rm -f tsconfig.tsbuildinfo && npx tsc -p tsconfig.json && node dist/main"]
+# Migracje (nie `db push`), seed ról + użytkowników (dev only), build i start.
+# `prisma migrate deploy` stosuje wyłącznie pliki z prisma/migrations — razem z danymi
+# w nich zawartymi (INSERT/UPDATE) — i niczego nie kasuje na własną rękę.
+# `db push` wyliczał zmiany z różnicy schematu: pomijał dane z migracji, a przy rozjeździe
+# albo przerywał start, albo (z --accept-data-loss) usuwał kolumny i tabele.
+CMD ["sh", "-c", "npx prisma generate && npx prisma migrate deploy && node prisma/seed.js && ([ \"$NODE_ENV\" != \"production\" ] && node prisma/seed-users-from-json.js || true) && rm -f tsconfig.tsbuildinfo && npx tsc -p tsconfig.json && node dist/main"]

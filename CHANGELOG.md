@@ -1,3 +1,13 @@
+## 2026-08-13 — chore(deploy): backend stosuje migracje zamiast `prisma db push`
+
+### architektura / API
+- `apps/backend/Dockerfile.dev` CMD: `npx prisma db push` → `npx prisma migrate deploy`
+- powód: `db push` wyliczał zmiany z różnicy schematu, więc pomijał dane zapisane w migracjach (m.in. `INSERT INTO leave_types` i limity `maxDaysPerYear`), a przy rozjeździe schematu albo przerywał start kontenera, albo — uruchomiony z `--accept-data-loss` przez `fix_db.sh` / `npm run db:init` — kasował kolumny i tabele
+- stan produkcji przed zmianą: `_prisma_migrations` = 68 wpisów, pending = 8 migracji urlopowych; 13 wpisów w bazie nie ma plików w repo (skasowane historycznie) — `migrate deploy` ich nie sprawdza, bo nie wykrywa dryfu
+
+### wytyczne
+- `back-kontener` backend — zmiany schematu na produkcję trafiają wyłącznie przez pliki `prisma/migrations`; `db push` zostaje narzędziem lokalnym, `fix_db.sh` i `npm run db:init` (obie z `--accept-data-loss`) tylko po dumpie bazy
+
 ## 2026-08-13 — feat(urlopy): ustawowe limity dni dla rodzajów urlopu
 
 ### schema.prisma
