@@ -1,3 +1,43 @@
+## 2026-08-13 — feat(realizacja): etapowe wpisy zakupu i wykonania na liściu WBS (każdy typ)
+
+### schema.prisma
+- dodano model `LeafActual` (tabela `leaf_actuals`) — jeden wiersz = jedno zdarzenie zakupu albo wykonania: `entryDate`, `qty`, `unitCost`, `comment`, `docNumber`, `supplierId`, `authorId`. Kluczowany po `wbsRootId` (korzeń klonu liścia), NIE po id wiersza WBS — dzięki temu wpisy przeżywają utworzenie nowej wersji i świadomie NIE są klonowane w `cloneVersionData` (zakup zdarzył się raz w świecie rzeczywistym i nie należy do żadnej wersji). Bez FK na `wbsRootId`, bo liść bywa usuwany i odtwarzany; sprzątanie idzie kaskadą po `nodeId`
+- dodano pole `sourceWbsNodeId` w modelu `WbsNode` — korzeń klonu liścia, odpowiednik `MaterialRequirement.sourceRequirementId`; klucz parowania baseline↔żywe dla WBS. Bez backfillu: kod czyta je jako `sourceWbsNodeId ?? id`, więc NULL znaczy „sam jestem korzeniem"
+- dodano pole `realizationClosed` w modelu `WbsNode` — pozycja rozliczona mimo niedowykonania planu; różnica przestaje być brakiem i liczy się jako oszczędność, a liść wypada z niedokończonych w pokryciu
+- dodano relacje `ProcessNode.leafActuals`, `Supplier.leafActuals`, `User.leafActuals`
+- migracja `20260813150000_leaf_actuals`
+- migracja `20260813160000_backfill_leaf_actuals` — przeniesienie dotychczasowych zakupów: każda propozycja `isPurchase` z ceną staje się PIERWSZYM wpisem swojego liścia (ilość = ilość z wyceny, data = `createdAt` propozycji, dostawca i nr oferty z propozycji, autor pusty). Bez tego pozycje już kupione pokazywałyby „0 / N · 0%". Cena wg reguły backendu (propozycja pełniąca obie role bierze `purchasePriceNetto`; brak → nie jest zakupem), idempotentna — jeden wpis na korzeń klonu i tylko dla liści bez wpisów. Na produkcji obejmie 13 z 16 propozycji zakupu (3 bez ceny zostają „jeszcze nie kupione")
+
+### architektura / API
+- nowy moduł `leaf-actuals` — `GET /leaf-actuals/order/:nodeId`, `POST /leaf-actuals`, `PATCH /leaf-actuals/:id`, `DELETE /leaf-actuals/:id`, `PATCH /leaf-actuals/close/:wbsNodeId`. Dopisywać może ADMIN/MANAGER/LOGISTYK; cudzy wpis edytuje i kasuje wyłącznie manager (pilnuje serwis, bo to zależy od autora, nie od samej roli). Każda operacja idzie do `AuditLog` — to dane rozliczeniowe
+- `OrdersService.comparison` przebudowany z wymagań materiałowych na **liście WBS**: parowanie baseline↔żywe po `sourceWbsNodeId ?? id` (fallback po jednoznacznej nazwie dla wersji sprzed migracji), liść = węzeł bez dzieci. Praca i usługi wchodzą do porównania bez karty produktowej — plan biorą z `WbsNode.unitCost`, materiał i sprzęt dalej z propozycji `isOffer` / `budgetedPriceNetto`
+- strona ZAKUP w porównaniu = suma wpisów `LeafActual` (cena to średnia ważona, bo każdy wpis ma własną). Brak wpisów → fallback na propozycję `isPurchase` (`source: 'PROPOSAL'`), żeby zamówienia sprzed wdrożenia nie wyzerowały się; brak i tego → `null`, czyli wprost „jeszcze nie kupione / nie zrobione"
+- nowe odchylenie `NADMIAR` (kupione/wykonane więcej niż w planie) — osobne od `ILOSCIOWE`, które opisuje zmianę zakresu w wycenie. `ZAKRES_MINUS` zawsze 0: liść baseline bez żywego odpowiednika wypada z porównania
+- wiersz porównania niesie teraz `wbsNodeId`, `baselineWbsNodeId`, `liveId` (id żywej karty materiałowej), `type`, `closed` i listę `entries`; `key` to id liścia baseline, nie wymagania — `BudgetModesPanel` grupuje po `baselineWbsNodeId`
+- `WbsMaterialsPanel` pokazuje liście typu `work` i `service` obok `material` i `equipment` (`LEAF_TYPES`) — praca i usługa nie mają karty produktowej, więc rozwinięcie idzie prosto do wpisów, bez zakładania `MaterialRequirement`
+- `WbsMaterialsPanel` — trzy nowe kolumny widoczne po akceptacji baseline: `realization` (licznik „Σ wpisów / plan" z paskiem i procentem), `deltaQty`, `deltaValue`; `purchasePrice` pokazuje teraz średnią ważoną z wpisów (fallback: propozycja `isPurchase`) i jest read-only, bo wynika z wpisów
+- wpisy realizacji renderują się jako wiersze potomne liścia (`RealizationEntryRow`) z wierszem dopisywania na końcu (`RealizationAddRow`): data, komentarz, ilość, koszt jedn., dla materiału i sprzętu dodatkowo nr FV/PZ. Enter zapisuje i zostawia kursor w komentarzu; domyślki — data dziś, koszt jedn. z poprzedniego wpisu (przy pierwszym z wyceny), ilość 1
+- eksport Excel z panelu Materiały: kolumny `Zakup / wykonanie`, `Koszt jedn. zakupu`, `Wartość realizacji`, `Δ ilość`, `Δ wartość`, `Rozliczone` (Δ jako żywe formuły) + nowy arkusz `Realizacja (wpisy)` z dziennikiem dostaw i wykonania
+- `GET /wbs-nodes/unified/:nodeId` zwraca dodatkowo `sourceWbsNodeId` i `realizationClosed` — bez nich panel nie znałby korzenia klonu (wpisy trafiałyby pod złe id po utworzeniu wersji) ani stanu rozliczenia po przeładowaniu
+- `WbsMaterialsPanel` dla liści bez karty (praca, usługa, nocleg, paliwo): kolumna „Koszt jedn. oferty" pokazuje `WbsNode.unitCost` (to z niego liczy się Δ wartość), a w kolumnie „Produkt" znika przycisk „Utwórz kartę" — zakładanie wymagań materiałowych na robociźnie nie ma sensu
+
+### słownik
+- dodano `leaf-actual` — model wpisu realizacji liścia, `schema.prisma`
+- dodano `leaf-actuals-service` / `leaf-actuals-controller` / `leaf-actuals-module` — moduł CRUD wpisów, `apps/backend/src/leaf-actuals/`
+- dodano `wbs-node-source-wbs-node-id`, `wbs-node-realization-closed` — nowe pola `WbsNode`, `schema.prisma`
+- dodano `realization-of`, `wbs-root-of`, `realization-state-styles` — liczenie i kolory stanu realizacji, `WbsMaterialsPanel.jsx`
+- dodano `realization-entry-row`, `realization-add-row`, `wbs-materials-realization-col` — wiersze wpisów i kolumna licznika, `WbsMaterialsPanel.jsx`
+- dodano `fetch-actuals`, `add-actual`, `delete-actual`, `toggle-realization-closed` — operacje na wpisach, `WbsMaterialsPanel.jsx`
+- dodano `wbs-materials-type-meta`, `wbs-materials-leaf-types`, `wbs-materials-actuals`, `materials-export-realization` — typy liści i eksport, `WbsMaterialsPanel.jsx`
+
+### wytyczne
+- `back-funkcja` `onlyPositions` w `comparison()` — pozycja porównania to każdy węzeł kosztowy poza `group` i poza korzeniem, DOKŁADNIE jak suma budżetu w `acceptPreview`. Nie filtrować po „węzeł bez dzieci": w tym drzewie węzeł z dzieckiem bywa osobną pozycją z własną ceną (kamera z doczepioną licencją) i taki filtr gubił jej zakup
+- `schema-model` `LeafActual` — kluczować po `wbsRootId`, nigdy po id liścia; wpisy NIE wchodzą do `cloneVersionData` (wyjątek od zasady kompletności klonu: to fakt świata rzeczywistego, nie część wersji)
+- `schema-pole` `WbsNode.sourceWbsNodeId` — ustawiać w klonie jako `sourceWbsNodeId ?? id`; każdy nowy kod parujący wersje WBS ma używać tego pola, nie nazwy węzła
+- `ui-kolumna` `purchasePrice` — nie edytować wprost: to średnia ważona wpisów. Zmiana ceny zakupu = edycja albo dopisanie wpisu
+- `back-endpoint` `PATCH /leaf-actuals/close/:wbsNodeId` — jedyna droga do `realizationClosed`; celowo poza `PATCH /wbs-nodes/:id`, bo to decyzja rozliczeniowa z wpisem do `AuditLog`
+- jednostka zakupu = jednostka wyceny (1:1) — jeśli kiedyś dojdzie zakup w innej jednostce (bęben vs metry), przelicznik ma trafić na wpis, nie na liść
+
 ## 2026-08-13 — feat(materiały): kolumna Komentarz w widoku Materiały, Logistyka na tym samym panelu
 
 ### architektura / API

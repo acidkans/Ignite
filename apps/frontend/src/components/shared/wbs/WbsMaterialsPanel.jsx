@@ -6,7 +6,7 @@ import {
     CheckCircle, Clock, XCircle, Star, Trash2, AlertCircle,
     ShoppingCart, Warehouse, LogOut, Plus, Search, Sparkles,
     FileText, Link as LinkIcon, Download, BookOpen, X, Database, Paperclip,
-    Lock, ThumbsUp, ArrowRight, Maximize2,
+    Lock, ThumbsUp, ArrowRight, Maximize2, Hammer, ClipboardCheck, CornerDownLeft, Truck,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
 import SupplierPicker from '../SupplierPicker';
@@ -17,10 +17,22 @@ import AutoResizeTextarea from './AutoResizeTextarea';
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
 
+// @anchor wbs-materials-type-meta — typy liści widoczne w panelu. Materiał i sprzęt mają
+// kartę produktową (`MaterialRequirement`), praca i usługa nie — wchodzą tu wyłącznie po to,
+// żeby dało się na nich prowadzić wpisy realizacji na tych samych zasadach.
 const TYPE_META = {
-    material:  { label: 'Materiał', icon: Wrench,  color: 'text-amber-300',  reqType: 'material' },
-    equipment: { label: 'Sprzęt',   icon: Package, color: 'text-blue-300',   reqType: 'equipment' },
+    material:  { label: 'Materiał', icon: Wrench,         color: 'text-amber-300',  reqType: 'material',  hasCard: true },
+    equipment: { label: 'Sprzęt',   icon: Package,        color: 'text-blue-300',   reqType: 'equipment', hasCard: true },
+    work:      { label: 'Praca',    icon: Hammer,         color: 'text-violet-300', reqType: null,        hasCard: false },
+    service:   { label: 'Usługa',   icon: ClipboardCheck, color: 'text-teal-300',   reqType: null,        hasCard: false },
+    lodging:   { label: 'Nocleg',   icon: Warehouse,      color: 'text-sky-300',    reqType: null,        hasCard: false },
+    fuel:      { label: 'Paliwo',   icon: Truck,          color: 'text-orange-300', reqType: null,        hasCard: false },
 };
+
+// @anchor wbs-materials-leaf-types — wszystkie kosztowe typy liści z `TYPE_OPTIONS` poza
+// `group`; liście bez typu zostają poza panelem, bo nie wiadomo, czym są. Nocleg i paliwo
+// wchodzą, bo w porównaniu i tak się liczą — bez nich nie dałoby się im dopisać realizacji.
+const LEAF_TYPES = ['material', 'equipment', 'work', 'service', 'lodging', 'fuel'];
 
 const STATUS_META = {
     PENDING:   { label: 'Oczekuje',     icon: Clock,        color: 'text-amber-400' },
@@ -1855,7 +1867,7 @@ export function BaselineSplitCard({
 
 // ─── Row ──────────────────────────────────────────────────────────────────────
 
-function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isExpanded, onToggle, onPatchNode, onCreateCard, materialDb, offers, token, readOnly, onRefresh, onPatchCard, onPropagatePrice }) {
+function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isExpanded, onToggle, onPatchNode, onCreateCard, materialDb, offers, token, readOnly, onRefresh, onPatchCard, onPropagatePrice, realization }) {
     const meta = TYPE_META[node.type] || TYPE_META.material;
     const TypeIcon = meta.icon;
     const reqStatus = card?.status;
@@ -1990,6 +2002,43 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
                     </span>
                 )}
             </td>
+            {/* Zakup / wykonanie — licznik Σ wpisów wobec planu; klik rozwija wiersze wpisów.
+                Pasek przy nadmiarze mieści się w 100%: plan zajmuje swój udział w sumie,
+                nadwyżka dostaje resztę na czerwono. */}
+            {accepted && (() => {
+                const r = realization;
+                const st = REAL_STATE[r.state] || REAL_STATE.none;
+                const main = r.state === 'none' ? 0 : r.state === 'over' ? (r.plan / r.qty) * 100 : r.state === 'closed' ? 100 : Math.min(100, r.pct);
+                const over = r.state === 'over' ? 100 - main : 0;
+                return (
+                    <td className="px-3 py-2.5 text-right">
+                        <div onClick={onToggle} title="Kliknij, aby rozwinąć wpisy realizacji" className="flex flex-col items-stretch gap-1 cursor-pointer">
+                            <div className="flex items-baseline justify-end gap-1.5 font-mono text-sm whitespace-nowrap">
+                                <span className={st.text}>{fmtQty(r.qty)}</span>
+                                <span className="text-gray-500">/ {fmtQty(r.plan)} {node.unit || 'szt'}</span>
+                                <span className="text-[10px] text-gray-500 w-9 text-right">{r.pct}%</span>
+                            </div>
+                            <div className="h-[3px] rounded-sm bg-white/10 overflow-hidden flex">
+                                <span className={`h-full ${st.bar}`} style={{ width: `${main}%`, flex: 'none' }} />
+                                {over > 0 && <span className="h-full bg-red-400" style={{ width: `${over}%`, flex: 'none' }} />}
+                            </div>
+                            {node.realizationClosed && (
+                                <span className="self-end text-[9px] font-bold uppercase tracking-widest text-teal-300/80">rozliczone</span>
+                            )}
+                        </div>
+                    </td>
+                );
+            })()}
+            {/* Δ ilość — zakup/wykonanie minus plan; liczone z sumy wpisów, nie z pojedynczego */}
+            {accepted && (() => {
+                const d = Math.round((realization.qty - realization.plan) * 1000) / 1000;
+                const cls = d > 1e-9 ? 'text-red-300' : d < -1e-9 ? 'text-teal-300' : 'text-gray-600';
+                return (
+                    <td className="px-3 py-2.5 text-right font-mono text-sm whitespace-nowrap">
+                        <span className={cls}>{realization.qty === 0 && !node.realizationClosed ? '—' : `${d > 0 ? '+' : ''}${fmtQty(d)} ${node.unit || 'szt'}`}</span>
+                    </td>
+                );
+            })()}
             {/* Produkt */}
             <td className="px-3 py-2.5">
                 {card ? (
@@ -1998,6 +2047,10 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
                         {card.model && <div className="text-xs text-gray-400 break-words">{card.model}</div>}
                         {!card.manufacturer && !card.model && <span className="text-sm text-white italic">Brak produktu</span>}
                     </div>
+                ) : meta.hasCard === false ? (
+                    // Praca, usługa, nocleg, paliwo nie mają karty produktowej — pokazywanie
+                    // „Utwórz kartę" kusiłoby do zakładania wymagań materiałowych na robociźnie.
+                    <span className="text-sm text-gray-600">—</span>
                 ) : (
                     <button onClick={handleCreateCard} disabled={creating || readOnly}
                         className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs bg-white/5 hover:bg-white/10 text-gray-500 hover:text-gray-300 border border-white/10 transition-colors disabled:opacity-40">
@@ -2026,21 +2079,45 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
                     </div>
                 ) : (
                     <span onClick={() => { if (readOnly || !card) return; if (offerLocked) { requestOfferUnlock(); return; } setEditPrice(true); }}
-                        title={offerLocked ? 'Koszt jedn. oferty zamrożony akceptacją baseline' : undefined}
+                        title={!card && meta.hasCard === false
+                            ? 'Koszt jedn. z wyceny liścia (WbsNode.unitCost) — edycja w Budżecie'
+                            : (offerLocked ? 'Koszt jedn. oferty zamrożony akceptacją baseline' : undefined)}
                         className={`text-orange-400 ${!readOnly && card ? (offerLocked ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:text-orange-300') : ''}`}>
-                        {card?.priceNetto != null ? `${Number(card.priceNetto).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—'}
+                        {/* Praca i usługi nie mają karty — plan siedzi wtedy wprost na liściu,
+                            a Δ wartość i tak z niego liczy, więc kolumna musi go pokazać */}
+                        {card?.priceNetto != null
+                            ? `${fmtZl(card.priceNetto)} zł`
+                            : (!card && node.unitCost ? `${fmtZl(node.unitCost)} zł` : '—')}
                         {offerLocked && <Lock size={9} className="inline-block ml-1 -mt-0.5 text-amber-400/60" />}
                     </span>
                 )}
             </td>
-            {/* Koszt jedn. zakupu — tylko baseline; wartość tylko dla liści z realnym kosztem zakupu */}
+            {/* Koszt jedn. zakupu — średnia ważona wpisów realizacji (każdy ma własną cenę),
+                a przy braku wpisów cena z propozycji `isPurchase` (pozycje sprzed wpisów).
+                Read-only: wynika z wpisów, więc edytuje się je, nie komórkę. */}
             {accepted && (() => {
-                const pu = purchaseUnitOf(card);
+                const fromEntries = realization.avg;
+                const pu = fromEntries ?? purchaseUnitOf(card);
                 return (
                     <td className="px-3 py-2.5 text-sm font-mono whitespace-nowrap text-right">
-                        <span className="text-red-400">
-                            {pu != null ? `${Number(pu).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł` : '—'}
+                        <span className="text-red-400" title={fromEntries != null && realization.mixedPrices ? 'Średnia ważona z wpisów realizacji' : undefined}>
+                            {pu != null ? `${fmtZl(pu)} zł` : '—'}
+                            {fromEntries != null && realization.mixedPrices && <span className="text-[10px] text-gray-500 ml-1">śr.</span>}
                         </span>
+                    </td>
+                );
+            })()}
+            {/* Δ wartość — realizacja minus plan z wyceny; plan bierzemy z ceny karty, a dla
+                pracy i usług z `unitCost` liścia, bo tam nie ma karty produktowej */}
+            {accepted && (() => {
+                const planUnit = card?.priceNetto ?? node.unitCost ?? null;
+                const planValue = planUnit != null ? planUnit * (Number(node.quantity) || 0) : null;
+                const has = realization.qty > 0 || node.realizationClosed;
+                const d = has && planValue != null ? Math.round((realization.value - planValue) * 100) / 100 : null;
+                const cls = d == null ? 'text-gray-600' : d > 0.005 ? 'text-red-300' : d < -0.005 ? 'text-teal-300' : 'text-gray-500';
+                return (
+                    <td className="px-3 py-2.5 text-sm font-mono whitespace-nowrap text-right">
+                        <span className={cls}>{d == null ? '—' : `${d > 0 ? '+' : ''}${fmtZl(d)} zł`}</span>
                     </td>
                 );
             })()}
@@ -2082,6 +2159,153 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
     );
 }
 
+// ─── Wiersze realizacji ───────────────────────────────────────────────────────
+
+// @anchor realization-entry-row — jeden wpis realizacji jako wiersz potomny liścia.
+// Komórki lecą po `visibleCols`, więc ilość wpisu stoi dokładnie pod licznikiem liścia,
+// a koszt pod „Koszt jedn. zakupu" — widać wzrokowo, że wiersze sumują się w to, co wyżej.
+function RealizationEntryRow({ entry, node, cols, readOnly, onDelete }) {
+    const author = [entry.author?.firstName, entry.author?.lastName].filter(Boolean).join(' ') || entry.author?.email || '';
+    const lastKey = cols[cols.length - 1]?.key;
+    return (
+        <tr className="group/entry bg-black/25 hover:bg-black/[0.15] border-b border-white/[0.03]">
+            <td className="px-3 py-1.5" />
+            {cols.map(c => {
+                if (c.key === 'parent') return (
+                    <td key={c.key} className="px-3 py-1.5 font-mono text-xs text-gray-500 whitespace-nowrap">
+                        <span className="inline-block w-3 h-2 mr-1.5 border-l border-b border-white/20 rounded-bl-sm align-middle" />
+                        {fmtDate(entry.entryDate)}
+                    </td>
+                );
+                if (c.key === 'name') return (
+                    <td key={c.key} className="px-3 py-1.5 text-xs text-gray-300">
+                        {entry.docNumber && (
+                            <span className="inline-block mr-2 px-1.5 py-px rounded border border-blue-400/25 bg-blue-400/10 text-blue-300 font-mono text-[10px]">{entry.docNumber}</span>
+                        )}
+                        {entry.comment || '—'}
+                        {entry.supplier?.name && <span className="text-gray-500"> · {entry.supplier.name}</span>}
+                        {author && <span className="text-gray-600 text-[10px] ml-2">· {author}</span>}
+                    </td>
+                );
+                if (c.key === 'realization') return (
+                    <td key={c.key} className="px-3 py-1.5 text-right font-mono text-xs text-gray-200 whitespace-nowrap">
+                        {fmtQty(entry.qty)} {node.unit || 'szt'}
+                    </td>
+                );
+                if (c.key === 'purchasePrice') return (
+                    <td key={c.key} className="px-3 py-1.5 text-right font-mono text-xs text-red-300 whitespace-nowrap">{fmtZl(entry.unitCost)}</td>
+                );
+                if (c.key === 'deltaValue') return (
+                    <td key={c.key} className="px-3 py-1.5 text-right font-mono text-xs text-gray-400 whitespace-nowrap">{fmtZl(entry.qty * entry.unitCost)} zł</td>
+                );
+                if (c.key === lastKey) return (
+                    <td key={c.key} className="px-3 py-1.5 text-right">
+                        {!readOnly && (
+                            <button onClick={onDelete} title="Usuń wpis realizacji"
+                                className="opacity-0 group-hover/entry:opacity-100 text-gray-600 hover:text-red-400 transition-all"><Trash2 size={12} /></button>
+                        )}
+                    </td>
+                );
+                return <td key={c.key} className="px-3 py-1.5" />;
+            })}
+        </tr>
+    );
+}
+
+// @anchor realization-add-row — zawsze pusty wiersz na końcu listy wpisów. Enter w dowolnym
+// polu zapisuje i zostawia kursor w komentarzu, żeby kolejny wpis szedł bez sięgania po mysz.
+// Domyślki: data dziś, koszt jedn. z poprzedniego wpisu (przy pierwszym z wyceny), ilość 1.
+function RealizationAddRow({ node, cols, defaultCost, hasDoc, closed, onAdd, onToggleClosed }) {
+    const today = new Date().toISOString().slice(0, 10);
+    const blank = () => ({ entryDate: today, qty: '1', unitCost: defaultCost != null ? String(defaultCost) : '', comment: '', docNumber: '' });
+    const [draft, setDraft] = useState(blank);
+    const [saving, setSaving] = useState(false);
+    const commentRef = useRef(null);
+
+    useEffect(() => {
+        setDraft(d => (d.unitCost === '' && defaultCost != null ? { ...d, unitCost: String(defaultCost) } : d));
+    }, [defaultCost]);
+
+    const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
+
+    const submit = async () => {
+        if (saving) return;
+        const qty = parseFloat(String(draft.qty).replace(',', '.'));
+        if (!Number.isFinite(qty) || qty <= 0) return;
+        setSaving(true);
+        const ok = await onAdd(draft);
+        setSaving(false);
+        if (ok) {
+            setDraft(blank());
+            commentRef.current?.focus();
+        }
+    };
+    const onKey = e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
+
+    const input = (extra = '') => `w-full bg-black/40 border border-white/10 rounded px-2 py-0.5 text-xs text-white outline-none focus:border-teal-500/50 placeholder-gray-700 ${extra}`;
+    const lastKey = cols[cols.length - 1]?.key;
+
+    return (
+        <tr className="bg-teal-500/[0.04] border-b border-white/5">
+            <td className="px-3 py-1.5" />
+            {cols.map(c => {
+                if (c.key === 'parent') return (
+                    <td key={c.key} className="px-3 py-1.5">
+                        <input value={draft.entryDate} onChange={e => set('entryDate', e.target.value)} onKeyDown={onKey}
+                            aria-label="Data zdarzenia" className={input('font-mono')} />
+                    </td>
+                );
+                if (c.key === 'name') return (
+                    <td key={c.key} className="px-3 py-1.5">
+                        <div className="flex items-center gap-2">
+                            <input ref={commentRef} value={draft.comment} onChange={e => set('comment', e.target.value)} onKeyDown={onKey}
+                                placeholder="komentarz — co zrobione" className={input()} />
+                            {hasDoc && (
+                                <input value={draft.docNumber} onChange={e => set('docNumber', e.target.value)} onKeyDown={onKey}
+                                    placeholder="FV / PZ" className={input('max-w-[130px]')} />
+                            )}
+                        </div>
+                    </td>
+                );
+                if (c.key === 'realization') return (
+                    <td key={c.key} className="px-3 py-1.5">
+                        <input value={draft.qty} onChange={e => set('qty', sanitizeQtyInput(e.target.value))} onKeyDown={onKey}
+                            inputMode="decimal" aria-label="Ilość" className={input('font-mono text-right')} />
+                    </td>
+                );
+                if (c.key === 'purchasePrice') return (
+                    <td key={c.key} className="px-3 py-1.5">
+                        <input value={draft.unitCost} onChange={e => set('unitCost', sanitizeQtyInput(e.target.value))} onKeyDown={onKey}
+                            inputMode="decimal" aria-label="Koszt jednostkowy" className={input('font-mono text-right')} />
+                    </td>
+                );
+                if (c.key === 'deltaValue') return (
+                    <td key={c.key} className="px-3 py-1.5 text-right">
+                        <button onClick={submit} disabled={saving} title="Zapisz wpis (Enter)"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-teal-500/30 bg-teal-500/10 text-teal-300 text-[10px] font-bold uppercase tracking-widest hover:bg-teal-500/20 disabled:opacity-40">
+                            <CornerDownLeft size={11} /> dopisz
+                        </button>
+                    </td>
+                );
+                if (c.key === lastKey) return (
+                    <td key={c.key} className="px-3 py-1.5 text-right">
+                        <button onClick={onToggleClosed}
+                            title={closed ? 'Pozycja rozliczona — kliknij, aby wznowić' : 'Rozlicz pozycję mimo niedowykonania planu'}
+                            className={`px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-widest transition-colors ${
+                                closed
+                                    ? 'border-teal-500/30 bg-teal-500/10 text-teal-300'
+                                    : 'border-white/10 text-gray-500 hover:text-gray-300 hover:border-white/20'
+                            }`}>
+                            {closed ? 'Rozliczone' : 'Rozlicz'}
+                        </button>
+                    </td>
+                );
+                return <td key={c.key} className="px-3 py-1.5" />;
+            })}
+        </tr>
+    );
+}
+
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
 // Kolumna `purchasePrice` (Koszt jedn. zakupu) pojawia się TYLKO po akceptacji baseline
@@ -2090,10 +2314,15 @@ const COL_DEFS = [
     { key: 'parent',        label: 'Przedmiot projektu',   defaultW: 144 },
     { key: 'name',          label: 'Nazwa',                defaultW: 220 },
     { key: 'techSpec',      label: 'Wymagania techniczne', defaultW: 200 },
-    { key: 'qty',           label: 'Ilość',                defaultW: 88  },
+    { key: 'qty',           label: 'Ilość wyceny',         defaultW: 88  },
+    // @anchor wbs-materials-realization-col — licznik „Σ wpisów / plan" z paskiem;
+    // klik rozwija wiersze wpisów, tam też siedzi „+ dopisz"
+    { key: 'realization',   label: 'Zakup / wykonanie',    defaultW: 150, align: 'right', baselineOnly: true },
+    { key: 'deltaQty',      label: 'Δ ilość',              defaultW: 96,  align: 'right', baselineOnly: true },
     { key: 'product',       label: 'Produkt',              defaultW: 160 },
     { key: 'price',         label: 'Koszt jedn. oferty',   defaultW: 128, align: 'right' },
     { key: 'purchasePrice', label: 'Koszt jedn. zakupu',   defaultW: 128, align: 'right', baselineOnly: true },
+    { key: 'deltaValue',    label: 'Δ wartość',            defaultW: 118, align: 'right', baselineOnly: true },
     { key: 'status',        label: 'Status oferty',        defaultW: 148 },
     { key: 'comment',       label: 'Komentarz',            defaultW: 200 },
 ];
@@ -2104,6 +2333,54 @@ function purchaseUnitOf(card) {
     const p = card?.proposals?.find(x => x.isPurchase);
     if (!p) return null;
     return (p.isOffer && p.isPurchase) ? (p.purchasePriceNetto ?? p.priceNetto ?? null) : (p.priceNetto ?? null);
+}
+
+// @anchor realization-state-styles — kolor niesie stan realizacji: bursztyn w trakcie,
+// zieleń na planie, czerwień ponad plan, teal dla pozycji rozliczonej ręcznie.
+const REAL_STATE = {
+    none:   { text: 'text-gray-500',   bar: 'bg-white/15' },
+    part:   { text: 'text-amber-300',  bar: 'bg-amber-400' },
+    full:   { text: 'text-emerald-300', bar: 'bg-emerald-400' },
+    over:   { text: 'text-red-300',    bar: 'bg-emerald-400' },
+    closed: { text: 'text-teal-300',   bar: 'bg-teal-400' },
+};
+
+const fmtQty = (v) => {
+    const n = Number(v) || 0;
+    return Number.isInteger(n) ? String(n) : n.toLocaleString('pl-PL', { maximumFractionDigits: 3 });
+};
+const fmtZl = (v) => v == null ? '—' : Number(v).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtDate = (d) => { try { return new Date(d).toISOString().slice(0, 10); } catch { return ''; } };
+
+// @anchor wbs-root-of — korzeń klonu liścia: po nim wiszą wpisy realizacji, więc przetrwają
+// utworzenie nowej wersji. Wiersze sprzed migracji nie mają pola i są własnym korzeniem.
+const wbsRootOf = (node) => node?.sourceWbsNodeId || node?.id || '';
+
+// @anchor realization-of — suma wpisów realizacji liścia wobec planu z wyceny.
+// `avg` to średnia ważona (każdy wpis ma własny koszt jedn.), `state` steruje kolorem:
+// none → nic nie zrobione, part → w trakcie, full → plan wykonany, over → ponad plan,
+// closed → pozycja rozliczona ręcznie mimo niedowykonania.
+function realizationOf(node, entries) {
+    const list = entries || [];
+    const qty = Math.round(list.reduce((s, e) => s + (Number(e.qty) || 0), 0) * 1000) / 1000;
+    const value = Math.round(list.reduce((s, e) => s + (Number(e.qty) || 0) * (Number(e.unitCost) || 0), 0) * 100) / 100;
+    const plan = Number(node?.quantity) || 0;
+    const pct = plan > 0 ? Math.round((qty / plan) * 100) : (qty > 0 ? 100 : 0);
+    const state = node?.realizationClosed ? 'closed'
+        : qty === 0 ? 'none'
+        : qty > plan + 1e-9 ? 'over'
+        : qty >= plan - 1e-9 ? 'full'
+        : 'part';
+    return {
+        entries: list,
+        qty,
+        value,
+        plan,
+        pct,
+        state,
+        avg: qty > 0 ? Math.round((value / qty) * 100) / 100 : null,
+        mixedPrices: list.length > 1 && list.some(e => Number(e.unitCost) !== Number(list[0].unitCost)),
+    };
 }
 
 // Spłaszcza zagnieżdżony obiekt material na wymaganie — po migracji katalog jest w relacji,
@@ -2171,9 +2448,23 @@ export default function WbsMaterialsPanel({
     const visibleCols = useMemo(() => COL_DEFS.filter(c => !c.baselineOnly || accepted), [accepted]);
 
     const matNodes = useMemo(() =>
-        wbsNodes.filter(n => n.type === 'material' || n.type === 'equipment'),
+        wbsNodes.filter(n => LEAF_TYPES.includes(n.type)),
         [wbsNodes]
     );
+
+    // @anchor wbs-materials-actuals — wpisy realizacji całego zamówienia, grupowane po
+    // korzeniu klonu liścia. Jeden fetch na panel: wiersze wpisów i licznik w nagłówku
+    // liczą się z tej samej listy, więc nie rozjeżdżają się po dopisaniu.
+    const [actuals, setActuals] = useState([]);
+    const actualsByRoot = useMemo(() => {
+        const map = {};
+        for (const a of actuals) {
+            if (!map[a.wbsRootId]) map[a.wbsRootId] = [];
+            map[a.wbsRootId].push(a);
+        }
+        return map;
+    }, [actuals]);
+    const entriesOf = useCallback((node) => actualsByRoot[wbsRootOf(node)] || [], [actualsByRoot]);
 
     const sortedFilteredNodes = useMemo(() => {
         let nodes = [...matNodes];
@@ -2238,6 +2529,18 @@ export default function WbsMaterialsPanel({
                 cmp = (ca?.priceNetto ?? Infinity) - (cb?.priceNetto ?? Infinity);
             } else if (sortConfig.key === 'purchasePrice') {
                 cmp = (purchaseUnitOf(ca) ?? Infinity) - (purchaseUnitOf(cb) ?? Infinity);
+            } else if (sortConfig.key === 'realization' || sortConfig.key === 'deltaQty' || sortConfig.key === 'deltaValue') {
+                // Sortowanie po realizacji: „ile zrobione" wobec planu — najpierw pozycje
+                // nieruszone, na końcu przekroczone. Δ wartość idzie kwotą, nie procentem.
+                const ra = realizationOf(a, actualsByRoot[wbsRootOf(a)] || []);
+                const rb = realizationOf(b, actualsByRoot[wbsRootOf(b)] || []);
+                if (sortConfig.key === 'realization') cmp = ra.pct - rb.pct;
+                else if (sortConfig.key === 'deltaQty') cmp = (ra.qty - ra.plan) - (rb.qty - rb.plan);
+                else {
+                    const va = ra.value - (ca?.priceNetto ?? a.unitCost ?? 0) * (a.quantity || 0);
+                    const vb = rb.value - (cb?.priceNetto ?? b.unitCost ?? 0) * (b.quantity || 0);
+                    cmp = va - vb;
+                }
             } else if (sortConfig.key === 'techSpec') {
                 cmp = (ca?.technicalSpec || '').localeCompare(cb?.technicalSpec || '', 'pl');
             } else if (sortConfig.key === 'comment') {
@@ -2249,7 +2552,7 @@ export default function WbsMaterialsPanel({
         });
 
         return nodes;
-    }, [matNodes, cards, sortConfig, colFilters, searchQuery]);
+    }, [matNodes, cards, sortConfig, colFilters, searchQuery, actualsByRoot]);
 
     // ─ Data fetching ─────────────────────────────────────────────────────────
 
@@ -2313,6 +2616,18 @@ export default function WbsMaterialsPanel({
         }
     }, [nodeId, versionId, token, externalWbsNodes]);
 
+    // @anchor fetch-actuals — GET /leaf-actuals/order/:nodeId. Wpisy wiszą na korzeniu
+    // klonu liścia, więc pobieramy je dla całego zamówienia raz, niezależnie od wersji.
+    const fetchActuals = useCallback(async () => {
+        if (!nodeId) return;
+        try {
+            const res = await fetch(`${API_URL}/leaf-actuals/order/${nodeId}`, { headers: { Authorization: `Bearer ${token}` } });
+            if (res.ok) setActuals(await res.json());
+        } catch (e) {
+            console.error('[WbsMaterialsPanel] fetchActuals error:', e);
+        }
+    }, [nodeId, token]);
+
     const fetchMaterialDb = useCallback(async () => {
         try {
             const res = await fetch(`${API_URL}/materials`, {
@@ -2338,7 +2653,8 @@ export default function WbsMaterialsPanel({
         fetchCards();
         fetchMaterialDb();
         fetchOffers();
-    }, [fetchCards, fetchMaterialDb, fetchOffers, refreshKey]);
+        fetchActuals();
+    }, [fetchCards, fetchMaterialDb, fetchOffers, fetchActuals, refreshKey]);
 
     // @anchor wbs-materials-panel-global-update-listener
     useEffect(() => {
@@ -2385,6 +2701,59 @@ export default function WbsMaterialsPanel({
         }
         onWbsUpdate?.();
     }, [onWbsUpdate, onPatchNode, externalWbsNodes, wbsNodes, onQuantityChange]);
+
+    // @anchor add-actual — dopisanie wpisu realizacji. Ilość i koszt idą jako tekst
+    // (przecinek dziesiętny), backend je normalizuje; po zapisie odświeżamy całą listę,
+    // bo licznik liścia i wiersze wpisów muszą pochodzić z jednego źródła.
+    const addActual = useCallback(async (node, draft) => {
+        const res = await fetch(`${API_URL}/leaf-actuals`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({
+                wbsNodeId: node.id,
+                entryDate: draft.entryDate || undefined,
+                qty: draft.qty,
+                unitCost: draft.unitCost,
+                comment: draft.comment || null,
+                docNumber: draft.docNumber || null,
+            }),
+        });
+        if (!res.ok) {
+            const e = await res.json().catch(() => ({}));
+            alert(e.message || 'Nie udało się zapisać wpisu realizacji');
+            return false;
+        }
+        await fetchActuals();
+        return true;
+    }, [fetchActuals]);
+
+    // @anchor delete-actual
+    const deleteActual = useCallback(async (id) => {
+        const res = await fetch(`${API_URL}/leaf-actuals/${id}`, { method: 'DELETE', headers: authHeaders() });
+        if (!res.ok) {
+            const e = await res.json().catch(() => ({}));
+            alert(e.message || 'Nie udało się usunąć wpisu');
+            return;
+        }
+        await fetchActuals();
+    }, [fetchActuals]);
+
+    // @anchor toggle-realization-closed — rozliczenie pozycji mimo niedowykonania planu.
+    // Osobny endpoint (nie PATCH /wbs-nodes), bo to decyzja rozliczeniowa idąca do AuditLog;
+    // lokalną kopię węzła aktualizujemy tak samo jak `patchWbsNode`.
+    const toggleRealizationClosed = useCallback(async (node) => {
+        const closed = !node.realizationClosed;
+        const res = await fetch(`${API_URL}/leaf-actuals/close/${node.id}`, {
+            method: 'PATCH',
+            headers: authHeaders(),
+            body: JSON.stringify({ closed }),
+        });
+        if (!res.ok) return;
+        if (!externalWbsNodes) {
+            setInternalWbsNodes(prev => prev.map(n => n.id === node.id ? { ...n, realizationClosed: closed } : n));
+        }
+        onPatchNode?.(node.id, { realizationClosed: closed });
+    }, [externalWbsNodes, onPatchNode]);
 
     const createCard = useCallback(async (node) => {
         const reqType = wbsTypeFromAny(node.type) === 'equipment' ? 'equipment' : 'material';
@@ -2518,7 +2887,7 @@ export default function WbsMaterialsPanel({
 
     const exportToExcel = useCallback(async () => {
         const STATUS_LABELS_XLS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
-        const TYPE_LABELS_XLS = { material: 'Materiał', equipment: 'Sprzęt' };
+        const TYPE_LABELS_XLS = { material: 'Materiał', equipment: 'Sprzęt', work: 'Praca', service: 'Usługa', lodging: 'Nocleg', fuel: 'Paliwo' };
 
         // technicalSpec jest wpisywany jedna linia = jedno wymaganie; w Excelu
         // zlewały się bez separatora, więc łączymy je średnikiem.
@@ -2550,6 +2919,14 @@ export default function WbsMaterialsPanel({
             { header: 'Model', key: 'model', width: 18 },
             { header: 'Nazwa handlowa', key: 'productName', width: 22 },
             { header: 'Koszt jednostkowy', key: 'price', width: 12 },
+            // @anchor materials-export-realization — kolumny realizacji: ilość i wartość
+            // z wpisów, Δ jako żywe formuły (arkusz ma zostać policzalny po ręcznej korekcie)
+            { header: 'Zakup / wykonanie', key: 'realized', width: 15 },
+            { header: 'Koszt jedn. zakupu', key: 'realizedUnit', width: 15 },
+            { header: 'Wartość realizacji', key: 'realizedValue', width: 16 },
+            { header: 'Δ ilość', key: 'deltaQty', width: 10 },
+            { header: 'Δ wartość', key: 'deltaValue', width: 14 },
+            { header: 'Rozliczone', key: 'closed', width: 11 },
             { header: 'Status', key: 'status', width: 14 },
             { header: 'Dostępność', key: 'availability', width: 14 },
             { header: 'Prop. producent', key: 'pManufacturer', width: 18 },
@@ -2562,14 +2939,36 @@ export default function WbsMaterialsPanel({
         detHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         detHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
 
+        // Litery kolumn do formuł Δ — po `columns` są już znane, a nazwy trzymają się
+        // kluczy, więc dołożenie kolumny nie rozjeżdża odwołań.
+        const colL = (key) => detailsSheet.getColumn(key).letter;
+
         const detailsNodes = [...matNodes].sort((a, b) => (a.path || '').localeCompare(b.path || '', 'pl', { numeric: true, sensitivity: 'base' }));
         for (const node of detailsNodes) {
             const card = cards[node.id] || null;
             const parent = getParentPath(node.path);
             const selectedProposal = (card?.proposals || []).find(p => p.isSelected);
             const allProposals = card?.proposals || [];
+            const real = realizationOf(node, entriesOf(node));
+            const planUnit = card?.priceNetto ?? node.unitCost ?? null;
+            const rowNo = detailsSheet.rowCount + 1;
 
             detailsSheet.addRow({
+                realized: real.entries.length ? real.qty : null,
+                realizedUnit: real.avg,
+                realizedValue: real.entries.length
+                    ? { formula: `${colL('realized')}${rowNo}*${colL('realizedUnit')}${rowNo}`, result: real.value }
+                    : null,
+                deltaQty: real.entries.length || node.realizationClosed
+                    ? { formula: `${colL('realized')}${rowNo}-${colL('qty')}${rowNo}`, result: Math.round((real.qty - real.plan) * 1000) / 1000 }
+                    : null,
+                deltaValue: (real.entries.length || node.realizationClosed) && planUnit != null
+                    ? {
+                        formula: `${colL('realizedValue')}${rowNo}-${colL('qty')}${rowNo}*${colL('price')}${rowNo}`,
+                        result: Math.round((real.value - planUnit * (Number(node.quantity) || 0)) * 100) / 100,
+                    }
+                    : null,
+                closed: node.realizationClosed ? 'TAK' : '',
                 type: TYPE_LABELS_XLS[node.type] || node.type,
                 parent,
                 path: upperFirstSegment(node.path || ''),
@@ -2579,7 +2978,9 @@ export default function WbsMaterialsPanel({
                 manufacturer: card?.manufacturer || '',
                 model: card?.model || '',
                 productName: card?.productName || '',
-                price: card?.priceNetto != null ? Number(card.priceNetto) : null,
+                // Praca i usługi nie mają karty — koszt planu bierzemy wtedy z liścia,
+                // inaczej formuła Δ wartość odejmowałaby pustą komórkę.
+                price: card?.priceNetto != null ? Number(card.priceNetto) : (node.unitCost != null ? Number(node.unitCost) : null),
                 status: STATUS_LABELS_XLS[card?.status] || (card ? (card.status || '') : ''),
                 tech: joinTechLines(card?.technicalSpec),
                 availability: card?.availability || '',
@@ -2713,12 +3114,63 @@ export default function WbsMaterialsPanel({
             };
         }
 
+        // ── Sheet 3: wpisy realizacji (rozliczenie zakupów i wykonania) ──────
+        // Osobny arkusz, bo tu jest wiele wierszy na jedną pozycję — arkusz „Materiały"
+        // ma zostać listą pozycji, a nie dziennikiem dostaw.
+        if (actuals.length > 0) {
+            const nodeByRoot = new Map(matNodes.map(n => [wbsRootOf(n), n]));
+            const realSheet = workbook.addWorksheet('Realizacja (wpisy)');
+            realSheet.columns = [
+                { header: 'Przedmiot projektu', key: 'parent', width: 24 },
+                { header: 'Pozycja', key: 'name', width: 30 },
+                { header: 'Typ', key: 'type', width: 12 },
+                { header: 'Data', key: 'date', width: 12 },
+                { header: 'Ilość', key: 'qty', width: 10 },
+                { header: 'Jednostka', key: 'unit', width: 10 },
+                { header: 'Koszt jedn.', key: 'unitCost', width: 13 },
+                { header: 'Wartość', key: 'value', width: 14 },
+                { header: 'Dokument', key: 'doc', width: 18 },
+                { header: 'Dostawca', key: 'supplier', width: 20 },
+                { header: 'Komentarz', key: 'comment', width: 42 },
+                { header: 'Autor', key: 'author', width: 20 },
+            ];
+            const realHeader = realSheet.getRow(1);
+            realHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            realHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+
+            const qtyL = realSheet.getColumn('qty').letter;
+            const costL = realSheet.getColumn('unitCost').letter;
+            for (const e of actuals) {
+                const node = nodeByRoot.get(e.wbsRootId) || null;
+                const rowNo = realSheet.rowCount + 1;
+                realSheet.addRow({
+                    parent: node ? getParentPath(node.path) : '',
+                    name: node?.name || '—',
+                    type: TYPE_LABELS_XLS[node?.type] || node?.type || '',
+                    date: fmtDate(e.entryDate),
+                    qty: Number(e.qty),
+                    unit: node?.unit || 'szt',
+                    unitCost: Number(e.unitCost),
+                    value: { formula: `${qtyL}${rowNo}*${costL}${rowNo}`, result: Math.round(e.qty * e.unitCost * 100) / 100 },
+                    doc: e.docNumber || '',
+                    supplier: e.supplier?.name || '',
+                    comment: e.comment || '',
+                    author: [e.author?.firstName, e.author?.lastName].filter(Boolean).join(' ') || e.author?.email || '',
+                });
+            }
+            const sumRow = realSheet.addRow({ comment: 'RAZEM', value: { formula: `SUM(${realSheet.getColumn('value').letter}2:${realSheet.getColumn('value').letter}${realSheet.rowCount})`, result: null } });
+            sumRow.font = { bold: true };
+            realSheet.getColumn('unitCost').numFmt = '#,##0.00';
+            realSheet.getColumn('value').numFmt = '#,##0.00';
+            realSheet.views = [{ state: 'frozen', ySplit: 1 }];
+        }
+
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const safeOrder = String(orderName || projectName || 'zamowienie').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'zamowienie';
         // Zwraca artefakt (zamiast pobierać) — wybór pobierz/wyślij robi ExportChoiceModal w rodzicu.
         return { blob, filename: `${safeOrder}_materialy.xlsx` };
-    }, [matNodes, cards, orderName, projectName]);
+    }, [matNodes, cards, orderName, projectName, actuals, entriesOf]);
 
     // Notify parent when export function updates
     useEffect(() => { onExportReady?.(exportToExcel); }, [exportToExcel]);
@@ -2800,6 +3252,8 @@ export default function WbsMaterialsPanel({
                         {sortedFilteredNodes.map(node => {
                             const card = cards[node.id] || null;
                             const isExpanded = expandedId === node.id;
+                            const realization = realizationOf(node, entriesOf(node));
+                            const hasCard = TYPE_META[node.type]?.hasCard !== false;
                             return (
                                 <React.Fragment key={node.id}>
                                     <WbsMaterialRow
@@ -2808,11 +3262,14 @@ export default function WbsMaterialsPanel({
                                         accepted={accepted}
                                         offerLocked={offerLocked}
                                         isExpanded={isExpanded}
+                                        realization={realization}
                                         onPropagatePrice={propagatePriceNetto}
                                         onToggle={async () => {
                                             if (isExpanded) {
                                                 setExpandedId(null);
-                                            } else if (!card) {
+                                            } else if (!card && hasCard) {
+                                                // Materiał/sprzęt bez karty: rozwinięcie ją zakłada — praca
+                                                // i usługa karty nie mają, więc idą prosto do wpisów.
                                                 await createCard(node);
                                             } else {
                                                 setExpandedId(node.id);
@@ -2827,6 +3284,31 @@ export default function WbsMaterialsPanel({
                                         onRefresh={refreshCards}
                                         onPatchCard={patchCard}
                                     />
+                                    {/* @anchor realization-entry-rows — wpisy realizacji jako wiersze
+                                        potomne liścia: historia rośnie w dół, dopisywanie jest w tym
+                                        samym miejscu, w którym patrzy się na Δ. Widoczne po akceptacji
+                                        baseline, bo dopiero wtedy jest plan, z którym się porównujemy. */}
+                                    {isExpanded && accepted && realization.entries.map(e => (
+                                        <RealizationEntryRow
+                                            key={e.id}
+                                            entry={e}
+                                            node={node}
+                                            cols={visibleCols}
+                                            readOnly={readOnly}
+                                            onDelete={() => deleteActual(e.id)}
+                                        />
+                                    ))}
+                                    {isExpanded && accepted && !readOnly && (
+                                        <RealizationAddRow
+                                            node={node}
+                                            cols={visibleCols}
+                                            defaultCost={realization.entries.length ? realization.entries[realization.entries.length - 1].unitCost : (card?.priceNetto ?? node.unitCost ?? 0)}
+                                            hasDoc={hasCard}
+                                            closed={!!node.realizationClosed}
+                                            onAdd={draft => addActual(node, draft)}
+                                            onToggleClosed={() => toggleRealizationClosed(node)}
+                                        />
+                                    )}
                                     {isExpanded && card && (
                                         <tr>
                                             <td colSpan={visibleCols.length + 1} className="p-0 bg-black/20 border-b border-white/5">

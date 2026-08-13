@@ -1270,6 +1270,73 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-przycisk | chip Δ/pokrycie w nagłówku sekcji Materiały | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor materials-comparison-chip |
 | ui-modal | modal panelu porównawczego | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor materials-comparison-modal |
 
+### Moduł Realizacja — etapowe wpisy zakupu i wykonania na liściu WBS
+
+#### Backend (`apps/backend/prisma/schema.prisma`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| schema-model | LeafActual | apps/backend/prisma/schema.prisma | @anchor leaf-actual |
+| schema-pole | LeafActual.id | apps/backend/prisma/schema.prisma | @anchor leaf-actual-id |
+| schema-pole | LeafActual.wbsRootId | apps/backend/prisma/schema.prisma | @anchor leaf-actual-wbs-root-id |
+| schema-pole | LeafActual.nodeId | apps/backend/prisma/schema.prisma | @anchor leaf-actual-node-id |
+| schema-pole | LeafActual.entryDate | apps/backend/prisma/schema.prisma | @anchor leaf-actual-entry-date |
+| schema-pole | LeafActual.qty | apps/backend/prisma/schema.prisma | @anchor leaf-actual-qty |
+| schema-pole | LeafActual.unitCost | apps/backend/prisma/schema.prisma | @anchor leaf-actual-unit-cost |
+| schema-pole | LeafActual.comment | apps/backend/prisma/schema.prisma | @anchor leaf-actual-comment |
+| schema-pole | LeafActual.docNumber | apps/backend/prisma/schema.prisma | @anchor leaf-actual-doc-number |
+| schema-pole | LeafActual.supplierId | apps/backend/prisma/schema.prisma | @anchor leaf-actual-supplier-id |
+| schema-pole | LeafActual.authorId | apps/backend/prisma/schema.prisma | @anchor leaf-actual-author-id |
+| schema-relacja | LeafActual.node | apps/backend/prisma/schema.prisma | @anchor leaf-actual-node |
+| schema-relacja | LeafActual.supplier | apps/backend/prisma/schema.prisma | @anchor leaf-actual-supplier |
+| schema-relacja | LeafActual.author | apps/backend/prisma/schema.prisma | @anchor leaf-actual-author |
+| schema-pole | WbsNode.sourceWbsNodeId | apps/backend/prisma/schema.prisma | @anchor wbs-node-source-wbs-node-id |
+| schema-pole | WbsNode.realizationClosed | apps/backend/prisma/schema.prisma | @anchor wbs-node-realization-closed |
+| schema-relacja | ProcessNode.leafActuals | apps/backend/prisma/schema.prisma | @anchor process-node-leaf-actuals |
+| schema-relacja | Supplier.leafActuals | apps/backend/prisma/schema.prisma | @anchor supplier-leaf-actuals |
+| schema-relacja | User.leafActuals | apps/backend/prisma/schema.prisma | @anchor user-leaf-actuals |
+
+#### Backend (`apps/backend/src/leaf-actuals/`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-serwis | LeafActualsService | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-service |
+| back-typ | ActualsUser | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-user |
+| back-dto | LeafActualInput | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actual-input |
+| back-funkcja | rootOfWbsNode | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-root-of |
+| back-funkcja | listByOrder | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-list |
+| back-funkcja | create (wpis realizacji) | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-create |
+| back-funkcja | update (wpis realizacji) | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-update |
+| back-funkcja | remove (wpis realizacji) | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-remove |
+| back-funkcja | setClosed (rozliczenie pozycji) | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-close |
+| back-controller | LeafActualsController | apps/backend/src/leaf-actuals/leaf-actuals.controller.ts | @anchor leaf-actuals-controller |
+| back-endpoint | GET /leaf-actuals/order/:nodeId | apps/backend/src/leaf-actuals/leaf-actuals.controller.ts | @anchor leaf-actuals-list-endpoint |
+| back-endpoint | POST /leaf-actuals | apps/backend/src/leaf-actuals/leaf-actuals.controller.ts | @anchor leaf-actuals-create-endpoint |
+| back-endpoint | PATCH /leaf-actuals/:id | apps/backend/src/leaf-actuals/leaf-actuals.controller.ts | @anchor leaf-actuals-update-endpoint |
+| back-endpoint | DELETE /leaf-actuals/:id | apps/backend/src/leaf-actuals/leaf-actuals.controller.ts | @anchor leaf-actuals-remove-endpoint |
+| back-endpoint | PATCH /leaf-actuals/close/:wbsNodeId | apps/backend/src/leaf-actuals/leaf-actuals.controller.ts | @anchor leaf-actuals-close-endpoint |
+| back-modul | LeafActualsModule | apps/backend/src/leaf-actuals/leaf-actuals.module.ts | @anchor leaf-actuals-module |
+
+#### Frontend (`apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-stala | TYPE_META (typy liści panelu) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-type-meta |
+| ui-stala | LEAF_TYPES | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-leaf-types |
+| ui-stala | REAL_STATE (kolory stanu realizacji) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor realization-state-styles |
+| ui-funkcja | wbsRootOf | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-root-of |
+| ui-funkcja | realizationOf | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor realization-of |
+| ui-stan | actuals (wpisy realizacji zamówienia) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-actuals |
+| ui-kolumna | Zakup / wykonanie (licznik + pasek) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-realization-col |
+| ui-wiersz | RealizationEntryRow | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor realization-entry-row |
+| ui-wiersz | RealizationAddRow | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor realization-add-row |
+| ui-wiersz | osadzenie wierszy wpisów w tabeli | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor realization-entry-rows |
+| ui-funkcja | fetchActuals | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor fetch-actuals |
+| ui-funkcja | addActual | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor add-actual |
+| ui-funkcja | deleteActual | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor delete-actual |
+| ui-funkcja | toggleRealizationClosed | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor toggle-realization-closed |
+| ui-kolumna | kolumny realizacji w eksporcie Excel | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor materials-export-realization |
+
 ### Moduł split ProductCard — baseline vs żywa karta (Faza 6)
 
 #### Frontend (`apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx`)

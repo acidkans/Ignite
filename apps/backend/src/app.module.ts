@@ -43,6 +43,7 @@ import { SuppliersModule } from './suppliers/suppliers.module';
 import { QuickQuotesModule } from './quick-quotes/quick-quotes.module';
 import { OrdersModule } from './orders/orders.module';
 import { LeavesModule } from './leaves/leaves.module';
+import { LeafActualsModule } from './leaf-actuals/leaf-actuals.module';
 
 @Module({
   imports: [
@@ -92,6 +93,7 @@ import { LeavesModule } from './leaves/leaves.module';
     QuickQuotesModule,
     OrdersModule,
     LeavesModule,
+    LeafActualsModule,
   ],
   controllers: [AppController],
   providers: [

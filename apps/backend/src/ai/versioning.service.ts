@@ -180,6 +180,12 @@ export class VersioningService {
                     phase: wn.phase,
                     ganttStart: (wn as any).ganttStart ?? null,
                     ganttEnd: (wn as any).ganttEnd ?? null,
+                    // Korzeń klonu wędruje przez cały łańcuch wersji — po nim parują się
+                    // liście baseline↔żywe (F5) i po nim wiszą wpisy realizacji, więc
+                    // zakupy nie gubią się przy tworzeniu nowej wersji.
+                    sourceWbsNodeId: (wn as any).sourceWbsNodeId ?? wn.id,
+                    // Zamknięcie realizacji NIE jest klonowane: nowa wersja to nowy plan,
+                    // a rozliczenie odnosi się do konkretnego zakresu.
                 },
             });
         }

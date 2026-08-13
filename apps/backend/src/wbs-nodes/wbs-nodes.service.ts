@@ -417,6 +417,10 @@ export class WbsNodesService {
                 phase: node.phase,
                 ganttStart: node.ganttStart ? node.ganttStart.toISOString() : null,
                 ganttEnd: node.ganttEnd ? node.ganttEnd.toISOString() : null,
+                // Realizacja: korzeń klonu (po nim wiszą wpisy `LeafActual`) i flaga
+                // rozliczenia pozycji — panel Materiały liczy z nich licznik i Δ.
+                sourceWbsNodeId: node.sourceWbsNodeId,
+                realizationClosed: node.realizationClosed,
                 // Materials
                 materials,
                 materialsTotalCost,

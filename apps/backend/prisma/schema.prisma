@@ -49,6 +49,8 @@ model User {
   leaveDecisions    LeaveRequest[]     @relation("LeaveRequestDecider")
   /// @anchor user-holiday-days-off
   approvedHolidayDaysOff HolidayDayOff[] @relation("HolidayDayOffApprover")
+  /// @anchor user-leaf-actuals
+  leafActuals            LeafActual[]    @relation("LeafActualAuthor")
 
   @@map("users")
 }
@@ -234,6 +236,8 @@ model ProcessNode {
   acceptedVersion           ProjectVersion?            @relation("AcceptedVersion", fields: [acceptedVersionId], references: [id], onDelete: SetNull)
   /// @anchor process-node-quick-quotes
   quickQuotes               QuickQuote[]
+  /// @anchor process-node-leaf-actuals
+  leafActuals               LeafActual[]
 
   @@map("process_nodes")
 }
@@ -895,6 +899,8 @@ model Supplier {
   quickQuoteItems QuickQuoteItem[]
   /// @anchor supplier-product-proposals
   productProposals ProductProposal[]
+  /// @anchor supplier-leaf-actuals
+  leafActuals      LeafActual[]
 
   @@map("suppliers")
 }
@@ -1157,6 +1163,14 @@ model WbsNode {
   ganttStart DateTime? // data startowa paska na Gantcie (persystowana)
   /// @anchor wbs-node-gantt-end
   ganttEnd   DateTime? // data końcowa paska na Gantcie (persystowana)
+  /// @anchor wbs-node-source-wbs-node-id
+  /// Korzeń klonu — id liścia w wersji źródłowej (przy pierwszym klonie własne id).
+  /// Klucz parowania baseline↔żywe dla WBS, odpowiednik `MaterialRequirement.sourceRequirementId`.
+  sourceWbsNodeId   String?
+  /// @anchor wbs-node-realization-closed
+  /// Pozycja rozliczona mimo niedowykonania planu — różnica przestaje być „brakiem",
+  /// liczy się jako oszczędność, a liść wypada z niedokończonych w pokryciu.
+  realizationClosed Boolean @default(false)
 
   /// @anchor wbs-node-parent
   parent              WbsNode?          @relation("WbsTree", fields: [parentId], references: [id], onDelete: Cascade)
@@ -1173,6 +1187,54 @@ model WbsNode {
 
   @@index([nodeId, versionId])
   @@map("wbs_nodes")
+}
+
+/// @anchor leaf-actual
+/// Wpis realizacji liścia WBS — jedno zdarzenie zakupu (dostawa, FV) albo wykonania
+/// (dzień ekipy, odebrana usługa). Suma wpisów = strona ZAKUP w porównaniu F5; plan
+/// zostaje po stronie WYCENA. Działa dla każdego typu liścia: work, material, equipment,
+/// service — praca i usługi nie mają karty produktowej, więc `MaterialRequirement`
+/// nie mógłby ich udźwignąć.
+///
+/// Kluczowane po `wbsRootId` (korzeń klonu liścia), NIE po id konkretnego wiersza WBS:
+/// dzięki temu wpisy przeżywają utworzenie nowej wersji i NIE są klonowane w
+/// `cloneVersionData` — zakup zdarzył się raz w świecie rzeczywistym i nie należy do
+/// żadnej wersji. Świadomie bez FK na `wbsRootId` (liść bywa usuwany i odtwarzany
+/// w kolejnej wersji); sprzątanie idzie kaskadą po `nodeId`.
+model LeafActual {
+  /// @anchor leaf-actual-id
+  id         String   @id @default(uuid())
+  /// @anchor leaf-actual-wbs-root-id
+  wbsRootId  String // WbsNode.sourceWbsNodeId ?? WbsNode.id
+  /// @anchor leaf-actual-node-id
+  nodeId     String // ProcessNode — całe zamówienie jednym zapytaniem
+  /// @anchor leaf-actual-entry-date
+  entryDate  DateTime // data zdarzenia (domyślnie dziś), nie data wpisania
+  /// @anchor leaf-actual-qty
+  qty        Float
+  /// @anchor leaf-actual-unit-cost
+  unitCost   Float // koszt jedn. TEGO zdarzenia — druga dostawa bywa po innej cenie
+  /// @anchor leaf-actual-comment
+  comment    String?
+  /// @anchor leaf-actual-doc-number
+  docNumber  String? // nr FV / PZ / protokołu — sensowne dla materiału i sprzętu
+  /// @anchor leaf-actual-supplier-id
+  supplierId String?
+  /// @anchor leaf-actual-author-id
+  authorId   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  /// @anchor leaf-actual-node
+  node     ProcessNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  /// @anchor leaf-actual-supplier
+  supplier Supplier?   @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  /// @anchor leaf-actual-author
+  author   User?       @relation("LeafActualAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([nodeId])
+  @@index([wbsRootId])
+  @@map("leaf_actuals")
 }
 
 /// @anchor wbs-node-material

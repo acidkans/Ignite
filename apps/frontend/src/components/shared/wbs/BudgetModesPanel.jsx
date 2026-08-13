@@ -13,7 +13,7 @@ const SOURCE_STYLES = {
     'MAN':  { label: 'MAN', cls: 'text-gray-300 bg-white/5 border-white/10', title: 'Cena wpisana ręcznie' },
 };
 
-const DEV_LABELS = { CENOWE: 'cenowe', ILOSCIOWE: 'ilościowe', ZAKRES_PLUS: 'zakres+', ZAKRES_MINUS: 'zakres−' };
+const DEV_LABELS = { CENOWE: 'cenowe', ILOSCIOWE: 'ilościowe', NADMIAR: 'nadmiar', ZAKRES_PLUS: 'zakres+', ZAKRES_MINUS: 'zakres−' };
 
 const zl = (v) => v != null ? v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 const parseSnap = (s) => { try { return s ? JSON.parse(s) : null; } catch { return null; } };
@@ -131,8 +131,12 @@ export default function BudgetModesPanel({ nodeId, mode, acceptance }) {
     const comparisonGroups = useMemo(() => {
         if (!cmp) return [];
         const rowMeta = (r) => {
+            // Wiersz porównania kluczuje się teraz liściem WBS (`baselineWbsNodeId`), nie
+            // wymaganiem materiałowym — praca i usługi nie mają karty, a mają się grupować
+            // tak samo. Fallback po karcie zostaje dla danych sprzed tej zmiany.
             const bReq = baselineReqById.get(r.key);
-            const wbsNode = bReq?.wbsNodeId ? wbsById.get(bReq.wbsNodeId) : null;
+            const wbsNodeId = r.baselineWbsNodeId ?? bReq?.wbsNodeId ?? null;
+            const wbsNode = wbsNodeId ? wbsById.get(wbsNodeId) : null;
             const subject = wbsNode ? subjectOf(wbsNode.id) : null;
             const offer = calcOffer(wbsNode);
             const marginPlan = wbsNode ? (parseFloat(wbsNode.margin) || 0) : null;

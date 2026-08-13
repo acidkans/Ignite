@@ -121,18 +121,22 @@ export class OrdersService {
         });
     }
 
-    // @anchor orders-comparison — serce F5: parowanie żywych wymagań z klonami
-    // zaakceptowanej wersji po korzeniu klonu (sourceRequirementId ?? id).
-    // „Żywe" = wiersze AKTYWNEJ wersji (tam trafiają edycje), nie versionId=null —
+    // @anchor orders-comparison — serce F5: parowanie LIŚCI WBS zaakceptowanej wersji
+    // z liśćmi wersji aktywnej po korzeniu klonu (`sourceWbsNodeId ?? id`).
+    // Jednostką porównania jest liść, nie wymaganie materiałowe — praca i usługi nie
+    // mają karty produktowej, a mają być rozliczane tak samo jak materiał.
+    // „Żywe" = liście AKTYWNEJ wersji (tam trafiają edycje), nie versionId=null —
     // baseline null to legacy sprzed wersjonowania i zawiera nieaktualny zakres.
     // Jeden endpoint — wiele widoków (panel w Logistyce, panel per zamówienie,
     // chip w sekcji Materiały): te same liczby na różnych poziomach agregacji.
-    // Obie strony to split Wycena↔Zakup z `ProductProposal`, nie to samo pole:
-    // WYCENA = propozycja `isOffer` klonu baseline (fallback `budgetedPriceNetto`),
-    // ZAKUP = propozycja `isPurchase` żywego wiersza (bez fallbacku — brak produktu
-    // zakupowego znaczy „jeszcze nie zakupiony", a nie „tyle samo co w wycenie").
-    // Dostawca jest atrybutem propozycji, więc każda strona ma własnego.
-    // Odchylenia per wiersz: CENOWE / ILOSCIOWE / ZAKRES_PLUS / ZAKRES_MINUS.
+    //
+    // WYCENA = plan zaakceptowanego snapshotu: dla materiału cena propozycji `isOffer`
+    // (fallback `budgetedPriceNetto` karty), dla pracy i usługi `WbsNode.unitCost`.
+    // ZAKUP = suma wpisów realizacji (`LeafActual`) żywego liścia; brak wpisów znaczy
+    // „jeszcze nie kupione / nie zrobione", a nie „tyle samo co w wycenie". Pozycje
+    // materiałowe sprzed wpisów realizacji dostają fallback na propozycję `isPurchase`
+    // (źródło `PROPOSAL`), żeby stare zamówienia nie wyzerowały się po wdrożeniu.
+    // Odchylenia per wiersz: CENOWE / ILOSCIOWE / NADMIAR / ZAKRES_PLUS.
     async comparison(nodeId: string) {
         const node = await this.prisma.processNode.findUnique({
             where: { id: nodeId },
@@ -146,47 +150,59 @@ export class OrdersService {
         if (!node.acceptedVersionId) return { accepted: false, orderStage: node.orderStage };
 
         const liveVersionId = await resolveVersionId(this.prisma, nodeId);
-        const findLive = (versionId: string | null) => this.prisma.materialRequirement.findMany({
+        const leafSelect = {
+            id: true, parentId: true, name: true, type: true, unit: true,
+            quantity: true, unitCost: true, sortOrder: true,
+            sourceWbsNodeId: true, realizationClosed: true,
+        };
+        const findLeaves = (versionId: string | null) => this.prisma.wbsNode.findMany({
             where: { nodeId, versionId },
-            select: { id: true, name: true, unit: true, quantity: true, budgetedPriceNetto: true, budgetSource: true, offerPositionSnapshot: true, sourceRequirementId: true },
-            orderBy: { createdAt: 'asc' },
+            select: leafSelect,
+            orderBy: { sortOrder: 'asc' },
         });
 
-        const [baselineRows, liveVersionRows, baselineQqItems] = await Promise.all([
-            this.prisma.materialRequirement.findMany({
-                where: { nodeId, versionId: node.acceptedVersionId },
-                select: { id: true, name: true, unit: true, quantity: true, budgetedPriceNetto: true, sourceRequirementId: true },
-                orderBy: { createdAt: 'asc' },
-            }),
-            findLive(liveVersionId),
-            // Pozycje wyceny BASELINE (kolumny dostawcy QQ) — klucz: id żywego wymagania
-            this.prisma.quickQuoteItem.findMany({
-                where: { quickQuote: { nodeId, status: 'BASELINE' }, materialRequirementId: { not: null } },
+        const [baselineAll, liveVersionAll, actuals] = await Promise.all([
+            findLeaves(node.acceptedVersionId),
+            findLeaves(liveVersionId),
+            this.prisma.leafActual.findMany({
+                where: { nodeId },
+                orderBy: [{ entryDate: 'asc' }, { createdAt: 'asc' }],
                 select: {
-                    materialRequirementId: true, priceNettoPln: true, priceOriginalNetto: true,
-                    currency: true, exchangeRate: true, source: true,
-                    supplier: { select: { id: true, name: true } },
+                    id: true, wbsRootId: true, entryDate: true, qty: true, unitCost: true,
+                    comment: true, docNumber: true,
+                    supplier: { select: { name: true } },
                 },
             }),
         ]);
 
-        // Aktywna wersja bez własnych wierszy → dane wciąż leżą na baseline (null).
-        const liveRows = liveVersionRows.length > 0 || liveVersionId == null
-            ? liveVersionRows
-            : await findLive(null);
+        // Aktywna wersja bez własnych węzłów → drzewo wciąż leży na legacy (null).
+        const liveAll = liveVersionAll.length > 0 || liveVersionId == null
+            ? liveVersionAll
+            : await findLeaves(null);
 
-        // Korzeń klonu — wspólny identyfikator wiersza w całym łańcuchu wersji.
-        const rootOf = (r: { id: string; sourceRequirementId: string | null }) => r.sourceRequirementId ?? r.id;
-        const byLiveRoot = new Map(liveRows.map((r) => [rootOf(r), r]));
-        const qqByLiveId = new Map(baselineQqItems.map((i) => [i.materialRequirementId as string, i]));
-        const pairedLiveIds = new Set<string>();
-        const rows: any[] = [];
+        // Pozycja = każdy węzeł kosztowy poza `group` i poza korzeniem (przedmiotem
+        // projektu) — DOKŁADNIE ta sama reguła co suma budżetu w `acceptPreview`
+        // i w trybach Budżetu, więc obie strony porównania sumują ten sam zakres.
+        // Świadomie NIE „węzeł bez dzieci": w tym drzewie węzeł z dzieckiem bywa
+        // osobną pozycją z własną ceną (kamera z doczepioną licencją), a filtr po
+        // bezdzietności gubił jej zakup.
+        const onlyPositions = (rows: typeof baselineAll) =>
+            rows.filter((r) => r.parentId != null && String(r.type || '').toLowerCase() !== 'group');
+        const baselineLeaves = onlyPositions(baselineAll);
+        const liveLeaves = onlyPositions(liveAll);
 
-        // Propozycje obu ról splitu: `isOffer` po stronie baseline, `isPurchase` po
-        // stronie żywej. Serwis pilnuje max jednej z każdej roli na wymaganie.
-        const splitProposals = await this.prisma.productProposal.findMany({
+        // Karty materiałowe obu stron (1:1 po wbsNodeId) — nośnik ceny ofertowej
+        // materiału i punkt zaczepienia propozycji produktowych.
+        const allLeafIds = [...baselineLeaves.map((l) => l.id), ...liveLeaves.map((l) => l.id)];
+        const cards = allLeafIds.length ? await this.prisma.materialRequirement.findMany({
+            where: { wbsNodeId: { in: allLeafIds } },
+            select: { id: true, wbsNodeId: true, budgetedPriceNetto: true, unit: true },
+        }) : [];
+        const cardByLeaf = new Map(cards.map((c) => [c.wbsNodeId as string, c]));
+
+        const splitProposals = cards.length ? await this.prisma.productProposal.findMany({
             where: {
-                materialRequirementId: { in: [...baselineRows.map((r) => r.id), ...liveRows.map((r) => r.id)] },
+                materialRequirementId: { in: cards.map((c) => c.id) },
                 OR: [{ isOffer: true }, { isPurchase: true }],
             },
             select: {
@@ -195,107 +211,183 @@ export class OrdersService {
                 productName: true, manufacturer: true, model: true,
                 supplier: { select: { name: true } },
             },
-        });
-        const offerByReq = new Map<string, (typeof splitProposals)[number]>();
-        const purchaseByReq = new Map<string, (typeof splitProposals)[number]>();
+        }) : [];
+        const offerByCard = new Map<string, (typeof splitProposals)[number]>();
+        const purchaseByCard = new Map<string, (typeof splitProposals)[number]>();
         for (const p of splitProposals) {
-            if (p.isOffer && !offerByReq.has(p.materialRequirementId)) offerByReq.set(p.materialRequirementId, p);
-            if (p.isPurchase && !purchaseByReq.has(p.materialRequirementId)) purchaseByReq.set(p.materialRequirementId, p);
+            if (p.isOffer && !offerByCard.has(p.materialRequirementId)) offerByCard.set(p.materialRequirementId, p);
+            if (p.isPurchase && !purchaseByCard.has(p.materialRequirementId)) purchaseByCard.set(p.materialRequirementId, p);
         }
+
+        // Pozycje wyceny BASELINE (kolumna dostawcy QQ) — klucz: id karty żywego liścia.
+        const baselineQqItems = await this.prisma.quickQuoteItem.findMany({
+            where: { quickQuote: { nodeId, status: 'BASELINE' }, materialRequirementId: { not: null } },
+            select: {
+                materialRequirementId: true, priceNettoPln: true, source: true,
+                supplier: { select: { id: true, name: true } },
+            },
+        });
+        const qqByCard = new Map(baselineQqItems.map((i) => [i.materialRequirementId as string, i]));
+
+        // Wpisy realizacji wiszą na korzeniu klonu, nie na id wiersza — jedno miejsce
+        // dla wszystkich wersji tego samego liścia.
+        const actualsByRoot = new Map<string, typeof actuals>();
+        for (const a of actuals) {
+            if (!actualsByRoot.has(a.wbsRootId)) actualsByRoot.set(a.wbsRootId, []);
+            actualsByRoot.get(a.wbsRootId)!.push(a);
+        }
+
+        const rootOf = (l: { id: string; sourceWbsNodeId: string | null }) => l.sourceWbsNodeId ?? l.id;
+        const norm = (s: string | null) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        const byLiveRoot = new Map(liveLeaves.map((l) => [rootOf(l), l]));
+        // Fallback dla wersji sprzed `sourceWbsNodeId`: jednoznaczne dopasowanie po nazwie.
+        const liveByName = new Map<string, typeof liveLeaves[number] | null>();
+        for (const l of liveLeaves) {
+            const k = norm(l.name);
+            liveByName.set(k, liveByName.has(k) ? null : l);
+        }
+
+        const r2 = (x: number) => Math.round(x * 100) / 100;
         const productLabel = (p?: { manufacturer: string; model: string | null; productName: string }) =>
             p ? [p.manufacturer, p.model, p.productName].map((x) => (x || '').trim()).filter(Boolean).join(' ') || null : null;
-        const r2 = (x: number) => Math.round(x * 100) / 100;
 
-        // @anchor comparison-build-offer — strona WYCENA: cena z propozycji `isOffer`,
-        // fallback na `budgetedPriceNetto` wymagania (cena wpisana wprost w tabeli
-        // Materials nie tworzy propozycji — patrz `product-side-card-offer-price-fallback`).
-        const buildOffer = (b: (typeof baselineRows)[number]) => {
-            const p = offerByReq.get(b.id);
-            const price = p?.priceNetto ?? b.budgetedPriceNetto ?? null;
+        // @anchor comparison-build-offer — strona WYCENA liścia baseline: cena produktu
+        // `isOffer`, potem cena karty materiałowej, na końcu `unitCost` samego liścia
+        // (jedyne źródło dla pracy i usług).
+        const buildOffer = (leaf: (typeof baselineLeaves)[number]) => {
+            const card = cardByLeaf.get(leaf.id);
+            const p = card ? offerByCard.get(card.id) : null;
+            const price = p?.priceNetto ?? card?.budgetedPriceNetto ?? (leaf.unitCost || null);
             return {
-                qty: b.quantity,
+                qty: leaf.quantity,
                 price,
-                value: price != null ? r2(b.quantity * price) : null,
+                value: price != null ? r2(leaf.quantity * price) : null,
                 supplier: p?.supplier?.name ?? null,
                 product: productLabel(p),
             };
         };
 
-        // @anchor comparison-build-purchase — strona ZAKUP: wyłącznie propozycja
-        // `isPurchase`; gdy ta sama propozycja pełni obie role, cena zakupu siedzi
-        // w `purchasePriceNetto`. Brak propozycji lub ceny → null = „jeszcze nie
-        // zakupiony". Fallbacku na cenę wyceny NIE ma — inaczej obie kolumny
-        // pokazywałyby to samo i Δ zawsze wychodziłaby zero.
-        const buildPurchase = (live: (typeof liveRows)[number]) => {
-            const p = purchaseByReq.get(live.id);
-            if (!p) return null;
-            const price = p.isOffer ? p.purchasePriceNetto : p.priceNetto;
-            if (price == null) return null;
-            return {
-                qty: live.quantity,
-                price,
-                value: r2(live.quantity * price),
-                supplier: p.supplier?.name ?? null,
-                product: productLabel(p),
-            };
+        // @anchor comparison-build-purchase — strona ZAKUP żywego liścia: suma wpisów
+        // realizacji. Cena to średnia ważona wpisów, bo każdy może mieć własną.
+        // Bez wpisów: fallback na propozycję `isPurchase` (materiał sprzed wdrożenia),
+        // a gdy i jej nie ma — null, czyli wprost „jeszcze nie kupione / nie zrobione”.
+        // Pozycja zamknięta dostaje stronę zakupu ZAWSZE, choćby zerową — rozliczenie
+        // jest świadomą decyzją i różnica ma się policzyć jako oszczędność.
+        const buildPurchase = (leaf: (typeof liveLeaves)[number]) => {
+            const entries = actualsByRoot.get(rootOf(leaf)) ?? [];
+            if (entries.length) {
+                const qty = r2(entries.reduce((s, e) => s + e.qty, 0));
+                const value = r2(entries.reduce((s, e) => s + e.qty * e.unitCost, 0));
+                const last = entries[entries.length - 1];
+                return {
+                    qty,
+                    price: qty > 0 ? r2(value / qty) : null,
+                    value,
+                    supplier: last.supplier?.name ?? null,
+                    product: null as string | null,
+                    source: 'ENTRIES' as const,
+                };
+            }
+            const card = cardByLeaf.get(leaf.id);
+            const p = card ? purchaseByCard.get(card.id) : null;
+            const legacyPrice = p ? (p.isOffer ? p.purchasePriceNetto : p.priceNetto) : null;
+            if (p && legacyPrice != null) {
+                return {
+                    qty: leaf.quantity,
+                    price: legacyPrice,
+                    value: r2(leaf.quantity * legacyPrice),
+                    supplier: p.supplier?.name ?? null,
+                    product: productLabel(p),
+                    source: 'PROPOSAL' as const,
+                };
+            }
+            if (leaf.realizationClosed) {
+                return { qty: 0, price: null, value: 0, supplier: null, product: null, source: 'CLOSED' as const };
+            }
+            return null;
         };
 
-        // Wiersze sparowane. Baseline bez żywego odpowiednika (materiał usunięty
-        // w kolejnym snapshocie po akceptacji) — pomijamy całkowicie, nie liczy
-        // się już do porównania (nie jest częścią aktualnego zakresu zamówienia).
-        for (const b of baselineRows) {
-            const live = byLiveRoot.get(rootOf(b));
+        const entryDto = (e: (typeof actuals)[number]) => ({
+            id: e.id, entryDate: e.entryDate, qty: e.qty, unitCost: e.unitCost,
+            comment: e.comment, docNumber: e.docNumber, supplier: e.supplier?.name ?? null,
+        });
+
+        const pairedLiveIds = new Set<string>();
+        const rows: any[] = [];
+
+        // Wiersze sparowane. Liść baseline bez żywego odpowiednika (usunięty w kolejnym
+        // snapshocie po akceptacji) wypada z porównania — nie jest już częścią zakresu.
+        for (const b of baselineLeaves) {
+            const live = byLiveRoot.get(rootOf(b)) ?? liveByName.get(norm(b.name)) ?? null;
             if (!live) continue;
             pairedLiveIds.add(live.id);
             const baseline = buildOffer(b);
             const current = buildPurchase(live);
-            const qq = qqByLiveId.get(live.id) ?? qqByLiveId.get(rootOf(live)) ?? null;
+            const liveCard = cardByLeaf.get(live.id);
+            const qq = liveCard ? qqByCard.get(liveCard.id) ?? null : null;
+
             const deviations: string[] = [];
             if (live.quantity !== b.quantity) deviations.push('ILOSCIOWE');
             // CENOWE tylko gdy OBIE strony mają cenę — pozycja bez ceny wyceny to
             // dziura w ofercie, nie odchylenie cenowe zakupu.
-            if (current && baseline.price != null && current.price !== baseline.price) deviations.push('CENOWE');
+            if (current?.price != null && baseline.price != null && current.price !== baseline.price) deviations.push('CENOWE');
+            if (current != null && current.qty > b.quantity + 1e-9) deviations.push('NADMIAR');
+
             const delta = current?.value != null && baseline.value != null
                 ? r2(current.value - baseline.value)
                 : null;
+
             rows.push({
-                key: b.id, liveId: live.id, name: live.name ?? b.name, unit: live.unit ?? b.unit,
+                key: b.id,
+                wbsNodeId: live.id,
+                baselineWbsNodeId: b.id,
+                // id żywej karty materiałowej — tryb Wykonanie w BudgetModesPanel czyta
+                // po nim cenę i badge źródła; dla pracy i usług zostaje null
+                liveId: liveCard?.id ?? null,
+                name: live.name ?? b.name,
+                unit: live.unit ?? b.unit,
+                type: live.type || b.type || '',
+                closed: live.realizationClosed,
                 baseline, current,
+                entries: (actualsByRoot.get(rootOf(live)) ?? []).map(entryDto),
                 qqSupplier: qq ? { name: qq.supplier?.name ?? null, priceNettoPln: qq.priceNettoPln, source: qq.source } : null,
                 deviations, delta,
             });
         }
 
-        // Zakres+ (żywe wymagania spoza baseline)
-        for (const live of liveRows) {
+        // Zakres+ (żywe liście spoza baseline)
+        for (const live of liveLeaves) {
             if (pairedLiveIds.has(live.id)) continue;
             const current = buildPurchase(live);
-            const qq = qqByLiveId.get(live.id) ?? qqByLiveId.get(rootOf(live)) ?? null;
+            const liveCard = cardByLeaf.get(live.id);
+            const qq = liveCard ? qqByCard.get(liveCard.id) ?? null : null;
             rows.push({
-                key: live.id, liveId: live.id, name: live.name, unit: live.unit,
-                baseline: null, current,
+                key: live.id,
+                wbsNodeId: live.id,
+                baselineWbsNodeId: null,
+                liveId: liveCard?.id ?? null,
+                name: live.name,
+                unit: live.unit,
+                type: live.type || '',
+                closed: live.realizationClosed,
+                baseline: null,
+                current,
+                entries: (actualsByRoot.get(rootOf(live)) ?? []).map(entryDto),
                 qqSupplier: qq ? { name: qq.supplier?.name ?? null, priceNettoPln: qq.priceNettoPln, source: qq.source } : null,
                 deviations: ['ZAKRES_PLUS'], delta: current?.value ?? null,
             });
         }
 
-        // KPI. Wycena = tylko materiały nadal obecne w żywych danych (sparowane).
-        // Zakup = wyłącznie pozycje z realnym produktem `isPurchase` — pozycje bez
-        // zakupu NIE są prognozowane ceną wyceny, tylko wypadają z sumy (inaczej
-        // Δ udawałaby zero na czymś, czego jeszcze nie kupiono).
-        // Δ = suma kolumny Δ, czyli wyłącznie wiersze z OBIEMA wartościami; Δ%
-        // wobec wyceny tych samych wierszy — inaczej porównywałaby ułamek zakupów
-        // do pełnego budżetu oferty albo doliczała zakup bez ceny ofertowej.
+        // KPI. Wycena = liście nadal obecne w żywym zakresie (sparowane).
+        // Zakup = wyłącznie pozycje z realizacją (wpisy, legacy propozycja albo
+        // świadome zamknięcie) — reszta wypada z sumy, inaczej Δ udawałaby zero
+        // na czymś, czego jeszcze nie kupiono. Δ = suma kolumny Δ, czyli wyłącznie
+        // wiersze z OBIEMA wartościami; Δ% wobec wyceny tych samych wierszy.
         const purchased = rows.filter((r) => r.current?.value != null);
         const comparable = purchased.filter((r) => r.baseline?.value != null);
-        const baselineSum = r2(rows.reduce((s, r) => {
-            if (r.deviations.includes('ZAKRES_MINUS')) return s;
-            return s + (r.baseline?.value ?? 0);
-        }, 0));
+        const baselineSum = r2(rows.reduce((s, r) => s + (r.baseline?.value ?? 0), 0));
         const currentSum = r2(purchased.reduce((s, r) => s + r.current.value, 0));
         const purchasedOfferSum = r2(comparable.reduce((s, r) => s + r.baseline.value, 0));
-        const liveCount = liveRows.length;
-        const pricedCount = purchased.length;
         const deltaSum = r2(comparable.reduce((s, r) => s + (r.delta ?? 0), 0));
         const deltaPct = purchasedOfferSum > 0 ? r2((deltaSum / purchasedOfferSum) * 100) : null;
         const countDev = (t: string) => rows.filter((r) => r.deviations.includes(t)).length;
@@ -310,12 +402,16 @@ export class OrdersService {
             acceptedBy: node.acceptedBy,
             kpi: {
                 baselineSum, currentSum, purchasedOfferSum, deltaSum, deltaPct,
-                coveragePriced: pricedCount, coverageTotal: liveCount,
+                // pokrycie liczy pozycje domknięte realizacją — wpisy, legacy zakup
+                // albo ręczne zamknięcie; mianownik to cały żywy zakres.
+                coveragePriced: purchased.length,
+                coverageTotal: liveLeaves.length,
                 deviations: {
                     cenowe: countDev('CENOWE'),
                     ilosciowe: countDev('ILOSCIOWE'),
+                    nadmiar: countDev('NADMIAR'),
                     zakresPlus: countDev('ZAKRES_PLUS'),
-                    zakresMinus: countDev('ZAKRES_MINUS'),
+                    zakresMinus: 0,
                 },
             },
             rows,

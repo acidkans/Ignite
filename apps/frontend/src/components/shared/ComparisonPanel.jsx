@@ -7,6 +7,9 @@ import { API_URL } from '../../config';
 const DEV_STYLES = {
     CENOWE:       { label: 'cenowe',   cls: 'text-amber-300 bg-amber-500/10 border-amber-500/25' },
     ILOSCIOWE:    { label: 'ilościowe', cls: 'text-blue-300 bg-blue-500/10 border-blue-500/25' },
+    // Kupione/wykonane więcej niż w planie — osobne od „ilościowego", bo tamto opisuje
+    // zmianę zakresu w wycenie, a to nadwyżkę po stronie realizacji.
+    NADMIAR:      { label: 'nadmiar',  cls: 'text-red-300 bg-red-500/10 border-red-500/25' },
     ZAKRES_PLUS:  { label: 'zakres+',  cls: 'text-teal-300 bg-teal-500/10 border-teal-500/25' },
     ZAKRES_MINUS: { label: 'zakres−',  cls: 'text-red-300 bg-red-500/10 border-red-500/25' },
 };
@@ -172,10 +175,11 @@ export default function ComparisonPanel({ nodeId }) {
                     Baseline „{data.versionLabel}"
                 </span>
                 <div className="flex items-center gap-2 ml-auto flex-wrap">
-                    <div className="text-[14px] text-gray-400" title="Ile pozycji ma już produkt zakupu">zakupione <span className="font-mono text-gray-200">{k.coveragePriced}/{k.coverageTotal}</span></div>
+                    <div className="text-[14px] text-gray-400" title="Ile liści ma już realizację — wpisy zakupu/wykonania albo świadome rozliczenie">zrealizowane <span className="font-mono text-gray-200">{k.coveragePriced}/{k.coverageTotal}</span></div>
                     {Object.entries(k.deviations).filter(([, n]) => n > 0).map(([key, n]) => {
-                        const map = { cenowe: 'CENOWE', ilosciowe: 'ILOSCIOWE', zakresPlus: 'ZAKRES_PLUS', zakresMinus: 'ZAKRES_MINUS' };
+                        const map = { cenowe: 'CENOWE', ilosciowe: 'ILOSCIOWE', nadmiar: 'NADMIAR', zakresPlus: 'ZAKRES_PLUS', zakresMinus: 'ZAKRES_MINUS' };
                         const st = DEV_STYLES[map[key]];
+                        if (!st) return null;
                         return <span key={key} className={`text-[13px] font-bold px-1.5 py-0.5 rounded-full border ${st.cls}`}>{st.label}: {n}</span>;
                     })}
                     <button onClick={fetchComparison} title="Odśwież" className="p-1 text-gray-500 hover:text-white"><RefreshCw size={15} /></button>
@@ -204,7 +208,7 @@ export default function ComparisonPanel({ nodeId }) {
                             <th />
                             <th colSpan={2} />
                             <th className={`text-right px-[0.5em] py-1 font-mono font-bold whitespace-nowrap ${PURCHASE_CLS}`}
-                                title="Σ zakupu: wyłącznie pozycje, które mają już produkt isPurchase">
+                                title="Σ realizacji: wyłącznie pozycje z wpisami zakupu/wykonania albo rozliczone">
                                 {zl(k.currentSum)} zł
                             </th>
                             <th />
@@ -219,7 +223,7 @@ export default function ComparisonPanel({ nodeId }) {
                             <th className={`text-right px-[0.5em] py-1.5 font-medium normal-case ${OFFER_CLS}`}>Cena</th>
                             <th className={`text-right px-[0.5em] py-1.5 font-medium normal-case ${OFFER_CLS}`}>Wartość</th>
                             <th className={`text-left px-[0.5em] py-1.5 font-medium normal-case ${OFFER_CLS}`}>Dostawca</th>
-                            <th className={`text-right px-[0.5em] py-1.5 font-medium normal-case ${PURCHASE_CLS}`} title="Zakup — ilość z wersji aktywnej">Ilość</th>
+                            <th className={`text-right px-[0.5em] py-1.5 font-medium normal-case ${PURCHASE_CLS}`} title="Zakup / wykonanie — suma wpisów realizacji liścia">Ilość</th>
                             <th className={`text-right px-[0.5em] py-1.5 font-medium normal-case ${PURCHASE_CLS}`}>Cena</th>
                             <th className={`text-right px-[0.5em] py-1.5 font-medium normal-case ${PURCHASE_CLS}`}>Wartość</th>
                             <th className={`text-left px-[0.5em] py-1.5 font-medium normal-case ${PURCHASE_CLS}`}>Dostawca</th>
@@ -246,7 +250,9 @@ export default function ComparisonPanel({ nodeId }) {
                                         <td className="px-[0.5em] py-2 text-gray-400 truncate max-w-[10.5em]" title={r.current.product || ''}>{r.current.supplier || r.qqSupplier?.name || '—'}</td>
                                     </>
                                 ) : (
-                                    <td colSpan={4} className="px-[0.5em] py-2 text-center text-gray-600 italic">jeszcze nie zakupiony</td>
+                                    <td colSpan={4} className="px-[0.5em] py-2 text-center text-gray-600 italic">
+                                        {['work', 'service'].includes(r.type) ? 'jeszcze nie wykonane' : 'jeszcze nie zakupione'}
+                                    </td>
                                 )}
                                 <td className={`px-[0.75em] py-2 text-right font-mono font-semibold ${r.delta > 0 ? 'text-red-300' : r.delta < 0 ? 'text-teal-300' : 'text-gray-500'}`}>
                                     {r.delta != null ? `${r.delta >= 0 ? '+' : ''}${zl(r.delta)}` : '—'}
