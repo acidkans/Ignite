@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { ExternalLink, ChevronDown, Maximize2, Minimize2, Package } from 'lucide-react';
-import MaterialRequirementsPanel from './wbs/MaterialRequirementsPanel';
+import { API_URL } from '../../config';
+import WbsMaterialsPanel from './wbs/WbsMaterialsPanel';
+import OfferLockGuard, { useOfferLock } from './OfferLockGuard';
 
 function getAllOrders(nodes) {
     const result = [];
@@ -11,6 +13,51 @@ function getAllOrders(nodes) {
     return result;
 }
 
+// @anchor logistyka-order-materials-view — skrót do widoku WBS/Materiały dla pojedynczego
+// zamówienia. Renderuje ten sam `WbsMaterialsPanel` co sekcja „Materiały" w UnifiedWbsPanel
+// (razem z BaselineSplitCard po rozwinięciu wiersza), więc logistyk pracuje na dokładnie tym
+// samym widoku, a nie na osobnej liście materiałowej.
+function OrderMaterialsView({ orderId, isManagerOrAdmin, isLogistyk }) {
+    // Akceptacja baseline steruje kolumną „Koszt jedn. zakupu" i zamrożeniem strony „Wycena".
+    // UnifiedWbsPanel pobiera to samo z /orders/:id/acceptance — tu musimy pobrać sami,
+    // bo panel jest osadzony poza WBS.
+    const [acceptance, setAcceptance] = useState(null);
+    const { locked: offerLocked } = useOfferLock();
+
+    useEffect(() => {
+        setAcceptance(null);
+        if (!orderId) return;
+        let cancelled = false;
+        fetch(`${API_URL}/orders/${orderId}/acceptance`, {
+            headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || localStorage.getItem('token')}` },
+        })
+            .then(r => r.ok ? r.json() : null)
+            .then(d => { if (!cancelled) setAcceptance(d?.acceptedVersionId ? d : null); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [orderId]);
+
+    const accepted = !!acceptance?.acceptedVersionId;
+
+    return (
+        <>
+            <WbsMaterialsPanel
+                nodeId={String(orderId)}
+                readOnly={!isManagerOrAdmin && !isLogistyk}
+                accepted={accepted}
+                offerLocked={offerLocked}
+            />
+            {/* Modal blokady wartości ofertowych — bez niego kliknięcie w zamrożone pole nie
+                miałoby jak pokazać komunikatu (guard żyje w module-store, nie w kontekście). */}
+            <OfferLockGuard
+                accepted={accepted}
+                versionLabel={acceptance?.acceptedVersion?.label}
+                canOverride={isManagerOrAdmin}
+            />
+        </>
+    );
+}
+
 export default function LogistykaMaterialListsTab({ menuTree = [], onNavigateToOrder, searchQuery = '', userRoles = [] }) {
     const [expandedId, setExpandedId] = useState(null);
     const [fullscreenId, setFullscreenId] = useState(null);
@@ -19,6 +66,7 @@ export default function LogistykaMaterialListsTab({ menuTree = [], onNavigateToO
 
     const q = searchQuery.trim().toLowerCase();
     const isLogistyk = userRoles.includes('LOGISTYK');
+    const isManagerOrAdmin = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
     const filteredOrders = useMemo(() => {
         if (!q) return orders;
         return orders.filter(o =>
@@ -69,10 +117,11 @@ export default function LogistykaMaterialListsTab({ menuTree = [], onNavigateToO
                 </div>
                 {/* Panel materiałów */}
                 <div className="flex-1 overflow-hidden min-h-0">
-                    <MaterialRequirementsPanel
+                    <OrderMaterialsView
                         key={`logistyka-full-${fullscreenId}`}
-                        nodeId={String(fullscreenOrder.id)}
-                        isEmbedded={true}
+                        orderId={fullscreenOrder.id}
+                        isManagerOrAdmin={isManagerOrAdmin}
+                        isLogistyk={isLogistyk}
                     />
                 </div>
             </div>
@@ -128,13 +177,15 @@ export default function LogistykaMaterialListsTab({ menuTree = [], onNavigateToO
                             </button>
                         </div>
 
-                        {/* Rozwinięty panel materiałów */}
+                        {/* Rozwinięty panel materiałów — ten sam widok co WBS/Materiały.
+                            Stała wysokość, bo WbsMaterialsPanel skaluje się do rodzica (h-full). */}
                         {isExpanded && (
-                            <div className="border-t border-white/10">
-                                <MaterialRequirementsPanel
+                            <div className="border-t border-white/10 h-[70vh]">
+                                <OrderMaterialsView
                                     key={`logistyka-${order.id}`}
-                                    nodeId={String(order.id)}
-                                    isEmbedded={true}
+                                    orderId={order.id}
+                                    isManagerOrAdmin={isManagerOrAdmin}
+                                    isLogistyk={isLogistyk}
                                 />
                             </div>
                         )}

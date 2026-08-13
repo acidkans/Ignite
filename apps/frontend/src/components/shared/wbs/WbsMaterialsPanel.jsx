@@ -6,13 +6,14 @@ import {
     CheckCircle, Clock, XCircle, Star, Trash2, AlertCircle,
     ShoppingCart, Warehouse, LogOut, Plus, Search, Sparkles,
     FileText, Link as LinkIcon, Download, BookOpen, X, Database, Paperclip,
-    Lock, ThumbsUp, ArrowRight,
+    Lock, ThumbsUp, ArrowRight, Maximize2,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
 import SupplierPicker from '../SupplierPicker';
 import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula } from './wbsConstants';
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
 import { guardOfferEdit, requestOfferUnlock, offerLockInputProps } from '../OfferLockGuard';
+import AutoResizeTextarea from './AutoResizeTextarea';
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
 
@@ -1426,6 +1427,62 @@ function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefres
     );
 }
 
+// @anchor image-lightbox — pełny podgląd zdjęcia produktu. Kafelek w splicie ma 176×86 px i
+// `object-contain`, więc zrzut z karty katalogowej jest tam nieczytelny; tu obrazek idzie w
+// oryginalnych pikselach. Dwa tryby: „dopasuj" (domyślny, mieści się w oknie) i „1:1" (naturalna
+// rozdzielczość, przewijana). Portal do body — kafelek siedzi w komórce tabeli z `overflow:auto`.
+function ImageLightbox({ src, title, onClose }) {
+    const [natural, setNatural] = useState(false);
+    const [dims, setDims] = useState(null);
+
+    useEffect(() => {
+        const onKey = e => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [onClose]);
+
+    return createPortal(
+        <div
+            data-guard-ignore
+            className="fixed inset-0 z-[10002] flex flex-col bg-black/80 backdrop-blur-sm"
+            onClick={onClose}
+        >
+            <div className="flex items-center gap-3 px-4 py-2.5 bg-black/60 border-b border-white/10 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                <span className="text-sm font-bold text-white truncate flex-1">{title || 'Podgląd produktu'}</span>
+                {dims && <span className="text-[11px] text-gray-500 flex-shrink-0">{dims.w} × {dims.h} px</span>}
+                <button
+                    onClick={() => setNatural(v => !v)}
+                    className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 text-[11px] font-semibold transition-colors flex-shrink-0"
+                    title={natural ? 'Dopasuj do okna' : 'Pokaż w oryginalnej rozdzielczości'}
+                >
+                    {natural ? 'Dopasuj' : '1:1'}
+                </button>
+                <a
+                    href={src} download={`${(title || 'produkt').replace(/[\\/:*?"<>|]+/g, '_')}.png`}
+                    onClick={e => e.stopPropagation()}
+                    className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-colors flex-shrink-0"
+                    title="Pobierz obrazek"
+                >
+                    <Download size={13} />
+                </a>
+                <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-white transition-colors flex-shrink-0" title="Zamknij (Esc)">
+                    <X size={16} />
+                </button>
+            </div>
+            <div className={`flex-1 min-h-0 p-4 ${natural ? 'overflow-auto' : 'flex items-center justify-center overflow-hidden'}`}>
+                <img
+                    src={src}
+                    alt={title || 'podgląd produktu'}
+                    onClick={e => e.stopPropagation()}
+                    onLoad={e => setDims({ w: e.target.naturalWidth, h: e.target.naturalHeight })}
+                    className={natural ? 'max-w-none' : 'max-w-full max-h-full object-contain'}
+                />
+            </div>
+        </div>,
+        document.body,
+    );
+}
+
 // @anchor requirement-image-box — podgląd produktu POZYCJI (wspólny dla obu stron splitu).
 // Zachowuje się jak kafel zdjęcia w ProductCard: klik = wybór pliku, najechanie + Ctrl+V = wklejenie
 // ze schowka (ukryty input przechwytuje `paste`, bo `document` nie dostaje zdarzenia bez focusu).
@@ -1436,6 +1493,9 @@ function RequirementImageBox({ card, token, onRefresh, className = '' }) {
     const [fetchedUrl, setFetchedUrl] = useState(null);
     const [imageKey, setImageKey] = useState(0);
     const [uploading, setUploading] = useState(false);
+    // @anchor requirement-image-lightbox-open — pełny podgląd otwiera osobna ikona „⤢", nie klik
+    // w kafelek: klik zostaje przy wyborze pliku, żeby nie zmieniać nawyku wgrywania zdjęć.
+    const [lightboxOpen, setLightboxOpen] = useState(false);
     const localRef = useRef(null);
     const fetchedRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -1535,11 +1595,25 @@ function RequirementImageBox({ card, token, onRefresh, className = '' }) {
                 <>
                     <img src={src} alt="podgląd produktu" className="absolute inset-0 w-full h-full object-contain p-1.5" />
                     <button
+                        onClick={e => { e.stopPropagation(); setLightboxOpen(true); }}
+                        title="Powiększ — pełna rozdzielczość"
+                        className="absolute top-0.5 left-0.5 p-1 rounded bg-black/70 text-gray-400 hover:text-blue-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                        <Maximize2 size={11} />
+                    </button>
+                    <button
                         onClick={removeImage} title="Usuń obrazek"
                         className="absolute top-0.5 right-0.5 p-1 rounded bg-black/70 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                         <Trash2 size={11} />
                     </button>
+                    {lightboxOpen && (
+                        <ImageLightbox
+                            src={src}
+                            title={[card?.manufacturer, card?.model, card?.name].filter(Boolean).join(' · ')}
+                            onClose={() => setLightboxOpen(false)}
+                        />
+                    )}
                 </>
             ) : (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-gray-600 pointer-events-none">
@@ -1814,6 +1888,26 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
 
     const [creating, setCreating] = useState(false);
 
+    // @anchor wbs-material-row-comment — ta sama edytowalna kolumna „Komentarz" co w WBSHybridTable
+    // (pole `WbsNode.comment`). Lokalny bufor, bo zapis idzie na blur, a `node` wraca z rodzica
+    // dopiero po odświeżeniu drzewa — bez bufora znaki gubiłyby się w trakcie pisania.
+    const [commentVal, setCommentVal] = useState(node.comment || '');
+    const commentFocus = useRef(false);
+    useEffect(() => {
+        if (!commentFocus.current) setCommentVal(node.comment || '');
+    }, [node.comment]);
+
+    // Wartość bierzemy z eventu, nie ze stanu — blur potrafi wypaść w tym samym tasku co ostatnia
+    // zmiana (autouzupełnianie, skrypt), a wtedy `commentVal` z domknięcia jest jeszcze stary.
+    const handleCommentBlur = (v) => {
+        commentFocus.current = false;
+        if (v === (node.comment || '')) return;
+        onPatchNode(node.id, { comment: v });
+        // Ten sam sygnał co w WBSHybridTable — MarkerDetailsPanel i SchematTab słuchają go,
+        // żeby komentarz markera nie rozjechał się z komentarzem węzła WBS.
+        window.dispatchEvent(new CustomEvent('wbs-comment-changed', { detail: { wbsNodeIds: [node.id], comment: v } }));
+    };
+
     const handleQtyBlur = () => {
         setEditQty(false);
         const raw = String(qtyVal);
@@ -1970,6 +2064,20 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
                     <span className="text-sm text-gray-600">—</span>
                 )}
             </td>
+            {/* Komentarz — `WbsNode.comment`, wspólne pole z kolumną „Komentarz" w WBSHybridTable.
+                Nie jest wartością ofertową, więc akceptacja baseline (offerLocked) go nie zamraża. */}
+            <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                <AutoResizeTextarea
+                    value={commentVal}
+                    onChange={e => setCommentVal(e.target.value)}
+                    onFocusCapture={() => { commentFocus.current = true; }}
+                    onBlur={e => handleCommentBlur(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Escape') { setCommentVal(node.comment || ''); e.currentTarget.blur(); } }}
+                    readOnly={readOnly}
+                    placeholder="—"
+                    className={`bg-transparent border-none focus:outline-none text-sm w-full placeholder-gray-700 leading-snug text-gray-200 ${readOnly ? 'cursor-default' : ''}`}
+                />
+            </td>
         </tr>
     );
 }
@@ -1987,6 +2095,7 @@ const COL_DEFS = [
     { key: 'price',         label: 'Koszt jedn. oferty',   defaultW: 128, align: 'right' },
     { key: 'purchasePrice', label: 'Koszt jedn. zakupu',   defaultW: 128, align: 'right', baselineOnly: true },
     { key: 'status',        label: 'Status oferty',        defaultW: 148 },
+    { key: 'comment',       label: 'Komentarz',            defaultW: 200 },
 ];
 
 // @anchor purchase-unit-of — koszt jedn. zakupu z propozycji isPurchase (purchasePriceNetto gdy
@@ -2083,6 +2192,7 @@ export default function WbsMaterialsPanel({
                     matchTokens(parent, q) ||
                     (c?.manufacturer || '').toLowerCase().includes(q) ||
                     (c?.model || '').toLowerCase().includes(q) ||
+                    (n.comment || '').toLowerCase().includes(q) ||
                     (STATUS_META[c?.status]?.label || '').toLowerCase().includes(q);
             });
         }
@@ -2101,6 +2211,7 @@ export default function WbsMaterialsPanel({
                 if (key === 'price')  return String(c?.priceNetto ?? '').includes(q);
                 if (key === 'purchasePrice') return String(purchaseUnitOf(c) ?? '').includes(q);
                 if (key === 'techSpec') return (c?.technicalSpec || '').toLowerCase().includes(q);
+                if (key === 'comment') return (n.comment || '').toLowerCase().includes(q);
                 if (key === 'status') return (STATUS_META[c?.status]?.label || c?.status || '').toLowerCase().includes(q);
                 return true;
             });
@@ -2129,6 +2240,8 @@ export default function WbsMaterialsPanel({
                 cmp = (purchaseUnitOf(ca) ?? Infinity) - (purchaseUnitOf(cb) ?? Infinity);
             } else if (sortConfig.key === 'techSpec') {
                 cmp = (ca?.technicalSpec || '').localeCompare(cb?.technicalSpec || '', 'pl');
+            } else if (sortConfig.key === 'comment') {
+                cmp = (a.comment || '').localeCompare(b.comment || '', 'pl');
             } else if (sortConfig.key === 'status') {
                 cmp = (STATUS_META[ca?.status]?.label || '').localeCompare(STATUS_META[cb?.status]?.label || '', 'pl');
             }

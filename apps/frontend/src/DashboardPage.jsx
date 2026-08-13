@@ -878,7 +878,7 @@ export default function DashboardPage() {
                     <>
                         <button onClick={() => handleTabChange('materialLists')}
                             className={`px-6 py-3 text-xs font-bold uppercase tracking-widest transition-all relative ${activeTab === 'materialLists' ? 'text-teal-400' : 'text-gray-500 hover:text-gray-300'}`}>
-                            Listy Materiałowe
+                            Materiały
                             {activeTab === 'materialLists' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-500 shadow-[0_0_10px_rgba(20,184,166,0.5)]" />}
                         </button>
                         <button onClick={() => handleTabChange('offers')}

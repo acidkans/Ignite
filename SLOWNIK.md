@@ -301,6 +301,11 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-sekcja | budget-kpi-tiles (siatka kafli KPI Budżetu) | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-kpi-tiles |
 | ui-karta | ProductSideCard | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card |
 | ui-karta | BaselineSplitCard | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor baseline-split-card |
+| ui-input | AutoResizeTextarea | apps/frontend/src/components/shared/wbs/AutoResizeTextarea.jsx | @anchor auto-resize-textarea |
+| ui-modal | ImageLightbox | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor image-lightbox |
+| ui-stan | lightboxOpen | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor requirement-image-lightbox-open |
+| ui-kolumna | comment (Komentarz w Materiałach) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-material-row-comment |
+| ui-sekcja | OrderMaterialsView | apps/frontend/src/components/shared/LogistykaMaterialListsTab.jsx | @anchor logistyka-order-materials-view |
 | ui-funkcja | copyOfferToPurchase | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor baseline-split-copy-to-purchase |
 | back-endpoint | PATCH /material-requirements/proposals/:id/set-offer | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-patch-set-offer |
 | back-endpoint | PATCH /material-requirements/proposals/:id/set-purchase | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-patch-set-purchase |

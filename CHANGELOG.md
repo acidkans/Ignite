@@ -1,3 +1,29 @@
+## 2026-08-13 — feat(materiały): kolumna Komentarz w widoku Materiały, Logistyka na tym samym panelu
+
+### architektura / API
+- `LogistykaMaterialListsTab` renderuje `WbsMaterialsPanel` zamiast `MaterialRequirementsPanel` — zakładka Logistyki jest teraz skrótem do widoku WBS/Materiały, z rozwijanym `BaselineSplitCard` (Wycena/Zakup), którego stara lista nie miała
+- nowy `OrderMaterialsView` pobiera `GET /orders/:id/acceptance` per zamówienie i montuje `OfferLockGuard` — poza UnifiedWbsPanel nikt nie ustawiał stanu blokady, więc kliknięcie w zamrożone pole nie miało jak pokazać modala
+- `AutoResizeTextarea` wyciągnięte z `WBSHybridTable.jsx` do własnego pliku — współdzielone przez obie tabele; import z WBSHybridTable do WbsMaterialsPanel zrobiłby cykl (WBSHybridTable już importuje stamtąd `BaselineSplitCard`)
+- `COL_DEFS` w `WbsMaterialsPanel` — nowa kolumna `comment` (Komentarz) z sortowaniem, filtrem kolumnowym i wyszukiwaniem globalnym; zapis przez istniejący `PATCH /wbs-nodes/:id`
+- etykieta zakładki Logistyki: „Listy Materiałowe" → „Materiały" (id zakładki `materialLists` bez zmian — zostaje w localStorage użytkowników)
+- `ImageLightbox` — pełny podgląd zdjęcia produktu z kafelka `RequirementImageBox` (176×86 px `object-contain` gubi szczegóły zrzutów z kart katalogowych): tryb „dopasuj" i „1:1" z przewijaniem, wymiary w px, pobranie pliku, zamykanie Esc/kliknięciem w tło. Otwiera go osobna ikona „⤢" w rogu kafelka — klik w kafelek dalej wybiera plik, Ctrl+V dalej wkleja ze schowka
+
+### słownik
+- dodano `auto-resize-textarea` — textarea rosnąca do treści, `AutoResizeTextarea.jsx`
+- dodano `image-lightbox` — modal pełnego podglądu zdjęcia produktu, `WbsMaterialsPanel.jsx`
+- dodano `requirement-image-lightbox-open` — stan otwarcia lightboxa w `RequirementImageBox`, `WbsMaterialsPanel.jsx`
+- dodano `wbs-material-row-comment` — edytowalna komórka Komentarz w `WbsMaterialRow`, `WbsMaterialsPanel.jsx`
+- dodano `logistyka-order-materials-view` — wrapper widoku Materiały dla zamówienia, `LogistykaMaterialListsTab.jsx`
+
+### wytyczne
+- `ui-kolumna` `comment` — to samo pole `WbsNode.comment` co kolumna Komentarz w WBSHybridTable; po zapisie wysyłać `wbs-comment-changed`, bo `MarkerDetailsPanel` i `SchematTab` trzymają na tym evencie swoją kopię komentarza
+- `ui-kolumna` `comment` — nie jest wartością ofertową, więc `offerLocked` (akceptacja baseline) jej nie zamraża; blokada dotyczy tylko Ilości i Kosztu jedn. oferty
+- handlery `onBlur` w tabelach czytają wartość z `e.target.value`, nie ze stanu — blur potrafi wypaść w tym samym tasku co ostatnia zmiana i domknięcie ma wtedy starą wartość
+- `ui-modal` `ImageLightbox` — renderowany przez `createPortal` do `body` i oznaczony `data-guard-ignore`; kafelek siedzi w komórce tabeli z `overflow:auto`, więc modal w drzewie komponentu zostałby przycięty
+
+### znane błędy (nie naprawione tą zmianą)
+- `back-serwis` `material-requirements.service.ts` — zapis obrazka idzie do stałej `UPLOADS_DIR = '/usr/src/app/uploads'` (ścieżka kontenera), a odczyt przez `resolveUploadPath()` do `process.cwd()/uploads`. W Dockerze obie wskazują to samo, ale przy backendzie odpalonym natywnie (`npm run start:dev`) upload zwraca 201 i zapisuje `imageUrl` w bazie, a `GET /:id/image` daje 404 — plik ląduje w `C:\usr\src\app\uploads`. Dotyczy też `uploadDatasheet`/`uploadCompliance`, jeśli używają tej samej stałej
+
 ## 2026-08-13 — chore(bezpieczenstwo): seed użytkowników poza startem kontenera
 
 ### architektura / API
