@@ -18,9 +18,15 @@ RUN npx prisma generate
 
 COPY . .
 
-# Migracje (nie `db push`), seed ról + użytkowników (dev only), build i start.
+# Migracje, seed ról, build i start.
+#
 # `prisma migrate deploy` stosuje wyłącznie pliki z prisma/migrations — razem z danymi
 # w nich zawartymi (INSERT/UPDATE) — i niczego nie kasuje na własną rękę.
-# `db push` wyliczał zmiany z różnicy schematu: pomijał dane z migracji, a przy rozjeździe
-# albo przerywał start, albo (z --accept-data-loss) usuwał kolumny i tabele.
-CMD ["sh", "-c", "npx prisma generate && npx prisma migrate deploy && node prisma/seed.js && ([ \"$NODE_ENV\" != \"production\" ] && node prisma/seed-users-from-json.js || true) && rm -f tsconfig.tsbuildinfo && npx tsc -p tsconfig.json && node dist/main"]
+# `db push` (poprzednia wersja) wyliczał zmiany z różnicy schematu: pomijał dane z migracji,
+# a przy rozjeździe albo przerywał start, albo z --accept-data-loss usuwał kolumny i tabele.
+#
+# `seed.js` jest idempotentny (same `upsert` ról i uprawnień) — bezpieczny na każdym środowisku.
+# Seed użytkowników NIE jest tu uruchamiany: nadpisywał hasła istniejących kont danymi
+# z pliku w repo. Uruchamiaj go świadomie i ręcznie:
+#   docker exec erp-backend node prisma/seed-users-from-json.js
+CMD ["sh", "-c", "npx prisma generate && npx prisma migrate deploy && node prisma/seed.js && rm -f tsconfig.tsbuildinfo && npx tsc -p tsconfig.json && node dist/main"]

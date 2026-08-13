@@ -5,8 +5,17 @@ const fs = require('fs');
 
 const prisma = new PrismaClient();
 
+// @anchor seed-users-guard
+/// Skrypt NADPISUJE hasła istniejących kont (upsert po e-mailu), więc nie wolno go
+/// wpinać w start kontenera. Uruchamiać ręcznie i świadomie, po podłożeniu
+/// prisma/users-data.json (plik poza repo — wzorzec: users-data.example.json).
 async function main() {
     const usersDataPath = path.join(__dirname, 'users-data.json');
+    if (!fs.existsSync(usersDataPath)) {
+        console.error('❌ Brak prisma/users-data.json — seed użytkowników pominięty.');
+        console.error('   Wzorzec pliku: prisma/users-data.example.json');
+        process.exit(1);
+    }
     const usersData = JSON.parse(fs.readFileSync(usersDataPath, 'utf-8'));
 
     console.log(`📋 Wczytano ${usersData.length} użytkowników z users-data.json`);

@@ -1,3 +1,15 @@
+## 2026-08-13 — chore(bezpieczenstwo): seed użytkowników poza startem kontenera
+
+### architektura / API
+- `apps/backend/Dockerfile.dev` CMD: usunięto `node prisma/seed-users-from-json.js` (odpalany dotąd warunkiem `NODE_ENV != production`, a compose ustawia `NODE_ENV: development`) — skrypt robi `upsert` po e-mailu, więc nadpisywał hasła istniejących kont danymi z repo
+- `prisma/users-data.json` usunięty ze śledzenia i dopisany do `apps/backend/.gitignore` — trzymał hasło jawnym tekstem; wzorzec formatu w `prisma/users-data.example.json`
+- `seed-users-from-json.js` — brak pliku danych kończy się czytelnym błędem i `exit 1` zamiast wyjątku `ENOENT`
+- w CMD zostaje `seed.js` (same `upsert` ról i uprawnień — idempotentny)
+
+### wytyczne
+- `back-skrypt` `seed-users-from-json.js` — nigdy w komendzie startowej kontenera; uruchamiać ręcznie: `docker exec erp-backend node prisma/seed-users-from-json.js`
+- produkcja jest osobnym bytem: na serwer trafia wyłącznie kod i migracje, dane pracowników wprowadzane są tam u źródła; lokalna baza służy wyłącznie testom
+
 ## 2026-08-13 — chore(deploy): backend stosuje migracje zamiast `prisma db push`
 
 ### architektura / API

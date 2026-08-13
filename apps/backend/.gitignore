@@ -1,2 +1,5 @@
 # runtime upload artifacts — nie wersjonować
 uploads/
+
+# dane logowania do seeda — trzymane poza repo (jawne hasla)
+prisma/users-data.json

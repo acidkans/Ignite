@@ -1529,6 +1529,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-endpoint | GET /leaves/holidays | apps/backend/src/leaves/leaves.controller.ts | @anchor leaves-holidays-get-endpoint |
 | back-endpoint | PUT /leaves/holidays | apps/backend/src/leaves/leaves.controller.ts | @anchor leaves-holidays-put-endpoint |
 | schema-pole | LeaveType.maxDaysPerYear | apps/backend/prisma/schema.prisma | @anchor leave-type-max-days-per-year |
+| back-skrypt | seed uzytkownikow — blokada | apps/backend/prisma/seed-users-from-json.js | @anchor seed-users-guard |
 | back-funkcja | limit ustawowy dni w roku | apps/backend/src/leaves/leave-requests.service.ts | @anchor assert-statutory-limit |
 | back-funkcja | zuzycie dni wg rodzaju urlopu | apps/backend/src/leaves/leave-requests.service.ts | @anchor leave-type-usage |
 | back-endpoint | GET /leave-requests/type-usage | apps/backend/src/leaves/leave-requests.controller.ts | @anchor leave-requests-type-usage-endpoint |
