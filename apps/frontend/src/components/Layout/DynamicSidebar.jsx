@@ -14,9 +14,10 @@ function filterNode(node, query) {
     return null;
 }
 
-export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, loading, userRoles = [], onReloadTree }) {
+export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, loading, userRoles = [], leavesEnabled = false, onReloadTree }) {
     const canManageTree = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
     // @anchor sidebar-is-admin
+    /// Pozycje „Użytkownicy" i „Firma" widzi wyłącznie ADMIN — routy i API też tego pilnują.
     const isAdmin = userRoles.includes('ADMIN');
     const navigate = useNavigate();
     const location = useLocation();
@@ -126,31 +127,51 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
             <div>
                 <p className="px-2 py-1.5 text-[10px] font-bold text-gray-500 uppercase tracking-widest bg-white/[0.03] border-y border-white/[0.05] mb-1">System</p>
                 <div className="space-y-0.5">
-                    <button
-                        onClick={() => navigate('/users')}
-                        title="Użytkownicy"
-                        className={`w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md
-                            ${location.pathname === '/users'
-                                ? 'text-blue-400 bg-blue-500/10'
-                                : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
-                            }
-                        `}
-                    >
-                        Użytkownicy
-                    </button>
+                    {/* @anchor sidebar-users-button */}
+                    {isAdmin && (
+                        <button
+                            onClick={() => navigate('/users')}
+                            title="Użytkownicy"
+                            className={`w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md
+                                ${location.pathname === '/users'
+                                    ? 'text-blue-400 bg-blue-500/10'
+                                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                                }
+                            `}
+                        >
+                            Użytkownicy
+                        </button>
+                    )}
                     {/* @anchor sidebar-firma-button */}
-                    <button
-                        onClick={() => navigate('/firma')}
-                        title="Firma"
-                        className={`w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md
-                            ${location.pathname === '/firma'
-                                ? 'text-blue-400 bg-blue-500/10'
-                                : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
-                            }
-                        `}
-                    >
-                        Firma
-                    </button>
+                    {isAdmin && (
+                        <button
+                            onClick={() => navigate('/firma')}
+                            title="Firma"
+                            className={`w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md
+                                ${location.pathname === '/firma'
+                                    ? 'text-blue-400 bg-blue-500/10'
+                                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                                }
+                            `}
+                        >
+                            Firma
+                        </button>
+                    )}
+                    {/* @anchor sidebar-urlopy-button */}
+                    {leavesEnabled && (
+                        <button
+                            onClick={() => navigate('/urlopy')}
+                            title="Urlopy"
+                            className={`w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md
+                                ${location.pathname === '/urlopy'
+                                    ? 'text-blue-400 bg-blue-500/10'
+                                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                                }
+                            `}
+                        >
+                            Urlopy
+                        </button>
+                    )}
                     {canManageTree && (
                         <button
                             onClick={() => navigate('/process-tree')}

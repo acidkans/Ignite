@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { SmtpService } from '../smtp/smtp.service';
+import { SmtpService, SMTP_PROFILES } from '../smtp/smtp.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const COMPANY_SINGLETON_ID = 'singleton';
@@ -10,6 +10,19 @@ const escapeHtml = (v: any) =>
 
 const fullName = (u: { firstName?: string | null; lastName?: string | null; email?: string | null }) =>
   [u?.firstName, u?.lastName].filter(Boolean).join(' ').trim() || u?.email || '';
+
+// @anchor format-leave-mail-date
+// Data w mailach urlopowych — format wzorcowy „22.04.2025 00:00:00", strefa Europe/Warsaw.
+const formatLeaveDate = (d: Date) =>
+  new Intl.DateTimeFormat('pl-PL', {
+    timeZone: 'Europe/Warsaw',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(d);
 
 const parseList = (v: any): string[] => {
   if (!v) return [];
@@ -38,6 +51,77 @@ export class MailService {
         <small>Jeśli to nie Ty, zignoruj ten email.</small>
       `,
     });
+  }
+
+  // @anchor mail-send-leave-request
+  // Powiadomienie przełożonego o złożonym wniosku urlopowym — układ jak w mailu wzorcowym:
+  // nagłówek WNIOSKI URLOPOWE, kto i na jaki okres, komentarz, link do modułu Urlopy.
+  async sendLeaveRequest(params: {
+    to: string;
+    applicantName: string;
+    leaveTypeName?: string | null;
+    dateStart: Date;
+    dateEnd: Date;
+    comment?: string | null;
+    appUrl: string;
+  }) {
+    const typeLabel = params.leaveTypeName ? ` ${params.leaveTypeName.toLowerCase()}` : '';
+    await this.smtpService.sendMail(
+      {
+        to: params.to,
+        subject: `${params.applicantName} złożył/a wniosek o urlop${typeLabel}`,
+        html: `
+        <div style="font-family:Arial,sans-serif;color:#333">
+          <p style="color:#8a6d3b;margin:0 0 16px">WNIOSKI URLOPOWE</p>
+          <p style="margin:0">${escapeHtml(params.applicantName)}<br/>złożył/a wniosek urlopowy od:<br/>
+            ${escapeHtml(formatLeaveDate(params.dateStart))} do ${escapeHtml(formatLeaveDate(params.dateEnd))}</p>
+          ${params.comment ? `<p style="margin:16px 0">${escapeHtml(params.comment)}</p>` : ''}
+          <p style="margin:24px 0 4px">Przejdź do aplikacji Urlopy</p>
+          <p style="margin:0"><a href="${escapeHtml(params.appUrl)}">Link do aplikacji Urlopy</a></p>
+        </div>
+      `,
+      },
+      SMTP_PROFILES.LEAVES,
+    );
+  }
+
+  // @anchor mail-send-leave-decision
+  // Powiadomienie wnioskodawcy o decyzji przełożonego — ten sam układ co mail o złożeniu wniosku,
+  // z rozstrzygnięciem i ewentualnym uzasadnieniem.
+  async sendLeaveDecision(params: {
+    to: string;
+    applicantName: string;
+    deciderName?: string | null;
+    approved: boolean;
+    leaveTypeName?: string | null;
+    dateStart: Date;
+    dateEnd: Date;
+    decisionComment?: string | null;
+    appUrl: string;
+  }) {
+    const verdict = params.approved ? 'zatwierdzony' : 'odrzucony';
+    const color = params.approved ? '#2e7d32' : '#c62828';
+    const typeLabel = params.leaveTypeName ? ` ${params.leaveTypeName.toLowerCase()}` : '';
+
+    await this.smtpService.sendMail(
+      {
+        to: params.to,
+        subject: `Twój wniosek o urlop${typeLabel} został ${verdict}`,
+        html: `
+        <div style="font-family:Arial,sans-serif;color:#333">
+          <p style="color:#8a6d3b;margin:0 0 16px">WNIOSKI URLOPOWE</p>
+          <p style="margin:0">${escapeHtml(params.applicantName)},<br/>
+            Twój wniosek urlopowy od:<br/>
+            ${escapeHtml(formatLeaveDate(params.dateStart))} do ${escapeHtml(formatLeaveDate(params.dateEnd))}<br/>
+            został <strong style="color:${color}">${verdict}</strong>${params.deciderName ? ` przez: ${escapeHtml(params.deciderName)}` : ''}.</p>
+          ${params.decisionComment ? `<p style="margin:16px 0">${escapeHtml(params.decisionComment)}</p>` : ''}
+          <p style="margin:24px 0 4px">Przejdź do aplikacji Urlopy</p>
+          <p style="margin:0"><a href="${escapeHtml(params.appUrl)}">Link do aplikacji Urlopy</a></p>
+        </div>
+      `,
+      },
+      SMTP_PROFILES.LEAVES,
+    );
   }
 
   // @anchor mail-send-export

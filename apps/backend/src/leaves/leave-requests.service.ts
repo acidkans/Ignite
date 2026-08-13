@@ -1,0 +1,732 @@
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
+import { LeavesService } from './leaves.service';
+import { LeaveBalancesService } from './leave-balances.service';
+import { MailService } from '../mail/mail.service';
+import { HolidaysService } from './holidays.service';
+
+// @anchor create-leave-request-dto
+export interface CreateLeaveRequestDto {
+  userId?: string; // tylko ADMIN / przełożony może wskazać innego usera
+  leaveTypeId?: string | null; // rodzaj_urlopu — FK do słownika leave_types
+  daysCount?: number; // dni_urlopu
+  dependentId?: string | null; // podopieczny — wymagany dla rodzaju OPIEKA
+  dateStart: string;
+  timeStart?: string;
+  dateEnd: string;
+  timeEnd?: string;
+  officeFrom?: string;
+  officeTo?: string;
+  comment?: string;
+}
+
+// @anchor update-leave-request-dto
+export interface UpdateLeaveRequestDto extends Partial<CreateLeaveRequestDto> {
+  submittedAt?: string | null;
+}
+
+// @anchor decide-leave-request-dto
+export interface DecideLeaveRequestDto {
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  decisionComment?: string | null;
+}
+
+const REQUEST_INCLUDE = {
+  user: {
+    select: { id: true, firstName: true, lastName: true, email: true, company: true, supervisorId: true },
+  },
+  leaveType: { select: { id: true, code: true, name: true, color: true, consumesBalance: true } },
+  dependent: { select: { id: true, firstName: true, lastName: true, birthDate: true } },
+  decidedBy: { select: { id: true, firstName: true, lastName: true } },
+};
+
+// @anchor care-leave-code
+/// Kod rodzaju urlopu wymagajacego wskazania podopiecznego.
+export const CARE_LEAVE_CODE = 'OPIEKA';
+
+// @anchor leave-requests-service
+@Injectable()
+export class LeaveRequestsService {
+  constructor(
+    private prisma: PrismaService,
+    private leaves: LeavesService,
+    private balances: LeaveBalancesService,
+    private mail: MailService,
+    private config: ConfigService,
+    private holidays: HolidaysService,
+  ) {}
+
+  // @anchor list-own-leave-requests
+  /// Zakładka „Wnioski": ADMIN widzi wnioski wszystkich, pozostali wyłącznie swoje.
+  async listOwn(userId: string, roles: string[]) {
+    const access = await this.assertEnabled(userId, roles);
+    return this.prisma.leaveRequest.findMany({
+      where: access.scope === 'ALL' ? {} : { userId },
+      include: REQUEST_INCLUDE,
+      orderBy: [{ dateStart: 'desc' }],
+    });
+  }
+
+  // @anchor list-subordinate-leave-requests
+  /// Wnioski podwładnych (zakładka „Wnioski moich podwładnych"); ADMIN widzi wszystkie cudze.
+  async listSubordinates(userId: string, roles: string[]) {
+    const access = await this.assertEnabled(userId, roles);
+    const where =
+      access.scope === 'ALL'
+        ? { userId: { not: userId } }
+        : { user: { supervisorId: userId } };
+
+    return this.prisma.leaveRequest.findMany({
+      where,
+      include: REQUEST_INCLUDE,
+      orderBy: [{ dateStart: 'desc' }],
+    });
+  }
+
+  // @anchor create-leave-request
+  async create(userId: string, roles: string[], dto: CreateLeaveRequestDto) {
+    const access = await this.assertEnabled(userId, roles);
+    const targetUserId = dto.userId && dto.userId !== userId ? dto.userId : userId;
+
+    if (targetUserId !== userId) {
+      // wniosek za kogoś innego — tylko ADMIN albo bezpośredni przełożony
+      if (!access.canEdit && !(await this.isSupervisorOf(userId, targetUserId))) {
+        throw new ForbiddenException('Możesz składać wnioski tylko za siebie.');
+      }
+    }
+
+    this.assertRequestFieldsValid(dto.leaveTypeId, dto.dateStart, dto.dateEnd);
+    await this.assertDependentValid(targetUserId, dto.leaveTypeId, dto.dependentId);
+
+    const daysCount =
+      dto.daysCount ?? LeaveRequestsService.workingDaysBetween(new Date(dto.dateStart), new Date(dto.dateEnd));
+
+    // wymaganie: bez dostępnych dni w puli nie da się złożyć wniosku o urlop konsumujący saldo
+    if (await this.consumesBalance(dto.leaveTypeId)) {
+      await this.balances.assertDaysAvailable(targetUserId, daysCount);
+    }
+
+    await this.assertSaturdayHolidayDaysAvailable(targetUserId, dto.leaveTypeId, dto.dateStart, daysCount);
+    await this.assertStatutoryLimit(targetUserId, dto.leaveTypeId, dto.dateStart, daysCount);
+
+    const created = await this.prisma.leaveRequest.create({
+      data: {
+        userId: targetUserId,
+        leaveTypeId: dto.leaveTypeId || null,
+        dependentId: dto.dependentId || null,
+        daysCount,
+        dateStart: new Date(dto.dateStart),
+        dateEnd: new Date(dto.dateEnd),
+        timeStart: dto.timeStart ?? null,
+        timeEnd: dto.timeEnd ?? null,
+        officeFrom: dto.officeFrom ? new Date(dto.officeFrom) : null,
+        officeTo: dto.officeTo ? new Date(dto.officeTo) : null,
+        comment: dto.comment ?? null,
+        submittedAt: new Date(),
+        // migawka salda z chwili złożenia — do wydruku formularza
+        ...(await this.balanceSnapshot(targetUserId)),
+      },
+      include: REQUEST_INCLUDE,
+    });
+
+    await this.notifySupervisor(created);
+    return created;
+  }
+
+  // @anchor leave-type-usage
+  /// Zużycie dni w roku dla każdego rodzaju urlopu: ile wybrano (wnioski PENDING + APPROVED)
+  /// i ile zostało. Limit zależy od rodzaju: pula `LeaveBalance` (wypoczynkowy i na żądanie),
+  /// `LeaveType.maxDaysPerYear` (limit ustawowy) albo zatwierdzone `HolidayDayOff`.
+  async typeUsage(userId: string, roles: string[], targetUserId?: string, year?: number) {
+    const access = await this.assertEnabled(userId, roles);
+    let subjectId = userId;
+    if (targetUserId && targetUserId !== userId) {
+      if (access.scope === 'ALL' || (await this.isSupervisorOf(userId, targetUserId))) {
+        subjectId = targetUserId;
+      } else {
+        throw new ForbiddenException('Brak uprawnień do danych tego pracownika.');
+      }
+    }
+
+    const y = year || new Date().getFullYear();
+    const yearStart = new Date(Date.UTC(y, 0, 1));
+    const yearEnd = new Date(Date.UTC(y, 11, 31, 23, 59, 59));
+
+    const [types, requests, balance, holidayDays] = await Promise.all([
+      this.prisma.leaveType.findMany({
+        where: { isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      }),
+      this.prisma.leaveRequest.findMany({
+        where: {
+          userId: subjectId,
+          status: { in: ['PENDING', 'APPROVED'] },
+          dateStart: { gte: yearStart, lte: yearEnd },
+        },
+        select: { leaveTypeId: true, daysCount: true, status: true },
+      }),
+      this.balances.getBalance(subjectId),
+      this.holidays.approvedDaysCount(y),
+    ]);
+
+    return {
+      year: y,
+      userId: subjectId,
+      items: types.map(t => {
+        const mine = requests.filter(r => r.leaveTypeId === t.id);
+        const used = mine.reduce((s, r) => s + (r.daysCount || 0), 0);
+        const pending = mine
+          .filter(r => r.status === 'PENDING')
+          .reduce((s, r) => s + (r.daysCount || 0), 0);
+
+        let limit: number | null = t.maxDaysPerYear ?? null;
+        let source: string | null = limit ? 'limit ustawowy' : null;
+
+        if (t.code === LeaveRequestsService.SATURDAY_HOLIDAY_CODE) {
+          limit = holidayDays;
+          source = 'dni wolne za święta w sobotę';
+        } else if (t.consumesBalance && !t.maxDaysPerYear) {
+          // wypoczynkowy — pula z zaległymi latami, więc „zostało" bierzemy wprost z salda
+          limit = (balance.totalRemaining ?? 0) + used;
+          source = 'pula dni urlopowych';
+        }
+
+        return {
+          leaveTypeId: t.id,
+          code: t.code,
+          name: t.name,
+          color: t.color,
+          used,
+          pending,
+          limit,
+          remaining: limit === null ? null : Math.max(0, limit - used),
+          source,
+        };
+      }),
+    };
+  }
+
+  // @anchor leave-request-balance-snapshot
+  /// Saldo z chwili złożenia przepisane na pola remaining* (najstarszy rok → remainingY4).
+  private async balanceSnapshot(subjectId: string) {
+    const { years } = await this.balances.getBalance(subjectId);
+    const [y4, y3, y2, y1, current] = years.map(y => y.remainingDays);
+    return {
+      remainingY4: y4 ?? 0,
+      remainingY3: y3 ?? 0,
+      remainingY2: y2 ?? 0,
+      remainingY1: y1 ?? 0,
+      remainingCurrentYear: current ?? 0,
+    };
+  }
+
+  // @anchor saturday-holiday-leave-code
+  /// Rodzaj urlopu odbieranego za święto wypadające w sobotę.
+  private static readonly SATURDAY_HOLIDAY_CODE = 'ZA_SWIETO_SOB';
+
+  // @anchor assert-saturday-holiday-days
+  /// Wniosek „Do wyboru za święto w sobotę" wolno złożyć tylko do wysokości dni
+  /// zatwierdzonych przez administratora na dany rok, pomniejszonych o już wybrane.
+  private async assertSaturdayHolidayDaysAvailable(
+    userId: string,
+    leaveTypeId: string | null | undefined,
+    dateStart: string,
+    daysCount: number,
+  ): Promise<void> {
+    if (!leaveTypeId) return;
+    const type = await this.prisma.leaveType.findUnique({
+      where: { id: leaveTypeId },
+      select: { code: true },
+    });
+    if (type?.code !== LeaveRequestsService.SATURDAY_HOLIDAY_CODE) return;
+
+    const year = Number(LeaveRequestsService.warsawDayKey(new Date(dateStart)).slice(0, 4));
+    const entitlement = await this.holidays.approvedDaysCount(year);
+    if (!entitlement) {
+      throw new BadRequestException(
+        `Na ${year} rok administrator nie zatwierdził jeszcze dni wolnych za święta wypadające w sobotę.`,
+      );
+    }
+
+    const yearStart = new Date(Date.UTC(year, 0, 1));
+    const yearEnd = new Date(Date.UTC(year, 11, 31, 23, 59, 59));
+    const taken = await this.prisma.leaveRequest.findMany({
+      where: {
+        userId,
+        leaveTypeId,
+        status: { in: ['PENDING', 'APPROVED'] },
+        dateStart: { gte: yearStart, lte: yearEnd },
+      },
+      select: { daysCount: true },
+    });
+    const used = taken.reduce((s, r) => s + (r.daysCount || 0), 0);
+
+    if (used + daysCount > entitlement) {
+      throw new BadRequestException(
+        `Za święta w sobotę przysługuje w ${year} roku ${entitlement} dni, wykorzystano lub złożono wnioski na ${used}.`,
+      );
+    }
+  }
+
+  // @anchor assert-statutory-limit
+  /// Ustawowy limit dni w roku kalendarzowym z `LeaveType.maxDaysPerYear`
+  /// (na żądanie 4, opiekuńczy 5). Liczymy wnioski PENDING i APPROVED z tego samego roku.
+  private async assertStatutoryLimit(
+    userId: string,
+    leaveTypeId: string | null | undefined,
+    dateStart: string,
+    daysCount: number,
+  ): Promise<void> {
+    if (!leaveTypeId) return;
+    const type = await this.prisma.leaveType.findUnique({
+      where: { id: leaveTypeId },
+      select: { name: true, maxDaysPerYear: true },
+    });
+    const limit = type?.maxDaysPerYear;
+    if (!limit) return;
+
+    const year = Number(LeaveRequestsService.warsawDayKey(new Date(dateStart)).slice(0, 4));
+    const yearStart = new Date(Date.UTC(year, 0, 1));
+    const yearEnd = new Date(Date.UTC(year, 11, 31, 23, 59, 59));
+    const taken = await this.prisma.leaveRequest.findMany({
+      where: {
+        userId,
+        leaveTypeId,
+        status: { in: ['PENDING', 'APPROVED'] },
+        dateStart: { gte: yearStart, lte: yearEnd },
+      },
+      select: { daysCount: true },
+    });
+    const used = taken.reduce((s, r) => s + (r.daysCount || 0), 0);
+
+    if (used + daysCount > limit) {
+      throw new BadRequestException(
+        `Limit ustawowy: „${type.name}" to ${limit} dni w ${year} roku, wykorzystano lub złożono wnioski na ${used}.`,
+      );
+    }
+  }
+
+  // @anchor leave-type-consumes-balance-check
+  private async consumesBalance(leaveTypeId?: string | null): Promise<boolean> {
+    if (!leaveTypeId) return false;
+    const type = await this.prisma.leaveType.findUnique({
+      where: { id: leaveTypeId },
+      select: { consumesBalance: true },
+    });
+    return !!type?.consumesBalance;
+  }
+
+  // @anchor notify-supervisor-leave-request
+  /// Mail do przełożonego wnioskodawcy. Brak SMTP / brak przełożonego nie wywraca zapisu wniosku.
+  private async notifySupervisor(request: any): Promise<void> {
+    try {
+      const applicant = await this.prisma.user.findUnique({
+        where: { id: request.userId },
+        select: {
+          firstName: true,
+          lastName: true,
+          email: true,
+          supervisor: { select: { email: true } },
+        },
+      });
+      const to = applicant?.supervisor?.email;
+      if (!to) return;
+
+      const appUrl = `${this.config.get('FRONTEND_URL') || 'http://localhost:5174'}/urlopy`;
+      await this.mail.sendLeaveRequest({
+        to,
+        applicantName:
+          [applicant?.firstName, applicant?.lastName].filter(Boolean).join(' ') || applicant?.email || 'Pracownik',
+        leaveTypeName: request.leaveType?.name ?? null,
+        dateStart: request.dateStart,
+        dateEnd: request.dateEnd,
+        comment: request.comment,
+        appUrl,
+      });
+    } catch {
+      /* powiadomienie jest best-effort — wniosek jest już zapisany */
+    }
+  }
+
+  // @anchor update-leave-request
+  async update(userId: string, roles: string[], id: string, dto: UpdateLeaveRequestDto) {
+    const access = await this.assertEnabled(userId, roles);
+    const existing = await this.prisma.leaveRequest.findUnique({
+      where: { id },
+      include: { user: { select: { supervisorId: true } } },
+    });
+    if (!existing) throw new NotFoundException('Wniosek nie istnieje.');
+
+    const isOwner = existing.userId === userId;
+    const isSupervisor = existing.user?.supervisorId === userId;
+
+    if (!access.canEdit && !isSupervisor) {
+      if (!isOwner) throw new ForbiddenException('Brak uprawnień do edycji tego wniosku.');
+      if (existing.status !== 'PENDING') {
+        throw new ForbiddenException('Rozpatrzonego wniosku nie można już edytować.');
+      }
+    }
+    // zmiana treści zatwierdzonego wniosku rozjechałaby odjęte dni z pulą
+    if (existing.status === 'APPROVED') {
+      throw new BadRequestException('Cofnij zatwierdzenie, zanim zmienisz treść wniosku.');
+    }
+
+    if (dto.leaveTypeId !== undefined && !dto.leaveTypeId) {
+      throw new BadRequestException('Rodzaj urlopu jest wymagany.');
+    }
+    if ((dto.dateStart !== undefined && !dto.dateStart) || (dto.dateEnd !== undefined && !dto.dateEnd)) {
+      throw new BadRequestException('Data od i data do sa wymagane.');
+    }
+    {
+      const from = new Date(dto.dateStart ?? existing.dateStart);
+      const to = new Date(dto.dateEnd ?? existing.dateEnd);
+      if (to < from) throw new BadRequestException('Data do nie moze byc wczesniejsza niz data od.');
+    }
+
+    if (dto.leaveTypeId !== undefined || dto.dependentId !== undefined) {
+      await this.assertDependentValid(
+        dto.userId ?? existing.userId,
+        dto.leaveTypeId !== undefined ? dto.leaveTypeId : existing.leaveTypeId,
+        dto.dependentId !== undefined ? dto.dependentId : existing.dependentId,
+      );
+    }
+
+    const data: any = {};
+    if (dto.dependentId !== undefined) data.dependentId = dto.dependentId || null;
+    if (dto.leaveTypeId !== undefined) data.leaveTypeId = dto.leaveTypeId || null;
+    if (dto.daysCount !== undefined) data.daysCount = dto.daysCount;
+    if (dto.dateStart !== undefined) data.dateStart = new Date(dto.dateStart);
+    if (dto.dateEnd !== undefined) data.dateEnd = new Date(dto.dateEnd);
+    // zmiana dat bez jawnego daysCount — liczba dni przeliczana z nowego zakresu
+    if (dto.daysCount === undefined && (dto.dateStart !== undefined || dto.dateEnd !== undefined)) {
+      data.daysCount = LeaveRequestsService.workingDaysBetween(
+        data.dateStart ?? existing.dateStart,
+        data.dateEnd ?? existing.dateEnd,
+      );
+    }
+    if (dto.timeStart !== undefined) data.timeStart = dto.timeStart || null;
+    if (dto.timeEnd !== undefined) data.timeEnd = dto.timeEnd || null;
+    if (dto.officeFrom !== undefined) data.officeFrom = dto.officeFrom ? new Date(dto.officeFrom) : null;
+    if (dto.officeTo !== undefined) data.officeTo = dto.officeTo ? new Date(dto.officeTo) : null;
+    if (dto.comment !== undefined) data.comment = dto.comment || null;
+    if (dto.submittedAt !== undefined) data.submittedAt = dto.submittedAt ? new Date(dto.submittedAt) : null;
+
+    // po zmianie zakresu / rodzaju sprawdzamy pulę ponownie
+    const newTypeId = dto.leaveTypeId !== undefined ? dto.leaveTypeId : existing.leaveTypeId;
+    const newDays = data.daysCount ?? existing.daysCount;
+    if ((data.daysCount !== undefined || dto.leaveTypeId !== undefined) && (await this.consumesBalance(newTypeId))) {
+      await this.balances.assertDaysAvailable(existing.userId, newDays);
+    }
+
+    return this.prisma.leaveRequest.update({ where: { id }, data, include: REQUEST_INCLUDE });
+  }
+
+  // @anchor decide-leave-request
+  /// Decyzja przełożonego: zatwierdzenie odejmuje dni od najstarszego dostępnego rocznika,
+  /// odrzucenie / cofnięcie decyzji oddaje je z powrotem.
+  async decide(userId: string, roles: string[], id: string, dto: DecideLeaveRequestDto) {
+    const access = await this.assertEnabled(userId, roles);
+    const existing = await this.prisma.leaveRequest.findUnique({
+      where: { id },
+      include: {
+        user: { select: { supervisorId: true } },
+        leaveType: { select: { consumesBalance: true } },
+      },
+    });
+    if (!existing) throw new NotFoundException('Wniosek nie istnieje.');
+
+    const isSupervisor = existing.user?.supervisorId === userId;
+    if (!access.canEdit && !isSupervisor) {
+      throw new ForbiddenException('Wnioski rozpatruje przełożony albo administrator.');
+    }
+
+    const status = dto?.status;
+    if (!['PENDING', 'APPROVED', 'REJECTED'].includes(status)) {
+      throw new BadRequestException('Nieprawidłowy status wniosku.');
+    }
+    if (status === existing.status) {
+      return this.prisma.leaveRequest.findUnique({ where: { id }, include: REQUEST_INCLUDE });
+    }
+
+    const now = new Date();
+    const updated = await this.prisma.$transaction(async tx => {
+      // wyjście ze stanu APPROVED zawsze najpierw oddaje dni do puli
+      if (existing.status === 'APPROVED') {
+        await this.balances.revertDeductions(tx, id, existing.userId);
+      }
+      if (status === 'APPROVED' && existing.leaveType?.consumesBalance) {
+        await this.balances.applyDeductions(tx, id, existing.userId, existing.daysCount || 0);
+      }
+
+      // @anchor sync-leave-from-request
+      /// Zatwierdzony wniosek zakłada wpis urlopowy — to on zasila tabelę „Moje urlopy"
+      /// i liczniki wykorzystanych dni. Wyjście ze stanu APPROVED kasuje ten wpis.
+      if (status === 'APPROVED') {
+        if (existing.leaveTypeId) {
+          await tx.leave.upsert({
+            where: { leaveRequestId: id },
+            create: {
+              userId: existing.userId,
+              leaveTypeId: existing.leaveTypeId,
+              dateFrom: existing.dateStart,
+              dateTo: existing.dateEnd,
+              daysCount: existing.daysCount || 0,
+              note: existing.comment || null,
+              leaveRequestId: id,
+            },
+            update: {
+              leaveTypeId: existing.leaveTypeId,
+              dateFrom: existing.dateStart,
+              dateTo: existing.dateEnd,
+              daysCount: existing.daysCount || 0,
+              note: existing.comment || null,
+            },
+          });
+        }
+      } else {
+        await tx.leave.deleteMany({ where: { leaveRequestId: id } });
+      }
+
+      return tx.leaveRequest.update({
+        where: { id },
+        data: {
+          status: status as any,
+          approvedAt: status === 'APPROVED' ? now : null,
+          rejectedAt: status === 'REJECTED' ? now : null,
+          decidedById: status === 'PENDING' ? null : userId,
+          decisionComment: status === 'PENDING' ? null : dto.decisionComment || null,
+        },
+        include: REQUEST_INCLUDE,
+      });
+    });
+
+    // cofnięcie decyzji nie jest rozstrzygnięciem — wnioskodawcy nie zawiadamiamy
+    if (status !== 'PENDING') await this.notifyApplicant(updated, status === 'APPROVED');
+    return updated;
+  }
+
+  // @anchor notify-applicant-leave-decision
+  /// Mail do wnioskodawcy o decyzji przełożonego. Best-effort — błąd SMTP nie cofa decyzji.
+  private async notifyApplicant(request: any, approved: boolean): Promise<void> {
+    try {
+      const to = request.user?.email;
+      if (!to) return;
+
+      const appUrl = `${this.config.get('FRONTEND_URL') || 'http://localhost:5174'}/urlopy`;
+      await this.mail.sendLeaveDecision({
+        to,
+        applicantName:
+          [request.user?.firstName, request.user?.lastName].filter(Boolean).join(' ') || to,
+        deciderName: request.decidedBy
+          ? [request.decidedBy.firstName, request.decidedBy.lastName].filter(Boolean).join(' ') || null
+          : null,
+        approved,
+        leaveTypeName: request.leaveType?.name ?? null,
+        dateStart: request.dateStart,
+        dateEnd: request.dateEnd,
+        decisionComment: request.decisionComment,
+        appUrl,
+      });
+    } catch {
+      /* powiadomienie jest best-effort — decyzja jest już zapisana */
+    }
+  }
+
+  // @anchor remove-leave-request
+  async remove(userId: string, roles: string[], id: string) {
+    const access = await this.assertEnabled(userId, roles);
+    const existing = await this.prisma.leaveRequest.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Wniosek nie istnieje.');
+
+    const isOwner = existing.userId === userId;
+    if (!access.canEdit && !(isOwner && existing.status === 'PENDING')) {
+      throw new ForbiddenException('Brak uprawnień do usunięcia tego wniosku.');
+    }
+    return this.prisma.$transaction(async tx => {
+      // usunięcie zatwierdzonego wniosku musi oddać dni do puli — kaskada sama tego nie zrobi
+      if (existing.status === 'APPROVED') {
+        await this.balances.revertDeductions(tx, id, existing.userId);
+      }
+      return tx.leaveRequest.delete({ where: { id } });
+    });
+  }
+
+  // @anchor leave-dashboard-summary
+  /// Dane zakładki Dashboard — saldo dni, wnioski oczekujące, urlopy wg rodzaju w bieżącym roku.
+  async dashboard(userId: string, roles: string[], targetUserId?: string) {
+    const access = await this.assertEnabled(userId, roles);
+    // podgląd innego pracownika — tylko ADMIN albo jego bezpośredni przełożony
+    let subjectId = userId;
+    if (targetUserId && targetUserId !== userId) {
+      if (access.scope === 'ALL' || (await this.isSupervisorOf(userId, targetUserId))) {
+        subjectId = targetUserId;
+      } else {
+        throw new ForbiddenException('Brak uprawnień do danych tego pracownika.');
+      }
+    }
+    const yearStart = new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1));
+    const yearEnd = new Date(Date.UTC(new Date().getUTCFullYear(), 11, 31, 23, 59, 59));
+
+    // saldo — pula dni z LeaveBalance (rok bieżący i 4 lata wstecz)
+    const balance = await this.balances.getBalance(subjectId);
+
+    const myLeaves = await this.prisma.leave.findMany({
+      where: { userId: subjectId, dateFrom: { gte: yearStart, lte: yearEnd } },
+      include: { leaveType: { select: { id: true, name: true, color: true } } },
+    });
+
+    const byType = new Map<string, { name: string; color: string; days: number; count: number }>();
+    for (const l of myLeaves) {
+      const key = l.leaveType.id;
+      const entry = byType.get(key) || { name: l.leaveType.name, color: l.leaveType.color, days: 0, count: 0 };
+      entry.days += l.daysCount || 0;
+      entry.count += 1;
+      byType.set(key, entry);
+    }
+
+    const pendingOwn = await this.prisma.leaveRequest.count({
+      where: { userId: subjectId, status: 'PENDING' },
+    });
+
+    // wnioski wybranego pracownika — tabela w panelu Dashboard
+    const subjectRequests = await this.prisma.leaveRequest.findMany({
+      where: { userId: subjectId },
+      include: REQUEST_INCLUDE,
+      orderBy: [{ dateStart: 'desc' }],
+      take: 100,
+    });
+
+    const subject = await this.prisma.user.findUnique({
+      where: { id: subjectId },
+      select: {
+        id: true, firstName: true, lastName: true, email: true, company: true,
+        supervisor: { select: { id: true, firstName: true, lastName: true } },
+        userRoles: { select: { role: { select: { name: true } } } },
+      },
+    });
+
+    const pendingSubordinates = await this.prisma.leaveRequest.count({
+      where: access.scope === 'ALL'
+        ? { userId: { not: userId }, status: 'PENDING' }
+        : { user: { supervisorId: userId }, status: 'PENDING' },
+    });
+
+    // czy oglądający może rozpatrywać wnioski wyświetlanego pracownika
+    const canDecideSubject =
+      access.scope === 'ALL' || (subjectId !== userId && (await this.isSupervisorOf(userId, subjectId)));
+
+    return {
+      subject: subject
+        ? {
+            ...subject,
+            roles: subject.userRoles.map(r => r.role.name),
+            supervisorName: subject.supervisor
+              ? `${subject.supervisor.firstName || ''} ${subject.supervisor.lastName || ''}`.trim()
+              : null,
+          }
+        : null,
+      requests: subjectRequests,
+      balance: {
+        // lata liczone dynamicznie względem roku bieżącego — front tylko renderuje tę listę
+        years: balance.years,
+        totalRemaining: balance.totalRemaining,
+        source: 'pula dni urlopowych',
+      },
+      canDecideSubject,
+      currentYear: {
+        year: yearStart.getUTCFullYear(),
+        totalDays: myLeaves.reduce((s, l) => s + (l.daysCount || 0), 0),
+        byType: Array.from(byType.values()),
+      },
+      pendingOwn,
+      pendingSubordinates,
+      scope: access.scope,
+    };
+  }
+
+  // @anchor warsaw-day-key
+  /// Dzien kalendarzowy wg strefy Europe/Warsaw ('YYYY-MM-DD').
+  /// Klient wysyla ISO w UTC (11.08 00:00 lokalnie = 10.08 22:00Z), wiec liczenie po UTC
+  /// przesunęłoby zakres o dobę.
+  private static warsawDayKey(d: Date): string {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Warsaw',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+  }
+
+  // @anchor working-days-between-requests
+  /// Dni urlopu we wniosku: dni kalendarzowe od poczatku do konca wlacznie,
+  /// z pominieciem sobot i niedziel.
+  static workingDaysBetween(from: Date, to: Date): number {
+    if (isNaN(from.getTime()) || isNaN(to.getTime())) return 0;
+    const [fy, fm, fd] = LeaveRequestsService.warsawDayKey(from).split('-').map(Number);
+    const [ty, tm, td] = LeaveRequestsService.warsawDayKey(to).split('-').map(Number);
+    const start = Date.UTC(fy, fm - 1, fd);
+    const end = Date.UTC(ty, tm - 1, td);
+    if (end < start) return 0;
+
+    let days = 0;
+    for (let ms = start; ms <= end; ms += 86400000) {
+      const dow = new Date(ms).getUTCDay(); // 0 = niedziela, 6 = sobota
+      if (dow !== 0 && dow !== 6) days++;
+    }
+    return days;
+  }
+
+  // @anchor assert-request-fields-valid
+  /// Rodzaj urlopu i obie daty sa obowiazkowe; zakres musi byc chronologiczny.
+  private assertRequestFieldsValid(leaveTypeId?: string | null, dateStart?: string, dateEnd?: string): void {
+    if (!leaveTypeId) throw new BadRequestException('Rodzaj urlopu jest wymagany.');
+    if (!dateStart || !dateEnd) throw new BadRequestException('Data od i data do sa wymagane.');
+    const from = new Date(dateStart);
+    const to = new Date(dateEnd);
+    if (isNaN(from.getTime()) || isNaN(to.getTime())) throw new BadRequestException('Nieprawidlowy format daty.');
+    if (to < from) throw new BadRequestException('Data do nie moze byc wczesniejsza niz data od.');
+  }
+
+  // @anchor assert-dependent-valid
+  /// Dla rodzaju OPIEKA wniosek musi wskazywac podopiecznego, i to podopiecznego wnioskodawcy.
+  private async assertDependentValid(
+    applicantId: string,
+    leaveTypeId: string | null | undefined,
+    dependentId: string | null | undefined,
+  ): Promise<void> {
+    const type = leaveTypeId
+      ? await this.prisma.leaveType.findUnique({ where: { id: leaveTypeId }, select: { code: true } })
+      : null;
+    const isCareLeave = type?.code === CARE_LEAVE_CODE;
+
+    if (isCareLeave && !dependentId) {
+      throw new BadRequestException('Urlop opiekunczy wymaga wskazania podopiecznego.');
+    }
+    if (!dependentId) return;
+
+    const dependent = await this.prisma.dependent.findUnique({
+      where: { id: dependentId },
+      select: { userId: true },
+    });
+    if (!dependent) throw new BadRequestException('Wskazany podopieczny nie istnieje.');
+    if (dependent.userId !== applicantId) {
+      throw new BadRequestException('Wskazany podopieczny nie nalezy do tego pracownika.');
+    }
+  }
+
+  // @anchor is-supervisor-of
+  private async isSupervisorOf(supervisorId: string, employeeId: string): Promise<boolean> {
+    const employee = await this.prisma.user.findUnique({
+      where: { id: employeeId },
+      select: { supervisorId: true },
+    });
+    return employee?.supervisorId === supervisorId;
+  }
+
+  private async assertEnabled(userId: string, roles: string[]) {
+    const access = await this.leaves.resolveAccess(userId, roles);
+    if (!access.enabled) throw new ForbiddenException('Moduł Urlopy niedostępny dla tego użytkownika.');
+    return access;
+  }
+}

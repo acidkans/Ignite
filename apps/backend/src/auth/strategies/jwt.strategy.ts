@@ -26,6 +26,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // Map roles to ensure they are up to date
     const roles = (user as any).userRoles?.map(ur => ur.role.name) || [];
 
-    return { userId: user.id, email: user.email, roles: roles, teamIds: (user as any).teams?.map(t => t.id) || [] };
+    return { userId: user.id, email: user.email, company: user.company ?? null, roles: roles, teamIds: (user as any).teams?.map(t => t.id) || [] };
   }
 }

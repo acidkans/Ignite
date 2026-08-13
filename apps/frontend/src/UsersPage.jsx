@@ -4,6 +4,7 @@ import { AgGridReact } from 'ag-grid-react';
 import { themeQuartz } from 'ag-grid-community';
 import AddUserModal from './components/shared/AddUserModal';
 import EditUserModal from './components/shared/EditUserModal';
+import { LEAVE_COMPANIES } from './utils/leaveCompanies';
 
 export default function UsersPage() {
     const [activeTab, setActiveTab] = useState('users'); // 'users' | 'teams'
@@ -29,6 +30,12 @@ export default function UsersPage() {
     const usersList = useMemo(() => rowData.map(u => ({ label: `${u.firstName} ${u.lastName}`, id: u.id })), [rowData]);
     const supervisorNames = useMemo(() => ['Brak', ...usersList.map(u => u.label)], [usersList]);
     const teamNames = useMemo(() => ['Brak', ...teams.map(t => t.name)], [teams]);
+    // @anchor company-options
+    // Firmy z modułem Urlopy + firmy już występujące w bazie
+    const companyOptions = useMemo(() => {
+        const existing = rowData.map(u => u.company).filter(Boolean);
+        return ['Brak', ...Array.from(new Set([...LEAVE_COMPANIES, ...existing]))];
+    }, [rowData]);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -134,6 +141,16 @@ export default function UsersPage() {
         { field: 'firstName', headerName: 'Imię', editable: isAdminOrManager, flex: 1 },
         { field: 'lastName', headerName: 'Nazwisko', editable: isAdminOrManager, flex: 1 },
         { field: 'email', headerName: 'Email', editable: false, flex: 1.5 },
+        // @anchor users-company-column
+        {
+            field: 'company',
+            headerName: 'Firma',
+            editable: isAdminOrManager,
+            cellEditor: 'agSelectCellEditor',
+            cellEditorParams: { values: companyOptions },
+            valueGetter: p => p.data.company || 'Brak',
+            flex: 1.2
+        },
         {
             headerName: 'Zespoły',
             field: 'teams',
@@ -182,7 +199,7 @@ export default function UsersPage() {
             filter: false
         },
         { field: 'createdAt', headerName: 'Utworzono', valueFormatter: p => new Date(p.value).toLocaleDateString(), width: 120 }
-    ], [supervisorNames, teamNames, isAdminOrManager]);
+    ], [supervisorNames, teamNames, companyOptions, isAdminOrManager]);
 
     // Obsługa edycji komórki
     const onCellValueChanged = async (params) => {
@@ -221,6 +238,8 @@ export default function UsersPage() {
                     return;
                 }
             }
+        } else if (colId === 'Firma') {
+            payload = { company: newValue === 'Brak' ? null : newValue };
         } else {
             // Standardowe pole
             payload = { [field]: newValue };

@@ -1,3 +1,278 @@
+## 2026-08-13 — feat(urlopy): ustawowe limity dni dla rodzajów urlopu
+
+### schema.prisma
+- dodano pole `maxDaysPerYear` (Int?) w modelu `LeaveType` — ustawowy limit dni w roku kalendarzowym; NULL = brak limitu albo limit liczony osobno
+- migracja `20260813070000_leave_type_max_days` ustawia: `NA_ZADANIE` = 4 (art. 167(2) k.p.), `OPIEKA` = 5 (art. 173(1) k.p.)
+
+### architektura / API
+- `POST /leave-requests` — nowa walidacja `assertStatutoryLimit`: suma dni wniosków `PENDING` + `APPROVED` z danego roku nie może przekroczyć `maxDaysPerYear`
+- `GET /leaves/types` zwraca `maxDaysPerYear`; karta „Wykorzystane dni" pokazuje `wykorzystane / limit` dla rodzajów z limitem
+- źródło liczb: gov.pl „Urlopy i zwolnienia od pracy" — wypoczynkowy 20/26 dni wg stażu, na żądanie 4, opiekuńczy 5, siła wyższa 2 dni / 16 godzin, opieka nad dzieckiem art. 188 2 dni / 16 godzin, bezpłatny bez limitu
+
+- dodano `GET /leave-requests/type-usage?userId=&year=` — dla każdego rodzaju urlopu: `used`, `pending`, `limit`, `remaining`, `source`; limit bierze się z puli `LeaveBalance` (wypoczynkowy), `LeaveType.maxDaysPerYear` (limit ustawowy) albo zatwierdzonych `HolidayDayOff`
+- modal wniosku pokazuje pod wyborem rodzaju: ile dni wybrano w roku, ile z tego oczekuje na decyzję i ile zostało (albo „bez limitu rocznego")
+
+### wytyczne
+- `back-funkcja` `typeUsage` — jedyne miejsce liczące „ile zostało" dla wniosku; przy nowym rodzaju limitu rozszerzać ten serwis, nie liczyć na froncie
+- `schema-pole` `LeaveType.maxDaysPerYear` — trzymać tu wyłącznie limity ustawowe stałe w roku; limit `WYPOCZYNKOWY` wynika z `LeaveBalance` (pula z zaległymi latami), a `ZA_SWIETO_SOB` z liczby zatwierdzonych `HolidayDayOff` — obu nie dublować w tym polu
+
+## 2026-08-12 — feat(uprawnienia): Użytkownicy i Firma tylko dla administratora
+
+### architektura / API
+- `POST /users`, `PATCH /users/:id`, `DELETE /users/:id` — zawężone z `ADMIN, MANAGER` do `ADMIN`
+- `PATCH /company` — dodany `RolesGuard` + `@Roles('ADMIN')`; `GET /company` zostaje dla wszystkich zalogowanych, bo nagłówki eksportów biorą stąd dane firmy
+- `GET /users` bez zmian: ADMIN i MANAGER widzą pełną listę (przypisania zadań, urlopy), pozostali wyłącznie siebie
+- sidebar: pozycje „Użytkownicy" i „Firma" renderowane tylko przy roli ADMIN
+- trasy `/users` i `/firma` owinięte w `AdminRoute` — wejście po URL bez roli ADMIN pokazuje „Brak dostępu"
+
+### wytyczne
+- `ui-sekcja` `AdminRoute` — strażnik tylko dla wygody UI; każdy nowy endpoint administracyjny musi mieć własny `@Roles('ADMIN')` po stronie backendu
+
+## 2026-08-12 — feat(urlopy): dni wolne za święta wypadające w sobotę
+
+### schema.prisma
+- dodano model `HolidayDayOff` (`year`, `date` unique, `name`, `approved`, `approvedAt`, `approvedById`) — decyzja administratora o dniu wolnym za święto wypadające w sobotę; propozycje liczy backend, wiersz powstaje przy decyzji
+- dodano relację `User.approvedHolidayDaysOff` ↔ `HolidayDayOff.approvedBy`
+- migracja `20260812210000_holiday_days_off`
+
+### architektura / API
+- dodano `HolidaysService` — `POLISH_FIXED_HOLIDAYS` (9 świąt o stałej dacie) i wyliczanie propozycji: tylko one mogą wypaść w sobotę, święta ruchome są przypięte do dnia tygodnia
+- dodano `GET /leaves/holidays?year=` — lista propozycji na rok wraz ze stanem decyzji i liczbą zatwierdzonych dni (dla każdego użytkownika modułu)
+- dodano `PUT /leaves/holidays` (ADMIN) — `dates` to komplet zatwierdzonych dat dla roku; wszystko spoza listy wraca do stanu propozycji
+- `POST /leave-requests` — wniosek rodzaju `ZA_SWIETO_SOB` przechodzi tylko do wysokości dni zatwierdzonych na dany rok, pomniejszonych o wnioski `PENDING`/`APPROVED`; brak zatwierdzonych dni = 400
+
+- dodano `POST /leaves/holidays/custom` i `DELETE /leaves/holidays/custom?date=` (ADMIN) — własny dzień wolny poza kalendarzem świąt (od razu zatwierdzony) i jego usunięcie; dnia z kalendarza świąt nie można usunąć, tylko odznaczyć
+- `PUT /leaves/holidays` obejmuje też dni dodane ręcznie — odznaczenie daty jest cofnięciem zatwierdzenia
+- zarządzanie dniami wolnymi przeniesione z modala do osobnej karty „Dni wolne — zarządzanie", renderowanej tylko przy `access.canEdit`
+
+### wytyczne
+- `schema-model` `HolidayDayOff` — brak wiersza znaczy „propozycja niezatwierdzona"; nie zakładać wierszy seedem, tworzy je wyłącznie decyzja administratora
+- `back-stala` `POLISH_FIXED_HOLIDAYS` — lista świąt ruchomych jest tu zbędna z definicji; dopisywać wyłącznie święta o stałej dacie
+
+## 2026-08-12 — fix(urlopy): zatwierdzony wniosek zakłada wpis urlopowy
+
+### schema.prisma
+- dodano pole `leaveRequestId` (String?, `@unique`) w modelu `Leave` — wpis powstały z zatwierdzonego wniosku; NULL dla wpisów zakładanych ręcznie
+- dodano relację `Leave.leaveRequest` ↔ `LeaveRequest.leave` (1:1, `onDelete: Cascade`) — usunięcie wniosku kasuje wygenerowany wpis
+- migracja `20260812200000_leave_from_request`
+
+### architektura / API
+- `PATCH /leave-requests/:id/decision` — zatwierdzenie wniosku robi teraz `upsert` wpisu w `Leave` (daty, dni, komentarz jako notatka); wyjście ze stanu `APPROVED` (odrzucenie / cofnięcie) kasuje ten wpis. Wcześniej zatwierdzenie ruszało wyłącznie `LeaveBalance`, przez co tabela „Moje urlopy" i liczniki wykorzystanych dni zostawały puste
+- wniosek bez `leaveTypeId` nie generuje wpisu — nie ma z czego ustalić rodzaju urlopu
+
+### wytyczne
+- `schema-pole` `Leave.leaveRequestId` — wpisy z wniosków rozpoznajemy po tym polu; nie kasować ich ręcznie, robi to zmiana statusu wniosku
+
+## 2026-08-12 — feat(urlopy): kalendarz Google, karty „Moje dane" i zapis układu kart per użytkownik
+
+### architektura / API
+- dodano `GET /leaves/layout` i `PUT /leaves/layout` — układ kart zakładki „Moje dane" zapisywany per użytkownik w `UserEntityConfig` pod `entityType = 'leaves-cards-layout'` (bez zmian w schema.prisma)
+- dodano zakładkę `Kalendarz` w module Urlopy — wspólny kalendarz Google (embed + link `cid`), bez ograniczeń uprawnień
+- tabela „Moje urlopy" w „Moje dane" jest teraz tylko do odczytu (kolumny `dateFrom`, `dateTo`) — usunięto usuwanie wpisu, edycję komórek i modal edycji z tej zakładki
+
+### słownik
+- dodano `leaves-layout-entity-type`, `get-leaves-layout`, `save-leaves-layout`, `leaves-layout-get-endpoint`, `leaves-layout-put-endpoint` — zapis układu kart per użytkownik
+- dodano `my-leaves-default-layout`, `my-leaves-layout-state`, `my-leaves-drag-end`, `my-leaves-save-layout`, `resolve-card-overlaps`, `find-free-spot` — sterowany układ kart i odsuwanie przykrytych kart
+- dodano `leaves-calendar-tab`, `leaves-google-calendar-url`, `leaves-gov-url` — kalendarz Google i link do gov.pl
+- usunięto `draggable-card-storage-key`, `reset-leaves-card-positions`, `on-my-leave-cell-changed`, `my-leaves-add-entry-button` — pozycje kart nie leżą już w localStorage, tabela jest read-only
+
+### wytyczne
+- `ui-stan` `layout` (MyLeavesTab) — pozycje kart są sterowane z góry; `DraggableCard` niczego nie zapisuje sam, zmiany wracają przez `onDragEnd` i lądują na serwerze dopiero po „Zapisz położenie kart"
+- `back-endpoint` `PUT /leaves/layout` — payload to surowy JSON układu; walidacja kluczy po stronie frontu (`CARD_IDS`), backend trzyma go bez interpretacji
+
+## 2026-08-12 — feat(urlopy): pula dni urlopowych, status wniosku i mail do przełożonego
+
+### schema.prisma
+- dodano enum `LeaveRequestStatus` (`PENDING` / `APPROVED` / `REJECTED`) — cykl życia wniosku
+- dodano pole `status` w modelu `LeaveRequest` — status wniosku, backfill z `approvedAt`
+- dodano pole `rejectedAt` w modelu `LeaveRequest` — data odrzucenia
+- dodano pole `decisionComment` w modelu `LeaveRequest` — uzasadnienie decyzji przełożonego
+- dodano pole `decidedById` + relacja `decidedBy` w modelu `LeaveRequest` — kto rozpatrzył wniosek
+- dodano pole `consumesBalance` w modelu `LeaveType` — czy rodzaj urlopu pomniejsza pulę dni (seed: `WYPOCZYNKOWY`, `NA_ZADANIE`)
+- dodano model `LeaveBalance` (`userId`, `year`, `entitlementDays`, `usedDays`, unique `[userId, year]`) — jedno źródło prawdy o dostępnych dniach urlopu, wiersz na rok
+- dodano model `LeaveDeduction` (`leaveRequestId`, `year`, `days`) — rozksięgowanie zatwierdzonego wniosku na roczne pule, umożliwia cofnięcie decyzji
+- dodano relacje `User.leaveBalances` i `User.leaveDecisions`
+
+### architektura / API
+- dodano `LeaveBalancesService` + `GET /leave-balances` i `PUT /leave-balances/entitlement` — odczyt salda (swojego zawsze, cudzego dla ADMIN / przełożonego) i ustawianie puli dni przez ADMIN
+- okno lat salda liczone dynamicznie: `rok bieżący − 4 … rok bieżący` (`LEAVE_BALANCE_YEARS_BACK`); front renderuje listę lat z backendu zamiast zaszytych `remainingY1..Y4`
+- `POST /leave-requests` — blokada 400, gdy pula dni pusta albo wniosek przekracza dostępne dni (tylko rodzaje z `consumesBalance`)
+- `POST /leave-requests` — pola `remaining*` przestały być wejściem z formularza; backend zapisuje w nich migawkę salda z chwili złożenia
+- dodano `PATCH /leave-requests/:id/decision` — zatwierdzenie / odrzucenie / cofnięcie decyzji; zatwierdzenie odejmuje dni od NAJSTARSZEGO rocznika, wyjście ze stanu `APPROVED` oddaje je do tych samych lat
+- `DELETE /leave-requests/:id` — usunięcie zatwierdzonego wniosku oddaje dni do puli (kaskada sama tego nie robi)
+- `GET /leave-requests/dashboard` — `balance` zwraca listę lat z pulą i pozostałymi dniami zamiast pól `remainingY*`; doszła flaga `canDecideSubject`
+- dodano `MailService.sendLeaveRequest` — po złożeniu wniosku mail do przełożonego wnioskodawcy (best-effort, brak SMTP nie blokuje zapisu)
+- dodano `MailService.sendLeaveDecision` — po rozpatrzeniu wniosku mail do wnioskodawcy z rozstrzygnięciem, autorem decyzji i uzasadnieniem; cofnięcie decyzji (`PENDING`) nie wysyła nic
+- `EditUserModal` — konto z rolą ADMIN może zostać wskazane jako własny przełożony (pozostali nadal nie mają siebie na liście)
+- `smtp_settings` obsługuje profile — wiersz `singleton` (globalny) i nowy `leaves` (moduł Urlopy); `GET/PATCH /smtp` oraz `POST /smtp/test` przyjmują `?profile=`, domyślnie globalny
+- `SmtpService.sendMail` / `buildTransport` / `sendTest` przyjmują profil; profil bez wypełnionego hosta cofa się do globalnego, globalny bez hosta — do env `SMTP_*`
+- maile modułu Urlopy (`sendLeaveRequest`, `sendLeaveDecision`) wychodzą przez profil `leaves`
+- `SmtpSettingsPage` rozbite na `SmtpSettingsPanel` (wspólny UI edycji) + cienki wrapper; nowa zakładka „Urlopy SMTP" w module Urlopy, widoczna tylko dla ADMIN
+- `LeaveRequestsTab` i `LeavesDashboardTab` — kolumna Status (oczekuje / zatwierdzony / odrzucony) oraz przyciski Akceptuj / Odrzuć / Cofnij dla przełożonego i ADMIN
+- `LeavesDashboardTab` — ADMIN edytuje pulę dni za dany rok bezpośrednio w panelu salda
+
+### słownik
+- dodano wpisy modeli `LeaveBalance`, `LeaveDeduction`, enumu `LeaveRequestStatus`, serwisu `LeaveBalancesService`, endpointów salda i decyzji oraz zmiennych UI statusu i salda
+- zmieniono `approve-leave-request` → `decide-leave-request-front` — `setApproval` zastąpione przez `setDecision`
+
+### wytyczne
+- `schema-model` `LeaveBalance` — jedyne źródło prawdy o dostępnych dniach; pola `LeaveRequest.remaining*` to wyłącznie migawka do wydruku formularza, nie licz z nich salda
+- `back-funkcja` `applyDeductions` — każde odjęcie dni musi zapisać rozbicie w `LeaveDeduction`, inaczej cofnięcie decyzji nie odda dni do właściwych lat
+- `schema-pole` `LeaveType.consumesBalance` — walidacja puli i odejmowanie dni dotyczą wyłącznie rodzajów z tą flagą; L4, bezpłatny i opieka nie ruszają salda
+- `back-funkcja` `notifySupervisor` — powiadomienia mailowe modułu Urlopy są best-effort; błąd SMTP nie może wywracać zapisu wniosku
+- `back-stala` `SMTP_PROFILES` — nowy profil poczty = nowa pozycja w tej stałej i wiersz w `smtp_settings`; nigdy nie twórz wierszy o dowolnym id, `resolveSmtpProfile` odrzuca nieznane wartości do profilu globalnego
+
+## 2026-08-11 — feat(urlopy): dni wniosku bez weekendów, wymagany rodzaj urlopu i daty
+
+### architektura / API
+- `LeaveRequestsService.calendarDaysBetween` zastąpione przez `workingDaysBetween` — soboty i niedziele w zakresie nie są liczone do dni urlopu
+- dodano `LeaveRequestsService.warsawDayKey` — granice dni wyznaczane w strefie Europe/Warsaw; liczenie po UTC przesuwało zakres o dobę, bo UI wysyła lokalną północ jako 22:00Z
+- dodano `LeaveRequestsService.assertRequestFieldsValid` — `leaveTypeId`, `dateStart` i `dateEnd` obowiązkowe przy tworzeniu; przy edycji nie można ich wyczyścić ani odwrócić zakresu
+- `LeaveRequestModal` — rodzaj urlopu oznaczony gwiazdką i walidowany przed wysyłką; licznik dni pomija weekendy, podpis pola informuje o regule
+
+### wytyczne
+- `back-funkcja` `workingDaysBetween` — reguła dni roboczych obowiązuje teraz i we wnioskach, i we wpisach `Leave`; święta ustawowe nie są jeszcze uwzględniane, bo brak słownika dni wolnych
+- `schema-pole` `LeaveRequest.leaveTypeId` — w bazie pozostaje nullable (stare wnioski), ale API nie pozwala już utworzyć ani zapisać wniosku bez rodzaju urlopu
+- `back-funkcja` `warsawDayKey` — każda arytmetyka dni na `LeaveRequest` musi iść przez ten helper, nigdy po `getUTCDate()` na surowej dacie z żądania
+
+## 2026-08-11 — feat(urlopy): dni wniosku liczone z zakresu dat, widok Wnioski dla admina
+
+### architektura / API
+- dodano `LeaveRequestsService.calendarDaysBetween` — dni urlopu liczone jako dni kalendarzowe z dniem początkowym i końcowym włącznie (11.08 00:00 → 12.08 23:59 = 2 dni)
+- `POST /leave-requests` — `daysCount` wyliczany z zakresu dat, gdy nie podano go jawnie
+- `PATCH /leave-requests/:id` — zmiana `dateStart`/`dateEnd` bez jawnego `daysCount` przelicza liczbę dni z nowego zakresu
+- `GET /leave-requests/mine` — dla roli ADMIN zwraca wnioski wszystkich pracowników, dla pozostałych wyłącznie własne
+- `LeaveRequestsTab` — kolumny wnioskującego (Imię Nazwisko, Email, Firma) pokazywane w zakładce podwładnych oraz w „Wnioskach" admina
+- `LeaveRequestModal` — pole „Dni urlopu" wypełnia się automatycznie przy zmianie dat; ręczna edycja wyłącza automat, przycisk „przelicz z dat" go przywraca
+
+### wytyczne
+- `back-funkcja` `calendarDaysBetween` — liczone są dni kalendarzowe, więc weekendy i święta wchodzą do sumy; wpisy `Leave` nadal używają `workingDaysBetween` (dni robocze) — te dwie reguły są celowo różne
+- `back-endpoint` `GET /leave-requests/mine` — nazwa endpointu jest historyczna; dla ADMIN zwraca wszystkie wnioski, zakres rozstrzyga backend po `scope`
+
+## 2026-08-11 — fix(urlopy): jeden przycisk Nowy wniosek w karcie danych osobowych
+
+### architektura / API
+- usunięty przycisk przenoszący z „Moich danych” do zakładki Wnioski — zmiana zakładki nie była tym, czego oczekiwał użytkownik
+- przycisk „Dodaj wpis urlopu” przemianowany na „Nowy wniosek” i otwiera `LeaveRequestModal` bezpośrednio w zakładce Moje dane (bez przeskoku), z pracownikiem ustawionym na zalogowanego i bez możliwości zmiany
+- dodawanie wpisu do tabeli urlopów przeniesione nad tabelę jako „+ Dodaj wpis do tabeli” (tylko ADMIN) — inaczej zniknikęłoby wejście do `LeaveModal`
+- `MyLeavesTab` nie przyjmuje już propsa `onNewRequest`
+
+### wytyczne
+- `ui-przycisk` `card-new-request-button` — „Nowy wniosek” zawsze otwiera modal wniosku w miejscu; przejścia między zakładkami nie używamy jako reakcji na przycisk akcji
+
+## 2026-08-11 — feat(urlopy): Moje dane jako przeciągalne karty z pełnym saldem lat
+
+### architektura / API
+- dodano `DraggableCard` — karta przenoszona myszką za nagłówek, pozycja zapamiętywana w `localStorage` (klucz `leaves-card-pos-<id>`), przycisk „Ułóż karty od nowa” czyści zapis
+- `MyLeavesTab` przebudowany na trzy karty: dane osobowe (z akcjami Nowy wniosek / Dodaj wpis), saldo dni na lata, podopieczni; tabela urlopów leży domyślnie pod kartami
+- `MyLeavesTab` pobiera `GET /leave-requests/dashboard` — stąd „pozostało mi do wybrania”, „wybrany w tym roku” i rozbicie na lata (bieżący − 4)
+- `DependentsSection` zwężona: lista wierszy zamiast kafli, formularz rozwijany dopiero po „+ Dodaj podopiecznego”, bez wybieraka pracownika; raportuje liczbę podopiecznych do karty danych osobowych
+
+### wytyczne
+- `ui-karta` `DraggableCard` — pozycje kart są per przeglądarka (localStorage), nie per użytkownik w bazie; czyszczenie cache przywraca układ domyślny
+- `ui-zakladka` `MyLeavesTab` — saldo dni pochodzi z ostatniego wniosku użytkownika (pola `remaining*`), a nie z wyliczenia z wymiaru urlopu; do policzenia go realnie brakuje pola `dni_urlopu_na_rok`
+
+## 2026-08-11 — fix(urlopy): zakładka Moje dane zawężona do zalogowanego użytkownika
+
+### architektura / API
+- `GET /leaves/employees` — pytający zawsze trafia na listę pracowników, nawet jeśli jego firma nie jest w `LEAVE_COMPANIES` (ADMIN bez firmy mógł nie zobaczyć samego siebie)
+- `MyLeavesTab` — siatka wpisów filtrowana do `currentUserId`; usunięty przełącznik „Tylko moje wpisy” oraz kolumny Pracownik i Firma (zbędne przy jednej osobie)
+- `MyLeavesTab` — dodany nagłówek tożsamości (imię, nazwisko, email, firma); sekcja Podopieczni bez wybieraka pracownika
+- `LeaveModal` — nowy props `defaultUserId`, dzięki czemu „Dodaj wpis” w Moich danych od razu wskazuje zalogowanego
+
+### wytyczne
+- `ui-zakladka` `MyLeavesTab` — zakładka „Moje dane” pokazuje wyłącznie dane zalogowanego użytkownika, także adminowi; cudze wpisy należy oglądać w zakładkach wniosków i Dashboard
+
+## 2026-08-11 — feat(urlopy): podopieczni i urlop opiekuńczy
+
+### schema.prisma
+- dodano model `Dependent` (tabela `dependents`) — podopieczny użytkownika: `firstName`, `lastName`, `birthDate`, FK `userId` (onDelete Cascade)
+- dodano relację `User.dependents` (1:N) — każdy użytkownik może mieć wielu podopiecznych
+- dodano pole `LeaveRequest.dependentId` + relację `LeaveRequest.dependent` (onDelete SetNull) — wniosek wskazuje, na kogo brany jest urlop opiekuńczy
+- migracja `20260811130000_add_dependents`
+
+### architektura / API
+- dodano `DependentsController` + `DependentsService` w `LeavesModule`
+- dodano `GET /dependents?userId=`, `POST /dependents`, `PATCH /dependents/:id`, `DELETE /dependents/:id`
+- `LeaveRequestsService` waliduje wnioski: rodzaj o kodzie `OPIEKA` wymaga `dependentId`, a wskazany podopieczny musi należeć do wnioskodawcy
+- `LeaveRequestModal` — pola podopiecznego pojawiają się tylko dla rodzaju Opieka: przy jednym podopiecznym dane pokazują się od razu, przy wielu najpierw dropdown wyboru
+- `DependentsSection` — zarządzanie podopiecznymi w zakładce „Moje dane” (dodaj / edytuj / usuń)
+
+### słownik
+- dodano wiersze modelu `Dependent`, serwisu, endpointów i komponentów podopiecznych
+
+### wytyczne
+- `schema-pole` `LeaveRequest.dependentId` — wymagane wyłącznie dla rodzaju o kodzie `OPIEKA`; dla pozostałych rodzajów zapisywane jest `null`, także gdy front coś przyśle
+- `back-stala` `CARE_LEAVE_CODE` — rozpoznanie urlopu opiekuńczego idzie po `LeaveType.code`, nigdy po nazwie; stała lustrzana w `leavesTheme.js`
+- `back-funkcja` `DependentsService.resolveSubject` — cudzych podopiecznych czyta i edytuje tylko ADMIN albo bezpośredni przełożony pracownika
+
+## 2026-08-11 — feat(urlopy): widok zakładkowy (Moje dane / Wnioski / Wnioski podwładnych / Dashboard)
+
+### schema.prisma
+- dodano pole `leaveTypeId` w modelu `LeaveRequest` — rodzaj_urlopu, FK do istniejącego słownika `LeaveType` (opcjonalne, onDelete SetNull)
+- dodano pole `daysCount` w modelu `LeaveRequest` — dni_urlopu, Float default 1
+- dodano relacje `LeaveRequest.leaveType` i `LeaveType.requests`
+- migracja `20260811120000_leave_request_type_days`
+
+### architektura / API
+- dodano `LeaveRequestsController` + `LeaveRequestsService` w `LeavesModule`
+- dodano `GET /leave-requests/mine`, `GET /leave-requests/subordinates`, `GET /leave-requests/dashboard?userId=`, `POST /leave-requests`, `PATCH /leave-requests/:id`, `DELETE /leave-requests/:id`
+- `LeavesPage` przebudowany na pasek zakładek w stylu WBS: Moje dane, Wnioski, Wnioski moich podwładnych, Dashboard; zakładka podwładnych ukryta przy scope SELF
+- zakładki rodzajów urlopu zeszły poziom niżej — są teraz podzakładkami w `MyLeavesTab`, z przełącznikiem „Tylko moje wpisy”
+- `LeaveRequestModal` odwzorowuje formularz źródłowy (Imię Nazwisko, rodzaj_urlopu, data_od, data_do, komentarz, dni_urlopu) + sekcja rozwijana z obecnością w biurze i saldem dni
+- `LeavesDashboardTab` — cztery panele: FILTR, szczegóły pracownika, saldo dni do wybrania, wnioski wybranego pracownika
+
+### słownik
+- dodano wiersze modułu wniosków (serwis, controller, endpointy) i komponentów zakładek; usunięto martwe wpisy po refaktorze `LeavesPage`
+
+### wytyczne
+- `back-endpoint` `PATCH /leave-requests/:id` — `approvedAt` może ustawić wyłącznie bezpośredni przełożony autora albo ADMIN; autor nie zatwierdza własnego wniosku
+- `schema-model` `LeaveRequest` — po zatwierdzeniu (`approvedAt`) autor traci prawo edycji i usunięcia; zmiany może wprowadzać już tylko przełożony lub ADMIN
+- `back-endpoint` `GET /leave-requests/dashboard` — parametr `userId` dopuszczalny tylko dla ADMIN albo bezpośredniego przełożonego wskazanego pracownika
+
+## 2026-08-11 — feat(urlopy): tabela wniosków urlopowych (LeaveRequest)
+
+### schema.prisma
+- dodano model `LeaveRequest` (tabela `leave_requests`) — wniosek urlopowy pracownika
+- dodano pola: `dateStart`/`timeStart`, `dateEnd`/`timeEnd`, `officeFrom`/`officeTo` (w biurze od/do), `comment`, `submittedAt` (data złożenia), `approvedAt` (data zatwierdzenia), `createdAt` (timestamp)
+- dodano pola salda dni pozostałych do wybrania: `remainingY4` (zaległy sprzed 4 lat), `remainingY3`, `remainingY2`, `remainingY1` (sprzed roku), `remainingCurrentYear` (z tego roku) — typ Float, default 0
+- dodano relację `User.leaveRequests` (1:N do `LeaveRequest`, onDelete Cascade)
+- migracja `20260811110000_add_leave_requests` + indeksy na `userId`, `dateStart`, `submittedAt`
+
+### słownik
+- dodano wiersze modelu `LeaveRequest` w sekcji `### Moduł Urlopy (leaves)`
+
+### wytyczne
+- `schema-pole` `LeaveRequest.timeStart` / `timeEnd` — godziny trzymane jako `String` w formacie "HH:mm", osobno od pól datowych; nie łączyć ich z `dateStart`/`dateEnd` w bazie
+- `schema-pole` `LeaveRequest.remainingY4`..`remainingCurrentYear` — to migawka salda dni **jeszcze do wybrania** w chwili składania wniosku, nie liczba dni wnioskowanych
+
+## 2026-08-11 — feat(urlopy): moduł Urlopy — słownik rodzajów, wpisy per pracownik, gating po firmie
+
+### schema.prisma
+- dodano model `LeaveType` — słownik rodzajów urlopu (`code`, `name`, `color`, `sortOrder`, `isActive`); jeden wiersz = jedna zakładka w widoku Urlopy
+- dodano model `Leave` — wpis urlopowy pracownika (`userId`, `leaveTypeId`, `dateFrom`, `dateTo`, `daysCount`, `note`)
+- dodano relację `User.leaves` (1:N do `Leave`, onDelete Cascade)
+- dodano relację `Leave.leaveType` (N:1 do `LeaveType`, onDelete Restrict)
+- pole `User.company` istniało wcześniej — otrzymało anchor `user-company` i jest teraz edytowalne z UI
+- migracja `20260811100000_add_leaves` zakłada obie tabele i seeduje 6 rodzajów urlopu: Wypoczynkowy, L4, Bezpłatny, Opieka, Na żądanie, Do wyboru za święto w sobotę
+
+### architektura / API
+- dodano `LeavesModule` (`apps/backend/src/leaves/`) zarejestrowany w `AppModule`
+- dodano `GET /leaves/access` — zwraca `{ enabled, canEdit, scope, company }`; `enabled` gdy user ma firmę z `LEAVE_COMPANIES` albo rolę ADMIN
+- dodano `GET /leaves/types`, `GET /leaves/employees`, `GET /leaves?leaveTypeId=`, `POST /leaves`, `PATCH /leaves/:id`, `DELETE /leaves/:id`
+- `JwtStrategy.validate` zwraca dodatkowo `company` w `req.user`
+- frontend: nowy widok `/urlopy` (`LeavesPage`) z zakładkami per rodzaj urlopu i edycją inline w AG Grid, modal `LeaveModal` w stylu `EditUserModal`
+- sidebar System: przycisk „Urlopy" renderowany tylko gdy `GET /leaves/access` zwróci `enabled: true`
+- `UsersPage`: nowa kolumna „Firma" (edycja inline, agSelectCellEditor), `EditUserModal`: pole Firma z podpowiedziami
+
+### słownik
+- dodano sekcję `### Moduł Urlopy (leaves)` — modele, endpointy, serwis, widok, modal, kolumna Firma
+
+### wytyczne
+- `back-stala` `LEAVE_COMPANIES` — lista firm z modułem Urlopy żyje w `leaves.service.ts` i jest lustrzana w `apps/frontend/src/utils/leaveCompanies.js`; zmiana w jednym miejscu wymaga zmiany w drugim
+- `back-endpoint` `GET /leaves` — widoczność danych rozstrzyga wyłącznie backend (`scope`): ADMIN → wszyscy, przełożony → on + bezpośredni podwładni, pracownik → tylko on; frontend nie filtruje
+- `schema-model` `Leave` — zapis/edycja/usuwanie wyłącznie dla roli ADMIN (`canEdit`); przełożony i pracownik mają dostęp tylko do odczytu
+
 # CHANGELOG — Ignite ERP
 
 Zmiany strukturalne: schemat bazy, architektura, API. Bugfixy i refaktory nie są tu zapisywane.

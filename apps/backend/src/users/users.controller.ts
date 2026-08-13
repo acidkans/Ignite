@@ -8,9 +8,10 @@ import { Roles } from '../auth/decorators/roles.decorator';
 export class UsersController {
   constructor(private readonly usersService: UsersService) { }
 
+  // @anchor users-list-endpoint
+  /// Lista użytkowników zostaje dostępna dla ADMIN i MANAGER (przypisania, urlopy),
+  /// pozostali widzą wyłącznie siebie. Tworzenie / edycja / usuwanie — tylko ADMIN.
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles('ADMIN', 'MANAGER') // Removed to allow USER access with filtering
   @Get()
   async findAll(@Request() req) {
     const userRoles = req.user.roles || [];
@@ -38,14 +39,14 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('ADMIN')
   @Post()
   create(@Body() userData: any) {
     return this.usersService.create(userData);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('ADMIN')
   @Patch(':id')
   update(@Param('id') id: string, @Body() userData: any) {
     // Both ADMIN and MANAGER can update users
@@ -53,7 +54,7 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('ADMIN')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);

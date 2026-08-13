@@ -1,5 +1,6 @@
 import { API_URL } from '../../config';
 import { useState, useEffect } from 'react';
+import { LEAVE_COMPANIES } from '../../utils/leaveCompanies';
 
 const ROLE_OPTIONS = [
     { value: 'USER', label: 'Pracownik' },
@@ -13,6 +14,7 @@ export default function EditUserModal({ user, users, teams, onClose, onSuccess }
         firstName: user.firstName || '',
         lastName: user.lastName || '',
         email: user.email || '',
+        company: user.company || '',
         roles: user.userRoles?.map(r => r.role.name) || ['USER'],
         supervisorId: user.supervisor?.id || '',
         teamIds: Array.isArray(user.teams) ? user.teams.map(t => t.id) : [],
@@ -59,6 +61,7 @@ export default function EditUserModal({ user, users, teams, onClose, onSuccess }
         const payload = {
             firstName: form.firstName,
             lastName: form.lastName,
+            company: form.company || null,
             roles: form.roles,
             supervisorId: form.supervisorId || null,
             teamIds: form.teamIds,
@@ -141,6 +144,26 @@ export default function EditUserModal({ user, users, teams, onClose, onSuccess }
                     />
                 </div>
 
+                {/* Firma */}
+                {/* @anchor edit-user-company-field */}
+                <div className="flex flex-col gap-1">
+                    <label className="text-xs text-gray-400 uppercase tracking-widest">Firma</label>
+                    <input
+                        type="text"
+                        list="company-suggestions"
+                        value={form.company}
+                        onChange={e => set('company', e.target.value)}
+                        placeholder="np. Airtel Services"
+                        className="bg-white/5 border border-white/10 rounded px-3 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
+                    />
+                    <datalist id="company-suggestions">
+                        {LEAVE_COMPANIES.map(c => <option key={c} value={c} />)}
+                    </datalist>
+                    <span className="text-[10px] text-gray-500">
+                        Firmy z modułem Urlopy: {LEAVE_COMPANIES.join(', ')}
+                    </span>
+                </div>
+
                 {/* Role */}
                 <div className="flex flex-col gap-1">
                     <label className="text-xs text-gray-400 uppercase tracking-widest">Uprawnienia</label>
@@ -171,9 +194,17 @@ export default function EditUserModal({ user, users, teams, onClose, onSuccess }
                         className="bg-gray-800 border border-white/10 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500/50"
                     >
                         <option value="">Brak</option>
-                        {users.filter(u => u.id !== user.id).map(u => (
-                            <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
-                        ))}
+                        {/* @anchor supervisor-options */}
+                        {/* Własnym przełożonym może być tylko konto z rolą ADMIN — pozwala
+                            adminowi samodzielnie zatwierdzać swoje wnioski urlopowe.
+                            Bierzemy role z formularza, więc opcja pojawia się od razu po nadaniu roli. */}
+                        {users
+                            .filter(u => u.id !== user.id || form.roles.includes('ADMIN'))
+                            .map(u => (
+                                <option key={u.id} value={u.id}>
+                                    {u.firstName} {u.lastName}{u.id === user.id ? ' (ten sam użytkownik)' : ''}
+                                </option>
+                            ))}
                     </select>
                 </div>
 

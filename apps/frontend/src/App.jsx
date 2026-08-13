@@ -6,6 +6,7 @@ import FirmaPage from './FirmaPage';
 import SmtpSettingsPage from './SmtpSettingsPage';
 import NotificationSettingsPage from './NotificationSettingsPage';
 import ProcessTreePage from './ProcessTreePage';
+import LeavesPage from './LeavesPage';
 import DashboardPage from './DashboardPage';
 import MainLayout from './components/Layout/MainLayout';
 import MobileDashboard from './components/Mobile/MobileDashboard';
@@ -30,6 +31,30 @@ const Placeholder = ({ title }) => (
     <h1 className="text-3xl font-bold mb-4">🚧 {title}</h1>
     <p className="text-gray-400">Moduł w trakcie budowy.</p>
   </div>
+);
+
+// @anchor token-roles
+function tokenRoles() {
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    return JSON.parse(atob(token.split('.')[1])).roles || [];
+  } catch {
+    return [];
+  }
+}
+
+// @anchor admin-route
+/// Strażnik tras administracyjnych — wejście po URL bez roli ADMIN kończy się komunikatem,
+/// a nie widokiem. Backend pilnuje tego niezależnie.
+const AdminRoute = ({ children }) => (
+  tokenRoles().includes('ADMIN')
+    ? children
+    : (
+      <div className="h-full flex flex-col items-center justify-center text-white p-10">
+        <h1 className="text-2xl font-bold mb-2">Brak dostępu</h1>
+        <p className="text-gray-400">Ta sekcja jest dostępna wyłącznie dla administratora.</p>
+      </div>
+    )
 );
 
 const INACTIVITY_TIMEOUT_MS = 8 * 60 * 60 * 1000; // 8h braku aktywności
@@ -203,11 +228,12 @@ function App() {
         <Routes>
           <Route element={<MainLayout onLogout={handleLogout} />}>
             <Route path="/" element={<DashboardPage />} />
-            <Route path="/users" element={<UsersPage />} />
-            <Route path="/firma" element={<FirmaPage />} />
+            <Route path="/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
+            <Route path="/firma" element={<AdminRoute><FirmaPage /></AdminRoute>} />
             <Route path="/smtp" element={<SmtpSettingsPage />} />
             <Route path="/notifications" element={<NotificationSettingsPage />} />
             <Route path="/process-tree" element={<ProcessTreePage />} />
+            <Route path="/urlopy" element={<LeavesPage />} />
             <Route path="/hr/*" element={<Placeholder title="Moduł HR" />} />
             <Route path="*" element={<NotFound />} />
           </Route>

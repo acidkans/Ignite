@@ -42,6 +42,7 @@ import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { QuickQuotesModule } from './quick-quotes/quick-quotes.module';
 import { OrdersModule } from './orders/orders.module';
+import { LeavesModule } from './leaves/leaves.module';
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { OrdersModule } from './orders/orders.module';
     SuppliersModule,
     QuickQuotesModule,
     OrdersModule,
+    LeavesModule,
   ],
   controllers: [AppController],
   providers: [

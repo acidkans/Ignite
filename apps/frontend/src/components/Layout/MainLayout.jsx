@@ -80,6 +80,8 @@ export default function MainLayout({ onLogout }) {
     const pendingRequirementIdRef = useRef(null);
     const [userLabel, setUserLabel] = useState('');
     const [userRoles, setUserRoles] = useState([]);
+    // @anchor layout-leaves-enabled
+    const [leavesEnabled, setLeavesEnabled] = useState(false);
 
     // Modal State
     const [showAddModal, setShowAddModal] = useState(false);
@@ -98,6 +100,16 @@ export default function MainLayout({ onLogout }) {
                 console.error("Token parse error", e);
             }
         }
+    }, []);
+
+    // --- 1b. Dostep do modulu Urlopy (firma usera / ADMIN) ---
+    useEffect(() => {
+        const token = sessionStorage.getItem('token');
+        if (!token) return;
+        fetch(`${API_URL}/leaves/access`, { headers: { Authorization: `Bearer ${token}` } })
+            .then(res => res.ok ? res.json() : null)
+            .then(data => setLeavesEnabled(!!data?.enabled))
+            .catch(() => setLeavesEnabled(false));
     }, []);
 
     // --- 2. Load Process Tree (Sidebar) ---
@@ -258,6 +270,7 @@ export default function MainLayout({ onLogout }) {
                         onDeleteNode={handleDeleteNode}
                         onPermissions={(node) => setSelectedNodePermissions(node)}
                         userRoles={userRoles}
+                        leavesEnabled={leavesEnabled}
                         onReloadTree={fetchTree}
                     />
                 </div>

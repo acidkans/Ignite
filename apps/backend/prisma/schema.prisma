@@ -15,6 +15,7 @@ model User {
   firstName         String?
   lastName          String?
   phone             String?
+  /// @anchor user-company
   company           String?
   isActive          Boolean            @default(true)
   createdAt         DateTime           @default(now())
@@ -36,6 +37,18 @@ model User {
   msToken           UserMsToken?
   userTasks         UserTask[]
   msTodoSyncState   MsTodoSyncState?
+  /// @anchor user-leaves
+  leaves            Leave[]
+  /// @anchor user-leave-requests
+  leaveRequests     LeaveRequest[]
+  /// @anchor user-dependents
+  dependents        Dependent[]
+  /// @anchor user-leave-balances
+  leaveBalances     LeaveBalance[]
+  /// @anchor user-leave-decisions
+  leaveDecisions    LeaveRequest[]     @relation("LeaveRequestDecider")
+  /// @anchor user-holiday-days-off
+  approvedHolidayDaysOff HolidayDayOff[] @relation("HolidayDayOffApprover")
 
   @@map("users")
 }
@@ -523,8 +536,10 @@ model Company {
   @@map("companies")
 }
 
-/// Singleton — konfiguracja serwera poczty wychodzącej (SMTP), jeden wiersz id = "singleton".
-/// Źródło prawdy dla wysyłki maili (panel „Poczta SMTP"). Gdy puste — fallback do zmiennych env SMTP_*.
+/// Konfiguracja serwerów poczty wychodzącej (SMTP) — jeden wiersz na profil.
+/// Profile (= id wiersza): "singleton" globalny dla całej aplikacji, "leaves" dla modułu Urlopy.
+/// Źródło prawdy dla wysyłki maili (panel „Poczta SMTP" / zakładka „Urlopy SMTP").
+/// Profil bez hosta cofa się do globalnego, a globalny bez hosta — do zmiennych env SMTP_*.
 model SmtpSettings {
   /// @anchor smtp-settings-id
   id        String   @id @default("singleton")
@@ -1316,4 +1331,263 @@ model MsTodoSyncState {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("ms_todo_sync_state")
+}
+
+/// @anchor leave-type
+/// Słownik rodzajów urlopu — jeden wiersz = jedna zakładka w widoku Urlopy.
+model LeaveType {
+  /// @anchor leave-type-id
+  id        String   @id @default(uuid())
+  /// @anchor leave-type-code
+  code      String   @unique
+  /// @anchor leave-type-name
+  name      String   @unique
+  /// @anchor leave-type-color
+  color     String   @default("#3b82f6")
+  /// @anchor leave-type-sort-order
+  sortOrder Int      @default(0)
+  /// @anchor leave-type-is-active
+  isActive  Boolean  @default(true)
+  /// @anchor leave-type-consumes-balance
+  /// true = wniosek tego rodzaju pomniejsza pulę dni urlopowych (LeaveBalance) po zatwierdzeniu
+  /// i nie może zostać złożony, gdy w puli brakuje dni.
+  consumesBalance Boolean @default(false)
+  /// @anchor leave-type-max-days-per-year
+  /// Ustawowy limit dni w roku kalendarzowym (Kodeks pracy): NA_ZADANIE = 4 (art. 167(2)),
+  /// OPIEKA = 5 (art. 173(1)). NULL = brak limitu ustawowego (L4, bezpłatny) albo limit
+  /// liczony osobno (WYPOCZYNKOWY z LeaveBalance, ZA_SWIETO_SOB z HolidayDayOff).
+  maxDaysPerYear Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// @anchor leave-type-leaves
+  leaves Leave[]
+  /// @anchor leave-type-requests
+  requests LeaveRequest[]
+
+  @@map("leave_types")
+}
+
+/// @anchor leave
+/// Pojedynczy wpis urlopowy pracownika w ramach jednego rodzaju urlopu.
+model Leave {
+  /// @anchor leave-id
+  id          String   @id @default(uuid())
+  /// @anchor leave-user-id
+  userId      String
+  /// @anchor leave-leave-type-id
+  leaveTypeId String
+  /// @anchor leave-date-from
+  dateFrom    DateTime
+  /// @anchor leave-date-to
+  dateTo      DateTime
+  /// @anchor leave-days-count
+  daysCount   Float    @default(1)
+  /// @anchor leave-note
+  note        String?
+  /// @anchor leave-leave-request-id
+  /// Wpis powstaly z zatwierdzonego wniosku — cofniecie decyzji kasuje ten wpis.
+  /// NULL dla wpisow zakladanych recznie przez administratora.
+  leaveRequestId String? @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  /// @anchor leave-user
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// @anchor leave-leave-type
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  /// @anchor leave-leave-request
+  leaveRequest LeaveRequest? @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([leaveTypeId])
+  @@index([dateFrom])
+  @@map("leaves")
+}
+
+/// @anchor holiday-day-off
+/// Dzien wolny nalezny za swieto wypadajace w sobote (art. 130 §2 k.p.).
+/// Propozycje na dany rok liczy backend z listy swiat o stalej dacie; wiersz powstaje
+/// dopiero przy decyzji administratora, `approved` odblokowuje wnioski typu ZA_SWIETO_SOB.
+model HolidayDayOff {
+  /// @anchor holiday-day-off-id
+  id           String    @id @default(uuid())
+  /// @anchor holiday-day-off-year
+  year         Int
+  /// @anchor holiday-day-off-date
+  /// Data swieta (sobota) — klucz naturalny wiersza.
+  date         DateTime  @unique
+  /// @anchor holiday-day-off-name
+  name         String
+  /// @anchor holiday-day-off-approved
+  approved     Boolean   @default(false)
+  /// @anchor holiday-day-off-approved-at
+  approvedAt   DateTime?
+  /// @anchor holiday-day-off-approved-by-id
+  approvedById String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  /// @anchor holiday-day-off-approved-by
+  approvedBy User? @relation("HolidayDayOffApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([year])
+  @@map("holiday_days_off")
+}
+
+/// @anchor leave-request-status
+/// Cykl życia wniosku: złożony → zatwierdzony albo odrzucony.
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// @anchor leave-request
+/// Wniosek urlopowy — formularz składany przez pracownika, z saldem dni pozostałych do wybrania.
+model LeaveRequest {
+  /// @anchor leave-request-id
+  id                  String    @id @default(uuid())
+  /// @anchor leave-request-user-id
+  userId              String
+  /// @anchor leave-request-leave-type-id
+  leaveTypeId         String? // rodzaj_urlopu — opcjonalny, wniosek może powstać przed wyborem rodzaju
+  /// @anchor leave-request-days-count
+  daysCount           Float     @default(1) // dni_urlopu
+  /// @anchor leave-request-dependent-id
+  dependentId         String? // podopieczny — wymagany gdy rodzaj urlopu = OPIEKA
+  /// @anchor leave-request-date-start
+  dateStart           DateTime
+  /// @anchor leave-request-time-start
+  timeStart           String? // "HH:mm"
+  /// @anchor leave-request-date-end
+  dateEnd             DateTime
+  /// @anchor leave-request-time-end
+  timeEnd             String? // "HH:mm"
+  /// @anchor leave-request-office-from
+  officeFrom          DateTime? // w biurze od
+  /// @anchor leave-request-office-to
+  officeTo            DateTime? // w biurze do
+  /// @anchor leave-request-comment
+  comment             String?
+  /// @anchor leave-request-submitted-at
+  submittedAt         DateTime? // data złożenia
+  /// @anchor leave-request-approved-at
+  approvedAt          DateTime? // data zatwierdzenia
+  /// @anchor leave-request-status-field
+  status              LeaveRequestStatus @default(PENDING) // PENDING | APPROVED | REJECTED
+  /// @anchor leave-request-rejected-at
+  rejectedAt          DateTime? // data odrzucenia
+  /// @anchor leave-request-decision-comment
+  decisionComment     String? // uzasadnienie decyzji przełożonego
+  /// @anchor leave-request-decided-by-id
+  decidedById         String? // kto podjął decyzję
+  /// @anchor leave-request-remaining-y4
+  /// remaining* to MIGAWKA salda z chwili złożenia wniosku (do wydruku formularza).
+  /// Źródłem prawdy o dostępnych dniach jest model LeaveBalance.
+  remainingY4         Float     @default(0) // zaległy sprzed 4 lat — dni jeszcze do wybrania
+  /// @anchor leave-request-remaining-y3
+  remainingY3         Float     @default(0) // zaległy sprzed 3 lat
+  /// @anchor leave-request-remaining-y2
+  remainingY2         Float     @default(0) // zaległy sprzed 2 lat
+  /// @anchor leave-request-remaining-y1
+  remainingY1         Float     @default(0) // zaległy sprzed roku
+  /// @anchor leave-request-remaining-current
+  remainingCurrentYear Float    @default(0) // z tego roku
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  /// @anchor leave-request-user
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// @anchor leave-request-leave-type
+  leaveType LeaveType? @relation(fields: [leaveTypeId], references: [id], onDelete: SetNull)
+  /// @anchor leave-request-dependent
+  dependent Dependent? @relation(fields: [dependentId], references: [id], onDelete: SetNull)
+  /// @anchor leave-request-decided-by
+  decidedBy User? @relation("LeaveRequestDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  /// @anchor leave-request-deductions
+  deductions LeaveDeduction[]
+  /// @anchor leave-request-leave
+  /// Wpis urlopowy zalozony przy zatwierdzeniu wniosku (1:1).
+  leave      Leave?
+
+  @@index([userId])
+  @@index([dateStart])
+  @@index([submittedAt])
+  @@index([leaveTypeId])
+  @@index([dependentId])
+  @@index([status])
+  @@map("leave_requests")
+}
+
+/// @anchor leave-balance
+/// Pula dni urlopowych pracownika w danym roku — jedno źródło prawdy o dostępnych dniach.
+/// Wiersze trzymamy per rok, więc kolumny „urlop z <rok>" w UI liczą się dynamicznie
+/// względem roku bieżącego (okno: rok−4 … rok bieżący).
+model LeaveBalance {
+  /// @anchor leave-balance-id
+  id              String   @id @default(uuid())
+  /// @anchor leave-balance-user-id
+  userId          String
+  /// @anchor leave-balance-year
+  year            Int
+  /// @anchor leave-balance-entitlement-days
+  entitlementDays Float    @default(0) // dni przysługujące za ten rok (ustawia ADMIN)
+  /// @anchor leave-balance-used-days
+  usedDays        Float    @default(0) // dni odjęte przez zatwierdzone wnioski
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  /// @anchor leave-balance-user
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, year])
+  @@index([userId])
+  @@map("leave_balances")
+}
+
+/// @anchor leave-deduction
+/// Rozksięgowanie zatwierdzonego wniosku na roczne pule — pozwala cofnąć zatwierdzenie
+/// i oddać dni dokładnie do tych lat, z których zostały pobrane.
+model LeaveDeduction {
+  /// @anchor leave-deduction-id
+  id             String   @id @default(uuid())
+  /// @anchor leave-deduction-request-id
+  leaveRequestId String
+  /// @anchor leave-deduction-year
+  year           Int
+  /// @anchor leave-deduction-days
+  days           Float
+  createdAt      DateTime @default(now())
+
+  /// @anchor leave-deduction-request
+  leaveRequest LeaveRequest @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+
+  @@index([leaveRequestId])
+  @@map("leave_deductions")
+}
+
+/// @anchor dependent
+/// Podopieczny użytkownika — osoba, na którą pracownik może wziąć urlop opiekuńczy.
+model Dependent {
+  /// @anchor dependent-id
+  id        String   @id @default(uuid())
+  /// @anchor dependent-user-id
+  userId    String
+  /// @anchor dependent-first-name
+  firstName String
+  /// @anchor dependent-last-name
+  lastName  String
+  /// @anchor dependent-birth-date
+  birthDate DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// @anchor dependent-user
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// @anchor dependent-requests
+  requests LeaveRequest[]
+
+  @@index([userId])
+  @@map("dependents")
 }
