@@ -3,6 +3,7 @@ import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditAction } from '../audit/audit.types';
 import { resolveVersionId } from '../common/version.util';
+import { isManagerRoles, isOpenLeafType } from '../common/leaf-types.util';
 
 // @anchor orders-service
 // Akceptacja wersji zamówienia (baseline) + etapy zamówienia (Faza 4).
@@ -169,7 +170,7 @@ export class OrdersService {
                 orderBy: [{ entryDate: 'asc' }, { createdAt: 'asc' }],
                 select: {
                     id: true, wbsRootId: true, entryDate: true, qty: true, unitCost: true,
-                    comment: true, docNumber: true,
+                    comment: true, docNumber: true, manufacturer: true, model: true,
                     supplier: { select: { name: true } },
                 },
             }),
@@ -279,12 +280,18 @@ export class OrdersService {
                 const qty = r2(entries.reduce((s, e) => s + e.qty, 0));
                 const value = r2(entries.reduce((s, e) => s + e.qty * e.unitCost, 0));
                 const last = entries[entries.length - 1];
+                // Produkt strony ZAKUP bierzemy z ostatniego wpisu, który go ma —
+                // kolejne dostawy bywają zamiennikami i liczy się to, co przyszło
+                // ostatnio; pełną historię niesie lista `entries`.
+                const withProduct = [...entries].reverse().find((e) => (e.manufacturer || e.model));
                 return {
                     qty,
                     price: qty > 0 ? r2(value / qty) : null,
                     value,
                     supplier: last.supplier?.name ?? null,
-                    product: null as string | null,
+                    product: withProduct
+                        ? [withProduct.manufacturer, withProduct.model].map((x) => (x || '').trim()).filter(Boolean).join(' ') || null
+                        : null,
                     source: 'ENTRIES' as const,
                 };
             }
@@ -310,6 +317,7 @@ export class OrdersService {
         const entryDto = (e: (typeof actuals)[number]) => ({
             id: e.id, entryDate: e.entryDate, qty: e.qty, unitCost: e.unitCost,
             comment: e.comment, docNumber: e.docNumber, supplier: e.supplier?.name ?? null,
+            manufacturer: e.manufacturer, model: e.model,
         });
 
         const pairedLiveIds = new Set<string>();
@@ -383,14 +391,22 @@ export class OrdersService {
         // świadome zamknięcie) — reszta wypada z sumy, inaczej Δ udawałaby zero
         // na czymś, czego jeszcze nie kupiono. Δ = suma kolumny Δ, czyli wyłącznie
         // wiersze z OBIEMA wartościami; Δ% wobec wyceny tych samych wierszy.
-        const purchased = rows.filter((r) => r.current?.value != null);
+        // @anchor comparison-role-filter — praca, usługa, nocleg i paliwo to koszty własne firmy:
+        // poza managerem nikt ich nie ogląda. Filtr siedzi TU, a nie tylko w komponencie — to
+        // odpowiedź endpointu wychodzi na zewnątrz, a zawężenie po stronie przeglądarki zdejmuje
+        // się narzędziami deweloperskimi. Sumy i pokrycie liczą się już z tego, co zostało.
+        const isManager = isManagerRoles(this.cls.get('user.roles'));
+        const visibleRows = isManager ? rows : rows.filter((r) => isOpenLeafType(r.type));
+        const visibleLive = isManager ? liveLeaves : liveLeaves.filter((l) => isOpenLeafType(l.type));
+
+        const purchased = visibleRows.filter((r) => r.current?.value != null);
         const comparable = purchased.filter((r) => r.baseline?.value != null);
-        const baselineSum = r2(rows.reduce((s, r) => s + (r.baseline?.value ?? 0), 0));
+        const baselineSum = r2(visibleRows.reduce((s, r) => s + (r.baseline?.value ?? 0), 0));
         const currentSum = r2(purchased.reduce((s, r) => s + r.current.value, 0));
         const purchasedOfferSum = r2(comparable.reduce((s, r) => s + r.baseline.value, 0));
         const deltaSum = r2(comparable.reduce((s, r) => s + (r.delta ?? 0), 0));
         const deltaPct = purchasedOfferSum > 0 ? r2((deltaSum / purchasedOfferSum) * 100) : null;
-        const countDev = (t: string) => rows.filter((r) => r.deviations.includes(t)).length;
+        const countDev = (t: string) => visibleRows.filter((r) => r.deviations.includes(t)).length;
 
         return {
             accepted: true,
@@ -405,7 +421,7 @@ export class OrdersService {
                 // pokrycie liczy pozycje domknięte realizacją — wpisy, legacy zakup
                 // albo ręczne zamknięcie; mianownik to cały żywy zakres.
                 coveragePriced: purchased.length,
-                coverageTotal: liveLeaves.length,
+                coverageTotal: visibleLive.length,
                 deviations: {
                     cenowe: countDev('CENOWE'),
                     ilosciowe: countDev('ILOSCIOWE'),
@@ -414,7 +430,7 @@ export class OrdersService {
                     zakresMinus: 0,
                 },
             },
-            rows,
+            rows: visibleRows,
         };
     }
 

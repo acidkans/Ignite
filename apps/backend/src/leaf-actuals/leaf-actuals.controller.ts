@@ -15,8 +15,8 @@ export class LeafActualsController {
 
     // @anchor leaf-actuals-list-endpoint — GET /leaf-actuals/order/:nodeId
     @Get('order/:nodeId')
-    listByOrder(@Param('nodeId') nodeId: string) {
-        return this.service.listByOrder(nodeId);
+    listByOrder(@Param('nodeId') nodeId: string, @Req() req: any) {
+        return this.service.listByOrder(nodeId, req.user);
     }
 
     // @anchor leaf-actuals-create-endpoint — POST /leaf-actuals

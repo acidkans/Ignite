@@ -20,6 +20,10 @@ const PURCHASE_CLS = 'text-red-300';
 
 const zl = (v) => v != null ? v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 
+// Zawężenie widoku po roli robi BACKEND (`comparison-role-filter` w `orders.service`):
+// endpoint oddaje już tylko te typy liści, które wolno oglądać wołającemu, wraz z KPI
+// policzonym z tych samych wierszy. Panel niczego nie dofiltrowuje.
+
 // @anchor comparison-fit-font — tabela ma 11 kolumn i musi się zmieścić w szerokości
 // panelu bez poziomego suwaka, a panel bywa osadzony w różnie szerokich miejscach
 // (modal 72vw, rozwinięcie w Logistyce). Czcionka jest więc dobierana pomiarem:
@@ -82,6 +86,9 @@ export default function ComparisonPanel({ nodeId }) {
         return () => ro.disconnect();
     }, [data]);
 
+    const rows = data?.rows ?? [];
+    const kpi = data?.kpi ?? null;
+
     // @anchor comparison-export-excel — eksport: wycena jako wartości stałe,
     // wartości zakupu i kolumny Δ jako ŻYWE formuły (zasada eksportów Excel).
     const exportExcel = async () => {
@@ -106,7 +113,7 @@ export default function ComparisonPanel({ nodeId }) {
             { header: 'Odchylenia', key: 'devs', width: 24 },
         ];
         ws.getRow(1).font = { bold: true };
-        data.rows.forEach((r, i) => {
+        rows.forEach((r, i) => {
             const n = i + 2;
             ws.addRow({
                 name: r.name || '—',
@@ -132,12 +139,12 @@ export default function ComparisonPanel({ nodeId }) {
                 devs: r.current ? r.deviations.map(d => DEV_STYLES[d]?.label || d).join(', ') : 'jeszcze nie zakupiony',
             });
         });
-        const totalN = data.rows.length + 2;
+        const totalN = rows.length + 2;
         const totals = ws.addRow({
             name: 'Razem',
-            bValue: data.kpi.baselineSum,
-            cValue: { formula: `SUM(H2:H${totalN - 1})`, result: data.kpi.currentSum },
-            delta: { formula: `SUM(I2:I${totalN - 1})`, result: data.kpi.deltaSum },
+            bValue: kpi.baselineSum,
+            cValue: { formula: `SUM(H2:H${totalN - 1})`, result: kpi.currentSum },
+            delta: { formula: `SUM(I2:I${totalN - 1})`, result: kpi.deltaSum },
         });
         totals.font = { bold: true };
         ws.getColumn('deltaPct').numFmt = '0.0%';
@@ -160,7 +167,7 @@ export default function ComparisonPanel({ nodeId }) {
         </div>
     );
 
-    const k = data.kpi;
+    const k = kpi;
     const deltaCls = k.deltaSum > 0 ? 'text-red-300' : k.deltaSum < 0 ? 'text-teal-300' : 'text-gray-300';
     // @anchor comparison-delta-summary — podsumowanie Δ siedzi w nagłówku kolumny Δ
     // (zamiast samej litery), żeby suma stała nad kolumną, którą sumuje.
@@ -184,7 +191,7 @@ export default function ComparisonPanel({ nodeId }) {
                     })}
                     <button onClick={fetchComparison} title="Odśwież" className="p-1 text-gray-500 hover:text-white"><RefreshCw size={15} /></button>
                     <button onClick={exportExcel} title="Eksport Excel (Δ jako żywe formuły)"
-                        className="flex items-center gap-1 px-2 py-1 rounded text-[14px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/25">
+                        className="flex items-center gap-1 px-2 py-1 rounded text-[14px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 border border-blue-500/25">
                         <FileSpreadsheet size={14} />Excel
                     </button>
                 </div>
@@ -230,7 +237,7 @@ export default function ComparisonPanel({ nodeId }) {
                         </tr>
                     </thead>
                     <tbody>
-                        {data.rows.map((r) => (
+                        {rows.map((r) => (
                             <tr key={r.key} className={`border-b border-white/5 hover:bg-white/[0.02] ${r.deviations.includes('ZAKRES_MINUS') ? 'opacity-50' : ''}`}>
                                 <td className="px-[0.75em] py-2 text-gray-200 max-w-[20em]">
                                     <span className={`line-clamp-2 ${r.deviations.includes('ZAKRES_MINUS') ? 'line-through' : ''}`}>{r.name || '—'}</span>
@@ -266,7 +273,7 @@ export default function ComparisonPanel({ nodeId }) {
                                 </td>
                             </tr>
                         ))}
-                        {data.rows.length === 0 && (
+                        {rows.length === 0 && (
                             <tr><td colSpan={11} className="px-[0.75em] py-4 text-center text-gray-600">Brak wymagań do porównania</td></tr>
                         )}
                     </tbody>

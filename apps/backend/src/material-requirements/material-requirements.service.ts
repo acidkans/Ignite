@@ -467,6 +467,9 @@ export class MaterialRequirementsService {
         priceNetto: number | null;       // przyjmowany z frontendu → mapowany na budgetedPriceNetto
         name: string | null;
         materialId: string | null;
+        // Oferent produktu pozycji (kto zaofertował) — leci prosto do kolumny przez `...rest`;
+        // wpisany tu wyłącznie po to, żeby DTO nie kłamało o kształcie żądania.
+        supplierId: string | null;
         // pola katalogowe (legacy) — ignorowane w update MaterialRequirement, routowane do Material osobno
         productName?: string; manufacturer?: string; model?: string; seller?: string | null;
         offerNumber?: string | null; productUrl?: string | null; stockStatus?: number | null;
@@ -543,8 +546,13 @@ export class MaterialRequirementsService {
                 where: { materialRequirementId: id },
                 data: { isSelected: false },
             });
+            // @anchor mat-req-existing-proposal-pick — gdy wymaganie ma KILKA propozycji tego samego
+            // producenta i modelu (kopia zakupowa ze splitu, powtórzone „Szukaj AI"), wybór bez
+            // `orderBy` był losowy — edycja produktu w karcie potrafiła trafić w kopię zakupową
+            // zamiast w produkt wyceny. Kolejność: produkt wyceny → wybrany → najstarszy.
             const existingProp = await this.prisma.productProposal.findFirst({
                 where: { materialRequirementId: id, manufacturer: { equals: mfr, mode: 'insensitive' }, model: { equals: mdl, mode: 'insensitive' } },
+                orderBy: [{ isOffer: 'desc' }, { isSelected: 'desc' }, { createdAt: 'asc' }],
             });
             if (existingProp) {
                 await this.prisma.productProposal.update({
@@ -594,6 +602,28 @@ export class MaterialRequirementsService {
                         await this.prisma.material.update({ where: { id: req.materialId }, data: matPatch }).catch(() => {});
                     }
                 }
+            }
+        }
+
+        // @anchor mat-req-supplier-sync — oferent wpisany w karcie schodzi na propozycję, która JEST
+        // produktem tej karty: najpierw produkt wyceny (`isOffer`), w drugiej kolejności wybrany
+        // (`isSelected`) — ta sama kolejność co `mat-req-existing-proposal-pick`. Karta i ta jedna
+        // propozycja opisują jeden i ten sam produkt, więc dwa różne oferenty na nich to sprzeczność,
+        // a nie dwie informacje. POZOSTAŁE propozycje zostają nietknięte — to konkurencyjne oferty
+        // od innych firm i każda trzyma własnego oferenta.
+        // Gdy żadna propozycja nie pełni roli produktu karty (produkt wpisany wprost w kartę,
+        // bez wybierania propozycji), oferent zostaje wyłącznie na pozycji.
+        if ((dto as any).supplierId !== undefined) {
+            const cardProposal = await this.prisma.productProposal.findFirst({
+                where: { materialRequirementId: id, OR: [{ isOffer: true }, { isSelected: true }] },
+                orderBy: [{ isOffer: 'desc' }, { isSelected: 'desc' }, { createdAt: 'asc' }],
+                select: { id: true },
+            });
+            if (cardProposal) {
+                await this.prisma.productProposal.update({
+                    where: { id: cardProposal.id },
+                    data: { supplierId: (dto as any).supplierId },
+                });
             }
         }
 
@@ -691,7 +721,7 @@ export class MaterialRequirementsService {
     // @anchor mat-req-sync-offer-proposal-price — odwrotność `setOffer`: cena zapisana wprost
     // na wymaganiu (kolumna „Koszt jedn. oferty" w Materials, propagacja z WBS) ląduje też w
     // propozycji `isOffer`. Bez tego przepływ ceny był jednokierunkowy (propozycja → wymaganie)
-    // i lewa strona `BaselineSplitCard` zostawała pusta. Kolejność wyboru nośnika:
+    // i produkt wyceny zostawał bez ceny. Kolejność wyboru nośnika:
     // istniejąca propozycja isOffer → wybrana propozycja (isSelected, nie będąca produktem
     // Zakupu) → nowa pusta propozycja. Cena `null` niczego nie tworzy — tylko czyści isOffer.
     private async syncOfferProposalPrice(requirementId: string, priceNetto: number | null) {
@@ -1153,25 +1183,70 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
         // Zapisz propozycje do bazy. sourceUrl NIE pochodzi z JSON modelu (zmyślany) — bierzemy
         // realnie cytowaną stronę dopasowaną po tytule do producent/model, a gdy brak dopasowania
         // twardy fallback na link wyszukiwania Google (zawsze działa, nigdy 404).
-        const saved = await Promise.all(
-            proposals.map(p => {
-                const matched = this.pickSourceForProposal(p, resolvedSources);
-                const sourceUrl = matched || this.googleSearchUrl(p);
-                this.logger.log(`[Search][match] ${p.manufacturer} ${p.model} -> ${matched ? matched : 'GOOGLE-FALLBACK'}`);
-                return this.prisma.productProposal.create({
-                    data: {
-                        materialRequirementId: id,
-                        productName: p.productName,
-                        manufacturer: normalizeManufacturer(p.manufacturer),
-                        model: p.model || null,
-                        sourceUrl,
-                        matchScore: p.matchScore || null,
-                    },
-                });
-            }),
-        );
+        //
+        // @anchor mat-req-search-dedup — powtórne „Szukaj AI" NIE dokłada drugiego rekordu tego samego
+        // produktu. Klucz jak przy edycji karty: producent + model bez względu na wielkość liter, w obrębie
+        // wymagania. Deduplikujemy w dwie strony: wobec propozycji już zapisanych i wewnątrz samej
+        // odpowiedzi modelu (potrafi zwrócić ten sam model kilka razy). Istniejący rekord tylko
+        // UZUPEŁNIAMY o to, czego nie ma (link, dopasowanie, nazwa handlowa) — cena, role Wycena/Zakup,
+        // wybór i pliki to dorobek użytkownika, wyszukiwarka ich nie nadpisuje.
+        const dedupKey = (manufacturer: string, model?: string | null) =>
+            `${normalizeManufacturer(manufacturer || '').toLowerCase()}|${(model || '').trim().toLowerCase()}`;
+        const existing = await this.prisma.productProposal.findMany({
+            where: { materialRequirementId: id },
+            select: { id: true, manufacturer: true, model: true, productName: true, sourceUrl: true, matchScore: true },
+        });
+        const byKey = new Map(existing.map(p => [dedupKey(p.manufacturer, p.model), p]));
+        const seen = new Set<string>();
+        let dodane = 0;
+        let uzupelnione = 0;
 
-        return saved;
+        for (const p of proposals) {
+            const key = dedupKey(p.manufacturer, p.model);
+            if (seen.has(key)) {
+                this.logger.log(`[Search][dedup] ${p.manufacturer} ${p.model} — powtórka w odpowiedzi modelu, pomijam`);
+                continue;
+            }
+            seen.add(key);
+            const matched = this.pickSourceForProposal(p, resolvedSources);
+            const sourceUrl = matched || this.googleSearchUrl(p);
+            this.logger.log(`[Search][match] ${p.manufacturer} ${p.model} -> ${matched ? matched : 'GOOGLE-FALLBACK'}`);
+
+            const hit = byKey.get(key);
+            if (hit) {
+                const patch: any = {};
+                if (!hit.sourceUrl && sourceUrl) patch.sourceUrl = sourceUrl;
+                if (hit.matchScore == null && p.matchScore != null) patch.matchScore = p.matchScore;
+                if (!hit.productName && p.productName) patch.productName = p.productName;
+                if (Object.keys(patch).length) {
+                    await this.prisma.productProposal.update({ where: { id: hit.id }, data: patch });
+                    uzupelnione += 1;
+                }
+                this.logger.log(`[Search][dedup] ${p.manufacturer} ${p.model} — propozycja już istnieje, ${Object.keys(patch).length ? 'uzupełniam' : 'zostawiam'}`);
+                continue;
+            }
+
+            await this.prisma.productProposal.create({
+                data: {
+                    materialRequirementId: id,
+                    productName: p.productName,
+                    manufacturer: normalizeManufacturer(p.manufacturer),
+                    model: p.model || null,
+                    sourceUrl,
+                    matchScore: p.matchScore || null,
+                },
+            });
+            dodane += 1;
+        }
+        this.logger.log(`[Search] Zapisano: ${dodane} nowych, ${uzupelnione} uzupełnionych, ${proposals.length - dodane - uzupelnione} pominiętych`);
+
+        // Zwracamy KOMPLET propozycji wymagania, nie tylko świeżo zapisane: front podstawia tę
+        // odpowiedź wprost pod listę (`setProposals(data)`), więc przy dedupie zwrócenie samych
+        // nowych rekordów kasowałoby z ekranu propozycje, które już tam były.
+        return this.prisma.productProposal.findMany({
+            where: { materialRequirementId: id },
+            orderBy: { createdAt: 'asc' },
+        });
     }
 
     // @anchor mat-req-upload-image — print screen / zdjęcie POZYCJI. Obrazek ląduje na wymaganiu
@@ -1244,10 +1319,13 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
         return { stream, mimeType: mimeMap[ext] || 'application/octet-stream' };
     }
 
-    async addManualProposal(id: string, dto: { productName: string; manufacturer: string; model?: string; sourceUrl?: string; priceNetto?: number | null; availability?: string }) {
+    async addManualProposal(id: string, dto: { productName: string; manufacturer: string; model?: string; sourceUrl?: string; priceNetto?: number | null; availability?: string; supplierId?: string | null }) {
         await this.findOne(id);
         return this.prisma.productProposal.create({
             data: { materialRequirementId: id, isManual: true, ...dto, manufacturer: normalizeManufacturer(dto.manufacturer) },
+            // Ten sam kształt co `updateProposal` i odczyt karty — front podstawia odpowiedź
+            // wprost pod listę propozycji, a `ComparisonPanel` czyta z niej `supplier.name`.
+            include: { supplier: true },
         });
     }
 
@@ -1264,6 +1342,16 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
             await this.prisma.materialRequirement.update({
                 where: { id: updated.materialRequirementId },
                 data: { budgetedPriceNetto: updated.priceNetto },
+            });
+        }
+        // Oferent wpisany na propozycji, która JEST produktem karty, wchodzi na kartę — druga
+        // strona `mat-req-supplier-sync`. Bez tego pole rozjeżdżało się zależnie od tego, w którym
+        // z dwóch okien użytkownik akurat kliknął, a oba opisują ten sam produkt. Propozycje
+        // niebędące produktem karty (konkurencyjne oferty) karty nie dotykają.
+        if (dto.supplierId !== undefined && (updated.isOffer || updated.isSelected)) {
+            await this.prisma.materialRequirement.update({
+                where: { id: updated.materialRequirementId },
+                data: { supplierId: dto.supplierId },
             });
         }
         return updated;
@@ -1374,12 +1462,16 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
                         imageUrl: proposal.imageUrl ?? undefined,
                     },
                 });
-            // Połącz wymaganie z materiałem + zapisz zabudżetowaną cenę
+            // Połącz wymaganie z materiałem + zapisz zabudżetowaną cenę i oferenta.
+            // Oferent idzie w górę tą samą zasadą co cena: wybrana propozycja JEST produktem
+            // karty, więc karta przejmuje też to, kto ten produkt zaofertował. Propozycja bez
+            // oferenta nie kasuje oferenta karty — brak danych to nie jest informacja „nikt".
             await this.prisma.materialRequirement.update({
                 where: { id: proposal.materialRequirementId },
                 data: {
                     materialId: material.id,
                     ...(proposal.priceNetto != null ? { budgetedPriceNetto: proposal.priceNetto } : {}),
+                    ...(proposal.supplierId ? { supplierId: proposal.supplierId } : {}),
                 },
             });
         }
@@ -1416,10 +1508,14 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
             where: { materialRequirementId: proposal.materialRequirementId, id: { not: proposalId } },
             data: { isOffer: false },
         });
-        if (proposal.priceNetto != null) {
+        // Cena i oferent produktu wyceny idą na kartę pozycji — ta sama zasada co w `selectProposal`.
+        const offerPatch: any = {};
+        if (proposal.priceNetto != null) offerPatch.budgetedPriceNetto = proposal.priceNetto;
+        if (proposal.supplierId) offerPatch.supplierId = proposal.supplierId;
+        if (Object.keys(offerPatch).length > 0) {
             await this.prisma.materialRequirement.update({
                 where: { id: proposal.materialRequirementId },
-                data: { budgetedPriceNetto: proposal.priceNetto },
+                data: offerPatch,
             });
         }
         const updated = await this.prisma.productProposal.update({ where: { id: proposalId }, data: { isOffer: true } });

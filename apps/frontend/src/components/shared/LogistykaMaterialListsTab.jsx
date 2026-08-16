@@ -15,8 +15,8 @@ function getAllOrders(nodes) {
 
 // @anchor logistyka-order-materials-view — skrót do widoku WBS/Materiały dla pojedynczego
 // zamówienia. Renderuje ten sam `WbsMaterialsPanel` co sekcja „Materiały" w UnifiedWbsPanel
-// (razem z BaselineSplitCard po rozwinięciu wiersza), więc logistyk pracuje na dokładnie tym
-// samym widoku, a nie na osobnej liście materiałowej.
+// (razem z kartą produktu `ProductCard` po rozwinięciu wiersza), więc logistyk pracuje na
+// dokładnie tym samym widoku, a nie na osobnej liście materiałowej.
 function OrderMaterialsView({ orderId, isManagerOrAdmin, isLogistyk }) {
     // Akceptacja baseline steruje kolumną „Koszt jedn. zakupu" i zamrożeniem strony „Wycena".
     // UnifiedWbsPanel pobiera to samo z /orders/:id/acceptance — tu musimy pobrać sami,

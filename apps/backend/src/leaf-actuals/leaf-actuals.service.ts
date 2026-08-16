@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditAction } from '../audit/audit.types';
+import { isOpenLeafType } from '../common/leaf-types.util';
 
 // @anchor leaf-actuals-user — kształt `req.user` z JwtStrategy, tyle ile potrzeba do uprawnień
 export interface ActualsUser {
@@ -18,6 +19,10 @@ export interface LeafActualInput {
     comment?: string | null;
     docNumber?: string | null;
     supplierId?: string | null;
+    manufacturer?: string | null;
+    model?: string | null;
+    // @anchor leaf-actual-input-scope — zakres wykonania dla liści bez karty produktowej
+    scope?: string | null;
 }
 
 const num = (v: unknown): number | null => {
@@ -54,14 +59,35 @@ export class LeafActualsService {
     }
 
     // @anchor leaf-actuals-list — wszystkie wpisy zamówienia jednym zapytaniem;
-    // frontend grupuje po `wbsRootId`, bo ten sam korzeń obsługuje każdą wersję
-    async listByOrder(nodeId: string) {
+    // frontend grupuje po `wbsRootId`, bo ten sam korzeń obsługuje każdą wersję.
+    // @anchor leaf-actuals-role-filter — poza managerem oddajemy WYŁĄCZNIE wpisy liści
+    // materiałowych i sprzętowych. Praca, usługa, nocleg i paliwo to koszty własne firmy;
+    // zawężenie w komponencie nie wystarcza, bo odpowiedź endpointu widać w narzędziach
+    // deweloperskich. Typ liścia bierzemy ze WSZYSTKICH klonów korzenia i wymagamy, żeby
+    // każdy był otwarty — przetypowanie pozycji w nowej wersji ma zamykać wpis, nie otwierać.
+    async listByOrder(nodeId: string, user?: ActualsUser) {
+        const entries = await this.listAllOfOrder(nodeId);
+        if (this.isManager(user)) return entries;
+
+        const leaves = await this.prisma.wbsNode.findMany({
+            where: { nodeId },
+            select: { id: true, sourceWbsNodeId: true, type: true },
+        });
+        const zamkniete = new Set<string>();
+        const otwarte = new Set<string>();
+        for (const l of leaves) {
+            (isOpenLeafType(l.type) ? otwarte : zamkniete).add(l.sourceWbsNodeId ?? l.id);
+        }
+        return entries.filter((e) => otwarte.has(e.wbsRootId) && !zamkniete.has(e.wbsRootId));
+    }
+
+    private async listAllOfOrder(nodeId: string) {
         return this.prisma.leafActual.findMany({
             where: { nodeId },
             orderBy: [{ entryDate: 'asc' }, { createdAt: 'asc' }],
             select: {
                 id: true, wbsRootId: true, entryDate: true, qty: true, unitCost: true,
-                comment: true, docNumber: true, createdAt: true,
+                comment: true, docNumber: true, manufacturer: true, model: true, scope: true, createdAt: true,
                 supplier: { select: { id: true, name: true } },
                 author: { select: { id: true, firstName: true, lastName: true, email: true } },
             },
@@ -86,11 +112,14 @@ export class LeafActualsService {
                 comment: input.comment?.trim() || null,
                 docNumber: input.docNumber?.trim() || null,
                 supplierId: input.supplierId || null,
+                manufacturer: input.manufacturer?.trim() || null,
+                model: input.model?.trim() || null,
+                scope: input.scope?.trim() || null,
                 authorId: user?.userId ?? null,
             },
             select: {
                 id: true, wbsRootId: true, entryDate: true, qty: true, unitCost: true,
-                comment: true, docNumber: true, createdAt: true,
+                comment: true, docNumber: true, manufacturer: true, model: true, scope: true, createdAt: true,
                 supplier: { select: { id: true, name: true } },
                 author: { select: { id: true, firstName: true, lastName: true, email: true } },
             },
@@ -132,10 +161,13 @@ export class LeafActualsService {
                 ...(input.comment !== undefined ? { comment: input.comment?.trim() || null } : {}),
                 ...(input.docNumber !== undefined ? { docNumber: input.docNumber?.trim() || null } : {}),
                 ...(input.supplierId !== undefined ? { supplierId: input.supplierId || null } : {}),
+                ...(input.manufacturer !== undefined ? { manufacturer: input.manufacturer?.trim() || null } : {}),
+                ...(input.model !== undefined ? { model: input.model?.trim() || null } : {}),
+                ...(input.scope !== undefined ? { scope: input.scope?.trim() || null } : {}),
             },
             select: {
                 id: true, wbsRootId: true, entryDate: true, qty: true, unitCost: true,
-                comment: true, docNumber: true, createdAt: true,
+                comment: true, docNumber: true, manufacturer: true, model: true, scope: true, createdAt: true,
                 supplier: { select: { id: true, name: true } },
                 author: { select: { id: true, firstName: true, lastName: true, email: true } },
             },

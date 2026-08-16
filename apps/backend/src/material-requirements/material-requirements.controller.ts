@@ -368,7 +368,7 @@ export class MaterialRequirementsController {
     @Post(':id/proposals')
     addProposal(
         @Param('id') id: string,
-        @Body() body: { productName: string; manufacturer: string; model?: string; sourceUrl?: string; priceNetto?: number | null; availability?: string },
+        @Body() body: { productName: string; manufacturer: string; model?: string; sourceUrl?: string; priceNetto?: number | null; availability?: string; supplierId?: string | null },
     ) {
         return this.service.addManualProposal(id, {
             productName: body.productName || '',
@@ -377,6 +377,9 @@ export class MaterialRequirementsController {
             sourceUrl: body.sourceUrl,
             priceNetto: body.priceNetto ?? null,
             availability: body.availability,
+            // Oferent produktu wybrany już w formularzu „Dodaj ręcznie" — bez tego trzeba by
+            // zapisać propozycję i dopiero potem wskazać, kto ją przysłał.
+            supplierId: body.supplierId ?? null,
         });
     }
 

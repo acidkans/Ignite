@@ -45,8 +45,29 @@ const THEMES = {
 // albo wolny wpis (dostawca zagraniczny bez NIP — wystarczy nazwa).
 // Reużywalny: modal uploadu oferty (F2), panel dostawcy w ProductCard (F6).
 // value: supplierId | null; onChange(supplier | null)
-export default function SupplierPicker({ value, onChange, disabled = false, dark = false }) {
+// @anchor supplier-picker-text-class — rozmiar czcionki całego pickera (trigger + lista).
+// Domyślnie `text-sm`; wiersze wpisów zakupu podają własny, żeby dropdown nie odstawał
+// od pól obok — tam wszystkie okna wpisu mają jeden rozmiar.
+// @anchor supplier-picker-size — gęstość triggera dopasowana do pól, obok których picker stoi.
+// `md` (domyślne) to modal uploadu oferty, `sm` — karta produktu (pola `py-1.5 text-xs`),
+// `xs` — wiersz propozycji produktu (pola `py-0.5`, tekst `text-xs` jak w karcie). Zmienia WYŁĄCZNIE wygląd
+// triggera; lista, NIP z Białej listy i wolny wpis działają tak samo w każdym rozmiarze,
+// bo to jeden i ten sam wybór dostawcy co przy zakupie.
+const SIZES = {
+  md: { trigger: 'gap-2 py-2 pl-3 rounded-lg',    padded: 'pr-12',  bare: 'pr-3',   clear: 'right-8 p-1',    chevron: 16, x: 14 },
+  sm: { trigger: 'gap-1.5 py-1.5 pl-2 rounded',   padded: 'pr-9',   bare: 'pr-2',   clear: 'right-6 p-0.5',  chevron: 13, x: 12 },
+  xs: { trigger: 'gap-1 py-0.5 pl-1.5 rounded',   padded: 'pr-7',   bare: 'pr-1.5', clear: 'right-4 p-0.5',  chevron: 11, x: 10 },
+};
+
+// @anchor supplier-picker-placeholder — tekst pustego triggera. Domyślnie „Wybierz dostawcę…";
+// przy produkcie mówi „Oferent produktu…", bo tam rejestruje się KTO NAM ZAOFERTOWAŁ,
+// co nie przesądza, u kogo ostatecznie kupimy.
+export default function SupplierPicker({
+  value, onChange, disabled = false, dark = false, textClass = 'text-sm',
+  size = 'md', placeholder = 'Wybierz dostawcę…',
+}) {
   const t = THEMES[dark ? 'dark' : 'light'];
+  const sz = SIZES[size] || SIZES.md;
   const [suppliers, setSuppliers] = useState([]);
   const [open, setOpen] = useState(false);
   // @anchor supplier-picker-query
@@ -119,22 +140,23 @@ export default function SupplierPicker({ value, onChange, disabled = false, dark
 
   // @anchor supplier-picker-clear — wyczyszczenie wyboru: pole wraca do pustego
   // („Wybierz dostawcę…"), consumer dostaje `onChange(null)`. Dwie drogi: krzyżyk
-  // przy wybranej wartości i pozycja „bez dostawcy" na szczycie listy.
+  // przy wybranej wartości i przycisk „bez dostawcy" w wierszu skrótów nad listą.
   const clearSupplier = () => { onChange?.(null); setOpen(false); resetCreate(); };
   const clearable = !!selected && !disabled;
 
   return (
-    <div className="relative text-sm">
+    <div className={`relative ${textClass}`}>
       <button
         type="button"
         disabled={disabled}
         onClick={() => { setOpen(!open); resetCreate(); }}
-        className={`w-full flex items-center justify-between gap-2 py-2 pl-3 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed ${clearable ? 'pr-12' : 'pr-3'} ${t.trigger}`}
+        title={selected ? `${selected.name}${selected.nip ? ` (NIP ${selected.nip})` : ''}` : placeholder}
+        className={`w-full flex items-center justify-between border disabled:opacity-50 disabled:cursor-not-allowed ${t.trigger} ${sz.trigger} ${clearable ? sz.padded : sz.bare}`}
       >
         <span className={`truncate ${selected ? t.triggerText : t.triggerPlaceholder}`}>
-          {selected ? `${selected.name}${selected.nip ? ` (NIP ${selected.nip})` : ''}` : 'Wybierz dostawcę…'}
+          {selected ? `${selected.name}${selected.nip ? ` (NIP ${selected.nip})` : ''}` : placeholder}
         </span>
-        <ChevronDown size={16} className="text-gray-400 shrink-0" />
+        <ChevronDown size={sz.chevron} className="text-gray-400 shrink-0" />
       </button>
       {clearable && (
         <button
@@ -142,14 +164,16 @@ export default function SupplierPicker({ value, onChange, disabled = false, dark
           onClick={clearSupplier}
           title="Usuń dostawcę"
           aria-label="Usuń dostawcę"
-          className={`absolute right-8 top-1/2 -translate-y-1/2 p-1 rounded transition-colors ${t.clear}`}
+          className={`absolute top-1/2 -translate-y-1/2 rounded transition-colors ${t.clear} ${sz.clear}`}
         >
-          <X size={14} />
+          <X size={sz.x} />
         </button>
       )}
 
+      {/* min-w-[220px]: przy wąskim triggerze (wiersz propozycji, karta produktu) panel
+          rozszerza się poza pole, żeby wiersz trzech skrótów i nazwy dostawców się mieściły. */}
       {open && (
-        <div className={`absolute z-50 mt-1 w-full border rounded-lg shadow-lg overflow-hidden ${t.dropdown}`}>
+        <div className={`absolute z-50 mt-1 w-full min-w-[220px] border rounded-lg shadow-lg overflow-hidden ${t.dropdown}`}>
           {!createMode && (
             <>
               <div className={`flex items-center gap-2 px-3 py-2 border-b ${t.divider}`}>
@@ -159,17 +183,25 @@ export default function SupplierPicker({ value, onChange, disabled = false, dark
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Szukaj po nazwie lub NIP…"
-                  className={`w-full outline-none text-sm bg-transparent ${t.triggerText}`}
+                  className={`w-full outline-none ${textClass} bg-transparent ${t.triggerText}`}
                 />
               </div>
-              <div className="max-h-48 overflow-y-auto">
-                <button
-                  type="button"
-                  onClick={clearSupplier}
-                  className={`w-full text-left px-3 py-2 ${t.item} ${value ? '' : t.itemSelected}`}
-                >
-                  <span className="italic text-gray-500">— bez dostawcy —</span>
+              {/* Tworzenie dostawcy stoi NAD listą — gdy kogoś w rejestrze nie ma, szuka się go
+                  krótko i od razu dopisuje; przy długiej liście przyciski na dole były poza ekranem.
+                  Trzy skróty (NIP / wolny wpis / brak dostawcy) w JEDNYM wierszu — dropdown bywa
+                  wąski (wiersz wpisu zakupu), więc etykiety są skrócone, pełne w `title`. */}
+              <div className={`border-b flex items-stretch text-xs ${t.divider}`}>
+                <button type="button" title="Dodaj dostawcę po NIP (Biała lista VAT)" onClick={() => { resetCreate(); setCreateMode('nip'); }} className={`flex-1 min-w-0 flex items-center justify-center gap-1 px-1.5 py-2 whitespace-nowrap ${t.addNip}`}>
+                  <Plus size={12} className="shrink-0" /> po NIP
                 </button>
+                <button type="button" title="Wolny wpis — dostawca bez NIP (np. zagraniczny)" onClick={() => { resetCreate(); setCreateMode('free'); }} className={`flex-1 min-w-0 flex items-center justify-center gap-1 px-1.5 py-2 whitespace-nowrap border-l ${t.divider} ${t.addFree}`}>
+                  <Plus size={12} className="shrink-0" /> bez NIP
+                </button>
+                <button type="button" title="Wyczyść — bez dostawcy" onClick={clearSupplier} className={`flex-1 min-w-0 flex items-center justify-center px-1.5 py-2 whitespace-nowrap border-l ${t.divider} ${t.addFree} ${value ? '' : t.itemSelected}`}>
+                  <span className="italic text-gray-500">bez dostawcy</span>
+                </button>
+              </div>
+              <div className="max-h-48 overflow-y-auto">
                 {filtered.map((s) => (
                   <button
                     key={s.id}
@@ -185,14 +217,6 @@ export default function SupplierPicker({ value, onChange, disabled = false, dark
                   </button>
                 ))}
                 {filtered.length === 0 && <div className="px-3 py-2 text-gray-400">Brak dostawców</div>}
-              </div>
-              <div className={`border-t flex ${t.divider}`}>
-                <button type="button" onClick={() => { resetCreate(); setCreateMode('nip'); }} className={`flex-1 flex items-center gap-1 px-3 py-2 ${t.addNip}`}>
-                  <Plus size={14} /> Dodaj po NIP
-                </button>
-                <button type="button" onClick={() => { resetCreate(); setCreateMode('free'); }} className={`flex-1 flex items-center gap-1 px-3 py-2 ${t.addFree}`}>
-                  <Plus size={14} /> Wolny wpis (bez NIP)
-                </button>
               </div>
             </>
           )}

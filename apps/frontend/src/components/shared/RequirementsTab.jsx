@@ -488,7 +488,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
             <div className="flex justify-end items-center gap-3">
                 <button
                     onClick={() => setPendingExport({ title: 'Informacje o zamówieniu (PDF)', defaultFilename: `${String(orderName || 'zamowienie').trim().replace(/[\\/:*?"<>|\s]+/g, '_') || 'zamowienie'}_informacje.pdf`, makeArtifact: () => buildRequirementsArtifact({ form, countdown, workingDays, orderName }) })}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/25 rounded-lg text-purple-300 text-[10px] font-bold uppercase tracking-widest transition-all"
+                    className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all"
                     title="Eksportuj informacje o zamówieniu do PDF"
                 >
                     <FileDown size={11} /> PDF tej zakładki

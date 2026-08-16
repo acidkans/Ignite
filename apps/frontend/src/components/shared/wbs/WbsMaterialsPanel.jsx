@@ -2,47 +2,26 @@ import React, { useState, useEffect, useCallback, useLayoutEffect, useMemo, useR
 import { createPortal } from 'react-dom';
 import ExcelJS from 'exceljs';
 import {
-    ChevronRight, ChevronDown, Package, Wrench,
-    CheckCircle, Clock, XCircle, Star, Trash2, AlertCircle,
-    ShoppingCart, Warehouse, LogOut, Plus, Search, Sparkles,
+    ChevronRight, ChevronDown, CheckCircle, Trash2, AlertCircle,
+    Plus, Search, Sparkles,
     FileText, Link as LinkIcon, Download, BookOpen, X, Database, Paperclip,
-    Lock, ThumbsUp, ArrowRight, Maximize2, Hammer, ClipboardCheck, CornerDownLeft, Truck,
+    Lock, Maximize2,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
 import SupplierPicker from '../SupplierPicker';
-import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula } from './wbsConstants';
+import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula, parsePriceInput, DRAWER } from './wbsConstants';
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
 import { guardOfferEdit, requestOfferUnlock, offerLockInputProps } from '../OfferLockGuard';
 import AutoResizeTextarea from './AutoResizeTextarea';
+import {
+    TYPE_META, LEAF_TYPES, STATUS_META, authHeaders, flattenWbsNodes, getParentPath,
+    flattenReq, wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf, fmtQty, fmtZl, fmtDate,
+} from './realizationShared';
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
 
-// @anchor wbs-materials-type-meta — typy liści widoczne w panelu. Materiał i sprzęt mają
-// kartę produktową (`MaterialRequirement`), praca i usługa nie — wchodzą tu wyłącznie po to,
-// żeby dało się na nich prowadzić wpisy realizacji na tych samych zasadach.
-const TYPE_META = {
-    material:  { label: 'Materiał', icon: Wrench,         color: 'text-amber-300',  reqType: 'material',  hasCard: true },
-    equipment: { label: 'Sprzęt',   icon: Package,        color: 'text-blue-300',   reqType: 'equipment', hasCard: true },
-    work:      { label: 'Praca',    icon: Hammer,         color: 'text-violet-300', reqType: null,        hasCard: false },
-    service:   { label: 'Usługa',   icon: ClipboardCheck, color: 'text-teal-300',   reqType: null,        hasCard: false },
-    lodging:   { label: 'Nocleg',   icon: Warehouse,      color: 'text-sky-300',    reqType: null,        hasCard: false },
-    fuel:      { label: 'Paliwo',   icon: Truck,          color: 'text-orange-300', reqType: null,        hasCard: false },
-};
-
-// @anchor wbs-materials-leaf-types — wszystkie kosztowe typy liści z `TYPE_OPTIONS` poza
-// `group`; liście bez typu zostają poza panelem, bo nie wiadomo, czym są. Nocleg i paliwo
-// wchodzą, bo w porównaniu i tak się liczą — bez nich nie dałoby się im dopisać realizacji.
-const LEAF_TYPES = ['material', 'equipment', 'work', 'service', 'lodging', 'fuel'];
-
-const STATUS_META = {
-    PENDING:   { label: 'Oczekuje',     icon: Clock,        color: 'text-amber-400' },
-    PROPOSAL:  { label: 'Propozycja',   icon: Star,         color: 'text-blue-400' },
-    CONFIRMED: { label: 'Potwierdzone', icon: CheckCircle,  color: 'text-green-400' },
-    REJECTED:  { label: 'Odrzucone',    icon: XCircle,      color: 'text-red-400' },
-    ORDERED:   { label: 'Zamówione',    icon: ShoppingCart, color: 'text-purple-400' },
-    IN_STOCK:  { label: 'Na magazynie', icon: Warehouse,    color: 'text-cyan-400' },
-    ISSUED:    { label: 'Wydane',       icon: LogOut,       color: 'text-emerald-400' },
-};
+// Meta typów, statusów i cała arytmetyka realizacji siedzą w `realizationShared.js` —
+// dzieli je z zakładką „Realizacja", która liczy pokrycie i Δ z tych samych wpisów.
 
 const WBS_NODE_STATUSES = [
     { value: '',          label: '—' },
@@ -54,28 +33,9 @@ const WBS_NODE_STATUSES = [
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function authHeaders() {
-    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-    return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-}
-
 function normalizeName(s) {
     if (!s) return s;
     return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-}
-
-function flattenWbsNodes(items, result = []) {
-    for (const n of (items || [])) {
-        result.push(n);
-        if (n.children?.length) flattenWbsNodes(n.children, result);
-    }
-    return result;
-}
-
-function getParentPath(nodePath) {
-    const segs = nodePath ? nodePath.split(' › ') : [];
-    if (segs.length <= 1) return segs[0] || '—';
-    return segs.slice(0, -1).join(' / ');
 }
 
 // ─── ProposalsSection ─────────────────────────────────────────────────────────
@@ -117,14 +77,18 @@ function ProposalImage({ proposalId, token, onDeleted }) {
     );
 }
 
+// @anchor proposal-field-num — pole liczbowe wiersza propozycji: te same zasady wpisywania co
+// w kolumnach tabeli (`sanitizeQtyInput` + `evalQtyFormula`) — cyfry, jeden separator dziesiętny
+// albo działanie zaczynające się od „=" („=1200*1.23"). Po zapisie w polu zostaje wynik.
 const PROPOSAL_FIELDS = [
     { key: 'manufacturer', ph: 'Producent',     ac: true  },
     { key: 'model',        ph: 'Model',          ac: true  },
     { key: 'productName',  ph: 'Nazwa handlowa', ac: true  },
-    { key: 'priceNetto',   ph: 'Koszt jedn.',     ac: false },
+    { key: 'priceNetto',   ph: 'Koszt jedn.',     ac: false, num: true },
     { key: 'availability', ph: 'Dostępność',     ac: false },
     { key: 'sourceUrl',    ph: 'https://...',    ac: false },
 ];
+
 const AC_KEYS = PROPOSAL_FIELDS.filter(f => f.ac).map(f => f.key);
 
 // Cross-filter: only upstream fields narrow suggestions (manufacturer → model → productName)
@@ -143,6 +107,22 @@ function findInlineAc(fieldKey, typed, materialDb, vals) {
     return match ? (match[fieldKey] || '') : null;
 }
 
+// @anchor proposal-supplier-picker — „Oferent produktu" w wierszu propozycji. Ten sam wybór
+// dostawcy co przy wpisie zakupu (`SupplierPicker`: rejestr, NIP z Białej listy, wolny wpis,
+// czyszczenie) i to samo pole w bazie co miał dawny `ProductSideCard` — `ProductProposal.supplierId`.
+// Znaczenie jest jednak inne i dlatego inna etykieta: tu rejestrujemy, KTO NAM ZAOFERTOWAŁ ten
+// produkt. Nie przesądza to, u kogo kupimy — kupno zapisuje dostawca na wpisie realizacji
+// (`LeafActual.supplierId`) i te dwa pola wolno mieć różne.
+const ProposalSupplierPicker = ({ value, onChange, disabled }) => (
+    <SupplierPicker dark size="xs" textClass="text-xs" placeholder="Oferent produktu…"
+        value={value ?? null} onChange={onChange} disabled={disabled} />
+);
+
+// @anchor proposal-supplier-after — pole, za którym wskakuje „Oferent produktu": między nazwą
+// handlową a kosztem jedn. Trzymane jako stała, bo kolejność kolumn niesie sens odczytu wiersza
+// i musi być ta sama w istniejącej propozycji i w formularzu „Dodaj ręcznie".
+const PROPOSAL_SUPPLIER_AFTER = 'productName';
+
 function ProposalRow({ p, token, onDelete, onSelect, onDeleted: onImageDeleted, onPatch, materialDb }) {
     const [vals, setVals] = useState({
         manufacturer: p.manufacturer || '',
@@ -157,17 +137,46 @@ function ProposalRow({ p, token, onDelete, onSelect, onDeleted: onImageDeleted, 
     const suppressAcRef = useRef(false);
     const suppressNextBlurRef = useRef(false);
 
+    // @anchor proposal-row-sync — wiersz nadąża za propozycją, gdy zmieni ją KTOŚ INNY niż on sam:
+    // edycja pola w karcie pozycji schodzi na wybraną propozycję po stronie backendu, po czym
+    // `onRefresh` wraca ze świeżymi danymi. Wcześniej stan pól zasiewał się tylko przy zmianie
+    // `p.id`, więc taka aktualizacja nie miała jak wejść do inputa — karta pokazywała koszt jedn.
+    // 5000, a wiersz propozycji zostawał pusty, choć w bazie obie wartości były równe.
+    // Nadpisujemy WYŁĄCZNIE pola, których wartość przyszła inna niż poprzednio z propsów —
+    // to, co użytkownik właśnie wpisuje (różni się od propsów, ale propsy się nie zmieniły),
+    // zostaje nietknięte aż do zapisu na blurze.
+    const incoming = useMemo(() => ({
+        manufacturer: p.manufacturer || '',
+        model: p.model || '',
+        productName: p.productName || '',
+        priceNetto: p.priceNetto != null ? String(p.priceNetto) : '',
+        availability: p.availability || '',
+        sourceUrl: p.sourceUrl || '',
+    }), [p.manufacturer, p.model, p.productName, p.priceNetto, p.availability, p.sourceUrl]);
+    const lastIncoming = useRef(incoming);
+    const lastId = useRef(p.id);
+
     useEffect(() => {
-        setVals({
-            manufacturer: p.manufacturer || '',
-            model: p.model || '',
-            productName: p.productName || '',
-            priceNetto: p.priceNetto != null ? String(p.priceNetto) : '',
-            availability: p.availability || '',
-            sourceUrl: p.sourceUrl || '',
+        if (lastId.current !== p.id) {
+            lastId.current = p.id;
+            lastIncoming.current = incoming;
+            setVals(incoming);
+            setInlineAc({});
+            return;
+        }
+        const patch = {};
+        for (const k of Object.keys(incoming)) {
+            if (incoming[k] !== lastIncoming.current[k]) patch[k] = incoming[k];
+        }
+        lastIncoming.current = incoming;
+        if (Object.keys(patch).length === 0) return;
+        setVals(v => ({ ...v, ...patch }));
+        setInlineAc(a => {
+            const next = { ...a };
+            for (const k of Object.keys(patch)) delete next[k];
+            return next;
         });
-        setInlineAc({});
-    }, [p.id]);
+    }, [p.id, incoming]);
 
     // After every render: restore selection for the currently active inline suggestion
     useLayoutEffect(() => {
@@ -183,8 +192,11 @@ function ProposalRow({ p, token, onDelete, onSelect, onDeleted: onImageDeleted, 
     const save = (key, raw) => {
         let value = raw;
         if (key === 'priceNetto') {
-            const n = parseFloat(String(raw).replace(',', '.'));
-            value = isNaN(n) ? null : n;
+            value = parsePriceInput(raw);
+            // W polu zostaje wynik, nie formuła — inaczej „=2*99" wisiałoby w inpucie,
+            // podczas gdy w bazie leży już 198, a resync z propsów tego nie posprząta
+            // (`proposal-row-sync` nadpisuje tylko pola, które przyszły INNE niż poprzednio).
+            setVals(v => ({ ...v, priceNetto: value != null ? String(value) : '' }));
         }
         onPatch(p.id, { [key]: value });
     };
@@ -227,7 +239,7 @@ function ProposalRow({ p, token, onDelete, onSelect, onDeleted: onImageDeleted, 
     }, [materialDb, vals.manufacturer, vals.model]);
 
     return (
-        <div className={`flex items-center gap-1 px-2 py-1 rounded border text-[10px] transition-colors ${p.isSelected ? 'bg-green-500/10 border-green-500/30' : 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]'}`}>
+        <div className={`flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors ${p.isSelected ? 'bg-green-500/10 border-green-500/30' : 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]'}`}>
             <button onClick={() => onDelete(p)} title="Usuń" className="flex-shrink-0 text-gray-600 hover:text-red-400 transition-colors mr-0.5">
                 <Trash2 size={11} />
             </button>
@@ -237,12 +249,13 @@ function ProposalRow({ p, token, onDelete, onSelect, onDeleted: onImageDeleted, 
                     <Database size={10} />
                 </span>
             )}
-            {PROPOSAL_FIELDS.map(({ key, ph, ac }) => (
-                <div key={key} className="flex-1 min-w-0">
+            {PROPOSAL_FIELDS.map(({ key, ph, ac, num }) => (
+                <React.Fragment key={key}>
+                <div className="flex-1 min-w-0">
                     <input
                         ref={el => inputRefs.current[key] = el}
                         value={ac && inlineAc[key] ? inlineAc[key] : vals[key]}
-                        onChange={e => ac ? handleChange(key, e.target.value) : setVals(v => ({ ...v, [key]: e.target.value }))}
+                        onChange={e => ac ? handleChange(key, e.target.value) : setVals(v => ({ ...v, [key]: num ? sanitizeQtyInput(e.target.value) : e.target.value }))}
                         onBlur={e => {
                             if (suppressNextBlurRef.current) { suppressNextBlurRef.current = false; return; }
                             if (ac) { const v = acceptField(key); save(key, v); }
@@ -270,9 +283,19 @@ function ProposalRow({ p, token, onDelete, onSelect, onDeleted: onImageDeleted, 
                         className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500/50 rounded px-1.5 py-0.5 text-white placeholder-gray-700 outline-none transition-colors cursor-pointer focus:cursor-text"
                     />
                 </div>
+                {/* Oferent siedzi W TYM SAMYM wierszu co produkt, zaraz za nazwą handlową i przed
+                    ceną — czyta się „ten produkt, od tej firmy, za tyle". Oferta jest własnością
+                    konkretnej propozycji, nie całego wymagania: dwie firmy mogą zaofertować dwa
+                    różne modele i każdy musi wiedzieć, od kogo przyszedł. */}
+                {key === PROPOSAL_SUPPLIER_AFTER && (
+                    <div className="flex-1 min-w-0">
+                        <ProposalSupplierPicker value={p.supplierId} onChange={s => onPatch(p.id, { supplierId: s?.id ?? null })} />
+                    </div>
+                )}
+                </React.Fragment>
             ))}
             {p.matchScore != null && (
-                <span className="flex-shrink-0 text-blue-400 text-[9px] w-8 text-right">{Math.round(p.matchScore * 100)}%</span>
+                <span className="flex-shrink-0 text-blue-400 text-[10px] w-8 text-right">{Math.round(p.matchScore * 100)}%</span>
             )}
             {!p.isSelected ? (
                 <button onClick={() => onSelect(p)}
@@ -286,7 +309,7 @@ function ProposalRow({ p, token, onDelete, onSelect, onDeleted: onImageDeleted, 
     );
 }
 
-function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropagatePrice, wbsNode }) {
+function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropagatePrice, wbsNode, offerLocked = false }) {
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const [proposals, setProposals] = useState(req.proposals || []);
     const [searching, setSearching] = useState(false);
@@ -346,6 +369,9 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
 
     const selectProposal = async (p) => {
         if (!(await guardSnapshotEdit())) return;
+        // Wybór propozycji ustawia `isOffer` i przepisuje cenę wyceny — to nośnik wartości
+        // ofertowej, więc po akceptacji baseline idzie przez modal OfferLockGuard.
+        if (offerLocked && !(await guardOfferEdit())) return;
         await fetch(`${API_URL}/material-requirements/proposals/${p.id}/select`, { method: 'PATCH', headers });
         // Optimistic: zaznacz checkmark natychmiast i zaktualizuj cenę w rodzicu
         setProposals(prev => prev.map(x => ({ ...x, isSelected: x.id === p.id })));
@@ -374,10 +400,21 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
     };
 
     const patchProposal = async (id, data) => {
+        // Edycja propozycji będącej produktem wyceny zmienia wartość ofertową — backend odbije
+        // ją przez `assertOfferEditable`, więc pytamy o odblokowanie zanim poleci PATCH.
+        const isOfferProposal = proposals.find(x => x.id === id)?.isOffer;
+        if (offerLocked && isOfferProposal && !(await guardOfferEdit())) return;
         await fetch(`${API_URL}/material-requirements/proposals/${id}`, {
             method: 'PATCH', headers, body: JSON.stringify(data),
         });
-        onRefresh();
+        // @anchor proposal-patch-refresh — pełne odświeżenie (drzewo WBS + lista wymagań) tylko
+        // gdy zmiana rusza budżet: cena wyceny na propozycji `isOffer`, bo backend przepisuje ją
+        // wtedy na `MaterialRequirement.budgetedPriceNetto`. Każde inne pole propozycji nie
+        // wychodzi poza kartę, więc idzie `silent` — sama karta i tak wraca świeża
+        // (`req.proposals` przesiewa listę), a bez tego każdy Enter przemalowywał całą sekcję
+        // i wyglądało to jak przeładowanie strony.
+        const touchesBudget = data.priceNetto !== undefined && isOfferProposal;
+        onRefresh(touchesBudget ? undefined : { silent: true });
     };
 
     const addManual = async () => {
@@ -388,8 +425,7 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
         }
         if (!form.productName) return;
         const payload = { ...form, isManual: true };
-        const raw = String(form.priceNetto ?? '').trim().replace(',', '.');
-        payload.priceNetto = raw === '' ? null : (parseFloat(raw) || null);
+        payload.priceNetto = parsePriceInput(form.priceNetto);
         const res = await fetch(`${API_URL}/material-requirements/${req.id}/proposals`, {
             method: 'POST', headers, body: JSON.stringify(payload),
         });
@@ -407,10 +443,10 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
             <div className="flex items-center gap-2">
                 <span className="text-[10px] italic uppercase tracking-widest text-white font-semibold">Propozycje produktów</span>
                 <button onClick={searchAI} disabled={searching}
-                    className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-colors disabled:opacity-40">
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-colors disabled:opacity-40">
                     <Sparkles size={10} /> {searching ? 'Szukam...' : 'Szukaj AI'}
                 </button>
-                <button onClick={() => setManualForm(manualForm ? null : { productName: '', manufacturer: '', model: '', priceNetto: '', availability: '', sourceUrl: '' })}
+                <button onClick={() => setManualForm(manualForm ? null : { productName: '', manufacturer: '', model: '', priceNetto: '', availability: '', sourceUrl: '', supplierId: null })}
                     className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 transition-colors">
                     <Plus size={10} /> Dodaj ręcznie
                 </button>
@@ -428,12 +464,13 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
                     <div className="w-5 flex-shrink-0 flex items-center justify-center">
                         {knownManual && <Database size={10} title="Produkt znany w bazie materiałów" className="text-cyan-500/70" />}
                     </div>
-                    {PROPOSAL_FIELDS.map(({ key, ph, ac }) => (
-                        <div key={key} className="flex-1 min-w-0">
+                    {PROPOSAL_FIELDS.map(({ key, ph, ac, num }) => (
+                        <React.Fragment key={key}>
+                        <div className="flex-1 min-w-0">
                             <input
                                 ref={el => manualInputRefs.current[key] = el}
                                 value={ac && manualAc[key] ? manualAc[key] : (manualForm[key] || '')}
-                                onChange={e => ac ? handleManualChange(key, e.target.value) : setManualForm(f => ({ ...f, [key]: e.target.value }))}
+                                onChange={e => ac ? handleManualChange(key, e.target.value) : setManualForm(f => ({ ...f, [key]: num ? sanitizeQtyInput(e.target.value) : e.target.value }))}
                                 onBlur={() => ac && acceptManualField(key)}
                                 onKeyDown={e => {
                                     if (e.key === 'Tab') {
@@ -453,12 +490,19 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
                                     }
                                 }}
                                 placeholder={ph}
-                                className="w-full bg-black/30 border border-white/10 rounded px-1.5 py-0.5 text-[10px] text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
+                                className="w-full bg-black/30 border border-white/10 rounded px-1.5 py-0.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
                             />
                         </div>
+                        {key === PROPOSAL_SUPPLIER_AFTER && (
+                            <div className="flex-1 min-w-0">
+                                <ProposalSupplierPicker value={manualForm.supplierId}
+                                    onChange={s => setManualForm(f => ({ ...f, supplierId: s?.id ?? null }))} />
+                            </div>
+                        )}
+                        </React.Fragment>
                     ))}
-                    <button onClick={() => setManualForm(null)} className="flex-shrink-0 px-2 py-0.5 text-[10px] text-gray-500 hover:text-white transition-colors ml-1">Anuluj</button>
-                    <button onClick={addManual} className="flex-shrink-0 px-3 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-[10px] text-white transition-colors">Dodaj</button>
+                    <button onClick={() => setManualForm(null)} className="flex-shrink-0 px-2 py-0.5 text-xs text-gray-500 hover:text-white transition-colors ml-1">Anuluj</button>
+                    <button onClick={addManual} className="flex-shrink-0 px-3 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-xs text-white transition-colors">Dodaj</button>
                 </div>
                 );
             })()}
@@ -533,8 +577,14 @@ function OfferPickerDropdown({ offers, onSelect, onClose }) {
 // ─── ProductCard ──────────────────────────────────────────────────────────────
 
 // @anchor product-card
-export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, onRefreshOffers, onPropagatePrice, readOnly, onPatch }) {
+export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefresh, onRefreshOffers, onPropagatePrice, readOnly, onPatch, offerLocked = false }) {
     const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
+
+    // @anchor product-card-offer-lock — po akceptacji baseline karta zostaje otwarta (opis, wymagania
+    // techniczne, zdjęcie), ale nośniki wartości ofertowej — „Koszt jedn.", wybór propozycji, przypięcie
+    // pozycji z oferty — przechodzą przez modal `OfferLockGuard`. Backend pilnuje tego samego
+    // (`assertOfferEditable`); front zamienia surowe 403 na pytanie o odblokowanie przez managera.
+    const lockProps = offerLockInputProps(offerLocked);
 
     const [fields, setFields] = useState({
         manufacturer: card?.manufacturer || '',
@@ -559,6 +609,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
 
     const assignOffer = useCallback(async (offerId, positionIdx) => {
         setOfferPicker(false);
+        if (offerLocked && !(await guardOfferEdit())) return;
         const res = await fetch(`${API_URL}/material-requirements/${card.id}/offer`, {
             method: 'PATCH', headers,
             body: JSON.stringify({ offerId, positionIdx }),
@@ -569,15 +620,16 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
         if (pricePln != null && onPropagatePrice) {
             onPropagatePrice(card, wbsNode, pricePln);
         }
-    }, [card, wbsNode, headers, onRefresh, onPropagatePrice]);
+    }, [card, wbsNode, headers, onRefresh, onPropagatePrice, offerLocked]);
 
     const removeOffer = useCallback(async () => {
         if (!(await guardSnapshotEdit())) return;
+        if (offerLocked && !(await guardOfferEdit())) return;
         await fetch(`${API_URL}/material-requirements/${card.id}/offer`, {
             method: 'DELETE', headers,
         });
         onRefresh();
-    }, [card?.id, headers, onRefresh]);
+    }, [card?.id, headers, onRefresh, offerLocked]);
     useEffect(() => () => { if (priceWarnTimer.current) clearTimeout(priceWarnTimer.current); }, []);
     const [localImageUrl, setLocalImageUrl] = useState(null);
     const [imageKey, setImageKey] = useState(0);
@@ -867,6 +919,19 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                             </div>
                         );
                     })}
+                    {/* @anchor product-card-supplier — „Oferent produktu" na POZYCJI, obok jej
+                        produktu wiodącego (`MaterialRequirement.supplierId`). Propozycje mają
+                        własnego oferenta każda z osobna; to pole odpowiada na pytanie „kto
+                        zaofertował to, co tu stoi", gdy produkt wpisano wprost w kartę, bez
+                        wybierania propozycji. Miejsce to samo co w wierszu propozycji —
+                        za nazwą handlową, przed kosztem jedn. */}
+                    <div className="flex-1 min-w-[140px]">
+                        <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Oferent produktu</label>
+                        <SupplierPicker dark size="sm" textClass="text-xs" placeholder="Kto zaofertował…"
+                            value={card?.supplierId ?? null}
+                            disabled={readOnly}
+                            onChange={s => patchCard({ supplierId: s?.id ?? null })} />
+                    </div>
                     <div className="flex-1 min-w-[90px]">
                         <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Koszt jedn.</label>
                         {hasOfferPos ? (
@@ -903,11 +968,16 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                         setF('priceNetto', clean);
                                     }}
                                     onFocus={e => { if (!parseFloat(String(fields.priceNetto).replace(',', '.'))) setF('priceNetto', ''); e.target.select(); }}
-                                    onBlur={() => {
-                                        const raw = String(fields.priceNetto ?? '').trim().replace(',', '.');
-                                        let next;
-                                        if (raw === '') next = null;
-                                        else { const v = parseFloat(raw); if (isNaN(v)) return; next = v; }
+                                    onBlur={async () => {
+                                        if (offerLocked && !(await guardOfferEdit())) {
+                                            setF('priceNetto', card?.priceNetto ? String(card.priceNetto) : '');
+                                            return;
+                                        }
+                                        const raw = String(fields.priceNetto ?? '').trim();
+                                        const next = parsePriceInput(raw);
+                                        // Nieczytelny wpis zostawiamy w polu i nie kasujemy ceny w bazie
+                                        if (raw !== '' && next === null) return;
+                                        setF('priceNetto', next != null ? String(next) : '');
                                         if (onPropagatePrice) onPropagatePrice(card, wbsNode, next);
                                         else patchCard({ priceNetto: next });
                                     }}
@@ -919,7 +989,8 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                         }
                                     }}
                                     disabled={readOnly}
-                                    className={`w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50 ${offers?.length > 0 && !readOnly ? 'pr-6' : ''}`}
+                                    {...lockProps}
+                                    className={`w-full bg-black/30 border rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50 ${offerLocked ? 'border-amber-500/30 opacity-70 cursor-not-allowed' : 'border-white/10'} ${offers?.length > 0 && !readOnly ? 'pr-6' : ''}`}
                                     placeholder="0.00" />
                                 {offers?.length > 0 && !readOnly && (
                                     <button onClick={() => { if (!offerPicker) onRefreshOffers?.(); setOfferPicker(v => !v); }} title="Przypisz cenę z oferty"
@@ -981,7 +1052,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                 </div>
 
                 {/* Propozycje */}
-                {!readOnly && <ProposalsSection req={card} token={token} onRefresh={onRefresh} onPatch={onPatch} materialDb={materialDb} onPropagatePrice={onPropagatePrice} wbsNode={wbsNode} />}
+                {!readOnly && <ProposalsSection req={card} token={token} onRefresh={onRefresh} onPatch={onPatch} materialDb={materialDb} onPropagatePrice={onPropagatePrice} wbsNode={wbsNode} offerLocked={offerLocked} />}
             </div>
 
             {/* Ikona karty katalogowej — widoczna gdy materiał zaciągnięty z bazy */}
@@ -1112,334 +1183,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     );
 }
 
-const SIDE_IC = 'w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50';
-
-// @anchor product-side-card — jedna strona splitu (Wycena=offer / Zakup=purchase). Pola produktu
-// związane z PROPOZYCJĄ (nie wymaganiem — technicalSpec jest wspólny, poza tym panelem). Wybór/dodanie
-// produktu ustawia rolę (set-offer / set-purchase). Każda strona ma własny rekord propozycji, więc
-// cena zakupu idzie w priceNetto; purchasePriceNetto obsługuje już tylko stare, współdzielone wpisy.
-function ProductSideCard({ requirement, side, proposal, token, wbsNode, onRefresh, onPropagatePrice, readOnly = false, locked = false, sharedWithLockedOffer = false }) {
-    const isPurchase = side === 'purchase';
-    // @anchor product-side-card-lock — strona „Wycena" po akceptacji baseline: pola zostają
-    // widoczne, ale nie przyjmują wpisu; kliknięcie otwiera modal `OfferLockGuard` (manager może
-    // odblokować). Strona „Zakup" nie jest blokowana nigdy — tam ma się dziać praca po akceptacji.
-    const lockProps = offerLockInputProps(locked);
-    const lockCls = locked ? ' cursor-not-allowed opacity-70' : '';
-    const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
-    const roleEndpoint = isPurchase ? 'set-purchase' : 'set-offer';
-    // Legacy: stary wpis pełniący obie role trzyma cenę zakupu w purchasePriceNetto; nowe (rozdzielone) w priceNetto.
-    const priceField = (isPurchase && proposal?.isOffer && proposal?.isPurchase) ? 'purchasePriceNetto' : 'priceNetto';
-
-    // @anchor product-side-card-offer-price-fallback — cena wpisana wprost w tabeli Materials
-    // („Koszt jedn. oferty" → budgetedPriceNetto wymagania) nie tworzy propozycji, więc strona
-    // Wyceny nie miała czego pokazać i pole zostawało puste mimo ceny w wierszu. Strona Wyceny
-    // czyta więc cenę wymagania jako fallback; pierwszy blur materializuje ją w propozycji isOffer.
-    // Strona Zakupu fallbacku NIE ma — koszt zakupu jest niezależny od ceny ofertowej.
-    const offerPriceFallback = isPurchase ? null : (requirement?.priceNetto ?? null);
-
-    const toFields = (p) => ({
-        manufacturer: p?.manufacturer || '', model: p?.model || '', productName: p?.productName || '',
-        price: p?.[priceField] != null ? String(p[priceField]) : (offerPriceFallback != null ? String(offerPriceFallback) : ''),
-        availability: p?.availability || '', sourceUrl: p?.sourceUrl || '',
-    });
-    const [fields, setFields] = useState(() => toFields(proposal));
-    const [supplierId, setSupplierId] = useState(proposal?.supplierId ?? null);
-    // @anchor product-side-card-pending-writes — wartości wysłane właśnie PATCH-em, jeszcze nie
-    // potwierdzone przez serwer (klucz pola → oczekiwana wartość w formie wyświetlanej). Odczyt
-    // (onRefresh → GET) potrafi wyprzedzić własny PATCH — przy realnym opóźnieniu sieci (produkcja)
-    // pole wracało wtedy na chwilę do starej wartości. Dopóki serwer nie odda tego, co zapisaliśmy,
-    // trzymamy wartość lokalną; gdy odda — wpis znika i pole znów podąża za serwerem.
-    const pendingRef = useRef({});
-    const lastProposalId = useRef(proposal?.id ?? null);
-    useEffect(() => {
-        // Inna propozycja w slocie → porzuć oczekujące zapisy poprzedniej i przyjmij dane wprost.
-        if ((proposal?.id ?? null) !== lastProposalId.current) {
-            lastProposalId.current = proposal?.id ?? null;
-            pendingRef.current = {};
-            setFields(toFields(proposal));
-            setSupplierId(proposal?.supplierId ?? null);
-            return;
-        }
-        const incoming = toFields(proposal);
-        setFields(prev => {
-            const next = { ...incoming };
-            for (const k of Object.keys(incoming)) {
-                const pend = pendingRef.current[k];
-                if (pend === undefined) continue;
-                if (incoming[k] === pend) delete pendingRef.current[k];  // serwer dogonił
-                else next[k] = prev[k];                                   // stary odczyt — trzymaj lokalne
-            }
-            return next;
-        });
-        const incSupplier = proposal?.supplierId ?? null;
-        const pendSupplier = pendingRef.current.supplierId;
-        if (pendSupplier === undefined) setSupplierId(incSupplier);
-        else if (incSupplier === pendSupplier) { delete pendingRef.current.supplierId; setSupplierId(incSupplier); }
-    /* eslint-disable-next-line */
-    }, [proposal?.id, proposal?.manufacturer, proposal?.model, proposal?.productName, proposal?.[priceField], proposal?.availability, proposal?.sourceUrl, proposal?.supplierId, offerPriceFallback]);
-    const setF = (k, v) => setFields(f => ({ ...f, [k]: v }));
-    const clearPending = (k) => { delete pendingRef.current[k]; };
-
-    const [searching, setSearching] = useState(false);
-    // Promise w locie, dedupliku­je równoległe onBlur na kilku polach zanim propozycja istnieje —
-    // inaczej szybkie Tab przez Producent→Model→Nazwa tworzyłoby kilka pustych propozycji naraz.
-    const creatingRef = useRef(null);
-
-    const assignRole = async (proposalId) => {
-        await fetch(`${API_URL}/material-requirements/proposals/${proposalId}/${roleEndpoint}`, { method: 'PATCH', headers });
-        await onRefresh?.();
-    };
-    // @anchor product-side-card-ensure-proposal — tworzy propozycję „w locie" z aktualnie wpisanych pól
-    // (Producent/Model/Nazwa/Cena/Dostępność/Adres WWW) i przypisuje ją do roli tej strony splitu, gdy
-    // użytkownik zaczyna edytować pola zanim jakikolwiek produkt istniał. Pola są więc zawsze widoczne
-    // i edytowalne — propozycja powstaje niejawnie przy pierwszym opuszczeniu pola.
-    const ensureProposal = async () => {
-        if (proposal) return proposal;
-        if (creatingRef.current) return creatingRef.current;
-        creatingRef.current = (async () => {
-            const raw = String(fields.price ?? '').trim().replace(',', '.');
-            const priceNetto = raw === '' ? null : (parseFloat(raw) || null);
-            const res = await fetch(`${API_URL}/material-requirements/${requirement.id}/proposals`, {
-                method: 'POST', headers,
-                body: JSON.stringify({
-                    productName: fields.productName || '', manufacturer: fields.manufacturer || '',
-                    model: fields.model || undefined, sourceUrl: fields.sourceUrl || undefined,
-                    availability: fields.availability || undefined, priceNetto,
-                }),
-            });
-            if (!res.ok) return null;
-            const created = await res.json();
-            await fetch(`${API_URL}/material-requirements/proposals/${created.id}/${roleEndpoint}`, { method: 'PATCH', headers });
-            return created;
-        })();
-        const result = await creatingRef.current;
-        creatingRef.current = null;
-        return result;
-    };
-    // @anchor product-side-card-fork-purchase — gdy Zakup dzieli propozycję z Wyceną (kciuk „ten sam
-    // produkt"), a oferta jest już zamrożona akceptacją, edycja produktu po stronie Zakupu
-    // przepisywałaby produkt OFERTOWY — backend odrzuciłby ją jako edycję oferty. Zamiast blokować
-    // pracę zakupową odczepiamy stronę Zakup: kopia propozycji (z ceną zakupu jako `priceNetto`)
-    // przejmuje rolę `isPurchase`, a propozycja ofertowa zostaje nietknięta.
-    const forkPurchaseFromOffer = async () => {
-        const res = await fetch(`${API_URL}/material-requirements/${requirement.id}/proposals`, {
-            method: 'POST', headers,
-            body: JSON.stringify({
-                productName: proposal.productName || '', manufacturer: proposal.manufacturer || '',
-                model: proposal.model || undefined, sourceUrl: proposal.sourceUrl || undefined,
-                availability: proposal.availability || undefined,
-                priceNetto: proposal.purchasePriceNetto ?? proposal.priceNetto ?? null,
-            }),
-        });
-        if (!res.ok) return null;
-        const created = await res.json();
-        if (proposal.supplierId) {
-            await fetch(`${API_URL}/material-requirements/proposals/${created.id}`, {
-                method: 'PATCH', headers, body: JSON.stringify({ supplierId: proposal.supplierId }),
-            });
-        }
-        await fetch(`${API_URL}/material-requirements/proposals/${created.id}/set-purchase`, { method: 'PATCH', headers });
-        return created;
-    };
-    // Strona Zakupu na współdzielonej propozycji przy zamrożonej ofercie — patrz `forkPurchaseFromOffer`.
-    const needsPurchaseFork = () => isPurchase && sharedWithLockedOffer && !!proposal;
-
-    const patchField = async (key, value) => {
-        if (locked && !(await guardOfferEdit())) return;
-        if (needsPurchaseFork()) {
-            pendingRef.current[key] = value ?? '';
-            const forked = await forkPurchaseFromOffer();
-            if (!forked) { clearPending(key); return; }
-            await fetch(`${API_URL}/material-requirements/proposals/${forked.id}`, {
-                method: 'PATCH', headers, body: JSON.stringify({ [key]: value }),
-            });
-            await onRefresh?.();
-            return;
-        }
-        pendingRef.current[key] = value ?? '';
-        const p = await ensureProposal();
-        if (!p) { clearPending(key); return; }
-        // ensureProposal już zapisała bieżącą wartość pola przy tworzeniu — dodatkowy PATCH tylko gdy propozycja już istniała.
-        if (proposal) {
-            const res = await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, {
-                method: 'PATCH', headers, body: JSON.stringify({ [key]: value }),
-            });
-            if (!res.ok) clearPending(key);
-        }
-        // silent — edycja pola tekstowego propozycji nie zmienia budżetu WBS, więc odświeżamy samą
-        // kartę zamiast przeładowywać całe drzewo (to powodowało „restart" widoku przy każdym polu).
-        await onRefresh?.({ silent: true });
-    };
-    // @anchor product-side-card-supplier-change — dostawca produktu tej strony (Wycena/Zakup), niezależny
-    // od drugiej strony splitu; wybór po NIP z rejestru lub wolny wpis po nazwie (SupplierPicker). Działa
-    // też zanim wybrano produkt — tworzy pustą propozycję tylko po to, by przypiąć dostawcę.
-    const supplierChange = async (supplier) => {
-        if (locked && !(await guardOfferEdit())) return;
-        const next = supplier?.id ?? null;
-        // Wyczyszczenie dostawcy tam, gdzie nie ma jeszcze propozycji, nie ma czego
-        // czyścić — nie zakładaj pustej propozycji tylko po to, by zapisać null.
-        if (next === null && !proposal) { setSupplierId(null); return; }
-        pendingRef.current.supplierId = next;
-        setSupplierId(next);
-        if (needsPurchaseFork()) {
-            const forked = await forkPurchaseFromOffer();
-            if (!forked) { clearPending('supplierId'); return; }
-            await fetch(`${API_URL}/material-requirements/proposals/${forked.id}`, {
-                method: 'PATCH', headers, body: JSON.stringify({ supplierId: next }),
-            });
-            await onRefresh?.();
-            return;
-        }
-        const p = await ensureProposal();
-        if (!p) { clearPending('supplierId'); return; }
-        const res = await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, {
-            method: 'PATCH', headers, body: JSON.stringify({ supplierId: next }),
-        });
-        if (!res.ok) clearPending('supplierId');
-        await onRefresh?.({ silent: true });
-    };
-    // @anchor product-side-card-price-formula — pole ceny („Koszt jedn." po stronie Wyceny,
-    // „Koszt zakupu" po stronie Zakupu) przyjmuje wyrażenie matematyczne rozpoczęte znakiem „=",
-    // np. „=1200/4+50". Na blur/Enter wyrażenie jest liczone (evalQtyFormula) i w polu zostaje sam
-    // wynik — do bazy zawsze idzie liczba, nigdy tekst formuły. Błędne lub ujemne wyrażenie nie
-    // zapisuje nic i przywraca poprzednią wartość.
-    const priceFormulaResult = String(fields.price ?? '').trim().startsWith('=')
-        ? evalQtyFormula(fields.price)
-        : null;
-
-    const priceBlur = async () => {
-        if (locked && !(await guardOfferEdit())) { setF('price', toFields(proposal).price); return; }
-        const input = String(fields.price ?? '').trim();
-        let raw;
-        if (input.startsWith('=')) {
-            const evaluated = evalQtyFormula(input);
-            if (evaluated === null || evaluated < 0) { setF('price', toFields(proposal).price); return; }
-            raw = String(evaluated);
-            setF('price', raw);
-        } else {
-            raw = input.replace(',', '.');
-        }
-        const val = raw === '' ? null : (parseFloat(raw) || null);
-        pendingRef.current.price = val == null ? '' : String(val);
-        const hadProposal = !!proposal;
-        const p = await ensureProposal();
-        if (!p) { clearPending('price'); return; }
-        if (hadProposal) {
-            const res = await fetch(`${API_URL}/material-requirements/proposals/${p.id}`, {
-                method: 'PATCH', headers, body: JSON.stringify({ [priceField]: val }),
-            });
-            if (!res.ok) clearPending('price');
-        }
-        // Propagacja ceny (PATCH priceNetto wymagania + budżet węzła WBS) MUSI się zakończyć przed
-        // odświeżeniem — bez await GET wyprzedzał własny PATCH i karta wracała do poprzedniej ceny.
-        // Propagacja sama przeładowuje już karty i drzewo WBS, więc kolejne pełne odświeżenie tylko
-        // powielałoby lawinę zapytań — po niej wystarczy silent.
-        if (!isPurchase && val != null) {
-            await onPropagatePrice?.(requirement, wbsNode, val);
-            await onRefresh?.({ silent: true });
-        } else {
-            await onRefresh?.();
-        }
-    };
-    const searchAI = async () => {
-        setSearching(true);
-        try {
-            const res = await fetch(`${API_URL}/material-requirements/${requirement.id}/search-products`, { method: 'POST', headers });
-            if (res.ok) await onRefresh?.();
-        } finally { setSearching(false); }
-    };
-
-    // @anchor product-side-card-delete-product — usuwa produkt TYLKO tej strony splitu. Role są
-    // rozdzielone na osobne propozycje (kciuk kopiuje, nie współdzieli rekordu), więc kasowanie
-    // propozycji zakupowej nie rusza Wyceny. Wyjątek: stary wpis pełniący obie role — tam sam
-    // rekord zostaje, schodzi z niego wyłącznie rola Zakupu (`clear-purchase`).
-    const deleteProduct = async () => {
-        if (!proposal) return;
-        if (locked && !(await guardOfferEdit())) return;
-        const shared = proposal.isOffer && proposal.isPurchase;
-        if (!window.confirm(`Usunąć produkt strony „${isPurchase ? 'Zakup' : 'Wycena'}"?`)) return;
-        if (isPurchase && shared) {
-            await fetch(`${API_URL}/material-requirements/proposals/${proposal.id}/clear-purchase`, { method: 'PATCH', headers });
-        } else {
-            await fetch(`${API_URL}/material-requirements/proposals/${proposal.id}`, { method: 'DELETE', headers });
-        }
-        await onRefresh?.();
-    };
-
-    const allProposals = requirement.proposals || [];
-    const priceLabel = isPurchase ? 'Koszt zakupu' : 'Koszt jedn.';
-
-    return (
-        <div className="px-4 py-3 flex flex-col gap-2">
-            {!proposal && <p className="text-[11px] text-gray-500 italic">Brak produktu dla strony „{isPurchase ? 'Zakup' : 'Wycena'}" — uzupełnij pola poniżej.</p>}
-            <div className="grid grid-cols-3 gap-2">
-                <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Producent</label>
-                    <input value={fields.manufacturer} disabled={readOnly} {...lockProps} onChange={e => setF('manufacturer', e.target.value)} onBlur={e => e.target.value !== (proposal?.manufacturer || '') && patchField('manufacturer', e.target.value)} placeholder="Producent" className={`${SIDE_IC}${lockCls}`} /></div>
-                <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Model</label>
-                    <input value={fields.model} disabled={readOnly} {...lockProps} onChange={e => setF('model', e.target.value)} onBlur={e => e.target.value !== (proposal?.model || '') && patchField('model', e.target.value)} placeholder="Model" className={`${SIDE_IC}${lockCls}`} /></div>
-                <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Nazwa handlowa</label>
-                    <input value={fields.productName} disabled={readOnly} {...lockProps} onChange={e => setF('productName', e.target.value)} onBlur={e => e.target.value !== (proposal?.productName || '') && patchField('productName', e.target.value)} placeholder="Nazwa handlowa" className={`${SIDE_IC}${lockCls}`} /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-                <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">{priceLabel}</label>
-                    <div className="relative">
-                        <input value={fields.price} disabled={readOnly} inputMode="decimal"
-                            onChange={e => setF('price', sanitizeQtyInput(e.target.value))}
-                            onBlur={priceBlur}
-                            onKeyDown={e => {
-                                if (e.key === 'Enter') e.currentTarget.blur();
-                                if (e.key === 'Escape') { setF('price', toFields(proposal).price); e.currentTarget.blur(); }
-                            }}
-                            title="Możesz wpisać działanie po znaku „=”, np. =1200/4+50"
-                            {...lockProps}
-                            placeholder="0.00 lub =12*3" className={`${SIDE_IC} pr-6${lockCls}`} />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-[10px]">zł</span>
-                        {String(fields.price ?? '').trim().startsWith('=') && (
-                            <span className={`absolute left-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] px-1.5 py-0.5 rounded border shadow-lg ${priceFormulaResult != null && priceFormulaResult >= 0 ? 'text-teal-300 bg-teal-900/90 border-teal-500/40' : 'text-red-300 bg-red-900/90 border-red-500/40'}`}>
-                                {priceFormulaResult != null && priceFormulaResult >= 0 ? `= ${priceFormulaResult.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł` : 'błędne działanie'}
-                            </span>
-                        )}
-                    </div></div>
-                <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Dostępność</label>
-                    <input value={fields.availability} disabled={readOnly} {...lockProps} onChange={e => setF('availability', e.target.value)} onBlur={e => e.target.value !== (proposal?.availability || '') && patchField('availability', e.target.value)} placeholder="np. 7 dni" className={`${SIDE_IC}${lockCls}`} /></div>
-            </div>
-            <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Adres WWW</label>
-                <input value={fields.sourceUrl} disabled={readOnly} {...lockProps} onChange={e => setF('sourceUrl', e.target.value)} onBlur={e => e.target.value !== (proposal?.sourceUrl || '') && patchField('sourceUrl', e.target.value)} placeholder="https://…" className={`${SIDE_IC}${lockCls}`} /></div>
-            <div><label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">{isPurchase ? 'Dostawca' : 'Dostawca (oferent)'}</label>
-                <div onMouseDownCapture={locked ? (e) => { e.preventDefault(); e.stopPropagation(); requestOfferUnlock(); } : undefined}>
-                    <SupplierPicker dark value={supplierId} onChange={supplierChange} disabled={readOnly} />
-                </div></div>
-            {!readOnly && !locked && (
-                <div className="flex items-center gap-1.5 pt-1">
-                    <button onClick={searchAI} disabled={searching}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 disabled:opacity-40">
-                        <Sparkles size={9} /> {searching ? 'Szukam…' : 'Szukaj AI'}
-                    </button>
-                    {proposal && (
-                        <button onClick={deleteProduct}
-                            title={`Usuwa produkt wyłącznie strony „${isPurchase ? 'Zakup' : 'Wycena'}"`}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20">
-                            <Trash2 size={9} /> Usuń produkt
-                        </button>
-                    )}
-                </div>
-            )}
-            {!proposal && !locked && allProposals.length > 0 && (
-                <div className="flex flex-col gap-1">
-                    <span className="text-[9px] uppercase tracking-widest text-gray-600">lub wybierz istniejącą propozycję:</span>
-                    {allProposals.map(p => (
-                        <button key={p.id} onClick={() => assignRole(p.id)}
-                            className="text-left px-2 py-1 rounded border border-white/5 bg-white/[0.02] hover:bg-white/5 text-[11px] text-gray-300">
-                            {p.manufacturer} {p.model} — {p.productName}{p.priceNetto != null ? ` · ${Number(p.priceNetto).toFixed(2)} zł` : ''}
-                        </button>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
-
-// @anchor image-lightbox — pełny podgląd zdjęcia produktu. Kafelek w splicie ma 176×86 px i
+// @anchor image-lightbox — pełny podgląd zdjęcia produktu. Kafelek podglądu ma 176×86 px i
 // `object-contain`, więc zrzut z karty katalogowej jest tam nieczytelny; tu obrazek idzie w
 // oryginalnych pikselach. Dwa tryby: „dopasuj" (domyślny, mieści się w oknie) i „1:1" (naturalna
 // rozdzielczość, przewijana). Portal do body — kafelek siedzi w komórce tabeli z `overflow:auto`.
@@ -1495,12 +1239,12 @@ function ImageLightbox({ src, title, onClose }) {
     );
 }
 
-// @anchor requirement-image-box — podgląd produktu POZYCJI (wspólny dla obu stron splitu).
+// @anchor requirement-image-box — podgląd produktu POZYCJI (używany w zakładce Realizacja).
 // Zachowuje się jak kafel zdjęcia w ProductCard: klik = wybór pliku, najechanie + Ctrl+V = wklejenie
 // ze schowka (ukryty input przechwytuje `paste`, bo `document` nie dostaje zdarzenia bez focusu).
 // Obrazek trzymany jest na wymaganiu (`MaterialRequirement.imageUrl`), więc działa też zanim
 // pozycja ma produkt katalogowy; odczyt spada na obrazek z katalogu, gdy własnego nie ma.
-function RequirementImageBox({ card, token, onRefresh, className = '' }) {
+export function RequirementImageBox({ card, token, onRefresh, className = '' }) {
     const [localUrl, setLocalUrl] = useState(null);
     const [fetchedUrl, setFetchedUrl] = useState(null);
     const [imageKey, setImageKey] = useState(0);
@@ -1639,235 +1383,20 @@ function RequirementImageBox({ card, token, onRefresh, className = '' }) {
     );
 }
 
-// @anchor baseline-split-card — wspólny split Wycena↔Zakup: wspólne okno „Wymagania techniczne" na
-// górze (z wymagania), pod spodem dwie kolumny produktu — Wycena = propozycja isOffer, Zakup =
-// propozycja isPurchase — ZAWSZE dwa osobne rekordy. Kciuk na linii podziału kopiuje produkt Wyceny
-// do Zakupu (set-purchase na propozycji offer zakłada jej kopię, patrz `materializePurchaseCopy`),
-// więc zmiana lub usunięcie po stronie Zakupu nie rusza Wyceny.
-// Używany w rozwinięciu wiersza WBSHybridTable i w zakładce Materials.
-export function BaselineSplitCard({
-    card, wbsNode, processNodeId, token, materialDb, offers,
-    readOnly = false, offerLocked = false, onRefresh, onPropagatePrice, onRefreshOffers, onPatch,
-}) {
-    const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
-    const zl = (v) => v != null ? v.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
-
-    const [splitOpen, setSplitOpen] = useState(true);
-    const [techSpec, setTechSpec] = useState(card?.technicalSpec || '');
-    // @anchor baseline-split-techspec-pending — wartość wysłana PATCH-em i jeszcze niepotwierdzona.
-    // Bez tego stary odczyt (GET wyprzedzający własny PATCH) cofał treść wymagań technicznych.
-    const techPendingRef = useRef(undefined);
-    const techLastCardId = useRef(card?.id ?? null);
-    useEffect(() => {
-        const incoming = card?.technicalSpec || '';
-        if ((card?.id ?? null) !== techLastCardId.current) {
-            techLastCardId.current = card?.id ?? null;
-            techPendingRef.current = undefined;
-            setTechSpec(incoming);
-            return;
-        }
-        if (techPendingRef.current === undefined) { setTechSpec(incoming); return; }
-        if (incoming === techPendingRef.current) { techPendingRef.current = undefined; setTechSpec(incoming); }
-    }, [card?.id, card?.technicalSpec]);
-    // Auto-wysokość okna „Wymagania techniczne" — pokazuje całą treść bez zwijania/scrolla.
-    const techRef = useRef(null);
-    useLayoutEffect(() => {
-        const el = techRef.current;
-        if (!el) return;
-        el.style.height = 'auto';
-        el.style.height = `${el.scrollHeight}px`;
-    }, [techSpec]);
-
-    const proposals = card?.proposals || [];
-    const offerProposal = proposals.find(p => p.isOffer) || null;
-    const purchaseProposal = proposals.find(p => p.isPurchase) || null;
-
-    // @anchor baseline-split-qty — ilość liczona z węzła WBS, czyli DOKŁADNIE ta z kolumny „Ilość"
-    // rozwiniętego wiersza. Split jest rozwinięciem wiersza, więc musi pokazywać te same liczby.
-    // Wcześniej brał `card.quantity` (ilość wymagania), a te dwa nośniki potrafią się rozjechać —
-    // wtedy na jednym ekranie wiersz mówił 2 szt, a pasek Wycena/Zakup/Δ liczył z 12 szt.
-    // Fallback na wymaganie tylko gdy węzeł nie niesie ilości (wywołania spoza tabeli Materials).
-    const qty = wbsNode?.quantity ?? card?.quantity ?? 0;
-    // Cena wyceny: propozycja isOffer, a gdy jej brak — cena wpisana wprost w tabeli Materials
-    // (budgetedPriceNetto wymagania). Bez tego fallbacku pasek pokazywał „Wycena: —" mimo ceny w wierszu.
-    const offerPrice = offerProposal?.priceNetto ?? card?.priceNetto ?? null;
-    const purchasePrice = purchaseProposal
-        ? ((purchaseProposal.isOffer && purchaseProposal.isPurchase) ? (purchaseProposal.purchasePriceNetto ?? purchaseProposal.priceNetto) : purchaseProposal.priceNetto)
-        : null;
-    const delta = (offerPrice != null && purchasePrice != null) ? (purchasePrice - offerPrice) * qty : null;
-
-    const saveTechSpec = async () => {
-        if (!card?.id || techSpec === (card.technicalSpec || '')) return;
-        techPendingRef.current = techSpec;
-        const res = await fetch(`${API_URL}/material-requirements/${card.id}`, {
-            method: 'PATCH', headers, body: JSON.stringify({ technicalSpec: techSpec }),
-        });
-        if (!res.ok) techPendingRef.current = undefined;
-        await onRefresh?.({ silent: true });
-    };
-
-    // @anchor baseline-split-copy-to-purchase — kciuk: produkt Wyceny zostaje SKOPIOWANY na stronę
-    // Zakupu. Backend (`set-purchase` na propozycji ofertowej) zakłada osobny rekord propozycji —
-    // dwa niezależne wpisy, nie jeden wiersz pokazywany po obu stronach. Dzięki temu skopiowany
-    // zakup można potem zmienić albo usunąć, a produkt Wyceny zostaje nietknięty.
-    const copyOfferToPurchase = async () => {
-        if (!offerProposal) return;
-        if (purchaseProposal && purchaseProposal.id !== offerProposal.id &&
-            !window.confirm('Strona Zakup ma już inny produkt — zastąpić produktem z Wyceny?')) return;
-        await fetch(`${API_URL}/material-requirements/proposals/${offerProposal.id}/set-purchase`, { method: 'PATCH', headers });
-        await onRefresh?.();
-    };
-
-    // @anchor baseline-split-copy-supplier-to-purchase — kciuk: kopiuje TYLKO dostawcę z Wyceny do
-    // Zakupu, bez ruszania produktu; jeśli strona Zakup nie ma jeszcze żadnej propozycji, tworzy pustą
-    // (jak przy wyborze dostawcy bez produktu) i przypisuje ją do roli Zakup.
-    const copySupplierToPurchase = async () => {
-        if (!offerProposal) return;
-        if (purchaseProposal) {
-            await fetch(`${API_URL}/material-requirements/proposals/${purchaseProposal.id}`, {
-                method: 'PATCH', headers, body: JSON.stringify({ supplierId: offerProposal.supplierId ?? null }),
-            });
-        } else {
-            const res = await fetch(`${API_URL}/material-requirements/${card.id}/proposals`, {
-                method: 'POST', headers, body: JSON.stringify({ productName: '', manufacturer: '' }),
-            });
-            if (res.ok) {
-                const created = await res.json();
-                await fetch(`${API_URL}/material-requirements/proposals/${created.id}`, {
-                    method: 'PATCH', headers, body: JSON.stringify({ supplierId: offerProposal.supplierId ?? null }),
-                });
-                await fetch(`${API_URL}/material-requirements/proposals/${created.id}/set-purchase`, { method: 'PATCH', headers });
-            }
-        }
-        await onRefresh?.();
-    };
-
-    // Tryb read-only lub brak karty — pojedyncza karta produktu jak dotychczas.
-    if (readOnly || !card) {
-        return card ? (
-            <ProductCard card={card} wbsNode={wbsNode} token={token} materialDb={materialDb}
-                offers={offers} onRefresh={onRefresh} onRefreshOffers={onRefreshOffers}
-                onPropagatePrice={onPropagatePrice} readOnly={readOnly} onPatch={onPatch} />
-        ) : null;
-    }
-
-    return (
-        <div className="bg-blue-500/10">
-            {/* Wspólne okno „Wymagania techniczne" (z wymagania — te same dla obu stron)
-                + kafel podglądu produktu po prawej (wklejenie print screena ze schowka) */}
-            <div className="px-4 py-2 border-b border-white/5 flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                    <label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Wymagania techniczne (wspólne)</label>
-                    <textarea
-                        ref={techRef}
-                        value={techSpec}
-                        onChange={e => setTechSpec(e.target.value)}
-                        onBlur={saveTechSpec}
-                        rows={1}
-                        placeholder="Wymagania techniczne — spełniane przez produkty po obu stronach"
-                        className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-blue-500/50 resize-none overflow-hidden"
-                    />
-                </div>
-                <div className="flex flex-col">
-                    <label className="block text-[11px] uppercase tracking-widest text-gray-500 mb-1">Podgląd produktu</label>
-                    <RequirementImageBox card={card} token={token} onRefresh={onRefresh} />
-                </div>
-            </div>
-
-            {/* Pasek podsumowania Wycena · Zakup · Δ */}
-            <button
-                onClick={() => setSplitOpen(o => !o)}
-                className="w-full flex items-center gap-3 px-4 py-2 text-[13px] hover:bg-white/[0.03] transition-colors select-none"
-            >
-                <ChevronDown size={12} className={`text-teal-400 transition-transform ${splitOpen ? '' : '-rotate-90'}`} />
-                <span className="text-gray-400">Wycena: <span className="font-mono text-gray-200">{offerPrice != null ? `${zl(offerPrice * qty)} zł` : '—'}</span></span>
-                <span className="text-gray-400">Zakup: <span className="font-mono text-gray-200">{purchasePrice != null ? `${zl(purchasePrice * qty)} zł` : '—'}</span></span>
-                {delta != null && (
-                    <span className={`text-[11px] font-bold font-mono px-2 py-0.5 rounded-full border ${delta > 0 ? 'text-red-300 bg-red-500/10 border-red-500/25' : delta < 0 ? 'text-teal-300 bg-teal-500/10 border-teal-500/25' : 'text-gray-400 bg-white/5 border-white/10'}`}>
-                        Δ {delta >= 0 ? '+' : ''}{zl(delta)}
-                    </span>
-                )}
-            </button>
-
-            {splitOpen && (
-                <div className="relative grid grid-cols-2">
-                    {/* LEWO: Wycena (produkt isOffer) */}
-                    <div className="border-r border-white/10">
-                        <div className="flex items-center gap-2 px-4 py-1.5 bg-teal-500/5 border-y border-teal-500/10">
-                            <span className="text-[12px] font-bold uppercase tracking-widest text-teal-300/90">Wycena</span>
-                            {offerLocked && (
-                                <span className="inline-flex items-center gap-1 text-[9px] uppercase tracking-widest text-amber-300/80 bg-amber-500/10 border border-amber-500/25 rounded-full px-1.5 py-0.5"
-                                    title="Zamówienie zaakceptowane — wartości ofertowe zamrożone">
-                                    <Lock size={8} /> zamrożone
-                                </span>
-                            )}
-                        </div>
-                        <ProductSideCard
-                            requirement={card}
-                            side="offer"
-                            proposal={offerProposal}
-                            token={token}
-                            wbsNode={wbsNode}
-                            onRefresh={onRefresh}
-                            onPropagatePrice={onPropagatePrice}
-                            locked={offerLocked}
-                        />
-                    </div>
-
-                    {/* PRAWO: Zakup (produkt isPurchase) */}
-                    <div>
-                        <div className="flex items-center gap-2 px-4 py-1.5 bg-white/[0.02] border-y border-white/5">
-                            <span className="text-[12px] font-bold uppercase tracking-widest text-gray-400">Zakup</span>
-                            {purchaseProposal && offerProposal && purchaseProposal.id === offerProposal.id &&
-                                <span className="text-[9px] text-amber-400/80"
-                                    title="Wpis sprzed rozdzielenia stron — ten sam rekord po obu stronach splitu. Kliknij kciuk, aby rozdzielić na osobne wpisy.">
-                                    wspólny wpis z wyceną
-                                </span>}
-                        </div>
-                        <ProductSideCard
-                            requirement={card}
-                            side="purchase"
-                            proposal={purchaseProposal}
-                            token={token}
-                            wbsNode={wbsNode}
-                            onRefresh={onRefresh}
-                            onPropagatePrice={onPropagatePrice}
-                            sharedWithLockedOffer={offerLocked && !!offerProposal && purchaseProposal?.id === offerProposal.id}
-                        />
-                    </div>
-
-                    {/* Kciuk na linii podziału: produkt Wyceny → Zakup */}
-                    <div className="absolute left-1/2 top-9 -translate-x-1/2 z-10">
-                        <button
-                            onClick={copyOfferToPurchase}
-                            disabled={!offerProposal}
-                            title="Kopiuje produkt z Wyceny do Zakupu jako OSOBNY wpis — zmiana lub usunięcie po stronie Zakupu nie rusza Wyceny"
-                            className="p-1.5 rounded-full bg-gray-900 border border-teal-500/40 text-teal-300 hover:bg-teal-500/20 shadow-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                        >
-                            <ThumbsUp size={13} />
-                        </button>
-                    </div>
-
-                    {/* Kciuk na linii podziału: dostawca Wyceny → Zakup (na wysokości pola „Dostawca") */}
-                    <div className="absolute left-1/2 top-[210px] -translate-x-1/2 z-10">
-                        <button
-                            onClick={copySupplierToPurchase}
-                            disabled={!offerProposal?.supplierId}
-                            title="Kopiuje tylko dostawcę z Wyceny do Zakupu (bez zmiany produktu)"
-                            className="p-1.5 rounded-full bg-gray-900 border border-orange-500/40 text-orange-300 hover:bg-orange-500/20 shadow-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                        >
-                            <ThumbsUp size={13} />
-                        </button>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-}
-
 // ─── Row ──────────────────────────────────────────────────────────────────────
 
-function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isExpanded, onToggle, onPatchNode, onCreateCard, materialDb, offers, token, readOnly, onRefresh, onPatchCard, onPropagatePrice, realization }) {
+// @anchor materials-group-spine — pionowy „kręgosłup" rozwiniętej pozycji. Ten sam pasek
+// biegnie przez wiersz liścia, kartę produktu, pasek zakupów i wpisy realizacji, więc widać
+// jednym rzutem oka, gdzie grupa się zaczyna i kończy. Niebieski, bo to strona WYCENY —
+// turkus jest zarezerwowany dla zakupu/realizacji (`PurchasesBar`, „Rozliczone").
+const GROUP_SPINE = `${DRAWER.spine} ${DRAWER.accent.offer.spine}`;
+
+// @anchor materials-card-surface — karta produktu dostaje własną, jaśniejszą i chłodniejszą
+// płaszczyznę zamiast `bg-black/20`. Poprzednio różnica względem wiersza tabeli wynosiła
+// kilka procent krycia bieli i nie było widać, gdzie kończy się tabela, a zaczyna karta.
+const CARD_SURFACE = DRAWER.surface;
+
+function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isExpanded, onToggle, onOpenPurchases, onPatchNode, onCreateCard, materialDb, offers, token, readOnly, onRefresh, onPatchCard, onPropagatePrice, realization }) {
     const meta = TYPE_META[node.type] || TYPE_META.material;
     const TypeIcon = meta.icon;
     const reqStatus = card?.status;
@@ -1932,10 +1461,9 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
     const handlePriceBlur = () => {
         setEditPrice(false);
         if (!card?.id) return;
-        const raw = String(priceVal ?? '').trim().replace(',', '.');
-        let next;
-        if (raw === '') next = null;
-        else { const v = parseFloat(raw); if (isNaN(v)) return; next = v; }
+        const raw = String(priceVal ?? '').trim();
+        const next = parsePriceInput(raw);
+        if (raw !== '' && next === null) return;
         if (next === (card.priceNetto ?? null)) return;
         if (onPropagatePrice) onPropagatePrice(card, node, next);
         else if (onPatchCard) onPatchCard(card.id, { priceNetto: next });
@@ -1950,10 +1478,10 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
     const parent = getParentPath(node.path);
 
     return (
-        <tr className={`border-b border-white/[0.03] transition-colors ${isExpanded ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
+        <tr className={`transition-colors ${isExpanded ? 'bg-blue-500/[0.12]' : 'border-b border-white/[0.03] hover:bg-white/[0.02]'}`}>
             {/* Expand */}
-            <td className="w-9 px-2 py-2.5 text-center">
-                <button onClick={onToggle} className="text-gray-600 hover:text-gray-300 transition-colors">
+            <td className={`w-9 px-2 py-2.5 text-center ${isExpanded ? GROUP_SPINE : ''}`}>
+                <button onClick={onToggle} className={`transition-colors ${isExpanded ? 'text-blue-400 hover:text-blue-300' : 'text-gray-600 hover:text-gray-300'}`}>
                     {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </button>
             </td>
@@ -2002,9 +1530,9 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
                     </span>
                 )}
             </td>
-            {/* Zakup / wykonanie — licznik Σ wpisów wobec planu; klik rozwija wiersze wpisów.
-                Pasek przy nadmiarze mieści się w 100%: plan zajmuje swój udział w sumie,
-                nadwyżka dostaje resztę na czerwono. */}
+            {/* Zakup / wykonanie — licznik Σ wpisów wobec planu; klik rozwija wiersz I sekcję wpisów
+                pod kartą produktu (sama karta zostaje otwarta). Pasek przy nadmiarze mieści się
+                w 100%: plan zajmuje swój udział w sumie, nadwyżka dostaje resztę na czerwono. */}
             {accepted && (() => {
                 const r = realization;
                 const st = REAL_STATE[r.state] || REAL_STATE.none;
@@ -2012,7 +1540,7 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
                 const over = r.state === 'over' ? 100 - main : 0;
                 return (
                     <td className="px-3 py-2.5 text-right">
-                        <div onClick={onToggle} title="Kliknij, aby rozwinąć wpisy realizacji" className="flex flex-col items-stretch gap-1 cursor-pointer">
+                        <div onClick={onOpenPurchases || onToggle} title="Kliknij, aby rozwinąć wpisy zakupu / wykonania" className="flex flex-col items-stretch gap-1 cursor-pointer">
                             <div className="flex items-baseline justify-end gap-1.5 font-mono text-sm whitespace-nowrap">
                                 <span className={st.text}>{fmtQty(r.qty)}</span>
                                 <span className="text-gray-500">/ {fmtQty(r.plan)} {node.unit || 'szt'}</span>
@@ -2033,9 +1561,12 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
             {accepted && (() => {
                 const d = Math.round((realization.qty - realization.plan) * 1000) / 1000;
                 const cls = d > 1e-9 ? 'text-red-300' : d < -1e-9 ? 'text-teal-300' : 'text-gray-600';
+                // Zero odchylenia to nie liczba do czytania — plan trafiony w punkt
+                // pokazujemy myślnikiem, tak samo jak brak realizacji.
+                const brak = Math.abs(d) < 1e-9 || (realization.qty === 0 && !node.realizationClosed);
                 return (
                     <td className="px-3 py-2.5 text-right font-mono text-sm whitespace-nowrap">
-                        <span className={cls}>{realization.qty === 0 && !node.realizationClosed ? '—' : `${d > 0 ? '+' : ''}${fmtQty(d)} ${node.unit || 'szt'}`}</span>
+                        <span className={cls}>{brak ? '—' : `${d > 0 ? '+' : ''}${fmtQty(d)} ${node.unit || 'szt'}`}</span>
                     </td>
                 );
             })()}
@@ -2161,146 +1692,120 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
 
 // ─── Wiersze realizacji ───────────────────────────────────────────────────────
 
-// @anchor realization-entry-row — jeden wpis realizacji jako wiersz potomny liścia.
-// Komórki lecą po `visibleCols`, więc ilość wpisu stoi dokładnie pod licznikiem liścia,
-// a koszt pod „Koszt jedn. zakupu" — widać wzrokowo, że wiersze sumują się w to, co wyżej.
-function RealizationEntryRow({ entry, node, cols, readOnly, onDelete }) {
+// @anchor realization-row-font — jeden rozmiar czcionki dla WSZYSTKICH okien wpisu zakupu:
+// pola, dropdown dostawcy, wartość wpisu, etykiety i przyciski wiersza. Równy polom karty
+// produktu (`text-xs`) i wierszom propozycji — rozwinięty liść ma jeden rozmiar tekstu od
+// karty aż po ostatni wpis, bo to jedna grupa i skoki wielkości ją rozbijały.
+const ROW_FONT = 'text-xs';
+
+// @anchor realization-row-input — wspólny wygląd pól w wierszach zakupowych. Ta sama
+// wysokość i rozmiar tekstu co w polach karty produktu.
+const ROW_INPUT = `w-full bg-black/40 border border-white/10 rounded px-2 py-1 ${ROW_FONT} text-white outline-none focus:border-teal-500/50 placeholder-gray-700`;
+
+// @anchor realization-entry-row — jeden wpis realizacji jako wiersz potomny pozycji,
+// w całości edytowalny w miejscu: data, komentarz, dostawca, nr dokumentu, ilość,
+// producent, model i koszt jedn. Zapis idzie na blur (Enter = blur), tylko dla pola,
+// które faktycznie się zmieniło — bez „zapisz", bo wiersz jest formularzem sam w sobie.
+// Producent i model siedzą NA WPISIE, nie na pozycji: druga dostawa bywa zamiennikiem
+// i musi się dać zapisać osobno od pierwszej.
+function RealizationEntryRow({ entry, node, cols, readOnly, onSave, onDelete }) {
     const author = [entry.author?.firstName, entry.author?.lastName].filter(Boolean).join(' ') || entry.author?.email || '';
-    const lastKey = cols[cols.length - 1]?.key;
+    const [draft, setDraft] = useState({});
+
+    const orig = (k) => (k === 'entryDate' ? fmtDate(entry.entryDate) : (entry[k] ?? ''));
+    const get = (k) => (draft[k] !== undefined ? draft[k] : String(orig(k)));
+    const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
+    const drop = (k) => setDraft(d => { const n = { ...d }; delete n[k]; return n; });
+    // @anchor realization-entry-num-keys — pola liczbowe wpisu. Wpisuje się w nie tak samo
+    // jak w kolumny tabeli i w koszt jedn. propozycji: cyfry albo działanie od „=".
+    // Formuła musi zostać policzona TUTAJ, bo backend dostaje surową wartość z pola.
+    const NUM_KEYS = ['qty', 'unitCost'];
+    const commit = (k) => {
+        const raw = get(k);
+        if (NUM_KEYS.includes(k)) {
+            const n = parsePriceInput(raw);
+            // Pusto albo nieczytelnie — zostaw wpis jak był, nie zeruj ilości ani kosztu
+            if (n === null) { drop(k); return; }
+            if (Number(orig(k)) !== n) onSave(entry.id, { [k]: n });
+            drop(k);
+            return;
+        }
+        const next = raw;
+        if (String(orig(k)) === String(next)) { drop(k); return; }
+        onSave(entry.id, { [k]: next });
+        drop(k);
+    };
+    const onKey = (e, k) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') { drop(k); e.currentTarget.blur(); }
+    };
+    const field = (k, extra = '', props = {}) => (
+        <input value={get(k)} disabled={readOnly}
+            onChange={e => set(k, props.sanitize ? sanitizeQtyInput(e.target.value) : e.target.value)}
+            onBlur={() => commit(k)} onKeyDown={e => onKey(e, k)}
+            placeholder={props.placeholder} aria-label={props.label}
+            className={`${ROW_INPUT} ${extra} disabled:opacity-60`} />
+    );
+
+    const wartosc = (Number(get('qty')) || 0) * (Number(String(get('unitCost')).replace(',', '.')) || 0);
+
     return (
         <tr className="group/entry bg-black/25 hover:bg-black/[0.15] border-b border-white/[0.03]">
-            <td className="px-3 py-1.5" />
+            {/* Wąska kolumna rozwijania niesie znacznik „to jest wpis, nie pozycja" */}
+            <td className={`px-2 py-2 text-center border-l-[3px] border-l-blue-500/60 text-gray-700 font-mono ${ROW_FONT}`}>·</td>
             {cols.map(c => {
                 if (c.key === 'parent') return (
-                    <td key={c.key} className="px-3 py-1.5 font-mono text-xs text-gray-500 whitespace-nowrap">
-                        <span className="inline-block w-3 h-2 mr-1.5 border-l border-b border-white/20 rounded-bl-sm align-middle" />
-                        {fmtDate(entry.entryDate)}
+                    <td key={c.key} className="px-2 py-2">
+                        {field('entryDate', 'font-mono', { label: 'Data zdarzenia' })}
                     </td>
                 );
                 if (c.key === 'name') return (
-                    <td key={c.key} className="px-3 py-1.5 text-xs text-gray-300">
-                        {entry.docNumber && (
-                            <span className="inline-block mr-2 px-1.5 py-px rounded border border-blue-400/25 bg-blue-400/10 text-blue-300 font-mono text-[10px]">{entry.docNumber}</span>
-                        )}
-                        {entry.comment || '—'}
-                        {entry.supplier?.name && <span className="text-gray-500"> · {entry.supplier.name}</span>}
-                        {author && <span className="text-gray-600 text-[10px] ml-2">· {author}</span>}
+                    <td key={c.key} className="px-2 py-2">
+                        {field('comment', '', { placeholder: 'komentarz — co zrobione', label: 'Komentarz wpisu' })}
+                        {author && <div className={`${ROW_FONT} text-gray-600 mt-0.5 truncate`} title={author}>· {author}</div>}
+                    </td>
+                );
+                if (c.key === 'techSpec') return (
+                    <td key={c.key} className={`px-2 py-2 ${ROW_FONT}`}>
+                        {readOnly
+                            ? <span className={`${ROW_FONT} text-gray-400`}>{entry.supplier?.name || '—'}</span>
+                            : <SupplierPicker dark size="sm" textClass={ROW_FONT} value={entry.supplier?.id ?? null} onChange={s => onSave(entry.id, { supplierId: s?.id ?? null })} />}
+                    </td>
+                );
+                if (c.key === 'qty') return (
+                    <td key={c.key} className="px-2 py-2">
+                        {field('docNumber', 'font-mono', { placeholder: 'FV / PZ', label: 'Numer dokumentu' })}
                     </td>
                 );
                 if (c.key === 'realization') return (
-                    <td key={c.key} className="px-3 py-1.5 text-right font-mono text-xs text-gray-200 whitespace-nowrap">
-                        {fmtQty(entry.qty)} {node.unit || 'szt'}
+                    <td key={c.key} className="px-2 py-2">
+                        {field('qty', 'font-mono text-right', { label: 'Ilość wpisu', sanitize: true })}
+                    </td>
+                );
+                if (c.key === 'product') return (
+                    <td key={c.key} className="px-2 py-2 space-y-1">
+                        {TYPE_META[node?.type]?.hasCard !== false ? <>
+                            {field('manufacturer', '', { placeholder: 'producent', label: 'Producent' })}
+                            {field('model', '', { placeholder: 'model', label: 'Model' })}
+                        </> : field('scope', '', { placeholder: 'zakres — co obejmuje', label: 'Zakres' })}
                     </td>
                 );
                 if (c.key === 'purchasePrice') return (
-                    <td key={c.key} className="px-3 py-1.5 text-right font-mono text-xs text-red-300 whitespace-nowrap">{fmtZl(entry.unitCost)}</td>
+                    <td key={c.key} className="px-2 py-2">
+                        {field('unitCost', 'font-mono text-right', { label: 'Koszt jednostkowy', sanitize: true })}
+                    </td>
                 );
                 if (c.key === 'deltaValue') return (
-                    <td key={c.key} className="px-3 py-1.5 text-right font-mono text-xs text-gray-400 whitespace-nowrap">{fmtZl(entry.qty * entry.unitCost)} zł</td>
-                );
-                if (c.key === lastKey) return (
-                    <td key={c.key} className="px-3 py-1.5 text-right">
+                    // bez „zł" — waluta wynika z nagłówka kolumny
+                    <td key={c.key} className={`px-1.5 py-2 text-right font-mono ${ROW_FONT} text-gray-400 whitespace-nowrap`}>
+                        {fmtZl(wartosc)}
                         {!readOnly && (
-                            <button onClick={onDelete} title="Usuń wpis realizacji"
-                                className="opacity-0 group-hover/entry:opacity-100 text-gray-600 hover:text-red-400 transition-all"><Trash2 size={12} /></button>
+                            <button onClick={() => onDelete(entry.id)} title="Usuń wpis realizacji"
+                                className="ml-2 opacity-0 group-hover/entry:opacity-100 text-gray-600 hover:text-red-400 transition-all align-middle"><Trash2 size={14} /></button>
                         )}
                     </td>
                 );
-                return <td key={c.key} className="px-3 py-1.5" />;
-            })}
-        </tr>
-    );
-}
-
-// @anchor realization-add-row — zawsze pusty wiersz na końcu listy wpisów. Enter w dowolnym
-// polu zapisuje i zostawia kursor w komentarzu, żeby kolejny wpis szedł bez sięgania po mysz.
-// Domyślki: data dziś, koszt jedn. z poprzedniego wpisu (przy pierwszym z wyceny), ilość 1.
-function RealizationAddRow({ node, cols, defaultCost, hasDoc, closed, onAdd, onToggleClosed }) {
-    const today = new Date().toISOString().slice(0, 10);
-    const blank = () => ({ entryDate: today, qty: '1', unitCost: defaultCost != null ? String(defaultCost) : '', comment: '', docNumber: '' });
-    const [draft, setDraft] = useState(blank);
-    const [saving, setSaving] = useState(false);
-    const commentRef = useRef(null);
-
-    useEffect(() => {
-        setDraft(d => (d.unitCost === '' && defaultCost != null ? { ...d, unitCost: String(defaultCost) } : d));
-    }, [defaultCost]);
-
-    const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
-
-    const submit = async () => {
-        if (saving) return;
-        const qty = parseFloat(String(draft.qty).replace(',', '.'));
-        if (!Number.isFinite(qty) || qty <= 0) return;
-        setSaving(true);
-        const ok = await onAdd(draft);
-        setSaving(false);
-        if (ok) {
-            setDraft(blank());
-            commentRef.current?.focus();
-        }
-    };
-    const onKey = e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
-
-    const input = (extra = '') => `w-full bg-black/40 border border-white/10 rounded px-2 py-0.5 text-xs text-white outline-none focus:border-teal-500/50 placeholder-gray-700 ${extra}`;
-    const lastKey = cols[cols.length - 1]?.key;
-
-    return (
-        <tr className="bg-teal-500/[0.04] border-b border-white/5">
-            <td className="px-3 py-1.5" />
-            {cols.map(c => {
-                if (c.key === 'parent') return (
-                    <td key={c.key} className="px-3 py-1.5">
-                        <input value={draft.entryDate} onChange={e => set('entryDate', e.target.value)} onKeyDown={onKey}
-                            aria-label="Data zdarzenia" className={input('font-mono')} />
-                    </td>
-                );
-                if (c.key === 'name') return (
-                    <td key={c.key} className="px-3 py-1.5">
-                        <div className="flex items-center gap-2">
-                            <input ref={commentRef} value={draft.comment} onChange={e => set('comment', e.target.value)} onKeyDown={onKey}
-                                placeholder="komentarz — co zrobione" className={input()} />
-                            {hasDoc && (
-                                <input value={draft.docNumber} onChange={e => set('docNumber', e.target.value)} onKeyDown={onKey}
-                                    placeholder="FV / PZ" className={input('max-w-[130px]')} />
-                            )}
-                        </div>
-                    </td>
-                );
-                if (c.key === 'realization') return (
-                    <td key={c.key} className="px-3 py-1.5">
-                        <input value={draft.qty} onChange={e => set('qty', sanitizeQtyInput(e.target.value))} onKeyDown={onKey}
-                            inputMode="decimal" aria-label="Ilość" className={input('font-mono text-right')} />
-                    </td>
-                );
-                if (c.key === 'purchasePrice') return (
-                    <td key={c.key} className="px-3 py-1.5">
-                        <input value={draft.unitCost} onChange={e => set('unitCost', sanitizeQtyInput(e.target.value))} onKeyDown={onKey}
-                            inputMode="decimal" aria-label="Koszt jednostkowy" className={input('font-mono text-right')} />
-                    </td>
-                );
-                if (c.key === 'deltaValue') return (
-                    <td key={c.key} className="px-3 py-1.5 text-right">
-                        <button onClick={submit} disabled={saving} title="Zapisz wpis (Enter)"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-teal-500/30 bg-teal-500/10 text-teal-300 text-[10px] font-bold uppercase tracking-widest hover:bg-teal-500/20 disabled:opacity-40">
-                            <CornerDownLeft size={11} /> dopisz
-                        </button>
-                    </td>
-                );
-                if (c.key === lastKey) return (
-                    <td key={c.key} className="px-3 py-1.5 text-right">
-                        <button onClick={onToggleClosed}
-                            title={closed ? 'Pozycja rozliczona — kliknij, aby wznowić' : 'Rozlicz pozycję mimo niedowykonania planu'}
-                            className={`px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-widest transition-colors ${
-                                closed
-                                    ? 'border-teal-500/30 bg-teal-500/10 text-teal-300'
-                                    : 'border-white/10 text-gray-500 hover:text-gray-300 hover:border-white/20'
-                            }`}>
-                            {closed ? 'Rozliczone' : 'Rozlicz'}
-                        </button>
-                    </td>
-                );
-                return <td key={c.key} className="px-3 py-1.5" />;
+                return <td key={c.key} className="px-2 py-2" />;
             })}
         </tr>
     );
@@ -2311,96 +1816,78 @@ function RealizationAddRow({ node, cols, defaultCost, hasDoc, closed, onAdd, onT
 // Kolumna `purchasePrice` (Koszt jedn. zakupu) pojawia się TYLKO po akceptacji baseline
 // (baselineOnly) — odfiltrowywana w `visibleCols`. Etap ofertowania: sam „Koszt jedn. oferty".
 const COL_DEFS = [
-    { key: 'parent',        label: 'Przedmiot projektu',   defaultW: 144 },
-    { key: 'name',          label: 'Nazwa',                defaultW: 220 },
-    { key: 'techSpec',      label: 'Wymagania techniczne', defaultW: 200 },
-    { key: 'qty',           label: 'Ilość wyceny',         defaultW: 88  },
+    { key: 'parent',        label: 'Przedmiot projektu',   defaultW: 190 },
+    { key: 'name',          label: 'Nazwa',                defaultW: 240 },
+    { key: 'techSpec',      label: 'Wymagania techniczne', defaultW: 210 },
+    { key: 'qty',           label: 'Ilość wyceny',         defaultW: 130 },
     // @anchor wbs-materials-realization-col — licznik „Σ wpisów / plan" z paskiem;
     // klik rozwija wiersze wpisów, tam też siedzi „+ dopisz"
     { key: 'realization',   label: 'Zakup / wykonanie',    defaultW: 150, align: 'right', baselineOnly: true },
-    { key: 'deltaQty',      label: 'Δ ilość',              defaultW: 96,  align: 'right', baselineOnly: true },
-    { key: 'product',       label: 'Produkt',              defaultW: 160 },
+    { key: 'deltaQty',      label: 'Δ ilość',              defaultW: 110, align: 'right', baselineOnly: true },
+    { key: 'product',       label: 'Produkt',              defaultW: 200 },
     { key: 'price',         label: 'Koszt jedn. oferty',   defaultW: 128, align: 'right' },
-    { key: 'purchasePrice', label: 'Koszt jedn. zakupu',   defaultW: 128, align: 'right', baselineOnly: true },
-    { key: 'deltaValue',    label: 'Δ wartość',            defaultW: 118, align: 'right', baselineOnly: true },
+    { key: 'purchasePrice', label: 'Koszt jedn. zakupu',   defaultW: 150, align: 'right', baselineOnly: true },
+    { key: 'deltaValue',    label: 'Δ wartość',            defaultW: 140, align: 'right', baselineOnly: true },
     { key: 'status',        label: 'Status oferty',        defaultW: 148 },
     { key: 'comment',       label: 'Komentarz',            defaultW: 200 },
 ];
 
-// @anchor purchase-unit-of — koszt jedn. zakupu z propozycji isPurchase (purchasePriceNetto gdy
-// ta sama propozycja pełni obie role, inaczej priceNetto). null = brak realnego kosztu zakupu.
-function purchaseUnitOf(card) {
-    const p = card?.proposals?.find(x => x.isPurchase);
-    if (!p) return null;
-    return (p.isOffer && p.isPurchase) ? (p.purchasePriceNetto ?? p.priceNetto ?? null) : (p.priceNetto ?? null);
-}
-
-// @anchor realization-state-styles — kolor niesie stan realizacji: bursztyn w trakcie,
-// zieleń na planie, czerwień ponad plan, teal dla pozycji rozliczonej ręcznie.
-const REAL_STATE = {
-    none:   { text: 'text-gray-500',   bar: 'bg-white/15' },
-    part:   { text: 'text-amber-300',  bar: 'bg-amber-400' },
-    full:   { text: 'text-emerald-300', bar: 'bg-emerald-400' },
-    over:   { text: 'text-red-300',    bar: 'bg-emerald-400' },
-    closed: { text: 'text-teal-300',   bar: 'bg-teal-400' },
+// @anchor pl-entries-label — polska odmiana liczebnika w pasku wpisów: 1 wpis, 2–4 wpisy,
+// 5+ wpisów (z wyjątkiem nastek: 12 wpisów, nie „12 wpisy").
+const entriesLabel = (n) => {
+    const t = n % 10;
+    const s = n % 100;
+    if (n === 1) return '1 wpis';
+    if (t >= 2 && t <= 4 && !(s >= 12 && s <= 14)) return `${n} wpisy`;
+    return `${n} wpisów`;
 };
 
-const fmtQty = (v) => {
-    const n = Number(v) || 0;
-    return Number.isInteger(n) ? String(n) : n.toLocaleString('pl-PL', { maximumFractionDigits: 3 });
-};
-const fmtZl = (v) => v == null ? '—' : Number(v).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtDate = (d) => { try { return new Date(d).toISOString().slice(0, 10); } catch { return ''; } };
-
-// @anchor wbs-root-of — korzeń klonu liścia: po nim wiszą wpisy realizacji, więc przetrwają
-// utworzenie nowej wersji. Wiersze sprzed migracji nie mają pola i są własnym korzeniem.
-const wbsRootOf = (node) => node?.sourceWbsNodeId || node?.id || '';
-
-// @anchor realization-of — suma wpisów realizacji liścia wobec planu z wyceny.
-// `avg` to średnia ważona (każdy wpis ma własny koszt jedn.), `state` steruje kolorem:
-// none → nic nie zrobione, part → w trakcie, full → plan wykonany, over → ponad plan,
-// closed → pozycja rozliczona ręcznie mimo niedowykonania.
-function realizationOf(node, entries) {
-    const list = entries || [];
-    const qty = Math.round(list.reduce((s, e) => s + (Number(e.qty) || 0), 0) * 1000) / 1000;
-    const value = Math.round(list.reduce((s, e) => s + (Number(e.qty) || 0) * (Number(e.unitCost) || 0), 0) * 100) / 100;
-    const plan = Number(node?.quantity) || 0;
-    const pct = plan > 0 ? Math.round((qty / plan) * 100) : (qty > 0 ? 100 : 0);
-    const state = node?.realizationClosed ? 'closed'
-        : qty === 0 ? 'none'
-        : qty > plan + 1e-9 ? 'over'
-        : qty >= plan - 1e-9 ? 'full'
-        : 'part';
-    return {
-        entries: list,
-        qty,
-        value,
-        plan,
-        pct,
-        state,
-        avg: qty > 0 ? Math.round((value / qty) * 100) / 100 : null,
-        mixedPrices: list.length > 1 && list.some(e => Number(e.unitCost) !== Number(list[0].unitCost)),
-    };
-}
-
-// Spłaszcza zagnieżdżony obiekt material na wymaganie — po migracji katalog jest w relacji,
-// ale reszta frontendu nadal czyta card.manufacturer / card.priceNetto (stary schemat).
-function flattenReq(r) {
-    const selected = r.proposals?.find(p => p.isSelected) || null;
-    return {
-        ...r,
-        manufacturer: r.material?.manufacturer || r.manufacturer || '',
-        model:        r.material?.model        || r.model        || '',
-        productName:  r.material?.productName  || r.productName  || '',
-        priceNetto:   r.budgetedPriceNetto ?? r.priceNetto ?? null,
-        productUrl:   r.material?.productUrl   || r.productUrl   || '',
-        seller:       r.material?.seller       || r.seller       || '',
-        availability: selected?.availability   || r.availability || '',
-        dataSheetUrl:  r.material?.dataSheetUrl  || r.dataSheetUrl  || null,
-        dataSheetName: r.material?.dataSheetName || r.dataSheetName || null,
-        complianceUrl: r.material?.complianceUrl || r.complianceUrl || null,
-        imageUrl:      r.material?.imageUrl      || r.imageUrl      || null,
-    };
+// @anchor purchases-bar — pasek „Zakupy / wykonanie" pod kartą produktu: przełącznik sekcji wpisów
+// i zarazem jej podsumowanie (Σ wpisów wobec planu, liczba wpisów, wartość) plus przycisk
+// „Rozlicz". Osobny wiersz tabeli, bo wpisy są wierszami potomnymi liścia i muszą trzymać układ
+// kolumn. Renderowany dla KAŻDEGO liścia — także bez karty produktowej (praca, usługa), bo od
+// kiedy panel nie ma wiersza dopisywania, bez paska rozwinięcie takiego liścia bywało puste.
+// Przycisk „Rozlicz" siedzi tu, a nie w wierszu — w Materiałach nie ma już innego miejsca,
+// z którego dałoby się oznaczyć pozycję jako rozliczoną. Pasek NIE jest jednym <button>,
+// bo przycisk rozliczenia nie może być zagnieżdżony w przycisku zwijania.
+export function PurchasesBar({ node, realization, colSpan, open, onToggle, readOnly, onToggleClosed }) {
+    const st = REAL_STATE[realization.state] || REAL_STATE.none;
+    const closed = !!node.realizationClosed;
+    return (
+        <tr>
+            <td colSpan={colSpan} className={`p-0 bg-black/20 border-b border-white/5 ${GROUP_SPINE}`}>
+                <div className="flex items-center gap-3 pr-3">
+                    <button
+                        onClick={onToggle}
+                        title={open ? 'Zwiń wpisy zakupu / wykonania' : 'Rozwiń wpisy zakupu / wykonania'}
+                        className="flex-1 flex items-center gap-3 px-4 py-2 text-[13px] hover:bg-white/[0.03] transition-colors select-none"
+                    >
+                        <ChevronDown size={12} className={`text-teal-400 transition-transform ${open ? '' : '-rotate-90'}`} />
+                        <span className="text-[10px] uppercase tracking-widest text-gray-600">zakupy / wykonanie</span>
+                        <span className={`font-mono ${st.text}`}>{fmtQty(realization.qty)}</span>
+                        <span className="font-mono text-gray-500">/ {fmtQty(realization.plan)} {node.unit || 'szt'}</span>
+                        <span className="text-gray-500">{entriesLabel(realization.entries.length)}</span>
+                        {realization.value > 0 && (
+                            <span className="text-gray-400">wartość <span className="font-mono text-red-400">{fmtZl(realization.value)} zł</span></span>
+                        )}
+                    </button>
+                    {readOnly
+                        ? closed && <span className="text-[9px] font-bold uppercase tracking-widest text-teal-300/80">rozliczone</span>
+                        : (
+                            <button onClick={onToggleClosed}
+                                title={closed ? 'Pozycja rozliczona — kliknij, aby wznowić' : 'Rozlicz pozycję mimo niedowykonania planu'}
+                                className={`px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-widest whitespace-nowrap transition-colors ${
+                                    closed
+                                        ? 'border-teal-500/30 bg-teal-500/10 text-teal-300'
+                                        : 'border-white/10 text-gray-500 hover:text-gray-300 hover:border-white/20'
+                                }`}>
+                                {closed ? 'Rozliczone' : 'Rozlicz'}
+                            </button>
+                        )}
+                </div>
+            </td>
+        </tr>
+    );
 }
 
 // @anchor wbs-materials-panel
@@ -2410,9 +1897,10 @@ export default function WbsMaterialsPanel({
     readOnly = false,
     accepted = false,
     // @anchor wbs-materials-offer-locked — akceptacja baseline zamraża kolumny „Ilość" i
-    // „Koszt jedn. oferty" oraz stronę „Wycena" splitu; kolumna „Koszt jedn. zakupu" i cała
-    // strona „Zakup" zostają edytowalne. Rozdzielone od `accepted` (ta steruje widocznością
-    // kolumny zakupowej), bo manager może odblokować edycję nie zmieniając stanu akceptacji.
+    // „Koszt jedn. oferty" oraz wartości ofertowe w karcie produktu (`ProductCard`); wiersze
+    // realizacji i kolumna „Koszt jedn. zakupu" zostają edytowalne. Rozdzielone od `accepted`
+    // (ta steruje widocznością kolumn zakupowych), bo manager może odblokować edycję nie
+    // zmieniając stanu akceptacji.
     offerLocked = false,
     onWbsUpdate,
     onWbsNodeUnitCostChange,
@@ -2434,6 +1922,23 @@ export default function WbsMaterialsPanel({
     const [materialDb, setMaterialDb] = useState([]);
     const [offers, setOffers] = useState([]);
     const [expandedId, setExpandedId] = useState(null);
+    // @anchor wbs-materials-purchases-open — sekcja wpisów zakupu/wykonania siedzi POD kartą produktu
+    // i domyślnie jest zwinięta: rozwinięcie wiersza służy najpierw karcie („co miało być kupione"),
+    // a wpisy dopisuje się świadomie. Stan jest jeden na panel (rozwinięty bywa tylko jeden wiersz)
+    // i pamiętany w localStorage — logistyk przeglądający serię zakupów nie otwiera sekcji przy każdej
+    // pozycji od nowa. Dotyczy tak samo liści bez karty (praca, usługa): one też dostają pasek.
+    const [purchasesOpen, setPurchasesOpen] = useState(() => {
+        try { return localStorage.getItem('wbsPurchasesOpen') === '1'; } catch { return false; }
+    });
+    // @anchor wbs-materials-toggle-purchases — przełącznik sekcji wpisów; `next` wymusza stan
+    // (klik w kolumnę „Zakup / wykonanie" ma otwierać, nie przełączać w ciemno).
+    const togglePurchases = useCallback((next) => {
+        setPurchasesOpen(prev => {
+            const v = next === undefined ? !prev : next;
+            try { localStorage.setItem('wbsPurchasesOpen', v ? '1' : '0'); } catch { /* tryb prywatny */ }
+            return v;
+        });
+    }, []);
     const [loading, setLoading] = useState(!externalWbsNodes);
 
     // ─ Sorting / filtering / column widths ──────────────────────────────────
@@ -2702,29 +2207,18 @@ export default function WbsMaterialsPanel({
         onWbsUpdate?.();
     }, [onWbsUpdate, onPatchNode, externalWbsNodes, wbsNodes, onQuantityChange]);
 
-    // @anchor add-actual — dopisanie wpisu realizacji. Ilość i koszt idą jako tekst
-    // (przecinek dziesiętny), backend je normalizuje; po zapisie odświeżamy całą listę,
-    // bo licznik liścia i wiersze wpisów muszą pochodzić z jednego źródła.
-    const addActual = useCallback(async (node, draft) => {
-        const res = await fetch(`${API_URL}/leaf-actuals`, {
-            method: 'POST',
-            headers: authHeaders(),
-            body: JSON.stringify({
-                wbsNodeId: node.id,
-                entryDate: draft.entryDate || undefined,
-                qty: draft.qty,
-                unitCost: draft.unitCost,
-                comment: draft.comment || null,
-                docNumber: draft.docNumber || null,
-            }),
+    // @anchor update-actual — edycja pojedynczego pola wpisu (blur w wierszu).
+    // Wysyłamy tylko zmienione pole, więc równoległe poprawki w dwóch komórkach
+    // nie nadpisują się nawzajem.
+    const updateActual = useCallback(async (id, patch) => {
+        const res = await fetch(`${API_URL}/leaf-actuals/${id}`, {
+            method: 'PATCH', headers: authHeaders(), body: JSON.stringify(patch),
         });
         if (!res.ok) {
             const e = await res.json().catch(() => ({}));
-            alert(e.message || 'Nie udało się zapisać wpisu realizacji');
-            return false;
+            alert(e.message || 'Nie udało się zapisać zmiany wpisu');
         }
         await fetchActuals();
-        return true;
     }, [fetchActuals]);
 
     // @anchor delete-actual
@@ -3127,6 +2621,8 @@ export default function WbsMaterialsPanel({
                 { header: 'Data', key: 'date', width: 12 },
                 { header: 'Ilość', key: 'qty', width: 10 },
                 { header: 'Jednostka', key: 'unit', width: 10 },
+                { header: 'Producent', key: 'manufacturer', width: 18 },
+                { header: 'Model', key: 'model', width: 18 },
                 { header: 'Koszt jedn.', key: 'unitCost', width: 13 },
                 { header: 'Wartość', key: 'value', width: 14 },
                 { header: 'Dokument', key: 'doc', width: 18 },
@@ -3150,6 +2646,8 @@ export default function WbsMaterialsPanel({
                     date: fmtDate(e.entryDate),
                     qty: Number(e.qty),
                     unit: node?.unit || 'szt',
+                    manufacturer: e.manufacturer || '',
+                    model: e.model || '',
                     unitCost: Number(e.unitCost),
                     value: { formula: `${qtyL}${rowNo}*${costL}${rowNo}`, result: Math.round(e.qty * e.unitCost * 100) / 100 },
                     doc: e.docNumber || '',
@@ -3254,6 +2752,7 @@ export default function WbsMaterialsPanel({
                             const isExpanded = expandedId === node.id;
                             const realization = realizationOf(node, entriesOf(node));
                             const hasCard = TYPE_META[node.type]?.hasCard !== false;
+                            const purchasesShown = purchasesOpen;
                             return (
                                 <React.Fragment key={node.id}>
                                     <WbsMaterialRow
@@ -3275,6 +2774,18 @@ export default function WbsMaterialsPanel({
                                                 setExpandedId(node.id);
                                             }
                                         }}
+                                        onOpenPurchases={async () => {
+                                            // Klik w licznik „Zakup / wykonanie": rozwiń wiersz i OD RAZU
+                                            // sekcję wpisów — po to się w ten licznik klika. Gdy wiersz
+                                            // jest już otwarty, kolejny klik działa jak przełącznik.
+                                            if (!isExpanded) {
+                                                if (!card && hasCard) await createCard(node);
+                                                else setExpandedId(node.id);
+                                                togglePurchases(true);
+                                            } else {
+                                                togglePurchases();
+                                            }
+                                        }}
                                         onPatchNode={patchWbsNode}
                                         onCreateCard={createCard}
                                         materialDb={materialDb}
@@ -3284,38 +2795,20 @@ export default function WbsMaterialsPanel({
                                         onRefresh={refreshCards}
                                         onPatchCard={patchCard}
                                     />
-                                    {/* @anchor realization-entry-rows — wpisy realizacji jako wiersze
-                                        potomne liścia: historia rośnie w dół, dopisywanie jest w tym
-                                        samym miejscu, w którym patrzy się na Δ. Widoczne po akceptacji
-                                        baseline, bo dopiero wtedy jest plan, z którym się porównujemy. */}
-                                    {isExpanded && accepted && realization.entries.map(e => (
-                                        <RealizationEntryRow
-                                            key={e.id}
-                                            entry={e}
-                                            node={node}
-                                            cols={visibleCols}
-                                            readOnly={readOnly}
-                                            onDelete={() => deleteActual(e.id)}
-                                        />
-                                    ))}
-                                    {isExpanded && accepted && !readOnly && (
-                                        <RealizationAddRow
-                                            node={node}
-                                            cols={visibleCols}
-                                            defaultCost={realization.entries.length ? realization.entries[realization.entries.length - 1].unitCost : (card?.priceNetto ?? node.unitCost ?? 0)}
-                                            hasDoc={hasCard}
-                                            closed={!!node.realizationClosed}
-                                            onAdd={draft => addActual(node, draft)}
-                                            onToggleClosed={() => toggleRealizationClosed(node)}
-                                        />
-                                    )}
+                                    {/* @anchor wbs-materials-product-card — rozwinięcie liścia zaczyna
+                                        się od karty produktu WYCENY (propozycje AI, wymagania techniczne,
+                                        zdjęcie). Zakup nie ma tu własnej strony — konkretne kupione
+                                        materiały wpisuje się w sekcji wpisów PONIŻEJ karty. */}
                                     {isExpanded && card && (
                                         <tr>
-                                            <td colSpan={visibleCols.length + 1} className="p-0 bg-black/20 border-b border-white/5">
-                                                <BaselineSplitCard
+                                            <td colSpan={visibleCols.length + 1} className={`p-0 ${CARD_SURFACE} ${GROUP_SPINE}`}>
+                                                <div className={DRAWER.head}>
+                                                    <span className={`${DRAWER.label} ${DRAWER.accent.offer.label}`}>karta produktu</span>
+                                                    <span className={DRAWER.name}>{node.name}</span>
+                                                </div>
+                                                <ProductCard
                                                     card={card}
                                                     wbsNode={node}
-                                                    processNodeId={nodeId}
                                                     token={token}
                                                     materialDb={materialDb}
                                                     offers={offers}
@@ -3332,6 +2825,42 @@ export default function WbsMaterialsPanel({
                                                     })}
                                                 />
                                             </td>
+                                        </tr>
+                                    )}
+                                    {isExpanded && accepted && (
+                                        <PurchasesBar
+                                            node={node}
+                                            realization={realization}
+                                            colSpan={visibleCols.length + 1}
+                                            open={purchasesOpen}
+                                            onToggle={() => togglePurchases()}
+                                            readOnly={readOnly}
+                                            onToggleClosed={() => toggleRealizationClosed(node)}
+                                        />
+                                    )}
+                                    {/* @anchor realization-entry-rows — wpisy realizacji jako wiersze
+                                        potomne liścia: historia rośnie w dół, w tym samym miejscu,
+                                        w którym patrzy się na Δ. Widoczne po akceptacji baseline, bo
+                                        dopiero wtedy jest plan, z którym się porównujemy. Wyłącznie
+                                        ZAPISANE wpisy — Materiały pokazują to, co faktycznie kupiono;
+                                        nowe zdarzenia dopisuje się w zakładce Realizacja. */}
+                                    {isExpanded && accepted && purchasesShown && realization.entries.map(e => (
+                                        <RealizationEntryRow
+                                            key={e.id}
+                                            entry={e}
+                                            node={node}
+                                            cols={visibleCols}
+                                            readOnly={readOnly}
+                                            onSave={updateActual}
+                                            onDelete={deleteActual}
+                                        />
+                                    ))}
+                                    {/* @anchor materials-group-cap — domknięcie grupy rozwiniętej pozycji:
+                                        pasek tej samej grubości co kręgosłup, zawsze ostatni w fragmencie,
+                                        więc nie zależy od tego, które sekcje (karta, zakupy, wpisy) się pokazały. */}
+                                    {isExpanded && (
+                                        <tr aria-hidden="true">
+                                            <td colSpan={visibleCols.length + 1} className="p-0 h-[3px] bg-blue-500/50" />
                                         </tr>
                                     )}
                                 </React.Fragment>

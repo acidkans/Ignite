@@ -345,7 +345,7 @@ export default function BudgetModesPanel({ nodeId, mode, acceptance }) {
                 </span>
                 <button onClick={fetchAll} title="Odśwież" className="ml-auto p-1 text-gray-500 hover:text-white"><RefreshCw size={11} /></button>
                 <button onClick={exportComparison} title="Eksport Excel (żywe formuły)"
-                    className="flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/25">
+                    className="flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 border border-blue-500/25">
                     <FileSpreadsheet size={10} />Excel
                 </button>
             </div>

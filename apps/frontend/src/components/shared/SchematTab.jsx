@@ -1144,7 +1144,7 @@ export default function SchematTab({ nodeId, versionId, wbsData: externalWbsData
                             <button
                                 onClick={exportMarkersToPdf}
                                 disabled={exporting}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 disabled:opacity-50 disabled:cursor-wait"
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border bg-red-500/10 text-red-300 border-red-500/25 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-wait"
                                 title="Eksportuj znaczniki do PDF"
                             >
                                 <FileDown size={14} />
@@ -1250,7 +1250,7 @@ export default function SchematTab({ nodeId, versionId, wbsData: externalWbsData
                                 <button
                                     onClick={exportMarkersToPdf}
                                     disabled={exporting}
-                                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 disabled:opacity-50"
+                                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors border bg-red-500/10 text-red-300 border-red-500/25 disabled:opacity-50"
                                     title="Eksportuj do PDF"
                                 >
                                     <FileDown size={14} />

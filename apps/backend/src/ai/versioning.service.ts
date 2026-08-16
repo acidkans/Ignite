@@ -300,7 +300,10 @@ export class VersioningService {
                     listId: null,
                     materialId: mr.materialId ?? null,
                     availability: (mr as any).availability ?? null,
-                    // Obrazek pozycji (print screen w BaselineSplitCard) — bez tego snapshot wersji
+                    // Oferent produktu pozycji — kto ją zaofertował. Bez tego snapshot wersji
+                    // gubi autorstwo oferty, choć propozycje w klonie swojego oferenta niosą.
+                    supplierId: (mr as any).supplierId ?? null,
+                    // Obrazek pozycji (print screen w karcie produktu) — bez tego snapshot wersji
                     // traci podgląd produktu, choć plik dalej leży w uploads/.
                     imageUrl: (mr as any).imageUrl ?? null,
                     budgetedPriceNetto: (mr as any).budgetedPriceNetto ?? null,

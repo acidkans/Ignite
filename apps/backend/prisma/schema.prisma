@@ -815,6 +815,13 @@ model MaterialRequirement {
   /// @anchor mat-req-availability
   availability String? // dostępność wpisana w ProductCard (czas dostawy / stan)
 
+  // Oferent produktu pozycji — KTO NAM GO ZAOFERTOWAŁ. Nie przesądza, u kogo kupimy:
+  // zakup zapisuje własnego dostawcę na wpisie realizacji (LeafActual.supplierId) i te dwa
+  // pola wolno mieć różne. Odpowiednik ProductProposal.supplierId, tylko na poziomie pozycji:
+  // karta produktu ma jeden produkt wiodący, a propozycje bywają od kilku firm naraz.
+  /// @anchor mat-req-supplier-id
+  supplierId String?
+
   // Podgląd produktu wklejony na pozycji (wspólny dla obu stron splitu Wycena/Zakup).
   // Osobny od Material.imageUrl: katalog jest globalny, ten obrazek dotyczy TEJ pozycji
   // i działa zanim jakikolwiek produkt katalogowy zostanie wybrany.
@@ -858,6 +865,8 @@ model MaterialRequirement {
   assignedSubtask Subtask?                  @relation(fields: [assignedSubtaskId], references: [id], onDelete: SetNull)
   /// @anchor mat-req-wbs-node
   wbsNode         WbsNode?                  @relation("WbsNodeMaterialCard", fields: [wbsNodeId], references: [id], onDelete: Cascade)
+  /// @anchor mat-req-supplier
+  supplier        Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   /// @anchor mat-req-proposals
   proposals       ProductProposal[]
   /// @anchor mat-req-quick-quote-items
@@ -901,6 +910,8 @@ model Supplier {
   productProposals ProductProposal[]
   /// @anchor supplier-leaf-actuals
   leafActuals      LeafActual[]
+  /// @anchor supplier-material-requirements
+  materialRequirements MaterialRequirement[]
 
   @@map("suppliers")
 }
@@ -1218,6 +1229,19 @@ model LeafActual {
   comment    String?
   /// @anchor leaf-actual-doc-number
   docNumber  String? // nr FV / PZ / protokołu — sensowne dla materiału i sprzętu
+  /// @anchor leaf-actual-manufacturer
+  /// Producent i model TEGO zdarzenia — druga dostawa bywa zamiennikiem innej marki.
+  /// Dlatego produkt siedzi na wpisie, a nie na pozycji: pozycja ma jeden produkt
+  /// ofertowy (`ProductProposal isOffer`), a zakupów może być wiele i różnych.
+  manufacturer String?
+  /// @anchor leaf-actual-model
+  model        String?
+  /// @anchor leaf-actual-scope
+  /// Zakres TEGO zdarzenia — odpowiednik producenta i modelu dla liści, które nie mają
+  /// karty produktowej (praca, usługa, nocleg, paliwo). Jedno wolne pole zamiast pary
+  /// producent + model: przy robociźnie nie ma czego rozbijać, liczy się „co zrobiono".
+  /// Wypełniane wyłącznie dla typów innych niż materiał i sprzęt; wchodzi do wyszukiwarki.
+  scope        String?
   /// @anchor leaf-actual-supplier-id
   supplierId String?
   /// @anchor leaf-actual-author-id

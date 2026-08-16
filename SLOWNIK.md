@@ -296,17 +296,14 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-sekcja | ProjectItemsPanel | apps/frontend/src/components/shared/wbs/ProjectItemsPanel.jsx | @anchor project-items-panel |
 | ui-tabela | BudgetTable | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table |
 | ui-funkcja | real (podsumowanie rzeczywiste) | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-real-summary |
-| ui-funkcja | purchaseUnitOf | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor purchase-unit-of |
+| ui-funkcja | purchaseUnitOf | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor purchase-unit-of |
 | ui-sekcja | budget-oz-sums (fetch Oferta/Zakup do kafli KPI) | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table-oz-sums |
 | ui-sekcja | budget-kpi-tiles (siatka kafli KPI Budżetu) | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-kpi-tiles |
-| ui-karta | ProductSideCard | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card |
-| ui-karta | BaselineSplitCard | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor baseline-split-card |
 | ui-input | AutoResizeTextarea | apps/frontend/src/components/shared/wbs/AutoResizeTextarea.jsx | @anchor auto-resize-textarea |
 | ui-modal | ImageLightbox | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor image-lightbox |
 | ui-stan | lightboxOpen | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor requirement-image-lightbox-open |
 | ui-kolumna | comment (Komentarz w Materiałach) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-material-row-comment |
 | ui-sekcja | OrderMaterialsView | apps/frontend/src/components/shared/LogistykaMaterialListsTab.jsx | @anchor logistyka-order-materials-view |
-| ui-funkcja | copyOfferToPurchase | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor baseline-split-copy-to-purchase |
 | back-endpoint | PATCH /material-requirements/proposals/:id/set-offer | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-patch-set-offer |
 | back-endpoint | PATCH /material-requirements/proposals/:id/set-purchase | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-patch-set-purchase |
 | back-endpoint | PATCH /material-requirements/proposals/:id/clear-purchase | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-patch-clear-purchase |
@@ -321,6 +318,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | ProductProposal.purchasePriceNetto | apps/backend/prisma/schema.prisma | @anchor product-proposal-purchase-price-netto |
 | ui-dropdown | FilterDropdown | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-filter-dropdown |
 | ui-tabela | WBSHybridTable | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-table |
+| ui-stala | kolor kręgosłupa szuflady gałęzi | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-branch-spine |
+| ui-stala | CSS szuflady rozwiniętej gałęzi | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-drawer-css |
 | ui-funkcja | sumChildrenCost | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor sum-children-cost |
 | ui-funkcja | sumChildrenOfferPrice | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor sum-children-offer-price |
 | ui-kolumna | wbs-offer-price-cell | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-offer-price-cell |
@@ -334,8 +333,6 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | matReqsLoaded | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-reqs-loaded |
 | ui-stan | reloadSeq | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-req-reload-seq |
 | ui-stan | fetchMatSeq | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor fetch-mat-seq |
-| ui-stan | pendingRef | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-pending-writes |
-| ui-stan | techPendingRef | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor baseline-split-techspec-pending |
 | ui-stan | refreshCardsSeq | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor refresh-cards-seq |
 | ui-stan | tableWrapperRef | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor grid-nav-table-ref |
 | ui-stan | navRowOrder | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor grid-nav-row-order |
@@ -357,6 +354,15 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | handleNodeExpand | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-node-expand-refresh |
 | ui-widok | CalendarView | apps/frontend/src/components/shared/wbs/CalendarView.jsx | @anchor calendar-view |
 | ui-karta | ProductCard | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card |
+| ui-propsy | ProductCard.offerLocked | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card-offer-lock |
+| ui-karta | ProductCard w rozwinięciu wiersza Materiałów | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-product-card |
+| ui-stala | GROUP_SPINE (kręgosłup rozwiniętej pozycji) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor materials-group-spine |
+| ui-stala | CARD_SURFACE (płaszczyzna karty produktu) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor materials-card-surface |
+| ui-wiersz | domknięcie grupy rozwiniętej pozycji | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor materials-group-cap |
+| ui-sekcja | PurchasesBar (pasek „Zakupy / wykonanie") | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor purchases-bar |
+| ui-stan | purchasesOpen (zwinięcie sekcji wpisów, localStorage) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-purchases-open |
+| ui-funkcja | togglePurchases | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-toggle-purchases |
+| ui-funkcja | entriesLabel | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor pl-entries-label |
 
 #### Frontend — handlery `UnifiedWbsPanel.jsx`
 
@@ -407,9 +413,11 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | STRUCTURE_STATUS_META | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor structure-status-meta |
 | ui-stala | MATERIAL_STATUS_LABEL_TO_CODE | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor material-status-label-to-code |
 | ui-stala | STRUCTURE_COMMON_CELL_CLASS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor structure-common-cell-class |
+| ui-stala | DRAWER (wygląd szuflady rozwiniętego wiersza) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor expand-drawer |
 | ui-funkcja | defaultUnitForType | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor default-unit-for-type |
 | ui-funkcja | sanitizeQtyInput | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor sanitize-qty-input |
 | ui-funkcja | evalQtyFormula | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor eval-qty-formula |
+| ui-funkcja | parsePriceInput | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor parse-price-input |
 | ui-funkcja | fmtPLN | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor fmt-pln |
 | ui-funkcja | fmtQty | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor fmt-qty |
 | ui-funkcja | fmtPct | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor fmt-pct |
@@ -514,6 +522,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | MaterialRequirement.aiConfidence | apps/backend/prisma/schema.prisma | @anchor mat-req-ai-confidence |
 | schema-pole | MaterialRequirement.complianceData | apps/backend/prisma/schema.prisma | @anchor mat-req-compliance-data |
 | schema-pole | MaterialRequirement.availability | apps/backend/prisma/schema.prisma | @anchor mat-req-availability |
+| schema-pole | MaterialRequirement.supplierId (oferent produktu pozycji) | apps/backend/prisma/schema.prisma | @anchor mat-req-supplier-id |
+| schema-relacja | MaterialRequirement.supplier | apps/backend/prisma/schema.prisma | @anchor mat-req-supplier |
+| schema-relacja | Supplier.materialRequirements | apps/backend/prisma/schema.prisma | @anchor supplier-material-requirements |
 | schema-pole | MaterialRequirement.budgetedPriceNetto | apps/backend/prisma/schema.prisma | @anchor mat-req-budgeted-price-netto |
 | schema-pole | MaterialRequirement.offerId | apps/backend/prisma/schema.prisma | @anchor mat-req-offer-id |
 | schema-pole | MaterialRequirement.offerPositionIdx | apps/backend/prisma/schema.prisma | @anchor mat-req-offer-position-idx |
@@ -550,18 +561,14 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | ProductProposal.supplierId | apps/backend/prisma/schema.prisma | @anchor product-proposal-supplier-id |
 | schema-relacja | ProductProposal.supplier | apps/backend/prisma/schema.prisma | @anchor product-proposal-supplier |
 | schema-relacja | Supplier.productProposals | apps/backend/prisma/schema.prisma | @anchor supplier-product-proposals |
-| ui-funkcja | supplierChange | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-supplier-change |
-| ui-funkcja | copySupplierToPurchase | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor baseline-split-copy-supplier-to-purchase |
-| ui-funkcja | ensureProposal | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-ensure-proposal |
-| ui-funkcja | deleteProduct | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-delete-product |
-| ui-stan | priceFormulaResult | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-price-formula |
-| ui-stala | offerPriceFallback | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-offer-price-fallback |
 | back-funkcja | syncOfferProposalPrice | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-sync-offer-proposal-price |
+| back-funkcja | wybór propozycji przy edycji karty (existingProp) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-existing-proposal-pick |
+| back-funkcja | zejście oferenta z karty na propozycję | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-supplier-sync |
+| back-funkcja | deduplikacja wyników „Szukaj AI" (dedupKey) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-search-dedup |
 | back-funkcja | syncOfferPriceFromWbsNode | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-sync-offer-price-from-node |
 | back-funkcja | syncMaterialsFromWbsNode | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-sync-qty-direct-link |
 | back-funkcja | writeWbsNodeQuantity | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-write-wbs-node-quantity |
 | back-funkcja | update (gałąź quantity bez alokacji) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-qty-to-wbs |
-| ui-stala | qty | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor baseline-split-qty |
 
 #### Backend (`apps/backend/src/material-requirements/`)
 
@@ -1114,6 +1121,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | handleNipLookup | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-nip-lookup |
 | ui-funkcja | handleCreate | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-create |
 | ui-funkcja | clearSupplier | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-clear |
+| ui-propsy | SupplierPicker.textClass | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-text-class |
+| ui-propsy | SupplierPicker.size (md / sm / xs) | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-size |
+| ui-propsy | SupplierPicker.placeholder | apps/frontend/src/components/shared/SupplierPicker.jsx | @anchor supplier-picker-placeholder |
 
 ### Moduł kanał PDF — dostawca w ofercie (Faza 2)
 
@@ -1285,6 +1295,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | LeafActual.unitCost | apps/backend/prisma/schema.prisma | @anchor leaf-actual-unit-cost |
 | schema-pole | LeafActual.comment | apps/backend/prisma/schema.prisma | @anchor leaf-actual-comment |
 | schema-pole | LeafActual.docNumber | apps/backend/prisma/schema.prisma | @anchor leaf-actual-doc-number |
+| schema-pole | LeafActual.manufacturer | apps/backend/prisma/schema.prisma | @anchor leaf-actual-manufacturer |
+| schema-pole | LeafActual.model | apps/backend/prisma/schema.prisma | @anchor leaf-actual-model |
+| schema-pole | LeafActual.scope (zakres — liście bez karty) | apps/backend/prisma/schema.prisma | @anchor leaf-actual-scope |
 | schema-pole | LeafActual.supplierId | apps/backend/prisma/schema.prisma | @anchor leaf-actual-supplier-id |
 | schema-pole | LeafActual.authorId | apps/backend/prisma/schema.prisma | @anchor leaf-actual-author-id |
 | schema-relacja | LeafActual.node | apps/backend/prisma/schema.prisma | @anchor leaf-actual-node |
@@ -1303,6 +1316,12 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-serwis | LeafActualsService | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-service |
 | back-typ | ActualsUser | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-user |
 | back-dto | LeafActualInput | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actual-input |
+| back-dto | LeafActualInput.scope | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actual-input-scope |
+| back-stala | OPEN_LEAF_TYPES (typy widoczne dla każdej roli) | apps/backend/src/common/leaf-types.util.ts | @anchor open-leaf-types |
+| back-funkcja | isOpenLeafType | apps/backend/src/common/leaf-types.util.ts | @anchor is-open-leaf-type |
+| back-funkcja | isManagerRoles | apps/backend/src/common/leaf-types.util.ts | @anchor is-manager-roles |
+| back-funkcja | filtr roli w dzienniku wpisów | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-role-filter |
+| back-funkcja | filtr roli w porównaniu wycena↔zakup | apps/backend/src/orders/orders.service.ts | @anchor comparison-role-filter |
 | back-funkcja | rootOfWbsNode | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-root-of |
 | back-funkcja | listByOrder | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-list |
 | back-funkcja | create (wpis realizacji) | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-create |
@@ -1321,40 +1340,86 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 
 | Tag | Nazwa | Plik | Anchor |
 |-----|-------|------|--------|
-| ui-stala | TYPE_META (typy liści panelu) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-type-meta |
-| ui-stala | LEAF_TYPES | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-leaf-types |
-| ui-stala | REAL_STATE (kolory stanu realizacji) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor realization-state-styles |
-| ui-funkcja | wbsRootOf | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-root-of |
-| ui-funkcja | realizationOf | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor realization-of |
+| ui-stala | TYPE_META (typy liści panelu) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor wbs-materials-type-meta |
+| ui-stala | LEAF_TYPES | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor wbs-materials-leaf-types |
+| ui-stala | REAL_STATE (kolory stanu realizacji) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-state-styles |
+| ui-funkcja | wbsRootOf | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor wbs-root-of |
+| ui-funkcja | realizationOf | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-of |
 | ui-stan | actuals (wpisy realizacji zamówienia) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-actuals |
 | ui-kolumna | Zakup / wykonanie (licznik + pasek) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-realization-col |
+| ui-funkcja | resync pól wiersza propozycji | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor proposal-row-sync |
+| ui-funkcja | zakres odświeżenia po edycji propozycji (silent vs pełne) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor proposal-patch-refresh |
+| ui-dropdown | ProposalSupplierPicker (oferent produktu w wierszu propozycji) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor proposal-supplier-picker |
+| ui-stala | PROPOSAL_SUPPLIER_AFTER (miejsce kolumny oferenta) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor proposal-supplier-after |
+| ui-stala | PROPOSAL_FIELDS.num (pole liczbowe propozycji) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor proposal-field-num |
+| ui-stala | NUM_KEYS (pola liczbowe wpisu realizacji) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor realization-entry-num-keys |
+| ui-dropdown | Oferent produktu w karcie pozycji | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card-supplier |
 | ui-wiersz | RealizationEntryRow | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor realization-entry-row |
-| ui-wiersz | RealizationAddRow | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor realization-add-row |
 | ui-wiersz | osadzenie wierszy wpisów w tabeli | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor realization-entry-rows |
 | ui-funkcja | fetchActuals | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor fetch-actuals |
-| ui-funkcja | addActual | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor add-actual |
 | ui-funkcja | deleteActual | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor delete-actual |
 | ui-funkcja | toggleRealizationClosed | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor toggle-realization-closed |
 | ui-kolumna | kolumny realizacji w eksporcie Excel | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor materials-export-realization |
+| ui-stala | ROW_INPUT (pola wierszy zakupowych) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor realization-row-input |
+| ui-stala | ROW_FONT (jeden rozmiar czcionki okien wpisu zakupu) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor realization-row-font |
+| ui-funkcja | updateActual (edycja wpisu w miejscu) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor update-actual |
 
-### Moduł split ProductCard — baseline vs żywa karta (Faza 6)
+### Moduł Realizacja — zakładka „Tabela realizacji"
 
-#### Frontend (`apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx`)
+#### Wspólne (`apps/frontend/src/components/shared/wbs/realizationShared.js`)
 
-| Tag | Nazwa | Plik | Anchor |
-|-----|-------|------|--------|
-| ui-stan | acceptance (MaterialReqExpandPanel) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-acceptance-state |
-| ui-stan | baselineCard | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-baseline-card |
-| ui-stan | cmpRow | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-cmp-row |
-| ui-stan | splitOpen | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-open |
-| ui-stan | supplierOpen (split) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-supplier-open |
-| ui-funkcja | refreshSplitData | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-fetch |
-| ui-funkcja | handleCopyAll | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-copy-all |
-| ui-funkcja | handleCopyProduct | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-copy-product |
-| ui-funkcja | setLiveSupplier | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-set-live-supplier |
-| ui-przycisk | zwinięty pasek Wycena·Final·Δ | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-bar |
-| ui-sekcja | panel dostawcy żywej karty | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-supplier-panel |
-| ui-sekcja | przyciski na linii podziału | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor split-line-buttons |
+| Tag | Nazwa | Ścieżka | Anchor |
+|-----|-------|---------|--------|
+| ui-stala | OPEN_LEAF_TYPES (typy widoczne dla każdej roli) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-open-types |
+| ui-funkcja | authHeaders | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-auth-headers |
+| ui-funkcja | flattenWbsNodes | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-flatten-wbs-nodes |
+| ui-funkcja | getParentPath | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-get-parent-path |
+| ui-funkcja | leafNodesOf (liście kosztowe po typie) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-leaf-nodes-of |
+| ui-funkcja | buildCardMap (dopasowanie liść↔wymaganie) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-resolve-card |
+| ui-funkcja | planUnitOf (koszt jedn. z wyceny) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-plan-unit-of |
+
+#### Zakładka (`apps/frontend/src/components/shared/RealizationTab.jsx`)
+
+| Tag | Nazwa | Ścieżka | Anchor |
+|-----|-------|---------|--------|
+| ui-zakladka | RealizationTab | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-tab |
+| ui-zakladka | zakładka „Realizacja" w TAB_META | apps/frontend/src/DashboardPage.jsx | @anchor tab-realization |
+| ui-zakladka | kolory zakładek wg etapu (po akceptacji baseline) | apps/frontend/src/DashboardPage.jsx | @anchor tab-stage-colors |
+| ui-stala | COL_DEFS (kolumny tabeli realizacji) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-col-defs |
+| ui-kolumna | Koszt całkowity (wycena / zakup / Δ) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-total-col |
+| ui-kolumna | Produkt / zakres | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-product-col |
+| ui-funkcja | exportExcel (widok + podsumowanie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-excel |
+| ui-input | zakres wpisu (liście bez karty) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-scope |
+| ui-kolumna | Komentarz (WbsNode.comment) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-comment-col |
+| ui-stan | commentVal (bufor komentarza wiersza) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-comment |
+| ui-funkcja | saveComment (PATCH + rozgłoszenie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-save-comment |
+| ui-funkcja | focusNextInRow (Enter → następne okno) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-enter-next-field |
+| ui-funkcja | selectAllOnFocus (focus zaznacza całą treść pola) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-select-all-on-focus |
+| ui-funkcja | setClosed (znacznik „rozliczone" na pozycji) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-set-closed |
+| ui-funkcja | deleteActual — ostatni wpis zdejmuje „rozliczone" | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-reopen-on-empty |
+| ui-funkcja | reguła kolumny „Δ ilość" (test) | test/test-realization-close-delete.mjs | @anchor realization-delta-qty-rule |
+| ui-funkcja | appendEntryComment (dziennik w komentarzu pozycji) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-append-entry-comment |
+| ui-hook | listener wbs-comment-changed | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-comment-listener |
+| ui-stan | formSeed (produkt do formularza wpisu) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-form-seed |
+| ui-funkcja | offerProductOf (produkt z wyceny) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-offer-product |
+| ui-funkcja | openEntryForm (pytanie „ten sam produkt?") | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-open-entry-form |
+| ui-input | koszt jedn. wpisu — bez podpowiedzi ceny | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-no-price |
+| ui-stala | entryNoun / newEntryLabel / ADD_ENTRY_LABEL (zakup vs wykonanie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-noun |
+| ui-wiersz | RealizationRow | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row |
+| ui-przycisk | „+" dopisania wpisu (lewa strona wiersza) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-add-button |
+| ui-wiersz | osadzenie wierszy wpisów w tabeli realizacji | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-tab-entry-rows |
+| ui-wiersz | stopka „Razem" (podsumowanie kosztów całkowitych) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-totals-row |
+| ui-wiersz | RealizationEntryLine (wpis w dzienniku) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-line |
+| ui-formularz | RealizationEntryForm (przycisk „Nowy zakup") | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form |
+| ui-panel | RealizationExpandPanel (wymagania techniczne + podgląd + dziennik) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-expand-panel |
+| ui-stan | visibleTypes (filtr typów po roli) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-visible-types |
+| ui-stan | techPendingRef (niepotwierdzony PATCH wymagań) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-techspec-pending |
+| ui-funkcja | fetchActuals | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-fetch-actuals |
+| ui-funkcja | refreshCard | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-refresh-card |
+| ui-stan | rows (liście + realizacja po filtrach) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-rows |
+| ui-stan | totals (sumy widocznych wierszy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-totals |
+| ui-stan | analiza (odchylenia i prognoza per rodzaj kosztów) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-analysis |
+| ui-stala | PROG_MIN_UDZIAL (próg wiarygodności prognozy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-forecast-min-share |
 
 ### Moduł tryby Budżetu — baseline / wykonanie / porównanie (Faza 7)
 
@@ -1407,10 +1472,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-propsy | BudgetTable.offerLocked | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table-offer-locked |
 | ui-propsy | WBSHybridTable.offerLocked | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-offer-lock |
 | ui-propsy | WbsMaterialsPanel.offerLocked | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-offer-locked |
-| ui-propsy | ProductSideCard.locked | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-lock |
-| ui-funkcja | forkPurchaseFromOffer | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-side-card-fork-purchase |
 
-### Moduł obrazek pozycji (podgląd produktu w BaselineSplitCard)
+### Moduł obrazek pozycji (podgląd produktu pozycji)
 
 | Tag | Nazwa | Plik | Anchor |
 |-----|-------|------|--------|

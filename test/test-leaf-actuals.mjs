@@ -1,4 +1,4 @@
-// Test end-to-end wpisów realizacji (LeafActual) na lokalnym backendzie (port 3005).
+// Test end-to-end wpisów realizacji (LeafActual) na lokalnym backendzie (domyślnie 3001).
 // Odpala się na kopii bazy produkcyjnej w lokalnym Dockerze — sprząta po sobie
 // (kasuje wpisy, które sam założył, i przywraca flagę realizationClosed).
 //
@@ -9,7 +9,9 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const jwt = require('../apps/backend/node_modules/jsonwebtoken');
 
-const API = 'http://localhost:3005/api';
+// Domyślnie backend dev na 3001 (npm run start:dev). Backend w Dockerze słucha na 3005 —
+// wtedy: API_BASE=http://localhost:3005/api node test/test-leaf-actuals.mjs
+const API = process.env.API_BASE || 'http://localhost:3001/api';
 const ORDER_ID = '219f64a5-515e-45a3-b1c0-0ded85e2a85d'; // CMC- Serwerownia ZDC1-K9_2026 (ma baseline)
 const ADMIN_ID = '23a44372-c974-444c-a997-0b6bb3ead1a4';
 

@@ -24,7 +24,7 @@ SELECT DISTINCT ON (COALESCE(w."sourceWbsNodeId", w."id"))
     p."createdAt",
     w."quantity",
     CASE WHEN p."isOffer" THEN p."purchasePriceNetto" ELSE p."priceNetto" END,
-    'Przeniesione z propozycji zakupu — stan sprzed wpisów realizacji',
+    'Przeniesione z propozycji zakupu',
     NULLIF(TRIM(COALESCE(p."offerNumber", '')), ''),
     p."supplierId",
     NULL,

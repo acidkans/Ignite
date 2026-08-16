@@ -151,6 +151,18 @@ export function evalQtyFormula(raw) {
   }
 }
 
+// @anchor parse-price-input — jedna droga zamiany tego, co wpisano w pole ceny lub ilości,
+// na liczbę: najpierw działanie („=1200*1.23"), potem zwykła liczba z przecinkiem lub kropką.
+// Pusty i nieczytelny wpis dają `null` — wołający decyduje, czy to znaczy „brak wartości",
+// czy „zostaw jak było". Zero NIE jest zamieniane na `null`: zero to cena, nie brak ceny.
+export function parsePriceInput(raw) {
+  const s = String(raw ?? '').trim();
+  if (s === '') return null;
+  const evaluated = evalQtyFormula(s);
+  const n = evaluated !== null ? evaluated : parseFloat(s.replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+
 // @anchor default-unit-for-type
 export function defaultUnitForType(type) {
   const t = String(type || '').toLowerCase();
@@ -194,6 +206,25 @@ export const MATERIAL_STATUS_LABEL_TO_CODE = Object.fromEntries(
 
 // @anchor structure-common-cell-class
 export const STRUCTURE_COMMON_CELL_CLASS = 'text-sm leading-6';
+
+// @anchor expand-drawer — jeden wygląd „szuflady" rozwiniętego wiersza we wszystkich trzech
+// tabelach liści: Materiały (`WbsMaterialsPanel`), WBS (`WBSHybridTable`) i Realizacja
+// (`RealizationTab`). Ta sama płaszczyzna, ten sam kręgosłup przy lewej krawędzi i ten sam
+// nagłówek 10 px — wcześniej każda tabela miała własny (turkus, bursztyn, `bg-black/20`)
+// i rozwinięcie wyglądało jak inny widok, choć niesie te same dane o tej samej pozycji.
+// Akcent zostaje semantyczny i dlatego siedzi osobno w `accent`: niebieski to strona WYCENY,
+// turkus strona ZAKUPU/REALIZACJI. Kształt kopiujemy, znaczenia koloru nie mieszamy.
+export const DRAWER = {
+  surface: 'bg-[#182236]',
+  spine: 'border-l-[3px]',
+  head: 'flex items-baseline gap-2 px-4 pt-2',
+  label: 'text-[10px] font-bold uppercase tracking-widest',
+  name: 'text-[10px] text-gray-500 truncate',
+  accent: {
+    offer: { spine: 'border-l-blue-500', label: 'text-blue-300/80', row: 'bg-blue-500/[0.12]' },
+    real: { spine: 'border-l-teal-500', label: 'text-teal-300/80', row: 'bg-teal-500/[0.10]' },
+  },
+};
 
 // Formatter functions
 // @anchor fmt-pln

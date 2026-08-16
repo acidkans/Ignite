@@ -1,3 +1,360 @@
+## 2026-08-16 — feat(realizacja): analiza wykonania budżetu w eksporcie Excel (v2026.08.16.848)
+
+### architektura / API
+
+- **arkusz „Podsumowanie" jako pierwsza zakładka** (`realization-export-excel`): kolejność bierze się z kolejności `addWorksheet`, więc oba arkusze zakładane są na początku, a wypełniane niżej. Formuły `Realizacja!…` adresują po nazwie, więc kolejność arkuszy ich nie dotyczy
+- **narracyjna sekcja „Analiza"** (`realization-analysis`): kilka zdań budowanych z liczb — ile budżetu zrealizowano, na ilu pozycjach ruszyła realizacja, czy na nich jesteśmy do przodu czy przekraczamy, rozkład taniej/drożej. Każde zdanie w scalonej komórce A:F z `wrapText`. Sekcja podaje wynik, nie metodę liczenia
+- **tabela „Prognoza wydatków"**: osobny wiersz na każdy rodzaj kosztów (`Rodzaj kosztów | Wycena | Wykonanie | % wykonania | Prognoza | Δ do oferty`) zamknięty wierszem `Razem` liczonym formułami `SUM` — prognoza całego budżetu
+- **próg wiarygodności prognozy** (`realization-forecast-min-share`, `PROG_MIN_UDZIAL = 0.1`): dopóki wykonanie rodzaju kosztów nie osiągnie 10% jego wyceny, prognoza zostaje na 100% wyceny zamiast iść za odchyleniem (próg domykający — równe 10% już wystarcza). Przy paru wpisach odchylenie nie opisuje rynku, tylko przypadek — praca wyceniona na 67 311 zł z jednym wpisem na 100 zł dawała prognozę 3 365,55 zł i 64 tys. „oszczędności" wziętej z powietrza. Pod tabelą wiersz wymieniający rodzaje trzymane na 100%, żeby taka pozycja nie wyglądała na błąd rachunku
+- **prognoza liczona OSOBNO dla każdego rodzaju kosztów**: współczynnik `realRuszone / planRuszone` wyznaczany per typ i mnożony przez CAŁY plan tego typu; rodzaj bez żadnych wydatków wchodzi po 100% wyceny (wsp. 1). Globalny współczynnik przenosił rabat z materiału na robociznę — inny rynek, inne odchylenie. Test `test/test-realization-excel-format.mjs` przypadek B pokazuje rozjazd: per typ 13 000 zł wobec 10 000 zł globalnie
+- **„Porównanie globalne" liczone w plus**: `Wartość niezrealizowanego budżetu ofertowego` = wycena − realizacja, `Procentowa realizacja budżetu` = realizacja ÷ wycena. Wcześniej obie pozycje pokazywały wartość ujemną (−401 113,68 zł i −98,5%) mimo nazw sugerujących wielkość dodatnią
+- **format walutowy PLN** (`#,##0.00\ [$zł-415]`) na wszystkich kwotach w obu arkuszach; kolumny ilościowe zostają bez formatu (ogólne), bo jednostka siedzi w osobnej kolumnie
+- **opis zakresu wymienia rodzaje kosztów**: „cały zakres zamówienia" albo „część zakresu — rodzaje kosztów: Materiał, Sprzęt" zamiast programistycznego „wszystkie typy liści"
+- **długie teksty w scalonych komórkach**: wartości opisowe (zamówienie, zakres, fraza, filtry) scalone B:F, zdania Analizy A:F, oba z `wrapText` i jawną wysokością wiersza — Excel NIE auto-dopasowuje wysokości wiersza ze scaloną komórką, więc tekst urywał się w połowie zdania. Wysokość liczona z długości tekstu przy założeniu ~83% nominalnej szerokości scalenia (łamanie idzie po słowach); pilnuje tego `test/test-realization-excel-wysokosc.mjs`
+- nazwa pliku eksportu: `{nazwa zamówienia}_analiza finansowa realizacji projektu.xlsx`
+- przycisk eksportu Excel przeniesiony z prawej krawędzi nagłówka na lewo, obok tytułu „Tabela realizacji"; stopka tabeli realizacji o 2px większa niż wiersze (13/16px wobec 11/14px)
+
+### słownik
+
+- dodano `realization-analysis` — odchylenia i prognoza per rodzaj kosztów, `RealizationTab.jsx`
+
+### wytyczne
+
+- `ui-stan` `analiza` — prognozy wykonania NIE liczyć jednym globalnym współczynnikiem. Odchylenie z materiału nie ma prawa schodzić na pracę czy usługę; rodzaj bez wydatków zakładać po 100% wyceny, bo brak danych nie jest powodem, żeby obiecywać oszczędność
+- `ui-stala` `PROG_MIN_UDZIAL` — każda ekstrapolacja odchylenia potrzebuje progu minimalnej próbki. Bez niego jeden wpis na 100 zł przy wycenie 67 tys. „prognozuje" 64 tys. oszczędności. Gdy próg blokuje ekstrapolację, wynik trzeba opisać w arkuszu — inaczej prognoza równa wycenie wygląda na niepoliczoną
+- `ui-funkcja` `exportExcel` — formaty liczbowe w arkuszu „Podsumowanie" ustawiać PER KOMÓRKA, nie przez `getColumn().numFmt`. Kolumny niosą różne znaczenia w różnych sekcjach: D to `% wykonania` w tabeli prognozy i `Wycena` w rozbiciu po typie — format kolumnowy zamienia procent na złotówki
+- `ui-funkcja` `exportExcel` — teksty w eksportach i w UI bez slangu WBS („liść", „gałąź"). Do użytkownika mówimy językiem zarządzania projektem: pozycja, rodzaj kosztów, zakres
+- `ui-funkcja` `exportExcel` — zdania budowane z liczb muszą mieć osobny wariant dla stanów granicznych (zero realizacji, wycena 0 zł, budżet przekroczony). Podstawianie wartości do jednego szablonu daje „zrealizowano — budżetu" i kwoty ujemne tam, gdzie z nazwy mają być dodatnie
+- `ui-funkcja` `exportExcel` — polska odmiana liczebników: po przyimku „z" zawsze dopełniacz („z 4 pozycji"), a w wyliczeniach unikać orzeczenia, bo przy zmiennej liczbie każda forma („wypadła / wypadły / wypadło") będzie błędna dla pozostałych przypadków
+
+## 2026-08-16 — feat(materialy): rozwinięta pozycja czytelnie odcięta od tabeli (v2026.08.16.843)
+
+### architektura / API
+
+- **kręgosłup grupy** (`materials-group-spine`, `materials-card-surface`, `materials-group-cap`): rozwinięty liść to jeden blok — 3 px pionowy pasek biegnie przez wiersz pozycji, kartę produktu, pasek zakupów i wpisy realizacji, a domyka go pasek tej samej grubości. Karta dostała własną, jaśniejszą płaszczyznę `#182236` zamiast `bg-black/20`, która różniła się od wiersza tabeli o kilka procent krycia bieli. Niebieski, bo to strona wyceny — turkus zostaje dla zakupu/realizacji
+- **jeden rozmiar tekstu w rozwiniętej pozycji** (`realization-row-font`): pola karty, wiersze propozycji i wiersze wpisów zakupowych mają `text-xs`; wcześniej wpisy szły w `text-[22px]`, a propozycje w `text-[10px]`
+- `SupplierPicker` — „Dodaj po NIP" i „Wolny wpis (bez NIP)" nad listą dostawców, zaraz pod polem szukania; przy dłuższej liście były poza ekranem
+- „Szukaj AI" i „Dodaj ręcznie" przy nagłówku „Propozycje produktów" zamiast przy prawej krawędzi karty
+- **działania matematyczne w polach ceny i ilości** (`parse-price-input`): „=1200*1.23" zapisuje 1476. Objęte: koszt jedn. propozycji i formularza „Dodaj ręcznie", koszt jedn. karty produktu, kolumna „Koszt jedn. oferty", ilość i koszt jedn. wpisu zakupu. Wcześniej `sanitizeQtyInput` wpuszczał „=" do wszystkich tych pól, ale liczyła je TYLKO kolumna ilości — w pozostałych formuła po prostu nie zapisywała się, bez żadnego komunikatu. Testy: `test/test-price-formula.mjs` (19 przypadków, w tym `=12*alert(1)` → 12, czyli brak injectionu)
+
+### słownik
+
+- dodano `materials-group-spine` — kręgosłup rozwiniętej pozycji, `WbsMaterialsPanel.jsx`
+- dodano `materials-card-surface` — płaszczyzna karty produktu, `WbsMaterialsPanel.jsx`
+- dodano `materials-group-cap` — domknięcie grupy rozwiniętej pozycji, `WbsMaterialsPanel.jsx`
+- dodano `parse-price-input` — wpis z pola ceny/ilości na liczbę, `wbsConstants.js`
+- dodano `proposal-field-num` — flaga pola liczbowego propozycji, `WbsMaterialsPanel.jsx`
+- dodano `realization-entry-num-keys` — pola liczbowe wpisu realizacji, `WbsMaterialsPanel.jsx`
+
+### wytyczne
+
+- `ui-stala` `GROUP_SPINE` — każda nowa sekcja dopinana pod rozwiniętym liściem (karta, pasek zakupów, wpisy) musi dostać ten sam kręgosłup, inaczej wypada z grupy wizualnie mimo że należy do pozycji
+- `ui-wiersz` `materials-group-cap` — domknięcie renderuj ZAWSZE jako ostatni element fragmentu, nigdy jako `border-b` konkretnej sekcji: które sekcje się pokażą, zależy od `accepted` i `purchasesOpen`
+- `ui-funkcja` `sanitizeQtyInput` ↔ `ui-funkcja` `parsePriceInput` — chodzą parą. Pole, które wpuszcza „=" przy wpisywaniu, MUSI liczyć formułę przy zapisie; sam `sanitizeQtyInput` daje pole, w którym da się napisać działanie, a zapis po cichu przepada
+
+## 2026-08-16 — fix(materialy): karta pozycji i wybrana propozycja trzymają jeden oferent i jeden koszt (v2026.08.16.842)
+
+### architektura / API
+
+- **oferent karty schodzi na propozycję będącą produktem karty** (`mat-req-supplier-sync` w `update()`): cel wybierany kolejnością `isOffer` → `isSelected` → najstarsza, czyli tą samą co `mat-req-existing-proposal-pick`. Kopia zakupowa (`isPurchase`) i konkurencyjne oferty od innych firm zostają nietknięte — każda trzyma własnego oferenta, bo to osobne oferty
+- **i w drugą stronę**: `updateProposal` przenosi oferenta na pozycję, gdy zmieniana propozycja jest produktem karty (`isOffer` albo `isSelected`); `selectProposal` i `setOffer` przenoszą go razem z ceną przy wyborze produktu. Propozycja BEZ oferenta nie kasuje oferenta karty — brak danych to nie jest informacja „nikt"
+- bez tego pole rozjeżdżało się zależnie od tego, w którym z dwóch okien akurat kliknięto, choć oba opisują ten sam produkt
+
+### poprawki
+
+- **`ProposalRow` nadąża za zmianami przychodzącymi z zewnątrz** (`proposal-row-sync`). Stan pól wiersza zasiewał się wyłącznie przy zmianie `p.id`, więc edycja w karcie pozycji — która po stronie backendu schodzi na wybraną propozycję — nie miała jak wejść do inputa. Objaw zgłoszony przez użytkownika: karta pokazuje koszt jedn. `5000`, wiersz propozycji zostaje pusty. **W bazie obie wartości były równe od początku** (`material_requirements.budgetedPriceNetto = 5000` i `product_proposals.priceNetto = 5000` — sprawdzone na dev w `test/diag-oferent-sync.mjs`), więc to była wyłącznie warstwa widoku, nie utrata danych
+- resync nadpisuje TYLKO te pola, których wartość przyszła inna niż poprzednio z propsów. To, co użytkownik właśnie wpisuje (różni się od propsów, ale propsy się nie zmieniły), zostaje nietknięte aż do zapisu na blurze — inaczej odświeżenie w trakcie pisania kasowałoby wpisywaną cenę
+
+### słownik
+
+- dodano `proposal-row-sync` — resync pól wiersza propozycji, `WbsMaterialsPanel.jsx`
+- dodano `mat-req-supplier-sync` — zejście oferenta z karty na propozycję, `material-requirements.service.ts`
+
+### wytyczne
+
+- `ui-wiersz` `ProposalRow` — pola wiersza są stanem lokalnym zapisywanym na blurze, więc KAŻDE nowe pole edytowalne dopisuj do `incoming` w `proposal-row-sync`. Zasiew tylko po `[p.id]` cicho zamraża wartość: dane w bazie są poprawne, a ekran pokazuje stare
+- `schema-pole` `MaterialRequirement.supplierId` ↔ `schema-pole` `ProductProposal.supplierId` — dwa okna na JEDNO pole, dopóki propozycja jest produktem karty. Zmieniając jedną stronę, sprawdź czy druga nadal się synchronizuje; rozjazd wolno mieć wyłącznie propozycjom, które produktem karty nie są
+
+## 2026-08-16 — feat(materialy): „Oferent produktu" na pozycji i na każdej propozycji (v2026.08.16.841)
+
+### schema.prisma
+
+- dodano pole `supplierId` w modelu `MaterialRequirement` (`mat-req-supplier-id`) — oferent produktu POZYCJI, czyli kto nam ją zaofertował. Odpowiednik istniejącego `ProductProposal.supplierId`, tylko o poziom wyżej: karta produktu ma jeden produkt wiodący, a propozycji bywa kilka, każda od innej firmy
+- dodano relację `MaterialRequirement.supplier` → `Supplier` (`mat-req-supplier`, `onDelete: SetNull`) i odwrotną `Supplier.materialRequirements` (`supplier-material-requirements`)
+- migracja `20260816120000_mat_req_supplier` — `ADD COLUMN IF NOT EXISTS` + FK w bloku `DO $$` łapiącym `duplicate_object`, żeby powtórne wykonanie na bazie z ręcznie dołożoną kolumną nie wywracało deploya
+
+### architektura / API
+
+- **„Oferent produktu" to NIE dostawca zakupu** — rejestruje, kto przysłał ofertę, i nie przesądza, u kogo kupimy. Dostawcę zakupu zapisuje wpis realizacji (`LeafActual.supplierId`) i te dwa pola wolno mieć różne; dopiero razem odpowiadają na „kto ofertował" i „u kogo kupiliśmy"
+- **pole jest w dwóch miejscach naraz**: w karcie pozycji (`product-card-supplier`, pisze `MaterialRequirement.supplierId`) i w każdym wierszu propozycji (`proposal-supplier-picker`, pisze `ProductProposal.supplierId`). Oba stoją między „Nazwa handlowa" a „Koszt jedn." (`PROPOSAL_SUPPLIER_AFTER`) — wiersz czyta się „ten produkt, od tej firmy, za tyle"
+- **`POST /material-requirements/:id/proposals` przyjmuje `supplierId`** — kontroler i `addManualProposal` przepuszczają oferenta wybranego już w formularzu „Dodaj ręcznie" (dotąd trzeba było zapisać propozycję i dopiero potem wskazać, kto ją przysłał); odpowiedź dostała `include: { supplier: true }`, czyli ten sam kształt co `updateProposal`
+- **`PATCH /material-requirements/:id` przyjmuje `supplierId`** — leci do kolumny przez `...rest`, dopisany do typu DTO
+- **klon wersji przenosi oferenta pozycji** — `cloneVersionData` kopiuje `MaterialRequirement.supplierId` (propozycje swojego oferenta niosły już wcześniej). Bez tego snapshot wersji gubiłby autorstwo oferty
+- **przywrócone to, co zniknęło ze splitem** (v839): `ProductProposal.supplierId` został wtedy w schemacie i backendzie, ale stracił UI razem z `ProductSideCard`, przez co „Dostawca wyceny" w `ComparisonPanel` zaczął się wypełniać pustką. Teraz znów jest gdzie go wpisać
+- **`SupplierPicker` dostał `size`** (`md` / `sm` / `xs`, `supplier-picker-size`) i `placeholder` (`supplier-picker-placeholder`). Rozmiar zmienia WYŁĄCZNIE gęstość triggera — lista, NIP z Białej listy VAT, wolny wpis i czyszczenie działają identycznie, bo to ten sam wybór dostawcy co przy zakupie. Placeholder mówi „Kto zaofertował…" / „Oferent produktu…", żeby pole nie udawało dostawcy zakupu
+
+### słownik
+
+- dodano `mat-req-supplier-id`, `mat-req-supplier`, `supplier-material-requirements` — oferent na pozycji, `schema.prisma`
+- dodano `proposal-supplier-picker`, `proposal-supplier-after`, `product-card-supplier` — pola oferenta w panelu, `WbsMaterialsPanel.jsx`
+- dodano `supplier-picker-size`, `supplier-picker-placeholder` — nowe propsy `SupplierPicker.jsx`
+
+### wytyczne
+
+- `schema-pole` `MaterialRequirement.supplierId` i `schema-pole` `ProductProposal.supplierId` — to OFERENCI, nie dostawcy zakupu. Nie używaj ich do rozliczenia zakupu ani nie synchronizuj z `LeafActual.supplierId`: rozjazd między nimi jest informacją („ofertował A, kupiliśmy u B"), a nie błędem do naprawienia
+- `ui-dropdown` `SupplierPicker` — nowe miejsce użycia dobiera `size` do sąsiednich pól, nie dokłada własnych klas triggera. Gdyby zabrakło rozmiaru, dopisz go do `SIZES`, żeby gęstości nie rozjeżdżały się po komponentach
+
+## 2026-08-16 — feat(materialy): panel Materiały pokazuje tylko zapisane wpisy zakupu, bez wiersza dopisywania (v2026.08.16.840)
+
+### architektura / API
+
+- **`RealizationAddRow` usunięty z `WbsMaterialsPanel.jsx`**. Rozwinięta sekcja „Zakupy / wykonanie" pokazywała pod jednym kupionym materiałem drugi wiersz — pusty formularz z datą dzisiejszą, ilością 1 i skopiowanym producentem — który czytał się jak druga, niedokończona dostawa. Materiały są zestawieniem tego, co faktycznie kupiono, więc zostają w nich wyłącznie `RealizationEntryRow` (nadal w pełni edytowalne w miejscu, z kasowaniem wpisu). Dopisywanie zdarzeń żyje w zakładce Realizacja (`RealizationEntryForm`) — oba ekrany i tak pisały do tych samych `LeafActual`
+- **`addActual` (`add-actual`) usunięty z panelu** — panel nie woła już `POST /leaf-actuals`; endpoint bez zmian, wywołuje go `RealizationTab`
+- **przycisk „Rozlicz" / „Rozliczone" przeniesiony do `PurchasesBar`** — siedział w kolumnie `status` skasowanego wiersza, a to jedyne miejsce w Materiałach, z którego dało się oznaczyć pozycję jako rozliczoną. Zastępuje dotychczasowy sam znacznik „rozliczone" na pasku; w trybie podglądu (`readOnly`) zostaje sam znacznik. Pasek przestał być jednym wielkim `<button>` (przycisk rozliczenia nie może być zagnieżdżony w przycisku zwijania) — jest `<div>` z przyciskiem zwijania po lewej i rozliczeniem po prawej
+- **pasek dostaje KAŻDY liść, także bez karty produktowej** (praca, usługa, nocleg, paliwo) — dotąd `purchasesShown = card ? purchasesOpen : true` pokazywał ich wpisy od razu, bo nie było nad czym zwijać. Bez wiersza dopisywania taki liść bez zdarzeń rozwijał się w nic; teraz zawsze widać podsumowanie i „Rozlicz"
+
+### słownik
+
+- usunięto `realization-add-row` (`RealizationAddRow`) i `add-actual` (`addActual`) — oba zniknęły z `WbsMaterialsPanel.jsx`
+
+### wytyczne
+
+- `ui-sekcja` `WbsMaterialsPanel` — dopisywanie wpisów realizacji NIE wraca do Materiałów. Nowe pola wpisu dodawaj w `RealizationTab` (wiersz wpisu + formularz) i w `RealizationEntryRow` w Materiałach (edycja istniejącego), ale bez formularza dopisywania w panelu
+
+## 2026-08-16 — refactor(materialy): koniec splitu Wycena/Zakup — w karcie pozycji zostaje sam ProductCard (v2026.08.16.839)
+
+### architektura / API — „Szukaj AI" deduplikuje
+
+- **`POST /material-requirements/:id/search-products` nie dokłada drugiego rekordu tego samego produktu** (`mat-req-search-dedup`). Klucz jak przy edycji karty: producent + model bez względu na wielkość liter, w obrębie wymagania. Dedup działa w dwie strony — wobec propozycji już zapisanych i wewnątrz jednej odpowiedzi modelu (potrafi zwrócić ten sam model trzy razy, tak powstał `Hirschmann CA 3 LD ×3`)
+- **istniejąca propozycja jest tylko UZUPEŁNIANA** o puste pola (link, `matchScore`, nazwa handlowa). Cena, role Wycena/Zakup, wybór i pliki to dorobek użytkownika — wyszukiwarka ich nie nadpisuje
+- **endpoint zwraca KOMPLET propozycji wymagania**, nie tylko świeżo zapisane. Front podstawia odpowiedź wprost pod listę (`setProposals(data)`), więc przy dedupie zwrócenie samych nowych rekordów kasowałoby z ekranu te, które już tam były (przy okazji znika stary efekt „po wyszukaniu lista pokazuje tylko 3 nowe pozycje do czasu odświeżenia")
+- diagnostyka duplikatów na produkcji: `test/prod-duplikaty-propozycji.sql` — zapytanie kandydatów do usunięcia (zostaje rekord najbogatszy, kasowane są wyłącznie kopie bez ról, dostawcy, zdjęcia, plików i bez własnej ceny)
+- **sprzątnięte na produkcji (2026-08-16)**: 235 → 224 propozycji, usuniętych 11 czystych kopii po wcześniejszym zrzucie do `test/prod-propozycje-duplikaty-backup.csv`. Zostały 3 grupy „po dwa rekordy" — pary Wycena/Zakup (Avigilion 4800/4355, Schneider —/184,54, Baks 2,60/4,19), świadomie nietknięte, bo niosą cenę zakupu i dostawcę. Po sprzątaniu: zero wymagań z dwiema propozycjami `isSelected`, `isOffer` albo `isPurchase`. Bazy dev nie ruszano
+
+### architektura / API — kolory eksportów i etapu zamówienia
+
+- **jeden kolor na format eksportu w całej aplikacji**: Excel niebieski, PDF czerwony. Przemalowane: „Excel" w `ComparisonPanel` i `BudgetModesPanel` (emerald), „Excel" w zakładce Realizacja (emerald), „Analiza projektu do Excel" (green) i „Excel" w sekcji Materiały (emerald); „Q&A PDF" (blue), „PDF tej zakładki" w `RequirementsTab` (purple), oba „Eksport PDF" w `SchematTab` (emerald). Kolor niesie teraz format, a nie sekcję, w której przycisk stoi
+- **`import` budżetu z Excela zostaje zielony** — nie jest eksportem, a jedyny przycisk wciągający dane do aplikacji nie powinien wyglądać jak wynoszący je na zewnątrz. Tak samo bez zmian „Karta katalogowa (PDF)" w karcie produktu — to podgląd cudzego pliku, nie eksport naszych danych
+- **zakładki niosą etap zamówienia po akceptacji baseline** (`tab-stage-colors`): „planowanie" zielenieje (etap zamknięty — wycena stała się zobowiązaniem), „Realizacja" robi się pomarańczowa (etap bieżący). Przed akceptacją zostają jak były (cyan / teal). Kolor widać też na zakładce nieaktywnej (`idleColor`), bo to znacznik stanu zamówienia, nie podświetlenie wyboru
+
+### architektura / API — propozycje produktów: skąd biorą się duplikaty
+
+- **`mat-req-existing-proposal-pick`** — przy edycji produktu w karcie wyszukiwanie istniejącej propozycji (po producencie i modelu) nie miało `orderBy`, więc przy dwóch rekordach tego samego produktu Postgres zwracał dowolny: edycja potrafiła trafić w **kopię zakupową zamiast w produkt wyceny**. Kolejność ustalona: produkt wyceny → wybrany → najstarszy
+- **wpis zakupu NIE tworzy propozycji** — `leaf-actuals.service.ts` nie dotyka `product_proposals`, więc dopisywanie zakupów w Realizacji nie może mnożyć produktów w karcie. Pary „ten sam produkt dwa razy" widoczne w karcie to **spadek po splicie**: kciuk „produkt Wyceny → Zakup" zakładał osobny rekord (`materializePurchaseCopy`, sam w sobie deduplikujący — powtórny klik nadpisywał kopię)
+
+### architektura / API — układ rozwiniętego wiersza
+
+- **kolejność w rozwinięciu liścia odwrócona: karta produktu na górze, wpisy zakupu pod nią**. Dotąd wiersze realizacji stały NAD kartą, więc rozwinięcie zaczynało się od zakupów, choć czyta się je dopiero po tym, co miało być kupione
+- **nowy `PurchasesBar`** (`purchases-bar`) — pasek „Zakupy / wykonanie" pod kartą: przełącznik sekcji wpisów i zarazem jej podsumowanie (Σ wpisów wobec planu, liczba wpisów w polskiej odmianie przez `entriesLabel`, wartość zakupu, znacznik „rozliczone"). Sekcja jest **domyślnie zwinięta** (`wbs-materials-purchases-open`, pamiętana w `localStorage` pod `wbsPurchasesOpen`), bo rozwinięcie wiersza służy najpierw karcie, a wpisy dopisuje się świadomie
+- **klik w kolumnę „Zakup / wykonanie" otwiera wiersz RAZEM z sekcją wpisów** (`onOpenPurchases`) — licznik jest skrótem do zakupów, więc nie może kończyć się na rozwinięciu samej karty; kolejny klik na otwartym wierszu zwija sekcję
+- **liść bez karty produktowej (praca, usługa) nie dostaje paska** — nie ma nad czym zwijać, więc jego wpisy pokazują się od razu po rozwinięciu wiersza (`purchasesShown`)
+
+### architektura / API
+
+- **`BaselineSplitCard` i `ProductSideCard` usunięte** z `WbsMaterialsPanel.jsx`. Rozwinięcie liścia — i w zakładce Materiały (`wbs-materials-product-card`), i w drzewie WBS (`MaterialReqExpandPanel` w `WBSHybridTable.jsx`) — pokazuje teraz jedną kartę produktu `ProductCard` z wyszukiwarką AI, czyli dokładnie to, co dawała strona „Wycena" splitu. Podział procesu: **Wycena** = logistyk dobiera propozycje materiałowe w `wbs.materials`, **Realizacja** = wpisuje konkretne kupione materiały. Skoro zakup ma własne wiersze wpisów, druga kolumna karty nie miała już czego trzymać
+- **wiersze realizacji w panelu Materiały zostają bez zmian** — `RealizationEntryRow`, `RealizationAddRow`, licznik „Zakup / wykonanie" i kolumny `baselineOnly` działają jak dotąd; karta produktu wraca pod nie jako stały (nie zwijany) blok
+- **`ProductCard` przejmuje blokadę baseline** (`product-card-offer-lock`) — dotąd zamrożenie po akceptacji miała tylko strona „Wycena" splitu. Pole „Koszt jedn.", wybór propozycji (`select` ustawia `isOffer` i cenę) oraz przypięcie/odpięcie pozycji z oferty przechodzą przez modal `OfferLockGuard`; bez tego użytkownik dostawał surowe 403 z `assertOfferEditable`
+- **`ProductProposal.isPurchase` / `purchasePriceNetto` zostają w schemacie i w backendzie** — endpointy `set-purchase` / `clear-purchase` i sumy `budget-sums` nie są ruszane, bo czytają je `ComparisonPanel` i kafle Budżetu; zniknął tylko UI, który je ustawiał ręcznie w splicie. Skutek do świadomego przyjęcia: **dostawca produktu wyceny (`ProductProposal.supplierId`) nie ma już własnego pola** — `SupplierPicker` stał wyłącznie w `ProductSideCard`. Dostawcę wpisuje się teraz przy wpisie realizacji; w `ComparisonPanel` kolumna „Dostawca wyceny" pozostanie pusta dla pozycji wycenianych po tej zmianie
+
+### słownik
+
+- usunięto `baseline-split-card`, `baseline-split-open`, `baseline-split-qty`, `baseline-split-techspec-pending`, `baseline-split-copy-to-purchase`, `baseline-split-copy-supplier-to-purchase`, `product-side-card`, `product-side-card-lock`, `product-side-card-pending-writes`, `product-side-card-ensure-proposal`, `product-side-card-fork-purchase`, `product-side-card-supplier-change`, `product-side-card-price-formula`, `product-side-card-delete-product`, `product-side-card-search-ai`, `product-side-card-offer-price-fallback`
+- usunięto martwą sekcję „Moduł split ProductCard — baseline vs żywa karta (Faza 6)" — wszystkie jej anchory (`split-*` w `WBSHybridTable.jsx`) zniknęły z kodu już przy wprowadzeniu `BaselineSplitCard` (v718), a wpisy zostały w indeksie
+- dodano `product-card-offer-lock` — props `ProductCard.offerLocked` + `lockProps`, oraz `wbs-materials-product-card` — miejsce osadzenia karty w rozwiniętym wierszu Materiałów
+- dodano `purchases-bar` (`PurchasesBar`), `wbs-materials-purchases-open` (`purchasesOpen`), `wbs-materials-toggle-purchases` (`togglePurchases`), `pl-entries-label` (`entriesLabel`)
+- dodano `tab-stage-colors` (kolory zakładek wg etapu), `mat-req-existing-proposal-pick` (wybór propozycji przy edycji karty) i `mat-req-search-dedup` (deduplikacja wyników „Szukaj AI")
+
+### wytyczne
+
+- `ui-karta` `ProductCard` — jedyna karta produktu w projekcie; osadzana w rozwinięciu wiersza Materiałów i w rozwinięciu liścia drzewa WBS. Nie dokładać do niej strony „zakupowej" — zakup żyje we wpisach realizacji (`LeafActual`)
+- `ui-sekcja` `PurchasesBar` — rozwinięty wiersz liścia ma stałą kolejność: karta produktu (wycena) → pasek zakupów → wpisy. Nowe elementy rozwinięcia dokładać zgodnie z tą osią czasu, nie nad kartą
+- `ui-przycisk` eksporty — kolor niesie FORMAT: Excel = niebieski (`blue-500/10` + `blue-300`), PDF = czerwony (`red-500/10` + `red-300`). Nowy przycisk eksportu bierze kolor z formatu, nie z palety swojej sekcji
+- `schema-model` `ProductProposal` — każda ścieżka tworząca propozycję musi najpierw sprawdzić, czy wymaganie nie ma już tego producenta i modelu (klucz: producent + model, case-insensitive). Robi to `searchProducts` (`mat-req-search-dedup`) i edycja karty; przy szukaniu rekordu do nadpisania stosować `orderBy` preferujący `isOffer`, nigdy „pierwszy z brzegu". Sprzątając duplikaty NIGDY nie kasować rekordu z rolą `isOffer`/`isPurchase`, z dostawcą, zdjęciem albo własną ceną — para Wycena/Zakup to jedyny nośnik ceny zakupu sprzed wpisów realizacji
+- `schema-pole` `ProductProposal.isPurchase` — od tej wersji ustawiany wyłącznie przez backend (kopie, migracje danych), nie ma UI, który by go zmieniał. Konsumenci (`ComparisonPanel`, `budget-sums`, `purchaseUnitOf`) mają traktować brak produktu zakupu jako normalny stan i sięgać po wpisy realizacji
+
+## 2026-08-15 — feat(realizacja): filtr roli w backendzie, panel porównawczy w zakładce, zakres wpisu dla liści bez karty (v2026.08.15.833)
+
+### architektura / API — filtr po roli PO STRONIE BACKENDU
+
+- **`GET /orders/:nodeId/comparison` zwraca wiersze zależnie od roli** (`comparison-role-filter`) — manager i admin dostają wszystkie typy liści, każda inna rola wyłącznie materiał i sprzęt. KPI (sumy, Δ, pokrycie, liczniki odchyleń) liczą się już z wierszy, które rola faktycznie dostała: na zamówieniu CMC manager widzi 80 pozycji i 415 327,68 zł wyceny, logistyk 37 pozycji i 229 150,68 zł
+- **`GET /leaf-actuals/order/:nodeId` filtruje dziennik tak samo** (`leaf-actuals-role-filter`) — wpisy z liści pracy, usługi, noclegu i paliwa nie wychodzą poza managera. Typ bierzemy ze WSZYSTKICH klonów korzenia i wymagamy, żeby każdy był otwarty: przetypowanie pozycji w nowej wersji ma zamykać wpis, nie otwierać
+- wspólne `OPEN_LEAF_TYPES` / `isOpenLeafType` / `isManagerRoles` w `common/leaf-types.util.ts` — jedna lista dla obu endpointów, lustro `OPEN_LEAF_TYPES` z `realizationShared.js`
+- zawężenie w komponentach ZOSTAJE (zakładka Realizacja, `ComparisonPanel`) — backend egzekwuje, front nie pokazuje pustych kolumn; nowy test `test/test-role-filter.mjs` sprawdza obie warstwy na żywym API dla tokenu admina i logistyka
+- **`GET /wbs-nodes/unified/:nodeId` celowo BEZ filtra** — stoi na nim edytor struktury WBS i sumy budżetu, więc wycięcie z niego węzłów zmieniałoby hierarchię i kwoty planu, nie tylko widoczność kosztów własnych
+
+### architektura / API — eksport Excel z zakładki Realizacja
+
+- **przycisk „Excel" w nagłówku tabeli realizacji** (`realization-export-excel`) — eksportuje DOKŁADNIE to, co widać: wiersze po wyszukiwarce, filtrach kolumn i sortowaniu, zawężone rolą (praca, usługa, nocleg i paliwo wchodzą wyłącznie u managera). Arkusz „Realizacja" ma komplet kolumn ekranu plus znacznik `Rozliczone`
+- nazewnictwo stron: **„zakup" tylko tam, gdzie faktycznie się kupuje** — kolumny i wiersze zbiorcze obejmujące wszystkie typy liści mówią „realizacja" (`Koszt jedn. realizacji`, `Koszt całk. realizacji`, kolumna `Realizacja` w rozbiciu po typie), bo pracy i usługi się nie kupuje
+- **drugi arkusz „Podsumowanie"** — globalne porównanie (koszt całkowity wyceny, realizacji, Δ, Δ%), pokrycie (pozycje w widoku, rozliczone, udział rozliczonych, liczba wpisów), rozbicie po typie pozycji oraz metryczka widoku: zamówienie, data, stan baseline, użyte filtry i **zakres widoku** („wszystkie typy liści" / „materiały i sprzęt bez kosztów własnych"). Bez tej linijki nie dałoby się później odpowiedzieć, czy w pliku nie ma robocizny, bo jej nie było, czy dlatego, że rola jej nie widziała
+- żywe formuły zgodnie z zasadą eksportów: Δ ilość `=I−G`, wartość wyceny `=G*K`, Δ wartość `=N−M`, sumy `SUM`, a rozbicie po typie przez `SUMIF`/`COUNTIF`/`COUNTIFS` po arkuszu „Realizacja". Koszt zakupu zostaje wartością — to suma wpisów o różnych cenach, nie iloczyn
+- **`ComparisonPanel` NIE trafia do zakładki Realizacja** — próbnie osadzony, zdjęty jako klon tabeli, która stoi obok. Komponent zostaje bez zmian tam, gdzie był (Planowanie, Szybkie wyceny); wraz z nim wycofane `visibleTypes` i `kpiOf`, bo zawężanie po stronie przeglądarki zastąpił filtr w backendzie
+
+### schema.prisma
+
+- dodano pole `scope` w modelu `LeafActual` — zakres TEGO zdarzenia dla liści bez karty produktowej (praca, usługa, nocleg, paliwo). Kolumna „Produkt" była dla nich martwa: nad robocizną nie ma czego wpisać w „producenta", a rodzaj wykonanej pracy nigdzie nie siadał. Jedno wolne pole zamiast pary producent + model — przy pracy nie ma czego rozbijać na markę i typ. Migracja `20260815120000_leaf_actual_scope`, kolumna nullowalna, bez backfillu
+
+### architektura / API
+
+- **kolumna „Produkt" → „Produkt / zakres"** w zakładce Realizacja. Wiersz wpisu pokazuje producenta i model tam, gdzie liść ma kartę (materiał, sprzęt), a jedno pole „zakres" dla pozostałych typów; ten sam przełącznik steruje polem nr dokumentu (`hasDoc` → `hasCard` w `RealizationEntryLine` i `RealizationEntryForm`). W wierszu POZYCJI kolumna pokazuje wtedy zakresy zebrane z wpisów, tak jak dostawca i dokument
+- to samo w panelu Materiały (`RealizationAddRow`, `RealizationEntryRow`) — oba widoki piszą do tych samych wpisów, więc pole musi być w obu, inaczej zakres dałoby się wpisać tylko z jednego ekranu
+- `scope` wchodzi do wyszukiwarki nagłówka i do filtra kolumny „Produkt / zakres" — filtr sięga i po produkt z wyceny, i po zakres z wpisów, bo kolumna jest jedna
+- **eksport XLSX wpisów realizacji nadal wypisuje producenta i model** — dla pracy i usług te kolumny zostają puste, zakres do arkusza jeszcze nie wchodzi
+
+### architektura / API — poprawki z tej samej sesji
+
+- **usunięcie OSTATNIEGO wpisu zdejmuje z pozycji znacznik `realizationClosed`** (`realization-reopen-on-empty` w `deleteActual`). Zgłoszony objaw: po rozliczeniu pozycji i skasowaniu jej wpisu kolumna „Δ ilość" pokazywała wartość UJEMNĄ (minus cały plan), pasek stał na 100%, a wiersz nadal był podpisany „rozliczone" — czytało się to jak błąd danych. Skoro kasujemy zdarzenie, na którym stało rozliczenie, wracamy do stanu „nic się nie wydarzyło". Znacznik zdejmowany jest ze WSZYSTKICH klonów liścia (wpisy wiszą po korzeniu `sourceWbsNodeId`, flaga po węźle wersji); świadome „rozliczam mimo braku dostawy" nadal ustawia przycisk „Rozlicz"
+- `setClosed(node, closed)` wydzielone z `toggleClosed` — ten sam PATCH `/leaf-actuals/close/:id` wołają teraz przełącznik i automatyczne wznowienie po usunięciu wpisu
+- **cała kolumna „Koszt całkowity" na czerwono** — wycena jaśniejszym odcieniem (`text-red-300`), faktyczny zakup mocniejszym (`text-red-400`), tak samo w wierszu pozycji, w wierszu wpisu i w stopce „Razem". Δ zostaje kolorowana wg znaku (teal przy oszczędności, czerwień przy przekroczeniu), bo niesie ocenę, a nie kwotę
+- **wejście w pole wpisu zaznacza CAŁĄ jego treść** (`selectAllOnFocus`) — myszą tak samo jak Enterem z pola obok. Wpisy poprawia się przez nadpisanie, więc klik stawiający kursor w środku wartości wymuszał ręczne kasowanie
+- **przycisk zapisu wpisu nazwany czynnością** — „dopisz" → „Dodaj zakup" (`ADD_ENTRY_LABEL`), jedna etykieta nad KAŻDYM typem liścia. Rozróżnienie zakup/wykonanie zostaje w etykiecie nad datą (`newEntryLabel`). `thisEntryPhrase` usunięty, bo po zmianie treści pytania nie miał już użycia
+- **nowa treść pytania o produkt z wyceny**: „Czy zakupiłeś ten sam co wyceniany produkt? / Wypełnić dane zakupionego produktu danymi z wyceny?". Modal pojawia się wyłącznie nad materiałem i sprzętem (praca i usługa nie mają karty produktowej, więc `offerProductOf` zwraca `null`), więc treść mówi wprost o zakupie i nie potrzebuje wariantu dla wykonania
+- nowy test `test/test-realization-close-delete.mjs` — przechodzi po API całą drogę zgłoszenia (wpis → „Rozlicz" → usunięcie wpisu → wznowienie) i sprawdza stan po każdym kroku; sprząta po sobie. `test/test-realization-render.mjs` sprawdza dodatkowo kolory strony zakupu i to, że pozycja bez wpisów nie pokazuje ujemnej „Δ ilość" ani podpisu „rozliczone"
+
+### słownik
+
+- dodano `open-leaf-types`, `is-open-leaf-type`, `is-manager-roles`, `comparison-role-filter`, `leaf-actuals-role-filter`, `realization-export-excel`, `realization-comparison-section`, `realization-comparison-toggle`, `leaf-actual-scope`, `leaf-actual-input-scope`, `realization-product-col`, `realization-entry-scope`, `realization-select-all-on-focus`, `realization-set-closed`, `realization-reopen-on-empty`, `realization-delta-qty-rule`
+- zmieniono `realization-entry-noun` — `thisEntryPhrase` zastąpiony przez `addEntryLabel`
+
+### wytyczne
+
+- `ui-funkcja` `deleteActual` — pozycja bez ani jednego wpisu nie może zostać „rozliczona" automatycznie. Znacznik `realizationClosed` ma pochodzić z decyzji użytkownika, nie zostawać po skasowanych danych; inaczej wiersz pokazuje pełne wykonanie i ujemną Δ wobec planu
+- `schema-pole` `WbsNode.realizationClosed` — siedzi na WĘŹLE wersji, a wpisy `LeafActual` po KORZENIU klonu (`sourceWbsNodeId ?? id`). Każda operacja masowa na flagach musi iść po wszystkich węzłach danego korzenia, nie po pojedynczym `node.id`
+- `schema-pole` `LeafActual.scope` — wypełniamy WYŁĄCZNIE dla liści bez karty produktowej (`TYPE_META[type].hasCard === false`). Materiał i sprzęt trzymają produkt w `manufacturer` + `model`; mieszanie tych trzech pól w jednym wierszu zabiera możliwość raportu po producencie
+- `back-stala` `OPEN_LEAF_TYPES` — lista żyje w dwóch miejscach (`common/leaf-types.util.ts` i `realizationShared.js`) i MUSI mówić to samo. Dodanie typu liścia widocznego dla wszystkich ról wymaga zmiany w obu plikach naraz
+- `back-endpoint` dane realizacji — każdy nowy endpoint oddający koszty liści (dziennik, porównanie, eksport) filtruje po roli SAM. Zawężenie w komponencie jest wygodą użytkownika, nie zabezpieczeniem
+- `ui-funkcja` `exportExcel` w Realizacji — eksport bierze `rows`, czyli stan PO filtrach i sortowaniu, nigdy surowej listy liści. Arkusz ma odpowiadać ekranowi, a metryczka „Zakres widoku" ma mówić, czego w pliku nie ma
+- `ui-zakladka` `RealizationTab` i `ui-sekcja` `WbsMaterialsPanel` — piszą do tych samych `LeafActual`. Nowe pole wpisu dodawaj w OBU naraz (wiersz istniejącego wpisu, wiersz dopisywania, `addActual`), inaczej dane da się wprowadzić tylko z jednego ekranu
+
+## 2026-08-15 — fix(realizacja): martwy `commentRef` w formularzu wpisu, test renderu obejmuje podkomponenty (v2026.08.15.826)
+
+### architektura / API
+
+- **naprawiony drugi biały ekran** — przy przenoszeniu komentarza wpisu spod kolumny „Nazwa" pod „Komentarz" została stara referencja `ref: commentRef`, choć `commentRef` był w tym samym commicie przemianowany na `firstFieldRef`. `RealizationEntryForm` wywalał się z `ReferenceError: commentRef is not defined` przy każdym otwarciu formularza
+- **`RealizationRow`, `RealizationEntryLine`, `RealizationEntryForm`, `RealizationExpandPanel` i `COL_DEFS` wyeksportowane** — wyłącznie na potrzeby `test/test-realization-render.mjs`. Renderują się dopiero po rozwinięciu pozycji albo po otwarciu formularza, więc SSR samej zakładki nigdy do nich nie docierał; oba białe ekrany siedziały właśnie tam. Poza testem nic ich nie importuje, zakładka nadal wychodzi domyślnym eksportem
+- test renderu pokrywa teraz każdy podkomponent osobno (wiersz pozycji w trybie edycji i podglądu, wiersz wpisu, formularz dla zakupu z produktem z wyceny i dla wykonania bez produktu, rozwinięcie z kartą i bez) oraz sprawdza na wyrenderowanym HTML-u zachowania z ostatnich zmian: liczbę okien `data-entry-field` (trasa Entera), PUSTY koszt jedn. w nowym wpisie, przepisanie producenta i modelu z wyceny, autora i nr dokumentu w wierszu wpisu. Zweryfikowany na żywym błędzie — po tymczasowym przywróceniu `commentRef` test wywala się z tym samym `ReferenceError`
+- **poprawiony rodzaj gramatyczny etykiet** — nagłówek formularza sklejał `nowy ${entryNoun(type)}`, co nad pozycjami typu praca i usługa dawało „nowy wykonanie"; tak samo pytanie o produkt mówiło „Czy ten wykonanie…". Rzeczownik (`entryNoun`, prefiks linii w komentarzu pozycji) jest teraz oddzielony od form z zaimkiem i przymiotnikiem: `newEntryLabel` → „Nowy zakup" / „Nowe wykonanie", `thisEntryPhrase` → „ten zakup" / „to wykonanie"
+
+### wytyczne
+
+- `ui-zakladka` `RealizationTab` — podkomponentów renderujących się warunkowo (rozwinięcie, formularz) nie pokrywa SSR całej zakładki, bo bez DOM-u `useEffect` nie odpala i widok zatrzymuje się na spinnerze. Każdy taki podkomponent ma mieć własny przypadek w `test/test-realization-render.mjs` — inaczej błąd w nim wychodzi dopiero jako biały ekran u użytkownika
+- `ui-stala` `entryNoun` — to SAM rzeczownik, do prefiksu linii komentarza. Do tekstu z zaimkiem lub przymiotnikiem używaj `newEntryLabel` albo `thisEntryPhrase`; „zakup" jest rodzaju męskiego, „wykonanie" nijakiego, więc sklejanie ich z jedną formą zawsze psuje połowę przypadków
+
+## 2026-08-15 — fix(realizacja): pusta strona na zakładce Realizacja + test renderu (v2026.08.15.825)
+
+### architektura / API
+
+- **naprawiona pusta strona** — `appendEntryComment` miał `saveComment` w tablicy zależności `useCallback`, a `saveComment` było zadeklarowane 67 linii NIŻEJ w ciele komponentu. Tablica zależności jest wyliczana w trakcie renderu, więc `const` wpadał w martwą strefę i każdy render kończył się `ReferenceError: Cannot access 'saveComment' before initialization` — biały ekran. `saveComment` przeniesione ponad `appendEntryComment`
+- nowy test `test/test-realization-render.mjs` — renderuje `RealizationTab` i `WbsMaterialsPanel` przez `renderToString` (react-dom/server) na bundlu z esbuilda. Łapie DOKŁADNIE tę klasę błędów, której `vite build` nie widzi: martwą strefę `const`, brakujące importy komponentów i wyjątki w ciele komponentu. Zweryfikowany na żywym błędzie — po tymczasowym przywróceniu złej kolejności test się wywala z tym samym `ReferenceError`
+- test renderuje `WbsMaterialsPanel` z `externalWbsNodes` (ten props omija stan ładowania, więc powstaje prawdziwa tabela z wierszami) i sprawdza, że wyniesienie `TYPE_META`, `realizationOf`, `getParentPath`, `REAL_STATE` i formaterów do `realizationShared.js` nie rozwaliło panelu: wiersze pozycji, ścieżka rodzica, kolumny realizacji przy `accepted`, podpis „rozliczone" i format kwot `pl-PL`
+
+### wytyczne
+
+- `ui-zakladka` komponenty React — `vite build` NIE wykrywa użycia stałej przed deklaracją w ciele komponentu; to przechodzi build i daje biały ekran dopiero w przeglądarce. Po każdej zmianie w `RealizationTab` albo `WbsMaterialsPanel` uruchamiaj `node test/test-realization-render.mjs`. Praktyczna zasada: `useCallback`/`useMemo` deklaruj w kolejności zależności — funkcja używana w tablicy zależności innej musi stać wyżej
+
+## 2026-08-15 — feat(realizacja): Enter przechodzi po oknach wiersza, komentarz wpisu w dzienniku pozycji (v2026.08.15.824)
+
+### architektura / API
+
+- **Enter przechodzi do kolejnego okna wiersza zakupu** zamiast kończyć edycję (`focusNextInRow`). Kolejność bierze się z DOM-u, więc idzie dokładnie za kolejnością kolumn i nie ma osobnej listy do utrzymania przy dodawaniu kolumny; pola oznaczone są `data-entry-field`. Na ostatnim oknie Enter zapisuje wpis (formularz) albo robi blur, czyli commit pola (istniejący wpis). Kursor po otwarciu formularza startuje w PIERWSZYM oknie (data), nie w komentarzu — inaczej Enter zapisywałby wpis od razu, bo komentarz jest teraz ostatni
+- **komentarz wiersza zakupu przeniesiony pod kolumnę „Komentarz"** (był pod „Nazwą"). To ta sama treść, która dopisuje się do komentarza pozycji, więc musi stać w tej samej pionowej linii. Kolumna „Nazwa" zostaje w wierszu wpisu pusta
+- **komentarz nowego wpisu dopisuje się do komentarza POZYCJI** (`appendEntryComment`) jako osobna linia `zakup: <treść>` — dla pracy i usług `wykonanie: <treść>`, zgodnie z `entryNoun`. Idzie przez `saveComment`, więc od razu trafia do `WbsNode.comment` i rozgłasza `wbs-comment-changed`: ta sama treść jest widoczna w WBS, w panelu Materiały i na markerze schematu, bez wchodzenia w rozwinięcie pozycji
+- dopisywanie działa WYŁĄCZNIE przy dodaniu wpisu, nigdy przy jego późniejszej edycji — komentarz pozycji jest dziennikiem tego, co się wydarzyło, a nie kopią bieżącej treści wpisu. Poprawka wpisu po fakcie nie przepisuje historii i nie dokleja drugiej linii
+
+### słownik
+
+- dodano `realization-enter-next-field`, `realization-append-entry-comment`
+
+### wytyczne
+
+- `ui-funkcja` `focusNextInRow` — nowe okno w wierszu zakupu musi dostać atrybut `data-entry-field`, inaczej wypadnie z trasy Entera. Kolejności nie utrzymujemy w kodzie: wynika z kolejności `COL_DEFS`, bo `querySelectorAll` idzie po DOM-ie
+- `ui-funkcja` `appendEntryComment` — komentarz pozycji jest DZIENNIKIEM zdarzeń, nie lustrem ostatniego wpisu. Dopisujemy przy tworzeniu, nigdy przy edycji ani przy usuwaniu; nie parsujemy tych linii z powrotem na wpisy
+
+## 2026-08-15 — feat(realizacja): kolumna Komentarz, pytanie o produkt z wyceny, cena bez podpowiedzi (v2026.08.15.823)
+
+### architektura / API
+
+- **kolumna `comment` „Komentarz"** w tabeli realizacji — to samo pole `WbsNode.comment` co kolumna „Komentarz" w `WBSHybridTable` i w panelu Materiały, ta sama `AutoResizeTextarea`, zapis na blur przez `PATCH /wbs-nodes/:id`. Filtrowalna i sortowalna jak reszta kolumn
+- **synchronizacja komentarza obustronna** — dotąd `WBSHybridTable`, `MarkerDetailsPanel`, `SchematTab` i panel Materiały tylko ROZGŁASZAŁY `wbs-comment-changed`, a Materiały nie słuchały wcale. Zakładka Realizacja robi oba kierunki: `saveComment` wysyła PATCH i rozgłasza zdarzenie (dociera do markera schematu i wiersza WBS), a `realization-comment-listener` przyjmuje zmiany z tamtych widoków i aktualizuje wiersz bez przeładowania tabeli. Bufor `commentVal` z `commentFocus` pilnuje, żeby komentarz zmieniony równolegle w WBS nie skasował tego, co się właśnie pisze
+- **pytanie „ten sam produkt co w wycenie?" przy nowym wpisie** — `openEntryForm` sprawdza, czy pozycja ma produkt po stronie wyceny (`offerProductOf`: propozycja `isOffer`, fallback na produkt katalogowy wymagania). Jeśli tak, pyta przed otwarciem formularza: „OK" przepisuje producenta, model i dostawcę z wyceny, „Anuluj" zostawia pola puste (zamiennik wpisuje się ręcznie). Bez produktu po stronie wyceny pytania nie ma — formularz otwiera się pusty. Na produkcji dotyczy 19 z 37 kart (17 z opisem produktu)
+- **koszt jedn. nowego wpisu NIE jest podpowiadany** — dotąd wchodziła cena z poprzedniego wpisu, a przy pierwszym z wyceny. Wpis zapisywał się wtedy kwotą, której nikt nie przeczytał, a to są dane rozliczeniowe idące do `AuditLog`. Teraz pole zostaje puste także przy odpowiedzi „ten sam produkt" — cena musi być wpisana świadomie. Ilość dalej podpowiada brakującą do planu (to nie jest kwota)
+- wiersz wpisu trzyma swój komentarz pod kolumną „Nazwa" (jak dotąd); kolumna „Komentarz" należy do POZYCJI, nie do pojedynczej dostawy, więc w wierszach wpisów zostaje pusta
+- test `test/test-realization-tab.mjs` rozszerzony o round-trip `PATCH /wbs-nodes {comment}` z przywróceniem oryginalnej wartości oraz o sprawdzenie, że propozycje `isOffer` niosą producenta, model i dostawcę w relacji
+
+### słownik
+
+- dodano `realization-comment-col`, `realization-row-comment`, `realization-save-comment`, `realization-comment-listener`, `realization-form-seed`, `realization-offer-product`, `realization-open-entry-form`, `realization-entry-form-no-price`
+
+### wytyczne
+
+- `ui-input` `unitCost` wpisu realizacji — pole ceny w formularzu nowego wpisu NIGDY nie jest wypełniane domyślną wartością (ani z wyceny, ani z poprzedniej dostawy). Kwota trafia do `AuditLog` i do rozliczenia zamówienia, więc musi przejść przez świadomą decyzję. Podpowiadać wolno tylko dane opisowe: producenta, model, dostawcę — i to po potwierdzeniu
+- `ui-hook` `wbs-comment-changed` — każdy nowy widok pokazujący `WbsNode.comment` ma robić OBA kierunki: rozgłaszać po zapisie i nasłuchiwać cudzych zmian. Sam dispatch bez listenera zostawia widok ze starym komentarzem do przeładowania
+
+## 2026-08-15 — feat(realizacja): wspólna kolejność kolumn, koszt całkowity i „+" po lewej (v2026.08.15.822)
+
+### architektura / API
+
+- **wpisy realizacji renderują się jako wiersze POTOMNE tabeli głównej** (`RealizationEntryLine`, `RealizationEntryForm` mapują po tej samej liście `COL_DEFS` co wiersz pozycji), a nie w osobnej pod-tabeli w rozwinięciu. Kolejność kolumn jest wspólna z definicji, nie z ręcznego dopasowania: data pod „Przedmiot projektu", komentarz pod „Nazwą", producent i model pod „Produktem", dostawca pod „Dostawcą", nr FV/PZ pod „Dokumentem", ilość pod „Zakup / wykonanie", koszt jedn. pod „Koszt jedn. zakupu", wartość pod „Kosztem całkowitym". Kolumny planu (`qty`, `deltaQty`, `price`) zostają w wierszu wpisu puste
+- to samo naprawia **przypisywanie dostawcy po NIP** w zakładce Realizacja: `SupplierPicker` (wybór z rejestru, „Dodaj po NIP" z Białej listy VAT, wolny wpis bez NIP) renderuje listę jako `absolute` w `relative`, więc w poprzedniej, zagnieżdżonej pod-tabeli z `overflow-x-auto` dropdown był przycinany. Po przeniesieniu wpisów do tabeli głównej działa tak samo jak w panelu Materiały — kod pickera jest jeden i wspólny, nie było czego duplikować
+- **przycisk dopisania wpisu przeniesiony na lewo** — sam „+" obok strzałki rozwijania w pierwszej kolumnie wiersza (`realization-add-button`), zamiast etykietowanego przycisku po prawej. Etykieta powtarzałaby się w każdym wierszu; rodzaj zdarzenia („Nowy zakup" / „Nowe wykonanie") niesie tooltip
+- **nowa kolumna `total` „Koszt całkowity"** — koszt całkowity pozycji po stronie wyceny i po stronie zakupu, z odchyleniem pod spodem, w jednej kolumnie zamiast trzech osobnych (`planValue`, `realValue`, `deltaValue` usunięte). Sortowanie po tej kolumnie idzie odchyleniem — to pytanie, które się jej zadaje
+- **stopka „Razem"** (`realization-totals-row`) — podsumowanie kosztów całkowitych wyceny i zakupów dla wszystkich WIDOCZNYCH wierszy (po filtrach), przyklejona do dołu tabeli. `sticky` siedzi na komórkach, nie na `<tfoot>` — przyklejanie samego elementu grupującego nie jest wspierane spójnie między przeglądarkami
+- nowe kolumny `product` (produkt z wyceny), `supplier` i `doc` (dostawca i numery dokumentów z wpisów realizacji, zwinięte do „pierwszy +N") — potrzebne, żeby wiersz wpisu miał pod czym umieścić swoje pola; typ pozycji zszedł z osobnej kolumny pod nazwę
+- rozwinięcie pozycji (`RealizationExpandPanel`) zostaje nagłówkiem: wymagania techniczne, podgląd produktu i przycisk „Rozlicz". Wpisy są pod nim, w tabeli głównej
+
+### słownik
+
+- dodano `realization-total-col`, `realization-add-button`, `realization-tab-entry-rows`, `realization-totals-row`
+- usunięto (scalone w `realization-total-col`) — kolumny `planValue`, `realValue`, `deltaValue` nie mają już osobnych wpisów
+
+### wytyczne
+
+- `ui-stala` `COL_DEFS` — wiersz wpisu realizacji mapuje po TEJ SAMEJ liście kolumn co wiersz pozycji. Nowa kolumna = jeden `case` w `RealizationEntryLine` i w `RealizationEntryForm`; nie wolno renderować wpisów w osobnej tabeli, bo kolejność natychmiast się rozjeżdża
+- `ui-sekcja` `SupplierPicker` — lista rozwija się jako `absolute`, więc nie wolno go osadzać w kontenerze z `overflow-hidden`/`overflow-x-auto`; dropdown zostaje wtedy przycięty i wygląda jakby wyboru dostawcy w ogóle nie było
+
+## 2026-08-15 — feat(realizacja): zakładka Realizacja z płaską tabelą wszystkich liści (v2026.08.15.821)
+
+### architektura / API
+
+- nowa zakładka **Realizacja** (`RealizationTab`) na węźle `type=order`, obok „planowanie". Zawiera sekcję **Tabela realizacji**: płaska lista WSZYSTKICH liści kosztowych zamówienia z porównaniem zakupu do wyceny. Nie zakłada ani nie edytuje kart produktowych — służy wyłącznie rozliczaniu tego, co się wydarzyło. Bez `BaselineSplitCard`: realizacja nie zmienia wyceny
+- kolumny tabeli (`COL_DEFS`) czytają się parami „plan → wykonanie": `parent`, `name`, `type`, `qty`, `realization` (Σ wpisów / plan z paskiem), `deltaQty`, `price`, `purchasePrice`, `planValue`, `realValue`, `deltaValue`, `actions`. Sortowanie po każdej, filtr per kolumna i zmiana szerokości — jak w panelu Materiały
+- **filtr w nagłówku strony działa** — `searchQuery` z `DashboardPage` sięga nazwy, ścieżki, typu, produktu, wymagań technicznych i komentarza pozycji ORAZ treści WPISÓW (nr FV/PZ, dostawca, producent, model, komentarz), bo pozycję szuka się najczęściej po numerze faktury. Placeholder wyszukiwarki dla `activeTab='realization'`: „Szukaj po pozycji, produkcie, dostawcy, nr FV…"
+- **nowy zakup jako przycisk** (`RealizationEntryForm`), nie stale widoczny wiersz: tabela czyta się jako zestawienie, a dopisywanie jest świadomą czynnością. Przycisk siedzi w kolumnie `actions` wiersza i w nagłówku dziennika w rozwinięciu; nazwa zależy od typu liścia — „Nowy zakup" dla materiału i sprzętu, „Nowe wykonanie" dla pracy i usługi. Enter zapisuje i zostawia formularz otwarty z kursorem w komentarzu. Domyślna ilość = brakująca do planu (nie sztywna 1)
+- rozwinięcie wiersza (`RealizationExpandPanel`) zostawia **rozwijalne wymagania techniczne** (edytowalne, PATCH `/material-requirements/:id`) i **podgląd produktu** (`RequirementImageBox`, wklejanie Ctrl+V) — przy dopisywaniu zakupu trzeba wiedzieć, co miało być kupione. Pod spodem dziennik wpisów jako osobna tabela z własnymi nagłówkami (data, komentarz, dostawca, dokument, producent, model, ilość, koszt jedn., wartość), edytowalny w miejscu, oraz przycisk „Rozlicz"
+- **liście inne niż materiał i sprzęt widoczne tylko dla managera** — `OPEN_LEAF_TYPES` = `['material','equipment']`; praca, usługa, nocleg i paliwo to koszty własne firmy i pokazują się wyłącznie roli ADMIN/MANAGER. Filtr działa na etapie budowania listy liści, więc pozycje nie wchodzą też do sum w nagłówku ani do wyszukiwarki. Na danych produkcyjnych: 80 pozycji dla managera, 37 dla logistyka
+- zakładka niewidoczna dla pracownika (`cond: isOrder && !isWorker`); dopisywać może ADMIN/MANAGER/LOGISTYK (jak `@Roles` w `LeafActualsController`), reszta ma widok „tylko podgląd"
+- nowy moduł `realizationShared.js` — meta typów, statusów i cała arytmetyka realizacji (`realizationOf`, `purchaseUnitOf`, `wbsRootOf`, `planUnitOf`, `leafNodesOf`, `buildCardMap`, `REAL_STATE`, formatery) wyjęte z `WbsMaterialsPanel` do wspólnego pliku. Oba widoki liczą z tych samych wpisów `LeafActual` — dwie kopie `realizationOf` znaczyłyby, że jeden ekran pokazuje inne pokrycie niż drugi
+- `RequirementImageBox` wyeksportowany z `WbsMaterialsPanel` (podgląd produktu współdzielony z zakładką Realizacja)
+- backend bez zmian — zakładka stoi na gotowym module `leaf-actuals` (`GET /leaf-actuals/order/:nodeId`, `POST`, `PATCH`, `DELETE`, `PATCH /close/:wbsNodeId`)
+- test `test/test-realization-tab.mjs` — smoke warstwy danych: komplet pól w `/wbs-nodes/unified`, dopasowanie liść↔wymaganie, brak osieroconych wpisów, sumy nagłówka i średnia ważona kosztu zakupu
+
+### słownik
+
+- dodano `realization-tab`, `tab-realization`, `realization-col-defs`, `realization-entry-noun`, `realization-row`, `realization-entry-line`, `realization-entry-form`, `realization-expand-panel`, `realization-visible-types`, `realization-techspec-pending`, `realization-fetch-actuals`, `realization-refresh-card`, `realization-rows`, `realization-totals` — moduł Realizacja
+- dodano `realization-open-types`, `realization-auth-headers`, `realization-flatten-wbs-nodes`, `realization-get-parent-path`, `realization-leaf-nodes-of`, `realization-resolve-card`, `realization-plan-unit-of` — `realizationShared.js`
+- zmieniono ścieżkę `wbs-materials-type-meta`, `wbs-materials-leaf-types`, `realization-state-styles`, `realization-of`, `wbs-root-of`, `purchase-unit-of` — przeniesione do `realizationShared.js`
+
+### wytyczne
+
+- `ui-funkcja` `leafNodesOf` — „liść kosztowy" to węzeł Z TYPEM z `LEAF_TYPES`, **nie** węzeł bez dzieci. W realnych danych typowane pozycje bywają rodzicami innych pozycji i niosą własny koszt (np. „Avigilon … + licencje" `type=equipment`, `unitCost=4800`, z dzieckiem „licencja ACC7" `type=equipment`, `unitCost=1092`). Filtrowanie po bezdzietności wycięłoby 4 pozycje razem z ich zakupami — jedna z nich ma już wpis na 4355 zł. Każdy nowy widok realizacji bierze zbiór pozycji z `leafNodesOf`, nigdy z własnego `!node.children?.length`
+- `ui-funkcja` `realizationOf` — jedyne źródło liczb realizacji; nowy widok importuje je z `realizationShared.js`, nie kopiuje. Dwie kopie rozjeżdżają pokrycie między ekranami
+- `ui-stala` `OPEN_LEAF_TYPES` — widoczność typów liści po roli rozstrzyga się na etapie budowania listy pozycji, nie w renderze wiersza; inaczej ukryte pozycje nadal wchodziłyby do sum i do wyszukiwarki
+
+## 2026-08-14 — fix(ui): Szukaj AI tylko po stronie Wyceny, jeden rozmiar czcionki w wierszach zakupu
+
+### architektura / API
+- `SupplierPicker` przyjmuje props `textClass` (domyślnie `text-sm`) — rozmiar czcionki triggera, pola szukania i listy. Bez tego dropdown dostawcy w wierszu wpisu zakupu odstawał (14 px) od pól obok (24 px)
+- `ProductSideCard` — przycisk „Szukaj AI" renderuje się wyłącznie dla `side="offer"`; strona Zakupu bierze produkt kciukiem z Wyceny albo wpisem ręcznym
+- wiersze wpisów zakupu (`RealizationEntryRow`, `RealizationAddRow`) mają jeden rozmiar czcionki we wszystkich oknach wpisu — `ROW_FONT` = 22 px, czyli największy dotychczasowy (24 px) minus 2 px. Obejmuje pola, dropdown dostawcy, wartość wpisu, autora, etykietę „nowy zakup / nowe wykonanie" oraz przyciski „dopisz" i „Rozlicz"; z przycisków zszedł `tracking-widest`, bo rozstrzelony napis przy 22 px nie mieścił się w kolumnie
+
+### słownik
+- dodano `realization-row-font` — wspólny rozmiar czcionki okien wpisu zakupu, `WbsMaterialsPanel.jsx`
+- dodano `product-side-card-search-ai` — przycisk „Szukaj AI" (tylko strona Wyceny), `WbsMaterialsPanel.jsx`
+- dodano `supplier-picker-text-class` — props `textClass`, `SupplierPicker.jsx`
+
+### wytyczne
+- `ui-stala` `ROW_FONT` — każde nowe okno wpisu w wierszach zakupu bierze rozmiar stąd, nie z własnej klasy `text-*`; rozmiary w tych wierszach mają być identyczne
+
 ## 2026-08-13 — feat(realizacja): etapowe wpisy zakupu i wykonania na liściu WBS (każdy typ)
 
 ### schema.prisma
@@ -6,6 +363,7 @@
 - dodano pole `realizationClosed` w modelu `WbsNode` — pozycja rozliczona mimo niedowykonania planu; różnica przestaje być brakiem i liczy się jako oszczędność, a liść wypada z niedokończonych w pokryciu
 - dodano relacje `ProcessNode.leafActuals`, `Supplier.leafActuals`, `User.leafActuals`
 - migracja `20260813150000_leaf_actuals`
+- dodano pola `manufacturer` i `model` w modelu `LeafActual` — producent i model NA WPISIE, nie na pozycji: pozycja ma jeden produkt ofertowy (`ProductProposal isOffer`), a zakupów bywa kilka i mogą być zamiennikami. Migracja `20260813170000_leaf_actual_product` przepisuje produkt z propozycji `isPurchase` do wpisów z backfillu
 - migracja `20260813160000_backfill_leaf_actuals` — przeniesienie dotychczasowych zakupów: każda propozycja `isPurchase` z ceną staje się PIERWSZYM wpisem swojego liścia (ilość = ilość z wyceny, data = `createdAt` propozycji, dostawca i nr oferty z propozycji, autor pusty). Bez tego pozycje już kupione pokazywałyby „0 / N · 0%". Cena wg reguły backendu (propozycja pełniąca obie role bierze `purchasePriceNetto`; brak → nie jest zakupem), idempotentna — jeden wpis na korzeń klonu i tylko dla liści bez wpisów. Na produkcji obejmie 13 z 16 propozycji zakupu (3 bez ceny zostają „jeszcze nie kupione")
 
 ### architektura / API
@@ -17,6 +375,9 @@
 - `WbsMaterialsPanel` pokazuje liście typu `work` i `service` obok `material` i `equipment` (`LEAF_TYPES`) — praca i usługa nie mają karty produktowej, więc rozwinięcie idzie prosto do wpisów, bez zakładania `MaterialRequirement`
 - `WbsMaterialsPanel` — trzy nowe kolumny widoczne po akceptacji baseline: `realization` (licznik „Σ wpisów / plan" z paskiem i procentem), `deltaQty`, `deltaValue`; `purchasePrice` pokazuje teraz średnią ważoną z wpisów (fallback: propozycja `isPurchase`) i jest read-only, bo wynika z wpisów
 - wpisy realizacji renderują się jako wiersze potomne liścia (`RealizationEntryRow`) z wierszem dopisywania na końcu (`RealizationAddRow`): data, komentarz, ilość, koszt jedn., dla materiału i sprzętu dodatkowo nr FV/PZ. Enter zapisuje i zostawia kursor w komentarzu; domyślki — data dziś, koszt jedn. z poprzedniego wpisu (przy pierwszym z wyceny), ilość 1
+- wiersz wpisu realizacji jest w całości edytowalny w miejscu (data, komentarz, dostawca przez `SupplierPicker`, nr FV/PZ, ilość, producent, model, koszt jedn.) — zapis na blur, tylko zmienione pole; wartość wpisu liczy się na bieżąco. Czcionka w wierszach zakupowych 2× względem tabeli pozycji, bo to w nich się pracuje
+- strona ZAKUP w porównaniu bierze produkt z ostatniego wpisu, który go ma (kolejne dostawy bywają zamiennikami); pełną historię niesie lista `entries`
+- karta produktowa (`BaselineSplitCard`) zwija się razem z wymaganiami technicznymi, stan pamiętany w `localStorage`, domyślnie ZWINIĘTA — po wprowadzeniu wpisów rozwinięcie wiersza służy przede wszystkim zakupom
 - eksport Excel z panelu Materiały: kolumny `Zakup / wykonanie`, `Koszt jedn. zakupu`, `Wartość realizacji`, `Δ ilość`, `Δ wartość`, `Rozliczone` (Δ jako żywe formuły) + nowy arkusz `Realizacja (wpisy)` z dziennikiem dostaw i wykonania
 - `GET /wbs-nodes/unified/:nodeId` zwraca dodatkowo `sourceWbsNodeId` i `realizationClosed` — bez nich panel nie znałby korzenia klonu (wpisy trafiałyby pod złe id po utworzeniu wersji) ani stanu rozliczenia po przeładowaniu
 - `WbsMaterialsPanel` dla liści bez karty (praca, usługa, nocleg, paliwo): kolumna „Koszt jedn. oferty" pokazuje `WbsNode.unitCost` (to z niego liczy się Δ wartość), a w kolumnie „Produkt" znika przycisk „Utwórz kartę" — zakładanie wymagań materiałowych na robociźnie nie ma sensu

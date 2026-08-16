@@ -5731,7 +5731,7 @@ ${ganttSectionHtml}
                         {(key === 'wbs' || key === 'wbs-hybrid') && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); openExport({ title: 'Q&A PDF', defaultFilename: `Q&A_${safeFileBase()}.pdf`, makeArtifact: () => exportQaFormPdf(wbsData, orderName || projectName || 'Projekt') }); }}
-                                className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
+                                className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                             >
                                 <FileDown size={11} /> Q&A PDF
                             </button>
@@ -5991,7 +5991,7 @@ ${ganttSectionHtml}
                         </>
                     ), null, (
                         <div className="flex items-center gap-2">
-                            <button onClick={(e) => { e.stopPropagation(); const invalid = validateBudgetPricing(); if (invalid.length) { alert(`Eksport wstrzymany — ${invalid.length} pozycji wymaga uzupełnienia:\n\n${invalid.join('\n')}\n\nUzupełnij koszt jednostkowy i narzut tych pozycji, po czym ponów eksport.`); return; } openExport({ title: 'Analiza projektu (Excel)', defaultFilename: `${safeFileBase()}_budzet.xlsx`, makeArtifact: handleExportBudgetExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-lg text-green-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                            <button onClick={(e) => { e.stopPropagation(); const invalid = validateBudgetPricing(); if (invalid.length) { alert(`Eksport wstrzymany — ${invalid.length} pozycji wymaga uzupełnienia:\n\n${invalid.join('\n')}\n\nUzupełnij koszt jednostkowy i narzut tych pozycji, po czym ponów eksport.`); return; } openExport({ title: 'Analiza projektu (Excel)', defaultFilename: `${safeFileBase()}_budzet.xlsx`, makeArtifact: handleExportBudgetExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                                 <FileDown size={11} /> Analiza projektu do Excel
                             </button>
                             <button onClick={(e) => { e.stopPropagation(); budgetImportFileInputRef.current?.click(); }} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all">
@@ -6032,7 +6032,7 @@ ${ganttSectionHtml}
                         />
                     ), null, (
                         <>
-                            <button onClick={e => { e.stopPropagation(); openExport({ title: 'Materiały (Excel)', defaultFilename: `${safeFileBase()}_materialy.xlsx`, makeArtifact: () => materialsExportFn.current?.() }); }} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
+                            <button onClick={e => { e.stopPropagation(); openExport({ title: 'Materiały (Excel)', defaultFilename: `${safeFileBase()}_materialy.xlsx`, makeArtifact: () => materialsExportFn.current?.() }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
                                 <FileDown size={11} /> Excel
                             </button>
                             {/* @anchor materials-comparison-chip — „Δ +x% · pokrycie n/m", klik → panel porównawczy (F5) */}
