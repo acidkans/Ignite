@@ -1427,17 +1427,11 @@ export default function RealizationTab({
                 {readOnly && <span className="text-[10px] text-gray-600 uppercase tracking-wider">tylko podgląd</span>}
             </div>
 
-            {rows.length === 0 ? (
+            {leaves.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-500">
                     <AlertCircle size={28} className="text-gray-600" />
-                    <p className="text-sm">
-                        {searchQuery || Object.values(colFilters).some(Boolean)
-                            ? 'Brak pozycji pasujących do filtra.'
-                            : 'Brak pozycji kosztowych w tym zamówieniu.'}
-                    </p>
-                    {!searchQuery && leaves.length === 0 && (
-                        <p className="text-xs text-gray-600">Ustaw typ wiersza (materiał, sprzęt, praca, usługa…) w Strukturze projektu.</p>
-                    )}
+                    <p className="text-sm">Brak pozycji kosztowych w tym zamówieniu.</p>
+                    <p className="text-xs text-gray-600">Ustaw typ wiersza (materiał, sprzęt, praca, usługa…) w Strukturze projektu.</p>
                 </div>
             ) : (
                 <div className="flex-1 overflow-auto custom-scrollbar">
@@ -1482,6 +1476,33 @@ export default function RealizationTab({
                             </tr>
                         </thead>
                         <tbody>
+                            {/* @anchor realization-empty-filter-row — komunikat o pustym wyniku filtra
+                                MUSI siedzieć w `<tbody>`, a nie zastępować całą tabelę: nagłówek z polami
+                                filtrów zostaje na ekranie, więc filtr da się cofnąć bez przeładowania widoku. */}
+                            {rows.length === 0 && (
+                                <tr>
+                                    <td colSpan={COL_DEFS.length + 1} className="px-4 py-16">
+                                        <div className="flex flex-col items-center justify-center gap-3 text-gray-500">
+                                            <AlertCircle size={28} className="text-gray-600" />
+                                            <p className="text-sm">Brak pozycji pasujących do filtra.</p>
+                                            <div className="flex items-center gap-2">
+                                                {Object.values(colFilters).some(Boolean) && (
+                                                    <button
+                                                        onClick={() => setColFilters({})}
+                                                        className="px-2.5 py-1 rounded border border-teal-500/25 bg-teal-500/10 text-teal-300 text-[10px] font-bold uppercase tracking-wider hover:bg-teal-500/20 transition-colors">
+                                                        Wyczyść filtry kolumn
+                                                    </button>
+                                                )}
+                                                {searchQuery.trim() && (
+                                                    <span className="text-xs text-gray-600">
+                                                        Aktywna wyszukiwarka: „{searchQuery.trim()}"
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
                             {rows.map(({ node, card, realization }) => {
                                 const isExpanded = expandedId === node.id;
                                 const hasCard = TYPE_META[node.type]?.hasCard !== false;
@@ -1554,7 +1575,7 @@ export default function RealizationTab({
                             zostawało na oku przy przewijaniu długiej listy pozycji. */}
                         {/* `sticky` siedzi na komórkach, nie na `<tfoot>` — przyklejanie samego
                             elementu grupującego nie jest wspierane spójnie między przeglądarkami. */}
-                        <tfoot>
+                        <tfoot className={rows.length === 0 ? 'hidden' : undefined}>
                             <tr>
                                 <td className="sticky bottom-0 z-20 bg-gray-950 border-t-2 border-teal-500/30" />
                                 {/* Stopka o 2px większa niż wiersze tabeli (13/16px wobec 11/14px):

@@ -1,3 +1,18 @@
+## 2026-08-16 — fix(realizacja): pusty wynik filtra nie zabiera całej tabeli (v2026.08.16.849)
+
+### architektura / API
+
+- **komunikat „Brak pozycji pasujących do filtra" przeniesiony do `<tbody>`** (`realization-empty-filter-row`): wcześniej pusty wynik podmieniał CAŁĄ tabelę na komunikat, więc znikał też nagłówek z polami filtrów — filtr dało się cofnąć tylko przeładowaniem widoku. Teraz nagłówek i pola filtrów zostają, a komunikat siedzi w wierszu `colSpan` z przyciskiem „Wyczyść filtry kolumn"; gdy działa wyszukiwarka strony (`searchQuery`, prop), komunikat wypisuje szukaną frazę, bo tego pola tabela nie kontroluje
+- **stan „brak pozycji kosztowych" odcięty od stanu filtra**: tabela chowa się tylko przy `leaves.length === 0` (nic do filtrowania), stopka „Razem" chowa się przy pustym wyniku
+
+### słownik
+
+- dodano `realization-empty-filter-row` — pusty wynik filtra wewnątrz tabeli, `RealizationTab.jsx`
+
+### wytyczne
+
+- `ui-tabela` — pusty wynik filtrowania NIGDY nie może zastępować tabeli razem z nagłówkiem. Kontrolki, które doprowadziły do pustego wyniku, muszą zostać na ekranie, inaczej użytkownik nie ma czym cofnąć filtra. Komunikat idzie w wiersz `colSpan`, nie zamiast `<table>`
+
 ## 2026-08-16 — feat(realizacja): analiza wykonania budżetu w eksporcie Excel (v2026.08.16.848)
 
 ### architektura / API

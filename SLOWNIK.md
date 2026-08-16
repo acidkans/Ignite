@@ -1409,6 +1409,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-przycisk | „+" dopisania wpisu (lewa strona wiersza) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-add-button |
 | ui-wiersz | osadzenie wierszy wpisów w tabeli realizacji | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-tab-entry-rows |
 | ui-wiersz | stopka „Razem" (podsumowanie kosztów całkowitych) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-totals-row |
+| ui-wiersz | pusty wynik filtra wewnątrz tabeli (nagłówek filtrów zostaje) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-empty-filter-row |
 | ui-wiersz | RealizationEntryLine (wpis w dzienniku) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-line |
 | ui-formularz | RealizationEntryForm (przycisk „Nowy zakup") | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form |
 | ui-panel | RealizationExpandPanel (wymagania techniczne + podgląd + dziennik) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-expand-panel |
