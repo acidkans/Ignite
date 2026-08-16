@@ -448,6 +448,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-hook | wbs-materials-panel-global-update-listener | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-panel-global-update-listener |
 | ui-stan | comboRefs | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card-combo-refs |
 | ui-hook | useBeforeUnload | apps/frontend/src/hooks/useBeforeUnload.js | @anchor use-before-unload |
+| ui-stala | TOUCH_QUERY | apps/frontend/src/hooks/useDevice.js | @anchor device-touch-query |
+| ui-hook | efekt tożsamości dev-trackera | apps/frontend/src/App.jsx | @anchor app-dev-tracker-identity |
+| ui-stan | isTouch (WBSHybridTable) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-is-touch |
+| ui-stan | isTouch (WbsMaterialsPanel) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-is-touch |
 
 ### Skrypty narzędziowe (root repo)
 

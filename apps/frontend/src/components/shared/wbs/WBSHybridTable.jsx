@@ -3,6 +3,7 @@ import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber } 
 import AutoResizeTextarea from './AutoResizeTextarea';
 import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo } from 'lucide-react';
 import AddTaskModal from '../AddTaskModal';
+import { useDevice } from '../../../hooks/useDevice';
 
 // ── Q&A cell — zagnieżdżona tabela Pytanie / Odpowiedź per WBS node ───────────
 function QaPairRow({ p, idx, onUpdate, onRemove, onPersist }) {
@@ -879,6 +880,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // @anchor wbs-hybrid-offer-lock — po akceptacji baseline kolumny Ilość / Koszt jedn. / Narzut %
     // przestają przyjmować wpis (każdy typ liścia); kliknięcie otwiera modal `OfferLockGuard`.
     const offerLockProps = offerLockInputProps(offerLocked);
+    // @anchor wbs-hybrid-is-touch — na dotyku kolumna uchwytu zamienia się w duży przycisk
+    // rozwijania (drag&drop HTML5 i tak nie działa palcem, więc uchwyt tylko zajmował miejsce).
+    const { isTouch } = useDevice();
     const [expanded, setExpanded] = useState(() => new Set());
     const initialExpandDoneRef = useRef(false);
     // Domyślnie rozwiń tylko do 2. poziomu (root + węzły top-level) przy pierwszym
@@ -1363,9 +1367,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
     // ── Root row ──────────────────────────────────────────────────────────────
     rows.push(
-        <tr key="root" className="border-b border-white/5 bg-slate-900/50 hover:bg-slate-900/70 cursor-pointer select-none" onClick={e => toggle('root', e)}>
-            <td className="px-3 py-3">
-                <ChevronRight size={14} className={`text-gray-400 transition-transform ${isOpen('root') ? 'rotate-90' : ''}`} />
+        <tr key="root" className="border-b border-white/5 bg-slate-900/50 hover:bg-slate-900/70 cursor-pointer select-none" onClick={e => toggle('root', e)} style={{ touchAction: 'manipulation' }}>
+            <td className={isTouch ? 'p-0 text-center' : 'px-3 py-3'}>
+                <ChevronRight size={isTouch ? 20 : 14} className={`inline-block text-gray-400 transition-transform ${isOpen('root') ? 'rotate-90' : ''}`} />
             </td>
             <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center gap-2">
@@ -1440,24 +1444,45 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 className={`border-b border-white/5 cursor-pointer group/node transition-opacity wbs-br ${drawerClass} ${isDragging ? 'opacity-25' : ''} ${dropBorder} ${reqDropHighlight} ${selectedNodeId === node.id ? 'outline outline-1 outline-blue-500/40 !bg-blue-500/5' : ''}`}
                 onClick={e => { setSelectedNodeId(node.id); hasChildren && toggle(rowId, e); }}
             >
-                {/* WBS ID — uchwyt drag */}
-                <td
-                    className="px-2 py-2.5 cursor-grab min-w-[96px] w-[96px]"
-                    draggable
-                    onDragStart={e => onDragStart(e, node.id)}
-                    onDragEnd={onDragEnd}
-                >
-                    <div className="relative flex items-center gap-1.5">
-                        <GripVertical
-                            size={11}
-                            className={`flex-shrink-0 ${selectedDepth != null && depth === selectedDepth + 1 ? 'text-amber-400' : 'text-gray-700 group-hover/node:text-gray-500'}`}
-                        />
-                        {hasChildren
-                            ? <ChevronRight size={12} className={`text-gray-400 transition-transform flex-shrink-0 ${isOpen(rowId) ? 'rotate-90' : ''}`} />
-                            : <span className="w-[12px] flex-shrink-0" />
-                        }
-                    </div>
-                </td>
+                {/* WBS ID — uchwyt drag (mysz) / pełnokomórkowy przycisk rozwijania (dotyk).
+                    Na dotyku uchwyt drag znika (HTML5 DnD nie działa palcem), a chevron dostaje
+                    całą komórkę jako pole trafienia — inaczej 12-pikselowa ikona w 32-pikselowej
+                    kolumnie jest praktycznie nie do trafienia palcem. */}
+                {isTouch ? (
+                    <td className={`relative p-0 ${isDrawerHead ? 'bg-white/[0.04]' : ''}`}>
+                        {hasChildren && (
+                            <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setSelectedNodeId(node.id); toggle(rowId, e); }}
+                                aria-expanded={isOpen(rowId)}
+                                aria-label={isOpen(rowId) ? 'Zwiń gałąź' : 'Rozwiń gałąź'}
+                                title={isOpen(rowId) ? 'Zwiń' : 'Rozwiń'}
+                                style={{ touchAction: 'manipulation' }}
+                                className="absolute inset-0 flex items-center justify-center text-gray-300 active:bg-blue-500/25 active:text-blue-300 transition-colors"
+                            >
+                                <ChevronRight size={20} className={`transition-transform ${isOpen(rowId) ? 'rotate-90' : ''}`} />
+                            </button>
+                        )}
+                    </td>
+                ) : (
+                    <td
+                        className="px-2 py-2.5 cursor-grab min-w-[96px] w-[96px]"
+                        draggable
+                        onDragStart={e => onDragStart(e, node.id)}
+                        onDragEnd={onDragEnd}
+                    >
+                        <div className="relative flex items-center gap-1.5">
+                            <GripVertical
+                                size={11}
+                                className={`flex-shrink-0 ${selectedDepth != null && depth === selectedDepth + 1 ? 'text-amber-400' : 'text-gray-700 group-hover/node:text-gray-500'}`}
+                            />
+                            {hasChildren
+                                ? <ChevronRight size={12} className={`text-gray-400 transition-transform flex-shrink-0 ${isOpen(rowId) ? 'rotate-90' : ''}`} />
+                                : <span className="w-[12px] flex-shrink-0" />
+                            }
+                        </div>
+                    </td>
+                )}
 
                 {/* Nazwa */}
                 <td className="px-3 py-1.5 select-text relative" style={{ paddingLeft: `calc(0.75rem + ${depth * 24}px)`, paddingRight: '7rem' }} onClick={e => e.stopPropagation()}>
@@ -2029,7 +2054,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             <div className="w-full">
                 <table className="text-base border-collapse" style={{ tableLayout: 'fixed', width: '100%' }}>
                     <colgroup>
-                        <col style={{ width: 32 }} />
+                        {/* Kolumna uchwytu/rozwijania — na dotyku szersza, bo mieści pełny przycisk */}
+                        <col style={{ width: isTouch ? 56 : 32 }} />
                         <col style={{ width: colWidths.nazwa }} />
                         <col style={{ width: colWidths.typ }} />
                         <col style={{ width: colWidths.ilosc }} />

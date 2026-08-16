@@ -147,10 +147,16 @@ function App() {
     return () => window.removeEventListener('auth-expired', doLogout);
   }, [doLogout]);
 
-  // Dev-Tracker — tożsamość użytkownika (setUser) + dodatkowy kontekst (rola)
+  // Dev-Tracker — tożsamość użytkownika (setUser) + dodatkowy kontekst (rola).
+  // Cały blok w try/catch, bo widget jest skryptem zewnętrznym (dev-tracker.gigatel.org)
+  // i jego wyjątek leci tu w efekcie Reacta — bez error boundary React odmontowuje CAŁE
+  // drzewo, więc padał ekran logowania (biała strona). Konkretnie `clearUser()` rzuca
+  // TypeError w `applyVisibility`, gdy żaden użytkownik nie był wcześniej ustawiony —
+  // czyli na każdym świeżym urządzeniu i po każdym wylogowaniu.
+  // @anchor app-dev-tracker-identity
   useEffect(() => {
-    if (!token) { window.__devTracker?.clearUser(); window.__devTracker?.clearContext(); return; }
     try {
+      if (!token) { window.__devTracker?.clearUser(); window.__devTracker?.clearContext(); return; }
       const p = JSON.parse(atob(token.split('.')[1]));
       window.__devTracker?.setUser({ login: p.email, name: p.email, email: p.email });
       window.__devTracker?.setContext({ userId: p.sub || p.id, role: p.role });

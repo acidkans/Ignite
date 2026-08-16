@@ -8,6 +8,7 @@ import {
     Lock, Maximize2,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
+import { useDevice } from '../../../hooks/useDevice';
 import SupplierPicker from '../SupplierPicker';
 import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula, parsePriceInput, DRAWER } from './wbsConstants';
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
@@ -1396,7 +1397,7 @@ const GROUP_SPINE = `${DRAWER.spine} ${DRAWER.accent.offer.spine}`;
 // kilka procent krycia bieli i nie było widać, gdzie kończy się tabela, a zaczyna karta.
 const CARD_SURFACE = DRAWER.surface;
 
-function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isExpanded, onToggle, onOpenPurchases, onPatchNode, onCreateCard, materialDb, offers, token, readOnly, onRefresh, onPatchCard, onPropagatePrice, realization }) {
+function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isExpanded, onToggle, onOpenPurchases, onPatchNode, onCreateCard, materialDb, offers, token, readOnly, onRefresh, onPatchCard, onPropagatePrice, realization, isTouch = false }) {
     const meta = TYPE_META[node.type] || TYPE_META.material;
     const TypeIcon = meta.icon;
     const reqStatus = card?.status;
@@ -1479,18 +1480,25 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
 
     return (
         <tr className={`transition-colors ${isExpanded ? CARD_SURFACE : 'border-b border-white/[0.03] hover:bg-white/[0.02]'}`}>
-            {/* Expand */}
-            <td className={`w-9 px-2 py-2.5 text-center ${isExpanded ? GROUP_SPINE : ''}`}>
-                <button onClick={onToggle} className={`transition-colors ${isExpanded ? 'text-blue-400 hover:text-blue-300' : 'text-gray-600 hover:text-gray-300'}`}>
-                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            {/* Expand — na dotyku przycisk zajmuje całą komórkę (14 px ikona jest nie do trafienia palcem) */}
+            <td className={`text-center ${isTouch ? 'relative p-0' : 'w-9 px-2 py-2.5'} ${isExpanded ? GROUP_SPINE : ''}`}>
+                <button
+                    onClick={onToggle}
+                    aria-expanded={isExpanded}
+                    aria-label={isExpanded ? 'Zwiń wiersz' : 'Rozwiń wiersz'}
+                    title={isExpanded ? 'Zwiń' : 'Rozwiń'}
+                    style={{ touchAction: 'manipulation' }}
+                    className={`transition-colors ${isExpanded ? 'text-blue-400 hover:text-blue-300' : 'text-gray-600 hover:text-gray-300'} ${isTouch ? 'absolute inset-0 flex items-center justify-center active:bg-blue-500/25 active:text-blue-300' : ''}`}
+                >
+                    {isExpanded ? <ChevronDown size={isTouch ? 20 : 14} /> : <ChevronRight size={isTouch ? 20 : 14} />}
                 </button>
             </td>
             {/* Przedmiot projektu */}
             <td className="px-3 py-2.5">
                 <span className="text-sm text-white break-words" title={node.path}>{parent}</span>
             </td>
-            {/* Nazwa */}
-            <td className="px-3 py-2.5">
+            {/* Nazwa — klik rozwija wiersz (drugie, szerokie pole trafienia dla palca) */}
+            <td className="px-3 py-2.5 cursor-pointer" onClick={onToggle} style={{ touchAction: 'manipulation' }}>
                 <div className="text-sm text-white break-words">{node.name}</div>
                 {node.phase && <div className="text-xs text-gray-500 mt-0.5">{node.phase}</div>}
             </td>
@@ -1914,6 +1922,9 @@ export default function WbsMaterialsPanel({
     onExportReady,
 }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+    // @anchor wbs-materials-is-touch — dotyk czytamy raz w panelu i przekazujemy do wierszy
+    // (`useDevice` w każdym wierszu zakładałby setki listenerów matchMedia).
+    const { isTouch } = useDevice();
 
     const [internalWbsNodes, setInternalWbsNodes] = useState([]);
     const wbsNodes = externalWbsNodes ?? internalWbsNodes;
@@ -2703,7 +2714,8 @@ export default function WbsMaterialsPanel({
             <div className="flex-1 overflow-auto custom-scrollbar">
                 <table className="table-fixed w-full">
                     <colgroup>
-                        <col style={{ width: 36 }} />
+                        {/* Kolumna rozwijania — na dotyku szersza, bo mieści pełny przycisk */}
+                        <col style={{ width: isTouch ? 52 : 36 }} />
                         {visibleCols.map(c => (
                             <col key={c.key} style={{ width: colWidths[c.key] }} />
                         ))}
@@ -2761,6 +2773,7 @@ export default function WbsMaterialsPanel({
                                         accepted={accepted}
                                         offerLocked={offerLocked}
                                         isExpanded={isExpanded}
+                                        isTouch={isTouch}
                                         realization={realization}
                                         onPropagatePrice={propagatePriceNetto}
                                         onToggle={async () => {
