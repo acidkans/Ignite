@@ -63,11 +63,26 @@ const PROG_MIN_UDZIAL = 0.1;
 // dawało „nowy wykonanie" nad każdą pozycją typu praca i usługa.
 const entryNoun = (type) => (type === 'work' || type === 'service' ? 'wykonanie' : 'zakup');
 const newEntryLabel = (type) => (type === 'work' || type === 'service' ? 'Nowe wykonanie' : 'Nowy zakup');
-// Przycisk zapisu mówi „Dodaj zakup" nad KAŻDYM typem liścia — decyzja użytkownika. Etykieta
+// Przycisk zapisu mówi „Zapisz zakup" nad KAŻDYM typem liścia — decyzja użytkownika. Etykieta
 // nad datą (`newEntryLabel`) nadal rozróżnia zakup od wykonania, więc kontekst wiersza się nie gubi.
-const ADD_ENTRY_LABEL = 'Dodaj zakup';
+// „Zapisz", nie „Dodaj": po kliknięciu formularz się zamyka i nie podstawia kolejnego pustego
+// wiersza, więc przycisk kończy czynność, zamiast zapowiadać następną.
+const ADD_ENTRY_LABEL = 'Zapisz zakup';
 
 const ENTRY_INPUT = 'w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white outline-none focus:border-teal-500/50 placeholder-gray-700';
+
+// @anchor realization-field-label — nagłówek nad polem formularza nowego wpisu. Nagłówki
+// tabeli są przyklejone u góry, a formularz otwiera się w środku długiej listy — bez podpisu
+// przy samym polu nie widać, co się właśnie wypełnia. Tylko w formularzu: nad zapisanymi
+// wpisami powtarzałyby się przy każdym wierszu i zrobiłyby z dziennika ścianę tekstu.
+const lab = (t) => <span className="block text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-1">{t}</span>;
+
+// @anchor realization-missing-labels — nazwy pól w komunikacie „Uzupełnij: …". Małą literą,
+// bo wchodzą w środek zdania; te same słowa, co w nagłówkach nad polami, żeby komunikat
+// dało się przeczytać jako wskazówkę, gdzie kliknąć.
+const BRAK_ETYKIETY = {
+    qty: 'ilość', unitCost: 'koszt jedn.', manufacturer: 'producent', model: 'model', scope: 'zakres',
+};
 
 // @anchor realization-enter-next-field — Enter przechodzi do KOLEJNEGO okna w wierszu zakupu,
 // zamiast kończyć edycję. Wiersz wypełnia się od lewej do prawej jednym ciągiem, bez sięgania
@@ -200,11 +215,18 @@ export function RealizationRow({ node, card, realization, isExpanded, onToggle, 
                 ) : <span className="text-sm text-gray-600">—</span>}
             </td>
 
-            {/* Dostawca — z wpisów realizacji */}
+            {/* @anchor realization-row-suppliers — dostawcy z wpisów realizacji, każdy w osobnym
+                wierszu tej samej komórki. Skrót „IT-Planet +1" ukrywał, u kogo się kupowało —
+                a to jest dana rozliczeniowa, nie szczegół: żeby zobaczyć drugiego dostawcę,
+                trzeba było rozwijać pozycję. Nazwy są krótkie, więc lista mieści się w kolumnie. */}
             <td className="px-3 py-2.5">
-                <span className="text-sm text-gray-300 break-words" title={suppliers.join(', ')}>
-                    {suppliers.length === 0 ? '—' : suppliers.length === 1 ? suppliers[0] : `${suppliers[0]} +${suppliers.length - 1}`}
-                </span>
+                {suppliers.length === 0 ? <span className="text-sm text-gray-600">—</span> : (
+                    <div className="flex flex-col gap-0.5">
+                        {suppliers.map(s => (
+                            <span key={s} className="text-sm text-gray-300 break-words">{s}</span>
+                        ))}
+                    </div>
+                )}
             </td>
 
             {/* Dokument — z wpisów realizacji */}
@@ -360,11 +382,21 @@ export function RealizationEntryLine({ entry, cols, hasCard, readOnly, onSave, o
                         {author && <div className="text-[10px] text-gray-600 mt-0.5 truncate" title={author}>· {author}</div>}
                     </td>
                 );
+                // @anchor realization-entry-line-manufacturer — producent stoi pod kolumną „Nazwa",
+                // a nie razem z modelem pod „Produktem": kolumna była w wierszach wpisu pusta,
+                // a para producent + model wciśnięta w jedną komórkę robiła z niej najwęższe
+                // miejsce w wierszu. Ten sam podział trzyma formularz nowego wpisu, więc pola
+                // pokrywają się w pionie z tym, co się przed chwilą wpisało.
+                if (c.key === 'name') return (
+                    <td key={c.key} className="px-2 py-1.5">
+                        {hasCard ? field('manufacturer', '', { placeholder: 'producent', label: 'Producent' }) : null}
+                    </td>
+                );
                 if (c.key === 'product') return (
                     <td key={c.key} className="px-2 py-1.5 space-y-1">
                         {hasCard ? <>
-                            {field('manufacturer', '', { placeholder: 'producent', label: 'Producent' })}
                             {field('model', '', { placeholder: 'model', label: 'Model' })}
+                            {field('ean', 'font-mono', { placeholder: 'kod EAN', label: 'Kod EAN' })}
                         </> : field('scope', '', { placeholder: 'zakres — co obejmuje', label: 'Zakres' })}
                     </td>
                 );
@@ -418,27 +450,65 @@ export function RealizationEntryForm({ node, cols, hasCard, defaultQty, seedProd
         unitCost: '',
         comment: '', docNumber: '', supplierId: seedProduct?.supplierId ?? null,
         manufacturer: seedProduct?.manufacturer || '', model: seedProduct?.model || '',
+        // EAN nie ma skąd się podpowiedzieć — wycena go nie niesie, jest tylko na zakupie.
+        ean: '',
         // Zakres nie ma skąd się podpowiedzieć — liście bez karty nie mają produktu w wycenie.
         scope: '',
     });
     const [draft, setDraft] = useState(blank);
     const [saving, setSaving] = useState(false);
+    // @anchor realization-entry-form-missing — klucze pól, których zapis zażądał, a są puste.
+    // Wpis realizacji to dana rozliczeniowa: zakup bez ceny nie wchodzi do porównania z wyceną,
+    // a bez producenta i modelu nie wiadomo, CO właściwie kupiono — pozycja pokazuje wtedy
+    // ilość i kwotę bez towaru. Lepiej zatrzymać zapis niż dołożyć wiersz nie do odczytania.
+    const [brakujace, setBrakujace] = useState([]);
     // Kursor startuje w PIERWSZYM oknie wiersza, nie w komentarzu: Enter idzie teraz w prawo,
     // więc wejście od lewej pozwala wypełnić cały wiersz jednym ciągiem i zapisać na końcu.
     const firstFieldRef = useRef(null);
 
     useEffect(() => { firstFieldRef.current?.focus(); firstFieldRef.current?.select?.(); }, []);
 
-    const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
+    // Poprawienie pola gasi jego czerwoną obwódkę od razu, bez czekania na kolejny zapis.
+    const set = (k, v) => {
+        setDraft(d => ({ ...d, [k]: v }));
+        setBrakujace(b => (b.includes(k) ? b.filter(x => x !== k) : b));
+    };
 
+    // @anchor realization-entry-form-validate — czego zapis wymaga. Cena jest sprawdzana na
+    // WYPEŁNIENIE, nie na wartość dodatnią: zakup za 0 zł zdarza się naprawdę (wymiana
+    // gwarancyjna, gratis od dostawcy) i ma prawo wejść do rozliczenia — byle świadomie,
+    // wpisanym zerem, a nie pustym polem. Ilość zostaje przy regule „większa od zera",
+    // bo dostawa zerowej ilości nie jest zdarzeniem.
+    const waliduj = () => {
+        const b = [];
+        const qty = parseFloat(String(draft.qty).replace(',', '.'));
+        if (!Number.isFinite(qty) || qty <= 0) b.push('qty');
+        if (!String(draft.unitCost).trim()) b.push('unitCost');
+        if (hasCard) {
+            if (!draft.manufacturer.trim()) b.push('manufacturer');
+            if (!draft.model.trim()) b.push('model');
+        } else if (!draft.scope.trim()) b.push('scope');
+        return b;
+    };
+
+    // @anchor realization-entry-form-submit — zapis KOŃCZY czynność: formularz się zamyka.
+    // Wcześniej podstawiał kolejny pusty wiersz „na wszelki wypadek", przez co po każdym
+    // zapisie pod pozycją wisiał formularz, którego nikt nie zamawiał — a kolejną dostawę
+    // dopisuje się i tak przyciskiem „+", więc nic to nie oszczędzało.
     const submit = async () => {
         if (saving) return;
-        const qty = parseFloat(String(draft.qty).replace(',', '.'));
-        if (!Number.isFinite(qty) || qty <= 0) return;
+        const b = waliduj();
+        setBrakujace(b);
+        if (b.length) {
+            // Kursor ląduje w pierwszym brakującym polu — inaczej przy dłuższym wierszu
+            // trzeba szukać wzrokiem, co się podświetliło.
+            document.querySelector(`[data-entry-key="${b[0]}"]`)?.focus();
+            return;
+        }
         setSaving(true);
         const ok = await onAdd(draft);
         setSaving(false);
-        if (ok) { setDraft(blank()); firstFieldRef.current?.focus(); firstFieldRef.current?.select?.(); }
+        if (ok) onClose();
     };
     const onKey = e => {
         // Enter idzie do kolejnego okna; dopiero na ostatnim zapisuje wpis. Dzięki temu
@@ -449,11 +519,12 @@ export function RealizationEntryForm({ node, cols, hasCard, defaultQty, seedProd
     };
 
     const field = (k, extra = '', props = {}) => (
-        <input value={draft[k]} ref={props.ref} data-entry-field
+        <input value={draft[k]} ref={props.ref} data-entry-field data-entry-key={k}
             onChange={e => set(k, props.sanitize ? sanitizeQtyInput(e.target.value) : e.target.value)}
             onFocus={selectAllOnFocus}
             onKeyDown={onKey} placeholder={props.placeholder} aria-label={props.label}
-            className={`${ENTRY_INPUT} ${extra}`} />
+            aria-invalid={brakujace.includes(k) || undefined}
+            className={`${ENTRY_INPUT} ${extra} ${brakujace.includes(k) ? 'border-red-500/70 bg-red-500/10' : ''}`} />
     );
 
     const wartosc = (Number(String(draft.qty).replace(',', '.')) || 0) * (Number(String(draft.unitCost).replace(',', '.')) || 0);
@@ -467,40 +538,62 @@ export function RealizationEntryForm({ node, cols, hasCard, defaultQty, seedProd
             </td>
             {cols.map(c => {
                 if (c.key === 'parent') return (
-                    <td key={c.key} className="px-2 py-2">
+                    <td key={c.key} className="px-2 py-2 align-top">
+                        {/* Tytuł całego wiersza — dlatego zielony, w odróżnieniu od szarych
+                            nagłówków pojedynczych pól obok. */}
                         <span className="block text-[9px] font-bold uppercase tracking-widest text-teal-300/70 mb-1">{newEntryLabel(node.type)}</span>
                         {field('entryDate', 'font-mono', { label: 'Data zdarzenia', ref: firstFieldRef })}
                     </td>
                 );
-                if (c.key === 'comment') return <td key={c.key} className="px-2 py-2 align-bottom">{field('comment', '', { placeholder: 'komentarz — co zrobione', label: 'Komentarz' })}</td>;
+                if (c.key === 'comment') return <td key={c.key} className="px-2 py-2 align-top">{lab('Komentarz')}{field('comment', '', { placeholder: 'co zrobione', label: 'Komentarz' })}</td>;
+                // Producent w kolumnie „Nazwa" — patrz `realization-entry-line-manufacturer`.
+                if (c.key === 'name') return (
+                    <td key={c.key} className="px-2 py-2 align-top">
+                        {hasCard ? <>{lab('Producent')}{field('manufacturer', '', { placeholder: 'producent', label: 'Producent' })}</> : null}
+                    </td>
+                );
                 if (c.key === 'product') return (
-                    <td key={c.key} className="px-2 py-2 space-y-1 align-bottom">
+                    <td key={c.key} className="px-2 py-2 align-top">
                         {hasCard ? <>
-                            {field('manufacturer', '', { placeholder: 'producent', label: 'Producent' })}
+                            {lab('Model')}
                             {field('model', '', { placeholder: 'model', label: 'Model' })}
-                        </> : field('scope', '', { placeholder: 'zakres — co obejmuje', label: 'Zakres' })}
+                            <div className="mt-1.5">
+                                {lab('Kod EAN')}
+                                {field('ean', 'font-mono', { placeholder: '5901234123457', label: 'Kod EAN' })}
+                            </div>
+                        </> : <>{lab('Zakres')}{field('scope', '', { placeholder: 'co obejmuje', label: 'Zakres' })}</>}
                     </td>
                 );
                 if (c.key === 'supplier') return (
-                    <td key={c.key} className="px-2 py-2 align-bottom">
+                    <td key={c.key} className="px-2 py-2 align-top">
+                        {lab('Dostawca')}
                         <SupplierPicker dark value={draft.supplierId} onChange={s => setDraft(d => ({ ...d, supplierId: s?.id ?? null }))} />
                     </td>
                 );
-                if (c.key === 'doc') return <td key={c.key} className="px-2 py-2 align-bottom">{hasCard ? field('docNumber', 'font-mono', { placeholder: 'FV / PZ', label: 'Numer dokumentu' }) : null}</td>;
-                if (c.key === 'realization') return <td key={c.key} className="px-2 py-2 align-bottom">{field('qty', 'font-mono text-right', { label: 'Ilość', sanitize: true })}</td>;
-                if (c.key === 'purchasePrice') return <td key={c.key} className="px-2 py-2 align-bottom">{field('unitCost', 'font-mono text-right', { label: 'Koszt jednostkowy', sanitize: true })}</td>;
+                if (c.key === 'doc') return <td key={c.key} className="px-2 py-2 align-top">{hasCard ? <>{lab('Dokument')}{field('docNumber', 'font-mono', { placeholder: 'FV / PZ', label: 'Numer dokumentu' })}</> : null}</td>;
+                if (c.key === 'realization') return <td key={c.key} className="px-2 py-2 align-top">{lab('Ilość')}{field('qty', 'font-mono text-right', { label: 'Ilość', sanitize: true })}</td>;
+                if (c.key === 'purchasePrice') return <td key={c.key} className="px-2 py-2 align-top">{lab('Koszt jedn.')}{field('unitCost', 'font-mono text-right', { label: 'Koszt jednostkowy', sanitize: true })}</td>;
                 if (c.key === 'total') return (
-                    <td key={c.key} className="px-3 py-2 text-right align-bottom">
+                    <td key={c.key} className="px-3 py-2 text-right align-top">
+                        {lab('Wartość')}
                         <div className="font-mono text-sm text-gray-400 mb-1">{fmtZl(wartosc)} zł</div>
                         {/* Przycisk nazywa czynność, nie sposób jej wywołania („dopisz"). */}
                         <button onClick={submit} disabled={saving} title="Zapisz wpis (Enter)"
                             className="inline-flex items-center gap-1 px-2 py-1 rounded border border-teal-500/30 bg-teal-500/10 text-teal-300 text-xs font-bold uppercase whitespace-nowrap hover:bg-teal-500/20 disabled:opacity-40">
                             <CornerDownLeft size={12} /> {ADD_ENTRY_LABEL}
                         </button>
+                        {/* Komunikat stoi PRZY przycisku, bo to on właśnie odmówił. Wymienia
+                            nazwy pól, a nie tylko „uzupełnij dane" — czerwona obwódka bywa
+                            poza ekranem przy przewiniętej w bok tabeli. */}
+                        {brakujace.length > 0 && (
+                            <div className="mt-1.5 text-[10px] leading-tight text-red-300 text-left break-words">
+                                Uzupełnij: {brakujace.map(k => BRAK_ETYKIETY[k] || k).join(', ')}
+                            </div>
+                        )}
                     </td>
                 );
                 if (c.key === 'actions') return (
-                    <td key={c.key} className="px-3 py-2 text-right align-bottom">
+                    <td key={c.key} className="px-3 py-2 text-right align-top">
                         <button onClick={onClose} title="Zamknij formularz (Esc)" className="text-gray-600 hover:text-gray-300 transition-colors">
                             <X size={13} />
                         </button>
@@ -650,6 +743,15 @@ export default function RealizationTab({
     // `null` = pusty formularz. Ustawia je wyłącznie potwierdzona odpowiedź na pytanie „ten sam
     // produkt co w wycenie?", więc producent i model nigdy nie wjeżdżają do wpisu bez decyzji.
     const [formSeed, setFormSeed] = useState(null);
+    // @anchor realization-form-seed-key — licznik wymuszający przemontowanie formularza wpisu.
+    // `blank()` czyta seed WYŁĄCZNIE przy inicjalizacji stanu, więc po każdej odpowiedzi na
+    // pytanie o produkt formularz musi dostać nowy `key` — także gdy odpowiedź jest ta sama
+    // co poprzednio, bo pola mogły już zostać w międzyczasie ręcznie zmienione.
+    const [formSeedKey, setFormSeedKey] = useState(0);
+    // @anchor realization-product-confirm — pytanie „ten sam produkt co w wycenie?" czeka na
+    // odpowiedź w tym stanie: `{ nodeId, offer, opis }` albo `null`. Własny modal zamiast
+    // `window.confirm`, bo przeglądarka nie daje zmienić etykiet OK/Anuluj na TAK/NIE.
+    const [productConfirm, setProductConfirm] = useState(null);
 
     const [exporting, setExporting] = useState(false);
 
@@ -758,6 +860,7 @@ export default function RealizationTab({
                 supplierId: draft.supplierId || null,
                 manufacturer: draft.manufacturer || null,
                 model: draft.model || null,
+                ean: draft.ean || null,
                 scope: draft.scope || null,
             }),
         });
@@ -890,6 +993,7 @@ export default function RealizationTab({
                     (e.comment || '').toLowerCase().includes(q) ||
                     (e.manufacturer || '').toLowerCase().includes(q) ||
                     (e.model || '').toLowerCase().includes(q) ||
+                    (e.ean || '').toLowerCase().includes(q) ||
                     (e.scope || '').toLowerCase().includes(q)
                 )
             );
@@ -900,11 +1004,14 @@ export default function RealizationTab({
             const q = val.toLowerCase();
             list = list.filter(({ node, card, realization }) => {
                 if (key === 'parent')        return matchTokens(getParentPath(node.path), q);
-                if (key === 'name')          return `${node.name || ''} ${TYPE_META[node.type]?.label || ''}`.toLowerCase().includes(q);
-                // Filtr kolumny sięga i po produkt z wyceny, i po zakres z wpisów — kolumna jest
-                // jedna, więc szukanie musi trafiać w to, co w danym wierszu faktycznie widać.
+                // Producent wpisu stoi w tej kolumnie razem z nazwą pozycji, więc filtr musi
+                // trafiać w oba — patrz `realization-entry-line-manufacturer`.
+                if (key === 'name')          return `${node.name || ''} ${TYPE_META[node.type]?.label || ''}`.toLowerCase().includes(q)
+                    || realization.entries.some(e => (e.manufacturer || '').toLowerCase().includes(q));
+                // Filtr kolumny sięga i po produkt z wyceny, i po model, EAN oraz zakres z wpisów —
+                // kolumna jest jedna, więc szukanie musi trafiać w to, co w danym wierszu widać.
                 if (key === 'product')       return `${card?.manufacturer || ''} ${card?.model || ''}`.toLowerCase().includes(q)
-                    || realization.entries.some(e => (e.scope || '').toLowerCase().includes(q));
+                    || realization.entries.some(e => `${e.model || ''} ${e.ean || ''} ${e.scope || ''}`.toLowerCase().includes(q));
                 if (key === 'supplier')      return realization.entries.some(e => (e.supplier?.name || '').toLowerCase().includes(q));
                 if (key === 'doc')           return realization.entries.some(e => (e.docNumber || '').toLowerCase().includes(q));
                 if (key === 'qty')           return String(node.quantity ?? '').includes(q);
@@ -1359,22 +1466,34 @@ export default function RealizationTab({
     // przepisywana w żadnym wypadku — patrz `realization-entry-form-no-price`.
     const openEntryForm = (node, card) => {
         setExpandedId(node.id);
-        setFormNodeId(node.id);
         const offer = offerProductOf(card);
-        if (!offer) { setFormSeed(null); return; }
-        const opis = [offer.manufacturer, offer.model].filter(Boolean).join(' ') || offer.productName;
+        // Bez produktu po stronie wyceny nie ma o co pytać — formularz otwiera się od razu, pusty.
+        if (!offer) { setFormSeed(null); setFormSeedKey(k => k + 1); setFormNodeId(node.id); return; }
         // Pytanie pada wyłącznie nad materiałem i sprzętem — praca i usługa nie mają karty
         // produktowej, więc `offerProductOf` zwraca dla nich `null` i modal się nie pokazuje.
         // Dlatego treść mówi wprost o zakupie i produkcie, bez wariantu dla wykonania.
-        const sameProduct = window.confirm(
-            `Czy zakupiłeś ten sam co wyceniany produkt?\n` +
-            `Wypełnić dane zakupionego produktu danymi z wyceny?\n\n` +
-            `${opis}${offer.supplierName ? `\nDostawca z wyceny: ${offer.supplierName}` : ''}\n\n` +
-            `OK — uzupełnię producenta, model${offer.supplierName ? ' i dostawcę' : ''}.\n` +
-            `Anuluj — wpiszesz zamiennik ręcznie.\n\n` +
-            `Koszt jedn. w obu wypadkach zostaje pusty — cenę wpisujesz sam.`
-        );
-        setFormSeed(sameProduct ? offer : null);
+        const opis = [offer.manufacturer, offer.model].filter(Boolean).join(' ') || offer.productName;
+        // Formularz otwiera się DOPIERO po odpowiedzi (`resolveProductConfirm`), inaczej
+        // mignąłby pusty, a zaraz potem przemontował się z danymi z wyceny.
+        setProductConfirm({ nodeId: node.id, offer, opis });
+    };
+
+    // @anchor realization-resolve-product-confirm — odpowiedzi na pytania o produkt i o dostawcę.
+    // Każda część przepisuje się OSOBNO i tylko po świadomym „tak": ten sam produkt bywa kupiony
+    // u innego dostawcy, a ten sam dostawca dowozi zamiennik. Wcześniej jedna odpowiedź „tak"
+    // wpisywała dostawcę z wyceny do wpisu, w którym nikt go nie potwierdził. Cena nie wchodzi
+    // w żadnym wypadku — patrz `realization-entry-form-no-price`.
+    const resolveProductConfirm = ({ produkt, dostawca }) => {
+        if (!productConfirm) return;
+        const { offer, nodeId } = productConfirm;
+        setFormSeed(produkt || dostawca ? {
+            manufacturer: produkt ? offer.manufacturer : '',
+            model: produkt ? offer.model : '',
+            supplierId: dostawca ? offer.supplierId : null,
+        } : null);
+        setFormSeedKey(k => k + 1);
+        setFormNodeId(nodeId);
+        setProductConfirm(null);
     };
 
     // ─ Render ────────────────────────────────────────────────────────────────
@@ -1555,8 +1674,8 @@ export default function RealizationTab({
                                         {isExpanded && formNodeId === node.id && !readOnly && (
                                             <RealizationEntryForm
                                                 // Remount po zmianie pozycji LUB odpowiedzi na pytanie o produkt —
-                                                // `blank()` czyta seed tylko przy inicjalizacji stanu.
-                                                key={`form-${node.id}-${formSeed ? 'z-wyceny' : 'pusty'}`}
+                                                // patrz `realization-form-seed-key`.
+                                                key={`form-${node.id}-${formSeedKey}`}
                                                 node={node}
                                                 cols={COL_DEFS}
                                                 hasCard={hasCard}
@@ -1606,6 +1725,106 @@ export default function RealizationTab({
                     </table>
                 </div>
             )}
+
+            {productConfirm && (
+                <ProductConfirmModal
+                    opis={productConfirm.opis}
+                    supplierName={productConfirm.offer.supplierName}
+                    onAnswer={resolveProductConfirm}
+                />
+            )}
+        </div>
+    );
+}
+
+// @anchor product-confirm-modal — pytania „ten sam produkt co w wycenie?" i „ten sam dostawca?"
+// z etykietami TAK / NIE. Własny modal zamiast `window.confirm`, bo natywne okno przeglądarki
+// ma etykiety OK / Anuluj i nie da się ich zmienić. Enter = TAK, Esc = NIE dla PYTANIA, które
+// stoi na ekranie — wcześniejsza odpowiedź zostaje.
+//
+// Dwa pytania, nie jedno: produkt i dostawca to osobne decyzje. Ten sam miernik bywa kupiony
+// u innego dostawcy (dostępność, termin), a ten sam dostawca dowozi zamiennik. Jedno „tak"
+// na oba naraz wpisywało do zakupu dostawcę, którego nikt nie potwierdził — a to jest dana
+// rozliczeniowa. O dostawcę pytamy WYŁĄCZNIE po „tak" na produkt: przy zamienniku wycena
+// nie ma czego podpowiedzieć, więc pytanie byłoby puste.
+function ProductConfirmModal({ opis, supplierName, onAnswer }) {
+    const [krok, setKrok] = useState('produkt');
+    const tak = useRef(null);
+
+    const pytanieODostawce = krok === 'dostawca';
+
+    useEffect(() => { tak.current?.focus(); }, [krok]);
+
+    const naTak = useCallback(() => {
+        if (pytanieODostawce) { onAnswer({ produkt: true, dostawca: true }); return; }
+        // Bez dostawcy w wycenie nie ma o co pytać — kończymy na pierwszym pytaniu.
+        if (supplierName) { setKrok('dostawca'); return; }
+        onAnswer({ produkt: true, dostawca: false });
+    }, [pytanieODostawce, supplierName, onAnswer]);
+
+    // „Nie" na drugie pytanie nie cofa pierwszego — produkt jest już potwierdzony.
+    const naNie = useCallback(
+        () => onAnswer({ produkt: pytanieODostawce, dostawca: false }),
+        [pytanieODostawce, onAnswer],
+    );
+
+    useEffect(() => {
+        const onKey = e => {
+            if (e.key === 'Escape') { e.preventDefault(); naNie(); }
+            if (e.key === 'Enter') { e.preventDefault(); naTak(); }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [naTak, naNie]);
+
+    const btn = 'flex-1 px-4 py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all active:scale-95';
+
+    return (
+        <div className="fixed inset-0 z-[140] bg-[#05070bcc] backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0b0f17] shadow-2xl">
+                <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-white">
+                        {pytanieODostawce ? 'Dostawca zakupu' : 'Zakupiony produkt'}
+                    </h3>
+                    {supplierName && (
+                        <span className="text-[10px] font-mono text-gray-600 flex-shrink-0">{pytanieODostawce ? '2 / 2' : '1 / 2'}</span>
+                    )}
+                </div>
+
+                <div className="p-5 flex flex-col gap-3">
+                    <p className="text-sm text-gray-200">
+                        {pytanieODostawce
+                            ? 'Czy kupujesz u tego samego dostawcy co w wycenie?'
+                            : 'Czy zakupiłeś ten sam co wyceniany produkt?'}
+                    </p>
+                    <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2.5">
+                        {pytanieODostawce
+                            ? <p className="text-sm text-teal-200 font-medium break-words">{supplierName}</p>
+                            : <p className="text-sm text-teal-200 font-medium break-words">{opis}</p>}
+                    </div>
+                    <p className="text-xs text-gray-400">
+                        <span className="font-bold text-gray-300">TAK</span> — {pytanieODostawce ? 'ustawię tego dostawcę we wpisie.' : 'uzupełnię producenta i model.'}<br />
+                        <span className="font-bold text-gray-300">NIE</span> — {pytanieODostawce ? 'dostawcę wybierzesz sam.' : 'wpiszesz zamiennik ręcznie.'}
+                    </p>
+                    <p className="text-[11px] text-amber-400/70">
+                        Koszt jedn. w obu wypadkach zostaje pusty — cenę wpisujesz sam.
+                    </p>
+                </div>
+
+                <div className="px-5 pb-5 flex gap-3">
+                    <button
+                        ref={tak}
+                        onClick={naTak}
+                        className={`${btn} bg-teal-500/15 border border-teal-500/30 text-teal-200 hover:bg-teal-500/25`}>
+                        Tak
+                    </button>
+                    <button
+                        onClick={naNie}
+                        className={`${btn} bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10`}>
+                        Nie
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }

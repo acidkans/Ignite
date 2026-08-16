@@ -155,11 +155,21 @@ const noop = () => {};
 // Pozycja BEZ ani jednego wpisu — stan, w którym zostaje liść po usunięciu ostatniego zakupu.
 const pusta = { entries: [], qty: 0, value: 0, plan: 2, pct: 0, state: 'none', avg: null, mixedPrices: false };
 
+// Dwie dostawy od RÓŻNYCH dostawców — kolumna „Dostawca" ma wymienić obu, nie skrócić do „+1".
+const dwochDostawcow = {
+    ...realization,
+    entries: [
+        entries[0],
+        { ...entries[0], id: 'e3', docNumber: 'FV 15/2026', supplier: { id: 's2', name: 'IT-Planet' } },
+    ],
+};
+
 const cases = [
     ['wiersz pozycji (RealizationRow)', () => runRow({ node: leaf, card, realization, isExpanded: false, onToggle: noop, onAddClick: noop, onSaveComment: noop, readOnly: false })],
     ['wiersz pozycji bez wpisów', () => runRow({ node: leaf, card, realization: pusta, isExpanded: false, onToggle: noop, onAddClick: noop, onSaveComment: noop, readOnly: false })],
     ['wiersz pozycji rozliczonej bez wpisów', () => runRow({ node: { ...leaf, realizationClosed: true }, card, realization: { ...pusta, state: 'closed' }, isExpanded: false, onToggle: noop, onAddClick: noop, onSaveComment: noop, readOnly: false })],
     ['wiersz pozycji — tylko podgląd', () => runRow({ node: leaf, card, realization, isExpanded: true, onToggle: noop, onAddClick: noop, onSaveComment: noop, readOnly: true })],
+    ['wiersz pozycji — dwóch dostawców', () => runRow({ node: leaf, card, realization: dwochDostawcow, isExpanded: false, onToggle: noop, onAddClick: noop, onSaveComment: noop, readOnly: false })],
     ['wiersz wpisu (RealizationEntryLine)', () => runEntryLine({ entry: entries[0], cols: COL_DEFS, hasCard: true, readOnly: false, onSave: noop, onDelete: noop })],
     ['wiersz wpisu na pracy (zakres zamiast produktu)', () => runEntryLine({ entry: { ...entries[0], id: 'e2', manufacturer: null, model: null, scope: 'demontaż starej szafy' }, cols: COL_DEFS, hasCard: false, readOnly: false, onSave: noop, onDelete: noop })],
     ['formularz wpisu — zakup z produktem z wyceny', () => runEntryForm({ node: leaf, cols: COL_DEFS, hasCard: true, defaultQty: 1, seedProduct: { manufacturer: 'Legrand', model: 'LCS3', supplierId: 's1' }, onAdd: noop, onClose: noop })],
@@ -189,8 +199,10 @@ check('formularz podpisany „Nowy zakup"', /nowy zakup/i.test(form));
 check('formularz pracy podpisany „Nowe wykonanie"', /nowe wykonanie/i.test(plain(out['formularz wpisu — wykonanie bez produktu'])),
     'rodzaj gramatyczny: wykonanie jest nijakie, nie „nowy wykonanie"');
 // Przycisk zapisu nazywa czynność, a nie sposób jej wywołania („dopisz").
-check('przycisk zapisu to „Dodaj zakup"', /dodaj zakup/i.test(form));
-check('przycisk zapisu nad pracą też „Dodaj zakup"', /dodaj zakup/i.test(plain(out['formularz wpisu — wykonanie bez produktu'])),
+// „Zapisz", nie „Dodaj": zapis zamyka formularz i nie podstawia kolejnego pustego wiersza,
+// więc przycisk kończy czynność, zamiast zapowiadać następną.
+check('przycisk zapisu to „Zapisz zakup"', /zapisz zakup/i.test(form));
+check('przycisk zapisu nad pracą też „Zapisz zakup"', /zapisz zakup/i.test(plain(out['formularz wpisu — wykonanie bez produktu'])),
     'jedna etykieta dla wszystkich typów liści');
 check('wiersz wpisu pokazuje autora', line.includes('Jan Kowalski'));
 check('wiersz wpisu ma nr dokumentu', line.includes('FV 12/2026'));
@@ -204,6 +216,42 @@ check('wpis na pracy nie ma producenta ani modelu', !/aria-label="Producent"/.te
 check('zakres wpisu wchodzi do pola', /value="demontaż starej szafy"/.test(linePraca));
 check('formularz nad pracą też prosi o zakres', /aria-label="Zakres"/.test(formPraca));
 check('wpis na materiale zostaje przy producencie i modelu', /aria-label="Producent"/.test(line) && !/aria-label="Zakres"/.test(line));
+
+// Producent siedzi w kolumnie „Nazwa", model i EAN pod „Produktem" — para w jednej komórce
+// robiła z niej najwęższe miejsce w wierszu, a kolumna „Nazwa" stała w wpisach pusta.
+// Test patrzy na PODZIAŁ komórek, nie na kolejność pól: liczy się, że to osobne `<td>`.
+const komorkaZ = (html, aria) => (html.split('<td').find(td => td.includes(`aria-label="${aria}"`)) || '');
+for (const [nazwa, html] of [['formularz', form], ['wiersz wpisu', line]]) {
+    const tdProducent = komorkaZ(html, 'Producent');
+    check(`${nazwa}: producent w innej komórce niż model`,
+        !!tdProducent && !tdProducent.includes('aria-label="Model"'),
+        'kolumna „Nazwa" była w wpisach pusta, „Produkt" — przeładowana');
+    check(`${nazwa}: model i EAN w tej samej komórce`, komorkaZ(html, 'Model').includes('aria-label="Kod EAN"'));
+}
+check('formularz ma pole kodu EAN', /aria-label="Kod EAN"/.test(form));
+// Zapis sprawdza cenę, producenta i model; kursor skacze do pierwszego brakującego pola,
+// a namierza je po `data-entry-key`. Bez tego atrybutu walidacja podświetli pole, ale
+// nie postawi w nim kursora.
+for (const klucz of ['unitCost', 'manufacturer', 'model', 'qty']) {
+    check(`pole „${klucz}" ma data-entry-key (skok kursora przy walidacji)`, form.includes(`data-entry-key="${klucz}"`));
+}
+check('formularz nad pracą waliduje zakres, nie producenta', formPraca.includes('data-entry-key="scope"') && !formPraca.includes('data-entry-key="manufacturer"'));
+check('wpis na pracy nie ma pola EAN', !/aria-label="Kod EAN"/.test(linePraca), 'robocizna nie ma kodu towarowego');
+check('EAN w nowym wpisie jest PUSTY', !/aria-label="Kod EAN"[^>]*value="[^"]/.test(form), 'wycena nie niesie EAN-u');
+
+// Nagłówki nad polami — tylko w formularzu. Nagłówki tabeli są przyklejone u góry, a formularz
+// otwiera się w środku listy; nad zapisanymi wpisami powtarzałyby się w każdym wierszu.
+for (const naglowek of ['Producent', 'Model', 'Kod EAN', 'Dostawca', 'Dokument', 'Ilość', 'Koszt jedn.']) {
+    check(`formularz ma nagłówek „${naglowek}"`, form.includes(`>${naglowek}</span>`));
+}
+check('zapisany wpis BEZ nagłówków pól', !line.includes('>Kod EAN</span>') && !line.includes('>Producent</span>'));
+
+// Kilku dostawców wymieniamy w osobnych wierszach tej samej komórki. Skrót „IT-Planet +1"
+// ukrywał, u kogo się kupowało — a to jest dana rozliczeniowa, nie szczegół.
+const wiersz2Dost = plain(out['wiersz pozycji — dwóch dostawców']);
+const komorkaDostawcow = wiersz2Dost.split('<td').find(td => td.includes('IT-Planet')) || '';
+check('oba nazwiska dostawców w JEDNEJ komórce', komorkaDostawcow.includes('Dostawca sp. z o.o.') && komorkaDostawcow.includes('IT-Planet'));
+check('bez skrótu „+1" w kolumnie dostawcy', !/\+1</.test(komorkaDostawcow), 'lista zamiast licznika');
 
 // Kolor strony ZAKUP — koszt jedn. zakupu był czerwony od początku, koszt całkowity zakupu
 // dołącza do niego. W jednej komórce stoją dwie liczby (wycena i zakup), więc kolor jest

@@ -1,3 +1,72 @@
+## 2026-08-16 — feat(realizacja): lista dostawców zamiast „+N", zapis zamyka formularz (v2026.08.16.852)
+
+### architektura / API
+
+- **kolumna „Dostawca" wymienia wszystkich, każdego w osobnym wierszu komórki** (`realization-row-suppliers`): skrót „IT-Planet +1" ukrywał, u kogo się kupowało — żeby zobaczyć drugiego dostawcę, trzeba było rozwijać pozycję. To dana rozliczeniowa, nie szczegół. Nazwy dostawców są krótkie, więc lista mieści się w kolumnie
+- **zapis wpisu ZAMYKA formularz** (`realization-entry-form-submit`): wcześniej po udanym zapisie podstawiał się kolejny pusty wiersz „na wszelki wypadek" i pod pozycją wisiał formularz, którego nikt nie zamawiał. Kolejną dostawę dopisuje się i tak przyciskiem „+", więc nic to nie oszczędzało
+- **przycisk zapisu nazywa się „Zapisz zakup"** (`ADD_ENTRY_LABEL`), nie „Dodaj zakup" — po zmianie wyżej kończy czynność, zamiast zapowiadać następną
+- **zapis wpisu waliduje pola rozliczeniowe** (`realization-entry-form-validate`, `realization-entry-form-missing`, `realization-missing-labels`): ilość, koszt jedn. oraz producent + model (a na liściach bez karty — zakres) muszą być wypełnione, inaczej zapis się zatrzymuje, puste pola dostają czerwoną obwódkę, a nad formularzem staje „Uzupełnij: …". Zakup bez ceny nie wchodzi do porównania z wyceną, a bez producenta i modelu nie wiadomo, CO kupiono. Cena jest sprawdzana na WYPEŁNIENIE, nie na wartość dodatnią — zakup za 0 zł (wymiana gwarancyjna, gratis) ma prawo wejść do rozliczenia, byle wpisanym zerem
+
+### słownik
+
+- dodano `realization-row-suppliers` — lista dostawców pozycji, `RealizationTab.jsx`
+- dodano `realization-entry-form-submit` — zapis wpisu zamykający formularz, `RealizationTab.jsx`
+- dodano `realization-entry-form-validate` — walidacja formularza wpisu, `RealizationTab.jsx`
+- dodano `realization-entry-form-missing` — stan pustych pól wymaganych, `RealizationTab.jsx`
+- dodano `realization-missing-labels` — nazwy pól w komunikacie „Uzupełnij: …", `RealizationTab.jsx`
+
+### wytyczne
+
+- `ui-kolumna` — skrótu „pierwszy +N" nie stosować do danych rozliczeniowych (dostawca, numer dokumentu). Licznik mówi ILE, a pytanie brzmi KTÓRZY; jeśli wartości są krótkie, wymienić je w osobnych wierszach komórki
+- `ui-formularz` — po zapisie nie podstawiać kolejnego pustego formularza. Otwarte pole wygląda jak niedokończona robota, a wejście w kolejny wpis jest jednym kliknięciem
+- `ui-formularz` — pola kwotowe walidować na WYPEŁNIENIE, nie na wartość dodatnią. Zero bywa prawdziwą wartością rozliczeniową (gratis, gwarancja); regułę „> 0" trzymać tylko tam, gdzie zero nie jest zdarzeniem (ilość)
+
+## 2026-08-16 — feat(realizacja): kod EAN na wpisie, producent w osobnej kolumnie, osobne pytanie o dostawcę (v2026.08.16.851)
+
+### schema.prisma
+
+- dodano pole `ean` w modelu `LeafActual` (`leaf-actual-ean`) — kod EAN kupionego egzemplarza. Producent i model bywają wpisane różnie przy każdej dostawie („Janitza" vs „JANITZA electronics"), więc po nich nie da się pewnie stwierdzić, czy druga dostawa to ten sam towar. `TEXT`, nie liczba: EAN-13 miewa wiodące zera i wychodzi poza bezpieczny zakres liczb w JS. Migracja `20260816140000_leaf_actual_ean`
+
+### architektura / API
+
+- **`POST /leaf-actuals` i `PATCH /leaf-actuals/:id` przyjmują `ean`** (`leaf-actual-input-ean`); pole wchodzi też do wszystkich trzech `select` serwisu, więc wraca w liście wpisów zamówienia
+- **producent przeniesiony do kolumny „Nazwa"** (`realization-entry-line-manufacturer`): w wierszach wpisu kolumna była pusta, a para producent + model wciśnięta w jedną komórkę „Produkt" robiła z niej najwęższe miejsce w wierszu. Pod „Produktem" zostaje model, pod nim EAN. Ten sam podział w formularzu i w zapisanych wpisach, więc pola pokrywają się w pionie. Filtry kolumn poszły za układem: „Nazwa" szuka też po producencie wpisu, „Produkt" po modelu, EAN-ie i zakresie
+- **nagłówki nad polami formularza nowego wpisu** (`realization-field-label`): nagłówki tabeli są przyklejone u góry, a formularz otwiera się w środku długiej listy — bez podpisu przy samym polu nie widać, co się wypełnia. Tylko w formularzu; nad zapisanymi wpisami powtarzałyby się w każdym wierszu
+- **pytanie o dostawcę oddzielone od pytania o produkt** (`product-confirm-modal`): modal ma teraz dwa kroki — „ten sam produkt?", a po „tak" „ten sam dostawca?". Produkt i dostawca to osobne decyzje: ten sam miernik bywa kupiony u innego dostawcy, a ten sam dostawca dowozi zamiennik. Jedno „tak" na oba naraz wpisywało do zakupu dostawcę, którego nikt nie potwierdził. Po „nie" na produkt o dostawcę nie pytamy — przy zamienniku wycena nie ma czego podpowiedzieć
+- **remount formularza wpisu na liczniku** (`realization-form-seed-key`) zamiast na kształcie seeda: `blank()` czyta seed wyłącznie przy inicjalizacji stanu, więc ta sama odpowiedź co poprzednio nie zmieniała `key` i podpowiedź nie wchodziła do już otwartego formularza
+
+### słownik
+
+- dodano `leaf-actual-ean` — pole EAN na wpisie realizacji, `schema.prisma`
+- dodano `leaf-actual-input-ean` — EAN w DTO wpisu, `leaf-actuals.service.ts`
+- dodano `realization-entry-line-manufacturer` — producent w kolumnie „Nazwa", `RealizationTab.jsx`
+- dodano `realization-field-label` — nagłówek nad polem formularza, `RealizationTab.jsx`
+- dodano `realization-form-seed-key` — licznik remountu formularza wpisu, `RealizationTab.jsx`
+
+### wytyczne
+
+- `ui-modal` — podpowiadanie danych z wyceny do zakupu rozbijać na tyle pytań, ile jest niezależnych decyzji. Produkt i dostawca zmieniają się osobno, więc jedno „tak" nie może przepisywać obu. Dane rozliczeniowe wchodzą do wpisu wyłącznie po świadomym potwierdzeniu — tak samo jak cena, której nie podpowiadamy nigdy
+- `schema-pole` `LeafActual.ean` — kody kreskowe trzymać jako `TEXT`. EAN-13 i GTIN mają wiodące zera (ginące w typie liczbowym) i przekraczają `Number.MAX_SAFE_INTEGER`
+- `ui-formularz` — pola formularza otwieranego w środku długiej tabeli potrzebują własnych nagłówków. Nagłówki tabeli są przyklejone u góry ekranu, a placeholder znika po wpisaniu pierwszego znaku
+
+## 2026-08-16 — feat(realizacja): własny modal „ten sam produkt?" z przyciskami TAK / NIE (v2026.08.16.850)
+
+### architektura / API
+
+- **`window.confirm` zastąpiony komponentem `ProductConfirmModal`** (`product-confirm-modal`): natywne okno przeglądarki ma nieedytowalne etykiety OK / Anuluj — jedyny sposób na TAK / NIE to własny modal. Styl zgodny z resztą aplikacji (`ExportChoiceModal`): overlay `bg-[#05070bcc]`, karta `bg-[#0b0f17]`, produkt z wyceny w wyróżnionej ramce. Enter = TAK, Esc = NIE, autofocus na „Tak" — zachowanie okna systemowego zostaje
+- **pytanie stało się asynchroniczne** (`realization-product-confirm`, `realization-resolve-product-confirm`): `openEntryForm` nie ustawia już `formNodeId` od razu, tylko odkłada `{ nodeId, offer, opis }` do stanu; formularz wpisu montuje się DOPIERO po odpowiedzi. Inaczej mignąłby pusty, a zaraz potem przemontował się z danymi z wyceny (zmiana `key`). Ścieżka bez produktu w wycenie otwiera formularz natychmiast, jak dotąd
+
+### słownik
+
+- dodano `realization-product-confirm` — stan oczekującego pytania o produkt, `RealizationTab.jsx`
+- dodano `realization-resolve-product-confirm` — rozwiązanie pytania TAK/NIE, `RealizationTab.jsx`
+- dodano `product-confirm-modal` — modal pytania o produkt, `RealizationTab.jsx`
+
+### wytyczne
+
+- `ui-modal` — NIE używać `window.confirm`, `window.alert` ani `window.prompt`. Zawsze własny modal React: natywne okna mają nieedytowalne, angielskie etykiety przycisków i systemowy wygląd obcy ciemnemu UI. Wzorzec: overlay `fixed inset-0 z-[140] bg-[#05070bcc] backdrop-blur-sm`, karta `max-w-md rounded-2xl border border-white/10 bg-[#0b0f17]`, Enter = potwierdzenie, Esc = odrzucenie
+- `ui-modal` — zamiana `window.confirm` na modal zmienia kod z synchronicznego na asynchroniczny. Wszystko, co po odpowiedzi ma się wydarzyć, przenieść do callbacka rozwiązującego; stan otwierany PRZED pytaniem trzeba przejrzeć, bo `window.confirm` blokował render, a modal nie
+
 ## 2026-08-16 — fix(realizacja): pusty wynik filtra nie zabiera całej tabeli (v2026.08.16.849)
 
 ### architektura / API

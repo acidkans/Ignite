@@ -1297,6 +1297,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | LeafActual.docNumber | apps/backend/prisma/schema.prisma | @anchor leaf-actual-doc-number |
 | schema-pole | LeafActual.manufacturer | apps/backend/prisma/schema.prisma | @anchor leaf-actual-manufacturer |
 | schema-pole | LeafActual.model | apps/backend/prisma/schema.prisma | @anchor leaf-actual-model |
+| schema-pole | LeafActual.ean (kod EAN kupionego egzemplarza) | apps/backend/prisma/schema.prisma | @anchor leaf-actual-ean |
 | schema-pole | LeafActual.scope (zakres — liście bez karty) | apps/backend/prisma/schema.prisma | @anchor leaf-actual-scope |
 | schema-pole | LeafActual.supplierId | apps/backend/prisma/schema.prisma | @anchor leaf-actual-supplier-id |
 | schema-pole | LeafActual.authorId | apps/backend/prisma/schema.prisma | @anchor leaf-actual-author-id |
@@ -1316,6 +1317,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-serwis | LeafActualsService | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-service |
 | back-typ | ActualsUser | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-user |
 | back-dto | LeafActualInput | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actual-input |
+| back-dto | LeafActualInput.ean | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actual-input-ean |
 | back-dto | LeafActualInput.scope | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actual-input-scope |
 | back-stala | OPEN_LEAF_TYPES (typy widoczne dla każdej roli) | apps/backend/src/common/leaf-types.util.ts | @anchor open-leaf-types |
 | back-funkcja | isOpenLeafType | apps/backend/src/common/leaf-types.util.ts | @anchor is-open-leaf-type |
@@ -1403,6 +1405,12 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | formSeed (produkt do formularza wpisu) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-form-seed |
 | ui-funkcja | offerProductOf (produkt z wyceny) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-offer-product |
 | ui-funkcja | openEntryForm (pytanie „ten sam produkt?") | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-open-entry-form |
+| ui-stan | productConfirm (pytanie o produkt czeka na odpowiedź) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-product-confirm |
+| ui-stan | formSeedKey (licznik remountu formularza wpisu) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-form-seed-key |
+| ui-funkcja | lab (nagłówek nad polem formularza wpisu) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-field-label |
+| ui-kolumna | producent wpisu w kolumnie „Nazwa" | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-line-manufacturer |
+| ui-funkcja | resolveProductConfirm (odpowiedź TAK/NIE na pytanie o produkt) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-resolve-product-confirm |
+| ui-modal | ProductConfirmModal („ten sam produkt?" z TAK/NIE) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor product-confirm-modal |
 | ui-input | koszt jedn. wpisu — bez podpowiedzi ceny | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-no-price |
 | ui-stala | entryNoun / newEntryLabel / ADD_ENTRY_LABEL (zakup vs wykonanie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-noun |
 | ui-wiersz | RealizationRow | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row |
@@ -1412,6 +1420,11 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-wiersz | pusty wynik filtra wewnątrz tabeli (nagłówek filtrów zostaje) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-empty-filter-row |
 | ui-wiersz | RealizationEntryLine (wpis w dzienniku) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-line |
 | ui-formularz | RealizationEntryForm (przycisk „Nowy zakup") | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form |
+| ui-funkcja | submit formularza wpisu (zapis zamyka formularz) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-submit |
+| ui-funkcja | waliduj (czego zapis wpisu wymaga) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-validate |
+| ui-stan | brakujace (puste pola wymagane przy zapisie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-missing |
+| ui-stala | BRAK_ETYKIETY (nazwy pól w komunikacie „Uzupełnij: …") | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-missing-labels |
+| ui-kolumna | dostawcy pozycji — lista, nie skrót „+N" | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-suppliers |
 | ui-panel | RealizationExpandPanel (wymagania techniczne + podgląd + dziennik) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-expand-panel |
 | ui-stan | visibleTypes (filtr typów po roli) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-visible-types |
 | ui-stan | techPendingRef (niepotwierdzony PATCH wymagań) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-techspec-pending |

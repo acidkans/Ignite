@@ -1236,6 +1236,11 @@ model LeafActual {
   manufacturer String?
   /// @anchor leaf-actual-model
   model        String?
+  /// @anchor leaf-actual-ean
+  /// Kod EAN kupionego egzemplarza — identyfikuje towar jednoznacznie tam, gdzie producent
+  /// i model bywają wpisane różnie („Janitza" vs „JANITZA electronics"). Tekst, nie liczba:
+  /// EAN-13 ma wiodące zera i przekracza bezpieczny zakres liczb w JS.
+  ean          String?
   /// @anchor leaf-actual-scope
   /// Zakres TEGO zdarzenia — odpowiednik producenta i modelu dla liści, które nie mają
   /// karty produktowej (praca, usługa, nocleg, paliwo). Jedno wolne pole zamiast pary

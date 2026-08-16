@@ -21,6 +21,8 @@ export interface LeafActualInput {
     supplierId?: string | null;
     manufacturer?: string | null;
     model?: string | null;
+    // @anchor leaf-actual-input-ean — kod EAN kupionego egzemplarza, tekstem (wiodące zera)
+    ean?: string | null;
     // @anchor leaf-actual-input-scope — zakres wykonania dla liści bez karty produktowej
     scope?: string | null;
 }
@@ -87,7 +89,7 @@ export class LeafActualsService {
             orderBy: [{ entryDate: 'asc' }, { createdAt: 'asc' }],
             select: {
                 id: true, wbsRootId: true, entryDate: true, qty: true, unitCost: true,
-                comment: true, docNumber: true, manufacturer: true, model: true, scope: true, createdAt: true,
+                comment: true, docNumber: true, manufacturer: true, model: true, ean: true, scope: true, createdAt: true,
                 supplier: { select: { id: true, name: true } },
                 author: { select: { id: true, firstName: true, lastName: true, email: true } },
             },
@@ -114,12 +116,13 @@ export class LeafActualsService {
                 supplierId: input.supplierId || null,
                 manufacturer: input.manufacturer?.trim() || null,
                 model: input.model?.trim() || null,
+                ean: input.ean?.trim() || null,
                 scope: input.scope?.trim() || null,
                 authorId: user?.userId ?? null,
             },
             select: {
                 id: true, wbsRootId: true, entryDate: true, qty: true, unitCost: true,
-                comment: true, docNumber: true, manufacturer: true, model: true, scope: true, createdAt: true,
+                comment: true, docNumber: true, manufacturer: true, model: true, ean: true, scope: true, createdAt: true,
                 supplier: { select: { id: true, name: true } },
                 author: { select: { id: true, firstName: true, lastName: true, email: true } },
             },
@@ -163,11 +166,12 @@ export class LeafActualsService {
                 ...(input.supplierId !== undefined ? { supplierId: input.supplierId || null } : {}),
                 ...(input.manufacturer !== undefined ? { manufacturer: input.manufacturer?.trim() || null } : {}),
                 ...(input.model !== undefined ? { model: input.model?.trim() || null } : {}),
+                ...(input.ean !== undefined ? { ean: input.ean?.trim() || null } : {}),
                 ...(input.scope !== undefined ? { scope: input.scope?.trim() || null } : {}),
             },
             select: {
                 id: true, wbsRootId: true, entryDate: true, qty: true, unitCost: true,
-                comment: true, docNumber: true, manufacturer: true, model: true, scope: true, createdAt: true,
+                comment: true, docNumber: true, manufacturer: true, model: true, ean: true, scope: true, createdAt: true,
                 supplier: { select: { id: true, name: true } },
                 author: { select: { id: true, firstName: true, lastName: true, email: true } },
             },
