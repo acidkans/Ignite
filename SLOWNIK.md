@@ -450,6 +450,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-hook | useBeforeUnload | apps/frontend/src/hooks/useBeforeUnload.js | @anchor use-before-unload |
 | ui-stala | TOUCH_QUERY | apps/frontend/src/hooks/useDevice.js | @anchor device-touch-query |
 | ui-hook | efekt tożsamości dev-trackera | apps/frontend/src/App.jsx | @anchor app-dev-tracker-identity |
+| ui-funkcja | przenoszenie węzła palcem (Pointer Events) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-pointer-drag |
 | ui-stan | isTouch (WBSHybridTable) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-is-touch |
 | ui-stan | isTouch (WbsMaterialsPanel) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-is-touch |
 

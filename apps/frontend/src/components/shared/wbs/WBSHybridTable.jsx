@@ -1262,6 +1262,94 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
     const onDragEnd = () => { dragIdRef.current = null; setDragId(null); setDragOver(null); setReqDragOverNode(null); };
 
+    // ── Przenoszenie palcem (Pointer Events) ──────────────────────────────────
+    // HTML5 drag&drop nie dostaje z dotyku ŻADNYCH zdarzeń (ani Chrome na Androidzie,
+    // ani Safari), więc na tablecie gest obsługujemy ręcznie. Stan (`dragIdRef`,
+    // `dragOver`) i samo przeniesienie (`extractNode` + `insertNode`) są te same co przy
+    // myszy — inna jest wyłącznie warstwa gestu, więc podświetlenia before/after/into
+    // i wiersz-widmo działają bez zmian.
+    // Uchwyt ma `touch-action: none`, dzięki czemu przeglądarka nie zabierze gestu na
+    // przewijanie i nie trzeba wymuszać przytrzymania — chwyt jest natychmiastowy.
+    // @anchor wbs-hybrid-pointer-drag
+    const pointerDragRef = useRef(null);      // { pointerId, nodeId, startX, startY, moved }
+    const autoScrollRafRef = useRef(0);
+    const autoScrollSpeedRef = useRef(0);
+
+    // Pętla dosuwania listy, gdy palec stoi przy krawędzi — bez niej nie da się przenieść
+    // wiersza poza widoczny fragment tabeli (palec nie generuje wtedy żadnych zdarzeń).
+    const autoScrollTick = () => {
+        const wrap = tableWrapperRef.current;
+        if (!pointerDragRef.current || !wrap) { autoScrollRafRef.current = 0; autoScrollSpeedRef.current = 0; return; }
+        if (autoScrollSpeedRef.current) wrap.scrollTop += autoScrollSpeedRef.current;
+        autoScrollRafRef.current = requestAnimationFrame(autoScrollTick);
+    };
+
+    // Wiersz pod palcem + miejsce zrzutu. Ta sama matematyka progów co w `onDragOver`.
+    const pointerDropTargetAt = (x, y) => {
+        const row = document.elementFromPoint(x, y)?.closest('tr[data-node-id]');
+        if (!row) return null;
+        const nodeId = row.dataset.nodeId;
+        const depth = Number(row.dataset.depth || 0);
+        const currentDragId = dragIdRef.current;
+        if (!currentDragId || currentDragId === nodeId) return null;
+        const dragNode = findNode(items, currentDragId);
+        if (dragNode && subtreeContains(dragNode, nodeId)) return null;
+        const rect = row.getBoundingClientRect();
+        const relY = (y - rect.top) / rect.height;
+        let position;
+        if (relY < 0.25) position = 'before';
+        else if (relY > 0.75) position = 'after';
+        else position = depth < MAX_DEPTH ? 'into' : (relY < 0.5 ? 'before' : 'after');
+        return { nodeId, position };
+    };
+
+    const onHandlePointerDown = (e, nodeId) => {
+        if (e.pointerType === 'mouse') return;   // mysz zostaje na natywnym HTML5 DnD
+        e.stopPropagation();
+        try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+        pointerDragRef.current = { pointerId: e.pointerId, nodeId, startX: e.clientX, startY: e.clientY, moved: false };
+    };
+
+    const onHandlePointerMove = (e) => {
+        const st = pointerDragRef.current;
+        if (!st || e.pointerId !== st.pointerId) return;
+        // Próg 6 px — samo dotknięcie uchwytu (bez ruchu) nie ma podnosić wiersza.
+        if (!st.moved) {
+            if (Math.hypot(e.clientX - st.startX, e.clientY - st.startY) < 6) return;
+            st.moved = true;
+            dragIdRef.current = st.nodeId;
+            setDragId(st.nodeId);
+            if (!autoScrollRafRef.current) autoScrollRafRef.current = requestAnimationFrame(autoScrollTick);
+        }
+        e.preventDefault();
+        const wrap = tableWrapperRef.current;
+        if (wrap) {
+            const r = wrap.getBoundingClientRect();
+            const EDGE = 56;
+            if (e.clientY < r.top + EDGE) autoScrollSpeedRef.current = -Math.ceil((r.top + EDGE - e.clientY) / 4);
+            else if (e.clientY > r.bottom - EDGE) autoScrollSpeedRef.current = Math.ceil((e.clientY - (r.bottom - EDGE)) / 4);
+            else autoScrollSpeedRef.current = 0;
+        }
+        setDragOver(pointerDropTargetAt(e.clientX, e.clientY));
+    };
+
+    const finishPointerDrag = (e, commit) => {
+        const st = pointerDragRef.current;
+        if (!st || e.pointerId !== st.pointerId) return;
+        pointerDragRef.current = null;
+        autoScrollSpeedRef.current = 0;
+        try { e.currentTarget.releasePointerCapture(st.pointerId); } catch {}
+        const target = dragOverRef.current;
+        const draggedId = dragIdRef.current;
+        dragIdRef.current = null; setDragId(null); setDragOver(null);
+        if (!commit || !st.moved || !target || !draggedId || target.nodeId === draggedId) return;
+        const [extracted, withoutDrag] = extractNode(items, draggedId);
+        if (!extracted) return;
+        save({ ...wbsTree, items: insertNode(withoutDrag, target.nodeId, extracted, target.position) });
+    };
+
+    useEffect(() => () => { if (autoScrollRafRef.current) cancelAnimationFrame(autoScrollRafRef.current); }, []);
+
     // ── Search filter ─────────────────────────────────────────────────────────
     const normalizedSearch = String(searchQuery || '').trim().toLowerCase();
     let searchVisibleIds = null;
@@ -1437,6 +1525,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         rows.push(
             <tr
                 key={rowId}
+                data-node-id={node.id}
+                data-depth={depth}
                 onDragOver={e => onDragOver(e, node.id, depth)}
                 onDragLeave={onDragLeave}
                 onDrop={e => onDrop(e, node.id)}
@@ -1450,19 +1540,41 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     kolumnie jest praktycznie nie do trafienia palcem. */}
                 {isTouch ? (
                     <td className={`relative p-0 ${isDrawerHead ? 'bg-white/[0.04]' : ''}`}>
-                        {hasChildren && (
-                            <button
-                                type="button"
-                                onClick={e => { e.stopPropagation(); setSelectedNodeId(node.id); toggle(rowId, e); }}
-                                aria-expanded={isOpen(rowId)}
-                                aria-label={isOpen(rowId) ? 'Zwiń gałąź' : 'Rozwiń gałąź'}
-                                title={isOpen(rowId) ? 'Zwiń' : 'Rozwiń'}
-                                style={{ touchAction: 'manipulation' }}
-                                className="absolute inset-0 flex items-center justify-center text-gray-300 active:bg-blue-500/25 active:text-blue-300 transition-colors"
+                        <div className="absolute inset-0 flex items-stretch">
+                            {/* Uchwyt przeniesienia — `touch-action: none`, więc gest zaczęty tutaj
+                                nie przewija listy, tylko podnosi wiersz. `draggable` zostaje dla
+                                hybryd (laptop z ekranem dotykowym trafia w gałąź dotykową, ale myszą
+                                dalej ma korzystać z natywnego HTML5 DnD — ścieżka wskaźnika
+                                ignoruje `pointerType === 'mouse'`). */}
+                            <span
+                                draggable
+                                onDragStart={e => onDragStart(e, node.id)}
+                                onDragEnd={onDragEnd}
+                                onPointerDown={e => onHandlePointerDown(e, node.id)}
+                                onPointerMove={onHandlePointerMove}
+                                onPointerUp={e => finishPointerDrag(e, true)}
+                                onPointerCancel={e => finishPointerDrag(e, false)}
+                                onClick={e => e.stopPropagation()}
+                                title="Przeciągnij, aby przenieść"
+                                style={{ touchAction: 'none' }}
+                                className={`flex items-center justify-center w-9 flex-shrink-0 active:bg-blue-500/25 active:text-blue-300 ${selectedDepth != null && depth === selectedDepth + 1 ? 'text-amber-400' : 'text-gray-600'}`}
                             >
-                                <ChevronRight size={20} className={`transition-transform ${isOpen(rowId) ? 'rotate-90' : ''}`} />
-                            </button>
-                        )}
+                                <GripVertical size={18} />
+                            </span>
+                            {hasChildren ? (
+                                <button
+                                    type="button"
+                                    onClick={e => { e.stopPropagation(); setSelectedNodeId(node.id); toggle(rowId, e); }}
+                                    aria-expanded={isOpen(rowId)}
+                                    aria-label={isOpen(rowId) ? 'Zwiń gałąź' : 'Rozwiń gałąź'}
+                                    title={isOpen(rowId) ? 'Zwiń' : 'Rozwiń'}
+                                    style={{ touchAction: 'manipulation' }}
+                                    className="flex-1 flex items-center justify-center text-gray-300 active:bg-blue-500/25 active:text-blue-300 transition-colors"
+                                >
+                                    <ChevronRight size={20} className={`transition-transform ${isOpen(rowId) ? 'rotate-90' : ''}`} />
+                                </button>
+                            ) : <span className="flex-1" />}
+                        </div>
                     </td>
                 ) : (
                     <td
@@ -2054,8 +2166,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             <div className="w-full">
                 <table className="text-base border-collapse" style={{ tableLayout: 'fixed', width: '100%' }}>
                     <colgroup>
-                        {/* Kolumna uchwytu/rozwijania — na dotyku szersza, bo mieści pełny przycisk */}
-                        <col style={{ width: isTouch ? 56 : 32 }} />
+                        {/* Kolumna uchwytu/rozwijania — na dotyku mieści uchwyt przeniesienia (36 px)
+                            i przycisk rozwijania (48 px), oba w rozmiarze pod palec */}
+                        <col style={{ width: isTouch ? 84 : 32 }} />
                         <col style={{ width: colWidths.nazwa }} />
                         <col style={{ width: colWidths.typ }} />
                         <col style={{ width: colWidths.ilosc }} />
