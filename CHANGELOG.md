@@ -1,3 +1,16 @@
+## 2026-08-16 — chore(deploy): deploy przycina cache buildów po wystawieniu kontenerów
+
+### architektura / API
+
+- **`deploy.sh` kończy się `docker builder prune -f --reserved-space 10GB`**: build leci z `--no-cache`, ale warstwy pośrednie i tak lądują w cache'u i nic ich stamtąd nie usuwa — przy dzisiejszym tempie deployów urosło to do **112,9 GB i zajęło 83% dysku serwera** (26 GB wolnego). Jednorazowe wyczyszczenie odzyskało 104 GB, dysk zszedł do 11%. `--reserved-space` to w Dockerze 29 następca wycofanego `--keep-storage`
+- sprzątanie idzie PO `docker compose up`, żeby nie opóźniać wystawienia aplikacji, i ma `|| true` mimo `set -e` — nieudane czyszczenie nie może wywrócić deployu, który się już udał
+- deploy kończy się wypisaniem stanu dysku (`df -h /`)
+
+### wytyczne
+
+- `back-skrypt` `deploy.sh` — cache buildów jest wspólny dla CAŁEGO demona Dockera, nie per projekt: przycięcie w deployu ERP dotyka też kpricera, task-trackera i airtela. Przy `--no-cache` bez znaczenia, ale ich pierwszy build po deployu ERP będzie wolniejszy
+- `back-skrypt` — krok sprzątający po udanym wdrożeniu zawsze z `|| true`; inaczej `set -e` zamienia nieudane porządki w nieudany deploy
+
 ## 2026-08-16 — chore(deploy): `deploy.sh` wykonuje się zawsze na serwerze
 
 ### architektura / API

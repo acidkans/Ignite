@@ -33,5 +33,17 @@ docker compose build --no-cache frontend backend
 docker compose up -d frontend backend
 docker compose ps frontend backend
 
+# Przycięcie cache'u buildów. Build leci z `--no-cache`, ale warstwy pośrednie i tak
+# lądują w cache'u i nic ich stamtąd nie usuwa — przy codziennych deployach urosło to
+# do 113 GB i zajęło 83% dysku. `--reserved-space` to ilość, którą wolno zostawić
+# (w Dockerze 29 następca `--keep-storage`). Cache jest wspólny dla całego demona,
+# więc dotyczy też pozostałych aplikacji na serwerze.
+#
+# Sprzątanie idzie PO wystawieniu kontenerów i nie może wywrócić deployu, który się
+# już udał — stąd `|| true` mimo `set -e`.
+echo "==> przycinam cache buildów"
+docker builder prune -f --reserved-space 10GB || true
+df -h / | tail -1
+
 exit 0
 }
