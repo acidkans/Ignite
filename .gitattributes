@@ -1,1 +1,5 @@
 db/dev-snapshot.sql.gz binary
+
+# Skrypty powłoki zawsze z linuksowymi końcami linii, także w kopii roboczej na
+# Windowsie (core.autocrlf=true inaczej dokleja CR i bash odmawia uruchomienia).
+*.sh text eol=lf

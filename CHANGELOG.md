@@ -1,3 +1,17 @@
+## 2026-08-16 — chore(deploy): `deploy.sh` wykonuje się zawsze na serwerze
+
+### architektura / API
+
+- **`deploy.sh` sam przerzuca się na serwer**: uruchomiony lokalnie sprawdza, czy istnieje `/srv/apps/erp`, i jeśli nie — loguje się przez `ssh gigatel` i woła sam siebie po tamtej stronie. Po drugiej stronie katalog już jest, więc idzie prosto w deploy i rekurencji nie ma. Wcześniej trzeba było pamiętać, żeby odpalić go NA serwerze: przesłanie treści z Windowsa do powłoki serwera (`ssh gigatel 'bash -s' < deploy.sh`) niosło windowsowe końce linii i wywalało się na pierwszej komendzie (`set: - : invalid option`, `cd: /srv/apps/erp\r`)
+- **cały skrypt objęty klamrą `{ … }`**: bash wczytuje taki blok w całości przed wykonaniem. Bez tego `git reset --hard origin/main` podmieniał w trakcie deployu plik samego skryptu, a bash doczytywałby dalsze linie już z nowej wersji, licząc od starego offsetu w pliku
+- **`.gitattributes`: `*.sh text eol=lf`** — skrypty powłoki zostają w linuksowym formacie także w kopii roboczej na Windowsie. Repozytorium i serwer zawsze miały LF; CR dokładał lokalnie `core.autocrlf=true` przy checkoucie
+- deploy raportuje teraz, gdzie się wykonuje (`hostname`), na jakim commicie stanął (`git log -1`) i w jakim stanie są kontenery (`docker compose ps`)
+
+### wytyczne
+
+- `back-skrypt` `deploy.sh` — uruchamiać przez `bash deploy.sh` z katalogu repo; skrypt sam decyduje, czy potrzebne jest `ssh`. Nie przesyłać jego treści strumieniem (`bash -s < deploy.sh`) — to jedyny sposób, w jaki lokalne końce linii trafiają do powłoki serwera
+- `back-skrypt` — skrypt, który w trakcie działania aktualizuje własne repo (`git pull` / `git reset --hard`), musi być objęty klamrą `{ … }` z `exit 0` na końcu, inaczej bash może wykonać sklejkę starej i nowej wersji
+
 ## 2026-08-16 — style(wbs): jedna płaszczyzna szuflady w trzech widokach, zielony nagłówek sekcji (v2026.08.16.854)
 
 ### architektura / API
