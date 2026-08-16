@@ -606,8 +606,11 @@ function getBranchStyle(rootIndex, depth) {
 const WBS_BRANCH_CSS = `.wbs-br{background-color:var(--wbs-bg);border-left:var(--wbs-bw) solid var(--wbs-bc);transition:background-color .12s}.wbs-br:hover{background-color:var(--wbs-bgh)}.wbs-br .wbs-name{color:var(--wbs-nc)}.wbs-br .wbs-field{color:var(--wbs-fc)}`
     + `.wbs-br.wbs-drawer,.wbs-drawer-row{border-left:3px solid var(--wbs-spine)}`
     + `.wbs-br.wbs-drawer-head{background-color:var(--wbs-bgh);border-top:1px solid var(--wbs-spine)}`
-    + `.wbs-drawer-end{border-left:3px solid var(--wbs-spine);border-bottom:2px solid var(--wbs-spine)}`
-    + `.wbs-drawer-end td{height:6px;padding:0}`;
+    // Domknięcie szuflady to PEŁNA listwa w kolorze kręgosłupa, nie krawędź 2 px pod pustym
+    // wierszem — ta ginęła między wierszami tabeli i nie było widać, gdzie gałąź się kończy.
+    // Ta sama grubość i ten sam zabieg co `materials-group-cap` / `realization-drawer-cap`.
+    + `.wbs-drawer-end{border-left:3px solid var(--wbs-spine)}`
+    + `.wbs-drawer-end td{height:4px;padding:0;background-color:var(--wbs-spine)}`;
 
 // ── Tag chips ─────────────────────────────────────────────────────────────────
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

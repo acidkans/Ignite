@@ -214,15 +214,27 @@ export const STRUCTURE_COMMON_CELL_CLASS = 'text-sm leading-6';
 // i rozwinięcie wyglądało jak inny widok, choć niesie te same dane o tej samej pozycji.
 // Akcent zostaje semantyczny i dlatego siedzi osobno w `accent`: niebieski to strona WYCENY,
 // turkus strona ZAKUPU/REALIZACJI. Kształt kopiujemy, znaczenia koloru nie mieszamy.
+//
+// JEDNA PŁASZCZYZNA NA CAŁĄ SZUFLADĘ. `surface` obowiązuje od wiersza, który rozwinięto,
+// przez kartę / panel, pasek zakupów, wpisy realizacji aż po formularz nowego wpisu.
+// Wcześniej każdy z tych kawałków miał własne tło (`bg-blue-500/[0.12]`, `bg-black/20`,
+// `bg-black/25`, `bg-teal-500/[0.06]`) i rozwinięcie czytało się jak cztery osobne bloki
+// zamiast jednego. Hover w środku szuflady dokładamy bielą (`hoverRow`), nie czernią —
+// czerń zmieniała odcień płaszczyzny, biel tylko ją rozjaśnia.
+//
+// `cap` domyka szufladę od spodu: pełna listwa w kolorze akcentu, nie cienka krawędź.
+// Krawędź 1–2 px ginęła między wierszami tabeli i nie było widać, gdzie grupa się kończy.
 export const DRAWER = {
   surface: 'bg-[#182236]',
+  hoverRow: 'hover:bg-white/[0.03]',
   spine: 'border-l-[3px]',
   head: 'flex items-baseline gap-2 px-4 pt-2',
   label: 'text-[10px] font-bold uppercase tracking-widest',
   name: 'text-[10px] text-gray-500 truncate',
+  cap: 'p-0 h-1',
   accent: {
-    offer: { spine: 'border-l-blue-500', label: 'text-blue-300/80', row: 'bg-blue-500/[0.12]' },
-    real: { spine: 'border-l-teal-500', label: 'text-teal-300/80', row: 'bg-teal-500/[0.10]' },
+    offer: { spine: 'border-l-blue-500', label: 'text-blue-300/80', cap: 'bg-blue-500/70' },
+    real: { spine: 'border-l-teal-500', label: 'text-teal-300/80', cap: 'bg-teal-500/70' },
   },
 };
 

@@ -1478,7 +1478,7 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
     const parent = getParentPath(node.path);
 
     return (
-        <tr className={`transition-colors ${isExpanded ? 'bg-blue-500/[0.12]' : 'border-b border-white/[0.03] hover:bg-white/[0.02]'}`}>
+        <tr className={`transition-colors ${isExpanded ? CARD_SURFACE : 'border-b border-white/[0.03] hover:bg-white/[0.02]'}`}>
             {/* Expand */}
             <td className={`w-9 px-2 py-2.5 text-center ${isExpanded ? GROUP_SPINE : ''}`}>
                 <button onClick={onToggle} className={`transition-colors ${isExpanded ? 'text-blue-400 hover:text-blue-300' : 'text-gray-600 hover:text-gray-300'}`}>
@@ -1750,9 +1750,9 @@ function RealizationEntryRow({ entry, node, cols, readOnly, onSave, onDelete }) 
     const wartosc = (Number(get('qty')) || 0) * (Number(String(get('unitCost')).replace(',', '.')) || 0);
 
     return (
-        <tr className="group/entry bg-black/25 hover:bg-black/[0.15] border-b border-white/[0.03]">
+        <tr className={`group/entry ${CARD_SURFACE} ${DRAWER.hoverRow} border-b border-white/[0.03]`}>
             {/* Wąska kolumna rozwijania niesie znacznik „to jest wpis, nie pozycja" */}
-            <td className={`px-2 py-2 text-center border-l-[3px] border-l-blue-500/60 text-gray-700 font-mono ${ROW_FONT}`}>·</td>
+            <td className={`px-2 py-2 text-center ${GROUP_SPINE} text-gray-700 font-mono ${ROW_FONT}`}>·</td>
             {cols.map(c => {
                 if (c.key === 'parent') return (
                     <td key={c.key} className="px-2 py-2">
@@ -1855,7 +1855,7 @@ export function PurchasesBar({ node, realization, colSpan, open, onToggle, readO
     const closed = !!node.realizationClosed;
     return (
         <tr>
-            <td colSpan={colSpan} className={`p-0 bg-black/20 border-b border-white/5 ${GROUP_SPINE}`}>
+            <td colSpan={colSpan} className={`p-0 ${CARD_SURFACE} border-b border-white/5 ${GROUP_SPINE}`}>
                 <div className="flex items-center gap-3 pr-3">
                     <button
                         onClick={onToggle}
@@ -2856,11 +2856,11 @@ export default function WbsMaterialsPanel({
                                         />
                                     ))}
                                     {/* @anchor materials-group-cap — domknięcie grupy rozwiniętej pozycji:
-                                        pasek tej samej grubości co kręgosłup, zawsze ostatni w fragmencie,
+                                        pełna listwa w kolorze kręgosłupa, zawsze ostatnia w fragmencie,
                                         więc nie zależy od tego, które sekcje (karta, zakupy, wpisy) się pokazały. */}
                                     {isExpanded && (
                                         <tr aria-hidden="true">
-                                            <td colSpan={visibleCols.length + 1} className="p-0 h-[3px] bg-blue-500/50" />
+                                            <td colSpan={visibleCols.length + 1} className={`${DRAWER.cap} ${DRAWER.accent.offer.cap}`} />
                                         </tr>
                                     )}
                                 </React.Fragment>

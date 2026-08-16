@@ -289,6 +289,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | Tag | Nazwa | Plik | Anchor |
 |-----|-------|------|--------|
 | ui-sekcja | UnifiedWbsPanel | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor unified-wbs-panel |
+| ui-sekcja | nagłówek sekcji (rozwinięta = stonowana zieleń) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor section-head |
 | ui-sekcja | WbsMaterialsPanel | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-panel |
 | ui-sekcja | MaterialRequirementsPanel | apps/frontend/src/components/shared/wbs/MaterialRequirementsPanel.jsx | @anchor material-requirements-panel |
 | ui-sekcja | GanttSection | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor gantt-section |
@@ -1421,10 +1422,12 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-wiersz | RealizationEntryLine (wpis w dzienniku) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-line |
 | ui-formularz | RealizationEntryForm (przycisk „Nowy zakup") | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form |
 | ui-funkcja | submit formularza wpisu (zapis zamyka formularz) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-submit |
-| ui-funkcja | waliduj (czego zapis wpisu wymaga) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-validate |
 | ui-stan | brakujace (puste pola wymagane przy zapisie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-missing |
+| ui-funkcja | waliduj (cena, producent, model / zakres) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-validate |
 | ui-stala | BRAK_ETYKIETY (nazwy pól w komunikacie „Uzupełnij: …") | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-missing-labels |
 | ui-kolumna | dostawcy pozycji — lista, nie skrót „+N" | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-suppliers |
+| ui-wiersz | listwa domykająca szufladę rozwiniętej pozycji | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-drawer-cap |
+| ui-kolumna | koszt całkowity wyceny — pomarańcz strony wyceny | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-total-plan-color |
 | ui-panel | RealizationExpandPanel (wymagania techniczne + podgląd + dziennik) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-expand-panel |
 | ui-stan | visibleTypes (filtr typów po roli) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-visible-types |
 | ui-stan | techPendingRef (niepotwierdzony PATCH wymagań) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-techspec-pending |

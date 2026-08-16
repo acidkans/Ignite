@@ -5684,8 +5684,15 @@ ${ganttSectionHtml}
                 className={`flex flex-col glass-panel border border-white/5 transition-all duration-300 shadow-2xl overflow-hidden ${isCompactSection && isActive ? 'rounded-none flex-1 min-h-0' : 'rounded-2xl'} ${isActive ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
                 style={isActive && !isCompactSection ? { minHeight: 'calc(100vh - 200px)' } : isHidden ? { display: 'none' } : {}}
             >
+                {/* @anchor section-head — nagłówek sekcji. Rozwinięta sekcja dostaje stonowaną,
+                    lekko przezroczystą zieleń i grubszą krawędź od spodu: nagłówek ma odcinać się
+                    od własnej treści, bo po rozwinięciu tonął w niej kolorem (`bg-[#0b0f17]` był
+                    tym samym ciemnym tłem, co tabela pod spodem) i przy przewijaniu długiej listy
+                    nie było wiadomo, którą sekcję się właśnie ogląda. Zieleń kładziemy warstwą
+                    (`background-image`) na NIEPRZEZROCZYSTEJ bazie — nagłówek jest `sticky`, więc
+                    treść nie może przez niego prześwitywać. */}
                 <div
-                    className={`flex items-center gap-2 px-5 py-2 transition-colors text-left flex-shrink-0 border-b border-white/10 sticky top-0 z-20 ${isActive ? 'bg-[#0b0f17]' : 'bg-white/[0.04]'}`}
+                    className={`flex items-center gap-2 px-5 py-2 transition-colors text-left flex-shrink-0 sticky top-0 z-20 ${isActive ? 'bg-[#0b0f17] bg-[linear-gradient(rgba(52,211,153,0.13),rgba(52,211,153,0.13))] border-b-2 border-emerald-400/35' : 'bg-white/[0.04] border-b border-white/10'}`}
                     onClick={() => toggleSection(key)}
                 >
                     <Icon size={16} className={`text-${colorClass}-400 flex-shrink-0`} />

@@ -1,11 +1,36 @@
-## 2026-08-16 — feat(realizacja): lista dostawców zamiast „+N", zapis zamyka formularz (v2026.08.16.852)
+## 2026-08-16 — style(wbs): jedna płaszczyzna szuflady w trzech widokach, zielony nagłówek sekcji (v2026.08.16.854)
+
+### architektura / API
+
+- **cała szuflada rozwiniętej pozycji na JEDNEJ płaszczyźnie** (`expand-drawer`): `DRAWER.surface` obowiązuje teraz od wiersza, który rozwinięto, przez kartę / panel, pasek zakupów, wpisy realizacji aż po formularz nowego wpisu. Wcześniej każdy kawałek miał własne tło (`bg-blue-500/[0.12]`, `bg-black/20`, `bg-black/25`, `bg-teal-500/[0.06]`) i jedno rozwinięcie czytało się jak cztery osobne bloki. Hover w środku szuflady dokłada się bielą (`DRAWER.hoverRow`), nie czernią — czerń zmieniała odcień płaszczyzny
+- **szuflada domknięta pełną listwą, nie krawędzią** (`DRAWER.cap`, `materials-group-cap`, `realization-drawer-cap`, `wbs-drawer-css`): 4 px w kolorze kręgosłupa zamiast 1–2 px `border-bottom`. Cienka krawędź ginęła między wierszami tabeli i nie było widać, gdzie grupa się kończy. Realizacja domknięcia w ogóle nie miała — teraz rysuje je zawsze jako ostatni wiersz fragmentu, niezależnie od tego, które sekcje się pokazały
+- **kręgosłup biegnie przez wpisy zakupu** w Realizacji i w Materiałach (`DRAWER.spine`) — 3 px w kolorze akcentu zamiast wcześniejszych 2 px / półprzezroczystego turkusu, więc pas jest ciągły od wiersza pozycji po listwę domykającą
+- **nagłówek rozwiniętej sekcji odcięty kolorem** (`section-head`): stonowana, lekko przezroczysta zieleń plus grubsza krawędź od spodu. Rozwinięta sekcja miała `bg-[#0b0f17]`, czyli to samo ciemne tło co tabela pod spodem — nagłówek tonął we własnej treści i przy przewijaniu nie było wiadomo, którą sekcję się ogląda. Zieleń kładziona warstwą `background-image` na nieprzezroczystej bazie, bo nagłówek jest `sticky` i treść nie może przez niego prześwitywać
+- **koszt całkowity wyceny na pomarańczowo** (`realization-total-plan-color`): kolor niesie STRONĘ, nie kolumnę — pomarańcz to wycena (tak jak „Koszt jedn. wyceny"), czerwień zakup (tak jak „Koszt jedn. zakupu"). Obie liczby w komórce były czerwone i różnił je tylko odcień. Ta sama zmiana w stopce „Razem"
+- **Δ w kolumnie kosztu całkowitego powiększona** do stopnia kwot nad nią (wiersz `text-sm`, stopka `text-base`, obie pogrubione) — była najdrobniejszą liczbą w kolumnie, a to o nią chodzi w całym porównaniu
+
+### słownik
+
+- dodano `realization-drawer-cap` — listwa domykająca szufladę pozycji, `RealizationTab.jsx`
+- dodano `realization-total-plan-color` — pomarańcz kosztu całkowitego wyceny, `RealizationTab.jsx`
+- dodano `section-head` — nagłówek sekcji w `UnifiedWbsPanel.jsx`
+- zmieniono `expand-drawer` — `DRAWER` dostał `hoverRow` i `cap`, `accent.*.row` zastąpione przez `accent.*.cap`
+
+### wytyczne
+
+- `ui-sekcja` — rozwinięty blok (szuflada, sekcja) trzyma JEDNO tło na całej wysokości. Odrębne kawałki wyróżniać akcentem, kręgosłupem albo etykietą, nie własnym odcieniem tła — kilka odcieni w jednym rozwinięciu czyta się jak kilka osobnych widoków
+- `ui-sekcja` — domknięcie bloku rysować pełną listwą (≥ 3 px, kolor akcentu), nie krawędzią 1–2 px: krawędź ginie między wierszami tabeli
+- `ui-sekcja` — tło elementu `sticky` musi mieć nieprzezroczystą bazę; przezroczysty akcent kłaść osobną warstwą (`background-image`), inaczej treść prześwituje przy przewijaniu
+- `ui-kolumna` — w kolumnach zestawiających plan z wykonaniem kolor oznacza STRONĘ (pomarańcz = wycena, czerwień = zakup), nie kolumnę. Dwie liczby tej samej barwy w jednej komórce są nie do rozróżnienia
+
+## 2026-08-16 — feat(realizacja): lista dostawców, zapis zamyka formularz, walidacja wpisu (v2026.08.16.853)
 
 ### architektura / API
 
 - **kolumna „Dostawca" wymienia wszystkich, każdego w osobnym wierszu komórki** (`realization-row-suppliers`): skrót „IT-Planet +1" ukrywał, u kogo się kupowało — żeby zobaczyć drugiego dostawcę, trzeba było rozwijać pozycję. To dana rozliczeniowa, nie szczegół. Nazwy dostawców są krótkie, więc lista mieści się w kolumnie
 - **zapis wpisu ZAMYKA formularz** (`realization-entry-form-submit`): wcześniej po udanym zapisie podstawiał się kolejny pusty wiersz „na wszelki wypadek" i pod pozycją wisiał formularz, którego nikt nie zamawiał. Kolejną dostawę dopisuje się i tak przyciskiem „+", więc nic to nie oszczędzało
 - **przycisk zapisu nazywa się „Zapisz zakup"** (`ADD_ENTRY_LABEL`), nie „Dodaj zakup" — po zmianie wyżej kończy czynność, zamiast zapowiadać następną
-- **zapis wpisu waliduje pola rozliczeniowe** (`realization-entry-form-validate`, `realization-entry-form-missing`, `realization-missing-labels`): ilość, koszt jedn. oraz producent + model (a na liściach bez karty — zakres) muszą być wypełnione, inaczej zapis się zatrzymuje, puste pola dostają czerwoną obwódkę, a nad formularzem staje „Uzupełnij: …". Zakup bez ceny nie wchodzi do porównania z wyceną, a bez producenta i modelu nie wiadomo, CO kupiono. Cena jest sprawdzana na WYPEŁNIENIE, nie na wartość dodatnią — zakup za 0 zł (wymiana gwarancyjna, gratis) ma prawo wejść do rozliczenia, byle wpisanym zerem
+- **zapis wpisu waliduje pola rozliczeniowe** (`realization-entry-form-validate`, `realization-entry-form-missing`, `realization-missing-labels`): ilość, koszt jedn. oraz producent + model (a na liściach bez karty — zakres) muszą być wypełnione, inaczej zapis się zatrzymuje, puste pola dostają czerwoną obwódkę, kursor skacze do pierwszego z nich (namierzany po `data-entry-key`), a przy przycisku zapisu staje „Uzupełnij: …" wymieniające je z nazwy. Zakup bez ceny nie wchodzi do porównania z wyceną, a bez producenta i modelu nie wiadomo, CO kupiono. Cena jest sprawdzana na WYPEŁNIENIE, nie na wartość dodatnią — zakup za 0 zł (wymiana gwarancyjna, gratis) ma prawo wejść do rozliczenia, byle wpisanym zerem
 
 ### słownik
 

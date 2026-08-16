@@ -169,7 +169,7 @@ export function RealizationRow({ node, card, realization, isExpanded, onToggle, 
     const scopes = [...new Set(r.entries.map(e => e.scope).filter(Boolean))];
 
     return (
-        <tr className={`transition-colors ${isExpanded ? DRAWER.accent.real.row : 'border-b border-white/[0.03] hover:bg-white/[0.02]'}`}>
+        <tr className={`transition-colors ${isExpanded ? DRAWER.surface : 'border-b border-white/[0.03] hover:bg-white/[0.02]'}`}>
             {/* @anchor realization-add-button — rozwijanie i dopisywanie po LEWEJ, przy
                 pozycji: sam „+" wystarczy, bo etykieta i tak powtarzałaby się w każdym wierszu.
                 Tooltip niesie, czy to zakup czy wykonanie. */}
@@ -283,19 +283,22 @@ export function RealizationRow({ node, card, realization, isExpanded, onToggle, 
 
             {/* Koszt całkowity — wycena, zakup i odchylenie w jednej kolumnie */}
             <td className="px-3 py-2.5 text-right font-mono text-sm whitespace-nowrap">
-                {/* Cała kolumna kosztów całkowitych jest czerwona: jaśniejszy odcień to wycena,
-                    mocniejszy — faktyczny zakup. Δ zostaje przy kolorze wg znaku, bo niesie inną
-                    informację (oszczędność vs przekroczenie), a nie kwotę. */}
-                <div className="text-red-300" title="Koszt całkowity z wyceny (ilość × koszt jedn.)">
+                {/* @anchor realization-total-plan-color — kolor niesie STRONĘ, nie kolumnę:
+                    pomarańcz = wycena (tak samo jak „Koszt jedn. wyceny"), czerwień = zakup
+                    (tak samo jak „Koszt jedn. zakupu"). Wcześniej obie liczby w tej komórce
+                    były czerwone i różnił je tylko odcień — nie dało się na rzut oka powiedzieć,
+                    która jest planem. Δ zostaje przy kolorze wg znaku, bo niesie inną informację
+                    (oszczędność vs przekroczenie), a nie kwotę. */}
+                <div className="text-orange-400" title="Koszt całkowity z wyceny (ilość × koszt jedn.)">
                     {planValue != null ? `${fmtZl(planValue)} zł` : '—'}
                 </div>
-                {/* Czerwień = strona zakupu, ta sama co w kolumnie „Koszt jedn. zakupu" —
-                    wycena zostaje szara, żeby dwie liczby w jednej komórce dało się rozróżnić kolorem. */}
                 <div className={hasReal ? 'text-red-400' : 'text-gray-600'} title="Koszt całkowity zakupu — suma wpisów realizacji">
                     {hasReal ? `${fmtZl(r.value)} zł` : '—'}
                 </div>
                 {dValue != null && (
-                    <div className={`text-[11px] ${dValue > 0.005 ? 'text-red-300' : dValue < -0.005 ? 'text-teal-300' : 'text-gray-500'}`}>
+                    /* Δ w tym samym stopniu co kwoty nad nią — to najważniejsza liczba w kolumnie
+                       (o nią chodzi w całym porównaniu), a była z nich najdrobniejsza. */
+                    <div className={`text-sm font-bold ${dValue > 0.005 ? 'text-red-300' : dValue < -0.005 ? 'text-teal-300' : 'text-gray-500'}`}>
                         Δ {dValue > 0 ? '+' : ''}{fmtZl(dValue)}
                     </div>
                 )}
@@ -369,9 +372,10 @@ export function RealizationEntryLine({ entry, cols, hasCard, readOnly, onSave, o
     const wartosc = (Number(get('qty')) || 0) * (Number(String(get('unitCost')).replace(',', '.')) || 0);
 
     return (
-        <tr className="group/entry bg-black/25 hover:bg-black/[0.15] border-b border-white/[0.03]">
-            {/* Wąska kolumna niesie znacznik „to jest wpis, nie pozycja" */}
-            <td className="px-1.5 py-1.5 text-center border-l-2 border-teal-500/25 text-gray-700 font-mono text-sm">·</td>
+        <tr className={`group/entry ${DRAWER.surface} ${DRAWER.hoverRow} border-b border-white/[0.03]`}>
+            {/* Wąska kolumna niesie znacznik „to jest wpis, nie pozycja". Kręgosłup ten sam
+                co w wierszu pozycji i w panelu wyżej — wpis jest częścią tej samej szuflady. */}
+            <td className={`px-1.5 py-1.5 text-center ${DRAWER.spine} ${DRAWER.accent.real.spine} text-gray-700 font-mono text-sm`}>·</td>
             {cols.map(c => {
                 if (c.key === 'parent') return <td key={c.key} className="px-2 py-1.5">{field('entryDate', 'font-mono', { label: 'Data zdarzenia' })}</td>;
                 // Komentarz wpisu stoi pod kolumną „Komentarz" tabeli głównej, nie pod „Nazwą" —
@@ -530,10 +534,11 @@ export function RealizationEntryForm({ node, cols, hasCard, defaultQty, seedProd
     const wartosc = (Number(String(draft.qty).replace(',', '.')) || 0) * (Number(String(draft.unitCost).replace(',', '.')) || 0);
 
     return (
-        // Formularz musi się odróżniać od zapisanych wpisów na pierwszy rzut oka —
-        // stąd zielona krawędź, plus w kolumnie rozwijania i etykieta nad datą.
-        <tr className="bg-teal-500/[0.06] border-b border-teal-500/20">
-            <td className="px-1.5 py-2 text-center border-l-2 border-teal-500/60">
+        // Formularz siedzi na tej samej płaszczyźnie co reszta szuflady — od zapisanych wpisów
+        // odróżnia go turkusowy „+" w kolumnie rozwijania, etykiety nad polami i podkreślenie
+        // pod wierszem. Własne tło robiło z niego piąty odcień w jednym rozwinięciu.
+        <tr className={`${DRAWER.surface} border-b border-teal-500/20`}>
+            <td className={`px-1.5 py-2 text-center ${DRAWER.spine} ${DRAWER.accent.real.spine}`}>
                 <Plus size={14} className="inline text-teal-400" />
             </td>
             {cols.map(c => {
@@ -1685,6 +1690,15 @@ export default function RealizationTab({
                                                 onClose={() => { setFormNodeId(null); setFormSeed(null); }}
                                             />
                                         )}
+                                        {/* @anchor realization-drawer-cap — domknięcie szuflady: listwa tej samej
+                                            grubości co kręgosłup, zawsze ostatnia w fragmencie, więc nie zależy od
+                                            tego, które kawałki (panel, wpisy, formularz) akurat się pokazały.
+                                            Ten sam zabieg co `materials-group-cap` w panelu Materiały. */}
+                                        {isExpanded && (
+                                            <tr aria-hidden="true">
+                                                <td colSpan={COL_DEFS.length + 1} className={`${DRAWER.cap} ${DRAWER.accent.real.cap}`} />
+                                            </tr>
+                                        )}
                                     </React.Fragment>
                                 );
                             })}
@@ -1708,9 +1722,10 @@ export default function RealizationTab({
                                     );
                                     if (c.key === 'total') return (
                                         <td key={c.key} className={`${base} px-3 py-2 text-right font-mono text-base whitespace-nowrap`}>
-                                            <div className="text-red-300" title="Suma kosztów całkowitych z wyceny">{fmtZl(totals.plan)} zł</div>
+                                            {/* Ta sama logika koloru co w wierszach — patrz `realization-total-plan-color`. */}
+                                            <div className="text-orange-400" title="Suma kosztów całkowitych z wyceny">{fmtZl(totals.plan)} zł</div>
                                             <div className="text-red-400" title="Suma kosztów całkowitych zakupu">{fmtZl(totals.real)} zł</div>
-                                            <div className={`text-[13px] font-bold ${totals.delta > 0.005 ? 'text-red-300' : totals.delta < -0.005 ? 'text-teal-300' : 'text-gray-500'}`}>
+                                            <div className={`text-base font-bold ${totals.delta > 0.005 ? 'text-red-300' : totals.delta < -0.005 ? 'text-teal-300' : 'text-gray-500'}`}>
                                                 Δ {totals.delta > 0 ? '+' : ''}{fmtZl(totals.delta)}
                                             </div>
                                         </td>
