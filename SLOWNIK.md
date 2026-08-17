@@ -915,6 +915,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | NotificationCronService.syncMsTodo | apps/backend/src/notification-cron/notification-cron.service.ts | @anchor notification-cron-ms-todo-sync |
 | back-funkcja | NotificationCronService.dispatchReminders | apps/backend/src/notification-cron/notification-cron.service.ts | @anchor notification-cron-reminder-dispatch |
 | back-funkcja | NotificationCronService.cleanupTrash | apps/backend/src/notification-cron/notification-cron.service.ts | @anchor notification-cron-trash-cleanup |
+| back-funkcja | NotificationCronService.checkAttachmentSilence | apps/backend/src/notification-cron/notification-cron.service.ts | @anchor notification-cron-attachment-silence |
+| back-stala | ATTACHMENT_SILENCE_DAYS | apps/backend/src/notification-cron/notification-cron.service.ts | @anchor attachment-silence-days |
+| back-stala | ATTACHMENT_BASELINE_DAYS | apps/backend/src/notification-cron/notification-cron.service.ts | @anchor attachment-baseline-days |
 
 ### Moduł MsTodo — MS Graph / To Do service
 

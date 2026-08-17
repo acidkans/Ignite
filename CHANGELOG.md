@@ -1,3 +1,25 @@
+## 2026-08-17 — feat(monitoring): serwer wykrywa cisze w naplywie zalacznikow i alarmuje adminow push (v2026.08.17.867)
+
+### architektura / API
+
+- **`NotificationCronService.checkAttachmentSilence()`** — codziennie o 7:00 sprawdza `marker_attachments`. Jesli przez `ATTACHMENT_SILENCE_DAYS` (7) nie dotarl ANI JEDEN zalacznik, a w poprzedzajacych `ATTACHMENT_BASELINE_DAYS` (60) cos przychodzilo — push do wszystkich aktywnych uzytkownikow z rola ADMIN
+- **Powod istnienia:** awaria z 15 lipca zyla MIESIAC, bo nikt nie zauwazyl, ze zdjecia przestaly przychodzic. Wszystkie pozostale zabezpieczenia (banner, licznik prob, kafelek osieroconych) siedza na TELEFONIE — ten jeden jest po stronie serwera i dlatego zadziala niezaleznie od tego, co sie zepsulo: blad klienta, proxy, nieudany deploy. Stroz nie moze dzielic losu z tym, czego pilnuje
+- **Warunek baseline** chroni przed alarmowaniem na instalacji, ktora po prostu nie uzywa zalacznikow — bez niego swieza baza krzyczalaby codziennie
+- **Alarm w 7. dniu ciszy, potem co tydzien** (`mod(dniCiszy, 7) = 0`), nie codziennie. Codzienny nag przy awarii ciagnacej sie tygodniami uczy adminow odklikiwac powiadomienia bez czytania, czyli psuje kanal, na ktorym nam zalezy
+- **Bez zmian w schemacie** — reuzywa istniejacego `SystemNotificationSettings.webPushEnabled` jako globalnego wylacznika, wiec zadnej migracji na produkcji
+- Zweryfikowane na danych z prawdziwego incydentu: symulacja detektora dzien po dniu na oknie 16.07–17.08 pokazuje alarm **23 lipca** (8 dni po awarii, zamiast miesiaca) i przypomnienia 30.07, 06.08, 13.08
+
+### slownik
+
+- dodano `notification-cron-attachment-silence` — detektor ciszy w naplywie zalacznikow, `notification-cron.service.ts`
+- dodano `attachment-silence-days` — prog ciszy w dniach, `notification-cron.service.ts`
+- dodano `attachment-baseline-days` — okno dowodu, ze wczesniej cos przychodzilo, `notification-cron.service.ts`
+
+### wytyczne
+
+- `back-funkcja` `checkAttachmentSilence` — monitoring przeplywu danych MUSI stac po stronie serwera, nie klienta. Sygnal wysylany przez aplikacje, ktora sama moze byc zepsuta, milczy dokladnie wtedy, kiedy jest najbardziej potrzebny
+- `back-funkcja` `checkAttachmentSilence` — kazdy detektor ciszy potrzebuje warunku baseline (czy wczesniej w ogole cos bylo) oraz ograniczenia czestotliwosci przypomnien. Bez pierwszego alarmuje na pustej instalacji, bez drugiego uczy adminow ignorowac alerty
+
 ## 2026-08-17 — feat(mobile): ostrzezenie „zdjecia nie wysylaja sie" + limit prob w kolejce (v2026.08.17.866)
 
 ### architektura / API

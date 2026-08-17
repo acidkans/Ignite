@@ -91,4 +91,82 @@ export class NotificationCronService {
       this.logger.log(`[TrashCleanup] usunięto ${count} zadań z kosza`);
     }
   }
+
+  // Po ilu dniach ciszy uznajemy, że coś jest zepsute, a nie że po prostu nie ma
+  // roboty w terenie. Tydzień przechodzi przez urlop i długi weekend.
+  // @anchor attachment-silence-days
+  private readonly ATTACHMENT_SILENCE_DAYS = 7;
+
+  // Okno, w którym szukamy dowodu, że wcześniej cokolwiek przychodziło. Bez tego
+  // świeża instalacja bez ani jednego załącznika alarmowałaby w kółko.
+  // @anchor attachment-baseline-days
+  private readonly ATTACHMENT_BASELINE_DAYS = 60;
+
+  // @anchor notification-cron-attachment-silence
+  // Codziennie o 7:00 — wykrywanie CISZY w napływie załączników znaczników.
+  //
+  // Powód istnienia: awaria z 15 lipca 2026 (załączniki przestały dochodzić przez
+  // regresję w kolejce offline) żyła MIESIĄC, bo nikt nie zauważył, że zdjęcia
+  // przestały przychodzić. Wszystkie inne zabezpieczenia siedzą na telefonie —
+  // ten jeden jest po stronie serwera i dlatego zadziała niezależnie od tego, co
+  // dokładnie się zepsuło: błąd klienta, proxy, nieudany deploy. Stróż nie może
+  // dzielić losu z tym, czego pilnuje.
+  @Cron('0 7 * * *')
+  async checkAttachmentSilence(): Promise<void> {
+    const settings = await this.notifSettings.getOrCreate();
+    if (!settings.webPushEnabled) return;
+
+    const dayMs = 24 * 60 * 60 * 1000;
+    const silenceFrom = new Date(Date.now() - this.ATTACHMENT_SILENCE_DAYS * dayMs);
+
+    const recent = await this.prisma.markerAttachment.count({
+      where: { createdAt: { gte: silenceFrom } },
+    });
+    if (recent > 0) return; // płynie — nie ma o czym mówić
+
+    // Cisza. Zanim zaalarmujemy: czy wcześniej w ogóle coś przychodziło? Inaczej
+    // zgłaszalibyśmy „awarię" na instalacji, która po prostu nie używa załączników.
+    const baselineFrom = new Date(Date.now() - this.ATTACHMENT_BASELINE_DAYS * dayMs);
+    const baseline = await this.prisma.markerAttachment.count({
+      where: { createdAt: { gte: baselineFrom, lt: silenceFrom } },
+    });
+    if (baseline === 0) return;
+
+    const last = await this.prisma.markerAttachment.findFirst({
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+    const daysSilent = last
+      ? Math.floor((Date.now() - last.createdAt.getTime()) / dayMs)
+      : this.ATTACHMENT_SILENCE_DAYS;
+
+    // Alarm w 7. dniu ciszy, potem co tydzień — nie codziennie. Codzienny nag przy
+    // awarii ciągnącej się tygodniami uczy adminów odklikiwać powiadomienia bez
+    // czytania, czyli psuje kanał, na którym nam zależy.
+    if (daysSilent % 7 !== 0) return;
+
+    const admins = await this.prisma.user.findMany({
+      where: { isActive: true, userRoles: { some: { role: { name: 'ADMIN' } } } },
+      select: { id: true, email: true },
+    });
+    if (admins.length === 0) {
+      this.logger.warn('[AttachmentSilence] cisza wykryta, ale brak aktywnych adminów do powiadomienia');
+      return;
+    }
+
+    const title = 'Zdjęcia ze znaczników nie przychodzą';
+    const body =
+      `Od ${daysSilent} dni nie dotarł żaden załącznik znacznika ` +
+      `(wcześniej: ${baseline} w ${this.ATTACHMENT_BASELINE_DAYS} dni). Sprawdź synchronizację.`;
+
+    this.logger.warn(`[AttachmentSilence] ${body} — powiadamiam ${admins.length} adminów`);
+
+    for (const admin of admins) {
+      try {
+        await this.push.sendToUser(admin.id, title, body, undefined, { type: 'SYSTEM_ALERT' });
+      } catch (err: any) {
+        this.logger.warn(`[AttachmentSilence] push do ${admin.email} nie poszedł: ${err?.message}`);
+      }
+    }
+  }
 }
