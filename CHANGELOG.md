@@ -1,3 +1,20 @@
+## 2026-08-17 — fix(mobile): kafelek niewyslanych zdjec na ekranie wyboru widoku (v2026.08.17.865)
+
+### architektura / API
+
+- **Wejscie do panelu przypisania przeniesione na `MobileHome`** — ekran „Wybierz widok". Licznik osieroconych siedzial dotad wylacznie w naglowku „Moich Zadan", czyli trzeba bylo wejsc w widok, ktory z przypisywaniem zdjec nie ma nic wspolnego, i wypatrzyc male czerwone kolko przy ikonie odswiezania. Teraz na ekranie wejsciowym stoi pelnowymiarowy kafelek „Niewyslane zdjecia" z liczba w plakietce, obok „Moich Zadan" i „Drzewa Zamowien"
+- Kafelek pokazuje sie **wylacznie gdy jest co przypisac** — przy pustej kolejce ekran wyglada jak dotad. Licznik odswieza sie co 10 s oraz na zdarzeniach `attachment-orphaned` i `attachment-synced`, wiec znika sam po wyslaniu ostatniego zdjecia
+- Wskaznik w naglowku `MobileDashboard` zostaje — te same dane, dwa wejscia
+
+### slownik
+
+- dodano `home-orphan-count` — licznik osieroconych na ekranie wyboru widoku, `MobileHome.jsx`
+- dodano `mobile-home-tile-orphans` — kafelek „Niewyslane zdjecia", `MobileHome.jsx`
+
+### wytyczne
+
+- `ui-karta` `mobile-home-tile-orphans` — zadanie, ktore nie nalezy do zadnego widoku (jak przypisanie zaleglych zdjec), ma wejscie na ekranie wyboru widoku, nie doklejone do przypadkowego widoku. Plakietka przy ikonie w naglowku cudzego widoku jest nie do znalezienia
+
 ## 2026-08-17 — feat(schemat): panel recznego przypisania osieroconych zalacznikow drag&drop (v2026.08.17.864)
 
 ### architektura / API

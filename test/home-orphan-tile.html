@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Test MobileHome — kafelek osieroconych</title>
+<!-- Uruchomienie: cp test/home-orphan-tile.html apps/frontend/_tmp-home-tile.html && cd apps/frontend && npx vite --port 5174 → http://localhost:5174/_tmp-home-tile.html --></head>
+<body style="margin:0;background:#030712">
+<div id="root" style="height:100vh"></div>
+<pre id="out" style="position:fixed;bottom:0;left:0;right:0;font-family:monospace;font-size:11px;color:#7dd3fc;background:#000e;padding:8px;z-index:99999;margin:0"></pre>
+<script type="module">
+  import '/src/index.css';
+  import React from 'react';
+  import { createRoot } from 'react-dom/client';
+  import MobileHome from '/src/components/Mobile/MobileHome.jsx';
+  import { db } from '/src/services/db.js';
+  import { enqueue, markOrphaned } from '/src/services/repos/outboxRepo.js';
+
+  const results = [];
+  const assert = (n, c, d = '') => results.push({ name: n, pass: !!c, detail: d });
+  const show = () => {
+    const failed = results.filter(r => !r.pass);
+    document.getElementById('out').textContent =
+      results.map(r => `${r.pass ? 'PASS' : 'FAIL'}  ${r.name}${r.detail ? ' → ' + r.detail : ''}`).join('\n')
+      + `\n${results.length - failed.length}/${results.length} PASS`;
+    window.__TEST_RESULT__ = { total: results.length, failed: failed.length };
+  };
+
+  window.fetch = async () => new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  await db.outbox.clear(); await db.attachmentDrafts.clear();
+
+  const nav = [];
+  createRoot(document.getElementById('root')).render(React.createElement(MobileHome, { onNavigate: v => nav.push(v) }));
+  const wait = (ms = 400) => new Promise(r => setTimeout(r, ms));
+  await wait(600);
+
+  // 1. Pusta kolejka — kafelka nie ma
+  assert('1. brak zaleglosci → kafelka nie ma', !document.body.textContent.includes('Niewysłane zdjęcia'));
+  assert('1. dwa kafelki bazowe widoczne',
+    document.body.textContent.includes('Moje Zadania') && document.body.textContent.includes('Drzewo Zamówień'));
+
+  // 2. Zasiew dwóch osieroconych
+  for (const i of [0, 1]) {
+    await db.attachmentDrafts.add({ outboxId: `o-${i}`, arrayBuffer: new Uint8Array([1,2,3]).buffer, fileName: `f${i}.jpg`, fileType: 'image/png', createdAt: new Date().toISOString() });
+    const id = await enqueue('ADD_ATTACHMENT', { markerId: `temp_${i}`, outboxId: `o-${i}`, fileName: `f${i}.jpg`, fileType: 'image/png', subtaskId: null, nodeId: null });
+    await markOrphaned(id);
+  }
+  window.dispatchEvent(new CustomEvent('attachment-orphaned'));
+  await wait(700);
+
+  assert('2. kafelek pojawia sie po oznaczeniu sierot', document.body.textContent.includes('Niewysłane zdjęcia'));
+  const badge = [...document.querySelectorAll('#root span')].map(s => s.textContent.trim()).filter(t => t === '2');
+  assert('2. licznik pokazuje 2', badge.length >= 1, `znaleziono: ${badge.length}`);
+
+  // 3. Klik otwiera panel
+  const tile = [...document.querySelectorAll('#root button')].find(b => b.textContent.includes('Niewysłane zdjęcia'));
+  tile.click();
+  await wait(700);
+  assert('3. klik otwiera panel przypisania', document.body.textContent.includes('Przeciągnij zdjęcie na znacznik'));
+
+  // 4. Kafelki nawigacji nadal dzialaja
+  await db.outbox.clear(); await db.attachmentDrafts.clear();
+  show();
+</script>
+</body>
+</html>

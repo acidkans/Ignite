@@ -203,6 +203,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | selectedOrphanId | apps/frontend/src/components/shared/OrphanAttachmentsPanel.jsx | @anchor orphan-selected-id |
 | ui-funkcja | onMarkerRowClick | apps/frontend/src/components/shared/OrphanAttachmentsPanel.jsx | @anchor orphan-row-tap-assign |
 | ui-stan | orphanCount | apps/frontend/src/components/Mobile/MobileDashboard.jsx | @anchor mobile-orphan-count |
+| ui-stan | orphanCount (MobileHome) | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor home-orphan-count |
+| ui-karta | kafelek niewysłanych zdjęć | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor mobile-home-tile-orphans |
 | back-funkcja | getAllMarkersFlat | apps/backend/src/schematics/schematics.service.ts | @anchor all-markers-flat |
 | ui-stala | OUTBOX_RETRY_INTERVAL_MS | apps/frontend/src/hooks/useSyncOutbox.js | @anchor outbox-retry-interval-ms |
 | ui-stala | markerIdMap | apps/frontend/src/services/db.js | @anchor marker-id-map |
