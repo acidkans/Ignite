@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pl">
+<head><meta charset="utf-8"><title>Test OrphanAttachmentsPanel</title>
+<!--
+  Uruchomienie: SKOPIUJ do apps/frontend/ i otworz przez dev serwer:
+    cp test/orphan-panel.html apps/frontend/_tmp-orphan-panel.html
+    cd apps/frontend && npx vite --port 5174
+    http://localhost:5174/_tmp-orphan-panel.html
+  (przez /@fs/ nie zadziala — Vite nie przepisuje wtedy bare importow `react`)
+--></head>
+<body style="margin:0;background:#0b1220">
+<div id="root"></div>
+<pre id="out" style="position:fixed;bottom:0;left:0;right:0;max-height:45vh;overflow:auto;font-family:monospace;font-size:11px;color:#7dd3fc;background:#000e;padding:8px;z-index:99999;margin:0"></pre>
+<script type="module">
+  import '/src/index.css';
+  import React from 'react';
+  import { createRoot } from 'react-dom/client';
+  import Panel from '/src/components/shared/OrphanAttachmentsPanel.jsx';
+  import { db } from '/src/services/db.js';
+  import { enqueue, getOrphanedAttachments, markOrphaned } from '/src/services/repos/outboxRepo.js';
+
+  const results = [];
+  const assert = (name, cond, detail = '') => results.push({ name, pass: !!cond, detail });
+  const render = () => {
+    const failed = results.filter(r => !r.pass);
+    document.getElementById('out').textContent =
+      results.map(r => `${r.pass ? 'PASS' : 'FAIL'}  ${r.name}${r.detail ? '\n        → ' + r.detail : ''}`).join('\n')
+      + `\n\n${results.length - failed.length}/${results.length} PASS`;
+    window.__TEST_RESULT__ = { total: results.length, failed: failed.length, results };
+  };
+
+  // --- Mock sieci ---
+  const posts = [];
+  const MARKERS = [
+    { id: 'm-1', name: 'AC z Rack V', note: null, subtaskId: 'sub-1', nodeId: 'nd-1', orderId: 'o-1', orderName: 'Serwerownia Dąbrowa', schematicName: 'plan.pdf', attachmentsCount: 2, createdAt: '2026-08-01T10:00:00Z' },
+    { id: 'm-2', name: 'NOWE SZAFY', note: null, subtaskId: 'sub-1', nodeId: 'nd-1', orderId: 'o-1', orderName: 'Serwerownia Dąbrowa', schematicName: 'plan.pdf', attachmentsCount: 0, createdAt: '2026-08-01T11:00:00Z' },
+    { id: 'm-3', name: 'instalacje BMS', note: null, subtaskId: null, nodeId: 'nd-2', orderId: 'o-2', orderName: 'CMC ZDC1-K9', schematicName: 'layout.pdf', attachmentsCount: 0, createdAt: '2026-08-02T09:00:00Z' },
+    { id: 'm-4', name: null, note: 'bez nazwy', subtaskId: null, nodeId: 'nd-2', orderId: 'o-2', orderName: 'CMC ZDC1-K9', schematicName: 'layout.pdf', attachmentsCount: 0, createdAt: '2026-08-02T09:30:00Z' },
+  ];
+  window.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    if (u.includes('/schematics/markers/all')) return new Response(JSON.stringify(MARKERS), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    if (u.includes('/attachments') && opts.method === 'POST') {
+      posts.push(u.split('/markers/')[1].split('/attachments')[0]);
+      return new Response(JSON.stringify({ id: 'att' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  sessionStorage.setItem('token', 'tok');
+
+  // --- Zasiew osieroconych zdjęć ---
+  const pngBytes = async (color) => {
+    const c = document.createElement('canvas'); c.width = c.height = 8;
+    const ctx = c.getContext('2d'); ctx.fillStyle = color; ctx.fillRect(0, 0, 8, 8);
+    const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+    return blob.arrayBuffer();
+  };
+
+  await db.outbox.clear(); await db.attachmentDrafts.clear(); await db.markerIdMap.clear();
+  for (const [i, color] of [['#f00'], ['#0f0'], ['#00f']].entries()) {
+    const outboxId = `orphan-${i}`;
+    await db.attachmentDrafts.add({
+      outboxId, arrayBuffer: await pngBytes(color[0]),
+      fileName: `foto-${i}.jpg`, fileType: 'image/png',
+      createdAt: new Date(2026, 7, 10, 14, 30 + i).toISOString(),
+    });
+    const rowId = await enqueue('ADD_ATTACHMENT', { markerId: `temp_x${i}`, outboxId, fileName: `foto-${i}.jpg`, fileType: 'image/png', subtaskId: null, nodeId: null });
+    await markOrphaned(rowId);
+  }
+
+  createRoot(document.getElementById('root')).render(React.createElement(Panel, { onClose: () => {}, onAssigned: () => {} }));
+
+  const wait = (ms = 350) => new Promise(r => setTimeout(r, ms));
+  const $$ = s => [...document.querySelectorAll(s)];
+  await wait(700);
+
+  // 1. Render
+  assert('1. trzy osierocone zdjęcia widoczne', $$('[data-orphan-id]').length === 3, `jest ${$$('[data-orphan-id]').length}`);
+  assert('1. cztery znaczniki na liście', $$('[data-marker-id]').length === 4, `jest ${$$('[data-marker-id]').length}`);
+  const orderHeaders = $$('#root .sticky').map(e => e.textContent.trim());
+  assert('1. pogrupowane po zamówieniu', orderHeaders.length === 2 && orderHeaders.some(h => h.includes('Serwerownia Dąbrowa')), JSON.stringify(orderHeaders));
+  assert('1. znacznik bez nazwy ma fallback', document.body.textContent.includes('bez nazwy'));
+  assert('1. godzina zdjęcia widoczna', /\d{2}:\d{2}/.test($$('[data-orphan-id]')[0].textContent), $$('[data-orphan-id]')[0].textContent);
+
+  // 2. Szukajka
+  const input = document.querySelector('#root input');
+  const setVal = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  setVal.call(input, 'BMS'); input.dispatchEvent(new Event('input', { bubbles: true }));
+  await wait();
+  assert('2. szukajka zawęża listę', $$('[data-marker-id]').length === 1 && $$('[data-marker-id]')[0].dataset.markerId === 'm-3', `${$$('[data-marker-id]').length} wynik(ów)`);
+  setVal.call(input, ''); input.dispatchEvent(new Event('input', { bubbles: true }));
+  await wait();
+
+  // 3. Tryb dwóch tapnięć
+  $$('[data-orphan-id]')[0].click();
+  await wait();
+  assert('3. tap zaznacza zdjęcie', document.body.textContent.includes('Teraz tapnij znacznik'));
+  $$('[data-marker-id]').find(e => e.dataset.markerId === 'm-2').click();
+  await wait(900);
+  assert('3. tap w znacznik wysyła na jego id', posts.length === 1 && posts[0] === 'm-2', JSON.stringify(posts));
+  assert('3. zdjęcie znika z listy po wysłaniu', $$('[data-orphan-id]').length === 2, `zostało ${$$('[data-orphan-id]').length}`);
+  assert('3. wpis zdjęty z kolejki', (await getOrphanedAttachments()).length === 2);
+
+  // 4. Przeciąganie palcem (Pointer Events)
+  const card = $$('[data-orphan-id]')[0];
+  const target = $$('[data-marker-id]').find(e => e.dataset.markerId === 'm-3');
+  const tr = target.getBoundingClientRect();
+  const cr = card.getBoundingClientRect();
+  const pe = (type, x, y) => new PointerEvent(type, { pointerId: 1, pointerType: 'touch', clientX: x, clientY: y, bubbles: true, cancelable: true });
+  card.setPointerCapture = () => {}; card.releasePointerCapture = () => {};
+  card.dispatchEvent(pe('pointerdown', cr.x + 20, cr.y + 20));
+  card.dispatchEvent(pe('pointermove', cr.x + 24, cr.y + 24));   // < 6 px, nie startuje
+  assert('4. ruch < 6 px nie zaczyna przeciągania', !document.body.textContent.includes('Upuść'));
+  card.dispatchEvent(pe('pointermove', tr.x + tr.width / 2, tr.y + tr.height / 2));
+  await wait(150);
+  assert('4. nad znacznikiem pokazuje "Upuść"', target.textContent.includes('Upuść'), target.textContent.trim());
+  card.dispatchEvent(pe('pointerup', tr.x + tr.width / 2, tr.y + tr.height / 2));
+  await wait(900);
+  assert('4. drop wysyła na znacznik pod palcem', posts.length === 2 && posts[1] === 'm-3', JSON.stringify(posts));
+  assert('4. zostało jedno zdjęcie', $$('[data-orphan-id]').length === 1, `zostało ${$$('[data-orphan-id]').length}`);
+
+  await db.outbox.clear(); await db.attachmentDrafts.clear();
+  render();
+</script>
+</body>
+</html>

@@ -6,6 +6,7 @@ import { enqueue, updateTempMarkerPayload, getOrphanedAttachments, reassignOrpha
 import { syncOutbox } from '../../services/sync/syncOutbox';
 import { db } from '../../services/db';
 import QaTreeView from './wbs/QaTreeView';
+import OrphanAttachmentsPanel from './OrphanAttachmentsPanel';
 
 // Modal potwierdzenia usunięcia — zastępuje window.confirm. Natywne okno ma
 // nieedytowalne przyciski OK/Anuluj (nie da się nazwać ich TAK/NIE ani powiedzieć
@@ -78,6 +79,8 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     // @anchor orphan-drafts
     const [orphanDrafts, setOrphanDrafts] = useState([]);
     const [reassigning, setReassigning] = useState(false);
+    // @anchor orphan-panel-open
+    const [orphanPanelOpen, setOrphanPanelOpen] = useState(false);
     const [editName, setEditName] = useState(marker.name || (marker.type === 'TEXT' ? marker.note || '' : ''));
     const [editComment, setEditComment] = useState('');
     const [editQuestion, setEditQuestion] = useState(marker.question || '');
@@ -820,6 +823,14 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         ...pendingDrafts.filter(d => !(marker.attachments || []).some(a => a.id === d.id)),
     ];
 
+    // ─── Panel przypisania osieroconych (wspólny dla mobile i desktop) ─────────
+    const OrphanPanelEl = orphanPanelOpen ? (
+        <OrphanAttachmentsPanel
+            onClose={() => { setOrphanPanelOpen(false); loadOrphanDrafts(); loadPendingDrafts(); }}
+            onAssigned={() => { loadOrphanDrafts(); onRefresh(true); }}
+        />
+    ) : null;
+
     // ─── Modal potwierdzenia (wspólny dla mobile i desktop) ────────────────────
     const ConfirmEl = confirmState ? (
         <ConfirmDeleteModal
@@ -884,13 +895,21 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                     </div>
                 ))}
             </div>
-            <button
-                onClick={reassignOrphansHere}
-                disabled={reassigning}
-                className="w-full flex items-center justify-center gap-2 py-3 text-xs font-black uppercase tracking-widest text-amber-300 bg-amber-500/20 border border-amber-500/40 rounded-xl active:scale-[0.98] transition-all disabled:opacity-40"
-            >
-                <Check size={14} /> {reassigning ? 'Wysyłanie…' : `Przypisz do tego znacznika (${orphanDrafts.length})`}
-            </button>
+            <div className="flex flex-col gap-2">
+                <button
+                    onClick={() => setOrphanPanelOpen(true)}
+                    className="w-full flex items-center justify-center gap-2 py-3 text-xs font-black uppercase tracking-widest text-blue-300 bg-blue-500/20 border border-blue-500/40 rounded-xl active:scale-[0.98] transition-all"
+                >
+                    <Layers size={14} /> Przypisz do znaczników…
+                </button>
+                <button
+                    onClick={reassignOrphansHere}
+                    disabled={reassigning}
+                    className="w-full flex items-center justify-center gap-2 py-3 text-xs font-black uppercase tracking-widest text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl active:scale-[0.98] transition-all disabled:opacity-40"
+                >
+                    <Check size={14} /> {reassigning ? 'Wysyłanie…' : `Wszystkie tutaj (${orphanDrafts.length})`}
+                </button>
+            </div>
         </div>
     ) : null;
 
@@ -1270,6 +1289,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                 )}
                 {LightboxEl}
                 {ConfirmEl}
+                {OrphanPanelEl}
             </>
         );
     }
@@ -1588,6 +1608,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
             )}
             {LightboxEl}
             {ConfirmEl}
+            {OrphanPanelEl}
         </>
     );
 }

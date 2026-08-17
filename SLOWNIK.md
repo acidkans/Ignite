@@ -196,6 +196,14 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-sekcja | OrphanRecoveryEl | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor orphan-recovery-section |
 | ui-modal | ConfirmDeleteModal | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor confirm-delete-modal |
 | ui-stan | confirmState | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor marker-confirm-state |
+| ui-stan | orphanPanelOpen | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor orphan-panel-open |
+| ui-widok | OrphanAttachmentsPanel | apps/frontend/src/components/shared/OrphanAttachmentsPanel.jsx | @anchor orphan-attachments-panel |
+| ui-funkcja | loadOrphans | apps/frontend/src/components/shared/OrphanAttachmentsPanel.jsx | @anchor load-orphans-panel |
+| ui-funkcja | assign | apps/frontend/src/components/shared/OrphanAttachmentsPanel.jsx | @anchor assign-orphan-to-marker |
+| ui-stan | selectedOrphanId | apps/frontend/src/components/shared/OrphanAttachmentsPanel.jsx | @anchor orphan-selected-id |
+| ui-funkcja | onMarkerRowClick | apps/frontend/src/components/shared/OrphanAttachmentsPanel.jsx | @anchor orphan-row-tap-assign |
+| ui-stan | orphanCount | apps/frontend/src/components/Mobile/MobileDashboard.jsx | @anchor mobile-orphan-count |
+| back-funkcja | getAllMarkersFlat | apps/backend/src/schematics/schematics.service.ts | @anchor all-markers-flat |
 | ui-stala | OUTBOX_RETRY_INTERVAL_MS | apps/frontend/src/hooks/useSyncOutbox.js | @anchor outbox-retry-interval-ms |
 | ui-stala | markerIdMap | apps/frontend/src/services/db.js | @anchor marker-id-map |
 | ui-funkcja | rememberMarkerId | apps/frontend/src/services/db.js | @anchor remember-marker-id |

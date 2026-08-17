@@ -46,6 +46,12 @@ export class SchematicsController {
   }
 
   // --- Markers ---
+  // Dwa segmenty w ścieżce — nie koliduje z jednosegmentowym @Get(':id') niżej.
+  @Get('markers/all')
+  async getAllMarkers() {
+    return this.schematicsService.getAllMarkersFlat();
+  }
+
   @Post(':schematicId/markers')
   async createMarker(
     @Param('schematicId') schematicId: string,

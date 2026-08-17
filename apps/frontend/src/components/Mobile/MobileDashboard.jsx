@@ -3,12 +3,13 @@ import {
     Clock, CheckCircle, AlertCircle, ChevronRight,
     LogOut, Briefcase, ChevronLeft, Info, Map as MapIcon,
     Calendar, User, FileText, ExternalLink, MapPin, Play, Flag, PauseCircle,
-    RefreshCw, UploadCloud, Home
+    RefreshCw, UploadCloud, Home, AlertTriangle
 } from 'lucide-react';
 import SchematicViewer from '../shared/SchematicViewer';
+import OrphanAttachmentsPanel from '../shared/OrphanAttachmentsPanel';
 import { useCachedSubtasks } from '../../hooks/useCachedSubtasks';
 import { useNetwork } from '../../hooks/useNetwork';
-import { enqueue, countPending } from '../../services/repos/outboxRepo';
+import { enqueue, countPending, getOrphanedAttachments } from '../../services/repos/outboxRepo';
 import { db, getMeta } from '../../services/db';
 import { API_URL } from '../../config';
 
@@ -26,17 +27,30 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
     const { isOnline } = useNetwork();
     const [lastSync, setLastSync] = useState(null);
     const [pendingCount, setPendingCount] = useState(0);
+    // Zdjęcia bez rozwiązywalnego znacznika — czekają na ręczne przypisanie.
+    // Liczone osobno od `pendingCount`, bo same z siebie NIGDY nie zejdą z kolejki.
+    // @anchor mobile-orphan-count
+    const [orphanCount, setOrphanCount] = useState(0);
+    const [orphanPanelOpen, setOrphanPanelOpen] = useState(false);
 
     useEffect(() => {
         const refresh = async () => {
-            const [ts, cnt] = await Promise.all([getMeta('lastPrefetchAt'), countPending()]);
+            const [ts, cnt, orphans] = await Promise.all([
+                getMeta('lastPrefetchAt'), countPending(), getOrphanedAttachments(),
+            ]);
             setLastSync(ts);
             setPendingCount(cnt);
+            setOrphanCount(orphans.length);
         };
         refresh();
         const interval = setInterval(refresh, 15000);
         window.addEventListener('schematic-synced', refresh);
-        return () => { clearInterval(interval); window.removeEventListener('schematic-synced', refresh); };
+        window.addEventListener('attachment-orphaned', refresh);
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('schematic-synced', refresh);
+            window.removeEventListener('attachment-orphaned', refresh);
+        };
     }, []);
 
     const handleStatusChange = async (subtask, newStatus) => {
@@ -302,6 +316,16 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
                         <span className="font-bold text-sm">Moje Zadania</span>
                     </div>
                     <div className="flex items-center gap-2">
+                        {orphanCount > 0 && (
+                            <button
+                                onClick={() => setOrphanPanelOpen(true)}
+                                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-red-500/15 border border-red-500/40 active:scale-90 transition-transform"
+                                title="Zdjęcia bez przypisanego znacznika — kliknij, żeby przypisać"
+                            >
+                                <AlertTriangle size={11} className="text-red-400" />
+                                <span className="text-[9px] text-red-400 font-black">{orphanCount}</span>
+                            </button>
+                        )}
                         {pendingCount > 0 && (
                             <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30">
                                 <UploadCloud size={11} className="text-amber-400" />
@@ -411,6 +435,13 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
                     <span className="text-[10px] font-black uppercase tracking-widest">Zadania</span>
                 </div>
             </nav>
+
+            {orphanPanelOpen && (
+                <OrphanAttachmentsPanel
+                    onClose={() => setOrphanPanelOpen(false)}
+                    onAssigned={async () => setOrphanCount((await getOrphanedAttachments()).length)}
+                />
+            )}
         </div>
     );
 }

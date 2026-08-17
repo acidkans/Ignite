@@ -1,3 +1,31 @@
+## 2026-08-17 — feat(schemat): panel recznego przypisania osieroconych zalacznikow drag&drop (v2026.08.17.864)
+
+### architektura / API
+
+- **`GET /schematics/markers/all`** — plaska lista WSZYSTKICH znacznikow w systemie z nazwa zamowienia. Schematy wisza zawsze na wezle `type='order'` (sprawdzone na produkcji: 75 schematow, 173 znaczniki, wszystkie na `order`), wiec nazwa zamowienia to jeden join — bez chodzenia po `process_node_closure`. Zwraca `id, name, note, subtaskId, nodeId, orderId, orderName, schematicName, attachmentsCount, createdAt`
+- **`OrphanAttachmentsPanel`** — pelnoekranowy panel: pasek osieroconych zdjec u gory, lista znaczników pogrupowana po zamowieniu nizej, szukajka po nazwie zamowienia / znacznika / schematu. Osierocone zdjecie nie niesie ZADNEJ informacji o swoim znaczniku (jedynym lacznikiem byl martwy `temp_` id), wiec zamiast zgadywac oddajemy wybor uzytkownikowi
+- **Dwie drogi przypisania**, bo panel zyje na telefonie: przeciagniecie zdjecia na znacznik ORAZ tap w zdjecie + tap w znacznik. Celowanie kciukiem w wiersz dlugiej listy podczas ciagniecia jest meczace — dwa tapniecia sa pewniejsze
+- **Przeciaganie palcem na Pointer Events**, jak przenoszenie wezlow w `WBSHybridTable`: HTML5 drag&drop nie dostaje z dotyku zadnych zdarzen. Prog 6 px (samo dotkniecie kafelka nie zaczyna gestu — bez tego kazdy tap podnosilby zdjecie), `touch-action: none` na kafelku, auto-przewijanie listy przy krawedziach, podglad zdjecia pod palcem. Mysz zostaje na natywnym DnD
+- **Wskaznik na pulpicie mobilnym** — czerwony licznik osieroconych obok istniejacego licznika kolejki, otwiera panel. Liczony osobno od `pendingCount`, bo osierocone wpisy same z siebie NIGDY nie zejda z kolejki i zawyzalyby licznik "do wyslania" bez konca
+- Sekcja odzysku w `MarkerDetailsPanel` dostala przycisk otwierajacy panel; dotychczasowe "przypisz wszystkie tutaj" zostaje jako skrot
+
+### slownik
+
+- dodano `all-markers-flat` — plaska lista znacznikow z nazwa zamowienia, `schematics.service.ts`
+- dodano `orphan-attachments-panel` — panel recznego przypisania, `OrphanAttachmentsPanel.jsx`
+- dodano `load-orphans-panel` — wczytanie osieroconych z IndexedDB, `OrphanAttachmentsPanel.jsx`
+- dodano `assign-orphan-to-marker` — przypisanie i wysylka, `OrphanAttachmentsPanel.jsx`
+- dodano `orphan-selected-id` — zaznaczone zdjecie w trybie dwoch tapniec, `OrphanAttachmentsPanel.jsx`
+- dodano `orphan-row-tap-assign` — tap w wiersz znacznika przypisuje, `OrphanAttachmentsPanel.jsx`
+- dodano `orphan-panel-open` — otwarcie panelu ze szczegolow znacznika, `MarkerDetailsPanel.jsx`
+- dodano `mobile-orphan-count` — licznik osieroconych na pulpicie, `MobileDashboard.jsx`
+
+### wytyczne
+
+- `ui-widok` `OrphanAttachmentsPanel` — panel MUSI dzialac na telefonie, bo osierocone zdjecia leza w IndexedDB urzadzenia, ktore je zrobilo. IndexedDB jest per-urzadzenie i per-domena, wiec z desktopu nie ma do nich fizycznego dostepu. Kazdy gest projektowany pod dotyk, nie pod mysz
+- `ui-funkcja` `onCardPointerDown` — gest dotykowy w tym projekcie idzie na Pointer Events z progiem 6 px. HTML5 drag&drop nie dostaje z palca zadnych zdarzen, a bez progu tap nie da sie odroznic od poczatku przeciagania
+- `back-endpoint` `GET /schematics/markers/all` — dwa segmenty w sciezce, wiec nie koliduje z jednosegmentowym `@Get(':id')` w tym samym kontrolerze. Kazdy nowy `markers/*` GET trzymac dwusegmentowo
+
 ## 2026-08-17 — feat(status): status „Dodatkowe zamówienie" w WBS, Realizacji i Materiałach (v2026.08.17.863)
 
 ### architektura / API

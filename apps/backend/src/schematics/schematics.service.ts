@@ -349,6 +349,46 @@ export class SchematicsService {
         return schematics;
     }
 
+    // Płaska lista WSZYSTKICH znaczników w systemie z nazwą zamówienia — zasila
+    // panel ręcznego przypisania osieroconych załączników. Schematy wiszą zawsze
+    // na węźle type='order', więc nazwa zamówienia to jeden join, bez chodzenia
+    // po tabeli domknięcia.
+    // @anchor all-markers-flat
+    async getAllMarkersFlat() {
+        const markers = await this.prisma.schematicMarker.findMany({
+            select: {
+                id: true,
+                name: true,
+                note: true,
+                subtaskId: true,
+                createdAt: true,
+                schematic: {
+                    select: {
+                        id: true,
+                        fileName: true,
+                        nodeId: true,
+                        node: { select: { id: true, name: true } },
+                    },
+                },
+                _count: { select: { attachments: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        return markers.map(m => ({
+            id: m.id,
+            name: m.name || null,
+            note: m.note || null,
+            subtaskId: m.subtaskId,
+            nodeId: m.schematic.nodeId,
+            orderId: m.schematic.node?.id || null,
+            orderName: m.schematic.node?.name || '(bez zamówienia)',
+            schematicName: m.schematic.fileName,
+            attachmentsCount: m._count.attachments,
+            createdAt: m.createdAt,
+        }));
+    }
+
     async getWbsLinksForMarker(markerId: string, versionId?: string) {
         const vId = (versionId === 'null' || versionId === 'undefined' || !versionId) ? null : versionId;
         if (vId) {
