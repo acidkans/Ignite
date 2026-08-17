@@ -894,23 +894,33 @@ export default function RealizationTab({
         setWbsNodes(prev => prev.map(n => n.id === node.id ? { ...n, status } : n));
         const cardId = cards[node.id]?.id || null;
         if (cardId) setCards(prev => prev[node.id] ? { ...prev, [node.id]: { ...prev[node.id], status } } : prev);
+        // Każdy zapis rozliczamy osobno, bo skutki nieudanego są inne. Padnięty zapis WĘZŁA
+        // = nic się nie stało, cofamy pokazaną wartość. Padnięty zapis KARTY = pozycja ma już
+        // nowy status, ale panel Materiały zostanie ze starym — wtedy wartość w tabeli ZOSTAJE
+        // (bo jest prawdziwa), a użytkownik dowiaduje się, że rozjazd trzeba poprawić ręcznie.
+        // Wspólny `catch` z cofaniem obu wartości kłamałby przy drugim przypadku.
         try {
             const res = await fetch(`${API_URL}/wbs-nodes/${node.id}`, {
                 method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ status }),
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            if (cardId) {
-                await fetch(`${API_URL}/material-requirements/${cardId}`, {
-                    method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ status }),
-                });
-            }
         } catch (e) {
-            // Cofamy pokazaną wartość — inaczej tabela twierdzi, że status się zmienił,
-            // a po przeładowaniu widoku wraca stary i nie wiadomo, który jest prawdziwy.
-            console.error('[RealizationTab] saveStatus error:', e);
+            console.error('[RealizationTab] saveStatus (wbs-node) error:', e);
             setWbsNodes(prev => prev.map(n => n.id === node.id ? { ...n, status: previous } : n));
             if (cardId) setCards(prev => prev[node.id] ? { ...prev, [node.id]: { ...prev[node.id], status: previous } } : prev);
             alert('Nie udało się zapisać statusu pozycji');
+            return;
+        }
+        if (!cardId) return;
+        try {
+            const cardRes = await fetch(`${API_URL}/material-requirements/${cardId}`, {
+                method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ status }),
+            });
+            if (!cardRes.ok) throw new Error(`HTTP ${cardRes.status}`);
+        } catch (e) {
+            console.error('[RealizationTab] saveStatus (karta) error:', e);
+            setCards(prev => prev[node.id] ? { ...prev, [node.id]: { ...prev[node.id], status: previous } } : prev);
+            alert('Status zapisany na pozycji, ale nie dotarł do karty materiałowej — panel Materiały może pokazywać starą wartość.');
         }
     }, [cards]);
 

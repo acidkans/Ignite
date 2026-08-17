@@ -1415,6 +1415,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | statusLabel (etykieta statusu liścia) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-status-label |
 | ui-stala | STATUS_OPTIONS (kody do wyboru, bez MIXED) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-status-options |
 | ui-funkcja | saveStatus (PATCH węzła + karty materiałowej) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-save-status |
+| ui-funkcja | patchCard — status idzie też na WbsNode | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor materials-patch-card-status-sync |
+| ui-funkcja | wybór wymagania do sync statusu (tag → wbsNodeId) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-status-req-link |
 | ui-kolumna | Komentarz (WbsNode.comment) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-comment-col |
 | ui-stan | commentVal (bufor komentarza wiersza) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-comment |
 | ui-funkcja | saveComment (PATCH + rozgłoszenie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-save-comment |

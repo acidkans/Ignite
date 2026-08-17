@@ -1,3 +1,24 @@
+## 2026-08-17 — fix(status): status pozycji zapisywany na obu polach we wszystkich trzech widokach (v2026.08.17.862)
+
+### architektura / API
+
+- **status pozycji mieszka w DWÓCH kolumnach** — `MaterialRequirement.status` (czyta go panel Materiały) i `WbsNode.status` (czytają go `WBSHybridTable` i zakładka Realizacja). Panel Materiały zapisywał WYŁĄCZNIE kartę, więc status ustawiony w Materiałach nie docierał do pozostałych dwóch widoków. Wyglądało to na różnicę między użytkownikami — manager ustawia status z drzewa WBS (tamten zapis szedł na oba pola), logistyk z panelu Materiały — ale rozstrzyga MIEJSCE edycji, nie rola ani uprawnienia
+- **`patchCard` w `WbsMaterialsPanel`** przy zmianie `status` wysyła teraz też `PATCH /wbs-nodes/:id` na wszystkie węzły przypięte do tej karty (jedna karta bywa dopasowana do kilku liści przez fallback po nazwie)
+- **`WBSHybridTable`** szuka wymagania do synchronizacji najpierw po tagu `req:<id>`, a gdy go nie ma — po `MaterialRequirement.wbsNodeId`. Wcześniej ścieżka była wyłącznie tagowa i 15 pozycji na produkcji (stare węzły bez taga) nie przenosiło statusu do Materiałów. Fallback po NAZWIE celowo pominięty przy zapisie — przy odczycie dopasowuje, przy zapisie ostemplowałby kartę innej pozycji o tej samej nazwie
+- **`saveStatus` w `RealizationTab`** rozlicza oba zapisy osobno: nieudany zapis węzła cofa wartość w tabeli, nieudany zapis karty ZOSTAWIA ją (jest prawdziwa) i mówi wprost, że panel Materiały może pokazywać starą wartość
+
+### stan produkcji
+
+- w chwili poprawki 131 z 976 par węzeł↔karta miało rozjechane statusy; dominujący wzorzec to „karta ma realny status (IN_STOCK / ORDERED / CONFIRMED), węzeł pusty albo PENDING", czyli ślad po edycjach z panelu Materiały
+- **rozjazd naprawiony jednorazowym UPDATE na bazie produkcyjnej** (decyzja użytkownika co do kierunku): zamówienie `CMC- Serwerownia ZDC1-K9_2026` — 40 węzłów wzięło status z karty (panel Materiały jako źródło prawdy), pozostałe 13 zamówień — 91 par ustawionych na `PENDING` po obu stronach. Po migracji 0 rozjazdów na 976 par
+- migracja objęła WYŁĄCZNIE pary już rozjechane; wiersze, w których węzeł i karta się zgadzały, zostały nietknięte
+- stan sprzed migracji zrzucony do `test/status-rozjazd-backup-2026-08-17.txt` (poza repo) — 6 pozycji w CMC straciło status obecny tylko na węźle (`IN_STOCK`, `PROPOSAL`, `ISSUED` ×2, `CONFIRMED`), bo reguła „z Materiałów" działa w obie strony
+
+### wytyczne
+
+- `schema-pole` `WbsNode.status` / `MaterialRequirement.status` — dopóki status żyje w dwóch kolumnach, KAŻDA ścieżka zapisu musi ustawiać obie. Nowy widok pokazujący status zaczyna od pytania, którą kolumnę czyta i czy jego zapis trafia w drugą
+- `ui-funkcja` `wbs-status-req-link` — fallback po nazwie jest dobry do ODCZYTU (dopasowanie węzeł↔karta), nigdy do ZAPISU: dwie pozycje o tej samej nazwie w różnych gałęziach dostałyby cudzy status
+
 ## 2026-08-17 — fix(marker): usuwanie znacznika i załącznika przez modal React zamiast window.confirm (v2026.08.17.861)
 
 ### architektura / API

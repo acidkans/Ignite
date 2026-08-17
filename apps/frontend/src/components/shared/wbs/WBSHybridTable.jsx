@@ -1906,14 +1906,23 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 {/* Status */}
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                     {(() => {
+                        // @anchor wbs-status-req-link — wymaganie do zsynchronizowania statusem:
+                        // tag `req:<id>` jest połączeniem właściwym, ale 15 pozycji na produkcji
+                        // trzyma się karty wyłącznie przez `MaterialRequirement.wbsNodeId` (stare
+                        // węzły bez taga). Bez tego fallbacku status ustawiony w drzewie nie
+                        // docierał do panelu Materiały i oba widoki pokazywały co innego.
+                        // Fallback po NAZWIE świadomie pominięty: przy odczycie dopasowuje
+                        // węzeł do karty, ale przy zapisie potrafiłby ostemplować statusem
+                        // kartę innej pozycji, która nazywa się tak samo.
                         const reqTag = (node.tags || []).find(t => String(t).startsWith('req:'));
+                        const reqId = reqTag ? reqTag.slice(4) : (matReqByWbsId[node.id]?.id || null);
                         return (
                             <StatusSelect
                                 value={node.status}
                                 onChange={v => {
                                     handleField(node.id, 'status', v);
                                     onNodeFieldSave?.(node.id, 'status', v);
-                                    if (reqTag) onNodeStatusChange?.(node.id, v, reqTag.slice(4));
+                                    if (reqId) onNodeStatusChange?.(node.id, v, reqId);
                                 }}
                                 data-nav-row={node.id}
                                 data-nav-col="status"

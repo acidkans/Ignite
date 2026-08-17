@@ -2316,14 +2316,38 @@ export default function WbsMaterialsPanel({
         }
     }, [nodeId, versionId, token, onWbsUpdate, externalWbsNodes, internalWbsNodes]);
 
+    // @anchor materials-patch-card-status-sync — status pozycji mieszka w DWÓCH kolumnach:
+    // `MaterialRequirement.status` (czyta go ten panel) i `WbsNode.status` (czytają go tabela WBS
+    // i zakładka Realizacja). Ten panel zapisywał tylko kartę, więc status ustawiony w Materiałach
+    // nie docierał nigdzie indziej — na produkcji rozjechało się tak 131 pozycji, w większości
+    // „karta ma status, węzeł pusty albo PENDING". Widać to było jako różnicę MIĘDZY UŻYTKOWNIKAMI,
+    // bo manager ustawia status z drzewa WBS (tamten zapis szedł na oba pola), a logistyk z tego
+    // panelu. Zapisujemy więc oba pola, tak samo jak robią to `WBSHybridTable` i `RealizationTab`.
+    //
+    // Węzłów bywa kilka na jedną kartę: dopasowanie liść↔wymaganie ma fallback po nazwie, więc ta
+    // sama karta potrafi obsłużyć kilka liści. Status dostają wszystkie — inaczej część wierszy WBS
+    // zostałaby ze starą wartością i rozjazd wróciłby tylnymi drzwiami.
     const patchCard = useCallback(async (cardId, data) => {
         await fetch(`${API_URL}/material-requirements/${cardId}`, {
             method: 'PATCH',
             headers: authHeaders(),
             body: JSON.stringify(data),
         });
+        if (data?.status !== undefined) {
+            const wbsNodeIds = Object.entries(cards).filter(([, c]) => c?.id === cardId).map(([id]) => id);
+            await Promise.all(wbsNodeIds.map(id =>
+                fetch(`${API_URL}/wbs-nodes/${id}`, {
+                    method: 'PATCH',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ status: data.status }),
+                }).catch(e => console.error('[WbsMaterialsPanel] status → WbsNode error:', e))
+            ));
+            // `onPatchNode` bierze POJEDYNCZY węzeł (`UnifiedWbsPanel` mapuje po `n.id === id`) —
+            // tablica przeszłaby bez błędu i po cichu nie zaktualizowała niczego.
+            wbsNodeIds.forEach(id => onPatchNode?.(id, { status: data.status }));
+        }
         await refreshCards();
-    }, [refreshCards]);
+    }, [refreshCards, cards, onPatchNode]);
 
     // Wariant A: ten sam materiał (po nazwie WBS węzła) w obrębie projektu = jedna cena.
     // Materials view jest już ograniczony do scope projektu (nodeId), więc dopasowanie
