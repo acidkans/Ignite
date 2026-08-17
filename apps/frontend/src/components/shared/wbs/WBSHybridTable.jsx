@@ -373,6 +373,7 @@ const STRUCT_STATUS_META = {
     CONFIRMED: { label: 'Potwierdzone', style: 'bg-green-500/20 text-green-300 border-green-500/30' },
     REJECTED:  { label: 'Odrzucone',    style: 'bg-red-500/20 text-red-300 border-red-500/30' },
     ORDERED:   { label: 'Zamówione',    style: 'bg-violet-500/20 text-violet-300 border-violet-500/30' },
+    EXTRA_ORDER: { label: 'Dodatkowe zamówienie', style: 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30' },
     IN_STOCK:  { label: 'Na magazynie', style: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' },
     ISSUED:    { label: 'Wydane',       style: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
     DONE:      { label: 'Wykonane',     style: 'bg-teal-500/20 text-teal-300 border-teal-500/30' },
@@ -380,7 +381,11 @@ const STRUCT_STATUS_META = {
     MIXED:     { label: 'Mieszany',     style: 'bg-sky-500/20 text-sky-300 border-sky-500/30' },
 };
 
-function StatusSelect({ value, onChange, onKeyDown, ...rest }) {
+// Eksportowane nazwanym eksportem (jak `ConfirmDeleteModal`), żeby harness
+// `test/status-dropdowns.html` renderował PRAWDZIWY select, a nie jego kopię — kopia
+// przeszłaby test także wtedy, gdyby lista statusów w komponencie się rozjechała.
+export { STRUCT_STATUS_META };
+export function StatusSelect({ value, onChange, onKeyDown, ...rest }) {
     const meta = STRUCT_STATUS_META[value || ''] || STRUCT_STATUS_META[''];
     return (
         <select

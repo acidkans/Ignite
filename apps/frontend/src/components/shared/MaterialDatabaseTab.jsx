@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ExternalLink, Package, ChevronDown, ChevronRight, Cpu, Trash2, Building2, Loader2 } from 'lucide-react';
 import { API_URL } from '../../config';
 import PropertyPreview from './PropertyPreview';
-import { TYPE_LABELS, TYPE_OPTIONS as WBS_TYPE_OPTIONS, wbsTypeFromAny } from './wbs/wbsConstants';
+import { TYPE_LABELS, TYPE_OPTIONS as WBS_TYPE_OPTIONS, wbsTypeFromAny, MATERIAL_STATUS_LABELS } from './wbs/wbsConstants';
 
 // ─── Sekcja zwijalna ──────────────────────────────────────────────────────────
 function CollapsibleSection({ title, open, onToggle, children, accent = 'teal', headerRight, fullBleed = false, fill = false }) {
@@ -41,13 +41,13 @@ const STATUS_COLORS = {
     REJECTED:  'text-red-400',
     PROPOSAL:  'text-blue-400',
     ORDERED:   'text-purple-400',
+    EXTRA_ORDER: 'text-fuchsia-400',
     IN_STOCK:  'text-cyan-400',
     ISSUED:    'text-emerald-400',
 };
-const STATUS_LABELS = {
-    PENDING: 'Oczekuje', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone',
-    PROPOSAL: 'Propozycja', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane',
-};
+// Zakładka jest tylko do ODCZYTU (gdzie materiał jest użyty i w jakim stanie), ale czyta ten sam
+// `MaterialRequirement.status` co trzy widoki edycyjne — bez etykiety pokazałaby surowy kod.
+const STATUS_LABELS = MATERIAL_STATUS_LABELS;
 
 function MaterialUsagePanel({ manufacturer, model }) {
     const [rows, setRows] = useState(null);

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <title>Statusy pozycji — trzy widoki</title>
+  <!--
+    Sprawdza, że status „Dodatkowe zamówienie" (EXTRA_ORDER) jest do wyboru we WSZYSTKICH
+    trzech widokach i że wszystkie trzy nazywają go TAK SAMO. Status jedzie między widokami
+    jako goły string, więc rozjazd kodu albo etykiety w jednej liście = drugi widok pokazuje
+    surowe `EXTRA_ORDER` zamiast nazwy.
+
+    Listy statusów żyją w trzech miejscach (stan zastany, nie zmieniany tym testem):
+      WBS        → STRUCT_STATUS_META    (WBSHybridTable.jsx)
+      Realizacja → STRUCTURE_STATUS_META (wbsConstants.js)
+      Materiały  → STATUS_META           (realizationShared.js)
+
+    Uruchomienie — kopiujemy do apps/frontend/, bo przez /@fs/ Vite nie przepisuje
+    bare importów `react`:
+      cp test/status-dropdowns.html apps/frontend/_tmp-status-dropdowns.html
+      http://localhost:5174/_tmp-status-dropdowns.html
+    Wynik zbiorczy ląduje też w `window.__RESULT__` (do odczytu automatem).
+  -->
+</head>
+<body style="margin:0;background:#0b1220;min-height:100vh;color:#e5e7eb;font-family:system-ui,sans-serif">
+<div id="root" style="padding:24px"></div>
+<script type="module">
+  import '/src/index.css';
+  import React from 'react';
+  import { createRoot } from 'react-dom/client';
+  import { StatusSelect, STRUCT_STATUS_META } from '/src/components/shared/wbs/WBSHybridTable.jsx';
+  import { STRUCTURE_STATUS_META, MATERIAL_STATUS_LABELS } from '/src/components/shared/wbs/wbsConstants.js';
+  import { STATUS_META } from '/src/components/shared/wbs/realizationShared.js';
+
+  const CODE = 'EXTRA_ORDER';
+  const LABEL = 'Dodatkowe zamówienie';
+
+  // Listy opcji budowane DOKŁADNIE tak, jak robią to widoki.
+  const wbsOptions   = Object.entries(STRUCT_STATUS_META).filter(([c]) => c !== 'MIXED');
+  const realOptions  = Object.keys(STRUCTURE_STATUS_META).filter(c => c !== 'MIXED');
+  const matOptions   = Object.entries(STATUS_META);
+
+  const results = [];
+  const check = (label, ok, detail = '') => { results.push({ label, ok, detail }); return ok; };
+
+  check('WBS — kod jest na liście', wbsOptions.some(([c]) => c === CODE));
+  check('WBS — etykieta', STRUCT_STATUS_META[CODE]?.label === LABEL, STRUCT_STATUS_META[CODE]?.label);
+  check('Realizacja — kod jest na liście', realOptions.includes(CODE));
+  check('Realizacja — etykieta', STRUCTURE_STATUS_META[CODE]?.label === LABEL, STRUCTURE_STATUS_META[CODE]?.label);
+  check('Materiały — kod jest na liście', matOptions.some(([c]) => c === CODE));
+  check('Materiały — etykieta', STATUS_META[CODE]?.label === LABEL, STATUS_META[CODE]?.label);
+  check('Eksporty PDF/Excel — etykieta', MATERIAL_STATUS_LABELS[CODE] === LABEL, MATERIAL_STATUS_LABELS[CODE]);
+
+  // Ten sam napis we wszystkich trzech widokach — inaczej ta sama pozycja czyta się
+  // w każdym widoku inaczej, mimo że w bazie stoi jedna wartość.
+  const labels = [STRUCT_STATUS_META[CODE]?.label, STRUCTURE_STATUS_META[CODE]?.label, STATUS_META[CODE]?.label];
+  check('wszystkie trzy widoki nazywają status tak samo', new Set(labels).size === 1, labels.join(' | '));
+
+  // MIXED to wartość WYLICZANA dla gałęzi — nie może dać się wybrać ręcznie.
+  check('MIXED nadal poza listą wyboru', !wbsOptions.some(([c]) => c === 'MIXED') && !realOptions.includes('MIXED'));
+
+  const failed = results.filter(r => !r.ok);
+  window.__RESULT__ = { ok: failed.length === 0, results };
+
+  function Row({ title, options }) {
+    return React.createElement('div', { style: { marginBottom: 20 } },
+      React.createElement('div', { style: { fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: '#94a3b8', marginBottom: 6 } }, title),
+      React.createElement('select', {
+        defaultValue: CODE,
+        style: { background: '#111827', color: '#e5e7eb', padding: '6px 10px', borderRadius: 6, border: '1px solid #334155', minWidth: 220 },
+      }, options.map(([code, label]) =>
+        React.createElement('option', { key: code, value: code }, label || '(brak)')))
+    );
+  }
+
+  function App() {
+    return React.createElement('div', null,
+      React.createElement('h1', { style: { fontSize: 18, marginBottom: 4 } }, 'Status „Dodatkowe zamówienie" w trzech widokach'),
+      React.createElement('p', { style: { color: '#94a3b8', fontSize: 13, marginTop: 0, marginBottom: 20 } },
+        'Każdy select zbudowany z listy, której naprawdę używa dany widok.'),
+
+      React.createElement('div', { style: { fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: '#94a3b8', marginBottom: 6 } },
+        'WBS — prawdziwy komponent StatusSelect'),
+      React.createElement('div', { style: { marginBottom: 20 } },
+        React.createElement(StatusSelect, { value: CODE, onChange: () => {} })),
+
+      React.createElement(Row, { title: 'Realizacja — kolumna Status',
+        options: realOptions.map(c => [c, STRUCTURE_STATUS_META[c]?.label]) }),
+      React.createElement(Row, { title: 'Materiały — kolumna Status oferty',
+        options: matOptions.map(([c, m]) => [c, m.label]) }),
+
+      React.createElement('div', { style: { marginTop: 24, borderTop: '1px solid #1e293b', paddingTop: 16 } },
+        results.map((r, i) => React.createElement('div', {
+          key: i,
+          style: { fontFamily: 'monospace', fontSize: 13, color: r.ok ? '#4ade80' : '#f87171', marginBottom: 4 },
+        }, `${r.ok ? 'OK  ' : 'FAIL'} ${r.label}${r.detail ? ` — ${r.detail}` : ''}`)),
+        React.createElement('div', {
+          style: { marginTop: 12, fontFamily: 'monospace', fontWeight: 700, color: failed.length ? '#f87171' : '#4ade80' },
+        }, failed.length ? `${failed.length} FAIL` : 'Wszystkie testy przeszły')
+      )
+    );
+  }
+
+  createRoot(document.getElementById('root')).render(React.createElement(App));
+</script>
+</body>
+</html>

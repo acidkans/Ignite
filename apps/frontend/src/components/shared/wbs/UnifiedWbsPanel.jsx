@@ -1426,8 +1426,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         })() : '';
 
         const matStatusLabel = (code) => {
-            const labels = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
-            return labels[code] || code || '—';
+            return MATERIAL_STATUS_LABELS[code] || code || '—';
         };
         const matTypeLabel = (code) => {
             return TYPE_LABELS[wbsTypeFromAny(code)] || code || '—';
@@ -3262,7 +3261,7 @@ ${ganttSectionHtml}
 
         // ── Sheet Zamówienie (agregacja): logistyczna agregacja materiałów po nazwie+wymaganiach ──
         {
-            const STATUS_LABELS_M = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
+            const STATUS_LABELS_M = MATERIAL_STATUS_LABELS;
             const TYPE_LABELS_M = { material: 'Materiał', equipment: 'Sprzęt' };
             const upperFirst = (path) => { if (!path) return ''; const idx = path.indexOf(' › '); return idx < 0 ? path.toUpperCase() : path.slice(0, idx).toUpperCase() + path.slice(idx); };
 
@@ -3945,7 +3944,7 @@ ${ganttSectionHtml}
         // ── Sheet Materiały: pełny eksport szczegółów (logika z WbsMaterialsPanel.exportToExcel) ──
         {
             const materialsSheet = workbook.addWorksheet('Materiały');
-            const STATUS_LABELS_XLS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
+            const STATUS_LABELS_XLS = MATERIAL_STATUS_LABELS;
             const TYPE_LABELS_XLS = { material: 'Materiał', equipment: 'Sprzęt' };
             const upperFirstSegment = (path) => {
                 if (!path) return '';

@@ -10,7 +10,7 @@ import {
 import { API_URL } from '../../../config';
 import { useDevice } from '../../../hooks/useDevice';
 import SupplierPicker from '../SupplierPicker';
-import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula, parsePriceInput, DRAWER } from './wbsConstants';
+import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula, parsePriceInput, DRAWER, MATERIAL_STATUS_LABELS } from './wbsConstants';
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
 import { guardOfferEdit, requestOfferUnlock, offerLockInputProps } from '../OfferLockGuard';
 import AutoResizeTextarea from './AutoResizeTextarea';
@@ -2415,7 +2415,7 @@ export default function WbsMaterialsPanel({
     // ─ Export ────────────────────────────────────────────────────────────────
 
     const exportToExcel = useCallback(async () => {
-        const STATUS_LABELS_XLS = { PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone', REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane' };
+        const STATUS_LABELS_XLS = MATERIAL_STATUS_LABELS;
         const TYPE_LABELS_XLS = { material: 'Materiał', equipment: 'Sprzęt', work: 'Praca', service: 'Usługa', lodging: 'Nocleg', fuel: 'Paliwo' };
 
         // technicalSpec jest wpisywany jedna linia = jedno wymaganie; w Excelu

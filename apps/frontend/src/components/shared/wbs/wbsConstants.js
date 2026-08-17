@@ -178,6 +178,7 @@ export const MATERIAL_STATUS_LABELS = {
   CONFIRMED: 'Potwierdzone',
   REJECTED: 'Odrzucone',
   ORDERED: 'Zamówione',
+  EXTRA_ORDER: 'Dodatkowe zamówienie',
   IN_STOCK: 'Na magazynie',
   ISSUED: 'Wydane',
   DONE: 'Wykonane',
@@ -191,7 +192,11 @@ export const STRUCTURE_STATUS_META = {
   PROPOSAL: { label: 'Propozycja', color: 'text-blue-400' },
   CONFIRMED: { label: 'Potwierdzone', color: 'text-green-400' },
   REJECTED: { label: 'Odrzucone', color: 'text-red-400' },
-  ORDERED: { label: 'Zamowione', color: 'text-violet-400' },
+  ORDERED: { label: 'Zamówione', color: 'text-violet-400' },
+  // @anchor status-extra-order — pozycja domówiona POZA pierwotnym zamówieniem (brak w dostawie,
+  // uszkodzenie, zmiana zakresu na budowie). Osobny kod, a nie ponowne `ORDERED`, bo inaczej nie
+  // dałoby się odróżnić pozycji zamówionej raz od takiej, która pochłonęła drugi zakup.
+  EXTRA_ORDER: { label: 'Dodatkowe zamówienie', color: 'text-fuchsia-400' },
   IN_STOCK: { label: 'Na magazynie', color: 'text-cyan-400' },
   ISSUED: { label: 'Wydane', color: 'text-emerald-400' },
   DONE: { label: 'Wykonane', color: 'text-teal-400' },

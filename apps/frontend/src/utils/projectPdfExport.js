@@ -3,7 +3,7 @@
 // Includes: Informacje o projekcie + Strategia + WBS + Materiały. NO budget.
 
 import { API_URL } from '../config';
-import { TYPE_LABELS as WBS_TYPE_LABELS, wbsTypeFromAny } from '../components/shared/wbs/wbsConstants';
+import { TYPE_LABELS as WBS_TYPE_LABELS, wbsTypeFromAny, MATERIAL_STATUS_LABELS } from '../components/shared/wbs/wbsConstants';
 
 const flattenWbsItems = (items) => {
     const result = [];
@@ -24,10 +24,10 @@ const TYPE_LABELS = {
     task: 'Zadanie',
 };
 
-const MAT_STATUS = {
-    PENDING: 'Oczekuje', PROPOSAL: 'Propozycja', CONFIRMED: 'Potwierdzone',
-    REJECTED: 'Odrzucone', ORDERED: 'Zamówione', IN_STOCK: 'Na magazynie', ISSUED: 'Wydane',
-};
+// Etykiety statusów z jednego źródła (`MATERIAL_STATUS_LABELS`) zamiast lokalnej kopii —
+// kopia zatrzymała się na 7 statusach i drukowała surowe `DONE` / `INSTALLED`, a każdy nowy
+// status (np. `EXTRA_ORDER`) trafiałby do PDF jako kod, nie jako nazwa.
+const MAT_STATUS = MATERIAL_STATUS_LABELS;
 // Etykiety typów materiału — z wbsConstants (WBS_TYPE_LABELS) + normalizacja legacy przez wbsTypeFromAny
 
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

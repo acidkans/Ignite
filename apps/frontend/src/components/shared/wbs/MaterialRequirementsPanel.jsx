@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef, u
 import {
     ChevronRight, ChevronDown, Plus, Package, Wrench,
     CheckCircle, Clock, XCircle, Star, Trash2, AlertCircle,
-    ShoppingCart, Warehouse, LogOut, Lock, X, Filter, GitBranch,
+    ShoppingCart, PackagePlus, Warehouse, LogOut, Lock, X, Filter, GitBranch,
     FileText, Search, Sparkles, Link as LinkIcon,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
@@ -26,6 +26,7 @@ const STATUS_META = {
     CONFIRMED: { label: 'Potwierdzone', icon: CheckCircle,  color: 'text-green-400' },
     REJECTED:  { label: 'Odrzucone',    icon: XCircle,      color: 'text-red-400' },
     ORDERED:   { label: 'Zamówione',    icon: ShoppingCart,  color: 'text-purple-400' },
+    EXTRA_ORDER: { label: 'Dodatkowe zamówienie', icon: PackagePlus, color: 'text-fuchsia-400' },
     IN_STOCK:  { label: 'Na magazynie', icon: Warehouse,     color: 'text-cyan-400' },
     ISSUED:    { label: 'Wydane',       icon: LogOut,        color: 'text-emerald-400' },
 };

@@ -5,7 +5,7 @@
 
 import {
     Package, Wrench, Hammer, ClipboardCheck, Warehouse, Truck,
-    Clock, Star, CheckCircle, XCircle, ShoppingCart, LogOut,
+    Clock, Star, CheckCircle, XCircle, ShoppingCart, LogOut, PackagePlus,
 } from 'lucide-react';
 
 // @anchor wbs-materials-type-meta — typy liści widoczne w panelu. Materiał i sprzęt mają
@@ -36,6 +36,10 @@ export const STATUS_META = {
     CONFIRMED: { label: 'Potwierdzone', icon: CheckCircle,  color: 'text-green-400' },
     REJECTED:  { label: 'Odrzucone',    icon: XCircle,      color: 'text-red-400' },
     ORDERED:   { label: 'Zamówione',    icon: ShoppingCart, color: 'text-purple-400' },
+    // Ten sam kod co w `STRUCTURE_STATUS_META` (wbsConstants) i `STRUCT_STATUS_META`
+    // (WBSHybridTable) — status jedzie między widokami jako goły string, więc rozjazd kodu
+    // pokazałby w drugim widoku surowe `EXTRA_ORDER` zamiast etykiety.
+    EXTRA_ORDER: { label: 'Dodatkowe zamówienie', icon: PackagePlus, color: 'text-fuchsia-400' },
     IN_STOCK:  { label: 'Na magazynie', icon: Warehouse,    color: 'text-cyan-400' },
     ISSUED:    { label: 'Wydane',       icon: LogOut,       color: 'text-emerald-400' },
 };

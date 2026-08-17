@@ -1,3 +1,27 @@
+## 2026-08-17 — feat(status): status „Dodatkowe zamówienie" w WBS, Realizacji i Materiałach (v2026.08.17.863)
+
+### architektura / API
+
+- **Nowy status pozycji `EXTRA_ORDER` — „Dodatkowe zamówienie"**, do wyboru w kolumnie Status we wszystkich trzech widokach: WBS (`WBSHybridTable`), Realizacja (`RealizationTab`) i Materiały (`WbsMaterialsPanel`). Na liście stoi zaraz po `ORDERED`, kolor fuksja (jedyny wolny odcień — fiolet, cyjan, szmaragd i limonka są już zajęte przez sąsiednie statusy). Osobny kod, a nie powtórne `ORDERED`, bo inaczej nie da się odróżnić pozycji zamówionej raz od takiej, która pochłonęła drugi zakup
+- **Bez migracji bazy** — `WbsNode.status` i `MaterialRequirement.status` to `String`, nie enum, a backend nie ma whitelisty statusów (brak `IsIn`/`IsEnum` w DTO). Nowy kod przechodzi obiema ścieżkami zapisu jako zwykły string; potwierdzone testem na dev (HTTP 200 na `PATCH /wbs-nodes/:id` i `PATCH /material-requirements/:id`)
+- **Pięć kopii mapy etykiet statusów zastąpione jednym źródłem** (`MATERIAL_STATUS_LABELS`): `UnifiedWbsPanel` (eksport PDF, arkusz „Zamówienie", eksport XLS), `WbsMaterialsPanel` (eksport XLS) i `projectPdfExport`. Każda kopia miała własne 7 statusów i zatrzymała się przed `DONE`/`INSTALLED` — drukowały surowy kod zamiast nazwy, a nowy status trafiłby do PDF jako `EXTRA_ORDER`. Zakładka „Baza materiałów" (`MaterialDatabaseTab`, tylko odczyt) czyta ten sam status i dostała etykietę oraz kolor
+- **`StatusSelect` i `STRUCT_STATUS_META` eksportowane nazwanym eksportem** z `WBSHybridTable` — harness `test/status-dropdowns.html` renderuje PRAWDZIWY select widoku WBS, nie jego kopię; kopia przeszłaby test także wtedy, gdyby lista w komponencie się rozjechała
+- **Poprawiona literówka `STRUCTURE_STATUS_META.ORDERED`**: „Zamowione" → „Zamówione". Kolumna Status w Realizacji pokazywała tę samą pozycję pod inną nazwą niż WBS i Materiały
+
+### testy
+
+- `test/status-extra-order-sync.js` — odtwarza sekwencję żądań każdego z trzech widoków na prawdziwej pozycji (dev, „Przychodnia Bojków" / „Rack 19""), po każdej czyta OBIE kolumny i endpoint `/wbs-nodes/unified/:nodeId`. Na koniec przywraca stan sprzed testu. 9/9 OK
+- `test/status-dropdowns.html` — sprawdza, że kod jest na liście wyboru w trzech widokach, że wszystkie trzy nazywają go tak samo, że etykieta jest w mapie eksportów i że `MIXED` nadal nie da się wybrać ręcznie. 9/9 OK
+
+### słownik
+
+- dodano `status-extra-order` — status „Dodatkowe zamówienie" (`EXTRA_ORDER`), `wbsConstants.js`
+
+### wytyczne
+
+- `ui-stala` `STRUCTURE_STATUS_META` / `STRUCT_STATUS_META` / `STATUS_META` — lista statusów żyje w TRZECH tablicach (osobne formaty stylu: klasa tekstu, klasa badge'a, ikona). Nowy status dopisujemy do wszystkich trzech w jednym commicie i pod tym samym kodem ORAZ tą samą etykietą — status jedzie między widokami jako goły string, więc rozjazd kodu daje w drugim widoku surowy kod zamiast nazwy, a rozjazd etykiety pokazuje tę samą pozycję pod dwiema nazwami
+- `ui-stala` `MATERIAL_STATUS_LABELS` — etykiety statusów do eksportów bierzemy STĄD, nigdy przez lokalną kopię mapy. Każda kopia zatrzymuje się na statusach z dnia, w którym powstała
+
 ## 2026-08-17 — fix(status): status pozycji zapisywany na obu polach we wszystkich trzech widokach (v2026.08.17.862)
 
 ### architektura / API
