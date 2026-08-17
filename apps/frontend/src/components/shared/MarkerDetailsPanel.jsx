@@ -2,10 +2,59 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, MapPin, Mic, Camera, FilePlus, Trash2, Save, ChevronDown, ChevronLeft, Download, Image as ImageIcon, CheckSquare, Square, Layers, Plus, Check, Video, Play, HelpCircle } from 'lucide-react';
 import { API_URL } from '../../config';
 import { useNetwork } from '../../hooks/useNetwork';
-import { enqueue, updateTempMarkerPayload } from '../../services/repos/outboxRepo';
+import { enqueue, updateTempMarkerPayload, getOrphanedAttachments, reassignOrphanedAttachment } from '../../services/repos/outboxRepo';
 import { syncOutbox } from '../../services/sync/syncOutbox';
 import { db } from '../../services/db';
 import QaTreeView from './wbs/QaTreeView';
+
+// Modal potwierdzenia usunięcia — zastępuje window.confirm. Natywne okno ma
+// nieedytowalne przyciski OK/Anuluj (nie da się nazwać ich TAK/NIE ani powiedzieć
+// CO dokładnie zniknie), a na mobile bywa tłumione przez przeglądarkę w PWA.
+// Enter = TAK, Escape = NIE; focus startuje na NIE, żeby odruchowy Enter nie kasował.
+// @anchor confirm-delete-modal
+export function ConfirmDeleteModal({ title, message, onConfirm, onCancel }) {
+    const nieRef = useRef(null);
+
+    useEffect(() => { nieRef.current?.focus(); }, []);
+
+    useEffect(() => {
+        const onKey = (e) => {
+            if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+            if (e.key === 'Enter') { e.preventDefault(); onConfirm(); }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [onConfirm, onCancel]);
+
+    const btn = 'flex-1 px-4 py-3 rounded-xl text-sm font-black uppercase tracking-wider transition-all active:scale-95';
+
+    return (
+        <div className="fixed inset-0 z-[10000] bg-[#05070bcc] backdrop-blur-sm flex items-center justify-center p-4" onClick={onCancel}>
+            <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0b0f17] shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="px-5 py-3 border-b border-white/10 flex items-center gap-2">
+                    <Trash2 size={15} className="text-red-400 flex-shrink-0" />
+                    <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-white">{title}</h3>
+                </div>
+                <div className="p-5">
+                    <p className="text-sm text-gray-300 leading-relaxed break-words">{message}</p>
+                </div>
+                <div className="px-5 pb-5 flex gap-3">
+                    <button
+                        onClick={onConfirm}
+                        className={`${btn} bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25`}>
+                        Tak
+                    </button>
+                    <button
+                        ref={nieRef}
+                        onClick={onCancel}
+                        className={`${btn} bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10`}>
+                        Nie
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 // Flatten all WBS nodes recursively with path label
 function flattenWbsNodes(nodes, prefix = '') {
@@ -24,11 +73,21 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     // Załączniki czekające w outboxie na sync (przetrwają reload — czytane z IndexedDB)
     // @anchor pending-drafts
     const [pendingDrafts, setPendingDrafts] = useState([]);
+    // Załączniki osierocone — zakolejkowane pod martwym temp_ id markera.
+    // Nie da się ich przypisać automatycznie, użytkownik wskazuje marker ręcznie.
+    // @anchor orphan-drafts
+    const [orphanDrafts, setOrphanDrafts] = useState([]);
+    const [reassigning, setReassigning] = useState(false);
     const [editName, setEditName] = useState(marker.name || (marker.type === 'TEXT' ? marker.note || '' : ''));
     const [editComment, setEditComment] = useState('');
     const [editQuestion, setEditQuestion] = useState(marker.question || '');
     const [editingAttNote, setEditingAttNote] = useState(null);
     const [lightboxAtt, setLightboxAtt] = useState(null);
+    // Potwierdzenie usunięcia — własny modal zamiast window.confirm (natywne okno
+    // ma nieedytowalne OK/Anuluj i na mobile potrafi zostać zablokowane przez PWA).
+    // { title, message, onConfirm }
+    // @anchor marker-confirm-state
+    const [confirmState, setConfirmState] = useState(null);
     const [isCameraActive, setIsCameraActive] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     const [mediaRecorder, setMediaRecorder] = useState(null);
@@ -87,12 +146,45 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         }
     }, [marker.id]);
 
+    // Wczytuje osierocone załączniki (martwe temp_ id) i buduje z nich podglądy.
+    // @anchor load-orphan-drafts
+    const loadOrphanDrafts = useCallback(async () => {
+        try {
+            const items = await getOrphanedAttachments();
+            const out = [];
+            for (const item of items) {
+                const draft = await db.attachmentDrafts.where('outboxId').equals(item.payload.outboxId).first();
+                if (!draft) continue;
+                const ft = draft.fileType || '';
+                out.push({
+                    outboxRowId: item.id,
+                    outboxId: item.payload.outboxId,
+                    isImage: ft.startsWith('image/'),
+                    fileUrl: URL.createObjectURL(new Blob([draft.arrayBuffer], { type: ft })),
+                    fileName: draft.fileName,
+                    createdAt: draft.createdAt,
+                });
+            }
+            setOrphanDrafts(prev => {
+                prev.forEach(d => { try { URL.revokeObjectURL(d.fileUrl); } catch (_) {} });
+                return out;
+            });
+        } catch (err) {
+            console.warn('[MarkerDetails] loadOrphanDrafts failed:', err);
+        }
+    }, []);
+
     useEffect(() => {
         loadPendingDrafts();
-        const onSynced = () => loadPendingDrafts();
+        loadOrphanDrafts();
+        const onSynced = () => { loadPendingDrafts(); loadOrphanDrafts(); };
         window.addEventListener('attachment-synced', onSynced);
-        return () => window.removeEventListener('attachment-synced', onSynced);
-    }, [loadPendingDrafts]);
+        window.addEventListener('attachment-orphaned', onSynced);
+        return () => {
+            window.removeEventListener('attachment-synced', onSynced);
+            window.removeEventListener('attachment-orphaned', onSynced);
+        };
+    }, [loadPendingDrafts, loadOrphanDrafts]);
 
     // Sync wbsLinksRef i inicjalizacja komentarza z pierwszego węzła WBS
     useEffect(() => { wbsLinksRef.current = wbsLinks; }, [wbsLinks]);
@@ -422,6 +514,27 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         }
     };
 
+    // Przypisuje wszystkie osierocone załączniki do TEGO znacznika i wysyła.
+    // @anchor reassign-orphans-to-marker
+    const reassignOrphansHere = async () => {
+        if (!orphanDrafts.length || isTemp) return;
+        setReassigning(true);
+        try {
+            for (const o of orphanDrafts) {
+                await reassignOrphanedAttachment(o.outboxRowId, marker.id, { subtaskId, nodeId });
+            }
+            const token = sessionStorage.getItem('token');
+            if (token) await syncOutbox(token);
+            await loadOrphanDrafts();
+            await loadPendingDrafts();
+            onRefresh(true);
+        } catch (err) {
+            alert('Błąd przypisania: ' + err.message);
+        } finally {
+            setReassigning(false);
+        }
+    };
+
     const dispatchTempUpdate = (updates) => {
         window.dispatchEvent(new CustomEvent('temp-marker-updated', { detail: { tempId: marker.id, updates } }));
     };
@@ -538,8 +651,13 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
     };
 
-    const handleDeleteMarker = async () => {
-        if (!window.confirm('Usunąć znacznik?')) return;
+    const handleDeleteMarker = () => setConfirmState({
+        title: 'Usunąć znacznik?',
+        message: `Znacznik ${marker.name ? `„${marker.name}" ` : ''}zniknie razem ze wszystkimi swoimi załącznikami. Tej operacji nie da się cofnąć.`,
+        onConfirm: doDeleteMarker,
+    });
+
+    const doDeleteMarker = async () => {
         try {
             const token = sessionStorage.getItem('token');
             const res = await fetch(`${API_URL}/schematics/markers/${marker.id}`, {
@@ -568,8 +686,19 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         } catch(err) { console.error(err); }
     };
 
-    const handleDeleteAttachment = async (id) => {
-        if (!window.confirm('Usunąć załącznik?')) return;
+    const handleDeleteAttachment = (id) => {
+        const att = displayAttachments.find(a => a.id === id);
+        const isPending = String(id).startsWith('pending_');
+        setConfirmState({
+            title: 'Usunąć załącznik?',
+            message: isPending
+                ? `Plik ${att?.fileName ? `„${att.fileName}" ` : ''}czeka jeszcze w kolejce i nie trafił na serwer — usunięcie przepada bezpowrotnie.`
+                : `Plik ${att?.fileName ? `„${att.fileName}" ` : ''}zostanie usunięty z serwera. Tej operacji nie da się cofnąć.`,
+            onConfirm: () => doDeleteAttachment(id),
+        });
+    };
+
+    const doDeleteAttachment = async (id) => {
         // Załącznik pending (jeszcze w kolejce offline) — usuwamy z IndexedDB, nie z API
         if (String(id).startsWith('pending_')) {
             try {
@@ -691,6 +820,16 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         ...pendingDrafts.filter(d => !(marker.attachments || []).some(a => a.id === d.id)),
     ];
 
+    // ─── Modal potwierdzenia (wspólny dla mobile i desktop) ────────────────────
+    const ConfirmEl = confirmState ? (
+        <ConfirmDeleteModal
+            title={confirmState.title}
+            message={confirmState.message}
+            onConfirm={() => { const fn = confirmState.onConfirm; setConfirmState(null); fn?.(); }}
+            onCancel={() => setConfirmState(null)}
+        />
+    ) : null;
+
     // ─── Lightbox (wspólny dla mobile i desktop) ───────────────────────────────
     const LightboxEl = lightboxAtt ? (
         <div className="fixed inset-0 z-[9999] bg-black/95 flex flex-col items-center justify-center" onClick={() => setLightboxAtt(null)}>
@@ -711,8 +850,52 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         </div>
     ) : null;
 
+    // ─── Sekcja: odzysk osieroconych załączników ──────────────────────────────
+    // Zdjęcia zakolejkowane pod markerem, który stracił swoje temp_ id zanim
+    // trafiły na serwer. Nie ma jak zgadnąć właściciela — użytkownik otwiera
+    // właściwy znacznik i przypisuje je jednym kliknięciem.
+    // @anchor orphan-recovery-section
+    const OrphanRecoveryEl = (!isTemp && orphanDrafts.length > 0) ? (
+        <div className="mb-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 p-3 space-y-3">
+            <div className="flex items-start gap-2">
+                <span className="text-base leading-none mt-0.5">⚠️</span>
+                <div className="min-w-0">
+                    <div className="text-[11px] font-black uppercase tracking-widest text-amber-400">
+                        Niewysłane zdjęcia ({orphanDrafts.length})
+                    </div>
+                    <div className="text-[10px] text-amber-200/70 mt-1 leading-relaxed">
+                        Utknęły w kolejce — ich znacznik zmienił identyfikator przed wysłaniem.
+                        Sprawdź miniatury i przypisz je do tego znacznika, jeśli tu należą.
+                    </div>
+                </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+                {orphanDrafts.map(o => (
+                    <div key={o.outboxId} className="relative rounded-xl overflow-hidden bg-black/40 border border-amber-500/20 aspect-square">
+                        {o.isImage ? (
+                            <img src={o.fileUrl} alt={o.fileName} className="w-full h-full object-cover cursor-zoom-in"
+                                 onClick={() => setLightboxAtt({ id: `orphan_${o.outboxId}`, isPending: true, fileType: 'IMAGE', fileUrl: o.fileUrl, fileName: o.fileName })} />
+                        ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-1">
+                                <Save size={18} className="text-gray-500" />
+                                <span className="text-[9px] text-center text-gray-400 truncate w-full">{o.fileName}</span>
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+            <button
+                onClick={reassignOrphansHere}
+                disabled={reassigning}
+                className="w-full flex items-center justify-center gap-2 py-3 text-xs font-black uppercase tracking-widest text-amber-300 bg-amber-500/20 border border-amber-500/40 rounded-xl active:scale-[0.98] transition-all disabled:opacity-40"
+            >
+                <Check size={14} /> {reassigning ? 'Wysyłanie…' : `Przypisz do tego znacznika (${orphanDrafts.length})`}
+            </button>
+        </div>
+    ) : null;
+
     // ─── Sekcja: siatka załączników (reużywana na mobile i desktop) ────────────
-    const AttachmentsGrid = (
+    const AttachmentsGridInner = (
         displayAttachments.length > 0 ? (
             <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
@@ -758,6 +941,13 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                 <p className="text-sm">Brak załączników</p>
             </div>
         )
+    );
+
+    const AttachmentsGrid = (
+        <>
+            {OrphanRecoveryEl}
+            {AttachmentsGridInner}
+        </>
     );
 
     // ─── MOBILE — kafelki + expand ─────────────────────────────────────────────
@@ -1079,6 +1269,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                     <QaTreeView nodeId={nodeId} versionId={versionId} onClose={() => setQaTreeOpen(false)} />
                 )}
                 {LightboxEl}
+                {ConfirmEl}
             </>
         );
     }
@@ -1396,6 +1587,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                 <QaTreeView nodeId={nodeId} versionId={versionId} onClose={() => setQaTreeOpen(false)} />
             )}
             {LightboxEl}
+            {ConfirmEl}
         </>
     );
 }

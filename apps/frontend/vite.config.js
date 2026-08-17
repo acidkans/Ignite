@@ -84,6 +84,11 @@ export default defineConfig({
         port: 5174,
         strictPort: true,
         allowedHosts: 'all',
+        // Harnessy testowe żyją w /test w korzeniu repo (konwencja projektu) —
+        // dev serwer musi móc je serwować. Dotyczy WYŁĄCZNIE trybu dev.
+        fs: {
+            allow: ['..', '../../test'],
+        },
         watch: {
             usePolling: true,
             interval: 300,

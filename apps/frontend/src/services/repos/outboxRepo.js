@@ -10,8 +10,41 @@ export async function enqueue(type, payload) {
     });
 }
 
+// Wpisy `orphaned` są pomijane — to załączniki wskazujące na temp_ id markera,
+// którego nie da się już rozwiązać. Retry ich nie naprawi (serwer zwraca 500 na
+// FK), więc czekają na ręczne przypisanie w panelu znacznika.
 export async function getAllPending() {
-    return db.outbox.orderBy('createdAt').toArray();
+    const all = await db.outbox.orderBy('createdAt').toArray();
+    return all.filter(i => !i.orphaned);
+}
+
+// Osierocone załączniki — pliki zakolejkowane pod martwym temp_ id markera.
+// @anchor get-orphaned-attachments
+export async function getOrphanedAttachments() {
+    const items = await db.outbox.where('type').equals('ADD_ATTACHMENT').toArray();
+    return items.filter(i => i.orphaned);
+}
+
+// Oznacza wpis jako osierocony — zdejmuje go z pętli synca, ale NIE kasuje pliku.
+// @anchor mark-outbox-orphaned
+export async function markOrphaned(id) {
+    return db.outbox.update(id, { orphaned: true });
+}
+
+// Ręczne przypisanie osieroconego załącznika do wskazanego (realnego) markera.
+// @anchor reassign-orphaned-attachment
+export async function reassignOrphanedAttachment(id, markerId, { subtaskId, nodeId } = {}) {
+    const item = await db.outbox.get(id);
+    if (!item) return;
+    await db.outbox.update(id, {
+        orphaned: false,
+        payload: {
+            ...item.payload,
+            markerId,
+            subtaskId: subtaskId ?? item.payload?.subtaskId ?? null,
+            nodeId: nodeId ?? item.payload?.nodeId ?? null,
+        },
+    });
 }
 
 export async function removeById(id) {

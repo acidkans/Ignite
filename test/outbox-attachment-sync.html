@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="pl">
+<head><meta charset="utf-8"><title>Test outbox — załączniki markera</title></head>
+<body style="font-family:monospace;background:#0b1220;color:#e2e8f0;padding:20px">
+<h1 style="font-size:16px">Test kolejki załączników markera</h1>
+<pre id="out">uruchamianie…</pre>
+<script type="module">
+  import { run } from './outbox-attachment-sync.test.js';
+  const out = document.getElementById('out');
+  try {
+    const results = await run();
+    const failed = results.filter(r => !r.pass);
+    out.textContent = results.map(r => `${r.pass ? 'PASS' : 'FAIL'}  ${r.name}${r.detail ? '\n        → ' + r.detail : ''}`).join('\n')
+      + `\n\n${results.length - failed.length}/${results.length} PASS`;
+    window.__TEST_RESULT__ = { total: results.length, failed: failed.length, results };
+  } catch (e) {
+    out.textContent = 'BŁĄD: ' + e.message + '\n' + e.stack;
+    window.__TEST_RESULT__ = { error: e.message };
+  }
+</script>
+</body>
+</html>

@@ -1,3 +1,59 @@
+## 2026-08-17 — fix(marker): usuwanie znacznika i załącznika przez modal React zamiast window.confirm (v2026.08.17.861)
+
+### architektura / API
+
+- **`ConfirmDeleteModal`** — modal potwierdzenia w `MarkerDetailsPanel.jsx` zastępuje oba `window.confirm` (usunięcie znacznika, usunięcie załącznika). Natywne okno ma nieedytowalne OK/Anuluj, nie pozwala nazwać przycisków TAK/NIE ani powiedzieć CO dokładnie zniknie, a na mobile bywa tłumione przez przeglądarkę w trybie PWA
+- **Komunikat mówi o konkretnym obiekcie**, nie o abstrakcyjnym „załączniku": nazwa pliku / nazwa znacznika w treści, a dla załącznika jeszcze niewysłanego osobne ostrzeżenie, że plik czeka w kolejce i przepadnie bezpowrotnie (na serwerze go nie ma, więc nie da się go odzyskać)
+- **Focus startuje na NIE**, nie na TAK — odruchowe Enter/spacja nie kasuje danych. Enter = TAK, Escape = NIE, klik w tło = NIE, klik w treść modala nic nie robi
+- `handleDeleteMarker` / `handleDeleteAttachment` rozdzielone na „zapytaj" (otwiera modal) i `doDeleteMarker` / `doDeleteAttachment` (wykonuje) — logika kasowania bez zmian
+- `ConfirmDeleteModal` eksportowany nazwanym eksportem, żeby dało się go wyrenderować w podglądzie `test/confirm-delete-modal.html` bez montowania całego panelu
+
+### słownik
+
+- dodano `confirm-delete-modal` — modal potwierdzenia usunięcia (TAK/NIE), `MarkerDetailsPanel.jsx`
+- dodano `marker-confirm-state` — stan otwartego potwierdzenia, `MarkerDetailsPanel.jsx`
+
+### wytyczne
+
+- `ui-modal` `ConfirmDeleteModal` — w potwierdzeniu operacji nieodwracalnej focus MUSI startować na przycisku odmowy. Przy focusie na TAK odruchowy Enter kasuje dane bez przeczytania komunikatu
+- `ui-modal` `ConfirmDeleteModal` — treść nazywa konkretny obiekt (nazwa pliku / znacznika) i skutek. „Usunąć załącznik?" nie daje użytkownikowi żadnej podstawy do decyzji, gdy na ekranie jest kilkanaście miniatur
+
+## 2026-08-17 — fix(schemat): załączniki znacznika nie trafiały na serwer od 2026-07-15 (v2026.08.17.860)
+
+### architektura / API
+
+- **Regresja z `ec6135a` (2026-07-15, „upload załączników outbox-first")**: od tego commitu KAŻDE zdjęcie szło przez kolejkę outbox, co odsłoniło błąd, który wcześniej omijała bezpośrednia wysyłka online. Ostatni załącznik w bazie produkcyjnej: **2026-07-15 05:22**, commit: 07:33 tego samego dnia. Zero nowych załączników przez miesiąc, przy dalej działającym zapisie znaczników
+- **Przyczyna**: znacznik utworzony offline dostaje `temp_<uuid>`. Po syncu `ADD_MARKER` serwer nadaje realne id, ale `SchematicViewer` odświeżał otwarty panel wyłącznie przez dopasowanie `m.id === selectedMarker.id` — po podmianie takie id już nie istnieje, więc panel zostawał z martwym `temp_` id. Zdjęcie dodane w tym panelu lądowało w kolejce jako `markerId: temp_…`, a jedyny mechanizm podmiany temp→real siedział w handlerze `ADD_MARKER`, który był już usunięty z outboxa. Efekt: POST na `/schematics/markers/temp_…/attachments` → FK violation → **HTTP 500 co 60 s w nieskończoność**, plik zostawał w IndexedDB (widoczny na telefonie, nieobecny na serwerze)
+- **`markerIdMap`** — nowy store Dexie (`db.version(4)`) trzymający mapowanie `temp_<uuid>` → realne id markera. Zapisywany przy syncu `ADD_MARKER`, przeżywa usunięcie wpisu z outboxa. `ADD_ATTACHMENT` tłumaczy `temp_` id tuż przed wysyłką, więc załącznik zakolejkowany JUŻ PO zsynchronizowaniu markera trafia na właściwy rekord
+- **`SchematicViewer` przepina otwarty panel**: zdarzenie `schematic-synced` niesie teraz `tempId` i `realId`, a handler jawnie podmienia `selectedMarker` na realny znacznik. Kolejne zdjęcia od razu dostają prawidłowe id
+- **Pętla synca czyta wpis ze świeża** tuż przed wysyłką (`db.outbox.get`) zamiast polegać na snapshocie sprzed przetwarzania. Wcześniej podmiana temp→real zapisana przez `ADD_MARKER` w tej samej iteracji nie była widoczna i pierwsza próba zawsze kończyła się 500
+- **Osierocone załączniki** (brak mapowania i brak wpisu `ADD_MARKER` w kolejce) są znakowane `orphaned` i zdejmowane z pętli synca — koniec z dobijaniem serwera błędami 500. Plik zostaje nietknięty w IndexedDB
+- **Panel odzysku w znaczniku**: sekcja „Niewysłane zdjęcia (N)" z miniaturami osieroconych plików i przyciskiem „Przypisz do tego znacznika". Nie da się zgadnąć właściciela automatycznie, więc wybór należy do użytkownika; po przypisaniu pliki idą na serwer normalnym syncem
+- **Brak draftu przy wpisie `ADD_ATTACHMENT`** loguje teraz `console.error` zamiast cicho kasować wpis z kolejki — utrata pliku przestaje być niewidoczna
+- `vite.config.js` — `server.fs.allow` obejmuje `/test`, żeby harnessy testowe z korzenia repo dało się uruchomić na dev serwerze (tylko tryb dev, bez wpływu na build)
+
+### słownik
+
+- dodano `marker-id-map` — store Dexie z mapą temp→real id markera, `services/db.js`
+- dodano `remember-marker-id` — zapis mapowania po syncu `ADD_MARKER`, `services/db.js`
+- dodano `resolve-marker-id` — tłumaczenie `temp_` id na realne przed wysyłką, `services/db.js`
+- dodano `get-orphaned-attachments` — lista osieroconych załączników, `services/repos/outboxRepo.js`
+- dodano `mark-outbox-orphaned` — zdjęcie wpisu z pętli synca bez kasowania pliku, `services/repos/outboxRepo.js`
+- dodano `reassign-orphaned-attachment` — ręczne przypisanie do wskazanego markera, `services/repos/outboxRepo.js`
+- dodano `outbox-keep` — sentinel zatrzymujący wpis w kolejce mimo braku błędu, `services/sync/syncOutbox.js`
+- dodano `orphan-drafts` — stan osieroconych draftów w panelu, `MarkerDetailsPanel.jsx`
+- dodano `load-orphan-drafts` — wczytanie osieroconych draftów z IndexedDB, `MarkerDetailsPanel.jsx`
+- dodano `reassign-orphans-to-marker` — handler przycisku „Przypisz do tego znacznika", `MarkerDetailsPanel.jsx`
+- dodano `orphan-recovery-section` — sekcja odzysku niewysłanych zdjęć, `MarkerDetailsPanel.jsx`
+
+### wytyczne
+
+- `ui-funkcja` `processItem` — każdy typ wpisu outboxa odwołujący się do encji tworzonej offline MUSI tłumaczyć `temp_` id na realne tuż przed wysyłką, a nie liczyć na podmianę wykonaną przez inny wpis kolejki. Wpis-źródło mapowania (`ADD_MARKER`) znika z outboxa po swoim syncu i od tej chwili nie ma już czego podmieniać
+- `ui-funkcja` `syncOutbox` — wpis czytamy z bazy tuż przed wysyłką. Snapshot listy pobrany na starcie pętli nie widzi zmian zapisanych przez wcześniejsze iteracje tej samej pętli
+- `ui-funkcja` `syncOutbox` — wpis, który zawsze zwróci ten sam błąd (martwy klucz obcy), NIE może zostawać w pętli retry. Znakujemy `orphaned` i oddajemy użytkownikowi, inaczej klient bije w serwer 500-kami co 60 s bez końca
+- `ui-stan` `selectedMarker` — komponent trzymający encję po ID musi mieć jawną ścieżkę przepięcia przy podmianie `temp_`→real. Efekt synchronizujący po `m.id === prev.id` nigdy nie trafi, bo stare ID przestaje istnieć
+- `ui-funkcja` `processItem` — cichy `return` przy brakującym drafcie kasuje wpis z kolejki razem z plikiem. Każde porzucenie danych użytkownika loguj głośno
+
 ## 2026-08-17 — feat(realizacja): edytowalna kolumna „Status" w tabeli Realizacja (v2026.08.17.859)
 
 ### architektura / API

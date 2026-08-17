@@ -190,7 +190,20 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | loadPendingDrafts | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor load-pending-drafts |
 | ui-funkcja | saveAttachmentDraft | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor save-attachment-draft |
 | ui-stala | displayAttachments | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor display-attachments |
+| ui-stan | orphanDrafts | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor orphan-drafts |
+| ui-funkcja | loadOrphanDrafts | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor load-orphan-drafts |
+| ui-funkcja | reassignOrphansHere | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor reassign-orphans-to-marker |
+| ui-sekcja | OrphanRecoveryEl | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor orphan-recovery-section |
+| ui-modal | ConfirmDeleteModal | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor confirm-delete-modal |
+| ui-stan | confirmState | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor marker-confirm-state |
 | ui-stala | OUTBOX_RETRY_INTERVAL_MS | apps/frontend/src/hooks/useSyncOutbox.js | @anchor outbox-retry-interval-ms |
+| ui-stala | markerIdMap | apps/frontend/src/services/db.js | @anchor marker-id-map |
+| ui-funkcja | rememberMarkerId | apps/frontend/src/services/db.js | @anchor remember-marker-id |
+| ui-funkcja | resolveMarkerId | apps/frontend/src/services/db.js | @anchor resolve-marker-id |
+| ui-funkcja | getOrphanedAttachments | apps/frontend/src/services/repos/outboxRepo.js | @anchor get-orphaned-attachments |
+| ui-funkcja | markOrphaned | apps/frontend/src/services/repos/outboxRepo.js | @anchor mark-outbox-orphaned |
+| ui-funkcja | reassignOrphanedAttachment | apps/frontend/src/services/repos/outboxRepo.js | @anchor reassign-orphaned-attachment |
+| ui-stala | KEEP | apps/frontend/src/services/sync/syncOutbox.js | @anchor outbox-keep |
 
 ### Moduł QaTreeView (wspólny widok Q&A drzewa)
 

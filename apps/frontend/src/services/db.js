@@ -34,6 +34,36 @@ db.version(3).stores({
     attachmentDrafts: '++id, outboxId, createdAt',
 });
 
+db.version(4).stores({
+    meta: '&key',
+    outbox: '++id, clientUuid, type, createdAt',
+    subtasks: 'id, status, plannedStart, plannedEnd, nodeId, updatedAt',
+    nodes: 'id',
+    schematics: 'id, subtaskId, nodeId, updatedAt',
+    attachmentDrafts: '++id, outboxId, createdAt',
+    // Mapa temp_<uuid> → realne id markera nadane przez serwer przy syncu
+    // ADD_MARKER. Przeżywa usunięcie wpisu ADD_MARKER z outboxa — bez tego
+    // załącznik zakolejkowany JUŻ PO zsynchronizowaniu markera zostaje z
+    // martwym temp_ id i leci w nieskończoność w FK violation (HTTP 500).
+    // @anchor marker-id-map
+    markerIdMap: '&tempId, realId, createdAt',
+});
+
+// --- Mapa temp → real id markera ---
+
+// @anchor remember-marker-id
+export async function rememberMarkerId(tempId, realId) {
+    if (!tempId || !realId) return;
+    await db.markerIdMap.put({ tempId, realId, createdAt: new Date().toISOString() });
+}
+
+// @anchor resolve-marker-id
+export async function resolveMarkerId(markerId) {
+    if (!markerId || !String(markerId).startsWith('temp_')) return markerId;
+    const row = await db.markerIdMap.get(markerId);
+    return row?.realId ?? null;
+}
+
 // --- Helpery meta (proste KV) ---
 
 export async function getMeta(key) {

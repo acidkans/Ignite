@@ -148,7 +148,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
     // Po syncu outboxa: zastąp temp markery prawdziwymi bez zamykania zakładki
     useEffect(() => {
         const handler = (e) => {
-            const { subtaskId: sid, nodeId: nid, schematics: fresh } = e.detail || {};
+            const { subtaskId: sid, nodeId: nid, schematics: fresh, tempId, realId } = e.detail || {};
             if (!fresh?.length) return;
             const matches = (subtaskId && sid === subtaskId) || (nodeId && nid === nodeId);
             if (!matches) return;
@@ -157,6 +157,21 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                 if (!prev) return fresh[0] || null;
                 return fresh.find(s => s.id === prev.id) || prev;
             });
+            // Otwarty panel znacznika trzyma obiekt po ID — po podmianie temp→real
+            // to ID przestaje istnieć i efekt synchronizujący `selectedMarker`
+            // (dopasowanie po m.id) już nigdy nie trafi. Panel zostawał wtedy z
+            // martwym temp_ id i każde kolejne zdjęcie lądowało w kolejce jako
+            // osierocone. Przepinamy go jawnie na realny marker.
+            if (tempId && realId) {
+                setSelectedMarker(prev => {
+                    if (prev?.id !== tempId) return prev;
+                    for (const s of fresh) {
+                        const real = (s.markers || []).find(m => m.id === realId);
+                        if (real) return real;
+                    }
+                    return prev;
+                });
+            }
         };
         window.addEventListener('schematic-synced', handler);
         return () => window.removeEventListener('schematic-synced', handler);

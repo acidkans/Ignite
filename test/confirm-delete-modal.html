@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <title>Podgląd ConfirmDeleteModal</title>
+  <!--
+    Podgląd modala potwierdzenia z MarkerDetailsPanel.
+
+    Uruchomienie: SKOPIUJ ten plik do apps/frontend/ i otwórz przez dev serwer:
+      cp test/confirm-delete-modal.html apps/frontend/_tmp-confirm-preview.html
+      cd apps/frontend && npx vite --port 5174
+      http://localhost:5174/_tmp-confirm-preview.html
+    (przez /@fs/ nie zadziała — Vite nie przepisuje wtedy bare importów `react`)
+  -->
+  <script>
+    // Modal używa klas Tailwinda z bundla aplikacji — tutaj wystarczy tło,
+    // reszta stylów przychodzi z index.css importowanego niżej.
+  </script>
+</head>
+<body style="margin:0;background:#0b1220;min-height:100vh">
+<div id="root"></div>
+<div id="log" style="position:fixed;bottom:0;left:0;right:0;font-family:monospace;font-size:12px;color:#7dd3fc;background:#000c;padding:8px"></div>
+<script type="module">
+  import '/src/index.css';
+  import React, { useState } from 'react';
+  import { createRoot } from 'react-dom/client';
+  import { ConfirmDeleteModal } from '/src/components/shared/MarkerDetailsPanel.jsx';
+
+  const log = (m) => { document.getElementById('log').textContent = m; window.__LAST__ = m; };
+
+  function Demo() {
+    const [open, setOpen] = useState(true);
+    const [variant, setVariant] = useState('attachment-pending');
+    const cfg = {
+      'attachment-pending': {
+        title: 'Usunąć załącznik?',
+        message: 'Plik „1000060246.jpg" czeka jeszcze w kolejce i nie trafił na serwer — usunięcie przepada bezpowrotnie.',
+      },
+      'attachment-server': {
+        title: 'Usunąć załącznik?',
+        message: 'Plik „1000060246.jpg" zostanie usunięty z serwera. Tej operacji nie da się cofnąć.',
+      },
+      'marker': {
+        title: 'Usunąć znacznik?',
+        message: 'Znacznik „Gniazdo RJ45 3" zniknie razem ze wszystkimi swoimi załącznikami. Tej operacji nie da się cofnąć.',
+      },
+    }[variant];
+
+    return React.createElement(React.Fragment, null,
+      React.createElement('div', { style: { padding: 20, display: 'flex', gap: 8, flexWrap: 'wrap' } },
+        ...Object.keys({ 'attachment-pending': 1, 'attachment-server': 1, 'marker': 1 }).map(v =>
+          React.createElement('button', {
+            key: v,
+            onClick: () => { setVariant(v); setOpen(true); log('otwarto: ' + v); },
+            style: { padding: '8px 12px', background: '#1e293b', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 8, cursor: 'pointer' },
+          }, v),
+        ),
+      ),
+      open && React.createElement(ConfirmDeleteModal, {
+        title: cfg.title,
+        message: cfg.message,
+        onConfirm: () => { setOpen(false); log('TAK → onConfirm'); },
+        onCancel: () => { setOpen(false); log('NIE → onCancel'); },
+      }),
+    );
+  }
+
+  createRoot(document.getElementById('root')).render(React.createElement(Demo));
+  log('gotowe');
+</script>
+</body>
+</html>
