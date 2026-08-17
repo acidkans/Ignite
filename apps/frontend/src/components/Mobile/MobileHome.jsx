@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Briefcase, Network, AlertTriangle } from 'lucide-react';
 import { getOrphanedAttachments } from '../../services/repos/outboxRepo';
 import OrphanAttachmentsPanel from '../shared/OrphanAttachmentsPanel';
+import SyncWarningBanner from '../shared/SyncWarningBanner';
 
 // @anchor mobile-home
 export default function MobileHome({ onNavigate }) {
@@ -38,6 +39,8 @@ export default function MobileHome({ onNavigate }) {
                     </div>
                 </div>
             </header>
+
+            <SyncWarningBanner />
 
             <main className="flex-1 p-5 flex flex-col gap-4 justify-center">
                 {/* @anchor mobile-home-tile-tasks */}

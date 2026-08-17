@@ -1,5 +1,5 @@
 import { API_URL } from '../../config';
-import { getAllPending, removeById, markOrphaned } from '../repos/outboxRepo';
+import { getAllPending, removeById, markOrphaned, bumpRetry, MAX_RETRIES } from '../repos/outboxRepo';
 import { db, rememberMarkerId, resolveMarkerId } from '../db';
 
 let syncing = false;
@@ -25,6 +25,20 @@ export async function syncOutbox(token) {
                 const result = await processItem(fresh, token);
                 if (result !== KEEP) await removeById(fresh.id);
             } catch (err) {
+                // Nieudana próba musi zostawić ślad w wpisie — inaczej nie da się
+                // odróżnić „czeka na zasięg" od „leci w kółko i nigdy nie przejdzie",
+                // a użytkownik nie ma jak się dowiedzieć, że zdjęcia nie idą.
+                const retries = await bumpRetry(item.id, err.message);
+                if (item.type === 'ADD_ATTACHMENT' && retries >= MAX_RETRIES) {
+                    await markOrphaned(item.id);
+                    window.dispatchEvent(new CustomEvent('attachment-orphaned', {
+                        detail: { markerId: item.payload?.markerId, reason: 'max-retries' },
+                    }));
+                    console.warn('[Outbox] Załącznik zablokowany po', retries, 'próbach —', err.message);
+                }
+                window.dispatchEvent(new CustomEvent('outbox-sync-failed', {
+                    detail: { type: item.type, retries, message: err.message },
+                }));
                 console.warn('[Outbox] Sync failed for', item.type, err.message);
             }
         }

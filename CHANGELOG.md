@@ -1,3 +1,29 @@
+## 2026-08-17 — feat(mobile): ostrzezenie „zdjecia nie wysylaja sie" + limit prob w kolejce (v2026.08.17.866)
+
+### architektura / API
+
+- **Pole `retries` w wpisie outboxa wreszcie cokolwiek robi.** `enqueue()` zapisywalo `retries: 0` od poczatku istnienia kolejki i NIC tego nigdy nie czytalo ani nie zwiekszalo — w calym froncie bylo to jedyne wystapienie tego slowa. Teraz kazda nieudana proba wywoluje `bumpRetry()`, ktory podbija licznik i zapamietuje `lastError` oraz `lastTriedAt`
+- **`SyncWarningBanner`** w obu widokach mobilnych (`MobileHome`, `MobileDashboard`). Po `WARN_AFTER_RETRIES` (3, czyli ~3 min przy syncu co 60 s) mowi wprost, ze zdjecia nie ida na serwer, pokazuje liczbe plikow, liczbe prob i ostatni blad, oraz uspokaja, ze pliki sa bezpieczne na telefonie i nie wolno kasowac aplikacji. Przycisk „Ponow" zeruje licznik i odpala sync od razu
+- **Offline nie jest awaria** — bez sieci banner jest szary i mowi „czekaja na zasieg, nic nie ginie", zamiast straszyc czerwonym alertem technika w terenie bez zasiegu
+- **Limit prob domyka druga dziure z tej samej rodziny.** Zalacznik wskazujacy na REALNE, ale skasowane id markera lecial dotad w kolko: pelne zdjecie na serwer co 60 s, w nieskonczonosc, bez sladu dla uzytkownika — flaga `orphaned` lapala wylacznie martwe `temp_`. Po `MAX_RETRIES` (6) wpis jest oznaczany `orphaned`, znika z petli i trafia do kafelka „Niewyslane zdjecia" razem z reszta
+- Powod istnienia tego wszystkiego: zdjecie, ktore NIE przechodzi, wygladalo dokladnie tak samo jak zdjecie czekajace na zasieg — ⏳ przy miniaturze i cisza. Blad z 15 lipca zyl miesiac wlasnie dlatego, ze nic nie odrozniało jednego od drugiego
+
+### slownik
+
+- dodano `warn-after-retries` — prog ostrzezenia uzytkownika, `outboxRepo.js`
+- dodano `max-outbox-retries` — prog trwalego zablokowania wpisu, `outboxRepo.js`
+- dodano `bump-outbox-retry` — licznik nieudanych prob + ostatni blad, `outboxRepo.js`
+- dodano `get-stuck-attachments` — zalaczniki po progu ostrzezenia, `outboxRepo.js`
+- dodano `reset-outbox-retries` — zerowanie licznika przy recznym ponowieniu, `outboxRepo.js`
+- dodano `sync-warning-banner` — ostrzezenie o braku synchronizacji, `SyncWarningBanner.jsx`
+- dodano `sync-warning-retry-now` — reczne ponowienie z bannera, `SyncWarningBanner.jsx`
+
+### wytyczne
+
+- `ui-funkcja` `syncOutbox` — kazda nieudana proba MUSI zostawic slad w wpisie (`retries`, `lastError`). Bez tego nie da sie odroznic „czeka na zasieg" od „leci w kolko i nigdy nie przejdzie", a to jest dokladnie ta roznica, ktora ukryla awarie zalacznikow na miesiac
+- `ui-sekcja` `SyncWarningBanner` — brak sieci to NIE jest awaria i nie moze wygladac jak awaria. Czerwony alert w terenie bez zasiegu uczy technika ignorowac ostrzezenia
+- `ui-stala` `MAX_RETRIES` — kazdy typ wpisu kolejki, ktory moze trwale nie przejsc, potrzebuje limitu prob. Wieczny retry to zmarnowany transfer z telefonu i cisza tam, gdzie powinien byc komunikat
+
 ## 2026-08-17 — fix(mobile): kafelek niewyslanych zdjec na ekranie wyboru widoku (v2026.08.17.865)
 
 ### architektura / API

@@ -10,6 +10,50 @@ export async function enqueue(type, payload) {
     });
 }
 
+// Po tylu nieudanych próbach mówimy użytkownikowi, że coś nie gra. Trzy, bo sync
+// chodzi co 60 s — czyli ostrzeżenie po ~3 minutach ciszy, a nie po pierwszym
+// mignięciu zasięgu w terenie.
+// @anchor warn-after-retries
+export const WARN_AFTER_RETRIES = 3;
+
+// Po tylu próbach wpis uznajemy za trwale zablokowany i zdejmujemy z pętli.
+// Bez tego załącznik wskazujący na realny, ale skasowany marker leci w kółko:
+// pełne zdjęcie na serwer co 60 s, w nieskończoność, bez śladu dla użytkownika.
+// @anchor max-outbox-retries
+export const MAX_RETRIES = 6;
+
+// Zwiększa licznik nieudanych prób i zapamiętuje ostatni błąd. Zwraca nową wartość.
+// @anchor bump-outbox-retry
+export async function bumpRetry(id, message) {
+    const item = await db.outbox.get(id);
+    if (!item) return 0;
+    const retries = (item.retries || 0) + 1;
+    await db.outbox.update(id, {
+        retries,
+        lastError: String(message || '').slice(0, 200),
+        lastTriedAt: new Date().toISOString(),
+    });
+    return retries;
+}
+
+// Załączniki, które próbowały i nie dają rady — jeszcze nie osierocone, ale
+// dość długo w miejscu, żeby powiedzieć o tym użytkownikowi.
+// @anchor get-stuck-attachments
+export async function getStuckAttachments() {
+    const items = await db.outbox.where('type').equals('ADD_ATTACHMENT').toArray();
+    return items.filter(i => !i.orphaned && (i.retries || 0) >= WARN_AFTER_RETRIES);
+}
+
+// Zeruje licznik prób — użytkownik świadomie ponawia, więc ostrzeżenie ma zniknąć
+// i pojawić się dopiero, gdy nowa seria prób znowu padnie.
+// @anchor reset-outbox-retries
+export async function resetRetries() {
+    const items = await db.outbox.where('type').equals('ADD_ATTACHMENT').toArray();
+    for (const i of items) {
+        if (!i.orphaned && (i.retries || 0) > 0) await db.outbox.update(i.id, { retries: 0 });
+    }
+}
+
 // Wpisy `orphaned` są pomijane — to załączniki wskazujące na temp_ id markera,
 // którego nie da się już rozwiązać. Retry ich nie naprawi (serwer zwraca 500 na
 // FK), więc czekają na ręczne przypisanie w panelu znacznika.

@@ -214,6 +214,13 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | markOrphaned | apps/frontend/src/services/repos/outboxRepo.js | @anchor mark-outbox-orphaned |
 | ui-funkcja | reassignOrphanedAttachment | apps/frontend/src/services/repos/outboxRepo.js | @anchor reassign-orphaned-attachment |
 | ui-stala | KEEP | apps/frontend/src/services/sync/syncOutbox.js | @anchor outbox-keep |
+| ui-stala | WARN_AFTER_RETRIES | apps/frontend/src/services/repos/outboxRepo.js | @anchor warn-after-retries |
+| ui-stala | MAX_RETRIES | apps/frontend/src/services/repos/outboxRepo.js | @anchor max-outbox-retries |
+| ui-funkcja | bumpRetry | apps/frontend/src/services/repos/outboxRepo.js | @anchor bump-outbox-retry |
+| ui-funkcja | getStuckAttachments | apps/frontend/src/services/repos/outboxRepo.js | @anchor get-stuck-attachments |
+| ui-funkcja | resetRetries | apps/frontend/src/services/repos/outboxRepo.js | @anchor reset-outbox-retries |
+| ui-sekcja | SyncWarningBanner | apps/frontend/src/components/shared/SyncWarningBanner.jsx | @anchor sync-warning-banner |
+| ui-funkcja | retryNow | apps/frontend/src/components/shared/SyncWarningBanner.jsx | @anchor sync-warning-retry-now |
 
 ### Moduł QaTreeView (wspólny widok Q&A drzewa)
 

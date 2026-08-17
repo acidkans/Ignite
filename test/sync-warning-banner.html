@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Test ostrzezenia o synchronizacji</title>
+<!-- Uruchomienie: cp test/sync-warning-banner.html apps/frontend/_tmp-sync-warning.html && cd apps/frontend && npx vite --port 5174 → http://localhost:5174/_tmp-sync-warning.html --></head>
+<body style="margin:0;background:#030712">
+<div id="root"></div>
+<pre id="out" style="position:fixed;bottom:0;left:0;right:0;max-height:50vh;overflow:auto;font-family:monospace;font-size:11px;color:#7dd3fc;background:#000e;padding:8px;z-index:99999;margin:0"></pre>
+<script type="module">
+  import '/src/index.css';
+  import React from 'react';
+  import { createRoot } from 'react-dom/client';
+  import Banner from '/src/components/shared/SyncWarningBanner.jsx';
+  import { db } from '/src/services/db.js';
+  import { enqueue, getStuckAttachments, getOrphanedAttachments, WARN_AFTER_RETRIES, MAX_RETRIES } from '/src/services/repos/outboxRepo.js';
+  import { syncOutbox } from '/src/services/sync/syncOutbox.js';
+
+  const results = [];
+  const assert = (n, c, d = '') => results.push({ name: n, pass: !!c, detail: d });
+  const show = () => {
+    const failed = results.filter(r => !r.pass);
+    document.getElementById('out').textContent =
+      results.map(r => `${r.pass ? 'PASS' : 'FAIL'}  ${r.name}${r.detail ? '\n        → ' + r.detail : ''}`).join('\n')
+      + `\n\n${results.length - failed.length}/${results.length} PASS`;
+    window.__TEST_RESULT__ = { total: results.length, failed: failed.length };
+  };
+  const wait = (ms = 300) => new Promise(r => setTimeout(r, ms));
+
+  // Serwer zawsze odrzuca zalacznik — symulacja markera skasowanego po stronie serwera
+  // (REALNE id, wiec stara logika osierocenia po temp_ tego nie lapie).
+  let attempts = 0;
+  window.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    if (u.includes('/health')) return new Response('ok', { status: 200 });
+    if (u.includes('/attachments') && opts.method === 'POST') { attempts++; return new Response('{"statusCode":500}', { status: 500 }); }
+    return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  sessionStorage.setItem('token', 'tok');
+
+  await db.outbox.clear(); await db.attachmentDrafts.clear(); await db.markerIdMap.clear();
+  await db.attachmentDrafts.add({ outboxId: 'st-1', arrayBuffer: new Uint8Array([1,2,3]).buffer, fileName: 'foto.jpg', fileType: 'image/jpeg', createdAt: new Date().toISOString() });
+  await enqueue('ADD_ATTACHMENT', { markerId: 'REAL-ALE-SKASOWANY', outboxId: 'st-1', fileName: 'foto.jpg', fileType: 'image/jpeg', subtaskId: null, nodeId: null });
+
+  createRoot(document.getElementById('root')).render(React.createElement(Banner));
+  await wait(600);
+
+  assert('0. przed proba: brak ostrzezenia', !document.body.textContent.includes('nie wysyłają się'));
+
+  // 1. Licznik prob rosnie
+  await syncOutbox('tok'); await wait(150);
+  let row = (await db.outbox.toArray())[0];
+  assert('1. pierwsza nieudana proba zwieksza retries', row.retries === 1, `retries=${row.retries}`);
+  assert('1. zapamietany ostatni blad', /HTTP 500/.test(row.lastError || ''), row.lastError);
+  assert('1. po 1 probie jeszcze nie ostrzegamy', (await getStuckAttachments()).length === 0);
+
+  // 2. Prog ostrzezenia
+  for (let i = 1; i < WARN_AFTER_RETRIES; i++) { await syncOutbox('tok'); await wait(80); }
+  assert(`2. po ${WARN_AFTER_RETRIES} probach wpis jest "stuck"`, (await getStuckAttachments()).length === 1, `retries=${(await db.outbox.toArray())[0].retries}`);
+  window.dispatchEvent(new CustomEvent('outbox-sync-failed'));
+  await wait(500);
+  assert('2. banner pokazuje ostrzezenie', document.body.textContent.includes('Zdjęcia nie wysyłają się na serwer'), document.querySelector('#root')?.textContent?.slice(0, 120));
+  assert('2. banner mowi, ze pliki sa bezpieczne', document.body.textContent.includes('bezpieczne na telefonie'));
+  assert('2. banner pokazuje ostatni blad', document.body.textContent.includes('HTTP 500'));
+
+  // 3. Limit prob → orphaned, koniec dobijania serwera
+  for (let i = WARN_AFTER_RETRIES; i < MAX_RETRIES; i++) { await syncOutbox('tok'); await wait(80); }
+  const orph = await getOrphanedAttachments();
+  assert(`3. po ${MAX_RETRIES} probach wpis oznaczony orphaned`, orph.length === 1, `orphaned=${orph.length}`);
+  const attemptsAtCutoff = attempts;
+  await syncOutbox('tok'); await wait(150);
+  assert('3. kolejny sync juz NIE puka do serwera', attempts === attemptsAtCutoff, `bylo ${attemptsAtCutoff}, jest ${attempts}`);
+  assert('3. plik nadal w IndexedDB', (await db.attachmentDrafts.count()) === 1);
+  await wait(400);
+  assert('3. po osieroceniu banner znika (sprawa idzie do panelu)', !document.body.textContent.includes('nie wysyłają się'));
+
+  await db.outbox.clear(); await db.attachmentDrafts.clear();
+  show();
+</script>
+</body>
+</html>

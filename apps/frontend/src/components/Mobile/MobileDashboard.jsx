@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import SchematicViewer from '../shared/SchematicViewer';
 import OrphanAttachmentsPanel from '../shared/OrphanAttachmentsPanel';
+import SyncWarningBanner from '../shared/SyncWarningBanner';
 import { useCachedSubtasks } from '../../hooks/useCachedSubtasks';
 import { useNetwork } from '../../hooks/useNetwork';
 import { enqueue, countPending, getOrphanedAttachments } from '../../services/repos/outboxRepo';
@@ -361,6 +362,8 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
                     </button>
                 </div>
             </header>
+
+            <SyncWarningBanner />
 
             <main className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
                 {filteredSubtasks.length === 0 ? (
