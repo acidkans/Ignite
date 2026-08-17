@@ -1,3 +1,27 @@
+## 2026-08-17 — feat(realizacja): edytowalna kolumna „Status" w tabeli Realizacja (v2026.08.17.859)
+
+### architektura / API
+
+- **kolumna „Status" w `RealizationTab`** czyta `WbsNode.status` z tego samego `/wbs-nodes/unified/:nodeId`, z którego bierze się reszta wiersza — żadnego nowego zapytania ani pola. To ten sam status, który w Strukturze projektu (`WBSHybridTable`) stoi w kolumnie „Status"
+- **edytowalna na miejscu**: `<select>` zapisuje przez `PATCH /wbs-nodes/:id` (`status` jest na liście dozwolonych pól w `updateNode`), a dla liścia z kartą materiałową leci DRUGI zapis na `PATCH /material-requirements/:id` — tak samo jak robi to WBS przez `handleHybridNodeStatusChange`. Bez niego kolumna „Status oferty" w panelu Materiały (czyta `MaterialRequirement.status`) zostawałaby ze starą wartością
+- nieudany zapis cofa wartość w tabeli i mówi o tym wprost — inaczej widok twierdzi, że status się zmienił, a po przeładowaniu wraca stary
+- etykiety i kolory z `STRUCTURE_STATUS_META` (`wbsConstants.js`) — wspólne z WBS i panelem Materiały, bez własnej kopii słownika statusów
+- kolumna wchodzi w filtr kolumnowy, sortowanie i wyszukiwarkę globalną tabeli; eksport Excel zostaje bez zmian
+- edycja podlega roli: `readOnly` (spoza ADMIN / MANAGER / LOGISTYK) blokuje `<select>`, tak jak resztę pól tabeli
+
+### słownik
+
+- dodano `realization-status-col` — kolumna „Status" w tabeli Realizacja, `RealizationTab.jsx`
+- dodano `realization-status-label` — etykieta statusu liścia dla komórki, filtra i sortowania, `RealizationTab.jsx`
+- dodano `realization-status-options` — kody statusów do wyboru (bez `MIXED`), `RealizationTab.jsx`
+- dodano `realization-save-status` — zapis statusu: węzeł WBS + karta materiałowa, `RealizationTab.jsx`
+
+### wytyczne
+
+- `ui-funkcja` `saveStatus` — zmiana `WbsNode.status` liścia z kartą materiałową MUSI iść na oba pola (węzeł + `MaterialRequirement.status`). Dwa widoki czytają status z dwóch różnych miejsc, więc zapis w jedno z nich rozjeżdża Realizację z panelem Materiały
+- `ui-funkcja` `statusLabel` — komórka, filtr kolumny i sortowanie MUSZĄ czytać etykietę z tej jednej funkcji; osobne wyliczanie labelki w każdym z tych miejsc rozjeżdża filtr z tym, co widać w tabeli
+- `ui-kolumna` `realization-status-col` — status spoza `STRUCTURE_STATUS_META` (dane sprzed ujednolicenia kodów, np. `NEW`) zostaje na liście `<select>` jako własna opcja. Bez tego przeglądarka pokazuje pierwszą opcję z listy i wiersz kłamie o tym, co jest w bazie
+
 ## 2026-08-16 — chore(deploy): deploy przycina cache buildów po wystawieniu kontenerów
 
 ### architektura / API

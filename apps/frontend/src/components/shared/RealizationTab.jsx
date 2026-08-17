@@ -7,7 +7,7 @@ import { API_URL } from '../../config';
 import SupplierPicker from './SupplierPicker';
 import { RequirementImageBox } from './wbs/WbsMaterialsPanel';
 import AutoResizeTextarea from './wbs/AutoResizeTextarea';
-import { sanitizeQtyInput, DRAWER } from './wbs/wbsConstants';
+import { sanitizeQtyInput, DRAWER, STRUCTURE_STATUS_META } from './wbs/wbsConstants';
 import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath,
     leafNodesOf, buildCardMap, wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf,
@@ -41,11 +41,33 @@ export const COL_DEFS = [
     // pozycji po stronie wyceny i po stronie zakupu, z odchyleniem pod spodem. Stopka tabeli
     // sumuje ją dla wszystkich widocznych wierszy — to jest podsumowanie całego zamówienia.
     { key: 'total',         label: 'Koszt całkowity',     defaultW: 175, align: 'right' },
+    // @anchor realization-status-col — `WbsNode.status` liścia, to samo pole co kolumna „Status"
+    // w `WBSHybridTable`, i tak samo edytowalne: pozycję da się przestawić tam, gdzie się ją
+    // właśnie rozlicza, bez skakania do Struktury projektu. Zapis idzie tą samą drogą co w WBS —
+    // `PATCH /wbs-nodes/:id`, a dla liścia z kartą materiałową dodatkowo na kartę, żeby kolumna
+    // „Status oferty" w panelu Materiały nie została ze starą wartością.
+    // Miejsce w kolejności jak w panelu Materiały — przed „Komentarzem", po kolumnach kwotowych.
+    { key: 'status',        label: 'Status',              defaultW: 148 },
     // @anchor realization-comment-col — `WbsNode.comment`, to samo pole co kolumna „Komentarz"
     // w `WBSHybridTable` i w panelu Materiały. Synchronizacja obustronna przez `wbs-comment-changed`.
     { key: 'comment',       label: 'Komentarz',           defaultW: 200 },
     { key: 'actions',       label: 'Wpisy',               defaultW: 70,  align: 'right' },
 ];
+
+// @anchor realization-status-label — etykieta statusu liścia z jednego źródła
+// (`STRUCTURE_STATUS_META`, wspólnego z WBS i panelem Materiały). Jedna funkcja obsługuje
+// komórkę, filtr kolumny i sortowanie, więc żadne z nich nie rozjedzie się z pozostałymi.
+// Pusty status daje pusty ciąg — wołający decyduje, czy pokazać „—", czy nic nie dopasować.
+export const statusLabel = (node) => {
+    const code = node?.status || '';
+    if (!code) return '';
+    return STRUCTURE_STATUS_META[code]?.label || code;
+};
+
+// @anchor realization-status-options — kody do wyboru w kolumnie „Status". `MIXED` wypada,
+// bo to wartość WYLICZANA dla gałęzi (mieszane statusy dzieci), a nie stan, który da się
+// pozycji nadać — tak samo jak w `StatusSelect` w `WBSHybridTable`.
+const STATUS_OPTIONS = Object.keys(STRUCTURE_STATUS_META).filter(code => code !== 'MIXED');
 
 // @anchor realization-forecast-min-share — próg wiarygodności prognozy wydatków: dopóki
 // wykonanie rodzaju kosztów nie osiągnie tego udziału w jego wycenie, prognoza zostaje na
@@ -126,7 +148,7 @@ const selectAllOnFocus = (e) => {
 // @anchor realization-row — jeden liść WBS: plan z wyceny obok realizacji z wpisów.
 // Wiersz jest tylko odczytem — wszystko, co się wpisuje, siedzi w wierszach potomnych,
 // więc klik w tabelę nie może przypadkiem zmienić wyceny.
-export function RealizationRow({ node, card, realization, isExpanded, onToggle, onAddClick, onSaveComment, readOnly }) {
+export function RealizationRow({ node, card, realization, isExpanded, onToggle, onAddClick, onSaveComment, onSaveStatus, readOnly }) {
     const meta = TYPE_META[node.type] || TYPE_META.material;
     const TypeIcon = meta.icon;
     const r = realization;
@@ -302,6 +324,29 @@ export function RealizationRow({ node, card, realization, isExpanded, onToggle, 
                         Δ {dValue > 0 ? '+' : ''}{fmtZl(dValue)}
                     </div>
                 )}
+            </td>
+
+            {/* Status pozycji — `WbsNode.status`, wspólny z kolumną „Status" w WBSHybridTable */}
+            <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                <select
+                    value={node.status || ''}
+                    onChange={e => onSaveStatus(node, e.target.value)}
+                    disabled={readOnly}
+                    title="Status pozycji — to samo pole co w Strukturze projektu"
+                    className={`w-full bg-black/40 border border-white/10 rounded px-1.5 py-0.5 text-sm font-medium outline-none transition-colors ${readOnly ? 'cursor-default' : 'cursor-pointer hover:bg-white/5 focus:border-teal-500/50'} ${STRUCTURE_STATUS_META[node.status || '']?.color || 'text-gray-400'}`}
+                >
+                    {/* Status spoza słownika (dane sprzed ujednolicenia kodów) zostaje na liście
+                        jako własna pozycja — bez tego `<select>` pokazałby pierwszą opcję i wyglądał,
+                        jakby pozycja miała status, którego nie ma w bazie. */}
+                    {!STRUCTURE_STATUS_META[node.status || ''] && node.status && (
+                        <option value={node.status} className="bg-gray-900 text-white">{node.status}</option>
+                    )}
+                    {STATUS_OPTIONS.map(code => (
+                        <option key={code} value={code} className="bg-gray-900 text-white">
+                            {STRUCTURE_STATUS_META[code].label}
+                        </option>
+                    ))}
+                </select>
             </td>
 
             {/* Komentarz pozycji — `WbsNode.comment`, wspólny z WBSHybridTable i panelem Materiały */}
@@ -836,6 +881,39 @@ export default function RealizationTab({
         window.dispatchEvent(new CustomEvent('wbs-comment-changed', { detail: { wbsNodeIds: [wbsNodeId], comment } }));
     }, []);
 
+    // @anchor realization-save-status — `WbsNode.status` przez to samo `PATCH /wbs-nodes/:id`
+    // co kolumna „Status" w WBSHybridTable. Liść z kartą materiałową dostaje DRUGI zapis —
+    // na `MaterialRequirement.status` — dokładnie tak, jak robi to WBS przez
+    // `handleHybridNodeStatusChange`: kolumna „Status oferty" w panelu Materiały czyta status
+    // z karty, więc bez tego drugiego zapisu oba widoki pokazywałyby różne wartości dla tej
+    // samej pozycji. Stan lokalny idzie pierwszy — `<select>` ma odpowiedzieć od razu,
+    // a nie po powrocie odpowiedzi z serwera.
+    const saveStatus = useCallback(async (node, status) => {
+        const previous = node.status || '';
+        if (status === previous) return;
+        setWbsNodes(prev => prev.map(n => n.id === node.id ? { ...n, status } : n));
+        const cardId = cards[node.id]?.id || null;
+        if (cardId) setCards(prev => prev[node.id] ? { ...prev, [node.id]: { ...prev[node.id], status } } : prev);
+        try {
+            const res = await fetch(`${API_URL}/wbs-nodes/${node.id}`, {
+                method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ status }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            if (cardId) {
+                await fetch(`${API_URL}/material-requirements/${cardId}`, {
+                    method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ status }),
+                });
+            }
+        } catch (e) {
+            // Cofamy pokazaną wartość — inaczej tabela twierdzi, że status się zmienił,
+            // a po przeładowaniu widoku wraca stary i nie wiadomo, który jest prawdziwy.
+            console.error('[RealizationTab] saveStatus error:', e);
+            setWbsNodes(prev => prev.map(n => n.id === node.id ? { ...n, status: previous } : n));
+            if (cardId) setCards(prev => prev[node.id] ? { ...prev, [node.id]: { ...prev[node.id], status: previous } } : prev);
+            alert('Nie udało się zapisać statusu pozycji');
+        }
+    }, [cards]);
+
     // @anchor realization-append-entry-comment — komentarz nowego wpisu dopisuje się do komentarza
     // POZYCJI jako osobna linia „zakup: …" / „wykonanie: …". Dzięki temu ta sama treść jest widoczna
     // wszędzie, gdzie żyje `WbsNode.comment` — w WBS, w panelu Materiały i na markerze schematu —
@@ -991,6 +1069,7 @@ export default function RealizationTab({
                 (card?.manufacturer || '').toLowerCase().includes(q) ||
                 (card?.model || '').toLowerCase().includes(q) ||
                 (card?.technicalSpec || '').toLowerCase().includes(q) ||
+                statusLabel(node).toLowerCase().includes(q) ||
                 (node.comment || '').toLowerCase().includes(q) ||
                 realization.entries.some(e =>
                     (e.docNumber || '').toLowerCase().includes(q) ||
@@ -1025,6 +1104,7 @@ export default function RealizationTab({
                 if (key === 'price')         return String(planUnitOf(node, card) ?? '').includes(q);
                 if (key === 'purchasePrice') return String(realization.avg ?? purchaseUnitOf(card) ?? '').includes(q);
                 if (key === 'total')         return `${Math.round(planValueOf(node, card) * 100) / 100} ${realization.value}`.includes(q);
+                if (key === 'status')        return statusLabel(node).toLowerCase().includes(q);
                 if (key === 'comment')       return (node.comment || '').toLowerCase().includes(q);
                 if (key === 'actions')       return String(realization.entries.length).includes(q);
                 return true;
@@ -1048,6 +1128,7 @@ export default function RealizationTab({
             else if (k === 'purchasePrice') cmp = (a.realization.avg ?? purchaseUnitOf(a.card) ?? Infinity) - (b.realization.avg ?? purchaseUnitOf(b.card) ?? Infinity);
             // Koszt całkowity sortuje po odchyleniu — to jest pytanie, które się tej kolumnie zadaje.
             else if (k === 'total')        cmp = (a.realization.value - planValueOf(a.node, a.card)) - (b.realization.value - planValueOf(b.node, b.card));
+            else if (k === 'status')       cmp = statusLabel(a.node).localeCompare(statusLabel(b.node), 'pl');
             else if (k === 'comment')      cmp = (a.node.comment || '').localeCompare(b.node.comment || '', 'pl');
             else if (k === 'actions')      cmp = a.realization.entries.length - b.realization.entries.length;
             return sortConfig.direction === 'asc' ? cmp : -cmp;
@@ -1640,6 +1721,7 @@ export default function RealizationTab({
                                             isExpanded={isExpanded}
                                             readOnly={readOnly}
                                             onSaveComment={saveComment}
+                                            onSaveStatus={saveStatus}
                                             onToggle={() => {
                                                 setExpandedId(isExpanded ? null : node.id);
                                                 if (isExpanded) { setFormNodeId(null); setFormSeed(null); }

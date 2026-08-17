@@ -1398,6 +1398,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-kolumna | Produkt / zakres | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-product-col |
 | ui-funkcja | exportExcel (widok + podsumowanie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-excel |
 | ui-input | zakres wpisu (liście bez karty) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-scope |
+| ui-kolumna | Status (WbsNode.status, edytowalny) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-status-col |
+| ui-funkcja | statusLabel (etykieta statusu liścia) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-status-label |
+| ui-stala | STATUS_OPTIONS (kody do wyboru, bez MIXED) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-status-options |
+| ui-funkcja | saveStatus (PATCH węzła + karty materiałowej) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-save-status |
 | ui-kolumna | Komentarz (WbsNode.comment) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-comment-col |
 | ui-stan | commentVal (bufor komentarza wiersza) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-comment |
 | ui-funkcja | saveComment (PATCH + rozgłoszenie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-save-comment |
