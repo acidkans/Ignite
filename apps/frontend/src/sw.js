@@ -83,6 +83,11 @@ self.addEventListener('push', (event) => {
             orderId: data.orderId || null,
             reminderId: data.reminderId || null,
             type: data.type || 'ORDER',
+            // Cel kliknięcia WEWNĄTRZ zamówienia. Sam `orderId` otwiera je na ostatnio
+            // oglądanej zakładce, więc powiadomienie o domówieniu lądowało gdziekolwiek.
+            // Nadawca decyduje, dokąd prowadzi jego powiadomienie — SW tylko to przenosi.
+            tab: data.tab || null,
+            section: data.section || null,
             url: '/',
         },
         // Przyciski akcji widoczne w systemowym popupie (Android / Chrome desktop)
@@ -110,7 +115,7 @@ self.addEventListener('push', (event) => {
 // @anchor sw-notification-click
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    const { orderId, reminderId, type } = event.notification.data || {};
+    const { orderId, reminderId, type, tab, section } = event.notification.data || {};
     const action = event.action;
 
     // Obsługa akcji dla REMINDER — deleguj do otwartej karty aplikacji
@@ -133,14 +138,19 @@ self.addEventListener('notificationclick', (event) => {
         return;
     }
 
-    // Domyślna obsługa ORDER
-    const url = orderId ? `/?orderId=${orderId}` : '/';
+    // Domyślna obsługa ORDER. Zimny start (brak otwartej karty) niesie cel w query — aplikacja
+    // czyta go przy starcie; bez tego kliknięcie z zamkniętej aplikacji lądowało na pulpicie.
+    const params = new URLSearchParams();
+    if (orderId) params.set('orderId', orderId);
+    if (tab) params.set('tab', tab);
+    if (section) params.set('section', section);
+    const url = orderId ? `/?${params.toString()}` : '/';
     event.waitUntil(
         self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
             for (const client of clientList) {
                 if ('focus' in client) {
                     client.focus();
-                    client.postMessage({ type: 'NAVIGATE_TO_ORDER', orderId });
+                    client.postMessage({ type: 'NAVIGATE_TO_ORDER', orderId, tab, section });
                     return;
                 }
             }

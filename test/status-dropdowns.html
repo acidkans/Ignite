@@ -9,10 +9,15 @@
     jako goły string, więc rozjazd kodu albo etykiety w jednej liście = drugi widok pokazuje
     surowe `EXTRA_ORDER` zamiast nazwy.
 
-    Listy statusów żyją w trzech miejscach (stan zastany, nie zmieniany tym testem):
-      WBS        → STRUCT_STATUS_META    (WBSHybridTable.jsx)
-      Realizacja → STRUCTURE_STATUS_META (wbsConstants.js)
-      Materiały  → STATUS_META           (realizationShared.js)
+    Druga część sprawdza rozdzielenie słowników: liście praca / usługa / nocleg / paliwo
+    mają WŁASNĄ listę („Nowe → Rozpoczęte → Wstrzymane → Zakończone / Nieskończone /
+    Odwołane"), a materiałowa droga przez zakup i magazyn nie może się do nich przeciec.
+
+    Listy statusów żyją w czterech miejscach:
+      WBS, materiał   → STRUCT_STATUS_META      (WBSHybridTable.jsx)
+      WBS, praca      → WORK_STRUCT_STATUS_META (WBSHybridTable.jsx, etykiety z wbsConstants)
+      Realizacja      → STRUCTURE_STATUS_META / WORK_STATUS_META (wbsConstants.js)
+      Materiały       → STATUS_META             (realizationShared.js)
 
     Uruchomienie — kopiujemy do apps/frontend/, bo przez /@fs/ Vite nie przepisuje
     bare importów `react`:
@@ -27,8 +32,8 @@
   import '/src/index.css';
   import React from 'react';
   import { createRoot } from 'react-dom/client';
-  import { StatusSelect, STRUCT_STATUS_META } from '/src/components/shared/wbs/WBSHybridTable.jsx';
-  import { STRUCTURE_STATUS_META, MATERIAL_STATUS_LABELS } from '/src/components/shared/wbs/wbsConstants.js';
+  import { StatusSelect, STRUCT_STATUS_META, WORK_STRUCT_STATUS_META } from '/src/components/shared/wbs/WBSHybridTable.jsx';
+  import { STRUCTURE_STATUS_META, MATERIAL_STATUS_LABELS, WORK_STATUS_META, WORK_STATUS_LABELS, statusOptionsForType, resolveStatusCode } from '/src/components/shared/wbs/wbsConstants.js';
   import { STATUS_META } from '/src/components/shared/wbs/realizationShared.js';
 
   const CODE = 'EXTRA_ORDER';
@@ -58,6 +63,39 @@
   // MIXED to wartość WYLICZANA dla gałęzi — nie może dać się wybrać ręcznie.
   check('MIXED nadal poza listą wyboru', !wbsOptions.some(([c]) => c === 'MIXED') && !realOptions.includes('MIXED'));
 
+  // ── Liście niematerialne: praca / usługa / nocleg / paliwo ─────────────────
+  // Osobny słownik żyje w `wbsConstants` (WORK_STATUS_META) i ma plakietkową kopię
+  // w `WBSHybridTable` (WORK_STRUCT_STATUS_META). Kopia bierze etykiety z oryginału,
+  // ale test i tak je porównuje — bo dokładnie na takim rozjeździe wykładały się
+  // poprzednie listy. Logikę słownika sprawdza `test/status-work-leaves.mjs`;
+  // tutaj chodzi o to, co widać w PRAWDZIWYM komponencie.
+  const workCodes = statusOptionsForType('work');
+  check('praca — sześć statusów w dropdownie', workCodes.length === 6, workCodes.join(', '));
+  check('praca — kolejność „Nowe" → „Odwołane"',
+    workCodes.join(',') === 'NEW,STARTED,ON_HOLD,COMPLETED,UNFINISHED,CANCELLED', workCodes.join(','));
+  check('praca — plakietki WBS mają te same kody',
+    Object.keys(WORK_STRUCT_STATUS_META).join(',') === workCodes.join(','), Object.keys(WORK_STRUCT_STATUS_META).join(','));
+  check('praca — plakietki WBS mają te same etykiety',
+    workCodes.every(c => WORK_STRUCT_STATUS_META[c]?.label === WORK_STATUS_LABELS[c]));
+  // `NEW` jest WSPÓLNY dla obu słowników (patrz komentarz w wbsConstants) — reszta nie.
+  const leaked = workCodes.filter(c => c !== 'NEW' && c in STRUCTURE_STATUS_META);
+  check('praca — poza NEW żaden status materiałowy się nie przeciekł', leaked.length === 0, leaked.join(', '));
+  check('praca — obcy kod z bazy pokazuje się jako „Nowe"',
+    resolveStatusCode('work', 'ORDERED') === 'NEW' && resolveStatusCode('fuel', 'PENDING') === 'NEW');
+  check('materiał — nadal swoja lista', !statusOptionsForType('material').includes('STARTED'));
+
+  // ── Status „Nowy" po stronie materiałowej ─────────────────────────────────
+  // Ten sam kod, inna etykieta — bo inny rodzaj rzeczownika. Wszystkie trzy widoki
+  // materiałowe muszą mówić „Nowy", inaczej ta sama pozycja czyta się w każdym inaczej.
+  const matNewLabels = [STRUCT_STATUS_META.NEW?.label, STRUCTURE_STATUS_META.NEW?.label, STATUS_META.NEW?.label, MATERIAL_STATUS_LABELS.NEW];
+  check('materiał — NEW jest we wszystkich trzech widokach i w eksportach',
+    matNewLabels.every(Boolean), matNewLabels.join(' | '));
+  check('materiał — wszędzie „Nowy"', new Set(matNewLabels).size === 1 && matNewLabels[0] === 'Nowy', matNewLabels.join(' | '));
+  check('materiał — NEW zaraz po „Brak"',
+    Object.keys(STRUCT_STATUS_META).slice(0, 2).join(',') === ',NEW', Object.keys(STRUCT_STATUS_META).slice(0, 2).join(','));
+  check('praca — „Nowe", materiał — „Nowy" (celowo różne etykiety tego samego kodu)',
+    WORK_STATUS_META.NEW.label === 'Nowe' && STRUCTURE_STATUS_META.NEW.label === 'Nowy');
+
   const failed = results.filter(r => !r.ok);
   window.__RESULT__ = { ok: failed.length === 0, results };
 
@@ -79,12 +117,19 @@
         'Każdy select zbudowany z listy, której naprawdę używa dany widok.'),
 
       React.createElement('div', { style: { fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: '#94a3b8', marginBottom: 6 } },
-        'WBS — prawdziwy komponent StatusSelect'),
+        'WBS, liść materiałowy — prawdziwy komponent StatusSelect'),
       React.createElement('div', { style: { marginBottom: 20 } },
-        React.createElement(StatusSelect, { value: CODE, onChange: () => {} })),
+        React.createElement(StatusSelect, { value: CODE, type: 'material', onChange: () => {} })),
+
+      React.createElement('div', { style: { fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, color: '#94a3b8', marginBottom: 6 } },
+        'WBS, liść pracy — ten sam komponent, drugi słownik (obcy kod „ORDERED" z bazy)'),
+      React.createElement('div', { style: { marginBottom: 20 } },
+        React.createElement(StatusSelect, { value: 'ORDERED', type: 'work', onChange: () => {} })),
 
       React.createElement(Row, { title: 'Realizacja — kolumna Status',
         options: realOptions.map(c => [c, STRUCTURE_STATUS_META[c]?.label]) }),
+      React.createElement(Row, { title: 'Realizacja / Materiały — kolumna Status nad pracą, usługą, noclegiem, paliwem',
+        options: workCodes.map(c => [c, WORK_STATUS_META[c]?.label]) }),
       React.createElement(Row, { title: 'Materiały — kolumna Status oferty',
         options: matOptions.map(([c, m]) => [c, m.label]) }),
 

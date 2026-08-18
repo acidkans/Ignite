@@ -1,3 +1,101 @@
+## 2026-08-18 — fix(auth): rola czytana z tokenu TEJ karty, nie ostatniego logowania w profilu (v2026.08.18.871)
+
+### architektura / API
+
+- **`activeToken()`** w `App.jsx` — jedno miejsce, z ktorego straznik tras administracyjnych i wylogowanie biora token. Kolejnosc `sessionStorage` → `localStorage`, czyli ta sama co w calej reszcie aplikacji (16 plikow)
+- **Objaw:** admin klikal „Uzytkownicy" i dostawal „Brak dostepu", mimo ze wszystkie zapytania do API szly poprawnie jako admin. `tokenRoles()` czytalo `localStorage` PRZED `sessionStorage`, a `localStorage` jest wspolny dla calego profilu przegladarki i logowanie zapisuje do OBU magazynow. Wystarczylo zalogowac sie na drugie konto w sasiednim oknie, zeby okno admina zaczelo raportowac cudza role
+- **Ten sam blad w `doLogout`** — wylogowanie zdejmowalo subskrypcje push tego, kto zalogowal sie ostatni, a nie tej karty. Oraz w `MobileDashboard`, gdzie odwrocona kolejnosc decydowala, czyje zadania sie ladują
+- Backend nie byl w to zamieszany: JWT niesie `roles` poprawnie, a straznik po stronie serwera dziala niezaleznie — to byla wylacznie zla tozsamosc po stronie UI
+
+### slownik
+
+- dodano `activeToken` — token biezacej karty, jedno zrodlo dla straznika i wylogowania, `App.jsx`
+
+### wytyczne
+
+- `ui-funkcja` `activeToken` — token czytaj ZAWSZE `sessionStorage` przed `localStorage`. `sessionStorage` jest per-karta i niesie tozsamosc TEGO okna, `localStorage` jest wspolny dla profilu i niesie tozsamosc ostatniego logowania gdziekolwiek. Odwrotna kolejnosc daje bledy, ktore wygladaja jak problem z uprawnieniami w bazie, a sa problemem z tym, czyj token wlasnie przeczytano
+
+## 2026-08-18 — feat(powiadomienia): push do logistyka o pierwszym „Dodatkowym zamowieniu" w zamowieniu (v2026.08.18.870)
+
+### architektura / API
+
+- **`ExtraOrderNotifierService`** (`notifications/extra-order-notifier.service.ts`) — gdy pozycja WCHODZI w status `EXTRA_ORDER`, logistycy zamowienia dostaja push i wpis w dzwonku. Wolany z dwoch miejsc, bo status ma dwie drogi zapisu: `MaterialRequirementsService.update/create` (karta) i `WbsNodesService.updateNode` (wezel WBS)
+- **RAZ NA ZAMOWIENIE, nie raz na pozycje.** Domowienie idzie zwykle seria — brakło dziesieciu rzeczy z jednej dostawy — i push per pozycja zamienilby kanal w spam, ktorego logistyk przestanie czytac. Progiem jest istniejacy wpis `Notification` typu `EXTRA_ORDER` dla tego `orderId`, wiec przezywa restart backendu BEZ dokladania kolumny do schematu. Ten sam warunek zalatwia przy okazji podwojny zapis z UI: drugie zadanie widzi juz wpis
+- **Reaguje na WEJSCIE w status, nie na stan zastany** — `statusBefore` czytany przed zapisem. UI zapisuje pole statusu przy okazji innych zmian, wiec bez tego kazdy zapis pozycji, ktora juz ma ten status, generowalby powiadomienie
+- **Brak odbiorcow to NIE jest „wyslane"** — gdy nikt nie pasuje, swiadomie nie powstaje wpis progowy. Inaczej prog zamknalby sie na zamowieniu, o ktorym nikt sie nie dowiedzial, i pozniejsze nadanie uprawnien logistykowi juz nic by nie dalo. W logu zostaje ostrzezenie z id zamowienia
+- **Odbiorca: „LOGISTYK z dostepem do wezla lub jego przodka, bezposrednio ALBO przez zespol".** Gałąź zespolowa nie jest ozdobnikiem — zmierzone na bazie dev (`test/extra-order-recipients.mjs`): reguła liczaca wylacznie `NodePermission.userId` dawala **0/34** zamowien z odbiorca, bo user-owe wpisy na zamowieniach to prawie wylacznie kontakty zewnetrzne (rola USER) z `addProjectContact`, a etatowy logistyk ma dostep przez zespol („Services", „Systems"). Z zespolami: **23/34**. Pozostale 11 zamowien siedzi pod obszarami, ktorych zespoly nie obejmuja — te nie powiadomia nikogo i mowi o tym log
+- **Globalny wylacznik `SystemNotificationSettings.webPushEnabled` gasi WYLACZNIE pusha** — wpis w dzwonku zostaje, bo to osobny kanal i wylaczenie Web Push nie znaczy „nie informuj mnie w ogole"
+- **Link prowadzi do WBS → Materialy tego zamowienia.** Payload niesie `tab: 'unified'` i `section: 'materials'`; service worker przenosi je do `notification.data`, przekazuje w `NAVIGATE_TO_ORDER` przy otwartej aplikacji i doklada do query przy zimnym starcie
+- **Dwie dziury w nawigacji push zaslepione przy okazji** — obie sprzed tej zmiany: (1) `App.jsx` rozglaszal zdarzenie `push-navigate-order`, ktorego NIKT nie sluchal, wiec klikniecie w push przy otwartej aplikacji dawalo tylko focus i zostawialo uzytkownika tam, gdzie byl; (2) `openWindow('/?orderId=…')` przy zimnym starcie prowadzil donikad, bo zaden kod nie czytal tego parametru
+- **Poprawiona zakladka w dzwonku** — `MainLayout` ustawial `tab: 'materials'` dla powiadomien o pozycji, a takiej zakladki w `DashboardPage` nie ma (sa `requirements`, `unified`, `materialLists`, `offers`, `realization`, …). `setActiveTab` dostawal nazwe, ktorej nikt nie renderuje. Teraz `unified` + sekcja `materials`
+- **Bez migracji bazy** — nowy typ powiadomienia to zwykly string w `Notification.type`, a odbiorcow liczymy z istniejacych `NodePermission`, `ProcessNodeClosure` i przynaleznosci do zespolu
+
+### slownik
+
+- dodano `ExtraOrderNotifierService` — powiadomienie o dodatkowym zamowieniu, `extra-order-notifier.service.ts`
+- dodano `EXTRA_ORDER_STATUS` — kod statusu wyzwalajacego, `extra-order-notifier.service.ts`
+- dodano `EXTRA_ORDER_NOTIFICATION_TYPE` — typ wpisu i zarazem prog deduplikacji, `extra-order-notifier.service.ts`
+- dodano `resolveOrderNodeId` — wspinaczka do wezla `type='order'`, `extra-order-notifier.service.ts`
+- dodano `logisticiansForOrder` — odbiorcy: rola + uprawnienie wlasne lub zespolowe, `extra-order-notifier.service.ts`
+- dodano `mat-req-extra-order-hook` — wykrycie wejscia w status na karcie, `material-requirements.service.ts`
+- dodano `wbs-node-extra-order-hook` — wykrycie wejscia w status na wezle, `wbs-nodes.service.ts`
+- dodano `pendingSectionRef` — sekcja do rozwiniecia po nawigacji, `MainLayout.jsx`
+- dodano `pushNavigateListener` — obsluga klikniecia w push przy otwartej aplikacji, `MainLayout.jsx`
+- dodano `pushColdStartNavigate` — obsluga klikniecia przy zamknietej aplikacji, `MainLayout.jsx`
+- dodano `pendingWbsSection` — sekcja przekazywana do panelu WBS, `DashboardPage.jsx`
+- dodano `initialSection` — sekcja rozwijana raz po wejsciu z powiadomienia, `UnifiedWbsPanel.jsx`
+
+### wytyczne
+
+- `back-funkcja` `logisticiansForOrder` — regule „kto jest przypisany do wezla" WERYFIKUJ na danych, zanim ja zakodujesz. Wersja po samym `NodePermission.userId` kompilowala sie, przechodzila typy i dawala zero odbiorcow na wszystkich 34 zamowieniach; feature milczalby, a nikt by nie wiedzial dlaczego. Uprawnienia user-owe na zamowieniach to w tym systemie kontakty zewnetrzne, dostep etatowy idzie przez zespol
+- `back-serwis` `ExtraOrderNotifierService` — prog „raz na X" opieraj na wpisie, ktory i tak powstaje (`Notification`), a nie na pamieci procesu ani nowej kolumnie. Pamiec ginie przy restarcie, kolumna wymaga migracji na produkcji
+- `back-serwis` `ExtraOrderNotifierService` — gdy nie ma do kogo wyslac, NIE zamykaj progu. Zapisany prog bez dostarczonej wiadomosci to cicha strata: pozniejsza naprawa uprawnien nic juz nie odblokuje
+- `ui-funkcja` `pushNavigateListener` — powiadomienie musi niesc CEL (`tab`, `section`), nie tylko identyfikator obiektu. Sam `orderId` otwiera zamowienie na ostatnio ogladanej zakladce, czyli prowadzi donikad w polowie przypadkow
+
+## 2026-08-18 — feat(status): osobna lista statusow dla lisci praca / usluga / nocleg / paliwo + status startowy „Nowy" dla wszystkich (v2026.08.18.869)
+
+### architektura / API
+
+- **Statusy pozycji rozdzielone na DWA rozlaczne slowniki.** Dotad wszystkie liscie — od switcha po dzien pracy ekipy — dzielily jedna liste materialowa (Oczekuje → Propozycja → Potwierdzone → Zamowione → Na magazynie → Wydane → Zainstalowane). Ta lista opisuje droge TOWARU przez zakup i magazyn; robocizna, usluga obca, nocleg i paliwo zadnej z tych faz nie maja. Nie da sie „zamowic na magazyn" dnia pracy ani „wydac z magazynu" przejechanych kilometrow
+- **Nowy slownik dla `work`, `service`, `lodging`, `fuel`** — szesc kodow, w tej kolejnosci: `NEW` „Nowe", `STARTED` „Rozpoczete", `ON_HOLD` „Wstrzymane", `COMPLETED` „Zakonczone", `UNFINISHED` „Nieskonczone", `CANCELLED` „Odwolane". Trzy ostatnie celowo sie nie sklejaja: „Zakonczone" = plan wykonany, „Nieskonczone" = przerwane przed meta, „Odwolane" = nigdy nie ruszylo
+- **`NEW` to status startowy KAZDEJ nowej pozycji — takze materialu i sprzetu.** Snapshot bez zaakceptowanego baseline to zamowienie, w ktorym pozycje dopiero powstaly. Materialowe „Oczekuje" mowilo tam co innego — „czeka na oferte dostawcy", czyli ktos juz ruszyl — i bylo nieprawda przez pierwsze tygodnie zycia kazdej pozycji. `defaultStatusForType` zwraca `NEW` dla wszystkich typow, a `mkNode` bierze typ i pyta o status wlasnie ja, wiec automatyczny lisc Paliwo i galaz gwarancyjna tez rodza sie jako nowe
+- **`NEW` to JEDYNY kod wspolny obu slownikom.** „Dopiero powstala" znaczy to samo nad switchem i nad dniem pracy ekipy, wiec rozdzielanie tego na dwa kody kazaloby kazdemu odczytowi pytac o typ, zanim odpowie „czy to nowe". Rozni sie tylko etykieta, bo rozni sie rodzaj rzeczownika: **„Nowy"** materiał i sprzet, **„Nowe"** praca, usluga, nocleg i paliwo. Pozostale kody pozostaja rozlaczne — inaczej jedna wartosc w kolumnie `WbsNode.status` znaczylaby dwie rzeczy zaleznie od typu wiersza
+- **Karta materialowa (`MaterialRequirement`) tez startuje jako `NEW`.** W panelu Materialy kolumna Status nad materialem i sprzetem edytuje status KARTY, nie wezla — bez tej zmiany swiezo utworzony lisc pokazywalby „Nowy" w WBS i „Oczekuje" w Materialach. Objete wszystkie trzy sciezki tworzenia: reczna (`create`), klon listy i ekstrakcja AI. Status nadawany w KODZIE, nie kolumnowym `@default` — zmiana defaultu w schemacie wymaga migracji na produkcji, a kazda sciezka i tak przechodzi przez ten kod
+- **Jedno zrodlo prawdy, cztery konsumentow.** `wbsConstants` oddaje `statusMetaForType` / `statusOptionsForType` / `statusLabelForType` / `resolveStatusCode`; WBS, Realizacja, Materialy i eksporty pytaja o mape wlasciwa dla typu zamiast trzymac wlasna kopie. Poprzednim razem to wlasnie piata kopia listy kazala drukowac surowy kod zamiast nazwy
+- **Bez migracji bazy i bez ruszania produkcyjnych rekordow.** `WbsNode.status` to `String` bez enuma i bez whitelisty w backendzie, a nowe kody sa rozlaczne z materialowymi. Lisc pracy, ktory ma dzis w bazie `PENDING` albo `ORDERED`, POKAZUJE sie jako „Nowe" (`resolveStatusCode`), a dopiero reczna zmiana utrwala kod z nowego slownika
+- **Kolumna „Status" w panelu Materialy przestala byc martwa nad ta czworka.** Material i sprzet edytuja status KARTY (`MaterialRequirement.status`), praca / usluga / nocleg / paliwo — status WEZLA (`WbsNode.status`), bo karty nie maja i do tej pory widnialo tam „—". Szukajka, filtr kolumny, sortowanie i eksport XLS ida przez wspolne `rowStatusLabel`, wiec widza dokladnie to, co komorka
+- **Eksport budzetu XLS drukowal surowy kod** w kolumnie Status („PENDING" jechalo do klienta) — teraz etykiete, przez `getStatusLabel` swiadome typu
+- `normalizeStatusCode` czyta etykiety OBU slownikow, wiec import z arkusza rozumie „Rozpoczete" tak samo jak „Zamowione"
+- Testy: `test/status-work-leaves.mjs` 80/80 (czysty node, bez backendu), `test/status-dropdowns.html` 20/20 w przegladarce — w tym PRAWDZIWY `StatusSelect` z `type="work"` i wartoscia `ORDERED` z bazy, ktory renderuje szesc opcji i pokazuje „Nowe". Backend `tsc --noEmit` czysty, `vite build` przechodzi
+
+### slownik
+
+- dodano `NEW` — status startowy kazdej nowej pozycji, „Nowy" po stronie materialowej, `wbsConstants.js`
+- dodano `WORK_STATUS_LEAF_TYPES` — typy lisci objete nowym slownikiem, `wbsConstants.js`
+- dodano `WORK_STATUS_LABELS` — szesc etykiet, jedno zrodlo, `wbsConstants.js`
+- dodano `WORK_STATUS_META` — etykiety + kolory, kolejnosc opcji w dropdownie, `wbsConstants.js`
+- dodano `WORK_STATUS_LABEL_TO_CODE` — etykieta → kod przy imporcie, `wbsConstants.js`
+- dodano `DEFAULT_STATUS_NEW` — stan startowy liscia niematerialnego, `wbsConstants.js`
+- dodano `usesWorkStatuses` — czy typ liscia idzie nowym slownikiem, `wbsConstants.js`
+- dodano `defaultStatusForType` — status nowo tworzonej pozycji, `wbsConstants.js`
+- dodano `statusMetaForType` — mapa statusow wlasciwa dla typu, `wbsConstants.js`
+- dodano `resolveStatusCode` — obcy kod z bazy → „Nowe", bez zapisu, `wbsConstants.js`
+- dodano `statusLabelForType` — etykieta dla komorki, filtra i eksportu, `wbsConstants.js`
+- dodano `statusOptionsForType` — kody do wyboru w dropdownie, `wbsConstants.js`
+- dodano `WORK_STRUCT_STATUS_META` — plakietkowa kopia slownika w tabeli WBS, `WBSHybridTable.jsx`
+- dodano `structStatusMetaFor` — plakietki wlasciwe dla typu liscia, `WBSHybridTable.jsx`
+- dodano `mkNode` — nowy wezel WBS, typ decyduje o statusie startowym, `WBSHybridTable.jsx`
+- dodano `rowStatusLabel` — etykieta statusu wiersza: karta albo wezel, `WbsMaterialsPanel.jsx`
+- dodano `getStatusLabel` — etykieta statusu swiadoma typu pozycji, `UnifiedWbsPanel.jsx`
+
+### wytyczne
+
+- `ui-stala` `WORK_STATUS_LABELS` — kody nowego slownika MUSZA pozostac rozlaczne z materialowymi. `WbsNode.status` to jedna kolumna `String` bez enuma; powtorzony kod znaczylby dwie rozne rzeczy zaleznie od typu wiersza i nie dalby sie odczytac z samej bazy
+- `ui-funkcja` `resolveStatusCode` — KAZDY odczyt statusu liscia (komorka, filtr, sortowanie, PDF, XLS) idzie przez slownik wlasciwy dla typu. Pominiecie choc jednego miejsca wypuszcza surowy kod z bazy na ekran albo do arkusza u klienta — dokladnie to zdarzylo sie przy `EXTRA_ORDER`
+- `ui-funkcja` `resolveStatusCode` — zmiana slownika statusow rozwiazywana w ODCZYCIE, nie migracja bazy. Dane produkcyjne zostaja nietkniete, a pierwszy reczny wybor utrwala nowy kod; migracja zapisalaby domysl narzedzia jako decyzje uzytkownika
+- `ui-stala` `NEW` — kod wspolny obu slownikom, ale etykieta osobna per slownik. Wspolny kod dlatego, ze „dopiero powstala" nie zalezy od typu pozycji; osobna etykieta dlatego, ze polszczyzna zalezy („Nowy" materiał, „Nowe" praca). Kazdy nowy status wspoldzielony miedzy slownikami wymaga tego samego uzasadnienia — inaczej wracamy do jednej listy dla wszystkiego
+- `schema-pole` `MaterialRequirement.status` — status startowy nadawaj w KODZIE serwisu, nie kolumnowym `@default`. Kolumnowy default wymaga migracji na produkcji, a i tak nie zadziala, bo kazda sciezka tworzenia karty przekazuje status jawnie. `@default("PENDING")` w schemacie zostaje jako martwy zapis — nie sugerowac sie nim przy czytaniu kodu
+
 ## 2026-08-17 — feat(monitoring): serwer wykrywa cisze w naplywie zalacznikow i alarmuje adminow push (v2026.08.17.867)
 
 ### architektura / API

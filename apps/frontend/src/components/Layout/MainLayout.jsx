@@ -78,6 +78,10 @@ export default function MainLayout({ onLogout }) {
     const [activeAreaId, setActiveAreaId] = useState(() => sessionStorage.getItem('activeAreaId'));
     const pendingTabRef = useRef(null);
     const pendingRequirementIdRef = useRef(null);
+    // @anchor pending-section-ref — sekcja do rozwinięcia WEWNĄTRZ zakładki WBS („materials",
+    // „budget"…). Zakładka mówi, gdzie iść, sekcja — na co patrzeć po dojściu; powiadomienie
+    // o domówieniu ma otworzyć listę materiałową, a nie zamówienie na przypadkowej sekcji.
+    const pendingSectionRef = useRef(null);
     const [userLabel, setUserLabel] = useState('');
     const [userRoles, setUserRoles] = useState([]);
     // @anchor layout-leaves-enabled
@@ -155,6 +159,38 @@ export default function MainLayout({ onLogout }) {
             navigate('/');
         }
     };
+
+    // @anchor push-navigate-listener — kliknięcie w powiadomienie push, gdy aplikacja jest
+    // otwarta. `App.jsx` przekłada wiadomość z service workera na to zdarzenie, ale do tej
+    // pory NIKT go nie słuchał: karta dostawała focus i zostawała tam, gdzie była. Ta sama
+    // droga co dzwonek — pendingTabRef + notification-navigate + zmiana węzła — żeby oba
+    // wejścia lądowały w tym samym miejscu i nie rozjechały się przy następnej zmianie.
+    useEffect(() => {
+        const handler = (e) => {
+            const { orderId, tab, section } = e.detail || {};
+            if (!orderId) return;
+            pendingTabRef.current = tab || null;
+            pendingSectionRef.current = section || null;
+            window.dispatchEvent(new CustomEvent('notification-navigate', { detail: { orderId, tab } }));
+            handleNodeChange(orderId);
+        };
+        window.addEventListener('push-navigate-order', handler);
+        return () => window.removeEventListener('push-navigate-order', handler);
+    }, []);
+
+    // @anchor push-cold-start-navigate — kliknięcie w push przy ZAMKNIĘTEJ aplikacji: service
+    // worker otwiera `/?orderId=…&tab=…&section=…`. Bez tego cel z powiadomienia ginął na
+    // starcie i użytkownik lądował na ostatnio oglądanym węźle.
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const orderId = params.get('orderId');
+        if (!orderId) return;
+        pendingTabRef.current = params.get('tab');
+        pendingSectionRef.current = params.get('section');
+        handleNodeChange(orderId);
+        // Query sprzątamy, żeby odświeżenie strony nie przerzucało w kółko na to zamówienie.
+        window.history.replaceState({}, '', window.location.pathname);
+    }, []);
 
     // --- 4. Node Management Handlers ---
     const handleAddNode = (parentNode) => {
@@ -285,8 +321,13 @@ export default function MainLayout({ onLogout }) {
                     <div className="flex items-center gap-2">
                         <NotificationBell
                             onNavigateToOrder={(orderId, requirementId) => {
-                                const tab = requirementId ? 'materials' : 'comments';
+                                // Powiadomienie o pozycji prowadzi do WBS → Materiały. Wcześniej stało
+                                // tu `'materials'`, a takiej zakładki w `DashboardPage` nie ma (są
+                                // `requirements`, `unified`, `materialLists`, `offers`, `realization`…) —
+                                // `setActiveTab` dostawał nazwę, której nikt nie renderuje.
+                                const tab = requirementId ? 'unified' : 'comments';
                                 pendingTabRef.current = tab;
+                                pendingSectionRef.current = requirementId ? 'materials' : null;
                                 pendingRequirementIdRef.current = requirementId || null;
                                 window.dispatchEvent(new CustomEvent('notification-navigate', { detail: { orderId, tab } }));
                                 handleNodeChange(orderId);
@@ -339,7 +380,7 @@ export default function MainLayout({ onLogout }) {
                     Outlet działa tutaj jako placeholder dla komponentów zdefiniowanych w App.jsx 
                     Przekazujemy setActiveAreaId itp. przez context, aby DashboardPage mógł z tego korzystać.
                 */}
-                <Outlet context={{ activeAreaId, setActiveAreaId: handleNodeChange, refreshTree: fetchTree, menuTree, setLeftVisible, setAiVisible, setDocsVisible, pendingTabRef, pendingRequirementIdRef }} />
+                <Outlet context={{ activeAreaId, setActiveAreaId: handleNodeChange, refreshTree: fetchTree, menuTree, setLeftVisible, setAiVisible, setDocsVisible, pendingTabRef, pendingRequirementIdRef, pendingSectionRef }} />
             </main>
 
             {/* TOGGLE DOCS BUTTON (amber) */}

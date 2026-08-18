@@ -296,6 +296,13 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-controller | WbsNodesController | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-controller |
 | back-modul | WbsNodesModule | apps/backend/src/wbs-nodes/wbs-nodes.module.ts | @anchor wbs-nodes-module |
 | back-serwis | WbsNodesService | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-nodes-service |
+| back-serwis | ExtraOrderNotifierService | apps/backend/src/notifications/extra-order-notifier.service.ts | @anchor notify-extra-order |
+| back-stala | EXTRA_ORDER_STATUS | apps/backend/src/notifications/extra-order-notifier.service.ts | @anchor extra-order-status |
+| back-stala | EXTRA_ORDER_NOTIFICATION_TYPE | apps/backend/src/notifications/extra-order-notifier.service.ts | @anchor extra-order-notification-type |
+| back-funkcja | resolveOrderNodeId | apps/backend/src/notifications/extra-order-notifier.service.ts | @anchor extra-order-resolve-order-node |
+| back-funkcja | logisticiansForOrder | apps/backend/src/notifications/extra-order-notifier.service.ts | @anchor extra-order-logisticians |
+| back-funkcja | statusBefore (karta) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-extra-order-hook |
+| back-funkcja | statusBefore (węzeł) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-node-extra-order-hook |
 | back-typ | QaPair | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor qa-pair |
 | back-typ | WbsTreeItem | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-tree-item |
 | back-endpoint | GET /wbs-nodes/unified/:nodeId | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-unified-get |
@@ -443,6 +450,19 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | MATERIAL_STATUS_LABELS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor material-status-labels |
 | ui-stala | STRUCTURE_STATUS_META | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor structure-status-meta |
 | ui-stala | EXTRA_ORDER | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor status-extra-order |
+| ui-stala | WORK_STATUS_LEAF_TYPES | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor work-status-leaf-types |
+| ui-stala | WORK_STATUS_LABELS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor work-status-labels |
+| ui-stala | WORK_STATUS_META | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor work-status-meta |
+| ui-stala | WORK_STATUS_LABEL_TO_CODE | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor work-status-label-to-code |
+| ui-stala | DEFAULT_STATUS_NEW | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor default-status-new |
+| ui-stala | NEW | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor status-new |
+| ui-stan | pendingSectionRef | apps/frontend/src/components/Layout/MainLayout.jsx | @anchor pending-section-ref |
+| ui-stan | pendingWbsSection | apps/frontend/src/DashboardPage.jsx | @anchor pending-wbs-section |
+| ui-stan | initialSection | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor wbs-initial-section |
+| ui-funkcja | pushNavigateListener | apps/frontend/src/components/Layout/MainLayout.jsx | @anchor push-navigate-listener |
+| ui-funkcja | pushColdStartNavigate | apps/frontend/src/components/Layout/MainLayout.jsx | @anchor push-cold-start-navigate |
+| ui-funkcja | activeToken | apps/frontend/src/App.jsx | @anchor active-token |
+| ui-stala | WORK_STRUCT_STATUS_META | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor work-struct-status-meta |
 | ui-stala | MATERIAL_STATUS_LABEL_TO_CODE | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor material-status-label-to-code |
 | ui-stala | STRUCTURE_COMMON_CELL_CLASS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor structure-common-cell-class |
 | ui-stala | DRAWER (wygląd szuflady rozwiniętego wiersza) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor expand-drawer |
@@ -459,6 +479,16 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | makeMaterialLookupKey | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor make-material-lookup-key |
 | ui-funkcja | parseLocaleNumber | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor parse-locale-number |
 | ui-funkcja | normalizeStatusCode | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor normalize-status-code |
+| ui-funkcja | usesWorkStatuses | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor uses-work-statuses |
+| ui-funkcja | defaultStatusForType | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor default-status-for-type |
+| ui-funkcja | statusMetaForType | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor status-meta-for-type |
+| ui-funkcja | resolveStatusCode | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor resolve-status-code |
+| ui-funkcja | statusLabelForType | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor status-label-for-type |
+| ui-funkcja | statusOptionsForType | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor status-options-for-type |
+| ui-funkcja | structStatusMetaFor | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor struct-status-meta-for |
+| ui-funkcja | mkNode | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mk-node |
+| ui-funkcja | rowStatusLabel | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor materials-row-status-label |
+| ui-funkcja | getStatusLabel | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor unified-get-status-label |
 | ui-funkcja | isLeafNode | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor is-leaf-node |
 | ui-funkcja | buildHierarchy | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor build-hierarchy |
 | ui-funkcja | flattenHierarchy | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor flatten-hierarchy |

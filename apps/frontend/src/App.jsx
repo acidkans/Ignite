@@ -33,11 +33,21 @@ const Placeholder = ({ title }) => (
   </div>
 );
 
+// @anchor active-token — token TEJ karty. `sessionStorage` jest per-karta, `localStorage`
+// wspólny dla całego profilu przeglądarki, a logowanie zapisuje do OBU. Odczyt zaczynający
+// się od `localStorage` zwraca więc token tego, kto zalogował się OSTATNI — w dowolnym oknie.
+// Przy dwóch oknach z różnymi kontami (admin i logistyk na jednym komputerze) okno admina
+// dostawało tożsamość drugiego okna i strażnik tras administracyjnych odmawiał wejścia
+// w „Użytkownicy", mimo że wszystkie zapytania do API leciały poprawnie jako admin —
+// bo cała reszta aplikacji czyta `sessionStorage` jako pierwszy.
+function activeToken() {
+  return sessionStorage.getItem('token') || localStorage.getItem('token');
+}
+
 // @anchor token-roles
 function tokenRoles() {
   try {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-    return JSON.parse(atob(token.split('.')[1])).roles || [];
+    return JSON.parse(atob(activeToken().split('.')[1])).roles || [];
   } catch {
     return [];
   }
@@ -105,7 +115,9 @@ function App() {
   useSyncOutbox(token);
 
   const doLogout = useCallback(async () => {
-    const t = localStorage.getItem('token') || sessionStorage.getItem('token');
+    // Ta sama zasada co w `activeToken`: wylogowanie ma zdjąć subskrypcję push TEJ karty,
+    // a nie tego, kto zalogował się ostatni w sąsiednim oknie.
+    const t = activeToken();
     if (t) await unregisterPushSubscription(t);
     localStorage.removeItem('token');
     sessionStorage.removeItem('token');
@@ -179,9 +191,9 @@ function App() {
     if (!('serviceWorker' in navigator)) return;
     // @anchor app-sw-message-handler
     const handler = (event) => {
-      const { type, orderId, reminderId, minutes } = event.data || {};
+      const { type, orderId, reminderId, minutes, tab, section } = event.data || {};
       if (type === 'NAVIGATE_TO_ORDER' && orderId) {
-        window.dispatchEvent(new CustomEvent('push-navigate-order', { detail: { orderId } }));
+        window.dispatchEvent(new CustomEvent('push-navigate-order', { detail: { orderId, tab, section } }));
       }
       if ((type === 'SNOOZE_REMINDER' || type === 'DISMISS_REMINDER') && reminderId) {
         const token = sessionStorage.getItem('token');

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber } from './wbsConstants';
+import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType } from './wbsConstants';
 import AutoResizeTextarea from './AutoResizeTextarea';
 import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo } from 'lucide-react';
 import AddTaskModal from '../AddTaskModal';
@@ -368,6 +368,7 @@ function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, 
 
 const STRUCT_STATUS_META = {
     '':        { label: 'Brak',         style: 'bg-transparent text-gray-600 border-transparent' },
+    NEW:       { label: 'Nowy',         style: 'bg-slate-500/20 text-slate-300 border-slate-500/30' },
     PENDING:   { label: 'Oczekuje',     style: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
     PROPOSAL:  { label: 'Propozycja',   style: 'bg-blue-500/20 text-blue-300 border-blue-500/30' },
     CONFIRMED: { label: 'Potwierdzone', style: 'bg-green-500/20 text-green-300 border-green-500/30' },
@@ -381,25 +382,48 @@ const STRUCT_STATUS_META = {
     MIXED:     { label: 'Mieszany',     style: 'bg-sky-500/20 text-sky-300 border-sky-500/30' },
 };
 
+// @anchor work-struct-status-meta — te same kody i etykiety co `WORK_STATUS_META`
+// (wbsConstants), tylko w plakietkowym kształcie tej tabeli. Etykiety biorę stamtąd,
+// a nie przepisuję: piąta kopia listy statusów była dokładnie tym, co poprzednio
+// rozjechało widoki i kazało drukować surowy kod zamiast nazwy.
+const WORK_STRUCT_STATUS_META = {
+    NEW:        { label: WORK_STATUS_META.NEW.label,        style: 'bg-slate-500/20 text-slate-300 border-slate-500/30' },
+    STARTED:    { label: WORK_STATUS_META.STARTED.label,    style: 'bg-blue-500/20 text-blue-300 border-blue-500/30' },
+    ON_HOLD:    { label: WORK_STATUS_META.ON_HOLD.label,    style: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+    COMPLETED:  { label: WORK_STATUS_META.COMPLETED.label,  style: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+    UNFINISHED: { label: WORK_STATUS_META.UNFINISHED.label, style: 'bg-orange-500/20 text-orange-300 border-orange-500/30' },
+    CANCELLED:  { label: WORK_STATUS_META.CANCELLED.label,  style: 'bg-red-500/20 text-red-300 border-red-500/30' },
+};
+
+// @anchor struct-status-meta-for — plakietki właściwe dla typu liścia: praca, usługa,
+// nocleg i paliwo idą własnym słownikiem, reszta drzewa zostaje na materiałowym.
+const structStatusMetaFor = (type) => (usesWorkStatuses(type) ? WORK_STRUCT_STATUS_META : STRUCT_STATUS_META);
+
 // Eksportowane nazwanym eksportem (jak `ConfirmDeleteModal`), żeby harness
 // `test/status-dropdowns.html` renderował PRAWDZIWY select, a nie jego kopię — kopia
 // przeszłaby test także wtedy, gdyby lista statusów w komponencie się rozjechała.
-export { STRUCT_STATUS_META };
-export function StatusSelect({ value, onChange, onKeyDown, ...rest }) {
-    const meta = STRUCT_STATUS_META[value || ''] || STRUCT_STATUS_META[''];
+export { STRUCT_STATUS_META, WORK_STRUCT_STATUS_META };
+// `type` decyduje, KTÓRY słownik statusów widzi użytkownik. Bez niego select spada na
+// materiałowy — tak samo jak przed rozdzieleniem list — więc każde wywołanie musi go podać.
+export function StatusSelect({ value, onChange, onKeyDown, type = '', ...rest }) {
+    const map = structStatusMetaFor(type);
+    // Kod spoza słownika tego typu (pozycja sprzed rozdzielenia list ma na pracy `PENDING`)
+    // pokazuje się jako „Nowe"; dopiero ręczna zmiana utrwala kod z nowego słownika.
+    const code = usesWorkStatuses(type) ? resolveStatusCode(type, value) : (value || '');
+    const meta = map[code] || map[''] || map.NEW;
     return (
         <select
-            value={value || ''}
+            value={code}
             onChange={e => onChange(e.target.value)}
             className={`text-[14px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 cursor-pointer focus:outline-none focus:ring-0 transition-colors ${meta.style}`}
             onClick={e => e.stopPropagation()}
             onKeyDown={onKeyDown}
             {...rest}
         >
-            {Object.entries(STRUCT_STATUS_META)
-                .filter(([code]) => code !== 'MIXED')
-                .map(([code, { label }]) => (
-                <option key={code} value={code} className="bg-gray-900 text-white">{label}</option>
+            {Object.entries(map)
+                .filter(([c]) => c !== 'MIXED')
+                .map(([c, { label }]) => (
+                <option key={c} value={c} className="bg-gray-900 text-white">{label}</option>
             ))}
         </select>
     );
@@ -412,12 +436,16 @@ function InheritedStatusBadge({ status }) {
 }
 
 // Node types: 'project' (root), 'product' (przedmiot projektu), 'material'|'work'|'service' (typy pracy)
-const mkNode = (withDefaults = false) => {
+// @anchor mk-node — `type` podany od razu (liść Paliwo, gałąź gwarancyjna) decyduje o statusie
+// startowym: praca, usługa, nocleg i paliwo rodzą się jako „Nowe", reszta jak dotąd „Oczekuje".
+// Węzeł bez typu zostaje na materiałowym `PENDING` — typ nadaje mu się dopiero w tabeli,
+// a od tej chwili `resolveStatusCode` pokazuje właściwą etykietę bez ruszania bazy.
+const mkNode = (withDefaults = false, type = '') => {
     const id = crypto.randomUUID();
     return {
         id,
         name: '',
-        status: 'PENDING',
+        status: defaultStatusForType(type),
         quantity: '',
         unit: 'sztuki',
         owner: '',
@@ -425,7 +453,7 @@ const mkNode = (withDefaults = false) => {
         cost: '',
         tags: [],
         qa: [],
-        type: '',
+        type,
         comment: '',
         strategy: '',
         children: [],
@@ -1147,7 +1175,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         setWbsTree(t => {
             const parent = findNode(t.items || [], parentId);
             if (!parent || (parent.children || []).some(c => c.type === 'fuel')) return t;
-            const fuel = { ...mkNode(false), name: 'Paliwo', type: 'fuel', unit: 'kilometry', unitCost: 0.7, comment: 'utworzony automatycznie' };
+            const fuel = { ...mkNode(false, 'fuel'), name: 'Paliwo', unit: 'kilometry', unitCost: 0.7, comment: 'utworzony automatycznie' };
             return { ...t, items: addChildTo(t.items || [], parentId, fuel) };
         });
         open(`node_${parentId}`);
@@ -1160,9 +1188,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // oraz Paliwo (fuel, bez ilości). Wymóg biznesowy — wszystkie projekty
     // muszą mieć budżet gwarancyjny zarezerwowany od razu.
     const buildDefaultWarrantyBranch = () => {
-        const warranty = { ...mkNode(false), name: 'Gwarancja 24m', type: 'group' };
-        const visit = { ...mkNode(false), name: 'Wizyta gwarancyjna', type: 'work', unit: 'dni', quantity: 2 };
-        const fuel = { ...mkNode(false), name: 'Paliwo', type: 'fuel', unit: 'kilometry', unitCost: 0.7 };
+        const warranty = { ...mkNode(false, 'group'), name: 'Gwarancja 24m' };
+        const visit = { ...mkNode(false, 'work'), name: 'Wizyta gwarancyjna', unit: 'dni', quantity: 2 };
+        const fuel = { ...mkNode(false, 'fuel'), name: 'Paliwo', unit: 'kilometry', unitCost: 0.7 };
         warranty.children = [visit, fuel];
         return warranty;
     };
@@ -1359,9 +1387,15 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const normalizedSearch = String(searchQuery || '').trim().toLowerCase();
     let searchVisibleIds = null;
     if (normalizedSearch) {
-        const STRUCT_STATUS_LABELS = Object.fromEntries(Object.entries(STRUCT_STATUS_META).map(([k, v]) => [k, v.label.toLowerCase()]));
+        // Etykieta statusu do szukania idzie przez słownik WŁAŚCIWY dla typu liścia — inaczej
+        // wpisanie „nowe" nie znalazłoby ani jednej pozycji pracy, bo w bazie siedzi tam `PENDING`.
+        const statusSearchLabel = (n) => {
+            const map = structStatusMetaFor(n.type);
+            const code = usesWorkStatuses(n.type) ? resolveStatusCode(n.type, n.status) : (n.status || '');
+            return code ? (map[code]?.label || code).toLowerCase() : '';
+        };
         const nodeMatchesSearch = (n) => {
-            const fields = [n.name, n.type, n.status ? STRUCT_STATUS_LABELS[n.status] : '', n.owner, n.unit, String(n.quantity ?? '')];
+            const fields = [n.name, n.type, statusSearchLabel(n), n.owner, n.unit, String(n.quantity ?? '')];
             return fields.some(f => String(f || '').toLowerCase().includes(normalizedSearch));
         };
         const matchingIds = new Set();
@@ -1924,6 +1958,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         return (
                             <StatusSelect
                                 value={node.status}
+                                type={node.type}
                                 onChange={v => {
                                     handleField(node.id, 'status', v);
                                     onNodeFieldSave?.(node.id, 'status', v);

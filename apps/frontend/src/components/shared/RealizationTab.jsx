@@ -7,7 +7,7 @@ import { API_URL } from '../../config';
 import SupplierPicker from './SupplierPicker';
 import { RequirementImageBox } from './wbs/WbsMaterialsPanel';
 import AutoResizeTextarea from './wbs/AutoResizeTextarea';
-import { sanitizeQtyInput, DRAWER, STRUCTURE_STATUS_META } from './wbs/wbsConstants';
+import { sanitizeQtyInput, DRAWER, STRUCTURE_STATUS_META, statusMetaForType, statusOptionsForType, statusLabelForType, resolveStatusCode, usesWorkStatuses } from './wbs/wbsConstants';
 import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath,
     leafNodesOf, buildCardMap, wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf,
@@ -55,19 +55,16 @@ export const COL_DEFS = [
 ];
 
 // @anchor realization-status-label — etykieta statusu liścia z jednego źródła
-// (`STRUCTURE_STATUS_META`, wspólnego z WBS i panelem Materiały). Jedna funkcja obsługuje
-// komórkę, filtr kolumny i sortowanie, więc żadne z nich nie rozjedzie się z pozostałymi.
+// (`statusLabelForType` w wbsConstants, wspólnego z WBS i panelem Materiały). Jedna funkcja
+// obsługuje komórkę, filtr kolumny i sortowanie, więc żadne z nich nie rozjedzie się
+// z pozostałymi. Słownik zależy od typu: praca, usługa, nocleg i paliwo mają własny.
 // Pusty status daje pusty ciąg — wołający decyduje, czy pokazać „—", czy nic nie dopasować.
 export const statusLabel = (node) => {
+    if (usesWorkStatuses(node?.type)) return statusLabelForType(node.type, node?.status);
     const code = node?.status || '';
     if (!code) return '';
     return STRUCTURE_STATUS_META[code]?.label || code;
 };
-
-// @anchor realization-status-options — kody do wyboru w kolumnie „Status". `MIXED` wypada,
-// bo to wartość WYLICZANA dla gałęzi (mieszane statusy dzieci), a nie stan, który da się
-// pozycji nadać — tak samo jak w `StatusSelect` w `WBSHybridTable`.
-const STATUS_OPTIONS = Object.keys(STRUCTURE_STATUS_META).filter(code => code !== 'MIXED');
 
 // @anchor realization-forecast-min-share — próg wiarygodności prognozy wydatków: dopóki
 // wykonanie rodzaju kosztów nie osiągnie tego udziału w jego wycenie, prognoza zostaje na
@@ -326,27 +323,40 @@ export function RealizationRow({ node, card, realization, isExpanded, onToggle, 
                 )}
             </td>
 
-            {/* Status pozycji — `WbsNode.status`, wspólny z kolumną „Status" w WBSHybridTable */}
+            {/* Status pozycji — `WbsNode.status`, wspólny z kolumną „Status" w WBSHybridTable.
+                Słownik zależy od typu liścia: praca, usługa, nocleg i paliwo dostają listę
+                „Nowe → Rozpoczęte → Wstrzymane → Zakończone / Nieskończone / Odwołane",
+                reszta zostaje na materiałowej drodze przez zakup i magazyn. */}
             <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                {(() => {
+                    const statusMap = statusMetaForType(node.type);
+                    const worky = usesWorkStatuses(node.type);
+                    // Kod materiałowy zapisany na liściu pracy sprzed rozdzielenia list
+                    // pokazuje się jako „Nowe"; bazy nie ruszamy, dopiero wybór go utrwala.
+                    const code = worky ? resolveStatusCode(node.type, node.status) : (node.status || '');
+                    return (
                 <select
-                    value={node.status || ''}
+                    value={code}
                     onChange={e => onSaveStatus(node, e.target.value)}
                     disabled={readOnly}
                     title="Status pozycji — to samo pole co w Strukturze projektu"
-                    className={`w-full bg-black/40 border border-white/10 rounded px-1.5 py-0.5 text-sm font-medium outline-none transition-colors ${readOnly ? 'cursor-default' : 'cursor-pointer hover:bg-white/5 focus:border-teal-500/50'} ${STRUCTURE_STATUS_META[node.status || '']?.color || 'text-gray-400'}`}
+                    className={`w-full bg-black/40 border border-white/10 rounded px-1.5 py-0.5 text-sm font-medium outline-none transition-colors ${readOnly ? 'cursor-default' : 'cursor-pointer hover:bg-white/5 focus:border-teal-500/50'} ${statusMap[code]?.color || 'text-gray-400'}`}
                 >
                     {/* Status spoza słownika (dane sprzed ujednolicenia kodów) zostaje na liście
                         jako własna pozycja — bez tego `<select>` pokazałby pierwszą opcję i wyglądał,
-                        jakby pozycja miała status, którego nie ma w bazie. */}
-                    {!STRUCTURE_STATUS_META[node.status || ''] && node.status && (
+                        jakby pozycja miała status, którego nie ma w bazie. Liści niematerialnych
+                        to nie dotyczy: tam obcy kod jest już rozwiązany na „Nowe". */}
+                    {!worky && !statusMap[node.status || ''] && node.status && (
                         <option value={node.status} className="bg-gray-900 text-white">{node.status}</option>
                     )}
-                    {STATUS_OPTIONS.map(code => (
-                        <option key={code} value={code} className="bg-gray-900 text-white">
-                            {STRUCTURE_STATUS_META[code].label}
+                    {statusOptionsForType(node.type).map(c => (
+                        <option key={c} value={c} className="bg-gray-900 text-white">
+                            {statusMap[c].label}
                         </option>
                     ))}
                 </select>
+                    );
+                })()}
             </td>
 
             {/* Komentarz pozycji — `WbsNode.comment`, wspólny z WBSHybridTable i panelem Materiały */}

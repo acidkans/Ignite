@@ -21,8 +21,11 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
     const [activeTab, setActiveTab] = useState('details');
     const [selectedDate, setSelectedDate] = useState(toDateStr(new Date()));
 
+    // Kolejność jak w całej reszcie aplikacji: `sessionStorage` (per-karta) przed
+    // `localStorage` (wspólny dla profilu). Odwrotna kolejność bierze tożsamość tego,
+    // kto zalogował się ostatni w dowolnym oknie tej przeglądarki.
     const token = typeof window !== 'undefined'
-        ? (localStorage.getItem('token') || sessionStorage.getItem('token'))
+        ? (sessionStorage.getItem('token') || localStorage.getItem('token'))
         : null;
     const { subtasks, loading, syncing, refresh } = useCachedSubtasks(token);
     const { isOnline } = useNetwork();

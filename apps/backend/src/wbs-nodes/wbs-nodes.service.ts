@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveVersionId } from '../common/version.util';
 import { assertOfferEditable, pickOfferChanges, OfferLockUser } from '../common/offer-lock.util';
+import { ExtraOrderNotifierService, EXTRA_ORDER_STATUS } from '../notifications/extra-order-notifier.service';
 
 // @anchor qa-pair
 export interface QaPair {
@@ -31,7 +32,10 @@ export interface WbsTreeItem {
 export class WbsNodesService {
     private readonly logger = new Logger(WbsNodesService.name);
 
-    constructor(private prisma: PrismaService) {}
+    constructor(
+        private prisma: PrismaService,
+        private extraOrder: ExtraOrderNotifierService,
+    ) {}
 
     /**
      * Pobiera drzewo WBS z tabeli relacyjnej i zwraca w formacie JSON blob
@@ -541,6 +545,14 @@ export class WbsNodesService {
             }
         }
 
+        // @anchor wbs-node-extra-order-hook — status sprzed zapisu: powiadamiamy o WEJŚCIU
+        // w „Dodatkowe zamówienie", nie o każdym zapisie pozycji, która ten status już ma.
+        // Druga droga zapisu tego samego statusu (karta materiałowa) woła to samo — próg
+        // „raz na zamówienie" w `ExtraOrderNotifierService` łapie oba wywołania.
+        const statusBefore = allowed.status !== undefined
+            ? (await this.prisma.wbsNode.findUnique({ where: { id }, select: { status: true } }))?.status ?? null
+            : null;
+
         let updated;
         try {
             updated = await this.prisma.wbsNode.update({ where: { id }, data: allowed });
@@ -551,6 +563,13 @@ export class WbsNodesService {
 
         if (quantityChanged) {
             await this.syncMaterialsFromWbsNode(id, allowed.quantity).catch(() => {});
+        }
+
+        if (allowed.status === EXTRA_ORDER_STATUS && statusBefore !== EXTRA_ORDER_STATUS) {
+            await this.extraOrder.notify({
+                processNodeId: updated.nodeId,
+                positionName: updated.name,
+            }).catch(() => {});
         }
 
         return updated;

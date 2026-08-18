@@ -8,7 +8,7 @@ import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import GanttSection from './GanttSection';
-import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom } from './wbsConstants';
+import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, usesWorkStatuses, statusLabelForType, resolveStatusCode } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
@@ -37,7 +37,12 @@ const VIEWS = {
 const OFFER_VALUE_FIELDS = new Set(['unitCost', 'margin', 'discount', 'quantity', 'unitPrice']);
 
 
-const getStatusLabel = (code, fallback = '') => {
+// @anchor unified-get-status-label — etykieta statusu pozycji. `type` wybiera słownik:
+// praca, usługa, nocleg i paliwo mają własny („Nowe → Rozpoczęte → …"), reszta drzewa
+// zostaje na materiałowym. Bez typu (wywołania nad kodami dziedziczonymi z alokacji
+// materiałowych) zachowuje się jak dotąd.
+const getStatusLabel = (code, fallback = '', type = '') => {
+    if (usesWorkStatuses(type)) return statusLabelForType(type, code, fallback);
     const normalized = normalizeStatusCode(code);
     return STRUCTURE_STATUS_META[normalized]?.label || fallback || String(code || '').trim() || 'Brak';
 };
@@ -128,7 +133,7 @@ function BranchStrategyField({ name, value, onSave }) {
     );
 }
 
-export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsDataLoad, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible, oneDriveFolderName = null }) {
+export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsDataLoad, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible, oneDriveFolderName = null, initialSection = null, onInitialSectionApplied }) {
     const [wbsData, setWbsData] = useState([]);
     const wbsDataRef = useRef(wbsData);
 
@@ -170,6 +175,15 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     wbsDataRef.current = wbsData;
     const [expandedSection, setExpandedSection] = useState(null);
     const [fullscreenSection, setFullscreenSection] = useState(null);
+    // @anchor wbs-initial-section — sekcja wskazana z zewnątrz (kliknięcie w powiadomienie
+    // o dodatkowym zamówieniu → „materials"). Rozwijamy ją RAZ i od razu meldujemy rodzicowi,
+    // że wykorzystana — inaczej każda ręczna zmiana sekcji byłaby cofana z powrotem na tę
+    // z powiadomienia, dopóki użytkownik nie opuści zamówienia.
+    useEffect(() => {
+        if (!initialSection) return;
+        setExpandedSection(initialSection);
+        onInitialSectionApplied?.();
+    }, [initialSection]); // eslint-disable-line react-hooks/exhaustive-deps
     // @anchor wbs-qa-tree-open
     // Edytowalny widok Q&A całego drzewa (QaTreeView). Otwierany automatycznie raz
     // na sesję przy pierwszym wejściu w WBS danego projektu — flaga w sessionStorage
@@ -1828,7 +1842,10 @@ ${ganttSectionHtml}
                 unitOfferPrice: { formula: `=IF(${cMargin}${r}=0,0,${cUnitCost}${r}*(1+${cMargin}${r})${discFactor})`, result: unitOffer },
                 offerPrice: { formula: `=IF(${cMargin}${r}=0,0,${cTotalCost}${r}*(1+${cMargin}${r})${discFactor})`, result: Number(row.offerPrice) || 0 },
                 comment: row.comment || '',
-                status: row.status || '',
+                // Etykieta, nie surowy kod — arkusz z „PENDING" w kolumnie Status jechał
+                // dotąd do klienta. `statusLabel` policzone przy budowie wiersza, ale przy
+                // eksporcie z odświeżonych danych bywa puste, więc jest fallback.
+                status: row.statusLabel || getStatusLabel(row.status, '', row.type),
                 qaCount: qaList.length,
             });
             qaList.forEach((p) => {
@@ -5100,7 +5117,7 @@ ${ganttSectionHtml}
                 return;
             }
             if (field === 'status') {
-                row.statusLabel = getStatusLabel(row[field], row[field]);
+                row.statusLabel = getStatusLabel(row[field], row[field], row.type);
                 updateNodeField(row.id, field, row[field]);
                 setWbsData(prev => prev.map(item => item.id === row.id ? { ...item, [field]: row[field], statusLabel: row.statusLabel } : item));
             } else if (field !== 'type') {
@@ -5334,8 +5351,10 @@ ${ganttSectionHtml}
         const getInheritedMaterialStatus = (item) => {
             const normalizedType = String(item.type || '').toLowerCase();
             if (!['material', 'equipment'].includes(normalizedType)) {
-                const code = normalizeStatusCode(item.status);
-                return { code, label: getStatusLabel(code, item.status) };
+                // Liść niematerialny nie dziedziczy statusu z alokacji — słownik ma własny,
+                // a obcy kod z czasów wspólnej listy `resolveStatusCode` sprowadza do „Nowe".
+                const code = resolveStatusCode(item.type, item.status);
+                return { code, label: getStatusLabel(code, item.status, item.type) };
             }
             const lookupKey = makeMaterialLookupKey(getSubjectInfo(item).name, item.name);
             const lookupStatuses = Array.from(new Set((materialMetaByLookupKey[lookupKey]?.statuses || [])

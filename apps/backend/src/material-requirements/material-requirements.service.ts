@@ -6,6 +6,7 @@ import { assertOfferEditable, OfferLockUser } from '../common/offer-lock.util';
 import { VectorService } from '../ai/vector.service';
 import { ProcessTreeService } from '../process-tree/process-tree.service';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
+import { ExtraOrderNotifierService, EXTRA_ORDER_STATUS } from '../notifications/extra-order-notifier.service';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -27,6 +28,7 @@ export class MaterialRequirementsService {
         private readonly processTreeService: ProcessTreeService,
         private readonly exchangeRates: ExchangeRatesService,
         private readonly configService: ConfigService,
+        private readonly extraOrder: ExtraOrderNotifierService,
     ) { }
 
     // ─── CRUD ──────────────────────────────────────────────────────────────────
@@ -346,7 +348,9 @@ export class MaterialRequirementsService {
                     sourceDocument: r.sourceDocument,
                     assignedSubtaskId: r.assignedSubtaskId,
                     isAiAssigned: r.isAiAssigned,
-                    status: 'PENDING',
+                    // Klon listy tworzy NOWE wiersze i celowo nie kopiuje statusu źródła —
+                    // startują jak każda świeżo utworzona pozycja.
+                    status: 'NEW',
                 },
             })
         ));
@@ -414,7 +418,21 @@ export class MaterialRequirementsService {
                 return existing;
             }
         }
-        const created = await this.prisma.materialRequirement.create({ data: { ...prismaData, versionId: resolvedVersionId, wbsNodeId: wbsNodeId ?? null } });
+        // Status startowy nadawany TUTAJ, a nie kolumnowym `@default("PENDING")` w schemacie:
+        // zmiana defaultu w bazie wymaga migracji na produkcji, a każda ścieżka tworzenia karty
+        // i tak przechodzi przez ten kod. DTO ze świadomym statusem (import, klon) wygrywa.
+        const created = await this.prisma.materialRequirement.create({
+            data: { status: 'NEW', ...prismaData, versionId: resolvedVersionId, wbsNodeId: wbsNodeId ?? null },
+        });
+        // Pozycja utworzona OD RAZU z „Dodatkowe zamówienie" (import, wklejenie z listy braków).
+        // Nie czekamy na zmianę statusu, bo tu jej nigdy nie będzie.
+        if (created.status === EXTRA_ORDER_STATUS) {
+            await this.extraOrder.notify({
+                processNodeId: created.nodeId,
+                positionName: created.name,
+                requirementId: created.id,
+            }).catch(() => {});
+        }
         // WbsNodeMaterial.materialId teraz → materials.id (nie material_requirements.id)
         // Auto-tworzenie pominięte — WbsNodeMaterial powstaje przy selectProposal()
         return created;
@@ -667,7 +685,22 @@ export class MaterialRequirementsService {
             }
         }
 
+        // @anchor mat-req-extra-order-hook — status CZYTANY przed zapisem, bo powiadamiamy
+        // o WEJŚCIU w „Dodatkowe zamówienie", a nie o każdym zapisie pozycji, która już ten
+        // status ma (UI zapisuje pole przy okazji innych zmian).
+        const statusBefore = data.status !== undefined
+            ? (await this.prisma.materialRequirement.findUnique({ where: { id }, select: { status: true } }))?.status ?? null
+            : null;
+
         const updated = await this.prisma.materialRequirement.update({ where: { id }, data });
+
+        if (data.status === EXTRA_ORDER_STATUS && statusBefore !== EXTRA_ORDER_STATUS) {
+            await this.extraOrder.notify({
+                processNodeId: updated.nodeId,
+                positionName: updated.name,
+                requirementId: updated.id,
+            }).catch(() => {});
+        }
 
         // Dual-write: synchronizuj alokacje do tabeli relacyjnej WbsNodeMaterial
         if (data.wbsNodeAllocations !== undefined) {
@@ -1046,7 +1079,7 @@ ${context}`;
                         assignedSubtaskId: item.assignedSubtaskId || null,
                         isAiAssigned: true,
                         aiConfidence: item.aiConfidence || null,
-                        status: 'PENDING',
+                        status: 'NEW',
                     },
                 }),
             ),

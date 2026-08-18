@@ -73,6 +73,7 @@ export default function DashboardPage() {
     const setAiVisible = context?.setAiVisible;
     const contextPendingTabRef = context?.pendingTabRef;
     const contextPendingRequirementIdRef = context?.pendingRequirementIdRef;
+    const contextPendingSectionRef = context?.pendingSectionRef;
     const refreshTree = context?.refreshTree;
 
     const { userId: currentUserId, roles: currentRoles = [] } = useMemo(() => decodeToken() || {}, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -176,6 +177,10 @@ export default function DashboardPage() {
     const pendingTabRef = contextPendingTabRef || localPendingTabRef;
 
     const [focusedRequirementId, setFocusedRequirementId] = useState(null);
+    // @anchor pending-wbs-section — sekcja WBS do rozwinięcia po wejściu z powiadomienia.
+    // Stan, nie ref, bo `UnifiedWbsPanel` musi się o niej dowiedzieć przez props po tym,
+    // jak już się zamontuje — ref zmieniony przed montowaniem nie wywołałby rerenderu.
+    const [pendingWbsSection, setPendingWbsSection] = useState(null);
 
     // @anchor dashboard-fetch-acceptance — stan akceptacji węzła (badge BASELINE, etap)
     const fetchAcceptance = useCallback(async () => {
@@ -213,6 +218,8 @@ export default function DashboardPage() {
             const reqId = contextPendingRequirementIdRef?.current || null;
             if (contextPendingRequirementIdRef) contextPendingRequirementIdRef.current = null;
             setFocusedRequirementId(reqId);
+            setPendingWbsSection(contextPendingSectionRef?.current || null);
+            if (contextPendingSectionRef) contextPendingSectionRef.current = null;
             if (openComments) {
                 setShowComments(true);
                 setActiveTab('requirements');
@@ -1031,6 +1038,8 @@ export default function DashboardPage() {
                             <div className="absolute inset-0 overflow-hidden">
                                 <UnifiedWbsPanel
                                     nodeId={activeAreaId}
+                                    initialSection={pendingWbsSection}
+                                    onInitialSectionApplied={() => setPendingWbsSection(null)}
                                     versionId={selectedVersionId}
                                     projectName={parentNode?.name || ''}
                                     orderName={activeNode?.name || ''}

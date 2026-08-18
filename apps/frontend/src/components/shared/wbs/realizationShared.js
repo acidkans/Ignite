@@ -5,7 +5,7 @@
 
 import {
     Package, Wrench, Hammer, ClipboardCheck, Warehouse, Truck,
-    Clock, Star, CheckCircle, XCircle, ShoppingCart, LogOut, PackagePlus,
+    Clock, Star, CheckCircle, XCircle, ShoppingCart, LogOut, PackagePlus, Sparkles,
 } from 'lucide-react';
 
 // @anchor wbs-materials-type-meta — typy liści widoczne w panelu. Materiał i sprzęt mają
@@ -31,6 +31,9 @@ export const LEAF_TYPES = ['material', 'equipment', 'work', 'service', 'lodging'
 export const OPEN_LEAF_TYPES = ['material', 'equipment'];
 
 export const STATUS_META = {
+    // Stan startowy karty materiałowej — ten sam kod co w `STRUCTURE_STATUS_META`
+    // i `STRUCT_STATUS_META`; „Oczekuje" znaczy „czeka na ofertę", a nie „dopiero powstała".
+    NEW:       { label: 'Nowy',         icon: Sparkles,     color: 'text-slate-300' },
     PENDING:   { label: 'Oczekuje',     icon: Clock,        color: 'text-amber-400' },
     PROPOSAL:  { label: 'Propozycja',   icon: Star,         color: 'text-blue-400' },
     CONFIRMED: { label: 'Potwierdzone', icon: CheckCircle,  color: 'text-green-400' },

@@ -10,7 +10,7 @@ import {
 import { API_URL } from '../../../config';
 import { useDevice } from '../../../hooks/useDevice';
 import SupplierPicker from '../SupplierPicker';
-import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula, parsePriceInput, DRAWER, MATERIAL_STATUS_LABELS } from './wbsConstants';
+import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula, parsePriceInput, DRAWER, usesWorkStatuses, statusMetaForType, statusOptionsForType, statusLabelForType, resolveStatusCode } from './wbsConstants';
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
 import { guardOfferEdit, requestOfferUnlock, offerLockInputProps } from '../OfferLockGuard';
 import AutoResizeTextarea from './AutoResizeTextarea';
@@ -1392,6 +1392,16 @@ export function RequirementImageBox({ card, token, onRefresh, className = '' }) 
 // turkus jest zarezerwowany dla zakupu/realizacji (`PurchasesBar`, „Rozliczone").
 const GROUP_SPINE = `${DRAWER.spine} ${DRAWER.accent.offer.spine}`;
 
+// @anchor materials-row-status-label — etykieta statusu w kolumnie „Status". Liście z kartą
+// (materiał, sprzęt) biorą ją z `MaterialRequirement.status`, a praca, usługa, nocleg i paliwo
+// wprost z `WbsNode.status`, bo karty nie mają i do tej pory pokazywały w tej kolumnie „—".
+// Szukajka i sortowanie MUSZĄ czytać to samo, co komórka — inaczej wpisanie „nowe" nie
+// znajduje pozycji, którą widać na ekranie.
+const rowStatusLabel = (node, card) =>
+    usesWorkStatuses(node?.type)
+        ? statusLabelForType(node.type, node?.status)
+        : (STATUS_META[card?.status]?.label || card?.status || '');
+
 // @anchor materials-card-surface — karta produktu dostaje własną, jaśniejszą i chłodniejszą
 // płaszczyznę zamiast `bg-black/20`. Poprzednio różnica względem wiersza tabeli wynosiła
 // kilka procent krycia bieli i nie było widać, gdzie kończy się tabela, a zaczyna karta.
@@ -1660,11 +1670,32 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
                     </td>
                 );
             })()}
-            {/* Status — edytowalny dropdown */}
+            {/* Status — edytowalny dropdown. Materiał i sprzęt edytują status KARTY
+                (`MaterialRequirement.status`), praca, usługa, nocleg i paliwo — status
+                WĘZŁA (`WbsNode.status`), bo karty nie mają. Do tej pory ta kolumna
+                pokazywała nad nimi „—" i nie dało się z tego widoku ruszyć ich stanu. */}
             <td className="px-3 py-2.5">
-                {card ? (
+                {usesWorkStatuses(node.type) ? (() => {
+                    const statusMap = statusMetaForType(node.type);
+                    // Kod materiałowy zapisany tu przed rozdzieleniem list pokazuje się jako
+                    // „Nowe"; bazy nie ruszamy, dopiero wybór z listy utrwala nowy kod.
+                    const code = resolveStatusCode(node.type, node.status);
+                    return (
+                        <select
+                            value={code}
+                            onChange={e => { if (!readOnly) onPatchNode?.(node.id, { status: e.target.value }); }}
+                            disabled={readOnly}
+                            className={`bg-transparent border border-white/10 rounded px-1.5 py-0.5 text-xs font-semibold outline-none cursor-pointer hover:bg-white/5 transition-colors ${statusMap[code]?.color || 'text-gray-500'}`}
+                            style={{ WebkitAppearance: 'auto' }}
+                        >
+                            {statusOptionsForType(node.type).map(c => (
+                                <option key={c} value={c} className="bg-gray-900 text-white font-normal">{statusMap[c].label}</option>
+                            ))}
+                        </select>
+                    );
+                })() : card ? (
                     <select
-                        value={card.status || 'PENDING'}
+                        value={card.status || 'NEW'}
                         onChange={async e => {
                             if (!readOnly && onPatchCard) await onPatchCard(card.id, { status: e.target.value });
                         }}
@@ -2000,7 +2031,7 @@ export default function WbsMaterialsPanel({
                     (c?.manufacturer || '').toLowerCase().includes(q) ||
                     (c?.model || '').toLowerCase().includes(q) ||
                     (n.comment || '').toLowerCase().includes(q) ||
-                    (STATUS_META[c?.status]?.label || '').toLowerCase().includes(q);
+                    rowStatusLabel(n, c).toLowerCase().includes(q);
             });
         }
 
@@ -2019,7 +2050,7 @@ export default function WbsMaterialsPanel({
                 if (key === 'purchasePrice') return String(purchaseUnitOf(c) ?? '').includes(q);
                 if (key === 'techSpec') return (c?.technicalSpec || '').toLowerCase().includes(q);
                 if (key === 'comment') return (n.comment || '').toLowerCase().includes(q);
-                if (key === 'status') return (STATUS_META[c?.status]?.label || c?.status || '').toLowerCase().includes(q);
+                if (key === 'status') return rowStatusLabel(n, c).toLowerCase().includes(q);
                 return true;
             });
         }
@@ -2062,7 +2093,7 @@ export default function WbsMaterialsPanel({
             } else if (sortConfig.key === 'comment') {
                 cmp = (a.comment || '').localeCompare(b.comment || '', 'pl');
             } else if (sortConfig.key === 'status') {
-                cmp = (STATUS_META[ca?.status]?.label || '').localeCompare(STATUS_META[cb?.status]?.label || '', 'pl');
+                cmp = rowStatusLabel(a, ca).localeCompare(rowStatusLabel(b, cb), 'pl');
             }
             return sortConfig.direction === 'asc' ? cmp : -cmp;
         });
@@ -2415,7 +2446,6 @@ export default function WbsMaterialsPanel({
     // ─ Export ────────────────────────────────────────────────────────────────
 
     const exportToExcel = useCallback(async () => {
-        const STATUS_LABELS_XLS = MATERIAL_STATUS_LABELS;
         const TYPE_LABELS_XLS = { material: 'Materiał', equipment: 'Sprzęt', work: 'Praca', service: 'Usługa', lodging: 'Nocleg', fuel: 'Paliwo' };
 
         // technicalSpec jest wpisywany jedna linia = jedno wymaganie; w Excelu
@@ -2510,7 +2540,7 @@ export default function WbsMaterialsPanel({
                 // Praca i usługi nie mają karty — koszt planu bierzemy wtedy z liścia,
                 // inaczej formuła Δ wartość odejmowałaby pustą komórkę.
                 price: card?.priceNetto != null ? Number(card.priceNetto) : (node.unitCost != null ? Number(node.unitCost) : null),
-                status: STATUS_LABELS_XLS[card?.status] || (card ? (card.status || '') : ''),
+                status: rowStatusLabel(node, card),
                 tech: joinTechLines(card?.technicalSpec),
                 availability: card?.availability || '',
                 pManufacturer: selectedProposal?.manufacturer || '',
@@ -2549,7 +2579,7 @@ export default function WbsMaterialsPanel({
             if (!name && !tech) continue;
             const key = `${type}||${name.toLowerCase()}||${tech.toLowerCase()}||${unit.toLowerCase()}`;
             const qty = Number(node.quantity) || 0;
-            const status = STATUS_LABELS_XLS[card?.status] || '';
+            const status = rowStatusLabel(node, card);
             const selectedProposal = (card?.proposals || []).find(p => p.isSelected);
             const chosen = selectedProposal || card || null;
             const product = [chosen?.manufacturer, chosen?.model].filter(Boolean).join(' / ');
