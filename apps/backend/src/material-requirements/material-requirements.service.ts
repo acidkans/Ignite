@@ -255,7 +255,11 @@ export class MaterialRequirementsService {
             dataSheetUrl: item.material?.dataSheetUrl ?? null,
             dataSheetName: item.material?.dataSheetName ?? null,
             complianceUrl: item.material?.complianceUrl ?? null,
-            imageUrl: item.material?.imageUrl ?? null,
+            // Ta sama kolejnosc co w `findOne`: obrazek POZYCJI ma pierwszenstwo przed katalogowym.
+            // Wczesniej lista brala wylacznie katalogowy, wiec zdjecie wgrane do pozycji bez
+            // materialu z bazy nie docieralo do panelu Materialy i karta produktu pokazywala pusty
+            // kafel - kafel pobiera obrazek dopiero gdy `card.imageUrl` jest niepuste.
+            imageUrl: item.imageUrl ?? item.material?.imageUrl ?? null,
             priceNetto: item.budgetedPriceNetto ?? null,
             productUrl: item.material?.productUrl ?? null,
             seller: item.material?.seller ?? null,

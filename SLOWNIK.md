@@ -1582,7 +1582,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | deleteImage (pozycja) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-delete-image |
 | back-endpoint | DELETE /material-requirements/:id/image | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-delete-image-endpoint |
 | ui-sekcja | RequirementImageBox | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor requirement-image-box |
-| ui-propsy | RequirementImageBox.readOnly | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor requirement-image-box-readonly |
+| ui-ikona | kosz i lupka na kaflu zdjęcia w karcie produktu | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card-image-actions |
 
 ### Moduł SnapshotEditGuard (blokada edycji nieaktywnego snapszota)
 
