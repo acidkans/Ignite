@@ -1,3 +1,28 @@
+## 2026-08-19 — fix(uprawnienia): logistyk nie widzi liści innych niż materiał i sprzęt w ŻADNYM widoku (v2026.08.19.872)
+
+### architektura / API
+
+- **Filtr siedzi w `WbsNodesService`, nie w komponentach** — `getUnifiedTree` i `getTree` przepuszczają odpowiedź przez `visibleForCaller()`, które dla ról spoza ADMIN/MANAGER zdejmuje liście typu `work`, `service`, `lodging`, `fuel`. Z tego jednego drzewa żyją WSZYSTKIE widoki liści (WBS/Planowanie, WBS/Materiały, Realizacja, Gantt, QA, Schemat, Dokumentacja, Listy materiałowe logistyka, eksporty PDF i Excel), więc zawężenie w jednym miejscu zamyka je naraz — i przeżywa zakładkę „Sieć" w narzędziach deweloperskich, czego filtr w przeglądarce nie potrafi
+- **`CLOSED_LEAF_TYPES` liczone z różnicy `ALL_LEAF_TYPES` − `OPEN_LEAF_TYPES`**, nie wpisane ręcznie: nowy typ liścia jest domyślnie zamknięty. Pominięcie go w `OPEN_LEAF_TYPES` ma znaczyć „nie pokazuj", a nie „pokaż wszystkim"
+- **Węzeł zamkniętego typu, który ma widoczne dzieci, ZOSTAJE — ale z wyzerowanymi kwotami** (`stripMoney`). Usunięcie go osierociłoby materiały pod nim: frontend buduje hierarchię po `parentId` i takie poddrzewo znika bez śladu. Filtr chodzi w pętli, więc gdy wypadnie ostatnie widoczne dziecko, wypada i rodzic
+- **`saveTree` nie kasuje tego, czego autor zapisu nie widział** — strategia zapisu to „usuń wszystko, czego nie ma w przysłanym drzewie", a nie-manager dostaje drzewo bez ukrytych liści i odsyła je przy każdej edycji struktury. Bez tego wyjątku PIERWSZY zapis logistyka skasowałby całą pracę, usługi, noclegi i paliwo razem z ich budżetem
+- **Brak roli w kontekście = widok zawężony** (fail-closed) — `seesClosedLeaves()` czyta role z CLS (`user.roles`, ustawiane przez `JwtAuthGuard`); pusty kontekst daje widok najwęższy, nie najszerszy
+- **`WbsMaterialsPanel` dostał prop `userRoles`** i buduje `matNodes` z `OPEN_LEAF_TYPES` — zawężenie po stronie UI zostaje jako druga warstwa (ten sam wzorzec co `visibleTypes` w `RealizationTab`). Rolę podają obie drogi wejścia do panelu: `UnifiedWbsPanel` (zakładka „Planowanie") i `LogistykaMaterialListsTab` (obszar Logistyka)
+- **Bez zmian, bo już filtrowały po roli:** `/orders/:id/comparison` (`comparison-role-filter`), `/leaf-actuals/order/:nodeId` (`leaf-actuals-role-filter`), zakładka Realizacja
+- **Test:** `test/wbs-role-filter.test.mjs` — 16 sprawdzeń na prawdziwym `WbsNodesService` z `dist/` (atrapy Prisma i CLS): widoczność dla managera/logistyka/pracownika, grupy i osierocenia, zerowanie kwot, oba kierunki `saveTree`
+
+### słownik
+
+- dodano `ALL_LEAF_TYPES`, `CLOSED_LEAF_TYPES`, `isClosedLeafType` — `common/leaf-types.util.ts`
+- dodano `wbs-nodes-sees-closed-leaves`, `wbs-nodes-visible-for-caller`, `wbs-nodes-strip-money`, `wbs-nodes-save-tree-hidden-guard` — `wbs-nodes.service.ts`
+- dodano `wbs-materials-visible-types` — filtr typów liści po roli w panelu Materiały, `WbsMaterialsPanel.jsx`
+
+### wytyczne
+
+- `back-funkcja` `saveTree` — zapis metodą „skasuj wszystko, czego nie ma w przysłanym drzewie" MUSI pytać, ile z tego drzewa autor zapisu w ogóle widział. Każde nowe zawężenie odpowiedzi `getUnifiedTree` po roli wymaga bliźniaczego wyjątku w `idsToDelete`, inaczej zawężenie zamienia się w kasowanie danych
+- `back-stala` `CLOSED_LEAF_TYPES` — nowy typ liścia dopisuj do `ALL_LEAF_TYPES` (i do `LEAF_TYPES` w `realizationShared.js`). Do `OPEN_LEAF_TYPES` tylko wtedy, gdy świadomie ma go oglądać każda rola
+- `ui-propsy` `WbsMaterialsPanel.userRoles` — brak propa znaczy „rola nieznana", a nie „manager": domyślne `[]` daje widok zawężony. Nowe osadzenie panelu musi świadomie podać role, inaczej pokaże mniej, a nie więcej
+
 ## 2026-08-18 — fix(auth): rola czytana z tokenu TEJ karty, nie ostatniego logowania w profilu (v2026.08.18.871)
 
 ### architektura / API

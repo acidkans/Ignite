@@ -17,7 +17,7 @@ function getAllOrders(nodes) {
 // zamówienia. Renderuje ten sam `WbsMaterialsPanel` co sekcja „Materiały" w UnifiedWbsPanel
 // (razem z kartą produktu `ProductCard` po rozwinięciu wiersza), więc logistyk pracuje na
 // dokładnie tym samym widoku, a nie na osobnej liście materiałowej.
-function OrderMaterialsView({ orderId, isManagerOrAdmin, isLogistyk }) {
+function OrderMaterialsView({ orderId, isManagerOrAdmin, isLogistyk, userRoles }) {
     // Akceptacja baseline steruje kolumną „Koszt jedn. zakupu" i zamrożeniem strony „Wycena".
     // UnifiedWbsPanel pobiera to samo z /orders/:id/acceptance — tu musimy pobrać sami,
     // bo panel jest osadzony poza WBS.
@@ -46,6 +46,7 @@ function OrderMaterialsView({ orderId, isManagerOrAdmin, isLogistyk }) {
                 readOnly={!isManagerOrAdmin && !isLogistyk}
                 accepted={accepted}
                 offerLocked={offerLocked}
+                userRoles={userRoles}
             />
             {/* Modal blokady wartości ofertowych — bez niego kliknięcie w zamrożone pole nie
                 miałoby jak pokazać komunikatu (guard żyje w module-store, nie w kontekście). */}
@@ -122,6 +123,7 @@ export default function LogistykaMaterialListsTab({ menuTree = [], onNavigateToO
                         orderId={fullscreenOrder.id}
                         isManagerOrAdmin={isManagerOrAdmin}
                         isLogistyk={isLogistyk}
+                        userRoles={userRoles}
                     />
                 </div>
             </div>
@@ -186,6 +188,7 @@ export default function LogistykaMaterialListsTab({ menuTree = [], onNavigateToO
                                     orderId={order.id}
                                     isManagerOrAdmin={isManagerOrAdmin}
                                     isLogistyk={isLogistyk}
+                                    userRoles={userRoles}
                                 />
                             </div>
                         )}

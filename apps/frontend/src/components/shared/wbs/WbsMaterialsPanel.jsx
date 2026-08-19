@@ -15,7 +15,7 @@ import { guardSnapshotEdit } from '../SnapshotEditGuard';
 import { guardOfferEdit, requestOfferUnlock, offerLockInputProps } from '../OfferLockGuard';
 import AutoResizeTextarea from './AutoResizeTextarea';
 import {
-    TYPE_META, LEAF_TYPES, STATUS_META, authHeaders, flattenWbsNodes, getParentPath,
+    TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, STATUS_META, authHeaders, flattenWbsNodes, getParentPath,
     flattenReq, wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf, fmtQty, fmtZl, fmtDate,
 } from './realizationShared';
 
@@ -1951,6 +1951,7 @@ export default function WbsMaterialsPanel({
     projectName = '',
     orderName = '',
     onExportReady,
+    userRoles = [],
 }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     // @anchor wbs-materials-is-touch — dotyk czytamy raz w panelu i przekazujemy do wierszy
@@ -1994,9 +1995,20 @@ export default function WbsMaterialsPanel({
     // Kolumny widoczne: „Koszt jedn. zakupu" tylko po akceptacji baseline (accepted).
     const visibleCols = useMemo(() => COL_DEFS.filter(c => !c.baselineOnly || accepted), [accepted]);
 
+    // @anchor wbs-materials-visible-types — praca, usługa, nocleg i paliwo to koszty własne
+    // firmy; poza managerem nikt ich tu nie ogląda. Ten sam filtr co `visibleTypes` w
+    // `RealizationTab` — logistyk wchodzi do panelu z dwóch stron (zakładka „Planowanie"
+    // i „Listy materiałowe"), a obie renderują ten sam komponent.
+    const visibleTypes = useMemo(
+        () => (userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r)) ? LEAF_TYPES : OPEN_LEAF_TYPES),
+        [userRoles]
+    );
+
+    // Filtr działa na etapie budowania listy liści, więc ukryte typy nie wchodzą też do
+    // wyszukiwarki, sum w stopce ani do eksportu Excel — wszystkie liczą z `matNodes`.
     const matNodes = useMemo(() =>
-        wbsNodes.filter(n => LEAF_TYPES.includes(n.type)),
-        [wbsNodes]
+        wbsNodes.filter(n => visibleTypes.includes(n.type)),
+        [wbsNodes, visibleTypes]
     );
 
     // @anchor wbs-materials-actuals — wpisy realizacji całego zamówienia, grupowane po

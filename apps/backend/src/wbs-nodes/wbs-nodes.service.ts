@@ -1,5 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
+import { isClosedLeafType, isManagerRoles } from '../common/leaf-types.util';
 import { resolveVersionId } from '../common/version.util';
 import { assertOfferEditable, pickOfferChanges, OfferLockUser } from '../common/offer-lock.util';
 import { ExtraOrderNotifierService, EXTRA_ORDER_STATUS } from '../notifications/extra-order-notifier.service';
@@ -35,7 +37,47 @@ export class WbsNodesService {
     constructor(
         private prisma: PrismaService,
         private extraOrder: ExtraOrderNotifierService,
+        private cls: ClsService,
     ) {}
+
+    // @anchor wbs-nodes-sees-closed-leaves — praca, usługa, nocleg i paliwo to koszty własne
+    // firmy. Poza ADMIN/MANAGER nikt ich nie ogląda, a decyduje o tym backend, nie komponent:
+    // z tego jednego drzewa żyją WSZYSTKIE widoki liści (WBS, Materiały, Realizacja, Gantt,
+    // Schemat, QA, eksporty PDF/Excel), więc zawężenie tutaj zamyka je wszystkie naraz —
+    // i przeżywa otwarcie zakładki „Sieć" w przeglądarce.
+    private seesClosedLeaves() {
+        return isManagerRoles(this.cls.get('user.roles'));
+    }
+
+    // @anchor wbs-nodes-visible-for-caller — zdejmuje z płaskiej listy liście zamknięte dla roli.
+    // Pętla, a nie jeden filtr: gdyby zamknięty typ miał pod sobą dzieci, wypadnięcie rodzica
+    // osierociłoby całe poddrzewo (frontend buduje hierarchię po `parentId` i takie węzły
+    // znikają bez śladu). Zostaje więc dopóty, dopóki ma widoczne potomstwo — a gdy ostatnie
+    // dziecko wypadnie, wypada i on. Węzeł, który przetrwał wyłącznie jako rodzic, wychodzi
+    // z WYZEROWANYMI kwotami (`stripMoney`) — ma trzymać gałąź, a nie pokazywać swój koszt.
+    private visibleForCaller<T extends { id: string; parentId?: string | null; type?: string | null }>(nodes: T[]): T[] {
+        if (this.seesClosedLeaves()) return nodes;
+        let current = nodes;
+        for (;;) {
+            const parents = new Set(current.map(n => n.parentId).filter(Boolean) as string[]);
+            const next = current.filter(n => !isClosedLeafType(n.type) || parents.has(n.id));
+            if (next.length === current.length) {
+                return next.map(n => (isClosedLeafType(n.type) ? this.stripMoney(n) : n));
+            }
+            current = next;
+        }
+    }
+
+    // @anchor wbs-nodes-strip-money — kasuje wszystkie pola kwotowe wiersza. `cost` jest tekstem
+    // (stare drzewo trzymało w nim kwotę wpisaną ręcznie), więc czyścimy je razem z liczbami;
+    // `quantity` zostaje, bo to ilość, nie pieniądze.
+    private stripMoney<T>(node: T): T {
+        return {
+            ...node,
+            cost: '',
+            unitCost: 0, totalCost: 0, margin: 0, discount: 0, unitPrice: 0, totalPrice: 0,
+        };
+    }
 
     /**
      * Pobiera drzewo WBS z tabeli relacyjnej i zwraca w formacie JSON blob
@@ -52,7 +94,7 @@ export class WbsNodesService {
 
         if (nodes.length === 0) return null;
 
-        return { items: this.buildTree(nodes, null) };
+        return { items: this.buildTree(this.visibleForCaller(nodes), null) };
     }
 
     /**
@@ -69,7 +111,7 @@ export class WbsNodesService {
             const existing = await tx.wbsNode.findMany({
                 where: { nodeId, versionId: vId },
                 select: {
-                    id: true, budgetType: true, unit: true, unitCost: true,
+                    id: true, type: true, budgetType: true, unit: true, unitCost: true,
                     quantity: true, totalCost: true, margin: true, discount: true,
                     unitPrice: true, totalPrice: true, comment: true, phase: true,
                 },
@@ -80,8 +122,16 @@ export class WbsNodesService {
             const newRows = this.flattenForInsert(items, nodeId, vId, null);
             const newIds = new Set(newRows.map(r => r.id));
 
-            // Usuń węzły które nie istnieją w nowym drzewie
-            const idsToDelete = existing.filter(n => !newIds.has(n.id)).map(n => n.id);
+            // Usuń węzły które nie istnieją w nowym drzewie.
+            // @anchor wbs-nodes-save-tree-hidden-guard — „nie ma w drzewie" znaczy „usunięte"
+            // TYLKO dla tego, kto to drzewo widział w całości. Nie-manager dostaje z
+            // `getUnifiedTree` listę bez liści pracy/usługi/noclegu/paliwa i odsyła ją tu przy
+            // każdej edycji struktury — bez tego wyjątku pierwszy zapis logistyka skasowałby
+            // wszystkie ukryte przed nim pozycje razem z ich budżetem.
+            const seesAll = this.seesClosedLeaves();
+            const idsToDelete = existing
+                .filter(n => !newIds.has(n.id) && (seesAll || !isClosedLeafType(n.type)))
+                .map(n => n.id);
             if (idsToDelete.length > 0) {
                 await tx.wbsNode.deleteMany({ where: { id: { in: idsToDelete } } });
             }
@@ -321,6 +371,13 @@ export class WbsNodesService {
                 nodes = await fetchNodesForCandidate(fallbackOrderNodeId);
             }
 
+            if (nodes.length === 0) {
+                return { items: [] };
+            }
+
+            // Zawężenie po roli PRZED liczeniem ścieżek, głębokości i alokacji — inaczej
+            // logistyk dostałby w odpowiedzi ceny liści, których nie ma prawa oglądać.
+            nodes = this.visibleForCaller(nodes);
             if (nodes.length === 0) {
                 return { items: [] };
             }

@@ -1394,6 +1394,13 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | isManagerRoles | apps/backend/src/common/leaf-types.util.ts | @anchor is-manager-roles |
 | back-funkcja | filtr roli w dzienniku wpisów | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-role-filter |
 | back-funkcja | filtr roli w porównaniu wycena↔zakup | apps/backend/src/orders/orders.service.ts | @anchor comparison-role-filter |
+| back-stala | ALL_LEAF_TYPES (komplet typów liści) | apps/backend/src/common/leaf-types.util.ts | @anchor all-leaf-types |
+| back-stala | CLOSED_LEAF_TYPES (typy tylko dla managera) | apps/backend/src/common/leaf-types.util.ts | @anchor closed-leaf-types |
+| back-funkcja | isClosedLeafType | apps/backend/src/common/leaf-types.util.ts | @anchor is-closed-leaf-type |
+| back-funkcja | seesClosedLeaves (rola widzi koszty własne) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-nodes-sees-closed-leaves |
+| back-funkcja | visibleForCaller (filtr drzewa WBS po roli) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-nodes-visible-for-caller |
+| back-funkcja | stripMoney (zerowanie kwot węzła) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-nodes-strip-money |
+| back-funkcja | ochrona ukrytych liści przy zapisie drzewa | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-nodes-save-tree-hidden-guard |
 | back-funkcja | rootOfWbsNode | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-root-of |
 | back-funkcja | listByOrder | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-list |
 | back-funkcja | create (wpis realizacji) | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-create |
@@ -1505,6 +1512,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-kolumna | koszt całkowity wyceny — pomarańcz strony wyceny | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-total-plan-color |
 | ui-panel | RealizationExpandPanel (wymagania techniczne + podgląd + dziennik) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-expand-panel |
 | ui-stan | visibleTypes (filtr typów po roli) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-visible-types |
+| ui-stan | visibleTypes (filtr typów po roli — panel Materiały) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-visible-types |
 | ui-stan | techPendingRef (niepotwierdzony PATCH wymagań) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-techspec-pending |
 | ui-funkcja | fetchActuals | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-fetch-actuals |
 | ui-funkcja | refreshCard | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-refresh-card |
