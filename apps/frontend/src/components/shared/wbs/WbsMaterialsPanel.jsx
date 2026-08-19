@@ -632,11 +632,8 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
         onRefresh();
     }, [card?.id, headers, onRefresh, offerLocked]);
     useEffect(() => () => { if (priceWarnTimer.current) clearTimeout(priceWarnTimer.current); }, []);
-    const [localImageUrl, setLocalImageUrl] = useState(null);
-    const [imageKey, setImageKey] = useState(0);
     // @anchor product-card-combo-refs
     const comboRefs = useRef({});
-    const [fetchedImageUrl, setFetchedImageUrl] = useState(null);
     const [showCatalogModal, setShowCatalogModal] = useState(false);
     const [catalogImageUrl, setCatalogImageUrl] = useState(null);
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
@@ -658,10 +655,6 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
         setPdfPreviewUrl(null);
         if (pdfBlobUrlRef.current) { URL.revokeObjectURL(pdfBlobUrlRef.current); pdfBlobUrlRef.current = null; }
     }, []);
-    const fileInputRef = useRef(null);
-    const pasteInputRef = useRef(null);
-    const localImageUrlRef = useRef(null);
-    const fetchedImageUrlRef = useRef(null);
     const catalogImageUrlRef = useRef(null);
     const [catalogMaterial, setCatalogMaterial] = useState(null);
 
@@ -678,27 +671,6 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     // Zresetuj formularz przy zmianie karty (nowe id) LUB gdy materialId się zmieni
     // (kliknięcie "Wybierz" na propozycji — pola producent/model/produktName powinny się zaktualizować).
     }, [card?.id, card?.materialId]);
-
-    // Pobierz obrazek z auth nagłówkiem i stwórz blob URL (img src nie może wysłać Authorization)
-    useEffect(() => {
-        if (!card?.imageUrl || !card?.id) {
-            setFetchedImageUrl(null);
-            return;
-        }
-        let cancelled = false;
-        fetch(`${API_URL}/material-requirements/${card.id}/image?t=${imageKey}`, {
-            headers: { Authorization: `Bearer ${token}` },
-        }).then(async res => {
-            if (!res.ok || cancelled) return;
-            const blob = await res.blob();
-            if (cancelled) return;
-            if (fetchedImageUrlRef.current) URL.revokeObjectURL(fetchedImageUrlRef.current);
-            const url = URL.createObjectURL(blob);
-            fetchedImageUrlRef.current = url;
-            setFetchedImageUrl(url);
-        }).catch(() => { if (!cancelled) setFetchedImageUrl(null); });
-        return () => { cancelled = true; };
-    }, [card?.id, card?.imageUrl, imageKey, token]);
 
     // Pobierz dane i obrazek karty katalogowej gdy modal otwarty
     useEffect(() => {
@@ -734,48 +706,8 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
 
     // Zwolnij objectURL przy odmontowaniu
     useEffect(() => () => {
-        if (localImageUrlRef.current) URL.revokeObjectURL(localImageUrlRef.current);
-        if (fetchedImageUrlRef.current) URL.revokeObjectURL(fetchedImageUrlRef.current);
         if (catalogImageUrlRef.current) URL.revokeObjectURL(catalogImageUrlRef.current);
     }, []);
-
-    const uploadBlob = useCallback(async (blob, filename = 'image.png') => {
-        if (readOnly || !card?.id) return;
-        if (!(await guardSnapshotEdit())) return;
-        if (localImageUrlRef.current) URL.revokeObjectURL(localImageUrlRef.current);
-        const objUrl = URL.createObjectURL(blob);
-        localImageUrlRef.current = objUrl;
-        setLocalImageUrl(objUrl);
-        const formData = new FormData();
-        formData.append('file', blob, filename);
-        const res = await fetch(`${API_URL}/material-requirements/${card.id}/upload-image`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-            body: formData,
-        });
-        if (res.ok) { setImageKey(k => k + 1); onRefresh(); }
-    }, [card?.id, token, readOnly, onRefresh]);
-
-    const handlePaste = useCallback((e) => {
-        const items = Array.from(e.clipboardData?.items || []);
-        const imgItem = items.find(i => i.type.startsWith('image/'));
-        if (!imgItem) return;
-        e.preventDefault();
-        const blob = imgItem.getAsFile();
-        if (blob) uploadBlob(blob, 'screenshot.png');
-    }, [uploadBlob]);
-
-    const handleFileSelect = useCallback(async (e) => {
-        const file = e.target.files?.[0];
-        if (!file || readOnly || !card?.id) return;
-        // Natychmiastowy podgląd
-        if (localImageUrlRef.current) URL.revokeObjectURL(localImageUrlRef.current);
-        const objUrl = URL.createObjectURL(file);
-        localImageUrlRef.current = objUrl;
-        setLocalImageUrl(objUrl);
-        await uploadBlob(file, file.name);
-        e.target.value = '';
-    }, [uploadBlob, readOnly, card?.id]);
 
     const setF = (k, v) => setFields(prev => ({ ...prev, [k]: v }));
     // Ostrzeżenie "tylko cyfry" przy polu Koszt jedn. po odrzuceniu znaku.
@@ -1069,38 +1001,15 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                 </div>
             )}
 
-            {/* Prawa kolumna — kliknięcie = file picker, hover+Ctrl+V = schowek */}
-            <div
-                onMouseEnter={() => !readOnly && pasteInputRef.current?.focus()}
-                onClick={() => !readOnly && fileInputRef.current?.click()}
-                className={`relative w-44 flex-shrink-0 border-l transition-colors ${readOnly ? 'cursor-default' : 'cursor-pointer hover:border-blue-500/30 hover:bg-blue-500/5'} border-white/5 bg-black/10`}
-                title="Kliknij aby wybrać plik | Najedź i Ctrl+V aby wkleić ze schowka"
-            >
-                {/* file picker */}
-                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} style={{ display: 'none' }} />
-                {/* paste trap — uncontrolled text input, dostaje focus na hover */}
-                <input
-                    ref={pasteInputRef}
-                    type="text"
-                    onPaste={handlePaste}
-                    tabIndex={-1}
-                    aria-hidden="true"
-                    style={{ position: 'absolute', opacity: 0, width: 0, height: 0, border: 'none', outline: 'none', padding: 0 }}
-                />
-                {(localImageUrl || fetchedImageUrl) ? (
-                    <img
-                        key={imageKey}
-                        src={localImageUrl || fetchedImageUrl}
-                        alt="podgląd"
-                        className="absolute inset-0 w-full h-full object-contain p-2"
-                    />
-                ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-gray-600 pointer-events-none">
-                        <Search size={20} />
-                        <span className="text-[10px] text-center px-2">Kliknij aby<br/>wybrać zdjęcie</span>
-                    </div>
-                )}
-            </div>
+            {/* Prawa kolumna — ten sam kafel zdjęcia co w zakładce Realizacja: klik = file picker,
+                hover+Ctrl+V = schowek, lupka = pełny podgląd, kosz = usunięcie. */}
+            <RequirementImageBox
+                card={card}
+                token={token}
+                onRefresh={onRefresh}
+                readOnly={readOnly}
+                className="w-44 border-l border-white/5 bg-black/10"
+            />
         </div>
 
         {/* Modal podglądu PDF */}
@@ -1198,11 +1107,14 @@ function ImageLightbox({ src, title, onClose }) {
         return () => window.removeEventListener('keydown', onKey);
     }, [onClose]);
 
+    // Portal ląduje w `body`, ale zdarzenia Reacta bąbelkują po drzewie KOMPONENTÓW, nie DOM —
+    // bez `stopPropagation` klik w tło doszedłby do kafla zdjęcia i zamknięcie podglądu
+    // otwierałoby okno wyboru pliku.
     return createPortal(
         <div
             data-guard-ignore
             className="fixed inset-0 z-[10002] flex flex-col bg-black/80 backdrop-blur-sm"
-            onClick={onClose}
+            onClick={e => { e.stopPropagation(); onClose(); }}
         >
             <div className="flex items-center gap-3 px-4 py-2.5 bg-black/60 border-b border-white/10 flex-shrink-0" onClick={e => e.stopPropagation()}>
                 <span className="text-sm font-bold text-white truncate flex-1">{title || 'Podgląd produktu'}</span>
@@ -1240,12 +1152,21 @@ function ImageLightbox({ src, title, onClose }) {
     );
 }
 
-// @anchor requirement-image-box — podgląd produktu POZYCJI (używany w zakładce Realizacja).
-// Zachowuje się jak kafel zdjęcia w ProductCard: klik = wybór pliku, najechanie + Ctrl+V = wklejenie
-// ze schowka (ukryty input przechwytuje `paste`, bo `document` nie dostaje zdarzenia bez focusu).
+// @anchor requirement-image-box — podgląd produktu POZYCJI. JEDEN kafel dla obu miejsc, w których
+// zdjęcie pozycji się pokazuje: karta produktu (`ProductCard`) i zakładka Realizacja. Klik = wybór
+// pliku, najechanie + Ctrl+V = wklejenie ze schowka (ukryty input przechwytuje `paste`, bo
+// `document` nie dostaje zdarzenia bez focusu), lupka = pełny podgląd, kosz = usunięcie zdjęcia.
 // Obrazek trzymany jest na wymaganiu (`MaterialRequirement.imageUrl`), więc działa też zanim
 // pozycja ma produkt katalogowy; odczyt spada na obrazek z katalogu, gdy własnego nie ma.
-export function RequirementImageBox({ card, token, onRefresh, className = '' }) {
+// Nie dorabiać drugiego kafla zdjęcia — karta produktu miała taki własny, bez kosza i lupki, i po
+// usunięciu splitu Wycena/Zakup (v848) właśnie tego brakowało użytkownikowi.
+// @anchor requirement-image-box-readonly — `readOnly` (karta z wersji/snapshotu) zostawia sam
+// podgląd z lupką: klik, wklejenie i kosz znikają. `className` niesie CAŁY wygląd ramki, bo w karcie
+// produktu kafel wypełnia kolumnę na pełną wysokość, a w Realizacji jest osobnym kaflem 176×86.
+export function RequirementImageBox({
+    card, token, onRefresh, readOnly = false,
+    className = 'w-44 h-[86px] rounded border border-white/10 bg-black/30',
+}) {
     const [localUrl, setLocalUrl] = useState(null);
     const [fetchedUrl, setFetchedUrl] = useState(null);
     const [imageKey, setImageKey] = useState(0);
@@ -1282,7 +1203,7 @@ export function RequirementImageBox({ card, token, onRefresh, className = '' }) 
     }, []);
 
     const uploadBlob = useCallback(async (blob, filename = 'screenshot.png') => {
-        if (!card?.id || !blob) return;
+        if (!card?.id || !blob || readOnly) return;
         if (!(await guardSnapshotEdit())) return;
         // Natychmiastowy podgląd — upload i odświeżenie idą w tle.
         if (localRef.current) URL.revokeObjectURL(localRef.current);
@@ -1303,7 +1224,7 @@ export function RequirementImageBox({ card, token, onRefresh, className = '' }) 
                 await onRefresh?.({ silent: true });
             }
         } finally { setUploading(false); }
-    }, [card?.id, token, onRefresh]);
+    }, [card?.id, token, onRefresh, readOnly]);
 
     const handlePaste = useCallback((e) => {
         const item = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith('image/'));
@@ -1321,7 +1242,7 @@ export function RequirementImageBox({ card, token, onRefresh, className = '' }) 
 
     const removeImage = useCallback(async (e) => {
         e.stopPropagation();
-        if (!card?.id) return;
+        if (!card?.id || readOnly) return;
         if (!(await guardSnapshotEdit())) return;
         await fetch(`${API_URL}/material-requirements/${card.id}/image`, {
             method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
@@ -1330,16 +1251,16 @@ export function RequirementImageBox({ card, token, onRefresh, className = '' }) 
         setLocalUrl(null);
         setImageKey(k => k + 1);
         await onRefresh?.({ silent: true });
-    }, [card?.id, token, onRefresh]);
+    }, [card?.id, token, onRefresh, readOnly]);
 
     const src = localUrl || fetchedUrl;
 
     return (
         <div
-            onMouseEnter={() => pasteInputRef.current?.focus()}
-            onClick={() => fileInputRef.current?.click()}
-            title="Kliknij aby wybrać plik | Najedź i Ctrl+V aby wkleić ze schowka"
-            className={`group relative w-44 h-[86px] flex-shrink-0 rounded border border-white/10 bg-black/30 cursor-pointer hover:border-blue-500/40 hover:bg-blue-500/5 transition-colors ${className}`}
+            onMouseEnter={() => { if (!readOnly) pasteInputRef.current?.focus(); }}
+            onClick={() => { if (!readOnly) fileInputRef.current?.click(); }}
+            title={readOnly ? 'Podgląd produktu' : 'Kliknij aby wybrać plik | Najedź i Ctrl+V aby wkleić ze schowka'}
+            className={`group relative flex-shrink-0 transition-colors ${readOnly ? 'cursor-default' : 'cursor-pointer hover:border-blue-500/40 hover:bg-blue-500/5'} ${className}`}
         >
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} style={{ display: 'none' }} />
             {/* pułapka na wklejenie — niewidoczny input dostaje focus po najechaniu myszą */}
@@ -1358,12 +1279,14 @@ export function RequirementImageBox({ card, token, onRefresh, className = '' }) 
                     >
                         <Maximize2 size={11} />
                     </button>
-                    <button
-                        onClick={removeImage} title="Usuń obrazek"
-                        className="absolute top-0.5 right-0.5 p-1 rounded bg-black/70 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                        <Trash2 size={11} />
-                    </button>
+                    {!readOnly && (
+                        <button
+                            onClick={removeImage} title="Usuń obrazek"
+                            className="absolute top-0.5 right-0.5 p-1 rounded bg-black/70 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                            <Trash2 size={11} />
+                        </button>
+                    )}
                     {lightboxOpen && (
                         <ImageLightbox
                             src={src}
@@ -1376,7 +1299,7 @@ export function RequirementImageBox({ card, token, onRefresh, className = '' }) 
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-gray-600 pointer-events-none">
                     <Search size={16} />
                     <span className="text-[10px] text-center px-2 leading-tight">
-                        {uploading ? 'Wysyłam…' : <>Kliknij aby wybrać<br />lub Ctrl+V</>}
+                        {readOnly ? 'Brak zdjęcia' : uploading ? 'Wysyłam…' : <>Kliknij aby wybrać<br />lub Ctrl+V</>}
                     </span>
                 </div>
             )}

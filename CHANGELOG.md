@@ -1,3 +1,21 @@
+## 2026-08-19 — fix(materialy): kosz i lupka wracaja na zdjecie w karcie produktu (v2026.08.19.873)
+
+### architektura / API
+
+- **Karta produktu przestaje mieć własny kafel zdjęcia** — prawa kolumna `ProductCard` renderuje teraz `RequirementImageBox`, ten sam komponent, którego używa zakładka Realizacja. Razem z nim wracają dwa przyciski, których w karcie nie było: lupka „Powiększ — pełna rozdzielczość" (`ImageLightbox`) i kosz „Usuń obrazek". Zniknęły nie z kafla karty, tylko razem z całym `BaselineSplitCard` przy likwidacji splitu Wycena/Zakup (v2026.08.16.848) — kafel karty produktu nigdy ich nie miał
+- **Z `ProductCard` wypadł martwy kod obsługi zdjęcia** — stany `localImageUrl`, `fetchedImageUrl`, `imageKey`, refy `fileInputRef`, `pasteInputRef`, `localImageUrlRef`, `fetchedImageUrlRef`, efekt pobierania obrazka i funkcje `uploadBlob`, `handlePaste`, `handleFileSelect`. Wszystko to robi teraz jeden komponent
+- **`RequirementImageBox` dostał props `readOnly`** (karta z wersji/snapshotu): zostaje sam podgląd z lupką, klik w kafel, wklejenie Ctrl+V i kosz znikają, a `uploadBlob`/`removeImage` mają dodatkowy warunek na wypadek wywołania inną drogą
+- **`className` niesie CAŁY wygląd ramki** kafla, bo w karcie produktu wypełnia on kolumnę na pełną wysokość (`w-44 border-l`), a w Realizacji jest osobnym kaflem 176×86 z zaokrągleniem. Dotychczasowe klasy zostały domyślną wartością propa, więc wywołanie w `RealizationTab` nie wymagało zmiany
+- **Efekt uboczny, na plus:** kafel w karcie produktu pobiera obrazek zawsze, gdy pozycja ma `id`, a nie tylko przy ustawionym `MaterialRequirement.imageUrl` — backend spada wtedy na zdjęcie z karty katalogowej materiału, więc produkt z bazy pokazuje zdjęcie także bez własnego uploadu
+
+### słownik
+
+- dodano `requirement-image-box-readonly` — props `RequirementImageBox.readOnly`, `WbsMaterialsPanel.jsx`
+
+### wytyczne
+
+- `ui-sekcja` `RequirementImageBox` — JEDYNY kafel zdjęcia pozycji w projekcie. Nie dorabiać drugiego pod nowe miejsce osadzenia: karta produktu miała taki własny, bez kosza i lupki, i to właśnie on po v848 został na widoku sam. Nowy wygląd ramki podawać przez `className`, nowe ograniczenie uprawnień przez `readOnly`
+
 ## 2026-08-19 — fix(uprawnienia): logistyk nie widzi liści innych niż materiał i sprzęt w ŻADNYM widoku (v2026.08.19.872)
 
 ### architektura / API
