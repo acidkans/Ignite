@@ -213,7 +213,13 @@ const linePraca = plain(out['wiersz wpisu na pracy (zakres zamiast produktu)']);
 const formPraca = plain(out['formularz wpisu — wykonanie bez produktu']);
 check('wpis na pracy ma pole „Zakres"', /aria-label="Zakres"/.test(linePraca));
 check('wpis na pracy nie ma producenta ani modelu', !/aria-label="Producent"/.test(linePraca) && !/aria-label="Model"/.test(linePraca));
-check('zakres wpisu wchodzi do pola', /value="demontaż starej szafy"/.test(linePraca));
+// Pola tekstowe wpisu są textareami rosnącymi z treścią (`realization-entry-growing-fields`),
+// więc wpisany tekst renderuje się jako ZAWARTOŚĆ elementu, a nie jako atrybut `value`.
+check('zakres wpisu wchodzi do pola', /aria-label="Zakres"[^>]*>demontaż starej szafy</.test(linePraca));
+check('pola tekstowe wpisu rosną z treścią (textarea, nie input)',
+    /<textarea[^>]*aria-label="Komentarz wpisu"/.test(line) && /<textarea[^>]*aria-label="Zakres"/.test(linePraca));
+check('data i liczby zostają jednolinijkowe',
+    /<input[^>]*aria-label="Data zdarzenia"/.test(line) && /<input[^>]*aria-label="Ilość wpisu"/.test(line) && /<input[^>]*aria-label="Koszt jednostkowy"/.test(line));
 check('formularz nad pracą też prosi o zakres', /aria-label="Zakres"/.test(formPraca));
 check('wpis na materiale zostaje przy producencie i modelu', /aria-label="Producent"/.test(line) && !/aria-label="Zakres"/.test(line));
 

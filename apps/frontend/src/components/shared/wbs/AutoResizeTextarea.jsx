@@ -3,7 +3,7 @@ import { useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 // Textarea rosnąca do wysokości treści — wspólna dla kolumn tekstowych WBS
 // (Komentarz / Strategia w `WBSHybridTable` i Komentarz w `WbsMaterialsPanel`).
 // @anchor auto-resize-textarea
-export default function AutoResizeTextarea({ value, onChange, onBlur, onKeyDown, placeholder, className, style, ...rest }) {
+export default function AutoResizeTextarea({ value, onChange, onBlur, onKeyDown, onFocus, placeholder, className, style, ...rest }) {
     const ref = useRef(null);
     const adjust = useCallback(() => {
         const el = ref.current;
@@ -31,7 +31,10 @@ export default function AutoResizeTextarea({ value, onChange, onBlur, onKeyDown,
             onChange={e => { onChange(e); adjust(); }}
             onBlur={onBlur}
             onKeyDown={onKeyDown}
-            onFocus={adjust}
+            // Własny `onFocus` wołającego (np. zaznaczenie całej treści) doklejamy DO przeliczenia,
+            // a nie zamiast niego: `{...rest}` idzie na końcu i po cichu podmieniłby handler,
+            // przez co pole otwarte na już wpisanej treści zostawałoby jednolinijkowe.
+            onFocus={e => { adjust(); onFocus?.(e); }}
             placeholder={placeholder}
             className={className}
             style={{ overflow: 'hidden', minHeight: '1.4em', resize: 'none', ...(style || {}) }}

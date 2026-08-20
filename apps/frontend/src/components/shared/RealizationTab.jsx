@@ -157,6 +157,14 @@ function resolveEntryNumber(raw) {
 // zasłaniałaby to, co się właśnie wpisuje.
 const FORMULA_HINT = 'Można wpisać działanie, np. =4,3*220 — zapisze się wynik';
 
+// @anchor realization-entry-growing-fields — pole TEKSTOWE wpisu rośnie razem z treścią
+// (`AutoResizeTextarea`), więc cały komentarz, producent, model, EAN, numer dokumentu i zakres
+// są widoczne naraz. Kolumny są wąskie, a jednolinijkowy `input` chowa nadmiar za krawędzią:
+// treść trzeba było przewijać kursorem wewnątrz pola, żeby przeczytać, co się samemu wpisało.
+// Jednolinijkowe zostają wyłącznie pola o z góry znanej długości — data i liczby (ilość,
+// koszt jedn.): tam nie ma czego pokazywać, a złamanie liczby na dwie linie psuje kolumnę.
+const growsWithText = (k) => k !== 'entryDate' && !NUMERIC_ENTRY_FIELDS.has(k);
+
 // ─── Wiersz pozycji ───────────────────────────────────────────────────────────
 
 // Podkomponenty poniżej są eksportowane WYŁĄCZNIE dla `test/test-realization-render.mjs`.
@@ -441,15 +449,24 @@ export function RealizationEntryLine({ entry, cols, hasCard, readOnly, onSave, o
         if (e.key === 'Enter') { e.preventDefault(); focusNextInRow(e, () => e.currentTarget.blur()); }
         if (e.key === 'Escape') { drop(k); e.currentTarget.blur(); }
     };
-    const field = (k, extra = '', props = {}) => (
-        <input value={get(k)} disabled={readOnly} data-entry-field
-            onChange={e => set(k, props.sanitize ? sanitizeQtyInput(e.target.value) : e.target.value)}
-            onFocus={selectAllOnFocus}
-            onBlur={() => commit(k)} onKeyDown={e => onKey(e, k)}
-            placeholder={props.placeholder} aria-label={props.label}
-            title={props.sanitize ? FORMULA_HINT : undefined}
-            className={`${ENTRY_INPUT} ${extra} disabled:opacity-60`} />
-    );
+    const field = (k, extra = '', props = {}) => {
+        const wspolne = {
+            value: get(k),
+            disabled: readOnly,
+            'data-entry-field': true,
+            onChange: e => set(k, props.sanitize ? sanitizeQtyInput(e.target.value) : e.target.value),
+            onFocus: selectAllOnFocus,
+            onBlur: () => commit(k),
+            onKeyDown: e => onKey(e, k),
+            placeholder: props.placeholder,
+            'aria-label': props.label,
+            className: `${ENTRY_INPUT} ${extra} disabled:opacity-60`,
+        };
+        // `align-top` — textarea jest elementem liniowym i bez tego zostawia pod sobą pasek
+        // na zejście liter, przez co wiersz wpisu stał wyżej niż sąsiednie komórki.
+        if (growsWithText(k)) return <AutoResizeTextarea {...wspolne} className={`${wspolne.className} align-top`} />;
+        return <input {...wspolne} title={props.sanitize ? FORMULA_HINT : undefined} />;
+    };
 
     const wartosc = (parsePriceInput(get('qty')) || 0) * (parsePriceInput(get('unitCost')) || 0);
 
@@ -608,15 +625,24 @@ export function RealizationEntryForm({ node, cols, hasCard, defaultQty, seedProd
         if (e.key === 'Escape') onClose();
     };
 
-    const field = (k, extra = '', props = {}) => (
-        <input value={draft[k]} ref={props.ref} data-entry-field data-entry-key={k}
-            onChange={e => set(k, props.sanitize ? sanitizeQtyInput(e.target.value) : e.target.value)}
-            onFocus={selectAllOnFocus}
-            onKeyDown={onKey} placeholder={props.placeholder} aria-label={props.label}
-            title={props.sanitize ? FORMULA_HINT : undefined}
-            aria-invalid={brakujace.includes(k) || undefined}
-            className={`${ENTRY_INPUT} ${extra} ${brakujace.includes(k) ? 'border-red-500/70 bg-red-500/10' : ''}`} />
-    );
+    const field = (k, extra = '', props = {}) => {
+        const wspolne = {
+            value: draft[k],
+            'data-entry-field': true,
+            'data-entry-key': k,
+            onChange: e => set(k, props.sanitize ? sanitizeQtyInput(e.target.value) : e.target.value),
+            onFocus: selectAllOnFocus,
+            onKeyDown: onKey,
+            placeholder: props.placeholder,
+            'aria-label': props.label,
+            'aria-invalid': brakujace.includes(k) || undefined,
+            className: `${ENTRY_INPUT} ${extra} ${brakujace.includes(k) ? 'border-red-500/70 bg-red-500/10' : ''}`,
+        };
+        if (growsWithText(k)) return <AutoResizeTextarea {...wspolne} className={`${wspolne.className} align-top`} />;
+        // `ref` bierze wyłącznie data (kursor startuje w pierwszym polu wiersza) i tylko ona
+        // go potrzebuje — `AutoResizeTextarea` trzyma własny ref na swoim elemencie.
+        return <input {...wspolne} ref={props.ref} title={props.sanitize ? FORMULA_HINT : undefined} />;
+    };
 
     const wartosc = (parsePriceInput(draft.qty) || 0) * (parsePriceInput(draft.unitCost) || 0);
 

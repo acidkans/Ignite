@@ -1,3 +1,22 @@
+## 2026-08-20 — feat(realizacja): pola tekstowe w wierszu zakupu rosną razem z treścią (v2026.08.20.876)
+
+### architektura / API
+
+- **Pola TEKSTOWE wpisu realizacji renderują się jako `AutoResizeTextarea`, nie `input`** — komentarz, producent, model, EAN, numer dokumentu i zakres rosną do wysokości treści, więc cały wpis widać naraz. Kolumny są wąskie, a jednolinijkowy `input` chował nadmiar za krawędzią: żeby przeczytać własny komentarz, trzeba było przewijać tekst kursorem wewnątrz pola. Dotyczy obu miejsc: wiersza zapisanego wpisu (`RealizationEntryLine`) i formularza nowego zakupu (`RealizationEntryForm`)
+- **Jednolinijkowe zostają wyłącznie pola o z góry znanej długości** — data i liczby (ilość, koszt jedn.). Decyduje o tym jedna funkcja `growsWithText`, więc nowe pole wpisu jest domyślnie rosnące, a wyjątek trzeba dopisać świadomie
+- **Enter dalej idzie do następnego okna wiersza, nie łamie linii** — `onKey` robi `preventDefault`, więc zamiana `input` na `textarea` nie zmienia trasy klawiatury. Tekst zawija się sam i tak rośnie pole
+- **`AutoResizeTextarea` składa `onFocus` wołającego z własnym przeliczeniem wysokości** — dotąd `{...rest}` szedł na końcu i po cichu podmieniał handler, więc pole otwarte na już wpisanej treści (wpisy realizacji zaznaczają całą treść na focus) zostawałoby jednolinijkowe
+- **Test:** `test/test-realization-render.mjs` — doszły 3 sprawdzenia (tekst wchodzi do textarei jako zawartość, pola tekstowe są textareami, data i liczby zostają `input`ami)
+
+### słownik
+
+- dodano `realization-entry-growing-fields` — `growsWithText`, które pola wpisu rosną z treścią, `RealizationTab.jsx`
+
+### wytyczne
+
+- `ui-input` — **pole tekstowe w tabeli ma rosnąć z treścią**, nie chować jej za krawędzią: używaj `AutoResizeTextarea`, a jednolinijkowy `input` zostawiaj wyłącznie dla wartości o z góry znanej długości (data, liczba, kod). Dotyczy każdej edytowalnej kolumny tekstowej, nie tylko komentarza
+- `ui-propsy` `AutoResizeTextarea` — handlery przekazywane przez `{...rest}` NADPISUJĄ własne handlery komponentu (spread stoi na końcu). Każdy nowy handler, który komponent obsługuje sam, wyciągaj do destrukturyzacji i składaj ręcznie
+
 ## 2026-08-20 — feat(realizacja): pole kosztu jedn. i ilości w karcie zakupu przyjmuje działania matematyczne (v2026.08.20.875)
 
 ### architektura / API

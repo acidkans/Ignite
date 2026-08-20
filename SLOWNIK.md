@@ -1510,6 +1510,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | NUMERIC_ENTRY_FIELDS (pola wpisu niosące liczbę: qty, unitCost) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-numeric-fields |
 | ui-funkcja | resolveEntryNumber (działanie „=4,3*220" → 946 przed zapisem) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-formula |
 | ui-stala | FORMULA_HINT (dymek „można wpisać działanie") | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-formula-hint |
+| ui-funkcja | growsWithText (pole tekstowe wpisu rośnie z treścią) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-growing-fields |
 | ui-kolumna | dostawcy pozycji — lista, nie skrót „+N" | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-suppliers |
 | ui-wiersz | listwa domykająca szufladę rozwiniętej pozycji | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-drawer-cap |
 | ui-kolumna | koszt całkowity wyceny — pomarańcz strony wyceny | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-total-plan-color |
