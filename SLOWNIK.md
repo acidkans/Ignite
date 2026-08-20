@@ -1506,7 +1506,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | submit formularza wpisu (zapis zamyka formularz) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-submit |
 | ui-stan | brakujace (puste pola wymagane przy zapisie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-missing |
 | ui-funkcja | waliduj (cena, producent, model / zakres) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-validate |
-| ui-stala | BRAK_ETYKIETY (nazwy pól w komunikacie „Uzupełnij: …") | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-missing-labels |
+| ui-stala | BRAK_ETYKIETY (nazwy pól w komunikacie „Uzupełnij lub popraw: …") | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-missing-labels |
+| ui-stala | NUMERIC_ENTRY_FIELDS (pola wpisu niosące liczbę: qty, unitCost) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-numeric-fields |
+| ui-funkcja | resolveEntryNumber (działanie „=4,3*220" → 946 przed zapisem) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-formula |
+| ui-stala | FORMULA_HINT (dymek „można wpisać działanie") | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-formula-hint |
 | ui-kolumna | dostawcy pozycji — lista, nie skrót „+N" | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-suppliers |
 | ui-wiersz | listwa domykająca szufladę rozwiniętej pozycji | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-drawer-cap |
 | ui-kolumna | koszt całkowity wyceny — pomarańcz strony wyceny | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-total-plan-color |

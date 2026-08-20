@@ -7,7 +7,7 @@ import { API_URL } from '../../config';
 import SupplierPicker from './SupplierPicker';
 import { RequirementImageBox } from './wbs/WbsMaterialsPanel';
 import AutoResizeTextarea from './wbs/AutoResizeTextarea';
-import { sanitizeQtyInput, DRAWER, STRUCTURE_STATUS_META, statusMetaForType, statusOptionsForType, statusLabelForType, resolveStatusCode, usesWorkStatuses } from './wbs/wbsConstants';
+import { sanitizeQtyInput, parsePriceInput, DRAWER, STRUCTURE_STATUS_META, statusMetaForType, statusOptionsForType, statusLabelForType, resolveStatusCode, usesWorkStatuses } from './wbs/wbsConstants';
 import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath,
     leafNodesOf, buildCardMap, wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf,
@@ -96,7 +96,7 @@ const ENTRY_INPUT = 'w-full bg-black/40 border border-white/10 rounded px-2 py-1
 // wpisami powtarzałyby się przy każdym wierszu i zrobiłyby z dziennika ścianę tekstu.
 const lab = (t) => <span className="block text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-1">{t}</span>;
 
-// @anchor realization-missing-labels — nazwy pól w komunikacie „Uzupełnij: …". Małą literą,
+// @anchor realization-missing-labels — nazwy pól w komunikacie „Uzupełnij lub popraw: …". Małą literą,
 // bo wchodzą w środek zdania; te same słowa, co w nagłówkach nad polami, żeby komunikat
 // dało się przeczytać jako wskazówkę, gdzie kliknąć.
 const BRAK_ETYKIETY = {
@@ -133,6 +133,29 @@ const selectAllOnFocus = (e) => {
     const el = e.currentTarget;
     requestAnimationFrame(() => el.select?.());
 };
+
+// @anchor realization-entry-numeric-fields — pola wpisu niosące LICZBĘ, a nie tekst: tylko one
+// liczą działania i tylko one przechodzą przez `sanitizeQtyInput`. Jedna lista dla wiersza
+// zapisanego wpisu i dla formularza nowego, żeby oba traktowały „=" tak samo.
+const NUMERIC_ENTRY_FIELDS = new Set(['qty', 'unitCost']);
+
+// @anchor realization-entry-formula — pole liczbowe wpisu przyjmuje DZIAŁANIE: „=4,3*220"
+// zapisuje się jako 946. Liczy je `parsePriceInput`, czyli ta sama droga co w Budżecie
+// i w panelu Materiały — ten sam wpis znaczy w całej aplikacji to samo.
+// Zwracamy TEKST, bo dalej idzie tą samą trasą co zwykły wpis (porównanie ze stanem
+// poprzednim, JSON do backendu). `null` = działanie jest niedokończone („=4,3*") i wołający
+// ma wtedy NIE zapisywać: serwer czyta liczby `parseFloat`em, więc zapisałby ciche 0 zł.
+function resolveEntryNumber(raw) {
+    const s = String(raw ?? '');
+    if (!s.trimStart().startsWith('=')) return s;
+    const n = parsePriceInput(s);
+    return n === null ? null : String(n);
+}
+
+// @anchor realization-formula-hint — podpowiedź w dymku pola liczbowego. Bez niej nikt nie
+// zgadnie, że pole liczy działania: kolumna jest wąska, a podpowiedź w placeholderze
+// zasłaniałaby to, co się właśnie wpisuje.
+const FORMULA_HINT = 'Można wpisać działanie, np. =4,3*220 — zapisze się wynik';
 
 // ─── Wiersz pozycji ───────────────────────────────────────────────────────────
 
@@ -404,7 +427,10 @@ export function RealizationEntryLine({ entry, cols, hasCard, readOnly, onSave, o
     const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
     const drop = (k) => setDraft(d => { const n = { ...d }; delete n[k]; return n; });
     const commit = (k) => {
-        const next = get(k);
+        const next = NUMERIC_ENTRY_FIELDS.has(k) ? resolveEntryNumber(get(k)) : get(k);
+        // Niedokończone działanie zostaje w polu i czeka na dokończenie — bez zapisu
+        // i bez cofania tego, co się już wpisało.
+        if (next === null) return;
         if (String(orig(k)) === String(next)) { drop(k); return; }
         onSave(entry.id, { [k]: next });
         drop(k);
@@ -421,10 +447,11 @@ export function RealizationEntryLine({ entry, cols, hasCard, readOnly, onSave, o
             onFocus={selectAllOnFocus}
             onBlur={() => commit(k)} onKeyDown={e => onKey(e, k)}
             placeholder={props.placeholder} aria-label={props.label}
+            title={props.sanitize ? FORMULA_HINT : undefined}
             className={`${ENTRY_INPUT} ${extra} disabled:opacity-60`} />
     );
 
-    const wartosc = (Number(get('qty')) || 0) * (Number(String(get('unitCost')).replace(',', '.')) || 0);
+    const wartosc = (parsePriceInput(get('qty')) || 0) * (parsePriceInput(get('unitCost')) || 0);
 
     return (
         <tr className={`group/entry ${DRAWER.surface} ${DRAWER.hoverRow} border-b border-white/[0.03]`}>
@@ -540,9 +567,11 @@ export function RealizationEntryForm({ node, cols, hasCard, defaultQty, seedProd
     // bo dostawa zerowej ilości nie jest zdarzeniem.
     const waliduj = () => {
         const b = [];
-        const qty = parseFloat(String(draft.qty).replace(',', '.'));
-        if (!Number.isFinite(qty) || qty <= 0) b.push('qty');
-        if (!String(draft.unitCost).trim()) b.push('unitCost');
+        const qty = parsePriceInput(draft.qty);
+        if (qty === null || qty <= 0) b.push('qty');
+        // Pusta cena i niedokończone działanie („=4,3*") liczą się tak samo — w obu wypadkach
+        // nie ma z czego wziąć kwoty. Zero przechodzi: `parsePriceInput` nie myli go z brakiem.
+        if (!String(draft.unitCost).trim() || parsePriceInput(draft.unitCost) === null) b.push('unitCost');
         if (hasCard) {
             if (!draft.manufacturer.trim()) b.push('manufacturer');
             if (!draft.model.trim()) b.push('model');
@@ -565,7 +594,9 @@ export function RealizationEntryForm({ node, cols, hasCard, defaultQty, seedProd
             return;
         }
         setSaving(true);
-        const ok = await onAdd(draft);
+        // Do zapisu idzie WYNIK działania, nie jego zapis — backend czyta liczby `parseFloat`em
+        // i z „=4,3*220" zrobiłby 0 zł. Walidacja wyżej gwarantuje, że oba pola się liczą.
+        const ok = await onAdd({ ...draft, qty: resolveEntryNumber(draft.qty), unitCost: resolveEntryNumber(draft.unitCost) });
         setSaving(false);
         if (ok) onClose();
     };
@@ -582,11 +613,12 @@ export function RealizationEntryForm({ node, cols, hasCard, defaultQty, seedProd
             onChange={e => set(k, props.sanitize ? sanitizeQtyInput(e.target.value) : e.target.value)}
             onFocus={selectAllOnFocus}
             onKeyDown={onKey} placeholder={props.placeholder} aria-label={props.label}
+            title={props.sanitize ? FORMULA_HINT : undefined}
             aria-invalid={brakujace.includes(k) || undefined}
             className={`${ENTRY_INPUT} ${extra} ${brakujace.includes(k) ? 'border-red-500/70 bg-red-500/10' : ''}`} />
     );
 
-    const wartosc = (Number(String(draft.qty).replace(',', '.')) || 0) * (Number(String(draft.unitCost).replace(',', '.')) || 0);
+    const wartosc = (parsePriceInput(draft.qty) || 0) * (parsePriceInput(draft.unitCost) || 0);
 
     return (
         // Formularz siedzi na tej samej płaszczyźnie co reszta szuflady — od zapisanych wpisów
@@ -647,7 +679,7 @@ export function RealizationEntryForm({ node, cols, hasCard, defaultQty, seedProd
                             poza ekranem przy przewiniętej w bok tabeli. */}
                         {brakujace.length > 0 && (
                             <div className="mt-1.5 text-[10px] leading-tight text-red-300 text-left break-words">
-                                Uzupełnij: {brakujace.map(k => BRAK_ETYKIETY[k] || k).join(', ')}
+                                Uzupełnij lub popraw: {brakujace.map(k => BRAK_ETYKIETY[k] || k).join(', ')}
                             </div>
                         )}
                     </td>

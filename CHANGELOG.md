@@ -1,3 +1,25 @@
+## 2026-08-20 — feat(realizacja): pole kosztu jedn. i ilości w karcie zakupu przyjmuje działania matematyczne (v2026.08.20.875)
+
+### architektura / API
+
+- **Pola liczbowe wpisu realizacji (`qty`, `unitCost`) liczą DZIAŁANIE** — „=4,3*220" zapisuje się jako 946. Liczy je `parsePriceInput` z `wbsConstants`, czyli ta sama droga co w Budżecie i panelu Materiały — ten sam zapis znaczy w całej aplikacji to samo. Dotyczy OBU miejsc: formularza nowego zakupu i edycji zapisanego wpisu w dzienniku
+- **Do backendu idzie WYNIK, nie zapis działania** — `LeafActualsService` czyta liczby `parseFloat`em, więc surowe „=4,3*220" dawało `NaN`: przy cenie ciche `unitCost = 0`, przy ilości odrzucony zapis („Ilość musi być większa od zera"). Formularz (`resolveEntryNumber` w `submit`) i wiersz wpisu (`commit`) rozwiązują działanie PRZED wysłaniem, więc backend zostaje bez zmian
+- **Niedokończone działanie („=4,3*") nie zapisuje się w ogóle** — tekst zostaje w polu do poprawki, zamiast zamienić się w 0 zł. W formularzu pole podświetla się na czerwono, a komunikat mówi teraz „Uzupełnij lub popraw: …", bo pole bywa niepuste, tylko nieprzeliczalne
+- **Podgląd „Wartość" liczy się na bieżąco z działania** — kwota pod ilością × kosztem pokazuje wynik jeszcze przed zapisem, więc widać, co się właśnie policzyło
+- **Dymek nad polem** (`FORMULA_HINT`) mówi o możliwości wpisania działania — kolumna jest wąska, a podpowiedź w placeholderze zasłaniałaby wpisywaną treść
+- **Test:** `test/test-realization-formula.mjs` — 16 sprawdzeń: parser (`=4.3* 220` → 946, przecinek dziesiętny, nawiasy, dzielenie, zero jako cena, niedokończone działanie → `null`) oraz droga wartości w `RealizationTab`
+
+### słownik
+
+- dodano `realization-entry-numeric-fields` — `NUMERIC_ENTRY_FIELDS`, pola wpisu niosące liczbę (`qty`, `unitCost`), `RealizationTab.jsx`
+- dodano `realization-entry-formula` — `resolveEntryNumber`, zamiana działania na wynik przed zapisem, `RealizationTab.jsx`
+- dodano `realization-formula-hint` — `FORMULA_HINT`, dymek nad polem liczbowym wpisu, `RealizationTab.jsx`
+- zmieniono `realization-missing-labels` — komunikat to teraz „Uzupełnij lub popraw: …"
+
+### wytyczne
+
+- `ui-input` — każde pole przepuszczone przez `sanitizeQtyInput` MUSI po drugiej stronie przejść przez `parsePriceInput` przed wysłaniem. Sanitizer świadomie przepuszcza „=" i znaki matematyczne, więc bez przeliczenia surowy zapis działania dolatuje do backendu, gdzie `parseFloat` robi z niego `NaN` → zapisane 0
+
 ## 2026-08-19 — fix(materialy): zdjecie pozycji wraca na liste + kosz i lupka na kaflu karty produktu (v2026.08.19.874)
 
 ### architektura / API
