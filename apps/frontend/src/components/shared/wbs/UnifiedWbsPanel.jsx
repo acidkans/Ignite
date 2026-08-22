@@ -5277,13 +5277,20 @@ ${ganttSectionHtml}
                 const resolvedQuantity = quantity; // per-node, never use aggregate inheritedQuantity
                 const persistedRowUnitCost = parseFloat(row.unitCost) || 0;
                 const inheritedUnitCost = inheritedQuantity > 0 && inheritedCost > 0 ? inheritedCost / inheritedQuantity : 0;
+                // Materiał/sprzęt: cena WYŁĄCZNIE z wymagań materiałowych. Wcześniejszy fallback na
+                // `persistedRowUnitCost` przenosił na materiał cenę poprzedniego typu (stawka pracy
+                // zostawała na switchu). Brak ceny domyślnej dla typu = cena wyzerowana przy zmianie typu.
                 const resolvedUnitCost = inheritedFromMaterials
-                    ? (inheritedUnitCost > 0 ? inheritedUnitCost : persistedRowUnitCost)
+                    ? inheritedUnitCost
                     : persistedRowUnitCost;
                 const totalCost = inheritedFromMaterials
                     ? (inheritedCost > 0 ? inheritedCost : resolvedUnitCost * resolvedQuantity)
                     : (Number.isFinite(parseFloat(row.totalCost)) ? parseFloat(row.totalCost) : resolvedUnitCost * resolvedQuantity);
-                const margin = parseFloat(row.margin) || 0;
+                // Narzut przy zmianie typu idzie za wartościami domyślnymi typu. Materiał/sprzęt
+                // swoich nie mają (poza modalem), więc narzut poprzedniego typu zjeżdża do zera
+                // razem z ceną — inaczej na materiale zostawał np. 20% wzięte z pracy.
+                const margin = inheritedFromMaterials ? 0 : (parseFloat(row.margin) || 0);
+                row.margin = margin;
                 row.inheritedFromMaterials = inheritedFromMaterials;
                 row.quantity = resolvedQuantity;
                 const typeDefault = defaultUnitForType(row.type);
@@ -5322,6 +5329,7 @@ ${ganttSectionHtml}
                     quantity: row.quantity,
                     unit: row.unit,
                     unitCost: row.unitCost,
+                    margin: row.margin,
                     cost: row.cost,
                     totalCost: row.totalCost,
                     offerPrice: row.offerPrice,

@@ -1752,10 +1752,18 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     handleField(node.id, 'unitCost', 0);
                                 } else if (isMaterial) {
                                     // Materiał/sprzęt wyceniane indywidualnie (wymagania materiałowe) —
-                                    // przy zmianie typu ustaw tylko jednostkę, nie ruszaj ceny.
+                                    // te dwa typy nie mają ceny domyślnej w modalu „Domyślne wartości".
+                                    // Brak ceny domyślnej = ZERUJEMY cenę, a nie zostawiamy starej: zmiana
+                                    // typu z pracy zostawiała na materiale stawkę pracy (np. 800 zł/dzień
+                                    // na switchu) i wyglądała jak prawdziwa cena zakupu. Właściwy koszt
+                                    // wraca z wymagań materiałowych. Narzut czyścimy z tego samego powodu:
+                                    // pochodził z domyślnych POPRZEDNIEGO typu, a materiał swojego nie ma.
                                     const suggestedUnit = suggestDefaultUnit(node.name, newType);
                                     const unitToApply = suggestedUnit || (getLeafDefaultFrom(leafDefaults, newType) || {}).unit;
                                     if (unitToApply != null) { handleField(node.id, 'unit', unitToApply); onNodeFieldSave?.(node.id, 'unit', unitToApply); }
+                                    handleField(node.id, 'unitCost', 0);
+                                    handleField(node.id, 'margin', 0);
+                                    onApplyLeafDefaults?.(node.id, { unit: unitToApply, unitCost: 0, margin: 0 });
                                 } else if (newType) {
                                     // Praca/usługa/nocleg/paliwo — wartości domyślne z modalu przy KAŻDEJ zmianie typu
                                     // (nowe i istniejące pozycje), od razu w tabeli, edytowalne później.
