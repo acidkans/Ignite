@@ -1,3 +1,18 @@
+## 2026-08-23 — fix(materialy): PATCH karty z producentem i modelem nie kończy się już 500 (v2026.08.23.898)
+
+### architektura / API
+
+- **`PATCH /material-requirements/:id` wywalał się 500**, gdy karta niosła producenta i model, a wymaganie nie miało jeszcze propozycji tej pary. Gałąź tworząca propozycję podawała `productName: pn ?? undefined`, a `ProductProposal.productName` jest w schemacie WYMAGANE — Prisma odbijała `Argument `productName` is missing` (`PrismaClientValidationError`). Front dostawał 500, propozycja nie powstawała, a ProductCard wracał wyzerowany. To ta sama pułapka co w `addManual` po stronie frontu (v897), tyle że na drugiej drodze zapisu — kartą, nie formularzem „Dodaj ręcznie"
+- **`mat-req-proposal-name-fallback` — nazwa składa się sama**, tak jak `composeProposalName` na froncie: wpisana ręcznie → nazwa z upsertowanego `Material` dla pary producent+model → złożenie „PRODUCENT MODEL"
+
+### słownik
+
+- dodano `mat-req-proposal-name-fallback` — składanie nazwy handlowej nowej propozycji tworzonej z karty, `material-requirements.service.ts`
+
+### wytyczne
+
+- `schema-pole` `ProductProposal.productName` — pole jest wymagane, więc **żadna ścieżka tworząca propozycję nie ma prawa podać tu `undefined`**. Producent i model wystarczą do zapisu; nazwę handlową składa się z nich (front: `composeProposalName`, backend: `mat-req-proposal-name-fallback`). Wzorzec `x ?? undefined` na wymaganym polu Prismy to nie „pomiń pole", tylko błąd walidacji w runtime
+
 ## 2026-08-23 — fix(materialy): ręczna propozycja zapisuje się od producenta i modelu (v2026.08.23.897)
 
 ### architektura / API

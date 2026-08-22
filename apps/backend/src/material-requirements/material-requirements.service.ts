@@ -628,11 +628,19 @@ export class MaterialRequirementsService {
                     data: { isSelected: true, isManual: true, ...(pn ? { productName: pn } : {}), ...(priceNetto != null ? { priceNetto } : {}) },
                 });
             } else {
+                // @anchor mat-req-proposal-name-fallback — `ProductProposal.productName` jest w
+                // schemacie WYMAGANE, a naturalna droga wpisywania w ProductCard to producent →
+                // model → zapis i nazwę handlową zostawia pustą. `productName: pn ?? undefined`
+                // znaczyło dla Prismy „brak wymaganego argumentu" i cały PATCH karty kończył się
+                // 500 — propozycja nie powstawała, a karta wracała wyzerowana. Nazwę składamy tak
+                // samo jak front (`composeProposalName`): najpierw z katalogu materiałów dla tej
+                // pary producent+model, w drugiej kolejności „PRODUCENT MODEL".
+                const proposalName = pn || material.productName || [mfr, mdl].filter(Boolean).join(' ');
                 await this.prisma.productProposal.create({
                     data: {
                         materialRequirementId: id,
                         manufacturer: normalizeManufacturer(mfr), model: mdl,
-                        productName: pn ?? undefined,
+                        productName: proposalName,
                         isManual: true, isSelected: true,
                         ...(priceNetto != null ? { priceNetto } : {}),
                     },

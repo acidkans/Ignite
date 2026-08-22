@@ -646,6 +646,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-relacja | Supplier.productProposals | apps/backend/prisma/schema.prisma | @anchor supplier-product-proposals |
 | back-funkcja | syncOfferProposalPrice | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-sync-offer-proposal-price |
 | back-funkcja | wybór propozycji przy edycji karty (existingProp) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-existing-proposal-pick |
+| back-funkcja | składanie nazwy handlowej nowej propozycji z karty (proposalName) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-proposal-name-fallback |
 | back-funkcja | zejście oferenta z karty na propozycję | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-supplier-sync |
 | back-funkcja | deduplikacja wyników „Szukaj AI" (dedupKey) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-search-dedup |
 | back-funkcja | syncOfferPriceFromWbsNode | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-sync-offer-price-from-node |
