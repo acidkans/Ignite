@@ -1482,6 +1482,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-kolumna | Koszt całkowity (wycena / zakup / Δ) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-total-col |
 | ui-kolumna | Produkt / zakres | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-product-col |
 | ui-funkcja | exportExcel (widok + podsumowanie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-excel |
+| ui-funkcja | arkusz „Zakupy" w eksporcie Excel (wpisy zakupu + wymaganie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchases |
+| ui-kolumna | Cena ofertowa vs cena zakupu (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchase-vs-offer |
 | ui-input | zakres wpisu (liście bez karty) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-scope |
 | ui-kolumna | Status (WbsNode.status, edytowalny) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-status-col |
 | ui-funkcja | statusLabel (etykieta statusu liścia) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-status-label |

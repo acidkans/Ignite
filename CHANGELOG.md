@@ -1,3 +1,24 @@
+## 2026-08-22 — Arkusz „Zakupy": cena ofertowa i porównanie z ceną zakupu (v2026.08.22.885)
+
+### architektura / API
+- `ui-kolumna` arkusz „Zakupy" — dodano `Cena ofertowa` (`planUnitOf`: karta produktowa, a dla liści bez karty `WbsNode.unitCost`), `Δ jedn.` (`zakup − oferta`), `Δ %` (`Δ jedn. ÷ cena ofertowa`) i `Δ wartość` (`ilość × Δ jedn.`); kolumnę `Koszt jedn.` przemianowano na `Cena zakupu`, `Wartość` na `Wartość zakupu`. Wszystkie porównania to żywe formuły, stopka sumuje wartość zakupu i Δ wartość.
+- wiersz bez ceny ofertowej zostawia komórki porównania puste i nie wchodzi do sumy Δ.
+
+### słownik
+- dodano `realization-export-purchase-vs-offer` — kolumny porównania ceny ofertowej z ceną zakupu w arkuszu Zakupy, RealizationTab.jsx
+
+## 2026-08-22 — Eksport Realizacji: arkusz „Zakupy" z kolumną wymagania (v2026.08.22.884)
+
+### architektura / API
+- `ui-funkcja` `exportExcel` (RealizationTab) — dodano trzeci arkusz „Zakupy": jeden wiersz na wpis `LeafActual`, wyłącznie dla liści kupowanych (materiał, sprzęt, nocleg, paliwo — praca i usługa to wykonanie). Kolumny: Wymaganie, Przedmiot projektu, Pozycja, Typ, Data zakupu, Producent, Model, Kod EAN, Dostawca, Dokument, Ilość, Jedn., Koszt jedn., Wartość (formuła `ilość × koszt jedn.`), Kupujący, Komentarz; stopka z SUM.
+- pierwsza kolumna „Wymaganie" niesie `MaterialRequirement.name` dopasowane do liścia przez `buildCardMap`; liść bez karty produktowej dostaje „—".
+
+### słownik
+- dodano `realization-export-purchases` — arkusz „Zakupy" w eksporcie Excel zakładki Realizacja, RealizationTab.jsx
+
+### wytyczne
+- `ui-funkcja` `exportExcel` — arkusz „Zakupy" rozbija wpisy, arkusz „Realizacja" je agreguje do pozycji; przy zmianie kolumn wpisu aktualizować oba.
+
 ## 2026-08-22 — feat(excel): Podsumowanie per główne gałęzie w analizie projektu (v2026.08.22.883)
 
 ### układ eksportu

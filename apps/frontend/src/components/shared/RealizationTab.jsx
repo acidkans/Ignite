@@ -1285,7 +1285,8 @@ export default function RealizationTab({
 
     // @anchor realization-export-excel — eksport DOKŁADNIE tego, co widać na ekranie: wiersze po
     // wyszukiwarce, filtrach kolumn i sortowaniu, zawężone rolą (praca, usługa, nocleg i paliwo
-    // wchodzą wyłącznie u managera — `visibleTypes`). Drugi arkusz „Podsumowanie" niesie globalne
+    // wchodzą wyłącznie u managera — `visibleTypes`). Arkusz „Zakupy" rozbija to samo na
+    // pojedyncze wpisy zakupu z wymaganiem, do którego są przypisane. Arkusz „Podsumowanie" niesie globalne
     // porównanie wyceny z realizacją, licznik rozliczonych pozycji i rozbicie po typie liścia.
     // Kolumny o prostej relacji arytmetycznej są ŻYWYMI formułami (zasada eksportów Excel):
     // wartość wyceny = ilość × koszt jedn., Δ = zakup − wycena, sumy przez SUM/SUMIF/COUNTIF —
@@ -1301,6 +1302,7 @@ export default function RealizationTab({
             // więc kolejność arkuszy im nie przeszkadza.
             const ps = wb.addWorksheet('Podsumowanie');
             const ws = wb.addWorksheet('Realizacja');
+            const zk = wb.addWorksheet('Zakupy');
             // Waluta w postaci, którą Excel rozpoznaje jako PLN, a nie jako format niestandardowy.
             const FMT_PLN = '#,##0.00\\ [$zł-415]';
             ws.columns = [
@@ -1372,6 +1374,106 @@ export default function RealizationTab({
             // Kwoty jako waluta PLN, ilości bez formatu (ogólne) — jednostka siedzi w osobnej
             // kolumnie „Jedn.", więc doklejanie separatorów do liczby sztuk tylko myli.
             ['pricePlan', 'pricePurchase', 'valuePlan', 'valueReal', 'delta'].forEach(k => { ws.getColumn(k).numFmt = FMT_PLN; });
+
+            // ─ Zakupy ────────────────────────────────────────────────────────
+            // @anchor realization-export-purchases — arkusz „Zakupy": jeden wiersz na WPIS
+            // realizacji (`LeafActual`), a nie na pozycję, i tylko tam, gdzie się faktycznie
+            // KUPUJE — praca i usługa to wykonanie, nie zakup (ten sam podział co `entryNoun`).
+            // Arkusz „Realizacja" agreguje wpisy do pozycji, więc nie da się z niego wyczytać
+            // pojedynczej dostawy: daty, faktury ani ceny konkretnego egzemplarza.
+            // Pierwsza kolumna niesie WYMAGANIE (`MaterialRequirement.name`), do którego zakup
+            // jest przypisany — po nim rozlicza się dostawy wobec zakresu z dokumentacji.
+            // Liście bez karty produktowej (nocleg, paliwo) wymagania nie mają — zostaje „—".
+            const zakupy = [];
+            for (const { node, card, realization: r } of rows) {
+                if (entryNoun(node.type) !== 'zakup') continue;
+                for (const e of r.entries) zakupy.push({ node, card, e });
+            }
+            zk.columns = [
+                { header: 'Wymaganie', key: 'req', width: 34 },
+                { header: 'Przedmiot projektu', key: 'parent', width: 30 },
+                { header: 'Pozycja', key: 'name', width: 34 },
+                { header: 'Typ', key: 'typ', width: 12 },
+                { header: 'Data zakupu', key: 'date', width: 13 },
+                { header: 'Producent', key: 'manufacturer', width: 20 },
+                { header: 'Model', key: 'model', width: 24 },
+                { header: 'Kod EAN', key: 'ean', width: 16 },
+                { header: 'Dostawca', key: 'supplier', width: 24 },
+                { header: 'Dokument', key: 'doc', width: 16 },
+                { header: 'Ilość', key: 'qty', width: 10 },
+                { header: 'Jedn.', key: 'unit', width: 8 },
+                // @anchor realization-export-purchase-vs-offer — cena ofertowa obok ceny zakupu
+                // i różnica między nimi. Ofertowa jest cechą POZYCJI (`planUnitOf`: karta
+                // produktowa, a dla liści bez karty `WbsNode.unitCost`), więc przy kilku
+                // dostawach powtarza się w każdym wierszu — to ta sama baza porównania.
+                // Δ liczona jako zakup − oferta: plus = kupiliśmy drożej, minus = taniej.
+                // Pozycja bez ceny w wycenie zostawia porównanie puste, zamiast udawać −100%.
+                { header: 'Cena ofertowa', key: 'planUnit', width: 14 },
+                { header: 'Cena zakupu', key: 'unitCost', width: 14 },
+                { header: 'Δ jedn.', key: 'dUnit', width: 12 },
+                { header: 'Δ %', key: 'dPct', width: 10 },
+                { header: 'Wartość zakupu', key: 'value', width: 16 },
+                { header: 'Δ wartość', key: 'dValue', width: 14 },
+                { header: 'Kupujący', key: 'author', width: 22 },
+                { header: 'Komentarz', key: 'comment', width: 40 },
+            ];
+            zk.getRow(1).font = { bold: true };
+            zk.views = [{ state: 'frozen', ySplit: 1 }];
+            zk.autoFilter = 'A1:T1';
+
+            zakupy.forEach(({ node, card, e }, i) => {
+                const n = i + 2;
+                const qty = Number(e.qty) || 0;
+                const unitCost = Number(e.unitCost) || 0;
+                const planUnit = planUnitOf(node, card);
+                zk.addRow({
+                    req: card?.name || '—',
+                    parent: getParentPath(node.path),
+                    name: node.name || '',
+                    typ: TYPE_META[node.type]?.label || node.type || '',
+                    date: fmtDate(e.entryDate),
+                    // Producent i model z WPISU, bo druga dostawa bywa zamiennikiem innej marki;
+                    // karta produktowa wchodzi dopiero, gdy wpis ich nie niesie.
+                    manufacturer: e.manufacturer || card?.manufacturer || '',
+                    model: e.model || card?.model || '',
+                    ean: e.ean || '',
+                    supplier: e.supplier?.name || '',
+                    doc: e.docNumber || '',
+                    qty,
+                    unit: node.unit || 'szt',
+                    planUnit,
+                    unitCost,
+                    dUnit: planUnit != null ? { formula: `N${n}-M${n}`, result: Math.round((unitCost - planUnit) * 100) / 100 } : null,
+                    dPct: planUnit != null ? { formula: `IF(M${n}=0,"",O${n}/M${n})`, result: planUnit ? (unitCost - planUnit) / planUnit : '' } : null,
+                    value: { formula: `K${n}*N${n}`, result: Math.round(qty * unitCost * 100) / 100 },
+                    dValue: planUnit != null ? { formula: `K${n}*O${n}`, result: Math.round(qty * (unitCost - planUnit) * 100) / 100 } : null,
+                    author: [e.author?.firstName, e.author?.lastName].filter(Boolean).join(' ') || e.author?.email || '',
+                    comment: e.comment || '',
+                });
+            });
+
+            if (zakupy.length) {
+                const lastZ = zakupy.length + 1;
+                const sumQty = Math.round(zakupy.reduce((s, x) => s + (Number(x.e.qty) || 0), 0) * 1000) / 1000;
+                const sumVal = Math.round(zakupy.reduce((s, x) => s + (Number(x.e.qty) || 0) * (Number(x.e.unitCost) || 0), 0) * 100) / 100;
+                // Δ sumujemy tylko po wierszach, które mają cenę ofertową — pozycja bez wyceny
+                // nie jest „zakupem za darmo ponad plan", tylko brakiem podstawy do porównania.
+                const sumDVal = Math.round(zakupy.reduce((s, { node, card, e }) => {
+                    const pu = planUnitOf(node, card);
+                    return pu == null ? s : s + (Number(e.qty) || 0) * ((Number(e.unitCost) || 0) - pu);
+                }, 0) * 100) / 100;
+                const sumZ = zk.addRow({
+                    req: 'Razem',
+                    qty: { formula: `SUM(K2:K${lastZ})`, result: sumQty },
+                    value: { formula: `SUM(Q2:Q${lastZ})`, result: sumVal },
+                    dValue: { formula: `SUM(R2:R${lastZ})`, result: sumDVal },
+                });
+                sumZ.font = { bold: true };
+            } else {
+                zk.addRow({ req: 'Brak wpisów zakupu w tym widoku' }).font = { italic: true };
+            }
+            ['planUnit', 'unitCost', 'dUnit', 'value', 'dValue'].forEach(k => { zk.getColumn(k).numFmt = FMT_PLN; });
+            zk.getColumn('dPct').numFmt = '0.0%';
 
             // ─ Podsumowanie ──────────────────────────────────────────────────
             ps.columns = [
