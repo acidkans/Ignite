@@ -1,6 +1,6 @@
 # WBS ↔ karty produktowe — stan i co dalej
 
-Dokument przekazania. Stan na **2026-08-22**, ostatnia wersja `v2026.08.22.879`.
+Dokument przekazania. Ostatnia weryfikacja **2026-08-22**, produkcja na `v2026.08.22.894`.
 Punkt wyjścia: ilość wpisana w kolumnie Ilość w WBS wracała po chwili powiększona o cudzą
 alokację (450 → 451). Rozwiązanie tego odsłoniło szerszy problem: kopiowanie liścia niosło
 wskaźnik na kartę produktową źródła, więc dwa węzły edytowały jedną kartę.
@@ -117,22 +117,23 @@ Węzły z ilością w WBS, bez karty i bez obecności w mapie alokacji jakiejkol
 |---|---|
 | `Trasy kablowe BAKS KSC200H120/3` | 40 metry |
 | `cybant` | 120 sztuki |
-| `rura rhdp 25` | 60 sztuki |
+| `rura rhdpe 25mm` | 60 sztuki |
 | `zapinki do cybantów` | 120 sztuki |
 
 Założenie karty tworzy wiersz z ilością — **wymaga zgody użytkownika**.
 
-### 3.2 Pięć kart z ilością rozjechaną z gałęziami
+### 3.2 Jedna karta z ilością rozjechaną z gałęziami
 
 | pozycja | karta | suma gałęzi |
 |---|---|---|
-| `cybant` | 351 | 675 (325 + 350) |
-| `łączniki tras kablowych  LKUSPH120` | 41 | 80 (40 + 40) |
-| `drabinka kablowa` ×3 | 3 | 1 (każdy węzeł ma 1) |
+| `łączniki kątowe  tras kablowych ` | 41 | 80 (40 + 40) |
 
-Przy pierwszych dwóch to resztka starej sumy `1 + …`. Przy drabinkach odwrotnie: karta trzyma 3
-z pozycji źródłowej, węzły mają po 1. Cztery inne karty zbiorcze są poprawne (`zapinki` 675,
-`konstrukcja pod RRH` 9, `mufa łącząca rhdp` 38, `mufa światłowodowa` 2).
+Resztka starej sumy `1 + 40`. Pozostałe cztery rozjazdy węzeł↔karta w AMP_5G są **poprawne** —
+to karty zbiorcze, których ilość równa się sumie gałęzi: `zapinki do cybantów` 675,
+`konstrukcja pod RRH i antenę` 9, `mufa łącząca rhdp` 38, `mufa światłowodowa 48j` 2.
+
+Pierwsza wersja dokumentu wymieniała tu jeszcze `cybant` i trzy `drabinki kablowe` — użytkownik
+poprawił je sam, wpisując ilość ponownie na wierszu WBS.
 
 Najprostsza droga bez skryptu: wpisać ilość ponownie na wierszu WBS — kaskada
 `syncMaterialsFromWbsNode` przepisze ją na kartę.
@@ -147,10 +148,10 @@ produkcji zostaje nietknięty (316 materiałów, 106 z ceną, 47 z nich równych
 pozycji) — to zmiana na przyszłość, nie migracja. `material_stock` jest puste, więc jedyny czytelnik
 tej ceny (QuickQuote `addStockItems`) i tak nie zwraca dziś żadnej pozycji.
 
-**Puste `.catch(() => {})` przy `material.update` w gałęzi katalogowej `update()`.** Cichnie każdy
-błąd zapisu pól katalogowych. Ta sama klasa błędu co martwe `syncAllocationsToRelational` —
-zostawione świadomie, bo zdjęcie zamieni dzisiejsze ciche pominięcie w 500 dla użytkownika;
-najpierw trzeba wiedzieć, co tam realnie pada.
+~~**Puste `.catch(() => {})` przy `material.update`.**~~ **ZROBIONE w v894** — nie throw, tylko
+`logger.warn`. Zapis pozycji dalej nie wywraca się przez błąd pól katalogowych, ale przestaje
+milczeć. Po tygodniu warto zajrzeć w logi backendu (`docker logs erp-backend | grep 'pol katalogowych'`)
+i zobaczyć, czy tam cokolwiek pada.
 
 **Auto-propagacja `technicalSpec`.** `update()` wpisuje spec do wszystkich kart o tej samej nazwie
 w projekcie, które mają puste pole. Jedna edycja dotyka cudzych wierszy — wbrew zasadzie

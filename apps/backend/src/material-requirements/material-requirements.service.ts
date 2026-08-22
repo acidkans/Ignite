@@ -666,7 +666,13 @@ export class MaterialRequirementsService {
                     if (dataSheetUrl !== undefined) { matPatch.dataSheetUrl = dataSheetUrl; matPatch.dataSheetName = dataSheetName ?? null; }
                     if (complianceUrl !== undefined) { matPatch.complianceUrl = complianceUrl; matPatch.complianceName = complianceName ?? null; }
                     if (Object.keys(matPatch).length > 0) {
-                        await this.prisma.material.update({ where: { id: req.materialId }, data: matPatch }).catch(() => {});
+                        // Błąd zapisu pól katalogowych NIE wywraca zapisu pozycji — kartę zapisujemy
+                        // dalej. Ale musi zostawić ślad: pusty `.catch(() => {})` w tym pliku ukrywał
+                        // przez pół roku martwe `syncAllocationsToRelational` i to on przekierował
+                        // zapis ilości w złą gałąź. Cisza jest gorsza niż log.
+                        await this.prisma.material.update({ where: { id: req.materialId }, data: matPatch })
+                            .catch((e) => this.logger.warn(
+                                `[mat-req ${id}] zapis pol katalogowych na Material ${req.materialId} nieudany: ${e?.message}`));
                     }
                 }
             }

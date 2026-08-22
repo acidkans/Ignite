@@ -799,9 +799,16 @@ model MaterialRequirement {
   /// @anchor mat-req-wbs-node-id
   wbsNodeId          String? @unique // FK do wbs_nodes — karta produktowa przypisana do węzła WBS (1:1)
   /// @anchor mat-req-wbs-node-ids
-  wbsNodeIds         String? // @deprecated JSON array UUID węzłów WBS (wielowybór) — zastąpione przez WbsNodeMaterial
+  /// ŻYWE, mimo dawnej adnotacji „deprecated": JSON array UUID węzłów WBS. Migracja do
+  /// `WbsNodeMaterial` nigdy nie została dokończona — frontend nadal to pole zapisuje i czyta
+  /// przy dopinaniu wymagania-sieroty do węzła.
+  wbsNodeIds         String?
   /// @anchor mat-req-wbs-node-allocations
-  wbsNodeAllocations String? // @deprecated JSON: {nodeId: quantity} — zastąpione przez WbsNodeMaterial.quantity
+  /// ŻYWE i CZYTANE: JSON {nodeId: ilość} — rozbicie pozycji na kilka gałęzi WBS. Ilość
+  /// wymagania to SUMA tej mapy, a każdy węzeł trzyma swój udział; właścicielem przez relację
+  /// 1:1 `wbsNodeId` jest tylko jeden z nich, więc brak karty na gałęzi wtórnej NIE jest błędem.
+  /// UWAGA: na `WbsNode.quantity` nigdy nie zapisuj SUMY — patrz `nodeShareFromDto`.
+  wbsNodeAllocations String?
   /// @anchor mat-req-is-ai-assigned
   isAiAssigned       Boolean @default(false) // true = przypisane przez AI, false = ręcznie
   /// @anchor mat-req-ai-confidence
@@ -1272,6 +1279,10 @@ model WbsNodeMaterial {
   /// @anchor wbs-node-material-wbs-node-id
   wbsNodeId  String
   /// @anchor wbs-node-material-material-id
+  /// UWAGA: trzyma `materials.id`, NIE id `MaterialRequirement` — mimo że wiersze opisują
+  /// rozbicie pozycji na gałęzie. Po migracji `ce75dbe` dwa miejsca w `material-requirements`
+  /// nadal podawały tu id wymagania: zapytania zwracały 0 wierszy, a zapisy leciały na klucz
+  /// obcy pod pustym `.catch`. Zapytanie z poziomu wymagania idzie przez `req.materialId`.
   materialId String
   /// @anchor wbs-node-material-quantity
   quantity   Float  @default(1)

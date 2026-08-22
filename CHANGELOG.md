@@ -1,3 +1,19 @@
+## 2026-08-22 — fix(materialy): cichy błąd zapisu produktu katalogowego zostawia ślad (v2026.08.22.894)
+
+### architektura / API
+
+- **`material.update` w gałęzi katalogowej `update()` loguje błąd zamiast go połykać** — `.catch(() => {})` zamienione na `.catch(e => logger.warn(...))`. Zapis pozycji nadal nie wywraca się przez błąd pól katalogowych, ale przestaje milczeć. To ta sama klasa błędu, która przez pół roku utrzymywała martwe `syncAllocationsToRelational` i przekierowała zapis ilości w złą gałąź
+
+### schema.prisma
+
+- opisano `MaterialRequirement.wbsNodeIds` i `wbsNodeAllocations` — zdjęta myląca adnotacja `@deprecated`. Migracja do `WbsNodeMaterial` nigdy nie została dokończona, oba pola są żywe i czytane; `wbsNodeAllocations` jest źródłem prawdy dla rozbicia pozycji na gałęzie
+- opisano `WbsNodeMaterial.materialId` — trzyma `materials.id`, NIE id `MaterialRequirement`. Bez tego rozróżnienia dwa miejsca w `material-requirements` pytały złą przestrzeń id: zapytania zwracały 0 wierszy, zapisy leciały na klucz obcy pod pustym `.catch`
+
+### wytyczne
+
+- `schema-pole` `MaterialRequirement.wbsNodeAllocations` — pole opisuje ROZBICIE pozycji na gałęzie WBS. Ilość wymagania to SUMA tej mapy, każdy węzeł trzyma swój udział, a właścicielem przez relację 1:1 jest tylko jeden z nich. **Brak własnej karty na gałęzi wtórnej NIE jest błędem** i nie należy jej tam zakładać
+- `back-serwis` — `.catch(() => {})` przy zapisie do bazy jest zakazane. Gdy błąd nie ma wywracać operacji, łap go do `logger.warn` z id rekordu. Ciche pomijanie zapisów ukryło w tym projekcie dwie niedokończone migracje
+
 ## 2026-08-22 — Eksport tabel oferty: czytelność arkuszy Plan działania / Oferta / Q&A (v2026.08.22.891)
 
 ### architektura / API
