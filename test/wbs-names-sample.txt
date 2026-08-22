@@ -1,0 +1,855 @@
+de63abd9-c905-4f16-9b7b-f4482914dba8|paliwo
+901fd897-98d3-4dae-a039-d491ba4d0e7b|OPCJA1 DELTA-Dostawa i uruchomienie urządzenia UPS o parametrach nie gorszych niż  Galaxy VS 120 kW 400V wraz z modułami akumulatorowymi pozwalającymi zapewnić czas podtrzymania zainstalowanych urządzeń w szafach rack min 1 godzina.  Opcja zamienna z pozycją powyżej
+76ce10ca-6c47-411a-b848-4023635a6c10|instalacja  UPS Galaxy 
+06b1b76d-54e5-4e8c-a670-b3b611e275f8|podstawy bezpiecznikowe 
+b5500607-848e-4c20-a8d3-271517073fec|Wzmocnienie podlogi pod UPS Delta i rack z bateriami
+66df9d69-228d-4305-a131-2829c507f8e2|Wzmocnienie podlogi pod UPS Galaxy i rack z bateriami
+f384c718-c68f-40c5-8b69-1f0262d8ca5b|instalacja wzmocnienia podłogi technicznej pod UPS Galaxy
+e2d05bf0-deb2-43e2-974b-874fa075dc7d|paliwo
+eae555c9-d2c8-4130-bf87-5b1c5edd18c2|wizja lokalna pod konstrukcje wsporczą UPS Galaxy
+732ff326-3b1a-4aa4-9b4a-961037702ee2|kable zasilające z szafy SZR do UPS i UPS do bypass
+df1fcfb6-6c81-44f0-bfba-7c42167c617b|paliwo
+1dfa919e-2823-41a6-86e7-40620add7e18|przeciągnięcie 2 linii WLZ do serwerowni
+16d40b74-068d-4de1-a92f-97b0f05b06dc|Paliwo
+a8a088e4-ea1b-48e2-a009-afd99b7e616a|UPS Delta
+a355422f-1edb-45f9-8838-e524bcbe4b71|Dostawa i uruchomienie analizatorów mocy i jakości energii (U/I/cosφ/THD, alarmy, inegracja z systemem BMS)
+2924399f-86d7-492c-82c6-f2a7e7710692|Rozbudowa układu zasilania do konfiguracji dwutorowej
+723a7be0-2ae7-4bd6-98ee-959a627eeea5|instalacja, konfiguracja modułu sterującego pracą naprzemienną
+ad17e2e0-e2c3-43e7-972a-f6b3600b126a|Dostawa i uruchomienie sterownika pracy naprzemiennej klimatyzatorów zainstalowanych w pomieszczeniu serwerowni
+ac42c4d2-9258-4e2e-aa93-7fb4428f662e|Projekt ukladu SZR
+8cedb4fe-d7df-4799-b545-fe2594977a69|paliwo
+2beebc48-aa70-434f-a6a5-7c8432662180|paliwo
+abcb7091-bfbc-4413-a094-a714cb18edb3|instalacje LAN (miedziane, światłowodowe)
+8a9831fe-1bc1-4faa-bc6b-613daad3ac1f|Paliwo
+6d38e9e6-e1c9-4daf-966e-99bc2f84272e|instalacje elektryczna
+1090b0c0-c619-4300-8cf6-dfd5a0a9d87f|koordynacja
+c59ac8c7-ee87-4590-814b-da7ea7a16c9c|konfiguracja BMS
+ccb5d4f3-cc0a-4bd5-86fc-188f3e4a603f|przedłużenie koryt kablowych
+122d3fc6-9b83-493d-aae7-1e2b1e5249f6|analizator mocy
+c45856f9-7376-4409-b5c4-ffe2797fd85c|instalacje LAN (miedziane, światłowodowe)
+8130bac7-13dc-49ca-b7cd-cb4b7b05bcb4|Paliwo
+ca4a46f5-debb-4b3d-93c2-d12a8d845aed|OPCJA-Dostawa metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+2f7b5553-0563-440b-a24c-41e170030c1a|instalacja Kamera Avigilion 
+22083c4b-5f5a-4552-8dde-e8ef8af472ff|paliwo
+ba89e0a1-e1e9-47a2-878f-ff4cc6733a06|wizja lokalna pod rozbudowę elektryczną
+c490a1ec-bc07-45f3-bb82-203e5263d30c|paliwo
+18b6a804-eb2f-4aad-9782-4202bb08a92a|OPCJA1 DELTA-Dostawa i uruchomienie urządzenia UPS o parametrach nie gorszych niż  Galaxy VS 120 kW 400V wraz z modułami akumulatorowymi pozwalającymi zapewnić czas podtrzymania zainstalowanych urządzeń w szafach rack min 1 godzina.  Opcja zamienna z pozycją powyżej
+80d7e5a0-b368-415f-9853-5aed51b81483|arrot do kabla
+f6301db8-bbcb-477c-8643-7af16293d774|OPCJA-Prace budowlane
+9e39a46b-8e09-471e-82e5-08408be2ef79|Postawienie ścianek działowych i wydzielenie pomieszczenia magazynowego
+f1179715-a7a5-4441-9770-b93e0f7da02e|instalacja wzmocnienia podłogi technicznej
+f7def674-c826-416e-b98e-aa3ef1b4cb2b|Uporządkowanie i inwentaryzacja okablowania pod podłogą techniczną oraz korytach kablowych nad szafami wraz z uzupełnieniem oznaczeń
+ce49fbfa-3f19-4af8-a5d4-469ea6c236dc|Zabezpieczenie ostrych krawędzi i uszkodzeń koryt kablowych
+cb67a9d2-8346-46f1-9980-1bb9ccaca92c|osłona gumowa krawędzi korytek
+76ebd7bc-5002-452a-b21e-ddb3cd968675|piasek
+f50d1046-61cf-4552-89ef-4c8992f06131|SZR
+65f253bb-51b6-4ca1-ac92-099409b2fb46|instalacje ppoż
+0f8faf65-f01e-45d0-a14b-1742671564d9|Instruktaż
+f1502274-1241-4154-8447-4109e6cc7d68|montaż zabezpieczeń krawędzi koryt kablowych
+02c66f9e-eeb8-4348-9b81-be9dc83cd820|przepięcie zasilania na nowe linie
+5bb3bd2f-5e95-4736-946b-96f188f6a2d2|Uzupełnienie połączeń wyrównawczych koryt i szaf RACK
+a0041a6b-ea3e-42a8-bfbd-381407bec40a|paliwo
+88c3667a-41fe-4b5f-9013-bcb50d67f39a|Przegląd (inwentaryzacja), uszczelnienie i oznaczenie wszystkich przejść PPOŻ (uzupełnienie masy, usunięcie pianek montażowych, etykiety),  Doposażenie drzwi w samozamykacz i uszczelkę samoopadającą,  Integracja systemu VESDA z SUG,  Opracowanie procedury reagowania na alarm VESDA / SUG
+5d73a40d-d1ab-407a-8d13-0c626cb68c39|paliwo
+7388a76d-ef60-4d63-9347-b980d8845f98|instalacja UPS  DELTA
+74826e2d-1ba9-4936-97e7-21f3c5343e4c|OPCJA-elementy do osadzenia słupków
+9614318c-7f06-4643-9c8e-ccd61407a80f|Wzmocnienie podlogi pod UPS Delta i rack z bateriami
+2345f625-2ffe-4a7d-8d17-23aa24c8e51b|instalacje elektryczna
+c6b0cac1-e1d6-4f4f-8c8b-7bbacf299f45|Wciaganie kabla do rur osłonowych 
+6fe40c6d-d4a2-47d2-90ee-86959d3b474d|Studzienka SK2
+a8b9346b-b12b-4f4a-88e0-b98aba3f2abd|Dostawa i uruchomienie analizatorów mocy i jakości energii (U/I/cosφ/THD, alarmy, inegracja z systemem BMS)
+aacead37-e908-41d5-8954-1cf8957bd424|instalacja linii zasialającej dla centrali wentylacyjnej
+75afd6d1-fb41-4746-a301-74804a686031|Dokumentacja powykonawcza
+5bca341b-5062-457d-802a-e5590356bdf3|Pytania Ogólne
+faedcbf4-f61c-4927-ad38-51d3e9c3b5f8|Klimatyzator Fujitsu
+bb21deef-1cb2-4b99-9335-ec5b6b6f18f4|Kanały wentylacyjne okrągłe spiro
+f72ee7f3-eba7-4dca-a8fa-6dd3468a9d3b|Dostawa i uruchomienie sterownika pracy naprzemiennej klimatyzatorów zainstalowanych w pomieszczeniu serwerowni
+67307cab-c17c-4083-8041-b192353faf47|OPCJA-kotwy
+4dda9e9e-7c56-429b-8837-fea97aab2e07|Wykop pod kable 
+cdc0ea56-2fd8-4fa0-88d5-7162e6423cad|Układanie rury 160 w gotowym wykopie 
+44204c7e-6217-4681-af2c-8504443f591f|kabel zasilający 2x( 5x 1x2401x240mm)
+9661850b-3c62-435a-a177-bdea2a137d08|paliwo
+4f93cdc5-4c6e-4de8-867b-5eab7e189945|Zaprojektowanie i wymiana WLZ na większy przekrój, dostosowany do mocy UPS 120 kW
+a3477b6f-b283-4ac7-85ad-7c181d912de2|kable zasilające z szafy SZR do UPS i UPS do bypass
+c4f6a1de-3ecc-4a13-84bf-84bfd2c820f4|Projekt trasy WLZ
+5e3aab38-3c60-490a-9e97-2f353504bbb1|instalacje elektryczna
+4eef4909-a706-46aa-b993-ad635ed31b15|potrójny rozlącznik  400A
+7d52ac72-4d69-4064-ac01-0df3dc6adf12|Bypass
+17c1ca75-4fda-48f7-b9f2-6a50eca8051b|instalacje BMS
+9911b5af-48a0-4e6b-a93d-3a32a92e6d8d|montaż zabezpieczeń krawędzi koryt kablowych
+9da54983-bf4f-47db-b015-9fc276cc6609|instalacja linii zasialającej dla klimatyzatora Fujitsu
+880fd979-7287-4ef3-9e0e-785c098e5a00|analizator mocy
+515ba1a0-5ce4-4351-8052-704c2e8e0df7|instalacje ppoż
+697d478b-8e3c-4844-bebd-2990be9b2e03|instalacja, konfiguracja modułu sterującego pracą naprzemienną
+810e9b0b-7c5c-4803-abc0-6e4fd0fa0785|instalacje HVAC (klimatyzacja,wentylacja)
+2d5fc817-7e19-4a97-993e-0874c53b52a4|paliwo
+24deae4f-c278-4076-9693-94bce457a38e|paliwo
+8b68415f-af6f-450c-9bc4-a743bcd5506e|Przewiert 6x160
+ef043a52-4e3e-4c25-bd70-e07cec9ff623|kabel 5x4
+18938f83-e656-4e7b-be1b-fac639232a2f|Geodeta
+9ee14b1f-072a-4f4d-a9e4-99cc9a59f2a6|Centrala wentylacyjna
+57d7cf05-9bd0-48c5-b1b1-7f63a25ec4e5|Prace porządkowe pod podłogą techniczną (usunięcie kurzu i innych elementów luźnych/zbędnych)
+9069363c-7d3b-4f9b-9295-3d73210e81fa|montaz nowej szafy SZR
+ab938939-005c-45cd-9502-f5c19ce6fb52|Zaprojektowanie, dostawa i wdrożenie systemu BMS/centralnego monitoringu dla zasilania + UPS, klimatyzacji, PPOŻ i czujników środowiskowych (temperatura,wilgotność). W zakresie integracja z poszczegolnymi systemami
+5b881bf8-a581-48f8-b1de-e616cbb0a689|Pomiary nowych linii WLZ
+a1b38249-e106-4d3a-978f-5d612afc6c73|skrzynkowy rozlącznik RBK
+8066794e-aeae-44c9-b3e0-a3185937c977|Montaż całego systemu systemu wentylacji
+ae397945-1e80-464f-b48c-13b742eaac40|Projekt konstrukcji wzmacniającej podłogę
+1b71ec7f-724b-4c89-b81d-7f544b7f2671|Weryfikacja oraz integracja systemów VESDA z centralą SCHRACK
+aa46bfcf-ec07-4b1b-86ec-8b074b120401|sprzęt BMS
+3304817e-e87b-4f77-ad22-3939a048cb92|gniazdo natynkowe
+1c4b3e84-201d-463a-9e86-5e00d51c19b7|Zaprojektowanie, dostawa i uruchomienie systemu wentylacji pomieszczeń serwerowni. System dodatkowo ma zapewniać możliwość przewietrzania pomieszczeń po akcji gaśniczej.
+30821db6-6445-48fe-babf-9f04768648a2|Instruktaż
+39f02c9c-015a-4fed-b29c-38387b501ead|przedłużenie koryt kablowych
+573d875c-fa81-4c60-8c4b-ee7a1e4be516|Dostawa i montaż paneli maskujących 19” 1-4U (sumarycznie 190U) do montazu w wolnych przestrzeniach RACK oraz przepustów szczotkowych (30szt)
+d41767aa-a863-49ee-823f-941746ca3b57|instalacje LAN (miedziane, światłowodowe)
+6ea7cc71-479f-4784-be34-ce60741922b4|Uzupełnienie połączeń wyrównawczych koryt i szaf RACK
+872d58c2-1e70-4397-bc0a-f41d1ec2ae48|oczka kablowe 4-6/16 do polączeń wyrównawczych
+0c8ef490-1b2b-43d8-b5fc-718fecf3a57a|Uporządkowanie i inwentaryzacja okablowania pod podłogą techniczną oraz korytach kablowych nad szafami wraz z uzupełnieniem oznaczeń
+d7a26836-aff0-4f67-a7d4-059d18b165b7|analizator mocy
+7b8d73b0-7781-42cd-8bdb-3a09ae278d37|instalacja, konfiguracja modułu sterującego praca naprzemienną
+d3fddb78-7f8b-4e83-8ef5-a7851de9bb02|paliwo
+68f9f9eb-fd75-4bf0-85b0-8302bc59b5af|montaz nowej szafy SZR
+722c418c-bed2-4c63-bfe2-417647fca0c1|układanie kabla w kanałach energetycznych 
+ef8e6ca2-9298-4311-b654-e38d2a98f75f|prace przygotowawcze do instalcji BMS 
+6f241b97-c5d9-4706-b64a-18591a439b2f|instalacja PDU, paneli porządkujących
+b38064fd-2900-4c6f-8297-477d3eb30d3d|Zasypanie i zagęczczenie wykopu
+d738115d-ee85-4560-b9a1-b15162269e49|końcówki kablowe oczko 10  na kabel  240mm
+e2cfde6c-92c2-4819-baaf-5a2e82fe567d|Zabezpieczenie ostrych krawędzi i uszkodzeń koryt kablowych
+b42593e5-4f9d-40a0-ac3d-6f447467b5a1|instalacja analizatora
+e1ff4abf-f53b-40de-aa6e-47be00618a01|korytka siatkowe i światłowodowe
+954cb7dc-baed-4d1b-adbf-a75a229edd8c|instalacja racka Galaxy
+979479eb-95fc-4bf3-9bd4-ab6b48968177|Doposażenie drzwi serwerowni w samozamykacze
+45e05213-eb0f-451b-8d0c-6b1a500be782|Przewiert 170 i wprowadzenie rury 160
+b432bf0b-e362-4b63-aa43-020502969f1b|szafa Schneider
+af55a3a5-431a-4a05-8bee-90e84e3a2b35|paliwo
+69434952-04ee-47d2-bb36-a6084ef2b964|Powykonawcza dokumentacja elektryczna
+8a95c01d-6eec-4b2b-bd77-5ee0a5384478|bloki rozdzielcze
+9b99a8c4-d735-4123-9935-e96fd4eefb3e|Pytania Ogólne
+a556c3b3-52db-4d14-a1ff-c6f430117174|Montaż studni SK2
+37e0cf53-0e93-431a-856c-f97575488db3|Wzmocnienie podlogi pod UPS i rack z bateriami
+237b88a2-9e38-4f01-b515-fb6d83f77326|Projekt konstrukcji wzmacniającej podłogę
+640aa23b-02d9-4376-9f87-c06677d44abf|Przygotowanie harmonogramu prac z wyszczególnieniem terminu realizacji
+55620461-bedb-4cd9-a9f2-23bcf6c6cfe8|SZR
+0b5b7e59-9151-4f92-9480-419b133772c1|koordynacja 
+1ecb59ea-dfad-4adc-a76c-5d22a625e897|moduł sterujący z montażem
+8349d121-8d5f-4553-8330-7fc150caf248|paliwo
+0de2b7be-cccc-47b1-91d0-ef8d94de72ca|drabinka baks pelna
+f56f73c8-3a30-4b27-b9f4-61533f675aac|Doposażenie drzwi serwerowni w samozamykacze
+aeb4bcc4-efd3-4c09-baed-61c5f938032b|OPCJA-Optymalizacja rozmieszczenia i pracy klimatyzatorów (demontaż i montaż w nowym miejscu)
+7c988713-8648-433a-a49c-eba752c28ded|OPCJA-Dostawa i montaż klimatyzatora Fujitsu (dotyczy pomieszczenia UPS/techniczne)
+7a6a8e07-e549-4a6b-88e4-fee2c158891e|paliwo
+cd0d4ce1-ef7e-4c6c-a227-dddbc8e2ebcc|prace wykończeniowe po instalacji klimatyzatora Fujitsu
+689694cd-7f99-4be8-8165-7b3330a6876f|Przygotowanie harmonogramu prac z wyszczególnieniem terminu realizacji
+cb0c3a4b-63ad-4825-b781-24bb2d3ba3d9|Montaż tac ociekowych pod klimatyzatorami,
+79164912-246d-4cd9-b783-125034512824|osłona gumowa krawędzi korytek
+f1365b00-63f7-4b94-803f-3a6b4457e807|kabel gnd do polączęń wyrównawczych
+26d73983-afab-44f6-8902-070e411f22f7|instalacja analizotora
+b4e0dce4-6cbb-4ceb-a488-a6f57b63ec8d|Panele maskujące 2U
+9150a073-b6f5-4f1a-9a7f-f02f15c7f0fe|OPCJA-paliwo
+cd594b0d-4ee0-4582-94e3-72796bc2ec5b|instalacja wzmocnienia podłogi technicznej
+38732d23-5e15-4d7f-8fe5-ab30f0e7d574|konstrukcja stalowa do wzmocnienia podłogi technicznej pod UPS i rack bateryjny
+a6e23b74-1612-4f84-8836-a32693853883|baterie
+ac342f38-3b29-46c3-9b5f-f8ec3a29299d|Weryfikacja oraz integracja systemów VESDA z centralą SCHRACK
+670dbfe6-b0dd-4e1c-abe0-102fd0d8fbac|OPCJA-Dostawa metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+0bb91fc8-cbaf-438f-b3cd-9db154bb3251|OPCJA-montaż ogrodzenia
+7a80ddf0-844f-400a-9ce5-d71ecc94765e|OPCJA-Ogrodzenie modułowe serwerowni
+8968eb52-a6d4-4e17-8baa-2f44d394c902|RHDPE 160 grubościenna 6m
+e41ad207-b38e-422b-accb-d73231688cd3|wynajem rozwijaka 
+f92d0377-e074-4c25-af9d-8cbaae9f4a13|Dostawa i instalacja Szafa Easy Rack z dachem, panelem bocznym, kółkami, nóżkami i 4 wspornikami, bez podłogi,organizery kablowe, czarna (model i wyposażenie identyczne jak pozostałych szaf zainstalowanych obecnie w serwerowni) - podanie modelu szafy
+0d398a06-a358-450e-b633-c80210f0b457|potrójny rozlącznik  400A
+3c344f41-99a6-40be-8ff5-b98d4fc4acd0|OPCJA-Dostawa i instalacja Kamera Avigilion 6.0C-H6A-BO1-IR + licencje ACC7 - ENT
+1c91548c-175c-4be8-b93d-abc52b438f85|montaz nowej szafy SZR
+0577649c-9193-4a55-a830-7b4ac1bca641|OPCJA-Prace budowlane
+415f0b62-826e-41ab-88a7-5a9f21f95937|Projekt konstrukcji wzmacniającej podłogę
+4b4c05a5-db37-446e-bc5d-d77f838bbfe4|Wzmocnienie podlogi pod UPS i rack z bateriami
+d8eba843-00fe-4458-822d-0b2d8a41d422|Wciaganie kabla do rur osłonowych 
+eeae25ac-7e87-458d-ae17-ec5725abcaad|koordynacja 
+8fb788df-1888-4b47-a185-b8d87ef25278|UPS Delta
+2ac2e98c-3e8e-41f2-a692-a703b4d5b801|Projekt ukladu SZR
+2521333f-0a24-407c-89d1-8a0a30d42e68|koordynacja
+147005ea-8a9d-46dd-8b19-acd1bc555413|OPCJA-montaż metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+a8e79409-d9f7-462d-a784-69ffe344f4ea|Paliwo
+8bfb4a64-89d8-4edf-9487-82501e4e41b1|kabel gnd do polączęń wyrównawczych
+ac7f3f0b-55b7-48ea-8b00-4fcd71b1172f|Modernizacja rozdzielni głównej serwerowni (dostosowanie do nowego WLZ), Zapewnienie selektywności zabezpieczeń
+1472f457-11ee-404e-b939-d200d83a83e5|paliwo
+4440b421-ba2d-4502-a7ab-e8729465d894|UPS Delta
+eccecd90-542e-4e97-8a7f-6923eace6fc7|kabel lan
+f7fd9d06-16c4-4a2c-b0ed-8e6ba8c40ed7|Przygotowanie harmonogramu prac
+98ab4e5d-9e92-46e4-92ef-0a75032952cc|łączniki arrota
+a64492fa-0e74-4204-b3f0-11d70444d472|paliwo
+d9d04de8-7d14-4837-ab62-23decfc485a9|paliwo
+1c0194b2-93ba-41f9-9132-6ce4968f1fe3|kabel zasilający UPSy (L1,L2L3,N,PE) 1x120mm
+4d946aca-4b23-4c79-a612-12198b605617|instalacja Kamera Avigilion 
+ac62702f-bcb9-465c-8cca-54a944add98b|Instruktaż konfiguracji i obsługi zainstalowanego w ramach niniejszego zadania w serwerowni sprzętu i wyposażenia
+dbb02095-1b5c-429d-bad0-a7629f835785|Dostosowanie koryt kablowych nad szafami rack (dotyczy nowo instalowanych szaf)
+f6297951-83af-4a68-b2aa-fb161ec5fac7|OPCJA- Poprawa orurowania skroplin (izolazja rur, montaż grzałek przeciwzamarzeniowych, korekta spadków rur)
+3b268886-f682-4a76-a006-d667832d2e36|Postawienie ścianek działowych i wydzielenie pomieszczenia magazynowego
+be42fc24-92e1-4984-8cb6-cf9bc0179930|przedłużenie koryt kablowych
+7d42f554-ecc6-4539-9150-ba5ef3fc3b79|drabinka baks pelna
+f5022c27-d7f4-4fbf-bd5c-6526578d132b|sprzęt BMS
+902b2119-86e1-49d4-b72f-ea97bdee1136|złączki uziemienia do korytek siatkowych do polączeń wyrównawczych
+19766b24-6957-49bd-be1e-f981ec98414f|montaż BMS
+9d6ead0a-e151-4afe-86d7-8c7009a3e407|szyna miedziana 120mm
+930f5ee2-af6f-4dae-bcd1-d2aedf741dc0|instalacja  UPS Galaxy VS 120 kW 400V wraz z modułami akumulatorowymi
+0c907481-8355-44a3-8c60-bccdb9691f76|montaz klimatyzartora Fujitsu
+60b8ab4e-9bdf-4325-9e1d-3f0634e66f00|montaż połączeń wyrównawczych
+10455d02-3131-43ad-8493-32d5b53c40c1|opcja: istalacja koszyków montażowych do szaf rack 
+5066da0e-0cf9-4f55-b1d9-e67c3aa91845|konstrukcja stalowa do wzmocnienia podłogi technicznej pod UPS i rack bateryjny
+8ea3f1e2-8c81-4be1-aa9f-517cf4a77a1e|Uszczelnienie i oznaczenie przejść instalacyjnych PPOŻ
+94dc201b-3053-43c8-a037-208e5918dd37|Rozbudowa systemu przeciwpożarowego Schrack o driver komunikacyjny  Modbus 
+d6083581-d8fb-4af4-9e84-23be3b744eff|paliwo
+98abf048-aa14-40ac-81a0-74a8a49429c0|instalacja  UPS Galaxy 
+0b9f301c-60e0-4944-bece-27a5eddda8a5|moduł sterujący z montażem
+f05e6778-0f27-403b-9281-74f67cbef10d|kabel lan
+718f7d0f-1ad9-4583-94b7-d21e2d9749df|wsporniki 3P do szyny zbiorczej
+b262009e-4be4-44e9-be08-988f97c8e9aa|Dokumentacja powykonawcza
+50c45ba8-a650-4bec-b8ca-bc11a739ab6a|Rozbudowa układu zasilania do konfiguracji dwutorowej umożliwiająca automatyczne/ręczne przełączenie źródla zasilania dla poszczególnych torów zasilających np.UPS1/UPS2/Zasilanie z przed UPS 
+06c4a63b-bf19-4b50-88cd-53435d2c3d09|Powykonawcza aktualizacja schematów
+c58af761-2028-4b44-8551-234493be8174|analizator mocy
+4c68887d-ed3d-45bb-b723-35227cbc47df|korytka siatkowe i światłowodowe
+dfc12faf-69da-4484-b83e-e4b4cbfa7537|Dostawa i montaż paneli maskujących 19” 1-4U (sumarycznie 190U) do montazu w wolnych przestrzeniach RACK oraz przepustów szczotkowych (30szt)
+023fb73f-038c-48d4-93eb-06f2034fb47c|Dostawa i uruchomienie analizatorów mocy i jakości energii (U/I/cosφ/THD, alarmy, inegracja z systemem BMS)
+ed34edba-7c0e-450c-b2ae-8d43ebdbdbd7|Bypass
+d7e72aa3-56f4-47f6-8fc4-1eb39dd2e6ac|drabinka baks pelna
+e06b058f-9c92-4704-9292-c405053bbb25|instalacja UPS  DELTA
+2b14c4e8-d982-40f3-a537-1efab072f152|Wykonanie dokumentacji powykonawczej uwzględniającej między innymi: 
+5e6ad898-1b4c-4384-b74c-c05bb03c695b|Modernizacja rozdzielni głównej serwerowni (dostosowanie do nowego WLZ), Zapewnienie selektywności zabezpieczeń
+65dc5c9b-0e3e-4496-af79-7681f4819bd2|paliwo
+36197fd1-781a-4a02-ad19-ffe221883092|instalacja  UPS Galaxy 
+705dd5b6-dd8e-48fc-810c-08b25e5d9361|Dostawa i uruchomienie sterownika pracy naprzemiennej klimatyzatorów zainstalowanych w pomieszczeniu serwerowni
+b2f769f4-3a65-4901-bdb4-75ea6e410882|Zaprojektowanie, dostawa i wdrożenie systemu BMS/centralnego monitoringu dla zasilania + UPS, klimatyzacji, PPOŻ i czujników środowiskowych (temperatura,wilgotność). W zakresie integracja z poszczegolnymi systemami
+8293d419-b1ec-4f32-bde4-99524cc37745|Zaprojektowanie, dostawa i uruchomienie systemu wentylacji pomieszczeń serwerowni. System dodatkowo ma zapewniać możliwość przewietrzania pomieszczeń po akcji gaśniczej.
+36aae42a-1268-424b-970b-e925458026f1|UPS Galaxy VS 120 kW 400V wraz z modułami akumulatorowymi
+41895461-eb05-4d4e-935c-e29dd9f448bd|instalacje elektryczna
+ed85e8f0-37a2-40bf-b242-eb89cc8c5204|instalacje ppoż
+65f7c948-915f-4864-a8e0-dc5c6bb36da3|Uszczelnienie i oznaczenie przejść instalacyjnych PPOŻ
+1548e9cf-d5ba-4e76-a7fc-ee8f637c656e|konfiguracja BMS
+cf2c7fa1-38a8-44ba-bb5e-a93a27c0ebcf|prace przygotowawcze do instalcji BMS 
+1bc5522a-08ad-41e7-ac62-56a255cf0b4a|paliwo
+47499b0b-2cb2-4988-be56-085cb950a66f|instalacja wzmocnienia podłogi technicznej
+871e0084-c451-4a35-ab52-099fec6cf18e|koordynacja
+4cd725f6-a420-408e-8d58-6f4d4bb908c5|bezpieczniki BM do  RBK 100A
+be54ea60-967f-4e95-a7b6-ff13c2454bc0|kabel lan
+f85ead1e-c613-4871-8ac9-63a51cbb6675|montaż BMS
+53144a12-f0d6-4aea-ad4d-544b011ecf5b|Rozbudowa układu zasilania do konfiguracji dwutorowej umożliwiająca automatyczne/ręczne przełączenie źródla zasilania dla poszczególnych torów zasilających np.UPS1/UPS2/Zasilanie z przed UPS 
+a7467ead-2510-4761-9e6b-70369d2bd97b|kabel wewnętrzny w szafie 1x6mm
+b57106ce-6df0-4e7a-8c21-d3f340f01902|Bypass
+f4dc7c80-f048-4c72-95b2-46b2299a347d|paliwo
+92cfa25f-b8b6-48c6-b598-06d074e4c904|koordynacja
+cf906f48-d3ee-456d-800b-e5a753936347|licencja ACC7 - ENT
+3d213d1f-ee96-40ea-9bd6-234a6416024f|OPCJA-kotwy
+6b21ade0-c497-4c07-8665-650a07e9ccd3|OPCJA-montaż metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+d4cf8693-8209-4b58-9fb3-8e2807ed0aad|instalacje HVAC (klimatyzacja,wentylacja)
+d18f9ac6-9671-499f-ab96-f9a05369929d|OPCJA- Poprawa orurowania skroplin (izolazja rur, montaż grzałek przeciwzamarzeniowych, korekta spadków rur)
+972bac72-22c9-420a-b59a-30cc3fd2ba28|materiały drobne materialy do separacji szyn N obu UPSów
+c64cb0be-037c-48cf-968e-401b907bf416|kable zasilające z szafy SZR do UPS i UPS do bypass
+c94e9fec-7c74-4fd2-ac6f-6da2ea114145|paliwo
+3c3dcc8d-5653-4588-8ec5-ade323eb8bff|instalacja linii zasialającej dla centrali wentylacyjnej
+95d60dcc-9e11-4c30-b559-48d47e8b5722|instalacje BMS
+aa492c2a-0025-478b-ad1f-4f79a6b8a2c7|Pomiary nowych linii WLZ
+6bf8847c-12f7-4cda-aae4-aecf2126f3b1|końcówki oczkowe na kabel 120mm x12
+9f3dce3e-6f4f-4511-ab18-777db6b17b1f|kabel 5x4
+9f1d3140-89b0-4e2e-875d-fb36b2bfb408|Wzmocnienie podlogi pod UPS i rack z bateriami
+87b86e76-72c8-411c-ae40-b52be2396f9d|OPCJA1 DELTA-Dostawa i uruchomienie urządzenia UPS o parametrach nie gorszych niż  Galaxy VS 120 kW 400V wraz z modułami akumulatorowymi pozwalającymi zapewnić czas podtrzymania zainstalowanych urządzeń w szafach rack min 1 godzina.  Opcja zamienna z pozycją powyżej
+4746cf45-c461-4da6-a949-5d89bdd0a105|drabinka baks pelna
+22476bb0-fb21-4b33-ad0e-fc4bb99e45e9|osłona gumowa krawędzi korytek
+660189ca-1e3b-4633-990d-7d678827b4d3|montaż zabezpieczeń krawędzi koryt kablowych
+d564f01c-af85-46e6-9c1f-9b796b21899b|Projekt trasy WLZ
+6f7ec440-a861-499b-a1f2-bd7dc06e7813|OPCJA rozłącznik baterii Schneider
+c2bda7c2-1fa9-48ae-9dc5-40c479cb4637|OPCJA-Dostawa metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+490fcf88-9b58-4113-84bb-88df15c2f2e7|Przygotowanie harmonogramu prac
+d2361ea6-cf9a-43b7-ac7f-58371563d437|wizja lokalna pod konstrukcję wsporczą UPS Delta
+82395615-5fc7-4117-8319-2abbb91278f6|Paliwo
+10bde5a4-b13e-48ea-a63b-6ec83075a5b6|Zasypanie i zagęczczenie wykopu
+3de6b74b-dd1d-40d7-8e1a-0ad88b8bc122|Montaż tac ociekowych pod klimatyzatorami,
+930830c6-6537-4ef7-aebb-60844f5f14ef|oczka kablowe 4-6/16 do polączeń wyrównawczych
+7758ca1d-0b9d-4ccc-b8b0-58eb174a341b|Dostawa i instalacja Szafa Easy Rack z dachem, panelem bocznym, kółkami, nóżkami i 4 wspornikami, bez podłogi,organizery kablowe, czarna (model i wyposażenie identyczne jak pozostałych szaf zainstalowanych obecnie w serwerowni) - podanie modelu szafy
+f7b1ee5b-2672-4aaa-b2dc-199a6d9b09b0|Dostawa i uruchomienie analizatorów mocy i jakości energii (U/I/cosφ/THD, alarmy, inegracja z systemem BMS)
+092f0b01-a4a1-4678-9af9-9133f68f4730|OPCJA-montaż ogrodzenia
+748b4736-11c0-47d9-b0f3-6a675c88fb50|Postawienie ścianek działowych i wydzielenie pomieszczenia magazynowego
+3c8df051-8864-48dc-a146-a926af27d024|OPCJA-montaż ogrodzenia
+1363a24c-b4d3-4720-b0c7-e7fd8eb5d60a|OPCJA-Ogrodzenie modułowe serwerowni
+db5cf585-e16f-4576-a8be-ea954eb3f8c4|OPCJA-elementy do osadzenia słupków
+61778c8e-9da4-420e-a9c1-65a385d3c505|OPCJA-kotwy
+95571415-6438-4a7c-b1a2-8500b847859b|OPCJA-paliwo
+737d9531-299c-45a2-82f6-4d9e445af0c3|Zaprojektowanie i wymiana WLZ na większy przekrój, dostosowany do mocy UPS 120 kW
+d9692d2d-5d13-4996-9697-a09305a4be15|przeciągnięcie 2 linii WLZ do serwerowni
+0345ce7a-87ef-45f2-93f8-c187093bd94e|Wciaganie kabla do rur osłonowych 
+c74f0896-ebff-4f80-8a59-aa0ee60bc2cf|Wykop pod kable 
+a97f44ca-940c-4bd4-a590-342409733459|Układanie rury 160 w gotowym wykopie 
+3976217c-c44f-4413-80eb-cd62fba18956|Przewiert 6x160
+d34d870d-5000-4a1f-9183-186b3814c800|układanie kabla w kanałach energetycznych 
+b32c8e66-cee3-407b-bc21-d8763e7571fe|Zasypanie i zagęczczenie wykopu
+0fe416f9-7087-4fa9-80f5-9509f58dbcb1|Powykonawcza aktualizacja schematów
+6554e81a-235a-4ab4-afca-f6e7ee1a4bda|Przewiert 170 i wprowadzenie rury 160
+62e863ec-8554-4b91-aa2e-e02bbb78dc02|Montaż studni SK2
+9c38fb61-55e0-4336-a24d-b7a2e558bb68|Studzienka SK2
+3dece905-2aeb-45d1-81b3-0b3851d6416e|kabel zasilający 2x( 5x 1x2401x240mm)
+1d6c3b93-7d17-4868-a3a2-e7af92913c55|RHDPE 160 grubościenna 6m
+dd70ddef-5d5f-4f3b-a677-6137dec16b5f|arrot do kabla
+1508eb37-18a0-438a-bc93-3b28af06f2de|łączniki arrota
+b0d61e75-7ebd-44f6-9e04-093c85ec6865|Projekt trasy WLZ
+8a5a9423-24be-45e2-bfa8-74887598c6ab|Pomiary nowych linii WLZ
+4d74e7ad-f3db-4991-a388-6bd86b553031|końcówki kablowe oczko 10  na kabel  240mm
+a733d6f7-b1c7-4a0c-9615-cc53a3ae4ac4|przepięcie zasilania na nowe linie
+92524492-d6d0-41f0-9acd-cc629372b309|paliwo
+23444c86-48c4-4cda-a5b1-12855dbeaa57|Modernizacja rozdzielni głównej serwerowni (dostosowanie do nowego WLZ), Zapewnienie selektywności zabezpieczeń
+15bff5e2-4cdd-4c3b-8304-9f1427beec29|potrójny rozlącznik  400A
+cc05632d-7d57-4b30-b1e1-0e8d293a9607|paliwo
+51e4e38c-0e5d-4ae8-b22a-d4dbe2bd0d4f|koordynacja
+c8ee3413-1c37-4d4c-b634-d7d40770f19a|Montaż całego systemu systemu wentylacji
+9d6bafb7-38f5-4380-88f3-b71624cb1865|Rozbudowa układu zasilania do konfiguracji dwutorowej umożliwiająca automatyczne/ręczne przełączenie źródla zasilania dla poszczególnych torów zasilających np.UPS1/UPS2/Zasilanie z przed UPS 
+32517bf6-b08d-49a0-897b-11d1b14983c3|Projekt ukladu SZR
+dff5ca61-79db-4017-a336-1ee2646821bc|szafa Schneider
+05203ded-40bc-45ac-a50f-7c784cae8bd3|kabel zasilający 2x( 4x 1x240mm)
+3ac1793f-c4f4-4f88-bdb1-10e41b16a9d2|instalacja  UPS Galaxy VS 120 kW 400V wraz z modułami akumulatorowymi
+c64eaf07-4836-4899-b00a-ab6996927677|paliwo
+bad950f1-9edd-4935-8ee2-c4b3d96babc6|instalacja  UPS Galaxy 
+1e26b322-11a3-43c3-874e-ec9328c06f0e|Bypass
+cd7e0882-8186-4209-9860-2f803dd6db06|drabinka baks pelna
+b2e3db50-b0e9-4b65-b8e1-5148c7112e16|kable zasilające z szafy SZR do UPS i UPS do bypass
+23549536-58a0-4e04-9989-ab498dd9c95b|Wzmocnienie podlogi pod UPS i rack z bateriami
+f788e389-475f-491b-8d17-3ac073722af7|Projekt konstrukcji wzmacniającej podłogę
+1b35bef0-024a-48ad-a979-3a5d46aaaa6f|konstrukcja stalowa do wzmocnienia podłogi technicznej pod UPS i rack bateryjny
+8c387d97-4175-4e60-acc8-b2d59eabd40d|instalacja wzmocnienia podłogi technicznej
+5128ae71-71cb-48a2-bce5-c010c7ad5236|OPCJA1 DELTA-Dostawa i uruchomienie urządzenia UPS o parametrach nie gorszych niż  Galaxy VS 120 kW 400V wraz z modułami akumulatorowymi pozwalającymi zapewnić czas podtrzymania zainstalowanych urządzeń w szafach rack min 1 godzina.  Opcja zamienna z pozycją powyżej
+1e40ded0-8758-4535-aedf-d61e1f1afc3b|baterie
+5bb54cbf-0be0-41dd-9666-7e1aedc61355|instalacja UPS  DELTA
+7891a7c0-6844-4d61-8803-831cacfa9de9|kable zasilające z szafy SZR do UPS i UPS do bypass
+057aaf4e-8ff1-46ec-8057-c6cb4ed57323|Bypass
+2527e9fe-968c-4bb1-a1bd-e6a810ae8e34|paliwo
+c43a1e58-3dfe-490e-851e-31a9d9d7250f|Wzmocnienie podlogi pod UPS i rack z bateriami
+099d5ee4-1b50-48ae-b50b-87e8ee158590|Projekt konstrukcji wzmacniającej podłogę
+04ba1105-5d7b-494b-8f61-e190a35e4625|konstrukcja stalowa do wzmocnienia podłogi technicznej pod UPS i rack bateryjny
+09746b38-7651-4b0a-9ab7-bf96befd453f|instalacja wzmocnienia podłogi technicznej
+4ebead16-89ca-410b-a0fc-76b77abbac69|paliwo
+4638ff0c-3091-46aa-94b2-020019d325ec|Przegląd (inwentaryzacja), uszczelnienie i oznaczenie wszystkich przejść PPOŻ (uzupełnienie masy, usunięcie pianek montażowych, etykiety),  Doposażenie drzwi w samozamykacz i uszczelkę samoopadającą,  Integracja systemu VESDA z SUG,  Opracowanie procedury reagowania na alarm VESDA / SUG
+6c120c0f-f3b6-45d8-a318-11ecbb12dd1a|Weryfikacja oraz integracja systemów VESDA z centralą SCHRACK
+d09e2114-13e6-45d1-a9fb-deba9371c0d5|Uszczelnienie i oznaczenie przejść instalacyjnych PPOŻ
+7415106f-1b4e-4863-a736-8a4f5c2e9183|paliwo
+97ed27d1-ae56-4d6b-a2fb-6dc4b2696340|Doposażenie drzwi serwerowni w samozamykacze
+6a545493-fb16-456e-b499-91d461db950a|Wykop pod kable 
+db1b53f8-9581-4761-8748-96f91c047a44|koordynacja
+4f44af56-0c13-4194-a7bc-3ccb223292af|Rozbudowa systemu przeciwpożarowego Schrack o driver komunikacyjny  Modbus 
+77400b5f-8683-4cc3-bc2f-f0929e8e4f07|Zaprojektowanie, dostawa i wdrożenie systemu BMS/centralnego monitoringu dla zasilania + UPS, klimatyzacji, PPOŻ i czujników środowiskowych (temperatura,wilgotność). W zakresie integracja z poszczegolnymi systemami
+c952cbe7-3fa5-4b7d-a90a-3a7ca14b5101|sprzęt BMS
+2dfb0623-9918-48b8-9ab5-20a995f85869|montaż BMS
+a922241b-8aa1-4372-814d-4a7b09d5908e|konfiguracja BMS
+93adfe46-ab7b-4258-9fb1-4884320bb638|prace przygotowawcze do instalcji BMS 
+cb163903-c396-4b42-aa4e-7022570e3f04|paliwo
+c98e1d29-de13-46ea-b8f0-af7f70f19549|koordynacja
+f3714ec6-e2c1-427e-b2ce-88ec1b67e850|Zaprojektowanie, dostawa i uruchomienie systemu wentylacji pomieszczeń serwerowni. System dodatkowo ma zapewniać możliwość przewietrzania pomieszczeń po akcji gaśniczej.
+4d6b667e-ab3e-47c8-93e4-20952d96e7c9|instalacja linii zasialającej dla centrali wentylacyjnej
+bb412273-c7ea-4211-a39a-7305f50f829a|kabel 5x4
+eb18876a-c803-4e8a-b020-5917c41129c5|Centrala wentylacyjna
+f2c1dc1c-003e-46a9-ab57-3b7dd34437d7|Kanały wentylacyjne okrągłe spiro
+c4f16408-a254-4c54-8bb1-8129b8cad7a3|OPCJA-Prace budowlane
+9ac22ae1-f73a-4580-bb4c-e084e1e4702f|Dostawa i uruchomienie sterownika pracy naprzemiennej klimatyzatorów zainstalowanych w pomieszczeniu serwerowni
+ef6333ce-0c67-4626-9733-d10c2c103c91|moduł sterujący z montażem
+11ee2d3a-6c2c-4118-b36c-0e3aa9ed5520|instalacja, konfiguracja modułu sterującego praca naprzemienną
+53cb3c5e-700e-4b8f-9cbf-913b004f4aa3|OPCJA-Optymalizacja rozmieszczenia i pracy klimatyzatorów (demontaż i montaż w nowym miejscu)
+9806b363-8d77-4de9-bd23-53b0dbe86088|OPCJA- Poprawa orurowania skroplin (izolazja rur, montaż grzałek przeciwzamarzeniowych, korekta spadków rur)
+36cfcdf6-8db5-43f1-819d-a37b4f671049|OPCJA-Dostawa i montaż klimatyzatora Fujitsu (dotyczy pomieszczenia UPS/techniczne)
+b38f34b9-05ce-48e6-a7f9-bf934b0bc60d|prace wykończeniowe po instalacji klimatyzatora Fujitsu
+a4ac186c-4619-4deb-a598-8a3eb82df87f|instalacja linii zasialającej dla klimatyzatora Fujitsu
+f92a27ef-3319-4e00-acde-740e18b1ca77|Klimatyzator Fujitsu
+f1664d5b-dc61-4c2e-bcf5-b24cc89c306d|montaz klimatyzartora Fujitsu
+158239f8-f469-4909-88b0-9af851a82009|Montaż tac ociekowych pod klimatyzatorami,
+2daa50a2-bfb9-449d-a0cb-3f9c2dcb48a8|Uporządkowanie i inwentaryzacja okablowania pod podłogą techniczną oraz korytach kablowych nad szafami wraz z uzupełnieniem oznaczeń
+a8c0a8e4-9e13-40d1-aba6-2cdbc8178350|Prace porządkowe pod podłogą techniczną (usunięcie kurzu i innych elementów luźnych/zbędnych)
+81c826ba-ef3e-4235-9cdb-0f8d4c9300dd|Zabezpieczenie ostrych krawędzi i uszkodzeń koryt kablowych
+469f858d-89bb-4ee5-85dd-e2a580b9a21f|osłona gumowa krawędzi korytek
+04ed4faa-53d5-4528-b799-510bdaf2e2a7|instalacje elektryczna
+0b047836-2c0c-4573-bd05-ffbe32dc7fef|montaż zabezpieczeń krawędzi koryt kablowych
+83ca5098-be72-4bba-a882-d0c4a786565c|Uzupełnienie połączeń wyrównawczych koryt i szaf RACK
+0ba8aea2-0f48-488d-85c9-8ee188c315f5|kabel gnd do polączęń wyrównawczych
+ebf1708d-4e5f-4abd-a753-177db7a2b70b|oczka kablowe 4-6/16 do polączeń wyrównawczych
+7513d0b4-3cff-4bda-8997-7cefdd3c42c9|złączki uziemienia do korytek siatkowych do polączeń wyrównawczych
+aa463c49-3e7f-4e8a-b908-4a1642e84707|montaż połączeń wyrównawczych
+e43180ca-df01-4999-8d2b-f873857a50e4|Dostawa i instalacja Szafa Easy Rack z dachem, panelem bocznym, kółkami, nóżkami i 4 wspornikami, bez podłogi,organizery kablowe, czarna (model i wyposażenie identyczne jak pozostałych szaf zainstalowanych obecnie w serwerowni) - podanie modelu szafy
+f9ab43e4-06fb-4813-87a8-ecd0c9360f0b|instalacja PDU, paneli porządkujących
+51928b01-72cc-4345-b180-46fbe94bbb9e|przedłużenie koryt kablowych
+25faa19e-9e9f-4b0b-97b8-3309f047eaa3|korytka siatkowe i światłowodowe
+50a224e2-604b-4ad6-983e-a0ad1c0a28ab|Dostawa i montaż paneli maskujących 19” 1-4U (sumarycznie 190U) do montazu w wolnych przestrzeniach RACK oraz przepustów szczotkowych (30szt)
+a0251f20-a713-4ad5-9b63-d61d5e395bde|opcja: istalacja koszyków montażowych do szaf rack 
+4724a918-2635-4d51-9687-196b548d718c|łączniki arrota
+67f0e094-5ff6-4d22-8ccc-af281f611858|Dostosowanie koryt kablowych nad szafami rack (dotyczy nowo instalowanych szaf)
+c35470f0-e68e-42ab-a25f-02143bbe5f24|koordynacja
+61e31a29-085e-49b1-bc5d-543d01b893c6|przepięcie zasilania na nowe linie
+6e7ac280-59a6-4491-934d-818fd5d29f93|paliwo
+7ce6d70a-82e4-4bde-b483-b3b7b3feab88|gniazdo natynkowe
+28377ae4-0b45-42f8-a49f-4c36bf2454c3|kabel lan
+09886e51-007f-4b8e-a1b1-6771d1f1a9c0|gniazdo natynkowe
+47a558a6-a3ac-4acb-a141-dc97ee343761|instalacja Kamera Avigilion 
+28885b4c-42b9-48e6-83f5-bd1b935de23d|OPCJA-montaż metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+f499e4cd-1ee8-4fdb-aae3-f12b5f50def6|Przygotowanie harmonogramu prac z wyszczególnieniem terminu realizacji
+4b14aa37-5baf-48e5-9616-a71107eae480|Instruktaż
+38f9a3e6-32da-4fce-8814-55a3ac8e9397|Instruktaż konfiguracji i obsługi zainstalowanego w ramach niniejszego zadania w serwerowni sprzętu i wyposażenia
+0a9ef7db-fe78-4622-b488-49c166cac3a4|paliwo
+75100f43-d4c6-42aa-864b-0bea8c5210f3|Dokumentacja powykonawcza
+82a58be7-dfa3-4966-a57f-c041f07de666|Powykonawcza dokumentacja elektryczna
+800050b6-ea71-4275-a18a-de81c87dc4a7|Pytania Ogólne
+671b8aad-9558-4d4a-b7ac-49eeb14be253|Wykonanie dokumentacji powykonawczej uwzględniającej między innymi: 
+dc8dd039-ab09-4b56-bc54-1f6ab20eb5e7|instalacje ppoż
+fa7d90d5-726f-4a44-ae8b-06bf70949712|Rozbudowa systemu przeciwpożarowego Schrack o driver komunikacyjny  Modbus 
+29c24434-a184-4356-9ef1-38c4c291aa36|Geodeta
+671c41d2-508e-48b8-8b74-3d5cbdba9c29|Montaż studni SK2
+6bd579ae-0edf-4afc-915b-f7d85aa63820|Studzienka SK2
+905f0c86-2557-48ba-92cf-6dd42aee9c5d|Przygotowanie harmonogramu prac
+ed2b0e13-73d1-4adb-baeb-6e6acf89be18|OPCJA- Poprawa orurowania skroplin (izolazja rur, montaż grzałek przeciwzamarzeniowych, korekta spadków rur)
+9acf3c9b-a0b8-4bad-b58b-988f57b1f8ec|Instruktaż
+40437dbb-8527-4838-a6ee-0937ab10feac|Układanie rury 160 w gotowym wykopie 
+62733e3d-5f6d-45a4-9a3e-44bc3c4d3772|Kanały wentylacyjne okrągłe spiro
+d9d4b582-8ed0-44c7-97e1-263549b94339|Przecisk pod drogą 5x160
+73ea6c5d-9c48-45c8-9d3b-3c2dbdd3a6b7|układanie kabla w kanałach energetycznych 
+7ed184f1-6f33-46d1-939b-9941c6e69732|Centrala wentylacyjna
+ccc78618-4435-45a0-ac70-18df4bd62bbc|Przewiert 170 w serwerowni i wprowadzenie rury 160
+7df533e5-d6a7-43fa-9dbd-6381ba66e390|instalacje BMS
+0bd18606-65f7-4aa9-bdc2-a5c113815211|instalacje HVAC (klimatyzacja,wentylacja)
+c0a53cc6-e084-4592-ac0c-e926e920f4e3|Dokumentacja powykonawcza
+2778e032-f740-4b16-a121-f048bb5f6a5b|SZR
+b4cd74db-19fc-4e81-907d-78354bc2bc69|instalacja  UPS Galaxy VS 120 kW 400V wraz z modułami akumulatorowymi
+e3a29a72-2ab3-452a-844d-f66694b77052|paliwo
+5483f340-8dac-4977-bde4-f3b701d948e1|Montaż całego systemu systemu wentylacji
+1e2963b0-68cd-4368-9fe1-e36b1c5bf038|prace wykończeniowe po instalacji klimatyzatora Fujitsu
+5e24e676-478b-41ec-a342-cc90c83da5c2|instalacje LAN (miedziane, światłowodowe)
+878021e9-0cef-43b8-a3be-9843776e820c|korytka siatkowe i światłowodowe
+581514a3-4908-4fd2-b28a-f77a7f831c13|Panele maskujące 1U
+5485da1f-88a6-42a5-9b5f-da72989d50cc|OPCJA-Dostawa i instalacja Kamera Avigilion
+0d3369ec-d274-4f9a-89c5-af02ef3cdb30|OPCJA-Dostawa metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+3050d71d-34b0-4323-9599-327d26583902|koordynacja
+104793a0-5374-4f2d-aa57-d024a090c747|moduł sterujący z montażem
+6fb0ec80-4976-4637-ad82-a928bf9cd4e9|instalacja, konfiguracja modułu sterującego praca naprzemienną
+b060ef9b-58a1-4c80-91bf-82e0c01b35e2|paliwo
+24ec3df4-effb-4d90-8575-cf2e7c5eea04|OPCJA-Optymalizacja rozmieszczenia i pracy klimatyzatorów (demontaż i montaż w nowym miejscu)
+28e7fd7e-1f17-465c-a6f5-56dde699837c|OPCJA-Dostawa metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+bc4051f5-1d51-47be-9379-4751cfa48378|końcówki kablowe tulejkowe na kabel 6mm
+9eac93d8-a462-4c12-9256-4bef0180cb67|piasek
+3302d7f2-3e27-44c3-b0cd-8612eb886dc2|UPS Delta
+1441da8e-d509-4824-bc27-aee79d6410a8|Projekt konstrukcji wzmacniającej podłogę pod UPS Galaxy
+ffc39295-477d-4902-9fc5-bf918ce69dad|Dostawa i uruchomienie sterownika pracy naprzemiennej klimatyzatorów zainstalowanych w pomieszczeniu serwerowni
+a52da1fd-3e47-4e17-859c-9df008cfa62d|końcówki kablowe oczko 10  na kabel  240mm
+761be875-8b12-4bb4-9053-892cfd8fe95e|moduł sterujący z montażem
+452e02a8-681b-4ae7-a255-fae5d1de86ce|Przygotowanie harmonogramu prac z wyszczególnieniem terminu realizacji
+435258a9-f13c-4269-b202-f79d17923e2f|Instruktaż konfiguracji i obsługi zainstalowanego w ramach niniejszego zadania w serwerowni sprzętu i wyposażenia
+0eb54ec4-2048-45f2-837b-b4670677d4b8|instalacje elektryczna
+b6d93338-1402-4f2c-9fb7-2f8b55e6fae5|potrójny rozlącznik  160A
+994c28ec-f99b-40ed-b738-47c0af11e721|piasek
+332a2aea-d0a8-4d0f-9848-8eff8326da2b|Zaprojektowanie i wymiana WLZ na większy przekrój, dostosowany do mocy UPS 120 kW
+98e4ab9b-db69-4679-bb6b-533fc55a2bb5|Przegląd (inwentaryzacja), uszczelnienie i oznaczenie wszystkich przejść PPOŻ (uzupełnienie masy, usunięcie pianek montażowych, etykiety),  Doposażenie drzwi w samozamykacz i uszczelkę samoopadającą,  Integracja systemu VESDA z SUG,  Opracowanie procedury reagowania na alarm VESDA / SUG
+966ce94b-6467-435d-9d64-bdba442f31ff|Zaprojektowanie, dostawa i uruchomienie systemu wentylacji pomieszczeń serwerowni. System dodatkowo ma zapewniać możliwość przewietrzania pomieszczeń po akcji gaśniczej.
+5f8c6f8c-209f-47c5-a84e-df7cca53d946|instalacja linii zasialającej dla centrali wentylacyjnej
+d8a42c5a-a1f3-4f70-bdca-025f505d89dd|kabel 5x4
+46660404-96e1-49dd-a5ee-b961ada01ffb|OPCJA-Dostawa i montaż klimatyzatora Fujitsu (dotyczy pomieszczenia UPS/techniczne)
+af09e4cd-f663-4450-8029-d1f8ac4f3fa2|prace wykończeniowe po instalacji klimatyzatora Fujitsu
+3c8ea5d4-4530-4e44-ba86-67fe9ff11849|instalacja linii zasialającej dla klimatyzatora Fujitsu
+4f2fa491-e2a5-4e32-af99-18e7be445bb6|Klimatyzator Fujitsu
+5cc1b911-8162-4c0e-b84b-2663f91336bb|Uporządkowanie i inwentaryzacja okablowania pod podłogą techniczną oraz korytach kablowych nad szafami wraz z uzupełnieniem oznaczeń
+2df4b5f7-0010-41ed-8f0f-6a2c69e95d3b|Uzupełnienie połączeń wyrównawczych koryt i szaf RACK
+0080be47-2d8c-4384-8c2d-f6f5022fdc62|Dostosowanie koryt kablowych nad szafami rack (dotyczy nowo instalowanych szaf)
+aab1fed9-8bef-4fda-bda2-cafa28436529|OPCJA-Ogrodzenie modułowe serwerowni
+9f6acf59-1613-4672-91d0-fb7860767da9|szafa Schneider
+303cb2d0-6ab5-4963-8a6d-9263f9cecae2|koordynacja 
+b54ed4bb-173e-4f1f-89d1-c87ee80d1b68|Rozbudowa układu zasilania do konfiguracji dwutorowej 
+9fdb3340-a4f5-4e35-8964-177f014f739a|Geodeta
+c85bd4c5-6c39-4337-80ac-7440c005e059|OPCJA-Dostawa metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+3e9d83fb-97f1-4773-bcf6-1969568e2533|paliwo
+5954c319-356e-4d02-b3a5-527dfe49ee22|drabinka baks pelna
+2486bd55-2554-4a18-b446-fa74073a175b|kable zasilające z szafy SZR do UPS i UPS do bypass
+57988b15-a77d-4d3e-aeed-281965e14a56|drabinka baks pelna
+0bf4559e-a01f-474a-a69f-dc1587689e81|przedłużenie koryt kablowych
+5e37eaaf-2e1e-4566-8e30-4e81b61d2d06|Projekt konstrukcji wzmacniającej podłogę
+24d29b66-cc0e-44f9-a19f-ba93dedcacaf|konstrukcja stalowa do wzmocnienia podłogi technicznej pod UPS i rack bateryjny
+2e9c7b7d-859d-4a07-9d0c-9a16398bb008|instalacja wzmocnienia podłogi technicznej
+c90548a8-2ac5-43f0-9006-08553ec518e4|UPS Delta
+2f3a9220-c642-49c3-8883-34f2853eb9c0|baterie
+f97ed072-b046-4c0f-8a04-cbe774748c52|instalacja UPS  DELTA
+4af473a0-fe8e-4753-ac87-590dc2ba051b|Bypass
+0ad27e8a-dcb1-4b59-acb6-d1692219baeb|montaz klimatyzartora Fujitsu
+3a175581-1aa1-491c-998d-982edbd05d40|Prace porządkowe pod podłogą techniczną (usunięcie kurzu i innych elementów luźnych/zbędnych)
+b6833d3d-39b0-430b-8c6d-fcbca58ce2b3|Zabezpieczenie ostrych krawędzi i uszkodzeń koryt kablowych
+7345fc2e-2ab6-400e-b37d-d87e0268e020|konstrukcja stalowa do wzmocnienia podłogi technicznej pod UPS Delta i rack bateryjny
+63b3c785-6ef3-4cce-adbc-1ef968737080|OPCJA-elementy do osadzenia słupków
+f6c17cca-339b-47e7-9169-2faeb4f426e9|wynajem widlaka
+abb679c5-1100-47ff-a94c-6f1c5905d01f|Wzmocnienie podlogi pod UPS i rack z bateriami
+b105da3b-0dc8-4305-bb56-583caaf9e2a5|konstrukcja stalowa do wzmocnienia podłogi technicznej pod UPS i rack bateryjny
+0a338bc6-382f-41b2-b492-39d1b5955e37|Weryfikacja oraz integracja systemów VESDA z centralą SCHRACK
+a2ea86bc-3f65-4290-95be-6b6c73e8dabc|Doposażenie drzwi serwerowni w samozamykacze
+d694f283-3a9b-4087-a650-4faab3bd08be|Centrala wentylacyjna
+b99ef25a-e15e-42d2-9fe0-080d539c1c6e|instalacja analizatora
+63685380-02b1-4a14-821b-235471e3f7ef|drabinka baks pelna delta
+075c843d-d2f4-42e2-b69d-7a72aa8ff292|OPCJA-Optymalizacja rozmieszczenia i pracy klimatyzatorów (demontaż i montaż w nowym miejscu)
+cbe24946-11c5-4aa7-834a-3496d4e1b5e2|złączki uziemienia do korytek siatkowych do polączeń wyrównawczych
+cb03ca01-3371-4623-93fc-4cf9c843b8c4|montaż połączeń wyrównawczych
+9a951768-1742-49f1-a8fd-299cbef1afb3|instalacja PDU, paneli porządkujących
+f3501b66-8d93-4be4-aa7a-6d148b8f6325|przedłużenie koryt kablowych
+5cdcda81-540f-46d7-8e58-6331d7a2b429|Dostawa i montaż paneli maskujących 19” 1-4U (sumarycznie 190U) do montazu w wolnych przestrzeniach RACK oraz przepustów szczotkowych (30szt)
+f484c23a-7902-434e-a77b-14b3fe114dbe|opcja: istalacja koszyków montażowych do szaf rack 
+ceb4a12d-a775-4e70-a414-d6260acb2626|OPCJA-paliwo
+cbc5c95c-a0a4-4c78-a928-2e242c420394|przeciągnięcie 2 linii WLZ do serwerowni
+ddeef873-4bc5-4035-ab9c-c759da6fcbad|OPCJA-Optymalizacja rozmieszczenia i pracy klimatyzatorów (demontaż i montaż w nowym miejscu)
+b324e725-526e-4e0b-9600-2a31970aad78|Paliwo
+96a5133e-aef0-499f-9083-433bdf7a9f0a|RHDPE 160 grubościenna 6m
+93923847-6d56-4242-99f5-b3f9a53c3ed8|arrot do kabla
+b560c9e7-c0b4-40db-9238-a722c5b5d6fc|instalacja linii zasialającej dla klimatyzatora Fujitsu
+2746cbda-2384-4c6a-84f4-1d1311779ad0|OPCJA-Dostawa metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+1b8492ef-4af7-4c5e-9c40-fea67ff15ea0|OPCJA-Dostawa i instalacja Kamera Avigilion 6.0C-H6A-BO1-IR + licencje ACC7 - ENT
+64c66e1d-e6b1-4d0b-8853-060f6cc985f9|konstrukcja stalowa do wzmocnienia podłogi technicznej pod UPS galaxy i rack bateryjny
+f011c183-cbe0-4ed0-845a-fbd802a2d038|baterie
+c50a424e-45e5-4d9e-b5ca-f13fdcda33fc|OPCJA rack Romi
+a7058609-327b-4791-a3c9-0927e4f2bbf2|Montaż tac ociekowych pod klimatyzatorami,
+ff4aa982-f25c-4132-83ce-23b684bed8fd|instalacja Kamera Avigilion 
+182d1cce-ffd6-40d7-9331-97d7aa79a737|OPCJA-montaż metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+71abc2b7-2c0a-4ea3-a3eb-72331690c00b|OPCJA-Dostawa metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+8a7ffcd5-4364-403a-b02f-15b4c5513ba5|Przygotowanie harmonogramu prac
+3eeb2a9f-c5e2-4951-a00d-79e6fd3842b8|Przygotowanie harmonogramu prac z wyszczególnieniem terminu realizacji
+5d764326-ea4e-4e77-b01a-9d37cc472b17|paliwo
+3e5a31c0-4cdc-4ae3-969d-f87dc42072bb|Powykonawcza dokumentacja elektryczna
+406bb7fc-d26c-4f9c-a9e5-a1009827b2d9|Powykonawcza aktualizacja schematów
+ac7106bd-edb4-435a-a1ad-2e52e2638dda|Prace porządkowe pod podłogą techniczną (usunięcie kurzu i innych elementów luźnych/zbędnych)
+05107d26-fbaa-439e-9327-8b6b1690e0c7|instalacje HVAC (klimatyzacja,wentylacja)
+43d6aebb-2ce8-460a-ba71-c32d98a3365f|Wykonanie dokumentacji powykonawczej uwzględniającej między innymi: 
+10be9c84-d73a-41b7-b5c8-78bd3633c013|Bypass
+66adb843-ade6-4829-ad5e-21a7e2657ed5|montaż zabezpieczeń krawędzi koryt kablowych
+26cdfab6-8914-430f-aac2-499416d87490|Dostawa i uruchomienie analizatorów mocy i jakości energii (U/I/cosφ/THD, alarmy, inegracja z systemem BMS)
+e13bf806-5ac3-4253-b920-8f51bcaef600|oczka kablowe 4-6/16 do polączeń wyrównawczych
+45acb927-3b53-4874-baf5-9c23c1b19525|konstrukcja stalowa do wzmocnienia podłogi technicznej pod UPS Delta i rack bateryjny
+01c3d393-b7b5-4e87-b201-27b45f309aeb|osłona gumowa krawędzi korytek
+86a7f959-f191-4d24-9dca-7211b1980973| Avigilion 6.0C-H6A-BO1-IR + licencje ACC7 - ENT
+801f618d-8bc1-449d-891a-9b3cd8a3a148|OPCJA baterie SSB
+99192978-3782-49ac-b28f-758be3bc49e3|kabel gnd do polączęń wyrównawczych
+0017840a-613b-41f8-9c71-d2527978a09d|baterie delta
+d036beed-f3a3-4504-a1fe-46c7e76972ce|paliwo delta
+1e865a82-dd97-4bf2-b177-8ec600e463dd|Prace porządkowe pod podłogą techniczną (usunięcie kurzu i innych elementów luźnych/zbędnych)
+c981c229-583b-4482-bfb8-98d31c982079|Paliwo
+c3aa4163-1fc6-4890-ba50-9e4e10543a2e|złączki uziemienia do korytek siatkowych do polączeń wyrównawczych
+cb54bbf8-536a-43bf-8621-4de5cc1ba852|gniazdo natynkowe
+46877494-9f36-4c1a-9928-eeccc0e30035|Powykonawcza aktualizacja schematów
+0173ed83-3731-48ad-8dfa-d213a31eb987|Instruktaż konfiguracji
+0efc9bcd-4adf-413f-b473-d3224c1b1222|gniazdo natynkowe
+b9c489d8-bfbd-4dbf-a408-978b7c802f94|Uszczelnienie i oznaczenie przejść instalacyjnych PPOŻ
+f9ceeb0c-d33f-459d-acf5-7f6cafa573c3|licencja enterprise
+48d123dd-8f4d-4d08-a832-b3a140e43d55|koordynacja 
+5a672f08-6732-44f9-a189-2b7d0d46e5b9|instalacje BMS
+9b10cf32-b5c7-408d-9afa-d2d66060d10a|sprzęt BMS
+1c54afd6-fcef-44c6-9b3a-e28b9b28e1b1|instalacje HVAC (klimatyzacja,wentylacja)
+bd8fa78b-b465-4cb7-98fd-a2d055bedf73|montaż zabezpieczeń krawędzi koryt kablowych
+26e08a72-ed76-4b5a-bedf-f4046c61c0e4|koordynacja
+0e1de171-6512-4d46-8fb6-56c879911f61|paliwo
+48333b8d-0c09-48ab-93af-c5b95fbeb239|Bypass
+16cf9730-ff79-4506-a522-b2e1562b3d16|Zabezpieczenie ostrych krawędzi i uszkodzeń koryt kablowych
+0531a009-18b2-42e1-bd2b-67b76f8508df|końcówki kablowe tulejkowe na kabel 6mm
+6e625450-86a6-44fe-ba9a-36c65364da42|konstrukcja stalowa do wzmocnienia podłogi technicznej pod UPS galaxy i rack bateryjny
+f45beccf-dcc3-485a-b1de-e2237ff96634|analizator mocy
+e8a708d5-459c-4338-888f-02b4735face9|konstrukcja stalowa do wzmocnienia podłogi technicznej pod UPS Delta i rack bateryjny
+b0fe962d-8fae-4f2b-9c5d-a205cfeabdb4|instalacje LAN (miedziane, światłowodowe)
+a10f5d86-05a0-4388-92d3-b99d6ee12867|Bypass
+11314e96-6693-4eeb-804f-c0a24b68a8d8|kabel zasilający UPSy (L1,L2L3,N,PE) 1x120mm
+c969e1e7-560d-447d-9f25-01b4983a07b1|OPCJA instalacja racka Romi z bateriami SSB
+7be1292d-4777-4313-ab90-c72b0cb20951|Paliwo
+37d96875-0aa5-49a9-a4b1-b027b1366190|instalacja analizatora
+169cc6ae-0ef9-439a-bed6-107e4edf47bb|skrzynkowy rozlącznik RBK
+d355b7f1-8580-497f-9747-56c926dc6346|instalacja wzmocnienia podłogi technicznej pod UPS Galaxy
+4dc13a02-2281-42ad-8578-ffb644113881|OPCJA instalacja UPS  DELTA
+a4d4757b-602d-4d2f-9727-22560b7bcd70|kabel lan
+e57b90d8-5ede-4f7c-8f7c-45f57c5e5002|wizja lokalna pod rozbudowę elektryczną
+16adf800-14d1-4c1b-bdaa-3559161bd1c3|gniazdo natynkowe
+3ccf81fc-6a28-418f-9148-c61018d05677|OPCJA-montaż metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+5967051e-4457-473d-89e8-562e43dcac15|OPCJA-Dostawa metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+2571daff-46cf-454b-89bf-dece4b007cfa|Przygotowanie harmonogramu prac z wyszczególnieniem terminu realizacji
+4b9c5f0a-4099-488e-bd7b-034b7ee80f1f|drabinka baks pelna delta
+e489e1a9-28ae-46c3-b089-5be45d5294d8|Instruktaż konfiguracji
+3dca9caa-2722-4116-bd70-85786424911f|paliwo
+764abab1-b423-4ee9-ac3f-69f472ef814b|Bypass
+0ba1a6e6-2446-4b09-9333-15754484dd22|OPCJA DELTA-
+bb4583fd-b00e-49c5-80bd-b2e58d2b5b47|konstrukcja stalowa do wzmocnienia podłogi technicznej pod UPS galaxy i rack bateryjny
+3b042aef-4bb3-4478-94bb-5a6ed13496fd|dostarczenie szaf Easyrack
+36d89379-5816-476f-a5c0-0ca53a65c4bc|Przygotowanie harmonogramu prac
+d5337f27-7988-4b31-9e8a-b838504e0ce5|Wzmocnienie podlogi pod UPS Galaxy i rack z bateriami
+af38132c-c30a-41e9-8e3e-12f9ea2d58dc|Instruktaż
+6f64ebd1-9261-46d9-bd44-94146944cc1a|OPCJA instalacja racka Romi z bateriami SSB
+8efbe25a-a043-419c-8a32-6de1eb39f878|bezpieczniki BM do  RBK 100A
+37613053-757f-4607-97c0-c6ca13604c96|Zaprojektowanie, dostawa i uruchomienie systemu wentylacji pomieszczeń serwerowni. System dodatkowo ma zapewniać możliwość przewietrzania pomieszczeń po akcji gaśniczej. › instalacja linii zasialającej dla centrali wentylacyjnej
+2a4d00af-1afc-4d50-89d2-7673e06652b5|drabinka baks pelna
+93073884-e830-49de-a590-acd99a10bc70|Dostosowanie koryt kablowych nad szafami rack (dotyczy nowo instalowanych szaf)
+f5c953e1-a579-461a-9bf9-a3fcda116171|OPCJA- Poprawa orurowania skroplin (izolazja rur, montaż grzałek przeciwzamarzeniowych, korekta spadków rur)
+70a52dc7-0e46-4ac5-a35a-d351a171fdbe|wizja lokalna pod konstrukcje wsporczą UPS Galaxy
+d0615648-9fca-43bd-ad71-c707e9f5d7a2|kabel gnd do polączęń wyrównawczych
+da7c6990-e82b-4823-bd32-f02bfdb0925a|Dostawa i instalacja Szafa Easy Rack z dachem, panelem bocznym, kółkami, nóżkami i 4 wspornikami, bez podłogi,organizery kablowe, czarna (model i wyposażenie identyczne jak pozostałych szaf zainstalowanych obecnie w serwerowni) - podanie modelu szafy
+aae5af4b-d500-48d8-839b-d20c8693232c|oczka kablowe 4-6/16 do polączeń wyrównawczych
+c2b2d4e6-d39e-4305-879d-a03a9fd6c9f9|montaż połączeń wyrównawczych
+14cd9229-a979-40c2-9746-663e3b405a6f|Dostawa i instalacja Szafa Easy Rack z dachem, panelem bocznym, kółkami, nóżkami i 4 wspornikami, bez podłogi,organizery kablowe, czarna (model i wyposażenie identyczne jak pozostałych szaf zainstalowanych obecnie w serwerowni) - podanie modelu szafy
+6a71ae09-40b9-40a0-a4f3-0108228a146a|instalacja PDU, paneli porządkujących
+5e30a334-e4be-4962-8734-3b46584d0a82|instalacja wzmocnienia podłogi technicznej pod UPS Galaxy
+7e07c664-f311-4992-83af-0e9d4ab8e6dc|UPS_OPCJA1: dodatek do UPS Galaxy - Rack bateryjny Schneider Galaxy
+04cfa162-63e3-40e6-b08c-87c0cd6b67c8|bloki rozdzielcze
+77dd0854-ec11-403b-83d8-4466ffa1cea6|OPCJA baterie SSB
+b5ffe0b4-7988-4550-a0b0-346ad780b0f5|OPCJA DELTA-
+fcb814d3-8dbf-4e3b-bf10-463be5acb06a|UPS_OPCJA2:  dodatek do UPS Galaxy - stalowy rack z bateryjny Romi+ baterie SBB
+c7eaab9c-7fcc-4c0e-9d29-1845231edf8a|Projekt konstrukcji wzmacniającej podłogę pod UPS Delta
+e9a1cb88-d39d-405b-8d83-4eea13fe8e68|Rozbudowa układu zasilania do konfiguracji dwutorowej umożliwiająca automatyczne/ręczne przełączenie źródla zasilania dla poszczególnych torów zasilających np.UPS1/UPS2/Zasilanie z przed UPS › Szafa automatyki 2xSZR Schneider
+a038bf74-8549-4ae0-9708-791cedfab8f9|Dokumentacja powykonawcza
+154761f1-e039-42dd-a278-458708e6905d|baterie delta
+d6f7b808-7ae7-4fbc-9a07-484202ee9345|Pytania Ogólne
+51880fd5-e81b-4411-96ab-a359315f9410|OPCJA instalacja UPS  DELTA
+58dfd442-d953-4b77-8ffa-310c9db8be9e|Rozbudowa układu zasilania do konfiguracji dwutorowej umożliwiająca automatyczne/ręczne przełączenie źródla zasilania dla poszczególnych torów zasilających np.UPS1/UPS2/Zasilanie z przed UPS 
+f47b8fec-2251-48b5-b242-aa3622c123b1|Dostawa i montaż paneli maskujących 19” 1-4U (sumarycznie 190U) do montazu w wolnych przestrzeniach RACK oraz przepustów szczotkowych (30szt)
+735e9697-a7d9-40c5-bd5d-3c375f35c519|podstawy bezpiecznikowe 
+a38ec514-2ffc-44ca-af72-9459f92ba657|instalacje HVAC (klimatyzacja,wentylacja)
+cf5b0af5-7f77-4df5-9c21-b5383e4a6cd0|UPS Delta
+0a46a527-68a7-4799-b9dc-df4509d64133|Wzmocnienie podlogi pod UPS Delta i rack z bateriami
+b7792bed-de75-4e3b-80bb-5bec09cd6716|paliwo
+c73528fc-52c9-4cf7-9951-cb0355f02f3c|Bypass
+366f1ac3-ea67-45b8-bac7-a39e785b0065|OPCJA-Dostawa i instalacja Kamera Avigilion
+83807f7b-1207-418a-9114-4f0237c81c9d|Uzupełnienie połączeń wyrównawczych koryt i szaf RACK
+05dcd72d-d09d-48a1-8ad8-cd6f9e9b11f8|instalacja Kamera Avigilion 
+4a26ba87-4f32-4464-87ad-13aa6f193244|złączki uziemienia do korytek siatkowych do polączeń wyrównawczych
+ac8a8ea5-5a08-429c-8209-bdcee38eab60|Powykonawcza dokumentacja elektryczna
+55c61dd7-d649-4a2b-9ffc-f428da3a43c4|Wykonanie dokumentacji powykonawczej uwzględniającej między innymi: 
+1bda47c3-35f2-4f46-bb16-b1e0432dadb7|korytka siatkowe i światłowodowe
+c5f63a8b-213e-40d5-a5b8-d3d9547b2388|paliwo
+745af99f-82ed-4993-80ad-5ff7dc708894|Szafa Schneider
+e3a78059-05f7-459e-abb9-30f35bf6b695|materiały drobne materialy do separacji szyn N obu UPSów
+bc0d2f72-8ca1-41b0-ad65-01d6ec780a03|instalacja  UPS Galaxy 
+a7bdd74d-b975-4e0c-96c4-e8996c0dfb61|kabel wewnętrzny w szafie 1x6mm
+1865dc64-5f7d-4856-96e1-5ea6cc194792|Powykonawcza aktualizacja schematów
+1ffe2cbd-d26d-49a8-888d-65a23368c81b|Pytania Ogólne
+a2134697-eaa2-44a8-bfbd-c61cb560cdf5|UPS_OPCJA2:  dodatek do UPS Galaxy - stalowy rack z bateryjny Romi+ baterie SBB
+f3f21a3b-dbb1-4f00-a048-10f7e60701d8|drabinka baks pelna
+38b316ce-5519-44b5-af27-9380f4096f9e|instalacja wzmocnienia podłogi technicznej pod UPS Delta
+846e7cdd-78a4-4d45-84b4-fde98c3aa79b|analizator mocy
+b1c41c70-ca1d-4c5a-bc05-5608a789b5ac|Projekt konstrukcji wzmacniającej podłogę pod UPS Galaxy
+3f5391dc-8159-482d-84e4-60c744231888|moduł sterujący z montażem
+ac7cff28-d001-4d13-b857-9102ad8f71b6|Paliwo
+18ad51c5-3b23-4824-ae89-89bfff6634e7|Dostawa i uruchomienie sterownika pracy naprzemiennej klimatyzatorów zainstalowanych w pomieszczeniu serwerowni
+6ab2f9c6-8189-4827-acbd-e35f7e4d23cf|Paliwo
+7324f083-66da-4db6-a67f-e2d25ea973ae|Montaż całego systemu systemu wentylacji
+f3654ba2-9df7-4fae-81e9-55c3ecdec6e4|instalacja  UPS Galaxy 
+3a5f6496-7386-4454-a171-fc0d996f3631|Paliwo
+8cfef739-5c3d-43e5-9138-53c9dbc8d8a1|kabel sygnalizacyjny UPS-Bypass 4x1mm
+bd116ed5-efcc-435a-8e14-aff8fab50ae2|Paliwo
+ffa7b569-737d-4111-8b28-e721ad02fccf|bezpieczniki BM do  RBK 100A
+42f34d5f-13ec-4b33-bc0c-e429fdb7f9c2|paliwo
+a7fd3e6d-7bc5-46c1-b4ba-aedd87e47e98|Projekt konstrukcji wzmacniającej podłogę pod UPS Delta
+07f5300b-0341-4d1b-98eb-1124c564a5ec|Rozbudowa układu zasilania do konfiguracji dwutorowej
+21000f15-fd71-4b57-bd78-dc74c97390d3|Montaż tac ociekowych pod klimatyzatorami,
+3a8dd737-2a47-4ab4-87e2-477caf96fe78|instalacja, konfiguracja modułu sterującego pracą naprzemienną
+e3076ac3-63fd-495e-8d85-7ec8a4ecd52c|Przegląd (inwentaryzacja), uszczelnienie i oznaczenie wszystkich przejść PPOŻ (uzupełnienie masy, usunięcie pianek montażowych, etykiety),  Doposażenie drzwi w samozamykacz i uszczelkę samoopadającą,  Integracja systemu VESDA z SUG,  Opracowanie procedury reagowania na alarm VESDA / SUG
+4baa3695-b810-4607-8906-2abec69f55dc|Zaprojektowanie, dostawa i wdrożenie systemu BMS/centralnego monitoringu dla zasilania + UPS, klimatyzacji, PPOŻ i czujników środowiskowych (temperatura,wilgotność). W zakresie integracja z poszczegolnymi systemami
+36d73186-db20-45b0-90d8-8482260612b7|Rozbudowa układu zasilania do konfiguracji dwutorowej
+64bd2907-32d5-4315-a1ba-ae1526123e2a|Bypass
+2b54e3f3-81d5-41dd-80e2-168b5264c7c4|montaż BMS
+3b352d2f-2606-4f30-b8ae-33c26ac32c8a|wizja lokalna pod konstrukcję wsporczą UPS Delta
+3ed1ee9b-ad06-48fe-967e-7aae52e61e95|instalacja paneli maskujących
+7574f7da-9cea-494a-9ee1-9c9d92259418|wizja lokalna pod rozbudowę elektryczną
+c4a5c845-9301-48aa-b50b-63de03365e28|Prace porządkowe pod podłogą techniczną (usunięcie kurzu i innych elementów luźnych/zbędnych)
+f002c275-f6bc-4053-8880-dc3448d16510|Dostawa i uruchomienie urządzenia UPS Galaxy VS 120 kW 400V wraz z modułami akumulatorowymi pozwalającymi zapewnić czas podtrzymania zainstalowanych urządzeń w szafach rack min 1 godzina. 
+23f45bb7-2b77-48b1-8fcc-efe61574e2b3|prace przygotowawcze do instalcji BMS
+d726aa7d-93d6-4268-b027-ef398ef6d84a|paliwo
+ffc1f395-6a7d-4c50-ad18-e7c0f66a16d3|Dostosowanie koryt kablowych nad szafami rack (dotyczy nowo instalowanych szaf)
+98493363-bdf3-4fb4-a5af-0d753a2ec802|OPCJA-Dostawa i instalacja Kamera Avigilion 6.0C-H6A-BO1-IR + licencje ACC7 - ENT
+b24e3268-0d4f-41e3-9303-af2bcddb73c4|wizja lokalna pod konstrukcję wsporczą UPS Delta
+89f8d23f-4300-40cd-8757-9d7cce419069|SZR
+9672ec0a-8405-40ec-9181-1314d7979f2c|Rozbudowa układu zasilania do konfiguracji dwutorowej umożliwiająca automatyczne/ręczne przełączenie źródla zasilania dla poszczególnych torów zasilających np.UPS1/UPS2/Zasilanie z przed UPS 
+01a1a1eb-abbd-4d1e-a034-261159e10269|koordynacja 
+dd8783f6-66b0-4832-ac63-38be7f99fa03|skrzynkowy rozlącznik RBK
+30feacbe-b91a-43a5-803f-fcb72e89d926|Instruktaż konfiguracji i obsługi zainstalowanego w ramach niniejszego zadania w serwerowni sprzętu i wyposażenia
+aefe13f8-f5c1-43d9-beb8-34162322389e|wizja lokalna pod konstrukcje wsporczą UPS Galaxy
+8f4de15f-8b0e-4a55-92e7-29da549ab3e5|szyna miedziana 120mm
+70d090af-796f-4d76-8b03-815ac4df798e|wsporniki 3P do szyny zbiorczej
+2e69833c-9efa-403a-9cb7-016d934aa75e|końcówki oczkowe na kabel 120mm x12
+76b0e8ba-566d-40c4-b8ef-357c95c769cb|końcówki kablowe tulejkowe na kabel 6mm
+1e5f117e-4268-48bd-b42a-39c85179f922|Wzmocnienie podlogi pod UPS Galaxy i rack z bateriami
+9c97b3b0-cfc0-49e3-be32-cd6223aa5b96|UPS_OPCJA1: dodatek do UPS Galaxy - Rack bateryjny Schneider Galaxy
+e07b9d80-b200-4955-9e34-4fb3481fad47|Instruktaż konfiguracji
+92d56353-416b-4733-a3f1-49332da5c798|kabel zasilający UPSy (L1,L2L3,N,PE) 1x120mm
+61b7a604-123d-49fe-922c-95d12837152b|osłona gumowa krawędzi korytek
+19949b09-0890-4282-afb1-260a9a9398b6|montaż połączeń wyrównawczych
+61f4a343-74ea-442d-a70e-d8e0a8545745|kabel wewnętrzny w szafie 1x6mm
+c200d5f4-c4b5-443d-b5f7-5e33611c16c8|materiały drobne materialy do separacji szyn N obu UPSów
+64096097-cb6d-4852-8ae3-0a6dcb8e7b6b|paliwo
+4d66cd58-5fd9-42e1-935f-380d9ad334f2|montaz klimatyzartora Fujitsu
+b45e4765-ce36-4441-ab91-c949a0724dca|Instruktaż konfiguracji i obsługi zainstalowanego w ramach niniejszego zadania w serwerowni sprzętu i wyposażenia
+719bccc8-6a0a-4ed2-8bda-5cc58ee83a47|Powykonawcza dokumentacja elektryczna
+7add64bc-da5e-485a-92cb-a83a923172ad|instalacje LAN (miedziane, światłowodowe)
+c84edb9f-9693-459a-9bff-56ac78d19a9b|Projekt konstrukcji wzmacniającej podłogę pod UPS Galaxy
+bb52adda-e1f4-49b7-9f52-f0dc77140937|Uzupełnienie połączeń wyrównawczych koryt i szaf RACK
+99ed4c7a-00cf-4876-ae30-d54d03853617|Easy Rack
+fc649251-7268-4318-ab98-c26fc556a108|drabinka baks pelna
+358b18fd-d61f-40f0-817c-2d5fcd92ed4c|paliwo
+e7be4282-5d24-4c5b-b470-19e939641e40|Paliwo
+b614ebba-47e9-4570-8765-755ba41921c1|koordynacja całego projektu
+019bf89e-9f5a-4b26-a935-2c66f060ec26|kabel gnd do polączęń wyrównawczych
+34c477eb-a653-4399-a482-a18d31b20b5f|złączki uziemienia do korytek siatkowych do polączeń wyrównawczych
+8b4fb3a6-cca2-4f27-b4c9-7c311c0310a1|instalacja PDU, paneli porządkujących
+b0d8c9b8-f3ab-4be4-ad3d-e0f06e6f4f7a|Easy Rack
+f825dcb5-87bb-4518-9084-ef00e206f19b|OPCJA-Dostawa metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+4410adcc-81a0-42c3-af9a-b37eef99fdbf|instalacja racka Galaxy
+71e745b7-190f-4ef8-b11e-2dc6e9c6cb46|OPCJA rozłącznik baterii Schneider
+b0cf95c4-2f05-451d-ab20-e091040c917a|OPCJA rack Romi
+f9e1372f-b54a-47e9-b57b-4775c9e8de5d|Panele maskujące 2U
+e67b138e-1319-4744-a1ea-adafff8d32a6|OPCJA-Dostawa metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+b8a97163-0405-42f6-b0f3-373803e4aae9|OPCJA-montaż metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+38180c75-9b32-4611-9b60-761be32bed53|Przygotowanie harmonogramu prac
+5372dad3-7103-4d77-a2c3-568e7012e12e|Instruktaż
+ce198145-a21e-4510-b827-b2e61eff1ef2|Panele maskujące 1U
+0d8bb716-4242-4bab-81ec-6a40c86b564a|wsporniki 3P do szyny zbiorczej
+86eb7aea-5c14-446d-9f6e-db37cc8d8196|Paliwo
+a456a010-d104-47fe-9fd2-31797693279e| wizja lokalna pod rozbudowę elektryczną
+df5a8ffb-9790-44b0-a81a-029513f91c13|bloki rozdzielcze
+bf8325df-6ed3-4248-9f1a-6166aa513402|podstawy bezpiecznikowe
+353bbcd3-1dd2-4b98-a256-0b24e80a9e44|Klimatyzator Fujitsu
+da7fd152-57ad-4efd-92ed-1b2501c5d116|paliwo delta
+6f6ac0dd-7363-47fc-b43c-d6647d5b5792|instalacja wzmocnienia podłogi technicznej pod UPS Delta
+88cdcd4f-a0fb-488d-b796-a12c1b044820|Dostawa i uruchomienie analizatorów mocy i jakości energii (U/I/cosφ/THD, alarmy, inegracja z systemem BMS)
+725335b0-25c7-45fe-bb4c-08ec3f68e3b9|Kanały wentylacyjne okrągłe spiro
+ce8fbb1e-4f6b-4282-8365-97bbac7d7091|OPCJA-Dostawa i montaż klimatyzatora Fujitsu (dotyczy pomieszczenia UPS/techniczne)
+e076b0a4-cd80-442c-80b5-625309e6b3c8|Uporządkowanie i inwentaryzacja okablowania pod podłogą techniczną oraz korytach kablowych nad szafami wraz z uzupełnieniem oznaczeń
+575c8b00-f901-455e-acc2-ef2ded4d2d72|montaż połączeń wyrównawczych
+2dabe149-f3fe-431c-b187-4837babfdb6d|Dostawa i instalacja Szafa Easy Rack z dachem, panelem bocznym, kółkami, nóżkami i 4 wspornikami, bez podłogi,organizery kablowe, czarna (model i wyposażenie identyczne jak pozostałych szaf zainstalowanych obecnie w serwerowni) - podanie modelu szafy
+6a38387d-dc11-4625-afd2-d24e8a4697ba|transport nowych racków APC, instalacja PDU, paneli porządkujących 
+cc2591c9-3ec2-4241-adc5-d54a34e7a60a|Dostosowanie koryt kablowych nad szafami rack (dotyczy nowo instalowanych szaf)
+aeaca3de-8e16-411e-8248-30f5d7af02fc|korytka siatkowe i światłowodowe
+7dd4200f-bf2a-4fec-9934-91b035622f53|kabel lan
+77632b6a-d2a1-4e89-b7b8-8f51a177fea1|Wykonanie dokumentacji powykonawczej uwzględniającej między innymi: 
+0fe74a15-ddb0-45e2-88ef-af32d4e2dbeb|instalacje elektryczna
+bd5a801c-a3f9-4d88-a4d5-dfef43896185|Dostawa i montaż paneli maskujących 19” 1-4U (sumarycznie 190U) do montazu w wolnych przestrzeniach RACK oraz przepustów szczotkowych (30szt)
+c5186f3f-1207-4604-9718-3f9b6e3c30ba|OPCJA-Dostawa i instalacja Kamera Avigilion
+45a0c71d-a81d-43b8-a2b3-af94bf592a6e|licencja ACC7 - ENT
+0c7bd973-2180-40c4-b6ea-07eb13ff1628|Instruktaż konfiguracji i obsługi zainstalowanego w ramach niniejszego zadania w serwerowni sprzętu i wyposażenia
+645f5ad0-ff4b-4250-a349-4c779bffd596|instalacja Kamera Avigilion 
+d6bd5b73-8904-46ac-8641-2b0b6cd9365b| Avigilion 6.0C-H6A-BO1-IR + licencje ACC7 - ENT
+1f8b1807-cab4-4e6e-84f3-6b6e9e7d868e|Powykonawcza dokumentacja elektryczna
+daa15447-e46d-4d25-8a63-df31fd5827d2|Rozbudowa układu zasilania do konfiguracji dwutorowej umożliwiająca automatyczne/ręczne przełączenie źródla zasilania dla poszczególnych torów zasilających np.UPS1/UPS2/Zasilanie z przed UPS 
+196b911a-3b80-4df7-9255-3e88df01f8cf|instalacja paneli maskujących
+24a1e77a-3463-479e-a657-aac588c492ca|paliwo
+8b1eb60d-75de-4818-bcef-80799f44c323|Dokumentacja powykonawcza
+659b8405-7f0c-478c-932d-37d77450b39d|Szafa automatyki 2xSZR Schneider 
+cecd9cd9-2e2d-4b9c-ad67-dc5747330ca0|kabel sygnalizacyjny UPS-Bypass 4x1mm
+1ea33ada-0780-4ccb-b882-ca2f59344725|Rozbudowa systemu przeciwpożarowego Schrack o driver komunikacyjny  Modbus
+07c6484a-cbca-4bcc-ad37-4993e28cb133|instalacje BMS
+3139dbc5-8609-439b-99a7-4bfe4cce61b7|Wykonanie dokumentacji powykonawczej uwzględniającej między innymi: 
+d6875c61-b17c-4198-ac43-0d8d4e002912|Powykonawcza aktualizacja schematów
+f2eb6ab7-4969-4034-bd2c-591368a8b165|Dostawa i uruchomienie urządzenia UPS Galaxy VS 120 kW 400V wraz z modułami akumulatorowymi pozwalającymi zapewnić czas podtrzymania zainstalowanych urządzeń w szafach rack min 1 godzina. 
+a1416afe-366d-4b1e-b2d4-0e52ada4220b|Szafa Schneider
+2f93c3c7-0e6a-4c9b-a46a-4349b7a85061|konfiguracja BMS
+956bdb2d-f3c3-485d-b17b-4ea33c8c2d3f|Projekt konstrukcji wzmacniającej podłogę pod UPS Delta
+b243e595-267f-4922-9ef2-872153369599|SZR
+5205bdd6-ea27-4aa5-a0b8-630705ff1164|oczka kablowe 4-6/16 do polączeń wyrównawczych
+384d991e-6f7a-402a-83cf-6b31015e962b| Avigilion 6.0C-H6A-BO1-IR + licencje ACC7 - ENT
+3ee59ebe-4db9-4459-bcaf-dbb3f30ae212|OPCJA-Dostawa metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+8b266502-0638-4047-9342-8bc87be2db54|instalacja wzmocnienia podłogi technicznej pod UPS Delta
+64677a73-b934-41e5-aab5-4efa5d2aeb98|Uporządkowanie i inwentaryzacja okablowania pod podłogą techniczną oraz korytach kablowych nad szafami wraz z uzupełnieniem oznaczeń
+96fc768d-5872-4ce2-8bfe-f820944ac5cb|Zabezpieczenie ostrych krawędzi i uszkodzeń koryt kablowych
+acb0258b-f80b-4a65-a190-97b650999966|panel szczotkowy 1U
+4f3c2943-f8c6-40f2-aace-a11cd017b945|końcówki oczkowe na kabel 120mm x12
+21558ea0-3dc6-4e12-a7c9-809ef1d750b5|panele szczotkowe 1U 19"
+95fad372-92f7-47aa-8727-3101142548ce|szyna miedziana 120mm
+8a5d7ee2-cb8b-449f-94fe-93ad137e9513|analizator mocy
+188593c2-09f2-4fbf-b284-becd730d4a33|koordynacja całego projektu
+d93de437-c57d-48a3-a326-4aeadde2d1bf|Projekt konstrukcji wzmacniającej podłogę pod UPS Galaxy
+a4c28ac6-c1ed-4a02-8a6e-91f68f8fa0cb|złączki uziemienia do korytek siatkowych do polączeń wyrównawczych
+6cd901bf-e52e-4050-9b29-1c020a8753b9|Dostawa koszyków montażowych do szaf rack 20szt 
+e8cae396-3b52-43d5-80c1-6059c433d943|Rozbudowa systemu przeciwpożarowego Schrack o driver komunikacyjny  Modbus
+55a312c4-23ee-4c9d-acb5-68a9c6c1c02b|Zaprojektowanie, dostawa i wdrożenie systemu BMS/centralnego monitoringu dla zasilania + UPS, klimatyzacji, PPOŻ i czujników środowiskowych (temperatura,wilgotność). W zakresie integracja z poszczegolnymi systemami
+0023f3cd-b704-4583-96a7-1507e467b322|sprzęt BMS
+6642898d-5928-41a8-a100-c246a98b01db|montaż BMS
+3332928e-9c4b-4017-9f2b-a6daa59f1d04|konfiguracja BMS
+78910b59-f02d-4e2d-bf9f-8e8be32516a4|prace przygotowawcze do instalcji BMS
+493aa8bd-2e0a-460e-a52a-61917a9493ca|koordynacja
+6086f91e-ca10-4695-a93c-76508cfa099d|koordynacja
+3360b973-f2eb-49af-87da-6a48b1bf06ab|Paliwo
+589dd277-5cfb-48d4-973a-880312584943| Avigilion 6.0C-H6A-BO1-IR + licencje ACC7 - ENT
+21ff84f7-6421-401e-b5df-1a3f971a5437|moduł sterujący z montażem
+f540626c-898e-4705-b614-ef8c8c6126f6|Powykonawcza dokumentacja elektryczna
+a539f595-899c-458e-a087-9181d68c3d34|paliwo
+ec3c3a77-44ee-4bd8-ac7e-48df7ba563ff|OPCJA-montaż metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+d615d6f7-7f2c-4702-8a32-629f7235df75|OPCJA-Dostawa metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+cb95e0cf-1db5-4be3-b901-0b42b6b36f18|Instruktaż
+60f4ea2c-bb74-493e-b40c-b4ed05bc2ee7|paliwo
+1b995850-4887-4448-bd52-0f3ae0156a87|Rozbudowa układu zasilania do konfiguracji dwutorowej umożliwiająca automatyczne/ręczne przełączenie źródla zasilania dla poszczególnych torów zasilających np.UPS1/UPS2/Zasilanie z przed UPS 
+45bbea6e-626a-4d05-aa2d-8dd1772ee83e|Rozbudowa układu zasilania do konfiguracji dwutorowej
+7a1f6a2b-dffb-4c9f-a233-8db4a8b09635|skrzynkowy rozlącznik RBK
+8c283b4a-82a3-44ad-bec4-180fd43dcd40|bezpieczniki BM do  RBK 100A
+a6004027-a334-4036-8265-ca39f79a3ca6|bloki rozdzielcze
+8720f203-b6d6-4c1e-9c5e-a07c59eab2f6|kabel zasilający UPSy (L1,L2L3,N,PE) 1x120mm
+2364fd6a-56d9-49c6-895b-e7b04c5ae0fb|szyna miedziana 120mm
+e6904045-6abc-48dd-9eef-6d787be393ca|wsporniki 3P do szyny zbiorczej
+984c5511-7538-4ce9-b23a-68d724984826|kabel wewnętrzny w szafie 1x6mm
+3fc23ca6-689b-40ab-9198-af495c25ec38|materiały drobne materialy do separacji szyn N obu UPSów
+712504aa-87bd-4051-9ec6-fca16d3dd6bf|końcówki oczkowe na kabel 120mm x12
+2a34728f-c5fd-4100-9331-4df0e23721d9|końcówki kablowe tulejkowe na kabel 6mm
+36d65e8d-e6a7-477e-8374-922e4f45b88f|Dostawa i uruchomienie urządzenia UPS Galaxy VS 120 kW 400V wraz z modułami akumulatorowymi pozwalającymi zapewnić czas podtrzymania zainstalowanych urządzeń w szafach rack min 1 godzina. 
+324fab55-1487-4f85-9e2d-5fd75ffec67b|instalacja  UPS Galaxy 
+416a87b0-7b3e-4a08-ab97-eaa349a7ac4a|kabel sygnalizacyjny UPS-Bypass 4x1mm
+7edd6e12-9f19-465f-a365-533469785688|Bypass
+b0a5f923-3ad1-4a92-b4bf-34771c95a8e8|drabinka baks pelna
+42fec55a-01cb-4f20-bf02-de055187315d|Wzmocnienie podlogi pod UPS Galaxy i rack z bateriami
+5118ec8e-cdbe-429d-bca7-6ce2fe42985d|konstrukcja stalowa do wzmocnienia podłogi technicznej pod UPS galaxy i rack bateryjny
+d74ab679-6366-47ff-93b7-ab194d607314|instalacja wzmocnienia podłogi technicznej pod UPS Galaxy
+37b5e7c8-d535-4fdd-bdfe-685b4c33d983|paliwo
+33c24038-1083-4d3a-83e3-121b59b1d75d|wizja lokalna pod konstrukcje wsporczą UPS Galaxy
+fa011bd6-f44d-4480-8788-87233b7bb4cb|Paliwo
+fa259c3f-c7af-43c5-8ab4-120fdc628693|UPS_OPCJA1: dodatek do UPS Galaxy - Rack bateryjny Schneider Galaxy
+dc4db4a8-e513-4c5f-917b-d8cd4d2ea0a0|instalacja racka bateryjnego Galaxy
+ab3e25ac-5e23-481d-97b3-4587ecd7f9b0|Dostawa i uruchomienie analizatorów mocy i jakości energii (U/I/cosφ/THD, alarmy, inegracja z systemem BMS)
+07a3cc9b-4c0c-4c27-9b2d-0a4edf2e838e|instalacja analizatora
+e77765e2-e600-477e-a644-374b5f4e6502|instalacje LAN (miedziane, światłowodowe)
+c4004c01-c57f-47f9-8f37-58877e816411|Uporządkowanie i inwentaryzacja okablowania pod podłogą techniczną oraz korytach kablowych nad szafami wraz z uzupełnieniem oznaczeń
+7724eaa5-512e-4614-ac77-9a1b33a866ff|Prace porządkowe pod podłogą techniczną (usunięcie kurzu i innych elementów luźnych/zbędnych)
+d4de0914-22cb-42b1-b638-af139ae9f89a|Zabezpieczenie ostrych krawędzi i uszkodzeń koryt kablowych
+ec05a2fc-6831-4b88-a114-41f8a94b7406|osłona gumowa krawędzi korytek
+6009eae5-cb7a-42f5-a49f-b8aae72985c7|montaż zabezpieczeń krawędzi koryt kablowych
+4545fd5d-daa6-4971-aef2-8d8c1bc28134|kabel lan
+45ca42af-5ad1-480c-a6ed-9d46164c4eac|gniazdo natynkowe
+df258634-c5ed-45eb-8b04-df40dca280cd|instalacja Kamera Avigilion 
+236cc4dc-36a4-4803-8b50-e8a3cd4a3c27|Uzupełnienie połączeń wyrównawczych koryt i szaf RACK
+4c63c905-1e75-4008-8510-448ff0215a66|kabel gnd do polączęń wyrównawczych
+82a4011e-6d28-4055-86de-7c1c42f1ba8f|oczka kablowe 4-6/16 do polączeń wyrównawczych
+6ff01260-4b23-4a39-8340-52a79cbeb532|montaż połączeń wyrównawczych
+ed9861db-f9e0-4c42-a82a-77330e1eb889|Dostawa i instalacja Szafa Easy Rack z dachem, panelem bocznym, kółkami, nóżkami i 4 wspornikami, bez podłogi,organizery kablowe, czarna (model i wyposażenie identyczne jak pozostałych szaf zainstalowanych obecnie w serwerowni) - podanie modelu szafy
+33ddb007-2f4f-4b82-a8ef-58e0b1e1539b|transport nowych racków APC, instalacja PDU, paneli porządkujących 
+3abe1c6b-20ab-4da2-b1e1-48068b560804|Easy Rack
+6b1a87b9-d79e-40fe-a7f8-a98f0a002050|Dostosowanie koryt kablowych nad szafami rack (dotyczy nowo instalowanych szaf)
+58fbe31c-8218-4411-a301-64c4e54c68fd|przedłużenie koryt kablowych
+addc515e-23ad-4c65-b292-89b8f56dc146|korytka siatkowe i światłowodowe
+6866937e-743c-4e5e-bc08-9161ee5f3674|Dostawa i montaż paneli maskujących 19” 1-4U (sumarycznie 190U) do montazu w wolnych przestrzeniach RACK oraz przepustów szczotkowych (30szt)
+d3b7a6f7-a312-4fce-b6ee-21acd843fdfb|Panele maskujące 1U
+022c6d36-28d4-4779-9170-e7da9406d43e|Panele maskujące 2U
+92e3d941-7e1e-470f-92b9-844dc812a60b|instalacja paneli maskujących
+588426e4-1b9c-49c6-bc6d-2374954cdc6d|panele szczotkowe 1U 19"
+dcd56b77-1df0-4532-b3a7-24a79f90057d|OPCJA-Dostawa i instalacja Kamera Avigilion
+4d20426a-9fab-466b-9e4c-bb5074b83196|licencja ACC7 - ENT
+1e9197ca-42c5-4cfe-bec5-7075380c448d|OPCJA-Dostawa metalowych szaf do przechowywania dokumentów  1990x1000x435 szafa posiada 4 przestawne półki o nośności 65 kg/p
+4cb274aa-408a-48ae-81c0-6497fb96423c|instalacje HVAC
+e65f5b54-935e-4454-bed7-c13bcdc131ad|Dostawa i uruchomienie sterownika pracy naprzemiennej klimatyzatorów zainstalowanych w pomieszczeniu serwerowni
+ac324f82-cda0-4dfc-97fa-a49f44300c75|Zaprojektowanie, dostawa i uruchomienie systemu wentylacji pomieszczeń serwerowni. System dodatkowo ma zapewniać możliwość przewietrzania pomieszczeń po akcji gaśniczej.
+6ace49ce-fd65-4910-b97e-fad21b86d032|instalacja linii zasialającej dla centrali wentylacyjnej
+7a99b150-f196-4d0d-90fc-f628c0d43bf3|Centrala wentylacyjna
+5e4707f8-edbc-48e2-ae76-75915bf91c70|Kanały wentylacyjne okrągłe spiro
+64aec326-c12e-41e4-8234-a6f213895a94|Montaż całego systemu systemu wentylacji
+0944d495-7921-45f0-be41-cb9a27308c1b|koordynacja
+183ed261-4d05-4704-b423-7b39cc4e63bc|kabel 5x4
+657face2-69d0-4406-87e0-bae1e7ffbfe7|OPCJA- Poprawa orurowania skroplin (izolazja rur, montaż grzałek przeciwzamarzeniowych, korekta spadków rur)
+074738ef-3088-4c6d-b67a-ff8b85c20e1d|OPCJA- Poprawa orurowania skroplin (izolazja rur, montaż grzałek przeciwzamarzeniowych, korekta spadków rur)
+ca547076-38fd-4337-9b8e-6e8f070a92e3|OPCJA-Dostawa i montaż klimatyzatora Fujitsu (dotyczy pomieszczenia UPS/techniczne)
+17d90415-911d-40ec-84f6-83ff34f7f0d6|prace wykończeniowe po instalacji HVAC
+ce87d9a6-791e-4cb8-8563-a444d982710e|instalacja linii zasialającej dla klimatyzatora Fujitsu
+5d2d4780-fe5c-43de-b3db-b20d3cd86698|Klimatyzator Fujitsu
+a2c43d1b-ade8-47f6-ab13-ae2e6681dd01|montaz klimatyzartora Fujitsu
+6facbb08-6954-42fd-b769-7c7e0db4aba0|Montaż tac ociekowych pod klimatyzatorami,
+fa30da47-a80b-42e5-89a1-0f50fc1b5dcb|Montaż tac ociekowych pod klimatyzatorami,
+f66a7e1b-8688-4f0b-af90-e77d2d268cfc|Przygotowanie harmonogramu prac
+68bfdff4-4ea2-472e-9966-68684e3e4a40|Przygotowanie harmonogramu prac z wyszczególnieniem terminu realizacji
+1f2c8dc2-7ec0-4d9a-a428-11d202518131|Instruktaż konfiguracji i obsługi zainstalowanego w ramach niniejszego zadania w serwerowni sprzętu i wyposażenia
+b53daf1e-c24c-4f22-988b-be7f0f009749|Instruktaż konfiguracji
+9e8f6e12-21ec-490f-bef3-f1b4539f7213|Dokumentacja powykonawcza
+c5533746-11de-4cdc-8713-b0bc0aa9e052|Wykonanie dokumentacji powykonawczej uwzględniającej między innymi: 
+18339fb8-ab60-4a5b-8e41-40229364bd7e|Powykonawcza aktualizacja schematów
+56a8be90-de5e-4391-a2a9-747762a3e421|instalacje ppoż
+ad89ffee-7474-498b-851a-764fb4d78160|Przegląd (inwentaryzacja), uszczelnienie i oznaczenie wszystkich przejść PPOŻ (uzupełnienie masy, usunięcie pianek montażowych, etykiety),  Doposażenie drzwi w samozamykacz i uszczelkę samoopadającą,  Integracja systemu VESDA z SUG,  Opracowanie procedury reagowania na alarm VESDA / SUG
+190b6e75-8878-477a-b900-2c8350d8c5c8|Weryfikacja oraz integracja systemów VESDA z centralą SCHRACK
+9b39b720-d459-4682-979d-f3280e374079|Uszczelnienie i oznaczenie przejść instalacyjnych PPOŻ
+a4cf6b13-a039-4481-8046-c1a6042bd420|Doposażenie drzwi serwerowni w samozamykacze
+7d0f31ad-2ed7-40d8-be25-4dc1a2690565|podstawy bezpiecznikowe- dostarcza CMC

@@ -3,8 +3,16 @@ import { useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 // Textarea rosnąca do wysokości treści — wspólna dla kolumn tekstowych WBS
 // (Komentarz / Strategia w `WBSHybridTable` i Komentarz w `WbsMaterialsPanel`).
 // @anchor auto-resize-textarea
-export default function AutoResizeTextarea({ value, onChange, onBlur, onKeyDown, onFocus, placeholder, className, style, ...rest }) {
+// `inputRef` — opcjonalna kotwica na sam element DOM dla wołającego (autouzupełnianie nazwy
+// potrzebuje setSelectionRange). Zwykłe `ref` nie przechodzi przez `{...rest}` komponentu
+// funkcyjnego, więc przekazujemy je osobnym propsem.
+export default function AutoResizeTextarea({ value, onChange, onBlur, onKeyDown, onFocus, placeholder, className, style, inputRef, ...rest }) {
     const ref = useRef(null);
+    const setRefs = useCallback((el) => {
+        ref.current = el;
+        if (typeof inputRef === 'function') inputRef(el);
+        else if (inputRef) inputRef.current = el;
+    }, [inputRef]);
     const adjust = useCallback(() => {
         const el = ref.current;
         if (!el) return;
@@ -25,7 +33,7 @@ export default function AutoResizeTextarea({ value, onChange, onBlur, onKeyDown,
     }, [adjust]);
     return (
         <textarea
-            ref={ref}
+            ref={setRefs}
             rows={1}
             value={value}
             onChange={e => { onChange(e); adjust(); }}

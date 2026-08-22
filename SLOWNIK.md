@@ -342,6 +342,12 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | hasActiveFilter (czy jakikolwiek filtr kolumnowy aktywny) | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-has-active-filter |
 | ui-sekcja | stopka „Wartość zafiltrowana" tabeli Budżet | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-filtered-footer |
 | ui-input | AutoResizeTextarea | apps/frontend/src/components/shared/wbs/AutoResizeTextarea.jsx | @anchor auto-resize-textarea |
+| ui-input | WbsNameAutocomplete (pole Nazwa z podpowiedzią jak w Excelu) | apps/frontend/src/components/shared/wbs/WbsNameAutocomplete.jsx | @anchor wbs-name-autocomplete |
+| ui-funkcja | buildNameSuggestionPool | apps/frontend/src/components/shared/wbs/wbsNameSuggest.js | @anchor build-name-suggestion-pool |
+| ui-funkcja | findNameSuggestion | apps/frontend/src/components/shared/wbs/wbsNameSuggest.js | @anchor find-name-suggestion |
+| ui-funkcja | normalizeNameKey | apps/frontend/src/components/shared/wbs/wbsNameSuggest.js | @anchor normalize-name-key |
+| ui-stala | MIN_PREFIX (próg długości prefiksu dla podpowiedzi nazwy) | apps/frontend/src/components/shared/wbs/wbsNameSuggest.js | @anchor wbs-name-min-prefix |
+| ui-stan | nameSuggestionPool | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor name-suggestion-pool |
 | ui-modal | ImageLightbox | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor image-lightbox |
 | ui-stan | lightboxOpen | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor requirement-image-lightbox-open |
 | ui-kolumna | comment (Komentarz w Materiałach) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-material-row-comment |

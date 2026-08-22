@@ -1,3 +1,26 @@
+## 2026-08-22 — feat(wbs): autouzupełnianie nazwy liścia z nazw już użytych w drzewie (v2026.08.22.895)
+
+### architektura / API
+
+- **`WbsNameAutocomplete` — kolumna Nazwa podpowiada jak Excel.** Po wpisaniu ≥3 znaków, które są prefiksem nazwy istniejącej już w tym samym drzewie WBS, pole dopisuje resztę nazwy i ZAZNACZA dopisany ogon. Dalsze pisanie nadpisuje zaznaczenie, Backspace/Delete je kasuje, Escape wraca do wpisanego prefiksu, a Enter / Tab / strzałka w prawo / wyjście z pola zatwierdzają. Podpowiedź działa tylko przy dopisywaniu na końcu tekstu — edycja w środku istniejącej nazwy jest nietknięta
+- **`wbsNameSuggest.js` — czysta logika dopasowania, bez Reacta.** Rozdzielona od komponentu, żeby dała się odpalić w Node; `test/test-name-autocomplete.mjs` sprawdza ją na 855 prawdziwych nazwach z bazy dev (185 unikalnych)
+- **`AutoResizeTextarea` przyjmuje `inputRef`** — dostęp do elementu DOM dla `setSelectionRange`. Zwykłe `ref` nie przechodzi przez `{...rest}` komponentu funkcyjnego
+
+### słownik
+
+- dodano `WbsNameAutocomplete` — pole nazwy węzła WBS z podpowiedzią, `WbsNameAutocomplete.jsx`, `@anchor wbs-name-autocomplete`
+- dodano `buildNameSuggestionPool` — pula nazw z drzewa, posortowana wg częstości użycia, `wbsNameSuggest.js`
+- dodano `findNameSuggestion` — pierwsza nazwa z puli zaczynająca się od prefiksu, `wbsNameSuggest.js`
+- dodano `normalizeNameKey` — klucz porównania nazw (wielkość liter + spacje), `wbsNameSuggest.js`
+- dodano `MIN_PREFIX` — próg 3 znaków, poniżej którego nie podpowiadamy, `wbsNameSuggest.js`
+- dodano `nameSuggestionPool` — memo puli w `WBSHybridTable.jsx`
+
+### wytyczne
+
+- `ui-funkcja` `findNameSuggestion` — dopasowanie jest DOSŁOWNYM prefiksem (różni się tylko wielkością liter i spacjami). Świadomie bez fuzzy: podpowiedź wstawiana automatycznie w pole musi być pewna. Dopasowanie rozmyte to osobny krok, z pytaniem do użytkownika, nie z cichym wstawieniem
+- `ui-input` `WbsNameAutocomplete` — zaznaczenie ogona nakładaj OD RAZU na DOM w `onChange`, nie tylko w `useLayoutEffect`. Gdy podpowiedź równa się dotychczasowej wartości pola, React nie przerysowuje (ten sam stan), efekt nie odpala i ogon zostaje niezaznaczony
+- `ui-stan` `nameSuggestionPool` — licz w `useMemo` po `items`, nigdy przy każdym znaku: drzewa mają 2–3 tys. węzłów
+
 ## 2026-08-22 — fix(materialy): cichy błąd zapisu produktu katalogowego zostawia ślad (v2026.08.22.894)
 
 ### architektura / API

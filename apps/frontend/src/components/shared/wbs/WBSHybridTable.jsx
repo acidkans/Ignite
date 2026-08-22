@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType } from './wbsConstants';
 import AutoResizeTextarea from './AutoResizeTextarea';
+import WbsNameAutocomplete from './WbsNameAutocomplete';
+import { buildNameSuggestionPool } from './wbsNameSuggest';
 import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo } from 'lucide-react';
 import AddTaskModal from '../AddTaskModal';
 import { useDevice } from '../../../hooks/useDevice';
@@ -1047,6 +1049,11 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
     const items = wbsTree?.items || [];
 
+    // @anchor name-suggestion-pool
+    // Nazwy z całego drzewa jako źródło podpowiedzi w kolumnie Nazwa. Przeliczane tylko
+    // przy zmianie drzewa — przy każdym wpisanym znaku byłoby to O(n) po 2–3 tys. węzłów.
+    const nameSuggestionPool = React.useMemo(() => buildNameSuggestionPool(items), [items]);
+
     // Pre-fetch marker links for all WBS nodes (+ periodic refresh) — jedno zapytanie batch
     // zamiast N (po jednym na węzeł), inaczej drzewo 200 węzłów robiło 200 fetchy co 30s.
     const fetchMarkerLinks = useCallback(async () => {
@@ -1650,11 +1657,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
                 {/* Nazwa */}
                 <td className="px-3 py-1.5 select-text relative" style={{ paddingLeft: `calc(0.75rem + ${depth * 24}px)`, paddingRight: '7rem' }} onClick={e => e.stopPropagation()}>
-                    <AutoResizeTextarea
+                    <WbsNameAutocomplete
                         value={node.name || ''}
-                        onChange={e => handleField(node.id, 'name', e.target.value)}
-                        onBlur={e => {
-                            const v = e.target.value;
+                        pool={nameSuggestionPool}
+                        excludeId={node.id}
+                        onValueChange={v => handleField(node.id, 'name', v)}
+                        onValueBlur={v => {
                             onNodeFieldSave?.(node.id, 'name', v);
                             if ((node.type === 'equipment' || node.type === 'material') && v) {
                                 onMaterialNodeCreated?.({ wbsNodeId: node.id, name: v, type: node.type, parentId });
