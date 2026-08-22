@@ -1,3 +1,24 @@
+## 2026-08-23 — fix(materialy): ręczna propozycja zapisuje się od producenta i modelu (v2026.08.23.897)
+
+### architektura / API
+
+- **`addManual` nie kończy się już cichym `return`** — `ProductProposal.productName` jest w schemacie WYMAGANE, więc bez nazwy handlowej propozycja nie ma prawa powstać, ale dotąd przycisk „Dodaj" po prostu nic nie robił i nic tego nie tłumaczyło. Naturalna droga wpisywania to producent → model (lista zawężona producentem) → zapis, a ona z założenia zostawia nazwę handlową pustą
+- **`composeProposalName` — nazwa handlowa składa się sama**: najpierw nazwa z katalogu materiałów dla pary producent+model, w drugiej kolejności złożenie „PRODUCENT MODEL". Wpisana ręcznie ma pierwszeństwo. Logika wyodrębniona do `proposalName.js`, bez Reacta, żeby dała się odpalić w Node
+- **`manualError` — komunikat pod formularzem** zamiast ciszy, gdy brakuje producenta
+- **Migracja produkcyjna (AMP_5G):** 9 węzłów materiałowych bez własnej karty i bez tagu `req:` pożyczało kartę sąsiada przez fallback po NAZWIE w `WbsMaterialsPanel` — propozycja dodana przy jednej gałęzi pojawiała się przy wszystkich o tej samej nazwie. Każdy dostał własną kartę (nazwa, ilość i jednostka z węzła; cena, wymagania techniczne, produkt i dostawca z karty pożyczanej). Przeliczono też 5 kart-wzorców, żeby usamodzielniona gałąź nie liczyła się dwa razy: `cybant` 675→325, `zapinki do cybantów` 675→325, `mufa łącząca rhdp` 38→10, `mufa światłowodowa 48j` 2→1, `łączniki kątowe` 41→1. Po migracji sumy się domykają: `cybant` 795 w WBS i 795 na kartach
+- **Test:** `test/test-proposal-name.mjs` — 9 sprawdzeń składania nazwy
+
+### słownik
+
+- dodano `compose-proposal-name` — `composeProposalName`, składanie nazwy handlowej propozycji, `proposalName.js`
+- dodano `manual-proposal-name-fallback` — gałąź zapisu ręcznej propozycji bez nazwy handlowej, `WbsMaterialsPanel.jsx`
+- dodano `manual-proposal-error` — `manualError`, komunikat pod formularzem ręcznej propozycji, `WbsMaterialsPanel.jsx`
+
+### wytyczne
+
+- `ui-formularz` — **nigdy nie kończ zapisu cichym `return`.** Brak wymaganego pola ma dać komunikat przy formularzu; martwy przycisk jest nie do zdiagnozowania z zewnątrz i wygląda jak awaria backendu
+- `ui-panel` `WbsMaterialsPanel` — dopasowanie węzeł↔karta ma trzeci stopień: **po NAZWIE**. Węzeł bez własnej karty pokazuje wtedy kartę sąsiada i edycja na jednym widać na wszystkich. Każdy węzeł materiałowy musi mieć własną kartę, inaczej fallback skleja pozycje o tej samej nazwie
+
 ## 2026-08-22 — fix(wbs): karta zbiorcza liczy się z rzeczywistych ilości gałęzi (v2026.08.22.896)
 
 ### architektura / API

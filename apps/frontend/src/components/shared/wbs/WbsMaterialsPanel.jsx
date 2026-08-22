@@ -14,6 +14,7 @@ import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula, parsePr
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
 import { guardOfferEdit, requestOfferUnlock, offerLockInputProps } from '../OfferLockGuard';
 import AutoResizeTextarea from './AutoResizeTextarea';
+import { composeProposalName } from './proposalName';
 import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, STATUS_META, authHeaders, flattenWbsNodes, getParentPath,
     flattenReq, wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf, fmtQty, fmtZl, fmtDate,
@@ -316,6 +317,9 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
     const [searching, setSearching] = useState(false);
     const [manualForm, setManualForm] = useState(null);
     const [manualAc, setManualAc] = useState({});
+    // @anchor manual-proposal-error — komunikat pod formularzem ręcznej propozycji; bez niego
+    // brak wymaganego pola kończył się cichym `return` i przycisk wyglądał na martwy.
+    const [manualError, setManualError] = useState(null);
     const manualInputRefs = useRef({});
     const suppressManualAcRef = useRef(false);
 
@@ -338,6 +342,7 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
             return;
         }
         const suggestion = findInlineAc(key, typed, materialDb, { ...manualForm, [key]: typed });
+        if (manualError) setManualError(null);
         setManualForm(f => ({ ...f, [key]: typed }));
         setManualAc(a => ({ ...a, [key]: suggestion }));
     };
@@ -424,7 +429,18 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
         for (const key of AC_KEYS) {
             if (manualAc[key]) form[key] = key === 'manufacturer' ? manualAc[key].toUpperCase() : manualAc[key];
         }
-        if (!form.productName) return;
+        // @anchor manual-proposal-name-fallback — `ProductProposal.productName` jest w schemacie
+        // WYMAGANE, więc bez nazwy handlowej propozycja nie ma prawa powstać. Dotąd funkcja
+        // kończyła się tutaj cichym `return`: przycisk nie robił nic i nic tego nie tłumaczyło.
+        // Naturalna droga to producent → model (lista zawężona producentem) → zapis, więc nazwę
+        // składamy sami: najpierw handlowa z katalogu dla tej pary, w drugiej kolejności
+        // „PRODUCENT MODEL". Komunikat zostaje wyłącznie dla formularza bez producenta i modelu.
+        form.productName = composeProposalName(form, materialDb);
+        if (!form.productName || !form.manufacturer) {
+            setManualError('Podaj producenta — nazwa handlowa złoży się sama z producenta i modelu.');
+            return;
+        }
+        setManualError(null);
         const payload = { ...form, isManual: true };
         payload.priceNetto = parsePriceInput(form.priceNetto);
         const res = await fetch(`${API_URL}/material-requirements/${req.id}/proposals`, {
@@ -434,6 +450,7 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
             const created = await res.json();
             setManualForm(null);
             setManualAc({});
+            setManualError(null);
             setProposals(prev => [...prev, created]);
             onRefresh();
         }
@@ -447,7 +464,7 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
                     className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-colors disabled:opacity-40">
                     <Sparkles size={10} /> {searching ? 'Szukam...' : 'Szukaj AI'}
                 </button>
-                <button onClick={() => setManualForm(manualForm ? null : { productName: '', manufacturer: '', model: '', priceNetto: '', availability: '', sourceUrl: '', supplierId: null })}
+                <button onClick={() => { setManualError(null); setManualForm(manualForm ? null : { productName: '', manufacturer: '', model: '', priceNetto: '', availability: '', sourceUrl: '', supplierId: null }); }}
                     className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 transition-colors">
                     <Plus size={10} /> Dodaj ręcznie
                 </button>
@@ -461,6 +478,7 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
                     (!mdl || (m.model || '').toLowerCase() === mdl)
                 );
                 return (
+                <>
                 <div className="flex items-center gap-1 px-2 py-1 rounded bg-white/5 border border-white/10">
                     <div className="w-5 flex-shrink-0 flex items-center justify-center">
                         {knownManual && <Database size={10} title="Produkt znany w bazie materiałów" className="text-cyan-500/70" />}
@@ -502,9 +520,13 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
                         )}
                         </React.Fragment>
                     ))}
-                    <button onClick={() => setManualForm(null)} className="flex-shrink-0 px-2 py-0.5 text-xs text-gray-500 hover:text-white transition-colors ml-1">Anuluj</button>
+                    <button onClick={() => { setManualError(null); setManualForm(null); }} className="flex-shrink-0 px-2 py-0.5 text-xs text-gray-500 hover:text-white transition-colors ml-1">Anuluj</button>
                     <button onClick={addManual} className="flex-shrink-0 px-3 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-xs text-white transition-colors">Dodaj</button>
                 </div>
+                {manualError && (
+                    <p className="text-[11px] text-red-300 mt-0.5 ml-7">{manualError}</p>
+                )}
+                </>
                 );
             })()}
 

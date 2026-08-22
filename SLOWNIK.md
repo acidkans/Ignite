@@ -342,6 +342,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | hasActiveFilter (czy jakikolwiek filtr kolumnowy aktywny) | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-has-active-filter |
 | ui-sekcja | stopka „Wartość zafiltrowana" tabeli Budżet | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-filtered-footer |
 | ui-input | AutoResizeTextarea | apps/frontend/src/components/shared/wbs/AutoResizeTextarea.jsx | @anchor auto-resize-textarea |
+| ui-funkcja | composeProposalName | apps/frontend/src/components/shared/wbs/proposalName.js | @anchor compose-proposal-name |
+| ui-funkcja | addManual (galaz bez nazwy handlowej) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor manual-proposal-name-fallback |
+| ui-stan | manualError | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor manual-proposal-error |
 | ui-input | WbsNameAutocomplete (pole Nazwa z podpowiedzią jak w Excelu) | apps/frontend/src/components/shared/wbs/WbsNameAutocomplete.jsx | @anchor wbs-name-autocomplete |
 | ui-funkcja | buildNameSuggestionPool | apps/frontend/src/components/shared/wbs/wbsNameSuggest.js | @anchor build-name-suggestion-pool |
 | ui-funkcja | findNameSuggestion | apps/frontend/src/components/shared/wbs/wbsNameSuggest.js | @anchor find-name-suggestion |
