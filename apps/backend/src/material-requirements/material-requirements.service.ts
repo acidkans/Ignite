@@ -661,18 +661,33 @@ export class MaterialRequirementsService {
         // - 1 alokacja → update WbsNode.quantity (cascade: WbsNodeMaterial + MR.quantity + JSON)
         // - 0 alokacji → zapis na węźle z relacji 1:1 `wbsNodeId`, wymaganie dostaje odbicie
         // - >1 alokacji → ignoruj quantity (edycja per gałąź w ExpandedDetail)
+        // Na węzeł NIGDY nie trafia `dto.quantity` wprost — patrz `nodeShareFromDto`.
         if (dto.quantity !== undefined) {
             const qty = parseFloat(String(dto.quantity));
             if (Number.isFinite(qty) && qty >= 0) {
-                const allocs = await this.prisma.wbsNodeMaterial.findMany({ where: { materialId: id } });
+                const req = await this.prisma.materialRequirement.findUnique({
+                    where: { id }, select: { wbsNodeId: true, materialId: true },
+                });
+                // Alokacje szukane po `materialId` wymagania, nie po jego własnym id: kolumna
+                // `WbsNodeMaterial.materialId` wskazuje `materials.id` (migracja `ce75dbe`).
+                // Zapytanie po id wymagania zwracało zawsze 0 wierszy, więc KAŻDY zapis ilości
+                // wpadał w gałąź „bez alokacji" niezależnie od stanu rozbicia na gałęzie.
+                const allocs = req?.materialId
+                    ? await this.prisma.wbsNodeMaterial.findMany({ where: { materialId: req.materialId } })
+                    : [];
                 if (allocs.length === 1) {
-                    await this.writeWbsNodeQuantity(allocs[0].wbsNodeId, qty);
-                    await this.prisma.wbsNodeMaterial.update({
-                        where: { id: allocs[0].id },
-                        data: { quantity: qty },
-                    }).catch(() => {});
+                    const share = this.nodeShareFromDto(allocs[0].wbsNodeId, qty, dto.wbsNodeAllocations);
+                    if (share !== null) {
+                        await this.writeWbsNodeQuantity(allocs[0].wbsNodeId, share);
+                        await this.prisma.wbsNodeMaterial.update({
+                            where: { id: allocs[0].id },
+                            data: { quantity: share },
+                        }).catch(() => {});
+                        if (dto.wbsNodeAllocations === undefined) {
+                            data.wbsNodeAllocations = JSON.stringify({ [allocs[0].wbsNodeId]: share });
+                        }
+                    }
                     data.quantity = qty;
-                    data.wbsNodeAllocations = JSON.stringify({ [allocs[0].wbsNodeId]: qty });
                 } else if (allocs.length > 1) {
                     delete data.quantity;
                 } else {
@@ -680,10 +695,10 @@ export class MaterialRequirementsService {
                     // `wbsNodeId`. Wcześniej ilość lądowała wtedy WYŁĄCZNIE na wymaganiu, a WBS się o niej
                     // nie dowiadywał — stąd rozjazd ilości między wierszem tabeli a kartą pod nim. Zasada:
                     // zapis idzie najpierw na `WbsNode` (źródło prawdy), wymaganie dostaje odbicie.
-                    const req = await this.prisma.materialRequirement.findUnique({
-                        where: { id }, select: { wbsNodeId: true },
-                    });
-                    if (req?.wbsNodeId) await this.writeWbsNodeQuantity(req.wbsNodeId, qty);
+                    if (req?.wbsNodeId) {
+                        const share = this.nodeShareFromDto(req.wbsNodeId, qty, dto.wbsNodeAllocations);
+                        if (share !== null) await this.writeWbsNodeQuantity(req.wbsNodeId, share);
+                    }
                     data.quantity = qty;
                 }
             }
@@ -706,10 +721,7 @@ export class MaterialRequirementsService {
             }).catch(() => {});
         }
 
-        // Dual-write: synchronizuj alokacje do tabeli relacyjnej WbsNodeMaterial
-        if (data.wbsNodeAllocations !== undefined) {
-            await this.syncAllocationsToRelational(id, data.wbsNodeAllocations).catch(() => {});
-        }
+        // Dual-write do `WbsNodeMaterial` ZDJĘTY — patrz nagłówek `syncAllocationsToRelational`.
 
         // Auto-propagacja technicalSpec do innych wymagań o tej samej nazwie w tym projekcie,
         // które mają puste pole — nie nadpisuje świadomie różnych wymagań.
@@ -734,6 +746,23 @@ export class MaterialRequirementsService {
         }
 
         return updated;
+    }
+
+    // @anchor mat-req-node-share-from-dto — udział POJEDYNCZEGO węzła w ilości wymagania.
+    // `MaterialRequirement.quantity` to suma wszystkich gałęzi, na które pozycja jest rozbita, więc
+    // wpisanie jej wprost na węzeł pompuje ilość o cudze alokacje (450 wpisane → 451 w tabeli, gdy
+    // w mapie wisi obcy wpis o wartości 1). Reguły:
+    //   - PATCH niesie mapę alokacji i jest w niej ten węzeł → prawdą dla węzła jest wpis z mapy,
+    //   - PATCH niesie mapę, ale bez tego węzła → `null`, czyli nie ruszamy węzła (nie znamy udziału),
+    //   - PATCH nie niesie mapy → przysłana ilość dotyczy tego jednego węzła.
+    private nodeShareFromDto(wbsNodeId: string, qty: number, allocationsJson?: string | null): number | null {
+        if (allocationsJson === undefined || allocationsJson === null) return qty;
+        let map: any;
+        try { map = JSON.parse(allocationsJson); } catch { return qty; }
+        if (!map || typeof map !== 'object' || Array.isArray(map)) return qty;
+        if (!Object.prototype.hasOwnProperty.call(map, wbsNodeId)) return null;
+        const share = parseFloat(String(map[wbsNodeId]));
+        return Number.isFinite(share) && share >= 0 ? share : null;
     }
 
     // @anchor mat-req-write-wbs-node-quantity — zapis ilości na węźle WBS wraz z przeliczeniem
@@ -796,6 +825,15 @@ export class MaterialRequirementsService {
 
     /**
      * Dual-write: parsuje wbsNodeAllocations JSON i zapisuje do WbsNodeMaterial.
+     *
+     * NIEUŻYWANE — wołający zdjęci świadomie. Po migracji `ce75dbe` kolumna
+     * `WbsNodeMaterial.materialId` wskazuje `materials.id`, a oba wywołania podawały tu id
+     * WYMAGANIA. `deleteMany` nie trafiał w nic, `create` leciał na klucz obcy, a `.catch(() => {})`
+     * połykał błąd — dual-write był martwy i nikt się o tym nie dowiedział.
+     *
+     * Zanim to wróci, muszą być spełnione dwa warunki: (1) wołający przekazuje `req.materialId`,
+     * (2) `wbsNodeAllocations` w bazie jest wyczyszczone z nieaktualnych wpisów. Bez (2) włączenie
+     * dual-write nadpisałoby żywe rozbicia z `selectProposal()` treścią przestarzałego JSON-a.
      */
     private async syncAllocationsToRelational(materialId: string, allocationsJson: string | null) {
         // Usuń istniejące alokacje
@@ -906,8 +944,7 @@ export class MaterialRequirementsService {
                         wbsNodeAllocations: newAllocations,
                     },
                 });
-                // Dual-write: synchronizuj do tabeli relacyjnej
-                await this.syncAllocationsToRelational(req.id, newAllocations).catch(() => {});
+                // Dual-write do `WbsNodeMaterial` ZDJĘTY — patrz nagłówek `syncAllocationsToRelational`.
             }
         }
 

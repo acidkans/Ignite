@@ -666,10 +666,14 @@ export class WbsNodesService {
             const allocJson = JSON.stringify(
                 Object.fromEntries(allForMat.map(a => [a.wbsNodeId, a.quantity])),
             );
-            await this.prisma.materialRequirement.update({
-                where: { id: materialId },
+            // Wymaganie wskazywane KOLUMNĄ `materialId`, nie własnym id: `WbsNodeMaterial.materialId`
+            // trzyma `materials.id` (migracja `ce75dbe`). Poprzednie `where: { id: materialId }`
+            // nie trafiało w żaden wiersz, a `.catch(() => {})` połykał `P2025` — ilość z węzła
+            // nie docierała do wymagania rozbitego na kilka gałęzi.
+            await this.prisma.materialRequirement.updateMany({
+                where: { materialId },
                 data: { quantity: total, wbsNodeAllocations: allocJson },
-            }).catch(() => {});
+            });
         }
     }
 

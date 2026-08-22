@@ -724,6 +724,16 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         } catch (e) { console.error('Refresh material costs error:', e); }
     }, [nodeId, versionId]);
 
+    // @anchor sync-material-requirements-from-wbs-quantity
+    // Dopina do węzła WBS wymaganie, które NIE ma jeszcze relacji 1:1 `wbsNodeId` (sierota po
+    // imporcie / ekstrakcji AI). Wymaganie już spięte z węzłem pomijamy świadomie:
+    //   - spięte z TYM węzłem  → ilość dowozi kaskada `syncMaterialsFromWbsNode` po
+    //     `PATCH /wbs-nodes/:id/budget`; drugi zapis stąd szedł w odwrotną stronę i wysyłał SUMĘ
+    //     alokacji, którą backend wpisywał z powrotem na węzeł (450 → 451),
+    //   - spięte z INNYM węzłem → przepięcie ukradłoby wymaganie sąsiadowi (klon wiersza kopiuje
+    //     tag `req:`, więc dwa węzły potrafią wskazywać jedno wymaganie).
+    // Zasada: `WbsNode.quantity` jest źródłem prawdy, ilość wymagania jest jego odbiciem i nigdy
+    // nie wraca na węzeł jako suma.
     const syncMaterialRequirementsFromWbsQuantity = useCallback(async (wbsNodeId, quantityRaw, wbsNodeName = '') => {
         const nextQuantity = parseFloat(quantityRaw);
         if (!wbsNodeId || !Number.isFinite(nextQuantity) || nextQuantity < 0) return;
@@ -734,9 +744,12 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             const requirements = await res.json();
             if (!Array.isArray(requirements) || !requirements.length) return;
 
-            const normalizedNodeName = normKey(wbsNodeName);
-            const linked = (requirements || []).filter((req) => {
-                if (!req || !['material', 'equipment'].includes(wbsTypeFromAny(req.type))) return false;
+            const orphans = requirements.filter(req =>
+                req && ['material', 'equipment'].includes(wbsTypeFromAny(req.type)) && !req.wbsNodeId);
+            if (!orphans.length) return;
+
+            // 1) sierota wskazująca ten węzeł w przestarzałych polach wielowyboru
+            let targetReq = orphans.find((req) => {
                 let alloc = {};
                 try { alloc = req.wbsNodeAllocations ? JSON.parse(req.wbsNodeAllocations) : {}; } catch { alloc = {}; }
                 let ids = [];
@@ -746,45 +759,25 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 } catch {
                     ids = [];
                 }
-                return req.wbsNodeId === wbsNodeId || ids.includes(wbsNodeId) || Object.prototype.hasOwnProperty.call(alloc || {}, wbsNodeId);
-            });
+                return ids.includes(wbsNodeId) || Object.prototype.hasOwnProperty.call(alloc || {}, wbsNodeId);
+            }) || null;
 
-            // Fallback: szukaj po nazwie gdy brak dopasowania po ID
-            let targetReq = null;
-            if (linked.length) {
-                const exactByName = linked.find(req => normalizedNodeName && normKey(req.name) === normalizedNodeName);
-                targetReq = exactByName || linked[0];
-            } else if (normalizedNodeName) {
-                // Tylko orphan requirements (bez wbsNodeId) — nie kradnij reqów innych węzłów o tej samej nazwie
-                targetReq = requirements.find(req =>
-                    ['material', 'equipment'].includes(wbsTypeFromAny(req.type)) &&
-                    normKey(req.name) === normalizedNodeName &&
-                    !req.wbsNodeId
-                ) || null;
+            // 2) sierota o tej samej nazwie co węzeł
+            const normalizedNodeName = normKey(wbsNodeName);
+            if (!targetReq && normalizedNodeName) {
+                targetReq = orphans.find(req => normKey(req.name) === normalizedNodeName) || null;
             }
 
             if (!targetReq) return;
 
-            // Gdy znaleziony po nazwie (nie po ID) — re-linkuj do własnego wbsNodeId i ustaw qty wprost
-            const foundById = linked.includes(targetReq);
-            let nextAlloc;
-            let totalQty;
-            if (foundById) {
-                let currentAlloc = {};
-                try { currentAlloc = targetReq.wbsNodeAllocations ? JSON.parse(targetReq.wbsNodeAllocations) : {}; } catch { currentAlloc = {}; }
-                nextAlloc = { ...(currentAlloc || {}), [wbsNodeId]: nextQuantity };
-                totalQty = Object.values(nextAlloc).reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
-            } else {
-                // Re-linkuj: zastąp alokacje własnym wbs_node id
-                nextAlloc = { [wbsNodeId]: nextQuantity };
-                totalQty = nextQuantity;
-            }
+            // Dopięcie: alokacje zastąpione jednym własnym wpisem, ilość wprost — nigdy suma.
+            const nextAlloc = { [wbsNodeId]: nextQuantity };
 
             const patchRes = await fetch(`${API_URL}/material-requirements/${targetReq.id}`, {
                 method: 'PATCH',
                 headers: authHeaders(),
                 body: JSON.stringify({
-                    quantity: totalQty,
+                    quantity: nextQuantity,
                     wbsNodeId: wbsNodeId,
                     wbsNodeIds: JSON.stringify([wbsNodeId]),
                     wbsNodeAllocations: JSON.stringify(nextAlloc),
@@ -793,7 +786,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             });
             if (patchRes.ok) {
                 // Optimistic local update — nie wywołuj fetchData() bo nadpisałby edytowany wbsData
-                const updated = { ...targetReq, quantity: totalQty, wbsNodeAllocations: JSON.stringify(nextAlloc) };
+                const updated = { ...targetReq, quantity: nextQuantity, wbsNodeId, wbsNodeAllocations: JSON.stringify(nextAlloc) };
                 setAllRequirements(prev => prev.map(r => r.id === targetReq.id ? updated : r));
             }
             // Don't call fetchData() here — it overwrites local wbsData and reverts user edits

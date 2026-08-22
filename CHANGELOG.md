@@ -1,3 +1,26 @@
+## 2026-08-22 — fix(wbs): ilość na wierszu WBS nie rośnie o cudzą alokację (v2026.08.22.877)
+
+### architektura / API
+
+- **`PATCH /material-requirements/:id` nigdy nie wpisuje `dto.quantity` wprost na węzeł WBS** — `MaterialRequirement.quantity` to SUMA wszystkich gałęzi, na które pozycja jest rozbita, a węzeł ma dostać wyłącznie swój udział. Nowy prywatny guard `nodeShareFromDto` czyta udział z mapy `wbsNodeAllocations` przysłanej w tym samym PATCH-u; gdy mapy nie ma — ilość dotyczy tego jednego węzła; gdy mapa jest, ale bez tego węzła — węzeł zostaje nietknięty. Bez tego wpisane 450 wracało do tabeli jako 451, bo w mapie wisiał obcy wpis o wartości 1
+- **Wybór gałęzi „ile alokacji" idzie po `req.materialId`, nie po id wymagania** — kolumna `WbsNodeMaterial.materialId` wskazuje `materials.id` (migracja `ce75dbe`), więc zapytanie po id wymagania zwracało zawsze 0 wierszy i KAŻDY zapis ilości wpadał w gałąź „bez alokacji", niezależnie od faktycznego rozbicia na gałęzie
+- **`syncMaterialsFromWbsNode` faktycznie dowozi ilość do wymagania rozbitego na gałęzie** — `materialRequirement.update({ where: { id: materialId } })` (id materiału w polu id wymagania) nie trafiało w żaden wiersz, a `.catch(() => {})` połykał `P2025`; teraz `updateMany({ where: { materialId } })`
+- **Frontend przestał zapisywać ilość drugą, przeciwną drogą** — `syncMaterialRequirementsFromWbsQuantity` obsługuje już wyłącznie DOPIĘCIE wymagania-sieroty (bez relacji 1:1 `wbsNodeId`) i wysyła ilość wprost, nigdy sumy. Wymaganie spięte z tym węzłem dostaje ilość kaskadą po `PATCH /wbs-nodes/:id/budget`; wymaganie spięte z innym węzłem zostaje nietknięte, żeby nie ukraść go sąsiadowi (klon wiersza kopiuje tag `req:`)
+- **Dual-write `syncAllocationsToRelational` zdjęty z obu wywołań** — oba podawały id wymagania do kolumny trzymającej `materials.id`, więc `create` leciał na klucz obcy pod `.catch(() => {})`. Funkcja zostaje jako referencja z opisem warunków powrotu
+- **Test:** `test/node-share-from-dto.spec.ts` — 7 sprawdzeń guardu, w tym regresja AMP5G (mapa `{obcy: 1, ten: 450}` + `quantity 451` → na węzeł idzie 450)
+
+### słownik
+
+- dodano `mat-req-node-share-from-dto` — `nodeShareFromDto`, udział pojedynczego węzła w ilości wymagania, `material-requirements.service.ts`
+- dodano `sync-material-requirements-from-wbs-quantity` — `syncMaterialRequirementsFromWbsQuantity`, dopięcie wymagania-sieroty do węzła WBS, `UnifiedWbsPanel.jsx`
+
+### wytyczne
+
+- `schema-pole` `MaterialRequirement.wbsNodeAllocations` — pole jest `@deprecated` i NIE jest wiarygodne: potrafi trzymać wpisy węzłów, które dawno mają własną ilość. Nie licz z niego sum, które trafią na `WbsNode.quantity`
+- `back-funkcja` `nodeShareFromDto` — jedyna droga zamiany ilości z PATCH-a wymagania na wartość dla węzła WBS. Nowy zapis na `WbsNode.quantity` z poziomu `material-requirements` MUSI przejść przez ten guard
+- `schema-pole` `WbsNodeMaterial.materialId` — trzyma `materials.id`, NIE id wymagania. Każde zapytanie do tej tabeli z poziomu `material-requirements` idzie przez `req.materialId`
+- `back-serwis` — nie owijaj zapisów w `.catch(() => {})`. Trzy ciche połykacze utrzymały niedokończoną migrację `ce75dbe` przy życiu przez pół roku i to one przekierowały zapis ilości w złą gałąź
+
 ## 2026-08-20 — feat(realizacja): pola tekstowe w wierszu zakupu rosną razem z treścią (v2026.08.20.876)
 
 ### architektura / API
