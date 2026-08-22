@@ -1,3 +1,25 @@
+## 2026-08-22 — ops(backup): dzienny zrzut bazy, procedura odtworzenia i kopia lokalna
+
+### architektura / API
+
+- **`backup-db.sh` — dzienny zrzut produkcyjnej bazy z crona `deploy` (02:30 UTC)**, retencja 30 dziennych + 12 miesięcznych (twardy link, więc miesięczny nie zajmuje miejsca drugi raz). Zrzut pisany do `.part` i dopiero kompletny dostaje docelową nazwę; przed przyjęciem sprawdzany na rozmiar i `gzip -t`. `flock` przeciw nakładaniu się przebiegów. Do tej pory produkcja nie miała ŻADNEGO backupu automatycznego — najnowszy zrzut na serwerze był z 11 czerwca
+- **`restore-db.sh` — odtworzenie bazy ze zrzutu bez ładowania go wprost na produkcję.** Zrzut niesie `DROP`-y, więc przerwane ładowanie zostawiłoby produkcję w gruzach bez drogi powrotnej. Skrypt ładuje do bazy obok, porównuje liczby wierszy w tabelach kontrolnych i dopiero sprawną bazę podmienia przez `ALTER DATABASE ... RENAME`. Stara baza zostaje jako `erp_db_przed_odtworzeniem_<ts>` do ręcznego skasowania. Tryb domyślny to PRÓBA — przełącza dopiero `--zapis`
+- **`pull-backup.ps1` — kopia zrzutów na komputer lokalny**, z weryfikacją SHA256 względem sumy po stronie serwera i pobieraniem do `.part`. Zrzuty na serwerze leżą na tym samym dysku co baza, więc chronią przed złym zapisem, ale nie przed utratą maszyny
+- **`DEPLOY.md` — sekcje ④ (kopie zapasowe) i ⑤ (odtworzenie)** z pełnym runbookiem i komendą odtworzenia wpisu crontaba przy stawianiu serwera od zera
+
+### słownik
+
+- dodano `backup-db-script` — `backup-db.sh`, dzienny zrzut bazy, korzeń repo
+- dodano `restore-db-script` — `restore-db.sh`, odtworzenie bazy ze zrzutu, korzeń repo
+- dodano `pull-backup-script` — `pull-backup.ps1`, kopia zrzutów na komputer lokalny, korzeń repo
+
+### wytyczne
+
+- `back-skrypt` `backup-db.sh` — cron woła go przez `bash`, nie wprost. Bit wykonywalności ginie przy `git reset --hard` na maszynach z `core.filemode=false`, a cicho niedziałający backup jest gorszy niż jego brak
+- **Zapis wprost do produkcyjnej bazy = najpierw zrzut.** Transakcja i próba na sucho nie zastępują punktu przywracania — pokazała to migracja ilości z v877, puszczona bez świeżego backupu
+- **Zrzut niesprawdzony to zrzut, którego nie ma** — procedurę odtworzenia ćwicz w trybie próby, nie przy pierwszej awarii
+- Pliki PowerShell (`.ps1`) pisz WYŁĄCZNIE w ASCII. PowerShell 5.1 czyta plik bez BOM jako Windows-1252, więc `—` (`E2 80 94`) rozpada się na `â€"`, gdzie bajt `94` to typograficzny cudzysłów domykający string w połowie linii. Skrypt psuje się cicho, w miejscu niezwiązanym z błędem
+
 ## 2026-08-22 — fix(wbs): ilość na wierszu WBS nie rośnie o cudzą alokację (v2026.08.22.877)
 
 ### architektura / API

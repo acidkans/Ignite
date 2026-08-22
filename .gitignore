@@ -104,3 +104,6 @@ apps/graphify-out/
 
 # Zrzuty bazy z /test — lokalne backupy, nie do repo
 test/*.dump
+
+# Zrzuty bazy — nigdy do repo (kopie leza poza repo: serwer + %USERPROFILE%\ignite-backups)
+*.sql.gz

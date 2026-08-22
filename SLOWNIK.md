@@ -521,6 +521,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 |-----|-------|------|--------|
 | back-skrypt | sync-obsidian.ps1 | sync-obsidian.ps1 | @anchor sync-obsidian-script |
 | back-skrypt | setup-task-scheduler.ps1 | setup-task-scheduler.ps1 | @anchor setup-task-scheduler-script |
+| back-skrypt | backup-db.sh | backup-db.sh | @anchor backup-db-script |
+| back-skrypt | restore-db.sh | restore-db.sh | @anchor restore-db-script |
+| back-skrypt | pull-backup.ps1 | pull-backup.ps1 | @anchor pull-backup-script |
 
 ### Moduł Material Requirements
 
