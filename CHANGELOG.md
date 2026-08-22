@@ -1,3 +1,23 @@
+## 2026-08-23 — feat(wbs): zatwierdzenie podpowiedzianej nazwy przepisuje ustawienia bliźniaka (v2026.08.23.899)
+
+### architektura / API
+
+- **`applyTwinDefaults` — nazwa zatwierdzona = ustawienia przepisane.** Gdy nazwa liścia (z podpowiedzi albo wpisana ręcznie) pokrywa się z pozycją już obecną w drzewie, węzeł dostaje jej typ, jednostkę, cenę jednostkową i narzut. Wypełniamy WYŁĄCZNIE pola puste — nic wpisanego ręcznie nie jest nadpisywane. Skopiowany typ pociąga te same skutki co wybór z listy: `work` zakłada liść Paliwo, `material`/`equipment` zakłada kartę produktową
+- **`pickTwinDefaults` — wartość najczęstsza, pole po polu.** Przy kilku bliźniakach każde pole głosowane osobno, wartości puste (typ '', jednostka '', cena 0, narzut 0) nie biorą udziału. Jeden bliźniak z niedokończoną konfiguracją nie psuje wtedy podpowiedzi dla pozostałych
+- **`twinFlash` — podświetlenie przepisanych komórek na 2 s.** Cena i typ nie mogą zmienić się bezgłośnie po wyjściu z pola nazwy
+
+### słownik
+
+- dodano `pickTwinDefaults` — ustawienia bliźniaka do przepisania, `wbsNameSuggest.js`
+- dodano `applyTwinDefaults` — nałożenie ustawień na węzeł, `WBSHybridTable.jsx`
+- dodano `twinFlash`, `twinFlashClass` — podświetlenie przepisanych pól, `WBSHybridTable.jsx`
+- zmieniono `buildNameSuggestionPool` — wpis puli niesie teraz `twins[]` (typ, jednostka, cena, narzut każdego nosiciela nazwy)
+
+### wytyczne
+
+- `ui-funkcja` `applyTwinDefaults` — kopiuj tylko do pól pustych i NIGDY do `unitCost`/`margin` przy `offerLocked`. `unit === 'sztuki'` traktuj jako puste (wartość startowa nowego węzła), tak samo jak robi to podpowiadacz jednostki przy zmianie typu
+- `ui-stan` `nameSuggestionPool` — memo przelicza się przy każdej zmianie drzewa, bo `items` dostaje nową tożsamość przy każdym znaku. Zmierzone 1,5 ms dla 2751 węzłów, więc świadomie bez dodatkowego debounce'u
+
 ## 2026-08-23 — fix(materialy): PATCH karty z producentem i modelem nie kończy się już 500 (v2026.08.23.898)
 
 ### architektura / API

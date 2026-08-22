@@ -348,6 +348,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-input | WbsNameAutocomplete (pole Nazwa z podpowiedzią jak w Excelu) | apps/frontend/src/components/shared/wbs/WbsNameAutocomplete.jsx | @anchor wbs-name-autocomplete |
 | ui-funkcja | buildNameSuggestionPool | apps/frontend/src/components/shared/wbs/wbsNameSuggest.js | @anchor build-name-suggestion-pool |
 | ui-funkcja | findNameSuggestion | apps/frontend/src/components/shared/wbs/wbsNameSuggest.js | @anchor find-name-suggestion |
+| ui-funkcja | pickTwinDefaults | apps/frontend/src/components/shared/wbs/wbsNameSuggest.js | @anchor pick-twin-defaults |
+| ui-funkcja | applyTwinDefaults | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor apply-twin-defaults |
+| ui-stan | twinFlash (podświetlenie pól przepisanych z bliźniaka) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor twin-flash |
+| ui-funkcja | twinFlashClass | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor twin-flash-class |
 | ui-funkcja | normalizeNameKey | apps/frontend/src/components/shared/wbs/wbsNameSuggest.js | @anchor normalize-name-key |
 | ui-stala | MIN_PREFIX (próg długości prefiksu dla podpowiedzi nazwy) | apps/frontend/src/components/shared/wbs/wbsNameSuggest.js | @anchor wbs-name-min-prefix |
 | ui-stan | nameSuggestionPool | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor name-suggestion-pool |

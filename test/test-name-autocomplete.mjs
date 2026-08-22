@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { buildNameSuggestionPool, findNameSuggestion, normalizeNameKey, MIN_PREFIX } from '../apps/frontend/src/components/shared/wbs/wbsNameSuggest.js';
+import { buildNameSuggestionPool, findNameSuggestion, pickTwinDefaults, normalizeNameKey, MIN_PREFIX } from '../apps/frontend/src/components/shared/wbs/wbsNameSuggest.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rows = readFileSync(join(here, 'wbs-names-sample.txt'), 'utf8')
@@ -57,7 +57,33 @@ if (spaced !== target.name.slice(0, 6)) {
 // 7. Nieistniejący prefiks → null.
 check('nieznany prefiks', findNameSuggestion(pool, 'zzzqqq nieistniejaca pozycja'), null);
 
-// 8. Wydajność: 855 węzłów, 100 zapytań.
+// 8. pickTwinDefaults — ustawienia przepisywane po zatwierdzeniu nazwy.
+const TWINS = [
+    { id: 't1', name: 'Patchcord kat.6 3m', type: 'material', unit: 'sztuki', unitCost: 15, margin: 20, children: [] },
+    { id: 't2', name: 'patchcord  KAT.6 3M', type: 'material', unit: 'sztuki', unitCost: 15, margin: 20, children: [] },
+    { id: 't3', name: 'Patchcord kat.6 3m', type: '', unit: '', unitCost: 0, margin: 0, children: [] },
+    { id: 't4', name: 'Wizja lokalna', type: 'work', unit: 'dni', unitCost: 800, margin: 0, children: [] },
+    { id: 't5', name: 'Wizja lokalna', type: 'work', unit: 'sztuki', unitCost: 0, margin: 0, children: [] },
+    { id: 't6', name: 'Nowa pozycja bez bliźniaka', type: 'work', unit: 'dni', unitCost: 500, margin: 5, children: [] },
+];
+const tp = buildNameSuggestionPool(TWINS);
+check('bliźniak oddaje typ/jednostkę/cenę/narzut',
+    JSON.stringify(pickTwinDefaults(tp, 'Patchcord kat.6 3m', 'nowy')),
+    JSON.stringify({ type: 'material', unit: 'sztuki', unitCost: 15, margin: 20 }));
+check('inna wielkość liter i spacje to ten sam bliźniak',
+    JSON.stringify(pickTwinDefaults(tp, 'PATCHCORD KAT.6   3m', 'nowy')),
+    JSON.stringify({ type: 'material', unit: 'sztuki', unitCost: 15, margin: 20 }));
+// t5 ma pustą cenę i domyślną jednostkę — nie może przegłosować wypełnionego t4
+check('pusty bliźniak nie psuje wyniku (cena)', pickTwinDefaults(tp, 'Wizja lokalna', 'nowy').unitCost, 800);
+check('pusty bliźniak nie psuje wyniku (narzut)', pickTwinDefaults(tp, 'Wizja lokalna', 'nowy').margin, null);
+check('jedyny nosiciel nazwy nie kopiuje sam sobie',
+    pickTwinDefaults(tp, 'Nowa pozycja bez bliźniaka', 't6'), null);
+check('nazwa spoza drzewa', pickTwinDefaults(tp, 'Cos zupelnie nowego', 'nowy'), null);
+// Bliźniak z samymi pustymi polami nie ma czego oddać.
+const EMPTY = [{ id: 'e1', name: 'Pozycja pusta', type: '', unit: '', unitCost: 0, margin: 0, children: [] }];
+check('bliźniak bez ustawień', pickTwinDefaults(buildNameSuggestionPool(EMPTY), 'Pozycja pusta', 'nowy'), null);
+
+// 9. Wydajność: 855 węzłów, 100 zapytań.
 const t0 = Date.now();
 for (let i = 0; i < 100; i++) findNameSuggestion(pool, rows[i % rows.length].name.slice(0, 5));
 console.log(`\n100 lookupów: ${Date.now() - t0} ms`);

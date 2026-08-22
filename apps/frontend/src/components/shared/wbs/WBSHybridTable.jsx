@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from
 import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType } from './wbsConstants';
 import AutoResizeTextarea from './AutoResizeTextarea';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
-import { buildNameSuggestionPool } from './wbsNameSuggest';
+import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
 import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo } from 'lucide-react';
 import AddTaskModal from '../AddTaskModal';
 import { useDevice } from '../../../hooks/useDevice';
@@ -975,6 +975,11 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [qtyFocusId, setQtyFocusId] = useState(null);
     const [warnKey, setWarnKey] = useState(null);
     const warnTimer = useRef(null);
+    // @anchor twin-flash
+    // Które pola właśnie przepisano z bliźniaka — podświetlane na 2 s, żeby zmiana ceny
+    // czy typu nie wydarzyła się niezauważona. `{ id, fields: ['type','unit',...] }`.
+    const [twinFlash, setTwinFlash] = useState(null);
+    const twinFlashTimer = useRef(null);
     const [showBasket, setShowBasket] = useState(false);
     // Koszyk: id wymagań, dla których rozwinięto podgląd wymagań technicznych (przed przypisaniem).
     const [expandedBasketIds, setExpandedBasketIds] = useState(new Set());
@@ -1050,8 +1055,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const items = wbsTree?.items || [];
 
     // @anchor name-suggestion-pool
-    // Nazwy z całego drzewa jako źródło podpowiedzi w kolumnie Nazwa. Przeliczane tylko
-    // przy zmianie drzewa — przy każdym wpisanym znaku byłoby to O(n) po 2–3 tys. węzłów.
+    // Nazwy z całego drzewa jako źródło podpowiedzi w kolumnie Nazwa, wraz z ustawieniami
+    // bliźniaków (typ, jednostka, cena, narzut) do przepisania po zatwierdzeniu nazwy.
+    // Memo po `items`, więc przelicza się przy każdej zmianie drzewa — zmierzone 1,5 ms
+    // dla 2751 węzłów (test/test-name-autocomplete.mjs), czyli bez wpływu na pisanie.
     const nameSuggestionPool = React.useMemo(() => buildNameSuggestionPool(items), [items]);
 
     // Pre-fetch marker links for all WBS nodes (+ periodic refresh) — jedno zapytanie batch
@@ -1161,6 +1168,58 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         handleField(newRoot.id, 'strategy', composed);
         onNodeFieldSave?.(newRoot.id, 'strategy', composed);
     };
+
+    // @anchor apply-twin-defaults
+    // Nazwa zatwierdzona (z podpowiedzi albo wpisana ręcznie) pokrywa się z pozycją już
+    // obecną w drzewie → przepisujemy jej ustawienia: typ, jednostkę, cenę i narzut.
+    // Zasada nadrzędna: WYPEŁNIAMY TYLKO PUSTE — nic, co użytkownik już wpisał, nie zostaje
+    // nadpisane. `unit === 'sztuki'` liczy się jako puste, bo to wartość startowa nowego
+    // węzła, tak samo traktuje ją podpowiadacz jednostki przy zmianie typu.
+    // Zwraca true, gdy cokolwiek skopiowano — wtedy wołający pomija heurystykę jednostki,
+    // bo jednostka realnego bliźniaka jest mocniejszą przesłanką niż zgadywanie z nazwy.
+    const applyTwinDefaults = (node, depth, parentId) => {
+        const twin = pickTwinDefaults(nameSuggestionPool, node.name, node.id);
+        if (!twin) return false;
+        const copied = [];
+        // Typ: root (depth 0) nie ma kolumny Typ, więc nie ma czego kopiować.
+        if (depth >= 1 && twin.type && !node.type) {
+            handleField(node.id, 'type', twin.type);
+            onNodeFieldSave?.(node.id, 'type', twin.type);
+            copied.push('type');
+            if (twin.type === 'work') ensureFuelLeaf(node.id);
+            if ((twin.type === 'equipment' || twin.type === 'material') && node.name) {
+                onMaterialNodeCreated?.({ wbsNodeId: node.id, name: node.name, type: twin.type, parentId });
+            }
+        }
+        if (twin.unit && (!node.unit || node.unit === 'sztuki')) {
+            handleField(node.id, 'unit', twin.unit);
+            onNodeFieldSave?.(node.id, 'unit', twin.unit);
+            copied.push('unit');
+        }
+        // Cena i narzut są zablokowane po akceptacji baseline — wtedy ich nie ruszamy.
+        if (!offerLocked && twin.unitCost && !Number(node.unitCost)) {
+            handleField(node.id, 'unitCost', twin.unitCost);
+            onNodeFieldSave?.(node.id, 'unitCost', twin.unitCost);
+            copied.push('unitCost');
+        }
+        if (!offerLocked && twin.margin && !Number(node.margin)) {
+            handleField(node.id, 'margin', twin.margin);
+            onNodeFieldSave?.(node.id, 'margin', twin.margin);
+            copied.push('margin');
+        }
+        if (!copied.length) return false;
+        setTwinFlash({ id: node.id, fields: copied });
+        if (twinFlashTimer.current) clearTimeout(twinFlashTimer.current);
+        twinFlashTimer.current = setTimeout(() => setTwinFlash(null), 2000);
+        return copied.includes('unit');
+    };
+
+    // @anchor twin-flash-class
+    // Podświetlenie komórki przepisanej z bliźniaka — bez tego cena czy typ zmieniłyby się
+    // po wyjściu z pola nazwy zupełnie bezgłośnie.
+    const twinFlashClass = (id, field) =>
+        (twinFlash?.id === id && twinFlash.fields.includes(field))
+            ? ' ring-1 ring-amber-400/70 bg-amber-500/10 rounded' : '';
 
     // Pokaż na chwilę ostrzeżenie "tylko cyfry" przy komórce liczbowej (klucz = `${id}:${field}`).
     const flashWarn = (id, field) => {
@@ -1667,7 +1726,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             if ((node.type === 'equipment' || node.type === 'material') && v) {
                                 onMaterialNodeCreated?.({ wbsNodeId: node.id, name: v, type: node.type, parentId });
                             }
-                            if (!node.unit || node.unit === 'sztuki') {
+                            // Nazwa pokrywa się z pozycją już w drzewie → przepisz jej ustawienia.
+                            // `node` jeszcze nie widzi nowej nazwy (stan rodzica), więc podajemy `v`.
+                            const unitFromTwin = applyTwinDefaults({ ...node, name: v }, depth, parentId);
+                            if (!unitFromTwin && (!node.unit || node.unit === 'sztuki')) {
                                 const suggested = suggestDefaultUnit(v, node.type);
                                 if (suggested) {
                                     handleField(node.id, 'unit', suggested);
@@ -1792,7 +1854,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     onMaterialNodeCreated?.({ wbsNodeId: node.id, name: node.name, type: newType, parentId });
                                 }
                             }}
-                            className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-base w-full focus:outline-none focus:border-blue-500 transition-colors cursor-pointer ${d.fieldClass}`}
+                            className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-base w-full focus:outline-none focus:border-blue-500 transition-colors cursor-pointer ${d.fieldClass}${twinFlashClass(node.id, 'type')}`}
                             data-nav-row={node.id}
                             data-nav-col="typ"
                             onKeyDown={e => handleGridKeyDown(e, node.id, 'typ')}
@@ -1849,7 +1911,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         ) : (
                             <select value={node.unit || ''}
                                 onChange={e => { handleField(node.id, 'unit', e.target.value); onNodeFieldSave?.(node.id, 'unit', e.target.value); }}
-                                className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-base w-full focus:outline-none focus:border-blue-500 cursor-pointer ${d.fieldClass}`}
+                                className={`bg-black/40 border border-white/10 rounded-lg px-2 py-0.5 text-base w-full focus:outline-none focus:border-blue-500 cursor-pointer ${d.fieldClass}${twinFlashClass(node.id, 'unit')}`}
                                 data-nav-row={node.id}
                                 data-nav-col="jednostka"
                                 onKeyDown={e => handleGridKeyDown(e, node.id, 'jednostka')}>
@@ -1901,7 +1963,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     onKeyDown={e => handleGridKeyDown(e, node.id, 'cena_netto')}
                                     placeholder="0,00"
                                     {...offerLockProps}
-                                    className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}${offerLocked ? ' cursor-not-allowed opacity-70' : ''}`}
+                                    className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}${offerLocked ? ' cursor-not-allowed opacity-70' : ''}${twinFlashClass(node.id, 'unitCost')}`}
                                     data-nav-row={node.id}
                                     data-nav-col="cena_netto"
                                 />
@@ -1941,7 +2003,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     onKeyDown={e => handleGridKeyDown(e, node.id, 'narzut')}
                                     placeholder="—"
                                     {...offerLockProps}
-                                    className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}${offerLocked ? ' cursor-not-allowed opacity-70' : ''}`}
+                                    className={`bg-transparent border-none focus:outline-none text-base w-full text-right placeholder-gray-700 ${d.fieldClass}${offerLocked ? ' cursor-not-allowed opacity-70' : ''}${twinFlashClass(node.id, 'margin')}`}
                                     data-nav-row={node.id}
                                     data-nav-col="narzut"
                                 />
