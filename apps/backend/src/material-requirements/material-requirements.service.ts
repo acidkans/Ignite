@@ -571,6 +571,12 @@ export class MaterialRequirementsService {
                 });
             }
         }
+        // @anchor mat-req-catalog-price-guard — `priceNetto` z karty to cena TEJ pozycji
+        // (→ `budgetedPriceNetto`), nie cena katalogowa produktu. PATCH wymagania nie dotyka
+        // `Material.priceNetto` — ta jest wspólna dla całej firmy i ma własną drogę zapisu przez
+        // moduł Materiały (`materials-create` / `materials-update`). Czyta ją QuickQuote przy
+        // wycenie z magazynu (`quick-quotes-add-stock-items`); stemplowanie jej ceną jednego
+        // projektu fałszowało wycenę w pozostałych.
         // Strip pól katalogowych usuniętych z MaterialRequirement; mapuj priceNetto → budgetedPriceNetto
         const { productName, manufacturer, model, seller, offerNumber, productUrl, stockStatus,
             dataSheetUrl, dataSheetName, complianceUrl, complianceName, availability,
@@ -591,7 +597,6 @@ export class MaterialRequirementsService {
                     where: { id: existingMat.id },
                     data: {
                         ...(pn ? { productName: pn } : {}),
-                        ...(priceNetto != null ? { priceNetto } : {}),
                         ...(seller ? { seller } : {}),
                         ...(productUrl ? { productUrl } : {}),
                         ...(dataSheetUrl ? { dataSheetUrl, dataSheetName: dataSheetName ?? null } : {}),
@@ -600,7 +605,6 @@ export class MaterialRequirementsService {
                 : await this.prisma.material.create({
                     data: {
                         manufacturer: mfr, model: mdl, productName: pn, type: 'DEVICE',
-                        ...(priceNetto != null ? { priceNetto } : {}),
                         ...(seller ? { seller } : {}),
                         ...(productUrl ? { productUrl } : {}),
                         ...(dataSheetUrl ? { dataSheetUrl, dataSheetName: dataSheetName ?? null } : {}),
@@ -659,7 +663,6 @@ export class MaterialRequirementsService {
                     if (productName !== undefined) matPatch.productName = productName;
                     if (seller      !== undefined) matPatch.seller      = seller;
                     if (productUrl  !== undefined) matPatch.productUrl  = productUrl;
-                    if (priceNetto  !== undefined) matPatch.priceNetto  = priceNetto;
                     if (dataSheetUrl !== undefined) { matPatch.dataSheetUrl = dataSheetUrl; matPatch.dataSheetName = dataSheetName ?? null; }
                     if (complianceUrl !== undefined) { matPatch.complianceUrl = complianceUrl; matPatch.complianceName = complianceName ?? null; }
                     if (Object.keys(matPatch).length > 0) {
@@ -1570,7 +1573,10 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
                         model: proposal.model ?? null,
                         productName: proposal.productName,
                         type: 'DEVICE',
-                        priceNetto: proposal.priceNetto ?? undefined,
+                        // Cena NIE schodzi do katalogu — patrz `mat-req-catalog-price-guard`.
+                        // Cena propozycji jest ceną jednej oferty (ten dostawca, ta ilość, ta data),
+                        // a `Material.priceNetto` to cena produktu dla całej firmy. Nowy wpis katalogu
+                        // rodzi się bez ceny — ustawia ją moduł Materiały.
                         seller: proposal.seller ?? undefined,
                         productUrl: proposal.sourceUrl ?? undefined,
                         dataSheetUrl: proposal.dataSheetUrl ?? undefined,

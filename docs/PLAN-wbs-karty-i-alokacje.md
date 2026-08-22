@@ -1,6 +1,6 @@
 # WBS ↔ karty produktowe — stan i co dalej
 
-Dokument przekazania. Stan na **2026-08-22**, produkcja na `v2026.08.22.878`.
+Dokument przekazania. Stan na **2026-08-22**, ostatnia wersja `v2026.08.22.879`.
 Punkt wyjścia: ilość wpisana w kolumnie Ilość w WBS wracała po chwili powiększona o cudzą
 alokację (450 → 451). Rozwiązanie tego odsłoniło szerszy problem: kopiowanie liścia niosło
 wskaźnik na kartę produktową źródła, więc dwa węzły edytowały jedną kartę.
@@ -74,6 +74,10 @@ projekcie bywają ucięte, z podwójnymi spacjami i wariantami; opakowuj je w `'
   kopiuje propozycje produktowe (`cloneProposalsForRequirement`).
 - **Martwe wywołania `syncAllocationsToRelational` zdjęte** — podawały id wymagania do kolumny
   trzymającej `materials.id`, `create` leciał na klucz obcy pod `.catch(() => {})`.
+- **`update()` nie stempluje `Material.priceNetto`** (`mat-req-catalog-price-guard`) — cena z karty
+  jest ceną pozycji (`budgetedPriceNetto`), katalog ma własną drogę zapisu przez moduł Materiały.
+- **`selectProposal` tworzy wpis katalogu bez ceny** — akceptacja propozycji nie zasiewa już
+  `Material.priceNetto` ceną jednej oferty.
 
 ### Migracje danych wykonane na produkcji
 
@@ -90,10 +94,11 @@ zostały przetworzone i tak zostaje.
 ### Testy
 
 ```bash
-cd apps/backend && npx jest --rootDir ../.. --testRegex "test/.*\.spec\.ts$"
+cd apps/backend && npx jest --roots "$(git rev-parse --show-toplevel)/test"
 ```
 
-`test/node-share-from-dto.spec.ts` (7) i `test/clone-for-wbs.spec.ts` (9) — instancjonują prawdziwy
+`test/node-share-from-dto.spec.ts` (7), `test/clone-for-wbs.spec.ts` (9) i
+`test/catalog-price-guard.spec.ts` (6) — instancjonują prawdziwy
 serwis z atrapą prisma, więc testują kod, nie jego kopię.
 
 ---
@@ -136,11 +141,16 @@ Najprostsza droga bez skryptu: wpisać ilość ponownie na wierszu WBS — kaska
 
 ## 4. Otwarte — reszta
 
-**Zapis uboczny na `Material.priceNetto`.** PATCH wymagania stempluje przy okazji cenę katalogową
-produktu dla całej firmy, którą czyta QuickQuote przy wycenie z magazynu
-(`quick-quotes.service.ts:332`). Frontend karty jej nie czyta. Do zdjęcia — katalog ma własną
-drogę zapisu przez moduł Materiały. Skutek uboczny: QuickQuote zacznie pomijać materiały bez
-świadomie ustawionej ceny.
+**Zapis uboczny na `Material.priceNetto` — ZDJĘTY w v879**, w obu miejscach: PATCH pozycji i
+`selectProposal`. Cena katalogowa ma teraz jedno źródło — moduł Materiały. Stan zastany na
+produkcji zostaje nietknięty (316 materiałów, 106 z ceną, 47 z nich równych propozycji ze swojej
+pozycji) — to zmiana na przyszłość, nie migracja. `material_stock` jest puste, więc jedyny czytelnik
+tej ceny (QuickQuote `addStockItems`) i tak nie zwraca dziś żadnej pozycji.
+
+**Puste `.catch(() => {})` przy `material.update` w gałęzi katalogowej `update()`.** Cichnie każdy
+błąd zapisu pól katalogowych. Ta sama klasa błędu co martwe `syncAllocationsToRelational` —
+zostawione świadomie, bo zdjęcie zamieni dzisiejsze ciche pominięcie w 500 dla użytkownika;
+najpierw trzeba wiedzieć, co tam realnie pada.
 
 **Auto-propagacja `technicalSpec`.** `update()` wpisuje spec do wszystkich kart o tej samej nazwie
 w projekcie, które mają puste pole. Jedna edycja dotyka cudzych wierszy — wbrew zasadzie

@@ -640,6 +640,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | nodeShareFromDto | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-node-share-from-dto |
 | back-funkcja | writeWbsNodeQuantity | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-write-wbs-node-quantity |
 | back-funkcja | update (gałąź quantity bez alokacji) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-qty-to-wbs |
+| back-funkcja | update (gałąź katalogowa — cena) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-catalog-price-guard |
 | ui-funkcja | syncMaterialRequirementsFromWbsQuantity | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor sync-material-requirements-from-wbs-quantity |
 
 #### Backend (`apps/backend/src/material-requirements/`)

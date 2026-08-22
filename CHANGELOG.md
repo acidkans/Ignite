@@ -1,3 +1,22 @@
+## 2026-08-22 — fix(materialy): cena katalogowa produktu tylko z modulu Materialy (v2026.08.22.879)
+
+### architektura / API
+
+- **`PATCH /material-requirements/:id` nie zapisuje już `Material.priceNetto`** — cena wpisana w karcie pozycji jest ceną TEJ pozycji (leci na `budgetedPriceNetto`), a nie ceną katalogową produktu wspólną dla całej firmy. Zapis szedł z trzech miejsc w `update()`: aktualizacji istniejącego wpisu katalogu i tworzenia nowego w gałęzi „producent + model", oraz z `matPatch` w gałęzi forwardowania pól katalogowych. Edycja ceny w jednym projekcie przestawiała cenę produktu widzianą przez wszystkie pozostałe
+- **Skutek dla QuickQuote:** `addStockItems` czyta `Material.priceNetto` przy wycenie z magazynu. Materiały, które ceny nie mają ustawionej świadomie przez moduł Materiały, będą pomijane z powodem `brak ceny katalogowej materiału` — pozycja trafia na listę `skipped`, nie do wyceny po fałszywej cenie
+- **`selectProposal` też nie zasiewa katalogu ceną** — akceptacja propozycji tworzyła NOWY wpis `materials` z ceną tej jednej oferty. Nie nadpisywała istniejącej, więc nie fałszowała cudzych projektów, ale ponieważ produkty wchodzą do katalogu głównie przez pracę na projektach, tą drogą powstawała większość cen katalogowych. Na produkcji 47 ze 106 wycenionych materiałów ma cenę co do grosza równą propozycji ze swojej pozycji. Wpis rodzi się teraz bez ceny — tak samo jak przy `assignOfferPosition` i upsercie z ekstrakcji AI, które nigdy jej nie zapisywały
+- **Katalog zachowuje własną drogę zapisu** — `materials-create` / `materials-update` w module Materiały. Bez zmian: propozycja produktowa nadal dostaje cenę z karty (`mat-req-sync-offer-proposal-price`), bo to nośnik ceny dla splitu Wycena/Zakup
+- **Test:** `test/catalog-price-guard.spec.ts` — 9 sprawdzeń na atrapie prisma: obie gałęzie katalogowe `update()`, pozycja bez materiału, `budgetedPriceNetto`, propozycja oraz `selectProposal` (nowy wpis bez ceny, istniejący nietknięty, cena nadal na pozycji)
+
+### słownik
+
+- dodano `mat-req-catalog-price-guard` — granica między ceną pozycji a ceną katalogową produktu, `material-requirements.service.ts`
+
+### wytyczne
+
+- `schema-pole` `Material.priceNetto` — to cena katalogowa produktu dla CAŁEJ firmy, jedyna droga zapisu prowadzi przez moduł Materiały. Żaden przepływ projektowy (karta pozycji, wybór propozycji, przypisanie pozycji z oferty) nie ma prawa jej stemplować — cena projektu mieszka w `MaterialRequirement.budgetedPriceNetto`, cena oferty w `ProductProposal.priceNetto`
+- `back-funkcja` uruchamianie testów backendu: `cd apps/backend && npx jest --roots "<abs>/test"`. `ts-jest` leży w `apps/backend/node_modules`, więc podmiana `--rootDir` na korzeń repo psuje rozwiązywanie transformera — wskazuj katalog testów przez `--roots`
+
 ## 2026-08-22 — docs(wbs): karty dla węzłów bez własnej + wytyczne do dalszej pracy
 
 ### architektura / API
