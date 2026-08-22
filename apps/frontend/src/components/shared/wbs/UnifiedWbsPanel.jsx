@@ -1078,6 +1078,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 headers: { ...authHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify({ mappings }),
             });
+            // `clone-for-wbs` dopisuje wklejonym węzłom tag `req:` ich własnej karty. Lokalne
+            // drzewo tego tagu jeszcze nie zna, więc debounce, który zdążył ruszyć w trakcie
+            // powyższych żądań, cofnąłby zapis serwera. Kasujemy go i przeładowujemy dane.
+            if (hybridSaveTimeout.current) clearTimeout(hybridSaveTimeout.current);
             onWbsUpdate?.();
             fetchData();
             setReqRefreshKey(k => k + 1);

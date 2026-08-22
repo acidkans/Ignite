@@ -530,6 +530,18 @@ const deepCloneNode = node => ({
 
 // Wariant zwracający również mapping (oldId → newId) całego poddrzewa,
 // potrzebny do skopiowania powiązanych wymagań technicznych po stronie backendu.
+// @anchor clone-dropped-tags — tagi, które NIE mogą przejechać na klon: wskazują kartę
+// produktową węzła źródłowego. Nową kartę zakłada `clone-for-wbs`, ono też dopisuje
+// węzłowi świeży `req:`.
+const isTagDroppedOnClone = (t) =>
+    typeof t === 'string' && (t.startsWith('req:') || t === 'auto-requirement');
+
+// @anchor deep-clone-node-with-mappings
+// Klon liścia lub gałęzi: nowe UUID i tagi OCZYSZCZONE ze wskaźników na kartę produktową.
+// `{ ...n }` kopiuje wszystkie pola, więc `req:<id-źródła>` jechał ze spreadem i wklejony
+// węzeł wskazywał kartę oryginału — edycja wymagań technicznych, statusu czy dostawcy na
+// kopii lądowała na pozycji, z której kopiowano. Od momentu wklejenia obie pozycje mają być
+// niezależne: wspólny może być produkt katalogowy, nigdy pola karty.
 const deepCloneNodeWithMappings = (node) => {
     const mappings = [];
     const cloneRec = (n) => {
@@ -538,6 +550,7 @@ const deepCloneNodeWithMappings = (node) => {
         return {
             ...n,
             id: newId,
+            tags: Array.isArray(n.tags) ? n.tags.filter(t => !isTagDroppedOnClone(t)) : n.tags,
             children: (n.children || []).map(cloneRec),
         };
     };

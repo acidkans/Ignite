@@ -1,3 +1,26 @@
+## 2026-08-22 — fix(wbs): wklejony liść dostaje własną kartę produktową (v2026.08.22.878)
+
+### architektura / API
+
+- **Klonowanie węzła nie kopiuje już tagów `req:` ani `auto-requirement`** — `deepCloneNodeWithMappings` robił `{ ...n, id: newId }`, więc tag ze wskaźnikiem na kartę ŹRÓDŁA jechał ze spreadem. Wklejony liść edytował kartę oryginału: wymagania techniczne, status i dostawca lądowały na pozycji, z której kopiowano. Nowy helper `isTagDroppedOnClone` odcina oba tagi przy klonowaniu
+- **`clone-for-wbs` dopisuje węzłowi tag jego WŁASNEJ karty** — nowa metoda `retagWbsNodeToRequirement`, odpowiednik kroku 9b z wersjonowania (`versioning.service.ts` remapuje `req:` przy klonowaniu wersji; kopiuj/wklej tego kroku nie miało). Wskaźnik jest poprawny niezależnie od tego, którą drogą klon powstał
+- **`clone-for-wbs` kopiuje propozycje produktowe razem z kartą** — nowa metoda `cloneProposalsForRequirement`. Dotąd klon dostawał kartę z ceną budżetową, ale bez propozycji `isOffer`, która tę cenę niesie: pozycja wyglądała na wycenioną w tabeli i pustą w widoku Wycena/Zakup. Na produkcji 135 klonów, źródło miało oferty w 35 przypadkach, klon w 5
+- **`handlePasteCloned` kasuje debounce zapisu drzewa po `clone-for-wbs`** — serwer dopisuje wtedy tagi, których lokalne drzewo jeszcze nie zna, więc zapis z debounce'u cofnąłby jego robotę
+- **Migracja produkcyjna:** 209 węzłów w najnowszych wersjach projektów przepiętych na własne karty. Zakres: wyłącznie tagi — żadnej ilości, ceny ani treści karty. Wersje archiwalne nietknięte (zamrożony zapis). Węzeł BEZ własnej karty, którego tag wskazuje żywą kartę innego węzła, zostawiony świadomie — zdjęcie tagu odebrałoby mu jedyną kartę, jaką widzi (37 przypadków)
+- **Test:** `test/clone-for-wbs.spec.ts` — 9 sprawdzeń obu nowych metod na atrapie prisma
+
+### słownik
+
+- dodano `clone-dropped-tags` — `isTagDroppedOnClone`, tagi odcinane przy klonowaniu węzła, `WBSHybridTable.jsx`
+- dodano `deep-clone-node-with-mappings` — `deepCloneNodeWithMappings`, klon gałęzi z mapowaniem id, `WBSHybridTable.jsx`
+- dodano `mat-req-clone-proposals` — `cloneProposalsForRequirement`, propozycje jadą z klonowaną kartą, `material-requirements.service.ts`
+- dodano `mat-req-retag-wbs-node` — `retagWbsNodeToRequirement`, węzeł dostaje tag własnej karty, `material-requirements.service.ts`
+
+### wytyczne
+
+- `ui-funkcja` `deepCloneNodeWithMappings` — **tag jest WSKAŹNIKIEM, nie wartością.** Kopiowanie węzła przez spread przenosi wskaźniki tak samo jak wartości, więc każde nowe pole typu `req:<id>` w `tags` trzeba świadomie odciąć albo przemapować. Wzorzec: `versioning.service.ts` krok 9b
+- `back-endpoint` `POST /material-requirements/clone-for-wbs` — kopia pozycji ma być 1:1 w momencie wklejenia i w pełni niezależna PO nim. Wspólny może zostać produkt katalogowy (`Material`), nigdy pola karty ani propozycje
+
 ## 2026-08-22 — ops(backup): dzienny zrzut bazy, procedura odtworzenia i kopia lokalna
 
 ### architektura / API

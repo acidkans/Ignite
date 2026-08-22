@@ -469,9 +469,51 @@ export class MaterialRequirementsService {
                 data: { ...rest, wbsNodeId: mapping.targetWbsNodeId, versionId: targetNode?.versionId ?? rest.versionId },
             });
             // WbsNodeMaterial.materialId → materials.id; auto-tworzenie pominięte (powstaje przy selectProposal)
+            await this.cloneProposalsForRequirement(src.id, clone.id);
+            await this.retagWbsNodeToRequirement(mapping.targetWbsNodeId, clone.id);
             created.push(clone);
         }
         return created;
+    }
+
+    // @anchor mat-req-clone-proposals — propozycje produktowe jadą razem z klonowaną kartą.
+    // Bez tego wklejony liść dostawał kartę z ceną budżetową, ale bez propozycji `isOffer`,
+    // która tę cenę niesie — pozycja wyglądała na wycenioną w tabeli i pustą w widoku
+    // Wycena/Zakup. Kopiujemy WSZYSTKIE propozycje: to konkurencyjne oferty tego produktu
+    // i nowa pozycja ma startować z tym samym rozeznaniem rynku co ta, z której powstała.
+    private async cloneProposalsForRequirement(sourceRequirementId: string, targetRequirementId: string) {
+        const proposals = await this.prisma.productProposal.findMany({
+            where: { materialRequirementId: sourceRequirementId },
+        });
+        for (const pp of proposals) {
+            const { id, materialRequirementId, createdAt, updatedAt, ...rest } = pp as any;
+            await this.prisma.productProposal.create({
+                data: { ...rest, materialRequirementId: targetRequirementId },
+            }).catch((e) => {
+                this.logger.warn(`[clone-for-wbs] propozycja ${id} nieskopiowana: ${e?.message}`);
+            });
+        }
+    }
+
+    // @anchor mat-req-retag-wbs-node — węzeł dostaje `req:` swojej WŁASNEJ karty.
+    // Odpowiednik kroku 9b z wersjonowania: kopiowanie węzła niesie tagi źródła, a tag
+    // `req:` jest wskaźnikiem, nie wartością — zostawiony bez podmiany kazałby dwóm węzłom
+    // edytować jedną kartę. Frontend zdejmuje stary tag przy klonowaniu, tutaj wpisujemy nowy,
+    // żeby wskaźnik był poprawny niezależnie od tego, którą drogą klon powstał.
+    private async retagWbsNodeToRequirement(wbsNodeId: string, requirementId: string) {
+        const node = await this.prisma.wbsNode.findUnique({
+            where: { id: wbsNodeId }, select: { tags: true },
+        });
+        if (!node) return;
+        let tags: string[] = [];
+        try { tags = node.tags ? JSON.parse(node.tags) : []; } catch { tags = []; }
+        if (!Array.isArray(tags)) tags = [];
+        const next = tags.filter(t => typeof t === 'string' && !t.startsWith('req:') && t !== 'auto-requirement');
+        next.push(`req:${requirementId}`, 'auto-requirement');
+        await this.prisma.wbsNode.update({
+            where: { id: wbsNodeId },
+            data: { tags: JSON.stringify(next) },
+        }).catch(() => {});
     }
 
     async update(id: string, dto: Partial<{

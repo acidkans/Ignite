@@ -669,6 +669,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-endpoint | DELETE /material-requirements/node/:nodeId/all | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-delete-by-node |
 | back-endpoint | POST /material-requirements/clear-assignments | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-clear-assignments |
 | back-endpoint | POST /material-requirements/clone-for-wbs | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-clone-for-wbs |
+| back-funkcja | cloneProposalsForRequirement | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-clone-proposals |
+| back-funkcja | retagWbsNodeToRequirement | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-retag-wbs-node |
+| ui-funkcja | deepCloneNodeWithMappings | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor deep-clone-node-with-mappings |
+| ui-funkcja | isTagDroppedOnClone | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor clone-dropped-tags |
 | back-endpoint | GET /material-requirements/:id | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-one |
 | back-endpoint | POST /material-requirements/ | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-create |
 | back-endpoint | PATCH /material-requirements/:id | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-patch-update |
