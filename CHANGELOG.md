@@ -1,3 +1,15 @@
+## 2026-08-22 — Eksport tabel oferty: czytelność arkuszy Plan działania / Oferta / Q&A (v2026.08.22.891)
+
+### architektura / API
+- `ui-funkcja` `buildMarkdownSheet` (UnifiedWbsPanel) — wiersze tekstowe (nagłówki, listy, akapity) nie dostają już jawnej wysokości; przy `wrapText` Excel auto-dopasowuje wysokość do zawiniętej treści.
+- linia zakończona dwukropkiem („Konwektory RRH Installation:") jest pogrubiana jako etykieta pozycji, komentarz pod nią zostaje zwykłą czcionką; nagłówki `####`–`######` traktowane jak `###` zamiast wpadać do akapitu.
+- pusty wiersz separujący pozycje ma normalną wysokość (wcześniej `height = 4`, co dawało zawężone paski), a ciąg pustych linii Markdown zwija się do jednego wiersza.
+- nowy parametr `opts.skipBlankRows` — arkusz „Oferta" generowany bez pustych wierszy, „Plan działania" z nimi.
+- arkusz „Q&A" — wiersze bez jawnej wysokości, Excel dopasowuje ją do najdłuższej z kolumn (ścieżka / pytanie / odpowiedź) zamiast liczyć tylko z odpowiedzi.
+
+### wytyczne
+- `ui-funkcja` `buildMarkdownSheet` — dla komórek z `wrapText` nie ustawiać `row.height`; jawna wysokość ucina zawinięty tekst.
+
 ## 2026-08-22 — Arkusz „Zakupy": cena ofertowa i porównanie z ceną zakupu (v2026.08.22.885)
 
 ### architektura / API

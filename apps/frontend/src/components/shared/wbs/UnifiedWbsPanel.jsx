@@ -3609,17 +3609,18 @@ ${ganttSectionHtml}
         // @anchor build-markdown-sheet
         // Buduje arkusz z tekstem Markdown (Oferta/Strategia) → sformatowane wiersze Excela.
         // Wspólna dla obu arkuszy tekstowych, żeby nie duplikować parsera Markdown.
-        const buildMarkdownSheet = (sheetName, text, emptyMessage) => {
+        const buildMarkdownSheet = (sheetName, text, emptyMessage, opts = {}) => {
+            // skipBlankRows — arkusz "Oferta" nie ma zawierać wąskich pustych wierszy (h=4),
+            // które w Excelu wyglądały jak przypadkowe rozjechane paski między akapitami.
+            const { skipBlankRows = false } = opts;
             const sheet = workbook.addWorksheet(sheetName);
             sheet.getColumn(1).width = 100;
 
             const assNavyFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
             const assAltFill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
             const assThFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B5A8A' } };
-            // Wysokość wiersza dopasowana do długości zawijanego tekstu (kolumna szer. 100
-            // znaków) — stała wysokość powodowała, że długi wiersz (np. tytuł + zdanie w tej
-            // samej linii Markdown) nachodził wizualnie na kolejne, puste wiersze poniżej.
-            const wrapHeight = (t, base, perLine) => Math.max(base, Math.ceil(String(t || '').length / 90) * perLine);
+            // Wiersze tekstowe nie dostają jawnej wysokości — przy wrapText Excel sam
+            // dopasowuje wysokość do zawiniętej treści (stała wysokość ucinała długi tekst).
 
             // **tekst** → ExcelJS richText
             const parseRt = (text) => {
@@ -3634,6 +3635,10 @@ ${ganttSectionHtml}
                 return valid.length ? valid : null;
             };
             const plain = (t) => String(t || '').replace(/\*\*/g, '');
+            // Wiersz-etykieta: krótka linia zakończona dwukropkiem („Konwektory RRH Installation:")
+            // wprowadzająca komentarz w kolejnych wierszach — w Excelu ma być pogrubiona,
+            // sam komentarz zostaje zwykłą czcionką.
+            const isLabelLine = (t) => /:\s*$/.test(plain(t).trim());
             const setVal = (cell, text) => {
                 const rt = parseRt(text);
                 cell.value = rt ? { richText: rt } : plain(text);
@@ -3647,7 +3652,14 @@ ${ganttSectionHtml}
 
                 if (/^\{tabela wbs[123]?\}$/i.test(trimmed)) { li++; continue; }
 
-                if (!trimmed) { sheet.addRow([]).height = 4; li++; continue; }
+                // Pusty wiersz separujący pozycje — normalnej wysokości (bez .height = 4,
+                // które dawało wizualnie zawężone paski między komentarzami). Ciąg pustych
+                // linii Markdown zwijamy do jednego wiersza.
+                if (!trimmed) {
+                    while (li + 1 < offerLines.length && !offerLines[li + 1].trim()) li++;
+                    if (!skipBlankRows) sheet.addRow([]);
+                    li++; continue;
+                }
 
                 // Markdown table block
                 if (trimmed.startsWith('|')) {
@@ -3713,7 +3725,7 @@ ${ganttSectionHtml}
                             });
                             row.height = 18;
                         });
-                        sheet.addRow([]).height = 4;
+                        if (!skipBlankRows) sheet.addRow([]);
                     }
                     continue;
                 }
@@ -3727,7 +3739,7 @@ ${ganttSectionHtml}
                     cell.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
                     cell.fill = assNavyFill;
                     cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
-                    row.height = wrapHeight(headingText, 26, 20);
+                    // Bez jawnej wysokości — Excel auto-dopasowuje wiersz do zawijanego tekstu.
                     li++; continue;
                 }
 
@@ -3741,18 +3753,18 @@ ${ganttSectionHtml}
                     cell.value = headingText;
                     cell.font = { bold: true, size: 12 };
                     cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
-                    row.height = wrapHeight(headingText, 20, 17);
+                    // wysokość auto (wrapText)
                     li++; continue;
                 }
 
-                if (trimmed.startsWith('### ')) {
+                if (/^#{3,6} /.test(trimmed)) {
                     const row = sheet.addRow([]);
                     const cell = row.getCell(1);
-                    const headingText = plain(trimmed.slice(4));
+                    const headingText = plain(trimmed.replace(/^#{3,6} /, ''));
                     cell.value = headingText;
                     cell.font = { bold: true, size: 11 };
                     cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
-                    row.height = wrapHeight(headingText, 18, 15);
+                    // wysokość auto (wrapText)
                     li++; continue;
                 }
 
@@ -3765,8 +3777,8 @@ ${ganttSectionHtml}
                     const rt = parseRt(ulm[2]);
                     const pfx = { text: '• ', font: { bold: true, color: { argb: 'FF1E3A5F' } } };
                     cell.value = rt ? { richText: [pfx, ...rt] } : '• ' + plain(ulm[2]);
-                    cell.alignment = { wrapText: true, vertical: 'middle', indent: indent + 1 };
-                    row.height = 16;
+                    if (isLabelLine(ulm[2])) cell.font = { bold: true };
+                    cell.alignment = { wrapText: true, vertical: 'top', indent: indent + 1 };
                     li++; continue;
                 }
 
@@ -3779,8 +3791,8 @@ ${ganttSectionHtml}
                     const rt = parseRt(olm[3]);
                     const pfx = { text: olm[2] + '. ', font: { bold: true, color: { argb: 'FF1E3A5F' } } };
                     cell.value = rt ? { richText: [pfx, ...rt] } : olm[2] + '. ' + plain(olm[3]);
-                    cell.alignment = { wrapText: true, vertical: 'middle', indent: indent + 1 };
-                    row.height = 16;
+                    if (isLabelLine(olm[3])) cell.font = { bold: true };
+                    cell.alignment = { wrapText: true, vertical: 'top', indent: indent + 1 };
                     li++; continue;
                 }
 
@@ -3789,8 +3801,8 @@ ${ganttSectionHtml}
                     const row = sheet.addRow([]);
                     const cell = row.getCell(1);
                     setVal(cell, trimmed);
-                    cell.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
-                    row.height = Math.max(16, Math.ceil(trimmed.length / 90) * 15);
+                    cell.font = { bold: isLabelLine(trimmed) };
+                    cell.alignment = { wrapText: true, vertical: 'top', indent: 1 };
                     li++;
                 }
             }
@@ -3820,7 +3832,7 @@ ${ganttSectionHtml}
             .replace(/\{Roboczo dni w projekcie\}/gi, workDaysFmt);
         const offerBody = resolveOfferTokens(getOfferText() || '').replace(/^#\s+/, '');
         const offerFull = offerBody.trim() ? `# Oferta\n\n${offerBody}` : '';
-        buildMarkdownSheet('Oferta', offerFull, 'Brak treści oferty.');
+        buildMarkdownSheet('Oferta', offerFull, 'Brak treści oferty.', { skipBlankRows: true });
         // ── Sheet "Strategia": strategie per gałąź (globalna strategia projektu usunięta) ──
         const branchStrategyMd = (wbsData || [])
             .filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0 && String(n.strategy || '').trim())
@@ -4410,7 +4422,9 @@ ${ganttSectionHtml}
                     row.alignment = { vertical: 'top', wrapText: true };
                     if (qaIdx % 2 === 0) for (let ci = 1; ci <= 3; ci++) row.getCell(ci).fill = qaAltFill;
                     applyBorder(row, 3, cellBorder);
-                    row.height = Math.max(20, Math.ceil(((pair.answer || '').length + 1) / 60) * 15);
+                    // Bez jawnej wysokości — Excel dopasowuje wiersz do najdłuższej zawijanej
+                    // kolumny (ścieżka / pytanie / odpowiedź). Wcześniejsze wyliczenie brało pod
+                    // uwagę tylko odpowiedź, więc długie pytania były ucinane.
                     qaIdx++;
                 }
             }
