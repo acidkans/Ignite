@@ -337,6 +337,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | purchaseUnitOf | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor purchase-unit-of |
 | ui-sekcja | budget-oz-sums (fetch Oferta/Zakup do kafli KPI) | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table-oz-sums |
 | ui-sekcja | budget-kpi-tiles (siatka kafli KPI Budżetu) | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-kpi-tiles |
+| ui-stan | showReal (wiersz „Rzeczywiste" tylko po akceptacji baseline) | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-show-real |
+| ui-funkcja | filteredSums (podsumowanie wierszy po filtrach) | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-filtered-sums |
+| ui-stan | hasActiveFilter (czy jakikolwiek filtr kolumnowy aktywny) | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-has-active-filter |
+| ui-sekcja | stopka „Wartość zafiltrowana" tabeli Budżet | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-filtered-footer |
 | ui-input | AutoResizeTextarea | apps/frontend/src/components/shared/wbs/AutoResizeTextarea.jsx | @anchor auto-resize-textarea |
 | ui-modal | ImageLightbox | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor image-lightbox |
 | ui-stan | lightboxOpen | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor requirement-image-lightbox-open |

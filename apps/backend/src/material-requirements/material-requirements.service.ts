@@ -1727,6 +1727,10 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
     // @anchor mat-req-budget-sums — sumy dla widoku budżetu: Σ wyceny (priceNetto isOffer)
     // i Σ zakupu (purchasePriceNetto ?? priceNetto isPurchase), oba × ilość wymagania.
     // accepted = zamówienie ma zaakceptowany snapshot (wtedy front pokazuje oba pola).
+    // purchaseDelta = Σ (cena zakupu − cena ofertowa) × ilość, liczone WYŁĄCZNIE po pozycjach,
+    // które mają realny zakup (propozycja isPurchase). Front dodaje tę różnicę do kosztu
+    // ofertowego z WBS — dzięki temu brak zakupów ⇒ rzeczywiste == oferta i nie ma rozjazdu
+    // z porównywania dwóch różnych źródeł kosztu (WbsNode vs MaterialRequirement).
     async budgetSums(nodeId: string, versionId?: string) {
         const node = await this.prisma.processNode.findUnique({
             where: { id: nodeId }, select: { acceptedVersionId: true },
@@ -1738,7 +1742,7 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
                 proposals: { select: { isOffer: true, isPurchase: true, priceNetto: true, purchasePriceNetto: true } },
             },
         });
-        let sumWycena = 0, sumZakup = 0;
+        let sumWycena = 0, sumZakup = 0, purchaseDelta = 0, purchasedCount = 0;
         for (const r of reqs) {
             const qty = r.quantity ?? 0;
             const offer = r.proposals.find(p => p.isOffer);
@@ -1747,8 +1751,12 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
             const purchasePrice = purchase ? (purchase.purchasePriceNetto ?? purchase.priceNetto ?? 0) : offerPrice;
             sumWycena += offerPrice * qty;
             sumZakup += purchasePrice * qty;
+            if (purchase) {
+                purchasedCount += 1;
+                purchaseDelta += (purchasePrice - offerPrice) * qty;
+            }
         }
-        return { accepted: !!node?.acceptedVersionId, sumWycena, sumZakup };
+        return { accepted: !!node?.acceptedVersionId, sumWycena, sumZakup, purchaseDelta, purchasedCount };
     }
 
     async uploadProposalFile(proposalId: string, file: Express.Multer.File, type: 'datasheet' | 'compliance') {

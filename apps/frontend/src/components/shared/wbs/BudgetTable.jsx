@@ -5,6 +5,9 @@ import { offerLockInputProps } from '../OfferLockGuard';
 
 const TH_BASE = 'text-left px-3 py-2.5 text-[17px] font-bold uppercase tracking-widest text-white whitespace-normal break-words select-none relative align-bottom';
 const TD = 'px-2 py-1.5 align-top break-words';
+// Stopka „Wartość zafiltrowana" — sticky trzyma się KOMÓREK, nie <tfoot>/<tr>: przy
+// `border-collapse: collapse` Chrome ignoruje position:sticky na sekcji i wierszu tabeli.
+const FOOT_TD = 'px-2 py-2 align-middle break-words sticky bottom-0 z-10 bg-[#0b0f17] border-t-2 border-white/20';
 const INPUT = 'bg-transparent text-white text-sm w-full outline-none focus:bg-white/5 rounded px-1 py-0.5 min-w-0';
 const TEXTAREA = 'bg-transparent text-white text-sm w-full outline-none focus:bg-white/5 rounded px-1 py-0.5 min-w-0 resize-none leading-snug whitespace-pre-wrap break-words overflow-hidden';
 const SELECT = 'bg-[#0b0f17] text-white text-sm w-full outline-none rounded px-1 py-0.5 cursor-pointer border border-white/5 hover:border-white/10 focus:border-blue-500/40 transition-colors';
@@ -232,6 +235,13 @@ export default function BudgetTable({
         };
     }, [localRows]);
 
+    // @anchor budget-has-active-filter — czy jakikolwiek filtr kolumnowy jest ustawiony.
+    // Steruje trzecim wierszem kafli KPI: bez filtrów „Zafiltrowane" powielałoby „Ofertę".
+    const hasActiveFilter = useMemo(() => Object.keys(colFilters).some(k => {
+        const v = colFilters[k];
+        return Array.isArray(v) ? v.length > 0 : String(v ?? '').trim() !== '';
+    }), [colFilters]);
+
     const filteredRows = useMemo(() => {
         const activeKeys = Object.keys(colFilters).filter(k => {
             const v = colFilters[k];
@@ -313,21 +323,38 @@ export default function BudgetTable({
 
     const summary = useMemo(() => calcSummary(localRows), [localRows, calcSummary]);
 
-    // @anchor budget-real-summary — podsumowanie „rzeczywiste": koszt liści mat/sprzęt
-    // podmieniony na sumZakup (realne ceny zakupu z propozycji), reszta liści = oferta;
-    // przychód bez zmian (cena dla klienta stała), zysk/marża przeliczone na koszcie realnym.
+    // @anchor budget-real-summary — podsumowanie „rzeczywiste" = ZAKUPY, nie oferta.
+    // Koszt ofertowy z WBS korygowany WYŁĄCZNIE o różnicę na pozycjach faktycznie kupionych
+    // (`purchaseDelta` z budget-sums: Σ (cena zakupu − cena ofertowa) × ilość po propozycjach
+    // isPurchase). Pozycje bez zakupu zostają w cenie ofertowej, więc brak zakupów ⇒
+    // rzeczywiste == oferta. Wcześniej podmieniano całą podstawę kosztu materiałów na sumę
+    // z MaterialRequirement, co dawało rozjazd nawet przy zerowej liczbie zakupów.
+    // Przychód bez zmian (cena dla klienta stała), zysk/marża przeliczone na koszcie realnym.
     const real = useMemo(() => {
-        const MAT_TYPES = new Set(['material', 'equipment']);
-        const offerMatCost = localRows.reduce(
-            (s, r) => (MAT_TYPES.has(r.type) ? s + (parseFloat(r.totalCost) || 0) : s), 0
-        );
-        const realMatCost = ozSums ? (ozSums.sumZakup ?? 0) : offerMatCost; // brak danych → fallback do oferty
-        const cost = summary.totalCost - offerMatCost + realMatCost;
+        const cost = summary.totalCost + (ozSums?.purchaseDelta ?? 0);
         const revenue = summary.totalRevenue; // przychód ofertowy bez zmian
         const profit = revenue - cost;
         const marginPct = revenue > 0 ? (profit / revenue) * 100 : 0;
         return { cost, revenue, profit, marginPct };
-    }, [localRows, summary, ozSums]);
+    }, [summary, ozSums]);
+
+    // @anchor budget-show-real — wiersz „Rzeczywiste" pojawia się dopiero po akceptacji
+    // baseline (ProcessNode.acceptedVersionId). Przed baseline nie ma czego porównywać —
+    // etap ofertowania nie zna jeszcze zakupów, więc kafle pokazują wyłącznie ofertę.
+    const showReal = !!ozSums?.accepted;
+
+    // @anchor budget-filtered-sums — podsumowanie wierszy AKTUALNIE widocznych (po filtrach
+    // kolumnowych). Liczone TĄ SAMĄ funkcją co kafel „Oferta", więc przy wyczyszczonych
+    // filtrach obie liczby są co do grosza równe. `quantity` sumuje kolumnę Ilość (mieszane
+    // jednostki — wartość poglądowa), `rawRevenue` to suma kolumny Cena ofert. przed rabatem
+    // globalnym; kafle KPI pokazują `totalRevenue` (po rabacie), stopka tabeli `rawRevenue`,
+    // bo stopka sumuje kolumnę i musi się zgadzać z tym, co widać w wierszach.
+    const filteredSums = useMemo(() => {
+        const s = calcSummary(displayedRows);
+        let quantity = 0;
+        for (const r of displayedRows) quantity += parseLocaleNumber(String(r.quantity ?? '')) ?? 0;
+        return { ...s, quantity, count: displayedRows.length };
+    }, [displayedRows, calcSummary]);
 
     const handleCellFocus = useCallback((rowId, e) => {
         clearTimeout(blurTimer.current);
@@ -419,9 +446,10 @@ export default function BudgetTable({
         <div className="flex flex-col gap-3 h-full">
             {/* Karty summary */}
             <div className="rounded-2xl border border-white/10 bg-black/30 p-2.5">
-                {/* @anchor budget-kpi-tiles — kafle KPI: każdy z wierszem Oferta + Rzeczywiste
-                    (koszt/przychód/zysk/marża); Koszt i Przychód szersze, Marża węższa,
-                    Rabat %/zł scalony w jednym kaflu (tylko etap ofertowania) */}
+                {/* @anchor budget-kpi-tiles — kafle KPI: wiersz Oferta zawsze, wiersz Rzeczywiste
+                    (= zakupy) tylko po akceptacji baseline (`showReal`), wiersz Zafiltrowane
+                    (kursywa, −2px) tylko przy aktywnym filtrze kolumnowym (`hasActiveFilter`).
+                    Koszt i Przychód szersze, Marża węższa, Rabat %/zł scalony w jednym kaflu */}
                 <div className="grid grid-cols-2 xl:grid-cols-12 gap-2">
                     <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 xl:col-span-3">
                         <div className="text-[10px] uppercase tracking-widest text-red-300/90 font-bold mb-1">Koszt</div>
@@ -429,10 +457,18 @@ export default function BudgetTable({
                             <span className="text-[10px] uppercase tracking-wider text-red-300/60">Oferta</span>
                             <span className="text-sm font-black text-red-200">{fmtPLNFull(summary.totalCost)} PLN</span>
                         </div>
-                        <div className="flex items-baseline justify-between gap-2">
-                            <span className="text-[10px] uppercase tracking-wider text-red-300/60">Rzeczywiste</span>
-                            <span className="text-sm font-bold text-red-200/80">{fmtPLNFull(real.cost)} PLN</span>
-                        </div>
+                        {showReal && (
+                            <div className="flex items-baseline justify-between gap-2">
+                                <span className="text-[10px] uppercase tracking-wider text-red-300/60">Rzeczywiste</span>
+                                <span className="text-sm font-bold text-red-200/80">{fmtPLNFull(real.cost)} PLN</span>
+                            </div>
+                        )}
+                        {hasActiveFilter && (
+                            <div className="flex items-baseline justify-between gap-2 italic">
+                                <span className="text-[8px] uppercase tracking-wider text-red-300/60">Zafiltrowane</span>
+                                <span className="text-xs font-bold text-red-200/80">{fmtPLNFull(filteredSums.totalCost)} PLN</span>
+                            </div>
+                        )}
                     </div>
                     <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2 xl:col-span-3">
                         <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold mb-1">Przychód</div>
@@ -440,10 +476,18 @@ export default function BudgetTable({
                             <span className="text-[10px] uppercase tracking-wider text-green-300/60">Oferta</span>
                             <span className="text-sm font-black text-green-200">{fmtPLNFull(summary.totalRevenue)} PLN</span>
                         </div>
-                        <div className="flex items-baseline justify-between gap-2">
-                            <span className="text-[10px] uppercase tracking-wider text-green-300/60">Rzeczywiste</span>
-                            <span className="text-sm font-bold text-green-200/80">{fmtPLNFull(real.revenue)} PLN</span>
-                        </div>
+                        {showReal && (
+                            <div className="flex items-baseline justify-between gap-2">
+                                <span className="text-[10px] uppercase tracking-wider text-green-300/60">Rzeczywiste</span>
+                                <span className="text-sm font-bold text-green-200/80">{fmtPLNFull(real.revenue)} PLN</span>
+                            </div>
+                        )}
+                        {hasActiveFilter && (
+                            <div className="flex items-baseline justify-between gap-2 italic">
+                                <span className="text-[8px] uppercase tracking-wider text-green-300/60">Zafiltrowane</span>
+                                <span className="text-xs font-bold text-green-200/80">{fmtPLNFull(filteredSums.totalRevenue)} PLN</span>
+                            </div>
+                        )}
                     </div>
                     <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2 xl:col-span-2">
                         <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold mb-1">Zysk</div>
@@ -451,10 +495,18 @@ export default function BudgetTable({
                             <span className="text-[10px] uppercase tracking-wider text-green-300/60">Oferta</span>
                             <span className="text-sm font-black text-green-200">{fmtPLNFull(summary.profit)} PLN</span>
                         </div>
-                        <div className="flex items-baseline justify-between gap-2">
-                            <span className="text-[10px] uppercase tracking-wider text-green-300/60">Rzeczywiste</span>
-                            <span className="text-sm font-bold text-green-200/80">{fmtPLNFull(real.profit)} PLN</span>
-                        </div>
+                        {showReal && (
+                            <div className="flex items-baseline justify-between gap-2">
+                                <span className="text-[10px] uppercase tracking-wider text-green-300/60">Rzeczywiste</span>
+                                <span className="text-sm font-bold text-green-200/80">{fmtPLNFull(real.profit)} PLN</span>
+                            </div>
+                        )}
+                        {hasActiveFilter && (
+                            <div className="flex items-baseline justify-between gap-2 italic">
+                                <span className="text-[8px] uppercase tracking-wider text-green-300/60">Zafiltrowane</span>
+                                <span className="text-xs font-bold text-green-200/80">{fmtPLNFull(filteredSums.profit)} PLN</span>
+                            </div>
+                        )}
                     </div>
                     <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-3 py-2 xl:col-span-2">
                         <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold mb-1">Marża</div>
@@ -462,10 +514,18 @@ export default function BudgetTable({
                             <span className="text-[10px] uppercase tracking-wider text-green-300/60">Oferta</span>
                             <span className="text-sm font-black text-green-200">{fmtPctFull(summary.marginPct)}</span>
                         </div>
-                        <div className="flex items-baseline justify-between gap-2">
-                            <span className="text-[10px] uppercase tracking-wider text-green-300/60">Rzeczywiste</span>
-                            <span className="text-sm font-bold text-green-200/80">{fmtPctFull(real.marginPct)}</span>
-                        </div>
+                        {showReal && (
+                            <div className="flex items-baseline justify-between gap-2">
+                                <span className="text-[10px] uppercase tracking-wider text-green-300/60">Rzeczywiste</span>
+                                <span className="text-sm font-bold text-green-200/80">{fmtPctFull(real.marginPct)}</span>
+                            </div>
+                        )}
+                        {hasActiveFilter && (
+                            <div className="flex items-baseline justify-between gap-2 italic">
+                                <span className="text-[8px] uppercase tracking-wider text-green-300/60">Zafiltrowane</span>
+                                <span className="text-xs font-bold text-green-200/80">{fmtPctFull(filteredSums.marginPct)}</span>
+                            </div>
+                        )}
                     </div>
                     <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 px-3 py-2 col-span-2 xl:col-span-2">
                         <div className="text-[10px] uppercase tracking-widest text-orange-300/90 font-bold mb-1">Rabat</div>
@@ -813,6 +873,37 @@ export default function BudgetTable({
                             </tr>
                         )}
                     </tbody>
+                    {/* @anchor budget-filtered-footer — przyklejona stopka „Wartość zafiltrowana":
+                        sumy ilości, kosztu całkowitego i ceny ofertowej z wierszy widocznych po
+                        filtrach kolumnowych. Bez filtrów = suma całego budżetu. */}
+                    <tfoot>
+                        <tr>
+                            <td className={`${FOOT_TD} text-center text-[11px] text-gray-500`}>Σ</td>
+                            {COLS.map(col => {
+                                if (col.key === 'subjectName') return (
+                                    <td key={col.key} className={FOOT_TD}>
+                                        <span className="text-[11px] uppercase tracking-widest text-amber-300/90 font-bold break-words">Wartość zafiltrowana</span>
+                                    </td>
+                                );
+                                if (col.key === 'name') return (
+                                    <td key={col.key} className={FOOT_TD}>
+                                        <span className="text-[10px] text-gray-500">{filteredSums.count} z {localRows.length} poz.</span>
+                                    </td>
+                                );
+                                if (col.key === 'quantity') return (
+                                    <td key={col.key} className={`${FOOT_TD} text-center text-sm font-bold text-white tabular-nums`}>{fmtQty(filteredSums.quantity)}</td>
+                                );
+                                if (col.key === 'totalCost') return (
+                                    <td key={col.key} className={`${FOOT_TD} text-center text-sm font-black text-red-200 tabular-nums`}>{fmtPLNFull(filteredSums.totalCost)}</td>
+                                );
+                                if (col.key === 'offerPrice') return (
+                                    <td key={col.key} className={`${FOOT_TD} text-center text-sm font-black text-green-200 tabular-nums`}>{fmtPLNFull(filteredSums.rawRevenue)}</td>
+                                );
+                                return <td key={col.key} className={FOOT_TD} />;
+                            })}
+                            <td className={FOOT_TD} />
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
         </div>

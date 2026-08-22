@@ -1,3 +1,25 @@
+## 2026-08-22 — fix(budzet): rzeczywiste = zakupy, ukryte bez baseline + sumy zafiltrowane (v2026.08.22.881)
+
+### architektura / API
+
+- **`GET /material-requirements/node/:nodeId/budget-sums` zwraca `purchaseDelta` i `purchasedCount`** — `purchaseDelta` to Σ (cena zakupu − cena ofertowa) × ilość, liczona WYŁĄCZNIE po pozycjach z propozycją `isPurchase`. Front dolicza tę różnicę do kosztu ofertowego z WBS zamiast podmieniać całą podstawę kosztu materiałów na `sumZakup`
+- **Kafle KPI „Rzeczywiste" liczą teraz zakupy, nie drugi wariant oferty** — poprzednia formuła brała koszt materiałów z `MaterialRequirement × ProductProposal`, a ofertowy z `WbsNode.unitCost × quantity`. Dwa różne źródła dawały rozjazd nawet przy ZEROWEJ liczbie zakupów: na produkcji AMP_5G (`d1bb2395…`, wersja „pierwszy", 0 propozycji `isPurchase`) kafel Koszt pokazywał 16 377 PLN różnicy z trzech powodów — 76 ze 131 wymagań bez propozycji `isOffer` spadało na `budgetedPriceNetto` (8 679 PLN), `budgetSums` ignorował `wbsNodeAllocations` i liczył pełne `r.quantity` (5 804 PLN), a 4 wiersze WBS typu material/equipment nie miały w ogóle powiązanego wymagania (1 895 PLN). Teraz brak zakupów ⇒ rzeczywiste == oferta
+- **Wiersz „Rzeczywiste" znika przed akceptacją baseline** — backend zwracał `accepted` od początku, ale front nigdy go nie czytał. Bez `ProcessNode.acceptedVersionId` nie ma czego porównywać, więc cztery kafle (koszt/przychód/zysk/marża) pokazują sam wiersz „Oferta"
+- **Nowa stopka tabeli Budżet „Wartość zafiltrowana"** — przyklejona do dołu, sumuje ilość, koszt całkowity i cenę ofertową z wierszy widocznych po filtrach kolumnowych, plus licznik `N z M poz.`. Bez filtrów pokrywa się z kaflem KPI „Oferta"
+- **Test:** `test/budget-kpi-harness.html` — 21 sprawdzeń na żywym komponencie w dev serwerze (mock `budget-sums`): brak baseline ⇒ jeden wiersz, baseline + zero zakupów ⇒ rzeczywiste == oferta co do grosza, `purchaseDelta` przenosi się 1:1 na kafel, stopka ma tyle komórek co nagłówek (13), filtr dokłada trzeci wiersz kursywą 8px/12px wobec 10px/14px i znika po wyczyszczeniu
+- **Trzeci wiersz „Zafiltrowane" w czterech kaflach KPI** (koszt / przychód / zysk / marża) — kursywa, czcionka o 2px mniejsza od reszty kafla (etykieta 8px zamiast 10px, wartość 12px zamiast 14px). Pokazuje się tylko przy aktywnym filtrze kolumnowym; bez filtrów powielałby wiersz „Oferta". Liczony tą samą funkcją `calcSummary` co „Oferta", więc po wyczyszczeniu filtrów obie liczby zgadzają się co do grosza. Kafle pokazują przychód PO rabacie globalnym, stopka tabeli — sumę kolumny „Cena ofert." przed rabatem, bo stopka musi się zgadzać z tym, co widać w wierszach
+
+### słownik
+
+- dodano `budget-show-real` — warunek widoczności wiersza „Rzeczywiste" w kaflach KPI, `BudgetTable.jsx`
+- dodano `budget-filtered-sums` — sumy ilości/kosztu/ceny z wierszy po filtrach, `BudgetTable.jsx`
+- dodano `budget-filtered-footer` — stopka `<tfoot>` „Wartość zafiltrowana", `BudgetTable.jsx`
+
+### wytyczne
+
+- `ui-sekcja` `budget-kpi-tiles` — wiersz „Rzeczywiste" ZAWSZE liczy się jako korekta wartości ofertowej o realne zakupy, nigdy jako niezależna suma z drugiego źródła. Ofertę i rzeczywiste wolno zestawiać tylko wtedy, gdy obie liczby wychodzą z tej samej podstawy — inaczej kafel pokazuje różnicę w jakości danych, nie w pieniądzach
+- `back-funkcja` `budgetSums` — `sumWycena`/`sumZakup` nie respektują `wbsNodeAllocations` (biorą pełne `MaterialRequirement.quantity`), więc nie nadają się do zestawiania z sumami WBS. Do porównań z budżetem używaj `purchaseDelta`
+
 ## 2026-08-22 — fix(materialy): cena katalogowa produktu tylko z modulu Materialy (v2026.08.22.879)
 
 ### architektura / API
