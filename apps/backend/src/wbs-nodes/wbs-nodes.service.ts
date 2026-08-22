@@ -634,45 +634,96 @@ export class WbsNodesService {
 
     /**
      * Synchronizuje MaterialRequirement.quantity z WbsNode.quantity.
-     * Po zmianie quantity na WbsNode:
-     *   1) zaktualizuj WbsNodeMaterial.quantity dla tego węzła (każda alokacja na ten node = nowe quantity)
-     *   2) dla każdego dotkniętego MaterialRequirement: przelicz quantity jako sumę wszystkich alokacji
-     *      i zaktualizuj wbsNodeAllocations JSON
+     * `WbsNode.quantity` jest źródłem prawdy, `MaterialRequirement.quantity` jego odbiciem.
+     *
+     * Karta może obejmować KILKA gałęzi WBS (`wbsNodeAllocations`), a właścicielem przez relację 1:1
+     * `wbsNodeId` jest tylko jedna z nich. Dlatego zmiana ilości na węźle dotyka każdej karty, która
+     * wymienia ten węzeł — nie tylko tej, którą węzeł posiada.
+     *
+     * @anchor wbs-sync-qty-direct-link
+     * Dwie dziury, które ta funkcja miała wcześniej, obie widoczne w AMP_5G:
+     *   - edycja gałęzi WTÓRNEJ nie ruszała karty w ogóle. `updateMany({ where: { wbsNodeId } })`
+     *     trafia wyłącznie w kartę posiadaną przez węzeł, a gałąź wtórna z definicji jej nie ma;
+     *     tabela `WbsNodeMaterial`, która miała to obsłużyć, jest dla większości pozycji pusta;
+     *   - edycja WŁAŚCICIELA nadpisywała sumę ilością jednej gałęzi. Karta `cybant` pokazywała 325
+     *     (tyle co właściciel) przy mapie `{…:1, …:350}` — gałąź 350 wypadła z zakupów.
+     *
+     * Suma liczona jest z RZECZYWISTYCH ilości węzłów wymienionych w mapie, nie z wartości w mapie —
+     * dzięki temu nieaktualne wpisy same się goją. Wyjątek: wpis wskazujący węzeł, którego już nie ma,
+     * zostaje z dotychczasową wartością. Usunięcie go obniżyłoby ilość zakupową po cichu, przy okazji
+     * niepowiązanej edycji; to osobna decyzja, nie efekt uboczny zapisu ilości.
      */
     private async syncMaterialsFromWbsNode(wbsNodeId: string, newQuantity: number) {
-        const allocs = await this.prisma.wbsNodeMaterial.findMany({ where: { wbsNodeId } });
-        // @anchor wbs-sync-qty-direct-link — most między `WbsNode.quantity` a `MaterialRequirement.quantity`
-        // opierał się wyłącznie na tabeli alokacji `WbsNodeMaterial` (mechanizm rozdzielania materiału na
-        // kilka gałęzi), a ta pokrywa mniejszość pozycji. Przy jej braku funkcja kończyła się tutaj i ilość
-        // NIE docierała do wymagania — mimo że łączy je relacja 1:1 `MaterialRequirement.wbsNodeId`.
-        // Zasada: `WbsNode.quantity` jest źródłem prawdy, `MaterialRequirement.quantity` jego odbiciem.
-        if (allocs.length === 0) {
-            await this.prisma.materialRequirement.updateMany({
-                where: { wbsNodeId },
-                data: { quantity: newQuantity },
-            });
-            return;
-        }
-
+        // Tabela relacyjna pozostaje żywa dla rozbić zakładanych przez `selectProposal`.
         await this.prisma.wbsNodeMaterial.updateMany({
             where: { wbsNodeId },
             data: { quantity: newQuantity },
         });
 
-        const materialIds = Array.from(new Set(allocs.map(a => a.materialId)));
-        for (const materialId of materialIds) {
-            const allForMat = await this.prisma.wbsNodeMaterial.findMany({ where: { materialId } });
-            const total = allForMat.reduce((sum, a) => sum + (a.quantity || 0), 0);
-            const allocJson = JSON.stringify(
-                Object.fromEntries(allForMat.map(a => [a.wbsNodeId, a.quantity])),
+        const affected = await this.prisma.materialRequirement.findMany({
+            where: { OR: [{ wbsNodeId }, { wbsNodeAllocations: { contains: wbsNodeId } }] },
+            select: { id: true, wbsNodeId: true, wbsNodeAllocations: true },
+        });
+        if (affected.length === 0) return;
+
+        for (const req of affected) {
+            let alloc: Record<string, unknown> = {};
+            try {
+                const parsed = req.wbsNodeAllocations ? JSON.parse(req.wbsNodeAllocations) : null;
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) alloc = parsed;
+            } catch { alloc = {}; }
+
+            const keys = Object.keys(alloc);
+            // Karta bez mapy (albo z mapą, która nie zna tego węzła, a węzeł jest jej właścicielem)
+            // opisuje jedną pozycję — jej ilość to wprost ilość węzła.
+            if (keys.length === 0) {
+                await this.prisma.materialRequirement.update({
+                    where: { id: req.id },
+                    data: { quantity: newQuantity },
+                });
+                continue;
+            }
+            if (!keys.includes(wbsNodeId)) {
+                if (req.wbsNodeId !== wbsNodeId) continue; // mapa nie zna węzła i nie jest jego kartą
+                keys.push(wbsNodeId);
+            }
+
+            const nodes = await this.prisma.wbsNode.findMany({
+                where: { id: { in: keys } },
+                select: { id: true, quantity: true },
+            });
+            const realne = new Map(nodes.map(n => [n.id, n.quantity ?? 0]));
+
+            // Gałąź, która ma WŁASNĄ kartę, nie należy do tej karty — jej ilość jest już policzona
+            // po tamtej stronie. Wpis to ślad po nieaktualnym powiązaniu i wliczenie go dawałoby
+            // podwójne liczenie w zakupach (`Przełącznica 48j` doliczałaby `Przełącznicę SC/PC`).
+            // Właściciel karty zostaje ZAWSZE, nawet gdy mapa go nie wymienia — inaczej karta,
+            // której mapa opisuje wyłącznie cudze gałęzie, spadłaby do zera.
+            const zWlasnaKarta = new Set(
+                (await this.prisma.materialRequirement.findMany({
+                    where: { wbsNodeId: { in: keys.filter(k => k !== req.wbsNodeId) }, id: { not: req.id } },
+                    select: { wbsNodeId: true },
+                })).map(r => r.wbsNodeId as string),
             );
-            // Wymaganie wskazywane KOLUMNĄ `materialId`, nie własnym id: `WbsNodeMaterial.materialId`
-            // trzyma `materials.id` (migracja `ce75dbe`). Poprzednie `where: { id: materialId }`
-            // nie trafiało w żaden wiersz, a `.catch(() => {})` połykał `P2025` — ilość z węzła
-            // nie docierała do wymagania rozbitego na kilka gałęzi.
-            await this.prisma.materialRequirement.updateMany({
-                where: { materialId },
-                data: { quantity: total, wbsNodeAllocations: allocJson },
+
+            const nextAlloc: Record<string, number> = {};
+            for (const k of keys) {
+                if (zWlasnaKarta.has(k)) continue;
+                if (realne.has(k)) nextAlloc[k] = realne.get(k) as number;
+                else nextAlloc[k] = parseFloat(String(alloc[k])) || 0; // węzeł zniknął — wartość zostaje
+            }
+
+            // Bezpiecznik: karta bez właściciela, której WSZYSTKIE gałęzie mają własne karty,
+            // zostałaby z pustą mapą i ilością 0. Cicha zerówka na pozycji zakupowej jest gorsza
+            // niż podwójne liczenie — taki wpis wymaga człowieka, nie efektu ubocznego edycji
+            // sąsiedniego węzła. Zostawiamy kartę nietkniętą.
+            if (Object.keys(nextAlloc).length === 0) continue;
+
+            const total = Object.values(nextAlloc).reduce((s, v) => s + v, 0);
+
+            await this.prisma.materialRequirement.update({
+                where: { id: req.id },
+                data: { quantity: total, wbsNodeAllocations: JSON.stringify(nextAlloc) },
             });
         }
     }

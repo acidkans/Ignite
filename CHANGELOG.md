@@ -1,3 +1,18 @@
+## 2026-08-22 — fix(wbs): karta zbiorcza liczy się z rzeczywistych ilości gałęzi (v2026.08.22.896)
+
+### architektura / API
+
+- **`syncMaterialsFromWbsNode` szuka KAŻDEJ karty wymieniającej ten węzeł**, nie tylko tej posiadanej przez niego przez relację 1:1. Karta może obejmować kilka gałęzi WBS (`wbsNodeAllocations`), a właścicielem jest tylko jedna z nich — dwie dziury z tego wynikające, obie widoczne w AMP_5G: edycja gałęzi WTÓRNEJ nie ruszała karty w ogóle (`updateMany({ where: { wbsNodeId } })` trafia wyłącznie w kartę właściciela, a tabela `WbsNodeMaterial` jest dla większości pozycji pusta), a edycja WŁAŚCICIELA nadpisywała sumę ilością jednej gałęzi — karta `cybant` pokazywała 325 przy mapie `{…:1, …:350}`, gałąź 350 wypadła z zakupów
+- **Suma liczona z RZECZYWISTYCH ilości węzłów z mapy, nie z wartości w mapie** — nieaktualne wpisy same się goją
+- **Gałąź mająca WŁASNĄ kartę nie jest doliczana** — jej ilość jest już policzona po tamtej stronie. Bez tego `Przełącznica 48j` doliczałaby `Przełącznicę SC/PC` i rosłaby z 1 na 3, dając 9 sztuk w Materiałach przy 7 w WBS
+- **Trzy bezpieczniki:** właściciel zostaje w sumie nawet gdy mapa go nie wymienia; wpis na nieistniejący węzeł zachowuje dotychczasową wartość (usunięcie obniżyłoby ilość zakupową po cichu, przy okazji niepowiązanej edycji); karta bez właściciela, której wszystkie gałęzie mają własne karty, zostaje NIETKNIĘTA — bez tego 12 pozycji w CMC spadłoby do zera
+- **Test:** `test/sync-materials-from-wbs-node.spec.ts` — 9 sprawdzeń na atrapie prisma, w tym obie regresje i wszystkie trzy bezpieczniki
+
+### wytyczne
+
+- `back-funkcja` `syncMaterialsFromWbsNode` — zmiana ilości na węźle dotyka KAŻDEJ karty, która ten węzeł wymienia. Relacja 1:1 `wbsNodeId` wskazuje tylko właściciela; gałąź wtórna nie ma własnej karty i nie da się jej znaleźć po tej relacji
+- `schema-pole` `MaterialRequirement.wbsNodeAllocations` — wpis na węzeł, który MA własną kartę, jest śladem po nieaktualnym powiązaniu (najczęściej po kopiuj/wklej gałęzi). Nie wliczaj go — to podwójne liczenie w zakupach
+
 ## 2026-08-22 — feat(wbs): autouzupełnianie nazwy liścia z nazw już użytych w drzewie (v2026.08.22.895)
 
 ### architektura / API
