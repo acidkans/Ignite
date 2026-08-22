@@ -1,3 +1,16 @@
+## 2026-08-22 — docs(wbs): karty dla węzłów bez własnej + wytyczne do dalszej pracy
+
+### architektura / API
+
+- **Migracja produkcyjna:** 21 kart „niczyich" (`wbsNodeId IS NULL`) podpiętych do węzłów, które i tak z nich korzystały, oraz 15 nowych kart dla węzłów żyjących na cudzej. Nazwa, ilość i jednostka z węzła; typ, cena budżetowa, wymagania techniczne, produkt katalogowy i dostawca skopiowane z karty, na której węzeł dotąd żył. Propozycje produktowe NIE kopiowane — powielenie ofert dublowałoby pozycje po stronie zakupowej. Węzły typu `group` pominięte
+- **`docs/PLAN-wbs-karty-i-alokacje.md`** — dokument przekazania: zasady pracy z bazą produkcyjną, stan wdrożenia, otwarte punkty per projekt, model danych (dwa łącza węzeł↔karta, alokacje wielogałęziowe, trzy różne ceny) i błędy sesji do niepowtarzania
+
+### wytyczne
+
+- `schema-pole` `ProjectVersion.isActive` — **bieżącą wersję projektu wyznacza `isActive`, NIGDY `createdAt DESC`.** Projekt trzyma kilka wersji WBS w tych samych tabelach, rozróżnianych `versionId`, a aplikacja pokazuje tę z flagą. W tej sesji wybór po dacie skierował 66 zmian tagów, 2 nowe karty i 1 podpięcie do wersji testowych (RPWIK-Tychy `trzeci testowy`, WZE Zielonki `trzecia versja szafy ZPAS`). Objaw: użytkownik nie widzi u siebie pozycji, o których raportuje asystent
+- `schema-relacja` `MaterialRequirement.wbsNodeId` — jest `@unique`, więc podpięcie karty z jednej wersji do węzła z innej ZABIERA kartę wersji, w której użytkownik pracuje. Każde zapytanie łączące karty z węzłami musi trzymać się jednej wersji
+- W raportach cytuj nazwy z bazy dosłownie — bez upiększania i bez uzupełniania uciętych końcówek. Nazwy w tym projekcie bywają ucięte, z podwójnymi spacjami i wariantami; opakowuj je w `'[' || name || ']'`
+
 ## 2026-08-22 — fix(wbs): wklejony liść dostaje własną kartę produktową (v2026.08.22.878)
 
 ### architektura / API
