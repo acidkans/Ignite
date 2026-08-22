@@ -1,3 +1,33 @@
+## 2026-08-22 — feat(excel): Podsumowanie per główne gałęzie w analizie projektu (v2026.08.22.883)
+
+### układ eksportu
+
+- **Arkusz `Podsumowanie` — nowa tabela „Podsumowanie per główne gałęzie"** (między tabelą per typ a tabelą per osoba odpowiedzialna). Kolumny identyczne z tabelą per typ: `Główna gałąź` / `Koszt` / `Przychód` / `Zysk` / `Marża %`. Jeden wiersz na przedmiot (węzeł depth=0, kolumna `Zakres` w arkuszu `Budżet`), sortowanie malejąco po koszcie, wiersz `Razem` na `SUBTOTAL(9,…)`.
+- **Wartości liczone formułami z arkusza `Budżet`, nie stałymi z aplikacji** — `Koszt`/`Przychód` = `SUMIF` po kolumnie `Zakres`, pozycje bez zakresu (`(puste)`) przez `SUMPRODUCT((TRIM(zakres)="")*…)`; `Zysk`/`Marża %` = formuły z sąsiednich komórek.
+
+### architektura / API
+
+- **`appendBudgetSheet` — `ref.cols` zwraca dodatkowo `subjectName`** (litera kolumny `Zakres`), żeby `Podsumowanie` mogło adresować ją w `SUMIF`/`SUMPRODUCT`.
+
+## 2026-08-22 — feat(excel): Podsumowanie liczone formułami z arkusza Budżet + sumy na górze (v2026.08.22.882)
+
+### architektura / API
+
+- **Eksport „Analiza projektu do Excel" — arkusz `Podsumowanie` nie zawiera już stałych liczb z aplikacji.** Wszystkie kwoty są formułami czytającymi arkusz `Budżet`: koszt całkowity i przychód przed rabatami = `SUM` po zakresie pozycji, tabele „per typ" i „per osoba odpowiedzialna" = `SUMIF` po kolumnach `Typ` / `Osoba odpowiedzialna`, „Liczba dni pracy" = `SUMPRODUCT` po typie `Praca` i jednostce dniowej. Edycja pozycji w arkuszu `Budżet` przelicza całe podsumowanie w pliku, bez ponownego eksportu z aplikacji.
+- **Wiersze bez etykiety (`—` w typie, `(puste)` w osobie odpowiedzialnej) liczone przez `SUMPRODUCT((TRIM(zakres)="")*…)`** — `SUMIF` nie dopasowuje pustych komórek.
+- **Rabat całościowy ma jedno źródło prawdy.** `Budżet!B1` jest formułą `='Podsumowanie'!$B$7`, a `Budżet!E1` = `MAX(0, Razem cena ofertowa − rabat)`. Zmiana rabatu procentowego/kwotowego w `Podsumowanie!B5`/`B6` przelicza oba arkusze.
+- **`appendBudgetSheet(workbook, opts)`** — nowy parametr `opts.discountRef` (adres komórki z rabatem całościowym; bez niego rabat zapisywany jako stała) oraz nowe pole `ref` w zwracanym obiekcie: geometria arkusza (litery kolumn, pierwszy/ostatni wiersz danych, wiersz sum) do budowania formuł w innych zakładkach.
+
+### układ eksportu
+
+- **Arkusz `Budżet` — wiersz „Razem" przeniesiony z dołu tabeli na górę.** Nowy układ: wiersz 1 = rabat całościowy, wiersz 2 = „Razem" (`SUBTOTAL(9,…)` po zakresie danych, respektuje autofiltr), wiersz 3 = nagłówek, dane od wiersza 4. Zamrożony podział przesunięty na 3 wiersze, autofiltr od wiersza 3.
+
+### wytyczne
+
+- `ui-funkcja` `appendBudgetSheet` — układ wierszy arkusza `Budżet` (1 rabat / 2 Razem / 3 nagłówek / 4+ dane) jest kontraktem dla formuł w `Podsumowaniu`; przy zmianie układu aktualizuj stałe `DISCOUNT_ROW`/`TOTALS_ROW`/`HEADER_ROW`/`FIRST_DATA_ROW` i zwracane `ref`, nigdy nie wpisuj numerów wierszy na sztywno w innych zakładkach.
+- `ui-funkcja` `appendBudgetSheet` — po zmianie układu wierszy re-import budżetu wymaga wskazania wiersza nagłówka **3** (a nie 2) w oknie importu; pole jest wybierane ręcznie przez użytkownika.
+- `Podsumowanie` — sumy celowo używają `SUM` (cały projekt), a nie `SUBTOTAL`; autofiltr w arkuszu `Budżet` nie zmienia podsumowania.
+
 ## 2026-08-22 — fix(budzet): rzeczywiste = zakupy, ukryte bez baseline + sumy zafiltrowane (v2026.08.22.881)
 
 ### architektura / API

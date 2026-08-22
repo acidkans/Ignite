@@ -1692,7 +1692,11 @@ ${ganttSectionHtml}
     // w przekazanym workbooku. Waliduje pozycje liściowe — przy zerowym koszcie
     // jednostkowym lub narzucie zwraca { ok:false, invalidRows }. Współdzielone przez
     // eksport budżetu i eksport tabel WBS.
-    const appendBudgetSheet = (workbook) => {
+    // opts.discountRef — adres komórki (np. "'Podsumowanie'!$B$7"), z której arkusz
+    // pobiera rabat całościowy; bez niego rabat jest wpisany jako stała liczba.
+    // Zwraca m.in. `ref` — geometrię arkusza (litery kolumn, zakres danych), żeby
+    // arkusz „Podsumowanie" mógł liczyć formułami z tego arkusza, a nie z aplikacji.
+    const appendBudgetSheet = (workbook, opts = {}) => {
         const rawRows = buildRows(VIEWS.BUDGET).filter(r => r.type !== 'group');
         if (!rawRows.length) return { ok: false, empty: true, invalidRows: [] };
 
@@ -1755,7 +1759,8 @@ ${ganttSectionHtml}
 
         // Kolejność kolumn: Ilość/Jednostka przed Kosztem jednostkowym; przed
         // „Cena ofertowa" kolumna „Jednostkowa cena ofertowa" (koszt jedn. × narzut).
-        // Wiersz 1 = pole rabatu całościowego; nagłówek tabeli w wierszu 2, dane od 3.
+        // Układ wierszy: 1 = pole rabatu całościowego, 2 = „Razem" (sumy na górze,
+        // widoczne bez przewijania), 3 = nagłówek tabeli, dane od 4.
         // Formuły używają liter z sheet.getColumn(key).letter — odporne na zmianę układu.
         // Kolumnę „Rabat (%)" eksportujemy tylko gdy którakolwiek pozycja ma rabat ≠ 0.
         const hasRowDiscount = rows.some(r => (Number(r.discount) || 0) !== 0);
@@ -1780,24 +1785,9 @@ ${ganttSectionHtml}
             { key: 'qaCount', width: 14, header: 'Q&A (liczba)' },
         ];
         const budgetSheet = workbook.addWorksheet('Budżet');
-        // Kolumny bez nagłówka — nagłówek dodajemy ręcznie w wierszu 2.
+        // Kolumny bez nagłówka — nagłówek dodajemy ręcznie w wierszu 3.
         budgetSheet.columns = BUDGET_COLUMNS.map(c => ({ key: c.key, width: c.width }));
         const budgetColLetter = (key) => budgetSheet.getColumn(key).letter;
-
-        // Wiersz 1 — pole rabatu całościowego budżetu (osobne od tabeli pozycji).
-        const globalDiscount = summary.totalRevenue - exportedRevenueAfterDiscount;
-        const discountFieldRow = budgetSheet.addRow([
-            'Rabat całościowy', globalDiscount, '',
-            'Cena ofertowa po rabacie całościowym', exportedRevenueAfterDiscount,
-        ]);
-        discountFieldRow.font = { bold: true };
-        budgetSheet.getCell('B1').numFmt = '#,##0.00';
-        budgetSheet.getCell('E1').numFmt = '#,##0.00';
-
-        // Wiersz 2 — nagłówek tabeli.
-        const headerRow = budgetSheet.addRow(BUDGET_COLUMNS.map(c => c.header));
-        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
 
         // Litery kolumn użyte w formułach Excela.
         const cUnitCost = budgetColLetter('unitCost');
@@ -1807,9 +1797,50 @@ ${ganttSectionHtml}
         const cDiscount = hasRowDiscount ? budgetColLetter('discount') : null;
         const cOfferPrice = budgetColLetter('offerPrice');
 
+        // Stały układ wierszy — inne arkusze (Podsumowanie) adresują te wiersze w formułach.
+        const DISCOUNT_ROW = 1;
+        const TOTALS_ROW = 2;
+        const HEADER_ROW = 3;
+        const FIRST_DATA_ROW = 4;
+        const lastDataRow = FIRST_DATA_ROW + rows.length - 1;
+        const totalCostRange = `${cTotalCost}${FIRST_DATA_ROW}:${cTotalCost}${lastDataRow}`;
+        const offerPriceRange = `${cOfferPrice}${FIRST_DATA_ROW}:${cOfferPrice}${lastDataRow}`;
+
+        // Wiersz 1 — pole rabatu całościowego budżetu (osobne od tabeli pozycji).
+        // Cena po rabacie = suma cen ofertowych (wiersz „Razem") − rabat: formuła,
+        // więc edycja pozycji lub rabatu przelicza ją w pliku.
+        const globalDiscount = summary.totalRevenue - exportedRevenueAfterDiscount;
+        const discountFieldRow = budgetSheet.addRow([
+            'Rabat całościowy',
+            opts.discountRef
+                ? { formula: `=${opts.discountRef}`, result: globalDiscount }
+                : globalDiscount,
+            '',
+            'Cena ofertowa po rabacie całościowym',
+            { formula: `=MAX(0,${cOfferPrice}${TOTALS_ROW}-B${DISCOUNT_ROW})`, result: exportedRevenueAfterDiscount },
+        ]);
+        discountFieldRow.font = { bold: true };
+        budgetSheet.getCell(`B${DISCOUNT_ROW}`).numFmt = '#,##0.00';
+        budgetSheet.getCell(`E${DISCOUNT_ROW}`).numFmt = '#,##0.00';
+
+        // Wiersz 2 — „Razem" NAD tabelą: sumy widoczne bez przewijania i pod zamrożonym
+        // podziałem. SUBTOTAL(9) respektuje autofiltr nagłówka.
+        const totalsRow = budgetSheet.addRow({
+            subjectName: 'Razem',
+            totalCost: { formula: `=SUBTOTAL(9,${totalCostRange})`, result: summary.totalCost },
+            offerPrice: { formula: `=SUBTOTAL(9,${offerPriceRange})`, result: summary.totalRevenue },
+        });
+        totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+
+        // Wiersz 3 — nagłówek tabeli.
+        const headerRow = budgetSheet.addRow(BUDGET_COLUMNS.map(c => c.header));
+        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+
         const qaSheetRows = [];
         rows.forEach((row, index) => {
-            const excelRow = index + 3; // wiersz 1 = pole rabatu, wiersz 2 = nagłówek
+            const excelRow = index + FIRST_DATA_ROW;
             const r = excelRow;
             const qaList = Array.isArray(row.qa)
                 ? row.qa.filter(p => String(p?.question || '').trim() || String(p?.answer || '').trim())
@@ -1856,32 +1887,42 @@ ${ganttSectionHtml}
             });
         });
 
-        // "Razem" = suma cen ofertowych pozycji (rabaty per gałąź już wliczone w wierszach).
-        const totalsRowNum = rows.length + 3;
-        const totalsRow = budgetSheet.addRow({
-            subjectName: 'Razem',
-            totalCost: { formula: `=SUBTOTAL(9,${cTotalCost}3:${cTotalCost}${totalsRowNum - 1})`, result: summary.totalCost },
-            offerPrice: { formula: `=SUBTOTAL(9,${cOfferPrice}3:${cOfferPrice}${totalsRowNum - 1})`, result: summary.totalRevenue },
-        });
-        totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
-
         ['quantity', 'unitCost', 'totalCost', 'unitOfferPrice', 'offerPrice'].forEach((key) => {
             budgetSheet.getColumn(key).numFmt = '#,##0.00';
         });
         budgetSheet.getColumn('margin').numFmt = '0.00%';
         if (hasRowDiscount) budgetSheet.getColumn('discount').numFmt = '0.00%';
-        budgetSheet.views = [{ state: 'frozen', ySplit: 2 }];
-        // Filtr na nagłówek (wiersz 2) + wiersze danych (bez wiersza „Razem"). Kolejność
-        // wierszy = kolejność gałęzi w WBS (buildRows sortuje po wbsOrderMap).
-        if (rows.length > 0) {
-            budgetSheet.autoFilter = {
-                from: { row: 2, column: 1 },
-                to: { row: rows.length + 2, column: budgetSheet.columnCount },
-            };
-        }
+        // Zamrożone wiersze 1-3: rabat, „Razem" i nagłówek stale widoczne przy przewijaniu.
+        budgetSheet.views = [{ state: 'frozen', ySplit: HEADER_ROW }];
+        // Filtr na nagłówek (wiersz 3) + wiersze danych. Kolejność wierszy = kolejność
+        // gałęzi w WBS (buildRows sortuje po wbsOrderMap).
+        budgetSheet.autoFilter = {
+            from: { row: HEADER_ROW, column: 1 },
+            to: { row: lastDataRow, column: budgetSheet.columnCount },
+        };
 
-        return { ok: true, empty: false, invalidRows: [], rows, summary, qaSheetRows };
+        // Geometria arkusza dla formuł w innych zakładkach (Podsumowanie).
+        const ref = {
+            sheet: `'Budżet'`,
+            firstDataRow: FIRST_DATA_ROW,
+            lastDataRow,
+            totalsRow: TOTALS_ROW,
+            discountRow: DISCOUNT_ROW,
+            cols: {
+                subjectName: budgetColLetter('subjectName'),
+                type: budgetColLetter('type'),
+                owner: budgetColLetter('owner'),
+                quantity: cQuantity,
+                unit: budgetColLetter('unit'),
+                totalCost: cTotalCost,
+                offerPrice: cOfferPrice,
+            },
+        };
+        // Zakres absolutny kolumny w arkuszu Budżet — do SUMIF/SUMPRODUCT w Podsumowaniu.
+        ref.range = (colKey) => `${ref.sheet}!$${ref.cols[colKey]}$${FIRST_DATA_ROW}:$${ref.cols[colKey]}$${lastDataRow}`;
+        ref.totalCell = (colKey) => `${ref.sheet}!$${ref.cols[colKey]}$${TOTALS_ROW}`;
+
+        return { ok: true, empty: false, invalidRows: [], rows, summary, qaSheetRows, ref };
     };
 
     // @anchor build-wbs-tree-dump
@@ -2721,7 +2762,9 @@ ${ganttSectionHtml}
         }
 
         const summarySheet = workbook.addWorksheet('Podsumowanie');
-        const budget = appendBudgetSheet(workbook);
+        // Rabat całościowy w arkuszu „Budżet" bierze się z Podsumowania (B7) — jedno
+        // źródło prawdy; edycja rabatu w Podsumowaniu przelicza oba arkusze.
+        const budget = appendBudgetSheet(workbook, { discountRef: `'Podsumowanie'!$B$7` });
         if (budget.empty) {
             alert('Brak danych budżetowych do eksportu.');
             return;
@@ -2734,7 +2777,28 @@ ${ganttSectionHtml}
             );
             return;
         }
-        const { rows, summary, qaSheetRows } = budget;
+        const { rows, summary, qaSheetRows, ref: bref } = budget;
+
+        // Wszystkie liczby w „Podsumowaniu" są formułami czytającymi arkusz „Budżet"
+        // (SUM / SUMIF / SUMPRODUCT po zakresie pozycji), a nie stałymi z aplikacji —
+        // dzięki temu edycja pozycji w pliku od razu przelicza całe podsumowanie.
+        // `result` to wartość policzona w aplikacji: podgląd zanim Excel przeliczy plik.
+        // Świadomie SUM (a nie SUBTOTAL): podsumowanie obejmuje cały projekt, także
+        // pozycje ukryte autofiltrem w arkuszu Budżet.
+        const bCostRange = bref.range('totalCost');
+        const bOfferRange = bref.range('offerPrice');
+        const bTypeRange = bref.range('type');
+        const bSubjectRange = bref.range('subjectName');
+        const bOwnerRange = bref.range('owner');
+        const bQtyRange = bref.range('quantity');
+        const bUnitRange = bref.range('unit');
+        // Suma kolumny z Budżetu z filtrem po kolumnie tekstowej; pusta etykieta
+        // („—" / „(puste)") wymaga SUMPRODUCT, bo SUMIF nie dopasuje pustych komórek.
+        const sumByLabel = (labelCell, labelValue, keyRange, sumRange) => (
+            String(labelValue || '').trim() === ''
+                ? `=SUMPRODUCT((TRIM(${keyRange})="")*${sumRange})`
+                : `=SUMIF(${keyRange},${labelCell},${sumRange})`
+        );
 
         const discountAmountFromPercent = Number.isFinite(parsedPercentDiscount)
             ? Math.max(0, parsedPercentDiscount) / 100 * summary.totalRevenue
@@ -2756,8 +2820,8 @@ ${ganttSectionHtml}
         ];
         summarySheet.addRow([`Budżet projektu`, fileProjectName]);
         summarySheet.addRow(['Data eksportu', exportDate]);
-        summarySheet.addRow(['Koszt całkowity', summary.totalCost]);
-        summarySheet.addRow(['Przychód przed rabatami', summary.totalRevenue]);
+        summarySheet.addRow(['Koszt całkowity', { formula: `=SUM(${bCostRange})`, result: summary.totalCost }]);
+        summarySheet.addRow(['Przychód przed rabatami', { formula: `=SUM(${bOfferRange})`, result: summary.totalRevenue }]);
         summarySheet.addRow(['Rabat procentowy', parsedPercentDiscount / 100 || 0]);
         summarySheet.addRow(['Rabat kwotowy', discountAmountFromValue]);
         // Łączny/Przychód po rabatach/Zysk/Marża jako formuły (nie statyczne liczby) —
@@ -2775,7 +2839,11 @@ ${ganttSectionHtml}
             }
             return s;
         }, 0);
-        summarySheet.addRow(['Liczba dni pracy', workDaysTotal]);
+        // Formuła: ilość z pozycji typu „Praca" z jednostką dniową (dni/dzień/dzien/d).
+        const workDaysFormula = `=SUMPRODUCT((${bTypeRange}="${TYPE_LABELS.work}")`
+            + `*((${bUnitRange}="dni")+(${bUnitRange}="dzień")+(${bUnitRange}="dzien")+(${bUnitRange}="d"))`
+            + `*${bQtyRange})`;
+        summarySheet.addRow(['Liczba dni pracy', { formula: workDaysFormula, result: workDaysTotal }]);
 
         summarySheet.getCell('B3').numFmt = '#,##0.00';
         summarySheet.getCell('B4').numFmt = '#,##0.00';
@@ -2795,7 +2863,7 @@ ${ganttSectionHtml}
         for (const row of rows) {
             const typeKey = row.type || '';
             const typeLabel = TYPE_LABELS[typeKey] || typeKey || '—';
-            if (!typeAgg[typeLabel]) typeAgg[typeLabel] = { typeLabel, cost: 0, revenue: 0 };
+            if (!typeAgg[typeLabel]) typeAgg[typeLabel] = { typeLabel, matchValue: TYPE_LABELS[typeKey] || typeKey || '', cost: 0, revenue: 0 };
             typeAgg[typeLabel].cost += Number(row.totalCost) || 0;
             typeAgg[typeLabel].revenue += Number(row.offerPrice) || 0;
         }
@@ -2809,13 +2877,15 @@ ${ganttSectionHtml}
 
         const perTypeFirstRow = perTypeHeaderRow.number + 1;
         const typeEntries = Object.values(typeAgg).sort((a, b) => b.cost - a.cost);
-        // Zysk/Marża jako formuły (=C-B / =IF(C=0,0,D/C)) — nie statyczne liczby.
+        // Koszt/Przychód = SUMIF po kolumnie „Typ" w arkuszu Budżet; Zysk/Marża — formuły.
         for (const agg of typeEntries) {
             const rn = summarySheet.rowCount + 1;
             const profit = agg.revenue - agg.cost;
             const margin = agg.revenue > 0 ? profit / agg.revenue : 0;
             summarySheet.addRow([
-                agg.typeLabel, agg.cost, agg.revenue,
+                agg.typeLabel,
+                { formula: sumByLabel(`$A${rn}`, agg.matchValue, bTypeRange, bCostRange), result: agg.cost },
+                { formula: sumByLabel(`$A${rn}`, agg.matchValue, bTypeRange, bOfferRange), result: agg.revenue },
                 { formula: `=C${rn}-B${rn}`, result: profit },
                 { formula: `=IF(C${rn}=0,0,D${rn}/C${rn})`, result: margin },
             ]);
@@ -2840,6 +2910,61 @@ ${ganttSectionHtml}
             summarySheet.getCell(`C${r}`).numFmt = '#,##0.00';
             summarySheet.getCell(`D${r}`).numFmt = '#,##0.00';
             summarySheet.getCell(`E${r}`).numFmt = '0.00%';
+        }
+
+        // Podsumowanie per główne gałęzie — jeden wiersz na przedmiot (kolumna
+        // „Zakres" w arkuszu Budżet, czyli węzeł depth=0). Kolumny identyczne jak
+        // w tabeli per typ; Koszt/Przychód = SUMIF po kolumnie „Zakres", Zysk/Marża — formuły.
+        const branchAgg = {};
+        for (const row of rows) {
+            const branchKey = String(row.subjectName || '').trim() || '(puste)';
+            if (!branchAgg[branchKey]) branchAgg[branchKey] = { cost: 0, revenue: 0 };
+            branchAgg[branchKey].cost += Number(row.totalCost) || 0;
+            branchAgg[branchKey].revenue += Number(row.offerPrice) || 0;
+        }
+        const branchKeys = Object.keys(branchAgg).sort((a, b) => branchAgg[b].cost - branchAgg[a].cost);
+        if (branchKeys.length) {
+            summarySheet.addRow([]);
+            const branchTitleRow = summarySheet.addRow(['Podsumowanie per główne gałęzie']);
+            branchTitleRow.font = { bold: true, size: 12 };
+            const branchHeaderRow = summarySheet.addRow(['Główna gałąź', 'Koszt', 'Przychód', 'Zysk', 'Marża %']);
+            branchHeaderRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            branchHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+            const branchFirstRow = branchHeaderRow.number + 1;
+            for (const branchKey of branchKeys) {
+                const rn = summarySheet.rowCount + 1;
+                const agg = branchAgg[branchKey];
+                const branchMatch = branchKey === '(puste)' ? '' : branchKey;
+                const profit = agg.revenue - agg.cost;
+                const margin = agg.revenue > 0 ? profit / agg.revenue : 0;
+                summarySheet.addRow([
+                    branchKey,
+                    { formula: sumByLabel(`$A${rn}`, branchMatch, bSubjectRange, bCostRange), result: agg.cost },
+                    { formula: sumByLabel(`$A${rn}`, branchMatch, bSubjectRange, bOfferRange), result: agg.revenue },
+                    { formula: `=C${rn}-B${rn}`, result: profit },
+                    { formula: `=IF(C${rn}=0,0,D${rn}/C${rn})`, result: margin },
+                ]);
+            }
+            const branchTotalCost = branchKeys.reduce((s, k) => s + branchAgg[k].cost, 0);
+            const branchTotalRevenue = branchKeys.reduce((s, k) => s + branchAgg[k].revenue, 0);
+            const branchTotalProfit = branchTotalRevenue - branchTotalCost;
+            const branchTotalMargin = branchTotalRevenue > 0 ? branchTotalProfit / branchTotalRevenue : 0;
+            const branchTotalsRowNum = summarySheet.rowCount + 1;
+            const branchTotalsRow = summarySheet.addRow([
+                'Razem',
+                { formula: `=SUBTOTAL(9,B${branchFirstRow}:B${branchTotalsRowNum - 1})`, result: branchTotalCost },
+                { formula: `=SUBTOTAL(9,C${branchFirstRow}:C${branchTotalsRowNum - 1})`, result: branchTotalRevenue },
+                { formula: `=C${branchTotalsRowNum}-B${branchTotalsRowNum}`, result: branchTotalProfit },
+                { formula: `=IF(C${branchTotalsRowNum}=0,0,D${branchTotalsRowNum}/C${branchTotalsRowNum})`, result: branchTotalMargin },
+            ]);
+            branchTotalsRow.font = { bold: true };
+            branchTotalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
+            for (let r = branchFirstRow; r <= branchTotalsRow.number; r++) {
+                summarySheet.getCell(`B${r}`).numFmt = '#,##0.00';
+                summarySheet.getCell(`C${r}`).numFmt = '#,##0.00';
+                summarySheet.getCell(`D${r}`).numFmt = '#,##0.00';
+                summarySheet.getCell(`E${r}`).numFmt = '0.00%';
+            }
         }
 
         // Podsumowanie per osoba odpowiedzialna — jeden wiersz na właściciela,
@@ -2868,14 +2993,18 @@ ${ganttSectionHtml}
                 if (b === '(puste)') return -1;
                 return a.localeCompare(b, 'pl');
             });
-            // Zysk/Marża jako formuły (=C-B / =IF(C=0,0,D/C)) — nie statyczne liczby.
+            // Koszt/Przychód = SUMIF po kolumnie „Osoba odpowiedzialna" w arkuszu Budżet;
+            // wiersz „(puste)" dopasowuje pozycje bez właściciela. Zysk/Marża — formuły.
             for (const ownerKey of ownerKeys) {
                 const rn = summarySheet.rowCount + 1;
                 const agg = byOwner[ownerKey];
+                const ownerMatch = ownerKey === '(puste)' ? '' : ownerKey;
                 const profit = agg.revenue - agg.cost;
                 const margin = agg.revenue > 0 ? profit / agg.revenue : 0;
                 summarySheet.addRow([
-                    ownerKey, agg.cost, agg.revenue,
+                    ownerKey,
+                    { formula: sumByLabel(`$A${rn}`, ownerMatch, bOwnerRange, bCostRange), result: agg.cost },
+                    { formula: sumByLabel(`$A${rn}`, ownerMatch, bOwnerRange, bOfferRange), result: agg.revenue },
                     { formula: `=C${rn}-B${rn}`, result: profit },
                     { formula: `=IF(C${rn}=0,0,D${rn}/C${rn})`, result: margin },
                 ]);
