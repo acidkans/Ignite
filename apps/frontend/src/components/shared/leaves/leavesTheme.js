@@ -61,3 +61,22 @@ export const statusMeta = (row) => {
 // @anchor care-leave-code-front
 // Kod rodzaju urlopu wymagajacego podopiecznego — lustro back-stala CARE_LEAVE_CODE.
 export const CARE_LEAVE_CODE = 'OPIEKA';
+
+// @anchor leave-types-requiring-comment-front
+// Rodzaje urlopu z ustawowym wymogiem uzasadnienia — lustro back-stala
+// LEAVE_TYPES_REQUIRING_COMMENT z apps/backend/src/leaves/leave-requests.service.ts.
+export const LEAVE_TYPES_REQUIRING_COMMENT = [CARE_LEAVE_CODE];
+
+// @anchor leave-comment-min-length-front
+export const LEAVE_COMMENT_MIN_LENGTH = 20;
+
+// @anchor care-leave-comment-hint-front
+// Wymogi z art. 173(1) par. 5 Kodeksu pracy — pokazywane pod polem komentarza.
+export const CARE_LEAVE_COMMENT_HINT =
+    'Urlop opiekuńczy wymaga uzasadnienia: przyczyna konieczności zapewnienia osobistej opieki ' +
+    'lub wsparcia oraz stopień pokrewieństwa z pracownikiem (dla osoby spoza rodziny — adres zamieszkania).';
+
+// @anchor saturday-holiday-code-front
+// Rodzaj urlopu odbieranego za swieto wypadajace w sobote — lustro back-stala
+// SATURDAY_HOLIDAY_CODE z apps/backend/src/leaves/leave-requests.service.ts.
+export const SATURDAY_HOLIDAY_CODE = 'ZA_SWIETO_SOB';

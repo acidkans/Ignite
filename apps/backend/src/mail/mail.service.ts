@@ -64,8 +64,33 @@ export class MailService {
     dateEnd: Date;
     comment?: string | null;
     appUrl: string;
+    // @anchor mail-leave-decision-buttons
+    /// Linki z podpisanym tokenem — jedno klikniecie zapisuje decyzje bez logowania.
+    approveUrl?: string;
+    rejectUrl?: string;
   }) {
     const typeLabel = params.leaveTypeName ? ` ${params.leaveTypeName.toLowerCase()}` : '';
+    const buttons =
+      params.approveUrl && params.rejectUrl
+        ? `
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0">
+            <tr>
+              <td style="padding-right:12px">
+                <a href="${escapeHtml(params.approveUrl)}"
+                   style="display:inline-block;background:#2e7d32;color:#fff;text-decoration:none;
+                          padding:12px 28px;border-radius:6px;font-weight:bold">Zatwierdź</a>
+              </td>
+              <td>
+                <a href="${escapeHtml(params.rejectUrl)}"
+                   style="display:inline-block;background:#c62828;color:#fff;text-decoration:none;
+                          padding:12px 28px;border-radius:6px;font-weight:bold">Odrzuć</a>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:0 0 16px;color:#777;font-size:12px">
+            Kliknięcie zapisuje decyzję od razu. Link działa 14 dni i tylko dopóki wniosek jest nierozpatrzony.
+          </p>`
+        : '';
     await this.smtpService.sendMail(
       {
         to: params.to,
@@ -76,6 +101,7 @@ export class MailService {
           <p style="margin:0">${escapeHtml(params.applicantName)}<br/>złożył/a wniosek urlopowy od:<br/>
             ${escapeHtml(formatLeaveDate(params.dateStart))} do ${escapeHtml(formatLeaveDate(params.dateEnd))}</p>
           ${params.comment ? `<p style="margin:16px 0">${escapeHtml(params.comment)}</p>` : ''}
+          ${buttons}
           <p style="margin:24px 0 4px">Przejdź do aplikacji Urlopy</p>
           <p style="margin:0"><a href="${escapeHtml(params.appUrl)}">Link do aplikacji Urlopy</a></p>
         </div>

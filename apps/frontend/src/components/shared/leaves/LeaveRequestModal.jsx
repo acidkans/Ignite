@@ -1,6 +1,6 @@
 import { API_URL } from '../../../config';
 import { useEffect, useMemo, useState } from 'react';
-import { CARE_LEAVE_CODE } from './leavesTheme';
+import { CARE_LEAVE_CODE, SATURDAY_HOLIDAY_CODE, LEAVE_TYPES_REQUIRING_COMMENT, LEAVE_COMMENT_MIN_LENGTH, CARE_LEAVE_COMMENT_HINT } from './leavesTheme';
 
 // @anchor leave-request-modal
 // Modal „Nowy wniosek urlopowy" — układ wg formularza źródłowego:
@@ -17,14 +17,23 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
         const pad = n => String(n).padStart(2, '0');
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     };
-    const today = new Date();
     const pad = n => String(n).padStart(2, '0');
-    const dayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+
+    // @anchor next-working-day
+    // Domyslna data wniosku nie moze wypasc w weekend — urlopu udziela sie w dni pracy,
+    // a wyliczanie dni pomija soboty i niedziele, wiec sobota jako start dawala 0 dni.
+    const nextWorkingDayStr = (from) => {
+        const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+        while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    };
+    const dayStr = nextWorkingDayStr(new Date());
 
     const [form, setForm] = useState({
         userId: request?.userId || currentUserId || '',
         leaveTypeId: request?.leaveTypeId || '',
         dependentId: request?.dependentId || '',
+        holidayDayOffId: request?.holidayDayOffId || '',
         dateStart: toLocal(request?.dateStart, `${dayStr}T00:00`),
         dateEnd: toLocal(request?.dateEnd, `${dayStr}T23:59`),
         comment: request?.comment || '',
@@ -53,6 +62,123 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
         () => leaveTypes.find(t => t.id === form.leaveTypeId)?.code === CARE_LEAVE_CODE,
         [leaveTypes, form.leaveTypeId]
     );
+
+    // @anchor is-saturday-holiday-leave
+    const isSaturdayHolidayLeave = useMemo(
+        () => leaveTypes.find(t => t.id === form.leaveTypeId)?.code === SATURDAY_HOLIDAY_CODE,
+        [leaveTypes, form.leaveTypeId]
+    );
+
+    // @anchor holiday-days-state
+    // Swieta w sobote zatwierdzone przez admina — lista do wyboru we wniosku.
+    const [holidayDays, setHolidayDays] = useState([]);
+    const [loadingHolidayDays, setLoadingHolidayDays] = useState(false);
+    // @anchor holiday-days-error
+    // Nieudane pobranie listy NIE moze udawac „admin nic nie zatwierdzil" — to dwa rozne stany.
+    const [holidayDaysError, setHolidayDaysError] = useState(null);
+
+    // @anchor fetch-holiday-days
+    // Sciagane dopiero gdy rodzaj = za swieto w sobote, dla roku z daty rozpoczecia.
+    useEffect(() => {
+        if (!isSaturdayHolidayLeave || !form.userId) { setHolidayDays([]); setHolidayDaysError(null); return; }
+        let cancelled = false;
+        setLoadingHolidayDays(true);
+        setHolidayDaysError(null);
+        const token = sessionStorage.getItem('token');
+        const year = Number((form.dateStart || '').slice(0, 4)) || new Date().getFullYear();
+        const params = new URLSearchParams({ userId: form.userId, year: String(year) });
+        if (request?.id) params.set('requestId', request.id);
+        fetch(`${API_URL}/leave-requests/holiday-days?${params}`, { headers: { Authorization: `Bearer ${token}` } })
+            .then(async res => {
+                if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    throw new Error(body.message || `Nie udało się pobrać listy świąt (HTTP ${res.status}).`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (cancelled) return;
+                const items = data?.items || [];
+                setHolidayDays(items);
+                const free = items.filter(i => !i.used);
+                setForm(f => ({
+                    ...f,
+                    // jedno wolne swieto — wybierane automatycznie, bez dropdownu
+                    holidayDayOffId: free.length === 1
+                        ? free[0].id
+                        : (free.some(i => i.id === f.holidayDayOffId) ? f.holidayDayOffId : ''),
+                }));
+            })
+            .catch(err => { if (!cancelled) { setHolidayDays([]); setHolidayDaysError(err.message); } })
+            .finally(() => { if (!cancelled) setLoadingHolidayDays(false); });
+        return () => { cancelled = true; };
+    }, [isSaturdayHolidayLeave, form.userId, form.dateStart, request?.id]);
+
+    // @anchor allows-hourly
+    // Podzial na godziny zalezy od rodzaju urlopu — kolumna LeaveType.allowsHourly.
+    // Pelnodniowe rodzaje dostaja sam kalendarz, godzinowe kalendarz + pelna godzine.
+    const allowsHourly = useMemo(
+        () => !!leaveTypes.find(t => t.id === form.leaveTypeId)?.allowsHourly,
+        [leaveTypes, form.leaveTypeId]
+    );
+
+    // @anchor hour-options
+    // Do wyboru wylacznie pelne godziny — minuty zawsze 00, tak samo waliduje backend.
+    const HOUR_OPTIONS = useMemo(
+        () => Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0')),
+        []
+    );
+
+    const dayPart = v => (v || '').slice(0, 10);
+    const hourPart = v => (v || '').slice(11, 13);
+
+    // @anchor set-day-part
+    // Zmiana daty zachowuje godzine; przy rodzaju pelnodniowym doklejamy granice doby.
+    const setDayPart = (field, day, fallbackTime) => {
+        if (!day) return set(field, '');
+        const time = allowsHourly ? `${hourPart(form[field]) || '00'}:00` : fallbackTime;
+        set(field, `${day}T${time}`);
+    };
+
+    const setHourPart = (field, hour) => {
+        const day = dayPart(form[field]);
+        if (!day) return;
+        set(field, `${day}T${hour}:00`);
+    };
+
+    // @anchor normalize-times-on-type-change
+    // Przelaczenie rodzaju nie moze zostawic minut z poprzedniego formularza:
+    // pelnodniowy = 00:00 / 23:59, godzinowy = pelna godzina.
+    useEffect(() => {
+        setForm(f => {
+            const startDay = dayPart(f.dateStart);
+            const endDay = dayPart(f.dateEnd);
+            if (!startDay || !endDay) return f;
+            const nextStart = allowsHourly ? `${startDay}T${hourPart(f.dateStart) || '00'}:00` : `${startDay}T00:00`;
+            const nextEnd = allowsHourly ? `${endDay}T${hourPart(f.dateEnd) || '00'}:00` : `${endDay}T23:59`;
+            if (f.dateStart === nextStart && f.dateEnd === nextEnd) return f;
+            return { ...f, dateStart: nextStart, dateEnd: nextEnd };
+        });
+    }, [allowsHourly]);
+
+    // @anchor comment-required
+    // Rodzaje z ustawowym wymogiem uzasadnienia (dziś: opieka, art. 173(1) par. 5 KP).
+    const commentRequired = useMemo(
+        () => LEAVE_TYPES_REQUIRING_COMMENT.includes(
+            leaveTypes.find(t => t.id === form.leaveTypeId)?.code
+        ),
+        [leaveTypes, form.leaveTypeId]
+    );
+
+    // @anchor comment-block
+    // Ten sam warunek co w back-funkcja assertCommentValid — blokuje wysyłkę zanim poleci request.
+    const commentBlock = !commentRequired
+        ? null
+        : !form.comment.trim()
+            ? CARE_LEAVE_COMMENT_HINT
+            : form.comment.trim().length < LEAVE_COMMENT_MIN_LENGTH
+                ? `Uzasadnienie jest za krótkie (min. ${LEAVE_COMMENT_MIN_LENGTH} znaków).`
+                : null;
 
     // @anchor fetch-dependents
     // Podopieczni sciagani dopiero gdy rodzaj = opieka — i zawsze dla wybranego pracownika.
@@ -177,23 +303,43 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
                 ? `Wniosek na ${requestedDays} dni przekracza dostępne ${totalRemaining} dni.`
                 : null;
 
+    // @anchor submit-block
+    // Jedyne zrodlo prawdy o gotowosci wniosku: wyszarza przycisk „Zloz wniosek",
+    // niesie powod w tooltipie i sluzy za walidacje przy zapisie. Kolejnosc = kolejnosc pol
+    // w formularzu, zeby komunikat wskazywal pierwsze brakujace pole od gory.
+    const submitBlock = useMemo(() => {
+        if (!form.userId) return 'Wybierz pracownika.';
+        if (!form.leaveTypeId) return 'Wybierz rodzaj urlopu.';
+        if (isCareLeave && !form.dependentId) return 'Urlop opiekuńczy wymaga wskazania podopiecznego.';
+        if (isSaturdayHolidayLeave && !form.holidayDayOffId) {
+            return 'Wskaż, za które święto wypadające w sobotę odbierasz dzień wolny.';
+        }
+        if (!form.dateStart || !form.dateEnd) return 'Podaj datę od i do.';
+        if (form.dateEnd < form.dateStart) return 'Data „do" nie może być wcześniejsza niż „od".';
+        if (commentBlock) return commentBlock;
+        if (!(Number(form.daysCount) > 0)) return 'Wniosek musi obejmować co najmniej jeden dzień pracy.';
+        if (balanceBlock) return balanceBlock;
+        return null;
+    }, [
+        form.userId, form.leaveTypeId, form.dependentId, form.holidayDayOffId,
+        form.dateStart, form.dateEnd, form.daysCount,
+        isCareLeave, isSaturdayHolidayLeave, commentBlock, balanceBlock,
+    ]);
+
     const handleSave = async () => {
         setError(null);
-        if (!form.userId) return setError('Wybierz pracownika.');
-        if (!form.leaveTypeId) return setError('Wybierz rodzaj urlopu.');
-        if (!form.dateStart || !form.dateEnd) return setError('Podaj datę od i do.');
-        if (form.dateEnd < form.dateStart) return setError('Data „do" nie może być wcześniejsza niż „od".');
-        if (isCareLeave && !form.dependentId) return setError('Urlop opiekuńczy wymaga wskazania podopiecznego.');
-        if (balanceBlock) return setError(balanceBlock);
+        if (submitBlock) return setError(submitBlock);
 
         const payload = {
             userId: form.userId,
             leaveTypeId: form.leaveTypeId || null,
             dependentId: isCareLeave ? form.dependentId : null,
+            holidayDayOffId: isSaturdayHolidayLeave ? form.holidayDayOffId : null,
             dateStart: new Date(form.dateStart).toISOString(),
             dateEnd: new Date(form.dateEnd).toISOString(),
-            timeStart: form.dateStart.slice(11, 16),
-            timeEnd: form.dateEnd.slice(11, 16),
+            // urlop pelnodniowy nie niesie godzin — wniosek obejmuje caly dzien pracy
+            timeStart: allowsHourly ? `${hourPart(form.dateStart) || '00'}:00` : null,
+            timeEnd: allowsHourly ? `${hourPart(form.dateEnd) || '00'}:00` : null,
             comment: form.comment || null,
             daysCount: Number(form.daysCount) || 1,
             officeFrom: form.officeFrom ? new Date(form.officeFrom).toISOString() : null,
@@ -348,22 +494,104 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
                     </div>
                 )}
 
+                {/* @anchor leave-request-holiday-field */}
+                {isSaturdayHolidayLeave && (
+                    <div className="flex flex-col gap-2 border border-lime-500/30 bg-lime-500/[0.06] rounded-lg p-3">
+                        <label className={labelCls}>Za które święto <span className="text-amber-500">*</span></label>
+
+                        {loadingHolidayDays ? (
+                            <p className="text-sm text-gray-500">Wczytywanie listy świąt...</p>
+                        ) : holidayDaysError ? (
+                            <p className="text-sm text-red-300">{holidayDaysError}</p>
+                        ) : holidayDays.length === 0 ? (
+                            <p className="text-sm text-amber-300">
+                                Administrator nie zatwierdził na ten rok żadnego święta wypadającego w sobotę.
+                            </p>
+                        ) : holidayDays.every(h => h.used) ? (
+                            <p className="text-sm text-amber-300">
+                                Za każde zatwierdzone święto złożyłeś już wniosek.
+                            </p>
+                        ) : (
+                            <select
+                                value={form.holidayDayOffId}
+                                onChange={e => set('holidayDayOffId', e.target.value)}
+                                className="bg-gray-800 border border-white/10 rounded px-3 py-2 text-white focus:outline-none focus:border-lime-500/50"
+                            >
+                                <option value="">— wybierz święto —</option>
+                                {holidayDays.map(h => (
+                                    <option key={h.id} value={h.id} disabled={h.used}>
+                                        {h.date} — {h.name}{h.used ? ' (już odebrane)' : ''}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
+                    </div>
+                )}
+
                 {/* data_od / data_do */}
+                {/* @anchor leave-request-date-fields */}
                 <div className="grid grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1">
                         <label className={labelCls}>Data od <span className="text-amber-500">*</span></label>
-                        <input type="datetime-local" value={form.dateStart} onChange={e => set('dateStart', e.target.value)} className={inputCls} />
+                        <div className="flex gap-2">
+                            <input
+                                type="date"
+                                value={dayPart(form.dateStart)}
+                                onChange={e => setDayPart('dateStart', e.target.value, '00:00')}
+                                className={`${inputCls} flex-1 min-w-0`}
+                            />
+                            {allowsHourly && (
+                                <select
+                                    value={hourPart(form.dateStart) || '00'}
+                                    onChange={e => setHourPart('dateStart', e.target.value)}
+                                    className="bg-gray-800 border border-white/10 rounded px-2 py-2 text-white focus:outline-none focus:border-blue-500/50"
+                                >
+                                    {HOUR_OPTIONS.map(h => <option key={h} value={h}>{h}:00</option>)}
+                                </select>
+                            )}
+                        </div>
                     </div>
                     <div className="flex flex-col gap-1">
                         <label className={labelCls}>Data do <span className="text-amber-500">*</span></label>
-                        <input type="datetime-local" value={form.dateEnd} onChange={e => set('dateEnd', e.target.value)} className={inputCls} />
+                        <div className="flex gap-2">
+                            <input
+                                type="date"
+                                value={dayPart(form.dateEnd)}
+                                onChange={e => setDayPart('dateEnd', e.target.value, '23:59')}
+                                className={`${inputCls} flex-1 min-w-0`}
+                            />
+                            {allowsHourly && (
+                                <select
+                                    value={hourPart(form.dateEnd) || '00'}
+                                    onChange={e => setHourPart('dateEnd', e.target.value)}
+                                    className="bg-gray-800 border border-white/10 rounded px-2 py-2 text-white focus:outline-none focus:border-blue-500/50"
+                                >
+                                    {HOUR_OPTIONS.map(h => <option key={h} value={h}>{h}:00</option>)}
+                                </select>
+                            )}
+                        </div>
                     </div>
                 </div>
 
                 {/* komentarz */}
+                {/* @anchor leave-request-comment-field */}
                 <div className="flex flex-col gap-1">
-                    <label className={labelCls}>Komentarz</label>
-                    <input type="text" value={form.comment} onChange={e => set('comment', e.target.value)} className={inputCls} />
+                    <label className={labelCls}>
+                        {commentRequired ? 'Uzasadnienie' : 'Komentarz'}
+                        {commentRequired && <span className="text-amber-500"> *</span>}
+                    </label>
+                    <textarea
+                        rows={commentRequired ? 3 : 1}
+                        value={form.comment}
+                        onChange={e => set('comment', e.target.value)}
+                        placeholder={commentRequired ? 'np. Matka po zabiegu, wymaga stałej opieki — stopień pokrewieństwa: matka' : ''}
+                        className={`${inputCls} resize-y ${commentRequired && commentBlock ? 'border-amber-500/50' : ''}`}
+                    />
+                    {commentRequired && (
+                        <p className="text-[11px] text-amber-300/80 leading-snug">
+                            {CARE_LEAVE_COMMENT_HINT} Imię i nazwisko podopiecznego bierzemy z pola powyżej.
+                        </p>
+                    )}
                 </div>
 
                 {/* dni_urlopu */}
@@ -441,8 +669,8 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
                     <button onClick={onClose} className="px-4 py-2 rounded bg-white/5 hover:bg-white/10 text-gray-300 transition-all">Anuluj</button>
                     <button
                         onClick={handleSave}
-                        disabled={saving || !!balanceBlock}
-                        title={balanceBlock || undefined}
+                        disabled={saving || !!submitBlock}
+                        title={submitBlock || undefined}
                         className="px-5 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                         {saving ? 'Zapisywanie...' : isEdit ? 'Zapisz' : 'Złóż wniosek'}

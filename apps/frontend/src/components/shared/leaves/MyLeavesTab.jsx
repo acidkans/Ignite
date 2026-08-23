@@ -18,8 +18,7 @@ const DEFAULT_LAYOUT = {
     'wykorzystane': { x: 800, y: 300 },
     'swieta': { x: 440, y: 400 },
     'swieta-admin': { x: 880, y: 730 },
-    'tabela': { x: 0, y: 620, w: 1120, h: 520 },
-    'historia': { x: 0, y: 1180, w: 900, h: 420 },
+    'historia': { x: 0, y: 620, w: 1120, h: 520 },
 };
 
 // @anchor my-leaves-card-ids
@@ -30,15 +29,10 @@ const CARD_IDS = Object.keys(DEFAULT_LAYOUT);
 // Karty (dane osobowe, saldo, podopieczni) są przeciągalne, tabela urlopów leży pod nimi.
 export default function MyLeavesTab({ access, leaveTypes, employees, currentUserId }) {
     const canApproveHolidays = !!access?.canEdit;
-    const [activeTypeId, setActiveTypeId] = useState(leaveTypes[0]?.id || null);
-    const [leaves, setLeaves] = useState([]);
     // @anchor my-leaves-request-modal-state
     const [modalRequest, setModalRequest] = useState(null);
     const [summary, setSummary] = useState(null);
     const [dependentsCount, setDependentsCount] = useState(0);
-    // @anchor my-leaves-history-open
-    /// Karta „Urlopy z lat poprzednich" — pokazywana na życzenie, nie zajmuje miejsca domyślnie.
-    const [historyOpen, setHistoryOpen] = useState(false);
     // @anchor my-leaves-history-year
     const [historyYear, setHistoryYear] = useState('all');
     // @anchor my-leaves-holidays-state
@@ -72,22 +66,6 @@ export default function MyLeavesTab({ access, leaveTypes, employees, currentUser
         } catch { /* brak podsumowania nie blokuje reszty zakładki */ }
     }, []);
 
-    // @anchor fetch-my-leaves
-    const fetchLeaves = useCallback(async (typeId) => {
-        if (!typeId) return;
-        try {
-            const token = sessionStorage.getItem('token');
-            const res = await fetch(`${API_URL}/leaves?leaveTypeId=${typeId}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!res.ok) throw new Error('Błąd pobierania urlopów');
-            setLeaves(await res.json());
-        } catch (err) {
-            setError(err.message);
-        }
-    }, []);
-
-    useEffect(() => { fetchLeaves(activeTypeId); }, [activeTypeId, fetchLeaves]);
     useEffect(() => { fetchSummary(); }, [fetchSummary]);
 
     // @anchor load-my-usage
@@ -99,7 +77,7 @@ export default function MyLeavesTab({ access, leaveTypes, employees, currentUser
         } catch { /* brak zestawienia nie blokuje reszty zakładki */ }
     }, [leaveTypes, currentUserId]);
 
-    useEffect(() => { loadUsage(); }, [loadUsage, leaves]);
+    useEffect(() => { loadUsage(); }, [loadUsage]);
 
     // @anchor fetch-my-holidays
     /// Dni wolne za święta wypadające w sobotę — lista na bieżący rok wraz ze stanem decyzji.
@@ -114,20 +92,6 @@ export default function MyLeavesTab({ access, leaveTypes, employees, currentUser
     }, []);
 
     useEffect(() => { loadHolidays(); }, [loadHolidays]);
-
-    // @anchor my-leaves-visible
-    const visibleLeaves = useMemo(
-        () => leaves.filter(l => l.userId === currentUserId),
-        [leaves, currentUserId]
-    );
-
-    // @anchor my-leaves-col-defs
-    /// Widok własny: przyznane urlopy tylko do odczytu — bez usuwania, notatek i edycji dni.
-    const colDefs = useMemo(() => [
-        { headerName: 'Od', field: 'dateFrom', valueGetter: p => warsawDayKey(p.data.dateFrom), editable: false, flex: 1 },
-        { headerName: 'Do', field: 'dateTo', valueGetter: p => warsawDayKey(p.data.dateTo), editable: false, flex: 1 },
-        { headerName: 'Dni', field: 'daysCount', editable: false, width: 110 },
-    ], []);
 
     const year = new Date().getFullYear();
 
@@ -164,6 +128,17 @@ export default function MyLeavesTab({ access, leaveTypes, employees, currentUser
         { headerName: 'Od', field: 'dateFrom', valueGetter: p => warsawDayKey(p.data.dateFrom), flex: 1 },
         { headerName: 'Do', field: 'dateTo', valueGetter: p => warsawDayKey(p.data.dateTo), flex: 1 },
         { headerName: 'Dni', field: 'daysCount', width: 100 },
+        // @anchor my-leaves-history-comment-column
+        // Komentarz z wniosku — przy zatwierdzeniu przepisywany do Leave.note.
+        {
+            headerName: 'Komentarz',
+            field: 'note',
+            flex: 2,
+            valueGetter: p => p.data.note || '—',
+            tooltipValueGetter: p => p.data.note || '',
+            wrapText: true,
+            autoHeight: true,
+        },
     ], []);
 
     const balance = summary?.balance;
@@ -282,7 +257,7 @@ export default function MyLeavesTab({ access, leaveTypes, employees, currentUser
 
             {/* Warstwa kart przeciągalnych */}
             {/* @anchor my-leaves-cards-layer */}
-            <div ref={layerRef} className="relative" style={{ minHeight: historyOpen ? 1680 : 1200 }}>
+            <div ref={layerRef} className="relative" style={{ minHeight: 1200 }}>
                 {/* KARTA 1 — dane osobowe */}
                 {/* @anchor card-personal-data */}
                 <DraggableCard
@@ -397,14 +372,6 @@ export default function MyLeavesTab({ access, leaveTypes, employees, currentUser
                                     </span>
                                 </div>
                             ))}
-                            {/* @anchor card-usage-details-button */}
-                            <button
-                                onClick={() => setHistoryOpen(o => !o)}
-                                title="Tabela wszystkich wpisów urlopowych z filtrem lat"
-                                className="mt-3 w-full bg-white/5 hover:bg-white/10 text-gray-200 border border-white/10 px-3 py-2 rounded-lg text-sm transition-colors"
-                            >
-                                {historyOpen ? 'Ukryj urlopy z lat poprzednich' : 'Pokaż urlopy z lat poprzednich'}
-                            </button>
                         </>
                     ) : (
                         <p className="text-sm text-gray-500">Liczenie dni...</p>
@@ -471,14 +438,14 @@ export default function MyLeavesTab({ access, leaveTypes, employees, currentUser
                     </DraggableCard>
                 )}
 
-                {/* KARTA 5 — tabela moich urlopów, przeciągalna i skalowalna */}
-                {/* @anchor my-leaves-table */}
+                {/* KARTA 5 — wszystkie wpisy urlopowe, jedna tabela z filtrem lat */}
+                {/* @anchor card-history */}
                 <DraggableCard
-                    id="tabela"
+                    id="historia"
                     title="Moje urlopy"
-                    subtitle="wpisy urlopowe (nie wnioski)"
-                    position={layout['tabela']}
-                    size={layout['tabela']?.w ? { w: layout['tabela'].w, h: layout['tabela'].h } : undefined}
+                    subtitle="wszystkie wpisy urlopowe (nie wnioski), filtr po roku"
+                    position={layout['historia']}
+                    size={layout['historia']?.w ? { w: layout['historia'].w, h: layout['historia'].h } : undefined}
                     onDragEnd={handleDragEnd}
                     onMeasure={handleMeasure}
                     width={1120}
@@ -486,28 +453,24 @@ export default function MyLeavesTab({ access, leaveTypes, employees, currentUser
                     resizable
                     accent="#3b82f6"
                 >
-                    {/* filtr rodzajów przyklejony do tabeli */}
-                    {/* @anchor my-leaves-type-filter */}
-                    <div className="flex flex-wrap gap-1 bg-white/5 rounded-t-lg p-1 border border-b-0 border-white/10">
-                        {leaveTypes.map(t => (
-                            <button
-                                key={t.id}
-                                onClick={() => setActiveTypeId(t.id)}
-                                className={`px-4 py-2 rounded-md transition-all text-sm ${activeTypeId === t.id ? 'text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
-                                style={activeTypeId === t.id ? { backgroundColor: `${t.color}66` } : undefined}
-                            >
-                                <span className="inline-flex items-center gap-2">
-                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />
-                                    {t.name}
-                                </span>
-                            </button>
-                        ))}
+                    {/* @anchor my-leaves-history-filter */}
+                    <div className="flex items-center gap-2 bg-white/5 rounded-t-lg p-2 border border-b-0 border-white/10">
+                        <label className="text-[11px] text-gray-500 uppercase tracking-wider">rok</label>
+                        <select
+                            value={historyYear}
+                            onChange={e => setHistoryYear(e.target.value)}
+                            className="bg-gray-800 border border-white/10 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                        >
+                            <option value="all">wszystkie lata</option>
+                            {historyYears.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                        <span className="ml-auto text-[11px] text-gray-500">{historyRows.length} wpisów</span>
                     </div>
 
                     <div className="flex-1 min-h-0 w-full rounded-b-lg overflow-hidden shadow-2xl border border-white/10">
                         <AgGridReact
-                            rowData={visibleLeaves}
-                            columnDefs={colDefs}
+                            rowData={historyRows}
+                            columnDefs={historyColDefs}
                             defaultColDef={leavesDefaultColDef}
                             animateRows={true}
                             pagination={true}
@@ -516,57 +479,6 @@ export default function MyLeavesTab({ access, leaveTypes, employees, currentUser
                         />
                     </div>
                 </DraggableCard>
-
-                {/* KARTA 6 — historia urlopów z filtrem lat (na życzenie) */}
-                {/* @anchor card-history */}
-                {historyOpen && (
-                    <DraggableCard
-                        id="historia"
-                        title="Urlopy z lat poprzednich"
-                        subtitle="wszystkie wpisy, filtr po roku"
-                        position={layout['historia']}
-                        size={layout['historia']?.w ? { w: layout['historia'].w, h: layout['historia'].h } : undefined}
-                        onDragEnd={handleDragEnd}
-                        onMeasure={handleMeasure}
-                        width={900}
-                        height={420}
-                        resizable
-                        accent="#a855f7"
-                    >
-                        {/* @anchor my-leaves-history-filter */}
-                        <div className="flex items-center gap-2 bg-white/5 rounded-t-lg p-2 border border-b-0 border-white/10">
-                            <label className="text-[11px] text-gray-500 uppercase tracking-wider">rok</label>
-                            <select
-                                value={historyYear}
-                                onChange={e => setHistoryYear(e.target.value)}
-                                className="bg-gray-800 border border-white/10 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-purple-500/50"
-                            >
-                                <option value="all">wszystkie lata</option>
-                                {historyYears.map(y => <option key={y} value={y}>{y}</option>)}
-                            </select>
-                            <span className="ml-auto text-[11px] text-gray-500">{historyRows.length} wpisów</span>
-                            <button
-                                onClick={() => setHistoryOpen(false)}
-                                className="text-gray-500 hover:text-gray-300 text-sm leading-none px-1"
-                                title="Ukryj kartę"
-                            >
-                                &times;
-                            </button>
-                        </div>
-
-                        <div className="flex-1 min-h-0 w-full rounded-b-lg overflow-hidden shadow-2xl border border-white/10">
-                            <AgGridReact
-                                rowData={historyRows}
-                                columnDefs={historyColDefs}
-                                defaultColDef={leavesDefaultColDef}
-                                animateRows={true}
-                                pagination={true}
-                                paginationPageSize={20}
-                                theme={leavesGridTheme}
-                            />
-                        </div>
-                    </DraggableCard>
-                )}
             </div>
 
             {/* @anchor my-leaves-request-modal */}
@@ -578,7 +490,7 @@ export default function MyLeavesTab({ access, leaveTypes, employees, currentUser
                     currentUserId={currentUserId}
                     canPickEmployee={false}
                     onClose={() => setModalRequest(null)}
-                    onSuccess={fetchSummary}
+                    onSuccess={() => { fetchSummary(); loadUsage(); }}
                 />
             )}
 

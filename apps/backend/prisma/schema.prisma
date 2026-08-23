@@ -1458,6 +1458,11 @@ model LeaveType {
   /// true = wniosek tego rodzaju pomniejsza pulę dni urlopowych (LeaveBalance) po zatwierdzeniu
   /// i nie może zostać złożony, gdy w puli brakuje dni.
   consumesBalance Boolean @default(false)
+  /// @anchor leave-type-allows-hourly
+  /// true = wniosek tego rodzaju dzieli sie na godziny (data + pelna godzina),
+  /// false = urlop pelnodniowy, formularz pokazuje sam kalendarz bez godzin.
+  /// Podstawa prawna per rodzaj opisana w back-stala HOURLY_LEAVE_CODES.
+  allowsHourly Boolean @default(false)
   /// @anchor leave-type-max-days-per-year
   /// Ustawowy limit dni w roku kalendarzowym (Kodeks pracy): NA_ZADANIE = 4 (art. 167(2)),
   /// OPIEKA = 5 (art. 173(1)). NULL = brak limitu ustawowego (L4, bezpłatny) albo limit
@@ -1536,6 +1541,9 @@ model HolidayDayOff {
 
   /// @anchor holiday-day-off-approved-by
   approvedBy User? @relation("HolidayDayOffApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  /// @anchor holiday-day-off-requests
+  /// Wnioski „Do wyboru za swieto w sobote" odbierane za ten konkretny dzien.
+  requests   LeaveRequest[]
 
   @@index([year])
   @@map("holiday_days_off")
@@ -1560,6 +1568,10 @@ model LeaveRequest {
   leaveTypeId         String? // rodzaj_urlopu — opcjonalny, wniosek może powstać przed wyborem rodzaju
   /// @anchor leave-request-days-count
   daysCount           Float     @default(1) // dni_urlopu
+  /// @anchor leave-request-holiday-day-off-id
+  /// Za ktore swieto wypadajace w sobote odbierany jest dzien wolny —
+  /// wymagane dla rodzaju ZA_SWIETO_SOB, dla pozostalych zawsze NULL.
+  holidayDayOffId     String?
   /// @anchor leave-request-dependent-id
   dependentId         String? // podopieczny — wymagany gdy rodzaj urlopu = OPIEKA
   /// @anchor leave-request-date-start
@@ -1609,6 +1621,8 @@ model LeaveRequest {
   leaveType LeaveType? @relation(fields: [leaveTypeId], references: [id], onDelete: SetNull)
   /// @anchor leave-request-dependent
   dependent Dependent? @relation(fields: [dependentId], references: [id], onDelete: SetNull)
+  /// @anchor leave-request-holiday-day-off
+  holidayDayOff HolidayDayOff? @relation(fields: [holidayDayOffId], references: [id], onDelete: SetNull)
   /// @anchor leave-request-decided-by
   decidedBy User? @relation("LeaveRequestDecider", fields: [decidedById], references: [id], onDelete: SetNull)
   /// @anchor leave-request-deductions
@@ -1622,6 +1636,7 @@ model LeaveRequest {
   @@index([submittedAt])
   @@index([leaveTypeId])
   @@index([dependentId])
+  @@index([holidayDayOffId])
   @@index([status])
   @@map("leave_requests")
 }

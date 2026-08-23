@@ -127,6 +127,16 @@ export default function LeaveRequestsTab({ mode, access, leaveTypes, employees, 
         // daty urlopu jako dzień kalendarzowy Europe/Warsaw — te same wartości co w „Moje urlopy"
         { headerName: 'Data od', colId: 'dateStart', valueGetter: p => warsawDayKey(p.data.dateStart), flex: 1.2 },
         { headerName: 'Data do', colId: 'dateEnd', valueGetter: p => warsawDayKey(p.data.dateEnd), flex: 1.2 },
+        // @anchor leave-requests-holiday-column
+        // Za które święto w sobotę odbierany jest dzień wolny — wypełnione tylko dla ZA_SWIETO_SOB.
+        {
+            headerName: 'Za święto',
+            colId: 'holidayDayOff',
+            valueGetter: p => p.data.holidayDayOff
+                ? `${String(p.data.holidayDayOff.date).slice(0, 10)} — ${p.data.holidayDayOff.name}`
+                : '—',
+            flex: 1.4,
+        },
         { headerName: 'Komentarz', field: 'comment', valueGetter: p => p.data.comment || '—', flex: 1.5 },
         { headerName: 'Złożono', colId: 'submittedAt', valueGetter: p => formatDateTime(p.data.submittedAt), flex: 1.1 },
         {

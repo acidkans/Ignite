@@ -43,6 +43,24 @@ export class LeaveRequestsController {
     );
   }
 
+  // @anchor leave-requests-holiday-days-endpoint
+  /// Swieta w sobote do wyboru we wniosku „Do wyboru za swieto w sobote".
+  @Get('holiday-days')
+  holidayDays(
+    @Req() req: any,
+    @Query('userId') targetUserId?: string,
+    @Query('year') year?: string,
+    @Query('requestId') requestId?: string,
+  ) {
+    return this.requests.holidayDaysForRequest(
+      req.user.userId,
+      req.user.roles || [],
+      targetUserId,
+      year ? Number(year) : undefined,
+      requestId,
+    );
+  }
+
   // @anchor leave-requests-create-endpoint
   @Post()
   create(@Req() req: any, @Body() dto: CreateLeaveRequestDto) {

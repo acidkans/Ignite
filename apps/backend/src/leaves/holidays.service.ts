@@ -19,6 +19,9 @@ export const POLISH_FIXED_HOLIDAYS: { month: number; day: number; name: string }
 
 // @anchor saturday-holiday-proposal
 export interface SaturdayHolidayProposal {
+  /// id wiersza HolidayDayOff — null dopoki administrator nie podjal decyzji.
+  /// Wniosek ZA_SWIETO_SOB wskazuje swieto wlasnie tym id.
+  id: string | null;
   date: string; // 'YYYY-MM-DD'
   name: string;
   approved: boolean;
@@ -59,6 +62,7 @@ export class HolidaysService {
     const toItem = (date: string, name: string, custom: boolean): SaturdayHolidayProposal => {
       const row = byDate.get(date);
       return {
+        id: row?.id ?? null,
         date,
         name,
         approved: !!row?.approved,
@@ -171,6 +175,43 @@ export class HolidaysService {
     );
 
     return this.list(year);
+  }
+
+  // @anchor list-approved-holiday-days
+  /// Swieta w sobote zatwierdzone przez administratora na dany rok — lista do wyboru
+  /// we wniosku ZA_SWIETO_SOB, z oznaczeniem dni juz odebranych przez tego pracownika.
+  async listApprovedForUser(
+    userId: string,
+    year: number,
+    excludeRequestId?: string,
+  ): Promise<{ year: number; items: { id: string; date: string; name: string; used: boolean }[] }> {
+    const rows = await this.prisma.holidayDayOff.findMany({
+      where: { year, approved: true },
+      orderBy: { date: 'asc' },
+      select: {
+        id: true,
+        date: true,
+        name: true,
+        requests: {
+          where: {
+            userId,
+            status: { in: ['PENDING', 'APPROVED'] },
+            ...(excludeRequestId ? { id: { not: excludeRequestId } } : {}),
+          },
+          select: { id: true },
+        },
+      },
+    });
+
+    return {
+      year,
+      items: rows.map(r => ({
+        id: r.id,
+        date: r.date.toISOString().slice(0, 10),
+        name: r.name,
+        used: r.requests.length > 0,
+      })),
+    };
   }
 
   // @anchor approved-holiday-days-count

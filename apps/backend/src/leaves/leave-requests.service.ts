@@ -5,6 +5,7 @@ import { LeavesService } from './leaves.service';
 import { LeaveBalancesService } from './leave-balances.service';
 import { MailService } from '../mail/mail.service';
 import { HolidaysService } from './holidays.service';
+import { LeaveDecisionTokenService } from './leave-decision-token.service';
 
 // @anchor create-leave-request-dto
 export interface CreateLeaveRequestDto {
@@ -12,6 +13,7 @@ export interface CreateLeaveRequestDto {
   leaveTypeId?: string | null; // rodzaj_urlopu — FK do słownika leave_types
   daysCount?: number; // dni_urlopu
   dependentId?: string | null; // podopieczny — wymagany dla rodzaju OPIEKA
+  holidayDayOffId?: string | null; // swieto w sobote — wymagane dla rodzaju ZA_SWIETO_SOB
   dateStart: string;
   timeStart?: string;
   dateEnd: string;
@@ -38,12 +40,49 @@ const REQUEST_INCLUDE = {
   },
   leaveType: { select: { id: true, code: true, name: true, color: true, consumesBalance: true } },
   dependent: { select: { id: true, firstName: true, lastName: true, birthDate: true } },
+  holidayDayOff: { select: { id: true, date: true, name: true } },
   decidedBy: { select: { id: true, firstName: true, lastName: true } },
 };
 
 // @anchor care-leave-code
 /// Kod rodzaju urlopu wymagajacego wskazania podopiecznego.
 export const CARE_LEAVE_CODE = 'OPIEKA';
+
+// @anchor leave-comment-min-length
+/// Minimalna dlugosc uzasadnienia — kilka slow, zeby "x" albo "." nie przeszlo za przyczyne.
+export const LEAVE_COMMENT_MIN_LENGTH = 20;
+
+// @anchor leave-types-requiring-comment
+/// Rodzaje urlopu, dla ktorych ustawa wymaga uzasadnienia we wniosku.
+/// OPIEKA — art. 173(1) par. 5 KP: wniosek wskazuje przyczyne koniecznosci zapewnienia
+/// osobistej opieki lub wsparcia oraz stopien pokrewienstwa (albo adres zamieszkania osoby
+/// spoza rodziny). Imie i nazwisko podopiecznego niesie osobne pole `dependentId`.
+/// Pozostale rodzaje sprawdzone i swiadomie bez wymogu: WYPOCZYNKOWY (art. 152 — bez
+/// uzasadnienia), NA_ZADANIE (art. 167(2) — bez uzasadnienia), BEZPLATNY (art. 174 —
+/// wniosek pisemny, ustawa nie zada przyczyny), ZA_SWIETO_SOB (art. 130 par. 2 — dzien
+/// oddawany z rozkladu), L4 (zwolnienie lekarskie, nie wniosek pracownika).
+export const LEAVE_TYPES_REQUIRING_COMMENT: string[] = [CARE_LEAVE_CODE];
+
+// @anchor care-leave-comment-hint
+/// Tresc podpowiedzi i komunikatu bledu — jedno zrodlo dla backendu i tekstu w modalu.
+export const CARE_LEAVE_COMMENT_HINT =
+  'Urlop opiekunczy wymaga uzasadnienia: przyczyna koniecznosci zapewnienia osobistej opieki ' +
+  'lub wsparcia oraz stopien pokrewienstwa z pracownikiem (dla osoby spoza rodziny — adres zamieszkania).';
+
+// @anchor hourly-leave-codes
+/// Rodzaje urlopu, ktore prawo pozwala dzielic na godziny — zrodlo wartosci startowej
+/// kolumny `LeaveType.allowsHourly` (migracja 20260823130000). Zrodlem prawdy w runtime
+/// jest kolumna w bazie, ta lista dokumentuje podstawe prawna kazdego rodzaju:
+///   WYPOCZYNKOWY  — art. 154(2) par. 4 KP: urlop w wymiarze godzinowym odpowiadajacym
+///                   czesci dobowego wymiaru czasu pracy (gdy reszta puli < pelny dzien). GODZINOWY.
+///   NA_ZADANIE    — art. 167(2) KP: czesc urlopu wypoczynkowego, ale udzielana na dzien;
+///                   pracownik nie zada czesci dnia (stanowisko PIP). PELNODNIOWY.
+///   OPIEKA        — art. 173(1) par. 3 KP: „udziela sie w dni, ktore sa dla pracownika
+///                   dniami pracy". PELNODNIOWY.
+///   BEZPLATNY     — art. 174 KP: udzielany w dniach, ustawa nie przewiduje godzin. PELNODNIOWY.
+///   ZA_SWIETO_SOB — art. 130 par. 2 KP: za swieto w sobote nalezy sie caly dzien wolny. PELNODNIOWY.
+///   L4            — zwolnienie lekarskie w dniach kalendarzowych, nie wniosek. PELNODNIOWY.
+export const HOURLY_LEAVE_CODES: string[] = ['WYPOCZYNKOWY'];
 
 // @anchor leave-requests-service
 @Injectable()
@@ -55,6 +94,7 @@ export class LeaveRequestsService {
     private mail: MailService,
     private config: ConfigService,
     private holidays: HolidaysService,
+    private decisionTokens: LeaveDecisionTokenService,
   ) {}
 
   // @anchor list-own-leave-requests
@@ -98,6 +138,9 @@ export class LeaveRequestsService {
 
     this.assertRequestFieldsValid(dto.leaveTypeId, dto.dateStart, dto.dateEnd);
     await this.assertDependentValid(targetUserId, dto.leaveTypeId, dto.dependentId);
+    await this.assertCommentValid(dto.leaveTypeId, dto.comment);
+    await this.assertHoursValid(dto.leaveTypeId, dto.timeStart, dto.timeEnd);
+    await this.assertHolidayDayOffValid(targetUserId, dto.leaveTypeId, dto.holidayDayOffId);
 
     const daysCount =
       dto.daysCount ?? LeaveRequestsService.workingDaysBetween(new Date(dto.dateStart), new Date(dto.dateEnd));
@@ -115,6 +158,7 @@ export class LeaveRequestsService {
         userId: targetUserId,
         leaveTypeId: dto.leaveTypeId || null,
         dependentId: dto.dependentId || null,
+        holidayDayOffId: dto.holidayDayOffId || null,
         daysCount,
         dateStart: new Date(dto.dateStart),
         dateEnd: new Date(dto.dateEnd),
@@ -132,6 +176,28 @@ export class LeaveRequestsService {
 
     await this.notifySupervisor(created);
     return created;
+  }
+
+  // @anchor list-holiday-days-for-request
+  /// Lista swiat w sobote do wyboru we wniosku ZA_SWIETO_SOB — zatwierdzone przez
+  /// administratora, z oznaczeniem dni juz odebranych przez tego pracownika.
+  async holidayDaysForRequest(
+    userId: string,
+    roles: string[],
+    targetUserId?: string,
+    year?: number,
+    excludeRequestId?: string,
+  ) {
+    const access = await this.assertEnabled(userId, roles);
+    let subjectId = userId;
+    if (targetUserId && targetUserId !== userId) {
+      if (access.scope === 'ALL' || (await this.isSupervisorOf(userId, targetUserId))) {
+        subjectId = targetUserId;
+      } else {
+        throw new ForbiddenException('Brak uprawnień do danych tego pracownika.');
+      }
+    }
+    return this.holidays.listApprovedForUser(subjectId, year || new Date().getFullYear(), excludeRequestId);
   }
 
   // @anchor leave-type-usage
@@ -327,15 +393,32 @@ export class LeaveRequestsService {
           firstName: true,
           lastName: true,
           email: true,
-          supervisor: { select: { email: true } },
+          supervisor: { select: { id: true, email: true } },
         },
       });
+      const supervisorId = applicant?.supervisor?.id;
+      if (!supervisorId) return;
       const to = applicant?.supervisor?.email;
       if (!to) return;
 
-      const appUrl = `${this.config.get('FRONTEND_URL') || 'http://localhost:5174'}/urlopy`;
+      const baseUrl = this.config.get('FRONTEND_URL') || 'http://localhost:5174';
+      const appUrl = `${baseUrl}/urlopy`;
+      // @anchor leave-decision-link-urls
+      // Przyciski w mailu — token imienny dla przelozonego, akcja wpisana w podpis.
+      const decisionUrl = (decision: 'APPROVED' | 'REJECTED') =>
+        `${baseUrl}/api/leave-requests/decision-link?token=${encodeURIComponent(
+          this.decisionTokens.issue({
+            requestId: request.id,
+            deciderId: supervisorId!,
+            deciderEmail: to,
+            decision,
+          }),
+        )}`;
+
       await this.mail.sendLeaveRequest({
         to,
+        approveUrl: decisionUrl('APPROVED'),
+        rejectUrl: decisionUrl('REJECTED'),
         applicantName:
           [applicant?.firstName, applicant?.lastName].filter(Boolean).join(' ') || applicant?.email || 'Pracownik',
         leaveTypeName: request.leaveType?.name ?? null,
@@ -392,7 +475,33 @@ export class LeaveRequestsService {
       );
     }
 
+    // zmiana rodzaju albo komentarza nie moze zostawic wniosku bez wymaganego uzasadnienia
+    if (dto.leaveTypeId !== undefined || dto.comment !== undefined) {
+      await this.assertCommentValid(
+        dto.leaveTypeId !== undefined ? dto.leaveTypeId : existing.leaveTypeId,
+        dto.comment !== undefined ? dto.comment : existing.comment,
+      );
+    }
+
+    if (dto.leaveTypeId !== undefined || dto.timeStart !== undefined || dto.timeEnd !== undefined) {
+      await this.assertHoursValid(
+        dto.leaveTypeId !== undefined ? dto.leaveTypeId : existing.leaveTypeId,
+        dto.timeStart !== undefined ? dto.timeStart : existing.timeStart,
+        dto.timeEnd !== undefined ? dto.timeEnd : existing.timeEnd,
+      );
+    }
+
+    if (dto.leaveTypeId !== undefined || dto.holidayDayOffId !== undefined) {
+      await this.assertHolidayDayOffValid(
+        dto.userId ?? existing.userId,
+        dto.leaveTypeId !== undefined ? dto.leaveTypeId : existing.leaveTypeId,
+        dto.holidayDayOffId !== undefined ? dto.holidayDayOffId : existing.holidayDayOffId,
+        id,
+      );
+    }
+
     const data: any = {};
+    if (dto.holidayDayOffId !== undefined) data.holidayDayOffId = dto.holidayDayOffId || null;
     if (dto.dependentId !== undefined) data.dependentId = dto.dependentId || null;
     if (dto.leaveTypeId !== undefined) data.leaveTypeId = dto.leaveTypeId || null;
     if (dto.daysCount !== undefined) data.daysCount = dto.daysCount;
@@ -504,6 +613,110 @@ export class LeaveRequestsService {
     // cofnięcie decyzji nie jest rozstrzygnięciem — wnioskodawcy nie zawiadamiamy
     if (status !== 'PENDING') await this.notifyApplicant(updated, status === 'APPROVED');
     return updated;
+  }
+
+  // @anchor decide-by-token
+  /// Decyzja z przycisku w mailu — bez logowania, tozsamosc bierze sie z podpisu tokenu.
+  /// Zwraca opis wyniku dla strony potwierdzenia; nie rzuca wyjatkow na bledny token,
+  /// zeby przelozony dostal czytelny komunikat zamiast surowego 401.
+  async decideByToken(token: string | undefined): Promise<{
+    ok: boolean;
+    title: string;
+    message: string;
+    applicantName?: string;
+    period?: string;
+  }> {
+    const payload = this.decisionTokens.verify(token);
+    if (!payload) {
+      return {
+        ok: false,
+        title: 'Link nieważny',
+        message: 'Link wygasł albo jest nieprawidłowy. Otwórz moduł Urlopy i rozpatrz wniosek w aplikacji.',
+      };
+    }
+
+    const existing = await this.prisma.leaveRequest.findUnique({
+      where: { id: payload.requestId },
+      include: REQUEST_INCLUDE,
+    });
+    if (!existing) {
+      return { ok: false, title: 'Wniosek nie istnieje', message: 'Wniosek został w międzyczasie usunięty.' };
+    }
+
+    const applicantName =
+      [existing.user?.firstName, existing.user?.lastName].filter(Boolean).join(' ') || existing.user?.email || '';
+    const period = `${existing.dateStart.toISOString().slice(0, 10)} — ${existing.dateEnd.toISOString().slice(0, 10)}`;
+
+    // link dziala tylko na wniosku nierozpatrzonym — to jest jego jednorazowosc
+    if (existing.status !== 'PENDING') {
+      const label = existing.status === 'APPROVED' ? 'zatwierdzony' : 'odrzucony';
+      return {
+        ok: false,
+        title: 'Wniosek już rozpatrzony',
+        message: `Ten wniosek został wcześniej ${label}. Nic nie zmieniono.`,
+        applicantName,
+        period,
+      };
+    }
+
+    // @anchor decision-token-identity-check
+    // Trzy warunki naraz, sprawdzane na biezaco (nie na stanie z chwili wyslania maila):
+    //  1. konto decydenta istnieje,
+    //  2. adres wpisany w podpis tokenu to nadal adres tego konta,
+    //  3. to konto jest nadal przelozonym wnioskodawcy.
+    // Zmiana adresu albo przelozonego uniewaznia wszystkie wczesniej wyslane linki.
+    const decider = await this.prisma.user.findUnique({
+      where: { id: payload.deciderId },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        userRoles: { select: { role: { select: { name: true } } } },
+      },
+    });
+    const denied = {
+      ok: false,
+      title: 'Brak uprawnień',
+      message: 'Ten link nie należy już do przełożonego tego pracownika. Rozpatrz wniosek w aplikacji.',
+      applicantName,
+      period,
+    };
+    if (!decider) return denied;
+
+    const norm = (v: string | null | undefined) => (v || '').trim().toLowerCase();
+    if (!norm(decider.email) || norm(decider.email) !== norm(payload.deciderEmail)) return denied;
+
+    const applicant = await this.prisma.user.findUnique({
+      where: { id: existing.userId },
+      select: { supervisorId: true },
+    });
+    if (applicant?.supervisorId !== decider.id) return denied;
+
+    const roles = decider.userRoles.map(r => r.role.name);
+
+    try {
+      await this.decide(decider.id, roles, existing.id, { status: payload.decision });
+    } catch (err: any) {
+      return {
+        ok: false,
+        title: 'Nie udało się zapisać decyzji',
+        message: err?.message || 'Spróbuj rozpatrzyć wniosek w aplikacji.',
+        applicantName,
+        period,
+      };
+    }
+
+    return {
+      ok: true,
+      title: payload.decision === 'APPROVED' ? 'Wniosek zatwierdzony' : 'Wniosek odrzucony',
+      message:
+        payload.decision === 'APPROVED'
+          ? 'Dni zostały odjęte z puli pracownika, a wpis urlopowy trafił do kalendarza.'
+          : 'Wniosek został odrzucony, pula dni pracownika pozostaje bez zmian.',
+      applicantName,
+      period,
+    };
   }
 
   // @anchor notify-applicant-leave-decision
@@ -712,6 +925,98 @@ export class LeaveRequestsService {
     if (!dependent) throw new BadRequestException('Wskazany podopieczny nie istnieje.');
     if (dependent.userId !== applicantId) {
       throw new BadRequestException('Wskazany podopieczny nie nalezy do tego pracownika.');
+    }
+  }
+
+  // @anchor assert-holiday-day-off-valid
+  /// Wniosek „Do wyboru za swieto w sobote" musi wskazywac konkretne swieto z listy
+  /// zatwierdzonej przez administratora, i to swieto jeszcze przez tego pracownika nieodebrane.
+  /// Dla pozostalych rodzajow powiazanie jest zawsze puste.
+  private async assertHolidayDayOffValid(
+    applicantId: string,
+    leaveTypeId: string | null | undefined,
+    holidayDayOffId: string | null | undefined,
+    excludeRequestId?: string,
+  ): Promise<void> {
+    const type = leaveTypeId
+      ? await this.prisma.leaveType.findUnique({ where: { id: leaveTypeId }, select: { code: true } })
+      : null;
+    const isSaturdayHoliday = type?.code === LeaveRequestsService.SATURDAY_HOLIDAY_CODE;
+
+    if (!isSaturdayHoliday) {
+      if (holidayDayOffId) {
+        throw new BadRequestException('Swieto w sobote wskazuje sie tylko we wniosku „Do wyboru za swieto w sobote".');
+      }
+      return;
+    }
+
+    if (!holidayDayOffId) {
+      throw new BadRequestException('Wskaz, za ktore swieto wypadajace w sobote odbierasz dzien wolny.');
+    }
+
+    const holiday = await this.prisma.holidayDayOff.findUnique({
+      where: { id: holidayDayOffId },
+      select: { approved: true, date: true, name: true },
+    });
+    if (!holiday) throw new BadRequestException('Wskazane swieto nie istnieje.');
+    if (!holiday.approved) {
+      throw new BadRequestException('Za to swieto administrator nie zatwierdzil dnia wolnego.');
+    }
+
+    const alreadyTaken = await this.prisma.leaveRequest.findFirst({
+      where: {
+        userId: applicantId,
+        holidayDayOffId,
+        status: { in: ['PENDING', 'APPROVED'] },
+        ...(excludeRequestId ? { id: { not: excludeRequestId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (alreadyTaken) {
+      const label = `${holiday.date.toISOString().slice(0, 10)} ${holiday.name}`;
+      throw new BadRequestException(`Dzien wolny za swieto ${label} zostal juz przez Ciebie odebrany.`);
+    }
+  }
+
+  // @anchor assert-hours-valid
+  /// Rodzaj pelnodniowy — wniosek nie niesie godzin (caly dzien pracy).
+  /// Rodzaj godzinowy — dopuszczamy wylacznie pelne godziny, minuty zawsze 00.
+  private async assertHoursValid(
+    leaveTypeId: string | null | undefined,
+    timeStart: string | null | undefined,
+    timeEnd: string | null | undefined,
+  ): Promise<void> {
+    const type = leaveTypeId
+      ? await this.prisma.leaveType.findUnique({ where: { id: leaveTypeId }, select: { allowsHourly: true } })
+      : null;
+    if (!type?.allowsHourly) return;
+
+    for (const value of [timeStart, timeEnd]) {
+      if (!value) continue;
+      if (!/^([01]\d|2[0-3]):00$/.test(value)) {
+        throw new BadRequestException('Urlop godzinowy przyjmuje wylacznie pelne godziny (minuty 00).');
+      }
+    }
+  }
+
+  // @anchor assert-comment-valid
+  /// Uzasadnienie obowiazkowe dla rodzajow z LEAVE_TYPES_REQUIRING_COMMENT (dzis: OPIEKA).
+  /// Pusty komentarz albo krotszy niz LEAVE_COMMENT_MIN_LENGTH znakow = wniosek odrzucony.
+  private async assertCommentValid(
+    leaveTypeId: string | null | undefined,
+    comment: string | null | undefined,
+  ): Promise<void> {
+    const type = leaveTypeId
+      ? await this.prisma.leaveType.findUnique({ where: { id: leaveTypeId }, select: { code: true } })
+      : null;
+    if (!type || !LEAVE_TYPES_REQUIRING_COMMENT.includes(type.code)) return;
+
+    const text = (comment || '').trim();
+    if (!text) throw new BadRequestException(CARE_LEAVE_COMMENT_HINT);
+    if (text.length < LEAVE_COMMENT_MIN_LENGTH) {
+      throw new BadRequestException(
+        `Uzasadnienie jest za krotkie (min. ${LEAVE_COMMENT_MIN_LENGTH} znakow). ${CARE_LEAVE_COMMENT_HINT}`,
+      );
     }
   }
 

@@ -1,3 +1,107 @@
+## 2026-08-23 — feat(urlopy): przyciski Zatwierdź / Odrzuć w mailu do przełożonego (v2026.08.23.908)
+
+### architektura / API
+
+- **`LeaveDecisionTokenService` — podpisany token decyzji.** HMAC-SHA256 na `JWT_SECRET`, bez wpisu w bazie. Payload niesie `requestId`, `deciderId`, `deciderEmail`, `decision` i `exp` (14 dni). Akcja siedzi w podpisie, nie w parametrze URL — podmiana `APPROVED` na `REJECTED` unieważnia token
+- **`GET /leave-requests/decision-link?token=` — publiczny endpoint bez `JwtAuthGuard`.** Przełożony klika z klienta pocztowego, gdzie nie ma sesji aplikacji. Zwraca stronę HTML z wynikiem, nie JSON
+- **`decideByToken` — trzy warunki tożsamości sprawdzane na bieżąco:** konto decydenta istnieje, adres wpisany w podpis to nadal adres tego konta, a konto jest nadal przełożonym wnioskodawcy. Zmiana adresu albo przełożonego unieważnia wszystkie wcześniej wysłane linki. Dalej idzie ta sama ścieżka co `PATCH /:id/decision` — odjęcie dni z puli, wpis urlopowy, mail zwrotny
+- **Jednorazowość z logiki, nie z bazy.** Link działa tylko dopóki wniosek ma status `PENDING`; drugie kliknięcie pokazuje „Wniosek już rozpatrzony" i niczego nie zmienia
+- **`sendLeaveRequest` — dwa przyciski w mailu** (zielony Zatwierdź, czerwony Odrzuć) plus nota o 14-dniowej ważności. Bez `approveUrl`/`rejectUrl` mail wygląda jak dotąd
+
+### słownik
+
+- dodano `LeaveDecisionTokenService`, `LeaveDecisionTokenPayload`, `LEAVE_DECISION_TOKEN_TTL_DAYS`, `issue`, `verify`, `LeaveDecisionLinkController`, `GET /leave-requests/decision-link`, `decideByToken`, `decision-token-identity-check`, `leave-decision-link-urls`, `mail-leave-decision-buttons`
+
+### wytyczne
+
+- `back-controller` `LeaveDecisionLinkController` — jedyny kontroler modułu Urlopy bez `JwtAuthGuard`. Nie dokładaj do niego endpointów: wszystko, co tu trafi, jest dostępne bez logowania
+- `back-funkcja` `decideByToken` — nie rzuca wyjątków na zły token. Przełożony ma zobaczyć czytelną stronę, a nie surowe 401; wszystkie odmowy zwracają ten sam komunikat, żeby nie podpowiadać, który element tokenu jest nie tak
+- `back-typ` `LeaveDecisionTokenPayload` — dokładając pole do payloadu pamiętaj, że stare linki w skrzynkach nadal je pominą. `verify` musi odrzucać brak pola, inaczej stary token przechodzi z pustą wartością
+
+## 2026-08-23 — feat(urlopy): jedna tabela urlopów w „Moje dane" z kolumną komentarza (v2026.08.23.906)
+
+### architektura / API
+
+- **Karta „Moje urlopy" (filtr po rodzaju) usunięta.** Jej rolę przejmuje dawna „Urlopy z lat poprzednich" — pokazywana domyślnie, bez przycisku pokaż/ukryj, z tytułem „Moje urlopy" i filtrem po roku zamiast zakładek rodzaju. Rodzaj urlopu jest kolumną, więc jedna tabela pokazuje wszystkie wpisy naraz
+- **Nowa kolumna „Komentarz".** Źródło: `Leave.note`, do którego przy zatwierdzeniu wniosku przepisywany jest `LeaveRequest.comment`. `fetchLeaveUsage` niesie teraz `note` w pozycjach
+- **`DEFAULT_LAYOUT` — usunięta karta `tabela`, `historia` przejmuje jej miejsce** (x 0, y 620, 1120×520). Zapisany wcześniej układ użytkownika zachowuje starą pozycję karty `historia`; przywraca go przycisk resetu układu
+
+### słownik
+
+- dodano `my-leaves-history-comment-column`, `leave-usage-item-note`
+- usunięto `my-leaves-visible`, `my-leaves-col-defs`, `my-leaves-history-open`, `fetch-my-leaves`, `my-leaves-table`, `my-leaves-type-filter`, `card-usage-details-button`
+
+### wytyczne
+
+- `ui-kolumna` `my-leaves-history-comment-column` — czyta `note` z wpisu urlopowego, nie `comment` z wniosku. Wpis założony ręcznie przez administratora nie ma powiązanego wniosku, więc sięganie po `leaveRequest.comment` dawałoby puste komórki
+
+## 2026-08-23 — feat(urlopy): wniosek za święto w sobotę wskazuje konkretne święto (v2026.08.23.903)
+
+### schema.prisma
+
+- dodano pole `holidayDayOffId` (String?) w modelu `LeaveRequest` — za które święto wypadające w sobotę odbierany jest dzień wolny; wymagane dla rodzaju `ZA_SWIETO_SOB`, dla pozostałych zawsze NULL
+- dodano relację `LeaveRequest.holidayDayOff` → `HolidayDayOff` (onDelete: SetNull) oraz odwrotną `HolidayDayOff.requests`
+- migracja `20260823140000_leave_request_holiday_day_off` — kolumna, indeks i FK
+
+### architektura / API
+
+- **`assertHolidayDayOffValid` — święto obowiązkowe i tylko z listy admina.** Brak wskazania → 400; święto niezatwierdzone przez administratora → 400; święto już odebrane przez tego pracownika (wniosek PENDING albo APPROVED) → 400 z datą i nazwą. Dla innych rodzajów urlopu przekazanie `holidayDayOffId` jest odrzucane
+- **`GET /leave-requests/holiday-days?userId=&year=&requestId=`** — zatwierdzone święta w sobotę na dany rok z flagą `used` (czy ten pracownik już odebrał za nie dzień). `requestId` wyłącza z liczenia edytowany wniosek
+- **`HolidayDayOff.id` wystawiony w `GET /leaves/holidays`.** Lista propozycji niosła dotąd samą datę; wniosek wskazuje święto po id, więc `SaturdayHolidayProposal` dostał pole `id` (null dopóki admin nie podjął decyzji)
+- **LeaveRequestModal — sekcja „Za które święto".** Widoczna tylko dla rodzaju `ZA_SWIETO_SOB`, lista ładowana dla roku z daty rozpoczęcia; jedno wolne święto wybierane automatycznie, odebrane pozycje wyszarzone. Zapis zablokowany bez wskazania święta
+- **LeaveRequestsTab — kolumna „Za święto"** z datą i nazwą święta
+
+### słownik
+
+- dodano `LeaveRequest.holidayDayOffId`, `assertHolidayDayOffValid`, `holidayDaysForRequest`, `listApprovedForUser`, `GET /leave-requests/holiday-days`
+- dodano `SATURDAY_HOLIDAY_CODE` (front), `isSaturdayHolidayLeave`, `holidayDays`, `leave-request-holiday-field`, `leave-requests-holiday-column`
+
+### wytyczne
+
+- `schema-pole` `LeaveRequest.holidayDayOffId` — jedno święto = jeden wniosek na pracownika. Limit roczny liczony dotąd sumą dni (`assertSaturdayHolidayDaysAvailable`) zostaje jako druga bariera, ale źródłem prawdy o tym, co już odebrano, jest powiązanie ze świętem
+- `back-funkcja` `assertHolidayDayOffValid` — sprawdza `approved`, nie samą obecność wiersza. Wiersz `HolidayDayOff` powstaje też przy cofnięciu zatwierdzenia, więc brak flagi = dzień nie przysługuje
+
+## 2026-08-23 — feat(urlopy): kalendarz bez godzin dla urlopów pełnodniowych, pełne godziny dla godzinowych (v2026.08.23.902)
+
+### schema.prisma
+
+- dodano pole `allowsHourly` (Boolean, default false) w modelu `LeaveType` — czy wniosek tego rodzaju dzieli się na godziny. Migracja `20260823130000_leave_type_allows_hourly` ustawia `true` wyłącznie dla `WYPOCZYNKOWY`
+
+### architektura / API
+
+- **Podstawa prawna per rodzaj — `HOURLY_LEAVE_CODES`.** `WYPOCZYNKOWY` godzinowy (art. 154² §4 KP — wymiar godzinowy odpowiadający części dobowego wymiaru czasu pracy). Pełnodniowe: `NA_ZADANIE` (art. 167² — część urlopu wypoczynkowego, ale udzielana na dzień), `OPIEKA` (art. 173¹ §3 — „udziela się w dni, które są dla pracownika dniami pracy"), `BEZPLATNY` (art. 174 — w dniach), `ZA_SWIETO_SOB` (art. 130 §2 — cały dzień wolny), `L4` (zwolnienie w dniach kalendarzowych)
+- **`assertHoursValid` — dla rodzaju godzinowego wyłącznie pełne godziny.** `timeStart`/`timeEnd` musi pasować do `HH:00`, inaczej 400. Sprawdzane w `POST` i `PATCH /leave-requests/:id`
+- **LeaveRequestModal — `datetime-local` rozbity na kalendarz + wybór godziny.** Rodzaj pełnodniowy: sam `input[type=date]`, wniosek zapisywany jako 00:00–23:59 z `timeStart`/`timeEnd` = null. Rodzaj godzinowy: kalendarz + `select` z 24 pełnymi godzinami, minuty niedostępne. Przełączenie rodzaju normalizuje już wpisane wartości
+
+### słownik
+
+- dodano `LeaveType.allowsHourly`, `HOURLY_LEAVE_CODES`, `assertHoursValid` — podział wniosku na godziny
+- dodano `allowsHourly`, `HOUR_OPTIONS`, `setDayPart`, `leave-request-date-fields` w `LeaveRequestModal.jsx`
+
+### wytyczne
+
+- `schema-pole` `LeaveType.allowsHourly` — źródło prawdy w runtime. `back-stala` `HOURLY_LEAVE_CODES` tylko dokumentuje podstawę prawną i wartość startową migracji; zmiana stałej nie zmienia zachowania bez migracji albo UPDATE-u
+- `ui-input` `leave-request-date-fields` — nigdy nie wracamy do `datetime-local`: pozwala wpisać dowolne minuty, których backend nie przyjmie dla urlopu godzinowego, a dla pełnodniowego są bezsensowne
+
+## 2026-08-23 — feat(urlopy): urlop opiekuńczy wymaga uzasadnienia w komentarzu (v2026.08.23.901)
+
+### architektura / API
+
+- **`assertCommentValid` — komentarz obowiązkowy dla rodzajów z ustawowym wymogiem uzasadnienia.** Dziś lista to wyłącznie `OPIEKA` (art. 173¹ §5 KP). Pusty komentarz albo krótszy niż 20 znaków → 400 z treścią wymogu. Sprawdzane w `POST /leave-requests` i w `PATCH /leave-requests/:id` (zmiana rodzaju albo komentarza nie może zostawić wniosku bez uzasadnienia)
+- **Pozostałe rodzaje sprawdzone — bez wymogu komentarza.** `WYPOCZYNKOWY` (art. 152), `NA_ZADANIE` (art. 167²), `BEZPLATNY` (art. 174 — wniosek pisemny, ale ustawa nie żąda przyczyny), `ZA_SWIETO_SOB` (art. 130 §2), `L4` (zwolnienie lekarskie, nie wniosek pracownika)
+- **LeaveRequestModal — istniejące pole komentarza zmienia rolę przy opiece.** Ten sam input (bez nowego modala): etykieta „Uzasadnienie" z gwiazdką, `textarea` zamiast jednolinijkowego pola, podpowiedź z wymogami art. 173¹ §5 i przykład wpisu. Przycisk zapisu zablokowany dopóki uzasadnienie nie spełnia warunku
+
+### słownik
+
+- dodano `assertCommentValid`, `LEAVE_TYPES_REQUIRING_COMMENT`, `LEAVE_COMMENT_MIN_LENGTH`, `CARE_LEAVE_COMMENT_HINT` — walidacja uzasadnienia, `leave-requests.service.ts` + lustra w `leavesTheme.js`
+- dodano `commentRequired`, `commentBlock`, `leave-request-comment-field` — wymuszenie uzasadnienia w `LeaveRequestModal.jsx`
+
+### wytyczne
+
+- `back-stala` `LEAVE_TYPES_REQUIRING_COMMENT` — lista kodów, nie flaga na `LeaveType`. Wymóg wynika z ustawy, nie z konfiguracji administratora, więc nie może być wyklikany w UI
+- `back-funkcja` `assertCommentValid` — imienia i nazwiska osoby wymagającej opieki NIE szukamy w komentarzu, niesie je `LeaveRequest.dependentId`. Komentarz pokrywa wyłącznie przyczynę i stopień pokrewieństwa / adres
+- `ui-input` `leave-request-comment-field` — to jedno pole dla wszystkich rodzajów urlopu; przy opiece zmienia się etykieta i walidacja, nie powstaje osobny formularz
+
 ## 2026-08-23 — feat(urlopy): staż pracy pracownika i wyliczany wymiar urlopu (v2026.08.23.900)
 
 ### schema.prisma

@@ -52,6 +52,9 @@ export async function fetchLeaveUsage(leaveTypes, currentUserId) {
                     dateTo: l.dateTo,
                     daysCount: l.daysCount || 0,
                     year: warsawYear(l.dateFrom),
+                    // @anchor leave-usage-item-note
+                    /// Komentarz z wniosku — przy zatwierdzeniu kopiowany do Leave.note.
+                    note: l.note || '',
                 })),
             };
         })

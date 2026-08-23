@@ -1763,11 +1763,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-karta | karta dane osobowe | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor card-personal-data |
 | ui-karta | karta saldo dni | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor card-balance |
 | ui-karta | karta wykorzystane dni | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor card-usage |
-| ui-przycisk | Szczegoly wg lat (karta wykorzystane) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor card-usage-details-button |
 | ui-stan | usageRows (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-usage-rows |
 | ui-funkcja | loadUsage (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor load-my-usage |
 | ui-karta | karta urlopy z lat poprzednich | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor card-history |
-| ui-stan | historyOpen (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-history-open |
 | ui-stan | historyYear (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-history-year |
 | ui-stan | historyItems (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-history-items |
 | ui-stan | historyYears (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-history-years |
@@ -1845,8 +1843,6 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | GOOGLE_CALENDAR_EMBED_URL | apps/frontend/src/components/shared/leaves/LeavesCalendarTab.jsx | @anchor leaves-google-calendar-embed-url |
 | ui-ikona | link kalendarz Google | apps/frontend/src/components/shared/leaves/LeavesCalendarTab.jsx | @anchor link-google-calendar |
 | ui-sekcja | osadzony kalendarz Google | apps/frontend/src/components/shared/leaves/LeavesCalendarTab.jsx | @anchor google-calendar-embed |
-| ui-tabela | tabela moich urlopow (karta ruchoma) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-table |
-| ui-sekcja | filtr rodzajow przy tabeli | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-type-filter |
 | ui-funkcja | pomiar karty (DraggableCard) | apps/frontend/src/components/shared/leaves/DraggableCard.jsx | @anchor draggable-card-measure |
 | ui-stala | DEFAULT_LAYOUT (Moje dane) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-default-layout |
 | ui-stan | layout kart (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-layout-state |
@@ -1869,10 +1865,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | handleResetLayout | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-reset-layout |
 | ui-zakladka | MyLeavesTab (Moje dane) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-tab |
 | ui-stan | me / meOnly (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-self |
-| ui-stan | visibleLeaves (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-visible |
 | ui-zakladka | podzakladki rodzajow urlopu | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor leaves-type-subtabs |
-| ui-funkcja | fetchLeaves (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor fetch-my-leaves |
-| ui-kolumna | kolumny tabeli moich urlopow | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-col-defs |
 | ui-zakladka | LeaveRequestsTab (Wnioski / podwladnych) | apps/frontend/src/components/shared/leaves/LeaveRequestsTab.jsx | @anchor leave-requests-tab |
 | ui-funkcja | fetchRequests (LeaveRequestsTab) | apps/frontend/src/components/shared/leaves/LeaveRequestsTab.jsx | @anchor fetch-leave-requests |
 | ui-funkcja | setDecision (LeaveRequestsTab) | apps/frontend/src/components/shared/leaves/LeaveRequestsTab.jsx | @anchor decide-leave-request-front |
@@ -1928,6 +1921,54 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | leavesEnabled (MainLayout) | apps/frontend/src/components/Layout/MainLayout.jsx | @anchor layout-leaves-enabled |
 | ui-kolumna | Firma (UsersPage) | apps/frontend/src/UsersPage.jsx | @anchor users-company-column |
 | ui-stan | companyOptions (UsersPage) | apps/frontend/src/UsersPage.jsx | @anchor company-options |
+| schema-pole | LeaveRequest.holidayDayOffId | apps/backend/prisma/schema.prisma | @anchor leave-request-holiday-day-off-id |
+| schema-relacja | LeaveRequest.holidayDayOff | apps/backend/prisma/schema.prisma | @anchor leave-request-holiday-day-off |
+| schema-relacja | HolidayDayOff.requests | apps/backend/prisma/schema.prisma | @anchor holiday-day-off-requests |
+| back-funkcja | assertHolidayDayOffValid | apps/backend/src/leaves/leave-requests.service.ts | @anchor assert-holiday-day-off-valid |
+| back-funkcja | holidayDaysForRequest | apps/backend/src/leaves/leave-requests.service.ts | @anchor list-holiday-days-for-request |
+| back-funkcja | listApprovedForUser | apps/backend/src/leaves/holidays.service.ts | @anchor list-approved-holiday-days |
+| back-endpoint | GET /leave-requests/holiday-days | apps/backend/src/leaves/leave-requests.controller.ts | @anchor leave-requests-holiday-days-endpoint |
+| ui-stala | SATURDAY_HOLIDAY_CODE (front) | apps/frontend/src/components/shared/leaves/leavesTheme.js | @anchor saturday-holiday-code-front |
+| ui-stan | isSaturdayHolidayLeave | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor is-saturday-holiday-leave |
+| ui-stan | holidayDays (LeaveRequestModal) | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor holiday-days-state |
+| back-serwis | LeaveDecisionTokenService | apps/backend/src/leaves/leave-decision-token.service.ts | @anchor leave-decision-token-service |
+| back-typ | LeaveDecisionTokenPayload | apps/backend/src/leaves/leave-decision-token.service.ts | @anchor leave-decision-token-payload |
+| back-stala | LEAVE_DECISION_TOKEN_TTL_DAYS | apps/backend/src/leaves/leave-decision-token.service.ts | @anchor leave-decision-token-ttl-days |
+| back-funkcja | issue (token decyzji) | apps/backend/src/leaves/leave-decision-token.service.ts | @anchor issue-leave-decision-token |
+| back-funkcja | verify (token decyzji) | apps/backend/src/leaves/leave-decision-token.service.ts | @anchor verify-leave-decision-token |
+| back-controller | LeaveDecisionLinkController | apps/backend/src/leaves/leave-decision-link.controller.ts | @anchor leave-decision-link-controller |
+| back-endpoint | GET /leave-requests/decision-link | apps/backend/src/leaves/leave-decision-link.controller.ts | @anchor leave-decision-link-endpoint |
+| back-funkcja | esc (strona decyzji) | apps/backend/src/leaves/leave-decision-link.controller.ts | @anchor escape-decision-page-html |
+| back-funkcja | decideByToken | apps/backend/src/leaves/leave-requests.service.ts | @anchor decide-by-token |
+| back-funkcja | kontrola tozsamosci decydenta | apps/backend/src/leaves/leave-requests.service.ts | @anchor decision-token-identity-check |
+| back-funkcja | decisionUrl (linki w mailu) | apps/backend/src/leaves/leave-requests.service.ts | @anchor leave-decision-link-urls |
+| back-stala | przyciski decyzji w mailu | apps/backend/src/mail/mail.service.ts | @anchor mail-leave-decision-buttons |
+| ui-kolumna | Komentarz (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-history-comment-column |
+| ui-stala | note (leaveUsage items) | apps/frontend/src/components/shared/leaves/leaveUsage.js | @anchor leave-usage-item-note |
+| ui-funkcja | nextWorkingDayStr | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor next-working-day |
+| ui-stan | holidayDaysError | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor holiday-days-error |
+| ui-hook | fetchHolidayDays | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor fetch-holiday-days |
+| ui-dropdown | Za które święto (LeaveRequestModal) | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor leave-request-holiday-field |
+| ui-kolumna | Za święto (LeaveRequestsTab) | apps/frontend/src/components/shared/leaves/LeaveRequestsTab.jsx | @anchor leave-requests-holiday-column |
+| schema-pole | LeaveType.allowsHourly | apps/backend/prisma/schema.prisma | @anchor leave-type-allows-hourly |
+| back-stala | HOURLY_LEAVE_CODES | apps/backend/src/leaves/leave-requests.service.ts | @anchor hourly-leave-codes |
+| back-funkcja | assertHoursValid | apps/backend/src/leaves/leave-requests.service.ts | @anchor assert-hours-valid |
+| ui-stan | allowsHourly (LeaveRequestModal) | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor allows-hourly |
+| ui-stala | HOUR_OPTIONS (LeaveRequestModal) | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor hour-options |
+| ui-funkcja | setDayPart (LeaveRequestModal) | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor set-day-part |
+| ui-hook | normalizacja godzin przy zmianie rodzaju | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor normalize-times-on-type-change |
+| ui-input | Data od / Data do (LeaveRequestModal) | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor leave-request-date-fields |
+| back-funkcja | assertCommentValid | apps/backend/src/leaves/leave-requests.service.ts | @anchor assert-comment-valid |
+| back-stala | LEAVE_TYPES_REQUIRING_COMMENT | apps/backend/src/leaves/leave-requests.service.ts | @anchor leave-types-requiring-comment |
+| back-stala | LEAVE_COMMENT_MIN_LENGTH | apps/backend/src/leaves/leave-requests.service.ts | @anchor leave-comment-min-length |
+| back-stala | CARE_LEAVE_COMMENT_HINT | apps/backend/src/leaves/leave-requests.service.ts | @anchor care-leave-comment-hint |
+| ui-stala | LEAVE_TYPES_REQUIRING_COMMENT (front) | apps/frontend/src/components/shared/leaves/leavesTheme.js | @anchor leave-types-requiring-comment-front |
+| ui-stala | LEAVE_COMMENT_MIN_LENGTH (front) | apps/frontend/src/components/shared/leaves/leavesTheme.js | @anchor leave-comment-min-length-front |
+| ui-stala | CARE_LEAVE_COMMENT_HINT (front) | apps/frontend/src/components/shared/leaves/leavesTheme.js | @anchor care-leave-comment-hint-front |
+| ui-stan | commentRequired (LeaveRequestModal) | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor comment-required |
+| ui-stan | submitBlock (LeaveRequestModal) | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor submit-block |
+| ui-stan | commentBlock (LeaveRequestModal) | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor comment-block |
+| ui-input | Uzasadnienie / Komentarz (LeaveRequestModal) | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor leave-request-comment-field |
 | ui-kolumna | Staż pracy (UsersPage) | apps/frontend/src/UsersPage.jsx | @anchor users-work-experience-column |
 | ui-kolumna | Wymiar urlopu (UsersPage) | apps/frontend/src/UsersPage.jsx | @anchor users-leave-entitlement-column |
 | ui-funkcja | calculateLeaveEntitlement (front) | apps/frontend/src/utils/leaveCompanies.js | @anchor leave-entitlement-front |
