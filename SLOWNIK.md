@@ -1928,6 +1928,16 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | leavesEnabled (MainLayout) | apps/frontend/src/components/Layout/MainLayout.jsx | @anchor layout-leaves-enabled |
 | ui-kolumna | Firma (UsersPage) | apps/frontend/src/UsersPage.jsx | @anchor users-company-column |
 | ui-stan | companyOptions (UsersPage) | apps/frontend/src/UsersPage.jsx | @anchor company-options |
+| ui-kolumna | Staż pracy (UsersPage) | apps/frontend/src/UsersPage.jsx | @anchor users-work-experience-column |
+| ui-kolumna | Wymiar urlopu (UsersPage) | apps/frontend/src/UsersPage.jsx | @anchor users-leave-entitlement-column |
+| ui-funkcja | calculateLeaveEntitlement (front) | apps/frontend/src/utils/leaveCompanies.js | @anchor leave-entitlement-front |
+| back-funkcja | calculateLeaveEntitlement | apps/backend/src/leaves/leaves.service.ts | @anchor calculate-leave-entitlement |
+| back-stala | LEAVE_ENTITLEMENT_THRESHOLD_YEARS | apps/backend/src/leaves/leaves.service.ts | @anchor leave-entitlement-threshold-years |
+| back-stala | LEAVE_ENTITLEMENT_DAYS_BELOW | apps/backend/src/leaves/leaves.service.ts | @anchor leave-entitlement-days-below |
+| back-stala | LEAVE_ENTITLEMENT_DAYS_ABOVE | apps/backend/src/leaves/leaves.service.ts | @anchor leave-entitlement-days-above |
+| back-funkcja | findAll (UsersService) | apps/backend/src/users/users.service.ts | @anchor users-find-all |
+| back-funkcja | normalizacja stażu w update | apps/backend/src/users/users.service.ts | @anchor user-update-work-experience |
+| schema-pole | User.workExperienceYears | apps/backend/prisma/schema.prisma | @anchor user-work-experience-years |
 | ui-input | Firma (EditUserModal) | apps/frontend/src/components/shared/EditUserModal.jsx | @anchor edit-user-company-field |
 | ui-dropdown | Przełożony (EditUserModal) | apps/frontend/src/components/shared/EditUserModal.jsx | @anchor supervisor-options |
 | schema-enum | LeaveRequestStatus | apps/backend/prisma/schema.prisma | @anchor leave-request-status |

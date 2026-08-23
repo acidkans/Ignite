@@ -17,6 +17,10 @@ model User {
   phone             String?
   /// @anchor user-company
   company           String?
+  /// @anchor user-work-experience-years
+  /// Ogolny staz pracy w latach (zatrudnienie + zaliczone okresy nauki) — podstawa
+  /// wyliczenia wymiaru urlopu wypoczynkowego (20 dni ponizej 10 lat, 26 od 10 lat).
+  workExperienceYears Float?
   isActive          Boolean            @default(true)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt

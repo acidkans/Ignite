@@ -4,7 +4,7 @@ import { AgGridReact } from 'ag-grid-react';
 import { themeQuartz } from 'ag-grid-community';
 import AddUserModal from './components/shared/AddUserModal';
 import EditUserModal from './components/shared/EditUserModal';
-import { LEAVE_COMPANIES } from './utils/leaveCompanies';
+import { LEAVE_COMPANIES, calculateLeaveEntitlement } from './utils/leaveCompanies';
 
 export default function UsersPage() {
     const [activeTab, setActiveTab] = useState('users'); // 'users' | 'teams'
@@ -151,6 +151,33 @@ export default function UsersPage() {
             valueGetter: p => p.data.company || 'Brak',
             flex: 1.2
         },
+        // @anchor users-work-experience-column
+        // Staz pracy — edytowalny tylko dla firm z modulem Urlopy (Airtel, LinkedTeam).
+        {
+            field: 'workExperienceYears',
+            headerName: 'Staż pracy (lata)',
+            width: 150,
+            editable: p => isAdminOrManager && LEAVE_COMPANIES.includes(p.data.company),
+            cellEditor: 'agNumberCellEditor',
+            cellEditorParams: { min: 0, max: 60, precision: 1 },
+            valueFormatter: p => (p.value === null || p.value === undefined || p.value === '')
+                ? (LEAVE_COMPANIES.includes(p.data?.company) ? '—' : '')
+                : String(p.value)
+        },
+        // @anchor users-leave-entitlement-column
+        // Wymiar urlopu liczony ze stazu (20 dni ponizej 10 lat, 26 od 10 lat) — pole nieedytowalne.
+        {
+            field: 'leaveEntitlementDays',
+            headerName: 'Wymiar urlopu (dni)',
+            width: 170,
+            editable: false,
+            valueGetter: p => LEAVE_COMPANIES.includes(p.data?.company)
+                ? calculateLeaveEntitlement(p.data?.workExperienceYears)
+                : null,
+            valueFormatter: p => (p.value === null || p.value === undefined)
+                ? (LEAVE_COMPANIES.includes(p.data?.company) ? 'brak stażu' : '')
+                : `${p.value} dni`
+        },
         {
             headerName: 'Zespoły',
             field: 'teams',
@@ -238,6 +265,16 @@ export default function UsersPage() {
                     return;
                 }
             }
+        } else if (field === 'workExperienceYears') {
+            const raw = newValue === '' || newValue === null || newValue === undefined
+                ? null
+                : Number(String(newValue).replace(',', '.'));
+            if (raw !== null && (!isFinite(raw) || raw < 0)) {
+                alert('Staż pracy musi być liczbą nieujemną.');
+                fetchData();
+                return;
+            }
+            payload = { workExperienceYears: raw };
         } else if (colId === 'Firma') {
             payload = { company: newValue === 'Brak' ? null : newValue };
         } else {

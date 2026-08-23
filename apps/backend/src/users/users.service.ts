@@ -1,7 +1,8 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import { Injectable, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, User } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { calculateLeaveEntitlement } from '../leaves/leaves.service';
 
 import { ConfigService } from '@nestjs/config';
 
@@ -131,6 +132,21 @@ export class UsersService {
       };
     }
 
+    // @anchor user-update-work-experience
+    // Staz pracy z gridu przychodzi jako string — normalizujemy, pusty = null.
+    if ('workExperienceYears' in updateData) {
+      const raw = updateData.workExperienceYears;
+      if (raw === null || raw === undefined || raw === '') {
+        updateData.workExperienceYears = null;
+      } else {
+        const parsed = Number(String(raw).replace(',', '.'));
+        if (!isFinite(parsed) || parsed < 0) {
+          throw new BadRequestException('Staż pracy musi być liczbą nieujemną.');
+        }
+        updateData.workExperienceYears = Math.round(parsed * 100) / 100;
+      }
+    }
+
     // Obsługa przełożonego
     if ('supervisorId' in otherData) {
       updateData.supervisorId = otherData.supervisorId ?? null;
@@ -147,8 +163,11 @@ export class UsersService {
     return result;
   }
 
+  // @anchor users-find-all
+  /// Lista uzytkownikow wraz z wyliczonym wymiarem urlopu — pole wirtualne
+  /// leaveEntitlementDays liczone ze stazu, nie trzymane w bazie.
   async findAll() {
-    return this.prisma.user.findMany({
+    const users = await this.prisma.user.findMany({
       select: {
         id: true,
         email: true,
@@ -156,6 +175,7 @@ export class UsersService {
         lastName: true,
         phone: true,
         company: true,
+        workExperienceYears: true,
         createdAt: true,
         userRoles: {
           select: {
@@ -180,6 +200,11 @@ export class UsersService {
         },
       },
     });
+
+    return users.map(u => ({
+      ...u,
+      leaveEntitlementDays: calculateLeaveEntitlement(u.workExperienceYears),
+    }));
   }
 
   async suggest(q: string) {

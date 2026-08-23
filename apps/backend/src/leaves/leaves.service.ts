@@ -5,6 +5,31 @@ import { PrismaService } from '../prisma/prisma.service';
 /// Firmy, dla których moduł Urlopy jest dostępny.
 export const LEAVE_COMPANIES = ['Airtel Services', 'Airtel Systems', 'LinkedTeam'];
 
+// @anchor leave-entitlement-threshold-years
+/// Prog stazu, od ktorego przysluguje 26 dni urlopu (Kodeks pracy art. 154).
+export const LEAVE_ENTITLEMENT_THRESHOLD_YEARS = 10;
+
+// @anchor leave-entitlement-days-below
+/// Wymiar urlopu przy stazu krotszym niz 10 lat.
+export const LEAVE_ENTITLEMENT_DAYS_BELOW = 20;
+
+// @anchor leave-entitlement-days-above
+/// Wymiar urlopu przy stazu co najmniej 10 lat.
+export const LEAVE_ENTITLEMENT_DAYS_ABOVE = 26;
+
+// @anchor calculate-leave-entitlement
+/// Wymiar urlopu wypoczynkowego z ogolnego stazu pracy (Kodeks pracy art. 154 §1).
+/// Brak podanego stazu => null, zeby UI nie pokazywal wyliczenia z powietrza.
+/// Nie uwzglednia proporcji dla niepelnego etatu — wymaga osobnego pola z wymiarem etatu.
+export function calculateLeaveEntitlement(years: number | null | undefined): number | null {
+  if (years === null || years === undefined) return null;
+  const value = Number(years);
+  if (!isFinite(value) || value < 0) return null;
+  return value >= LEAVE_ENTITLEMENT_THRESHOLD_YEARS
+    ? LEAVE_ENTITLEMENT_DAYS_ABOVE
+    : LEAVE_ENTITLEMENT_DAYS_BELOW;
+}
+
 // @anchor leave-access-dto
 export interface LeaveAccess {
   /// czy moduł Urlopy jest w ogóle dostępny dla usera

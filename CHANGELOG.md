@@ -1,3 +1,29 @@
+## 2026-08-23 — feat(urlopy): staż pracy pracownika i wyliczany wymiar urlopu (v2026.08.23.900)
+
+### schema.prisma
+
+- dodano pole `workExperienceYears` (Float?) w modelu `User` — ogólny staż pracy w latach (zatrudnienie + zaliczone okresy nauki), podstawa wyliczenia wymiaru urlopu wypoczynkowego
+
+### architektura / API
+
+- **`calculateLeaveEntitlement` — wymiar urlopu z Kodeksu pracy art. 154 §1.** Staż < 10 lat → 20 dni, staż ≥ 10 lat → 26 dni. Brak podanego stażu zwraca `null`, żeby UI nie pokazywał wyliczenia z powietrza
+- **`GET /users` zwraca wirtualne pole `leaveEntitlementDays`.** Liczone w locie z `workExperienceYears`, nie trzymane w bazie — zmiana stażu od razu zmienia wymiar, bez migracji danych
+- **`PATCH /users/:id` przyjmuje `workExperienceYears`.** Wartość z gridu (string, przecinek dziesiętny) normalizowana do liczby, pusta = `null`, ujemna odrzucana jako 400
+- **UsersPage — dwie nowe kolumny.** „Staż pracy (lata)" edytowalna wyłącznie dla firm z modułem Urlopy (Airtel Services, Airtel Systems, LinkedTeam) i tylko dla ADMIN/MANAGER; „Wymiar urlopu (dni)" nieedytowalna, liczona po stronie frontu tym samym wzorem co backend
+
+### słownik
+
+- dodano `calculateLeaveEntitlement` — wymiar urlopu ze stażu, `leaves.service.ts` + lustro w `leaveCompanies.js`
+- dodano `LEAVE_ENTITLEMENT_THRESHOLD_YEARS`, `LEAVE_ENTITLEMENT_DAYS_BELOW`, `LEAVE_ENTITLEMENT_DAYS_ABOVE` — progi z art. 154 §1
+- dodano `User.workExperienceYears` — staż pracy w latach
+- dodano kolumny `users-work-experience-column`, `users-leave-entitlement-column` w `UsersPage.jsx`
+
+### wytyczne
+
+- `schema-pole` `User.workExperienceYears` — trzymamy staż, nie wymiar urlopu. Wymiar zawsze liczony funkcją, nigdy zapisywany w bazie, żeby próg 10 lat nie rozjechał się między rekordami
+- `back-funkcja` `calculateLeaveEntitlement` — nie uwzględnia proporcji dla niepełnego etatu (art. 154 §2). Obsługa niepełnych etatów wymaga osobnego pola z wymiarem etatu i jest świadomie poza tą zmianą
+- `ui-kolumna` `users-work-experience-column` — staż edytowalny tylko dla firm z `LEAVE_COMPANIES`; dla pozostałych obie kolumny zostają puste, bo moduł Urlopy ich nie dotyczy
+
 ## 2026-08-23 — feat(wbs): zatwierdzenie podpowiedzianej nazwy przepisuje ustawienia bliźniaka (v2026.08.23.899)
 
 ### architektura / API
