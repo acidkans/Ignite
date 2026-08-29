@@ -35,10 +35,10 @@ export class DependentsService {
   async create(userId: string, roles: string[], dto: CreateDependentDto) {
     const subjectId = await this.resolveSubject(userId, roles, dto.userId);
     if (!dto.firstName?.trim() || !dto.lastName?.trim()) {
-      throw new BadRequestException('Imię i nazwisko podopiecznego są wymagane.');
+      throw new BadRequestException('Podaj imię i nazwisko podopiecznego.');
     }
     const birthDate = new Date(dto.birthDate);
-    if (isNaN(birthDate.getTime())) throw new BadRequestException('Nieprawidłowa data urodzenia.');
+    if (isNaN(birthDate.getTime())) throw new BadRequestException('Ta data urodzenia wygląda dziwnie — wpisz ją jeszcze raz.');
 
     return this.prisma.dependent.create({
       data: {
@@ -53,7 +53,7 @@ export class DependentsService {
   // @anchor update-dependent
   async update(userId: string, roles: string[], id: string, dto: UpdateDependentDto) {
     const existing = await this.prisma.dependent.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('Podopieczny nie istnieje.');
+    if (!existing) throw new NotFoundException('Nie znajduję takiego podopiecznego.');
     await this.resolveSubject(userId, roles, existing.userId);
 
     const data: any = {};
@@ -61,7 +61,7 @@ export class DependentsService {
     if (dto.lastName !== undefined) data.lastName = dto.lastName.trim();
     if (dto.birthDate !== undefined) {
       const d = new Date(dto.birthDate);
-      if (isNaN(d.getTime())) throw new BadRequestException('Nieprawidłowa data urodzenia.');
+      if (isNaN(d.getTime())) throw new BadRequestException('Ta data urodzenia wygląda dziwnie — wpisz ją jeszcze raz.');
       data.birthDate = d;
     }
     return this.prisma.dependent.update({ where: { id }, data });
@@ -70,7 +70,7 @@ export class DependentsService {
   // @anchor remove-dependent
   async remove(userId: string, roles: string[], id: string) {
     const existing = await this.prisma.dependent.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('Podopieczny nie istnieje.');
+    if (!existing) throw new NotFoundException('Nie znajduję takiego podopiecznego.');
     await this.resolveSubject(userId, roles, existing.userId);
     return this.prisma.dependent.delete({ where: { id } });
   }
@@ -79,7 +79,7 @@ export class DependentsService {
   /// Czyich podopiecznych wolno czytać/zmieniać: siebie zawsze, cudzych — ADMIN lub bezpośredni przełożony.
   private async resolveSubject(userId: string, roles: string[], targetUserId?: string): Promise<string> {
     const access = await this.leaves.resolveAccess(userId, roles);
-    if (!access.enabled) throw new ForbiddenException('Moduł Urlopy niedostępny dla tego użytkownika.');
+    if (!access.enabled) throw new ForbiddenException('Nie masz dostępu do modułu Urlopy.');
     if (!targetUserId || targetUserId === userId) return userId;
 
     if (access.scope === 'ALL') return targetUserId;
@@ -88,6 +88,6 @@ export class DependentsService {
       select: { supervisorId: true },
     });
     if (employee?.supervisorId === userId) return targetUserId;
-    throw new ForbiddenException('Brak uprawnień do podopiecznych tego pracownika.');
+    throw new ForbiddenException('Nie masz wglądu w podopiecznych tego pracownika.');
   }
 }

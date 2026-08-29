@@ -5,6 +5,7 @@ import DatePicker, { registerLocale } from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { pl } from 'date-fns/locale/pl';
 import { statusMeta, warsawDayKey } from './leavesTheme';
+import useAutoRefresh from '../../../hooks/useAutoRefresh';
 
 registerLocale('pl', pl);
 
@@ -65,8 +66,9 @@ export default function LeavesDashboardTab({ access, employees, currentUserId, o
     const canPick = !!access?.canViewAll || access?.scope !== 'SELF';
 
     // @anchor fetch-leaves-dashboard
-    const fetchDashboard = useCallback(async (userId) => {
-        setLoading(true);
+    // `silent` = odswiezanie w tle (co 5 min) — bez spinnera, zeby karty nie migaly
+    const fetchDashboard = useCallback(async (userId, silent = false) => {
+        if (!silent) setLoading(true);
         try {
             const token = sessionStorage.getItem('token');
             const qs = userId && userId !== currentUserId ? `?userId=${userId}` : '';
@@ -75,19 +77,23 @@ export default function LeavesDashboardTab({ access, employees, currentUserId, o
             });
             if (!res.ok) {
                 const d = await res.json().catch(() => ({}));
-                throw new Error(d.message || 'Błąd pobierania danych dashboardu');
+                throw new Error(d.message || 'Nie udało się pobrać danych — odśwież stronę.');
             }
             setData(await res.json());
             setError(null);
         } catch (err) {
-            setError(err.message);
-            setData(null);
+            // przy odswiezaniu w tle nie kasujemy tego, co uzytkownik juz widzi —
+            // chwilowy blad sieci ma zniknac sam przy nastepnej probie
+            if (!silent) { setError(err.message); setData(null); }
         } finally {
             setLoading(false);
         }
     }, [currentUserId]);
 
     useEffect(() => { fetchDashboard(selectedUserId); }, [selectedUserId, fetchDashboard]);
+
+    // @anchor leaves-dashboard-auto-refresh
+    useAutoRefresh(() => fetchDashboard(selectedUserId, true));
 
     // @anchor dashboard-filter-requests
     // Filtr dat działa na przecięciu zakresów: wniosek 11–12.08 wpada w filtr „od 11.08"
@@ -113,7 +119,7 @@ export default function LeavesDashboardTab({ access, employees, currentUserId, o
     const setDecision = async (row, status) => {
         let decisionComment = null;
         if (status === 'REJECTED') {
-            decisionComment = window.prompt('Powód odrzucenia wniosku (opcjonalnie):', '');
+            decisionComment = window.prompt('Napisz, dlaczego odrzucasz ten wniosek (możesz zostawić puste):', '');
             if (decisionComment === null) return;
         }
         try {
@@ -125,7 +131,7 @@ export default function LeavesDashboardTab({ access, employees, currentUserId, o
             });
             if (!res.ok) {
                 const d = await res.json().catch(() => ({}));
-                throw new Error(d.message || 'Błąd zapisu decyzji');
+                throw new Error(d.message || 'Nie udało się zapisać decyzji — spróbuj jeszcze raz.');
             }
             fetchDashboard(selectedUserId);
         } catch (err) {
@@ -147,7 +153,7 @@ export default function LeavesDashboardTab({ access, employees, currentUserId, o
             });
             if (!res.ok) {
                 const d = await res.json().catch(() => ({}));
-                throw new Error(d.message || 'Błąd zapisu puli dni');
+                throw new Error(d.message || 'Nie udało się zapisać puli dni — spróbuj jeszcze raz.');
             }
             fetchDashboard(selectedUserId);
         } catch (err) {

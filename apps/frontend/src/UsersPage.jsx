@@ -4,7 +4,10 @@ import { AgGridReact } from 'ag-grid-react';
 import { themeQuartz } from 'ag-grid-community';
 import AddUserModal from './components/shared/AddUserModal';
 import EditUserModal from './components/shared/EditUserModal';
+import ImportUsersModal from './components/shared/ImportUsersModal';
+import { exportUsersWorkbook } from './utils/usersExcel';
 import { LEAVE_COMPANIES, calculateLeaveEntitlement, formatWorkExperience } from './utils/leaveCompanies';
+import useAutoRefresh from './hooks/useAutoRefresh';
 
 export default function UsersPage() {
     const [activeTab, setActiveTab] = useState('users'); // 'users' | 'teams'
@@ -25,6 +28,9 @@ export default function UsersPage() {
     const [currentUser, setCurrentUser] = useState(null);
     const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
+    // @anchor users-import-modal-state
+    const [isImportUsersModalOpen, setIsImportUsersModalOpen] = useState(false);
+    const [exporting, setExporting] = useState(false);
 
     // Listy pomocnicze
     const usersList = useMemo(() => rowData.map(u => ({ label: `${u.firstName} ${u.lastName}`, id: u.id })), [rowData]);
@@ -37,8 +43,9 @@ export default function UsersPage() {
         return ['Brak', ...Array.from(new Set([...LEAVE_COMPANIES, ...existing]))];
     }, [rowData]);
 
-    const fetchData = useCallback(async () => {
-        setLoading(true);
+    // `silent` = odswiezanie w tle (co 5 min) — bez ekranu ladowania
+    const fetchData = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
             const token = sessionStorage.getItem('token');
             const headers = { 'Authorization': `Bearer ${token}` };
@@ -65,7 +72,7 @@ export default function UsersPage() {
             setRowData(usersData);
             setTeams(teamsData);
         } catch (err) {
-            setError(err.message);
+            if (!silent) setError(err.message);
         } finally {
             setLoading(false);
         }
@@ -78,6 +85,11 @@ export default function UsersPage() {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    // @anchor users-auto-refresh
+    // Lista uzytkownikow odswieza sie sama co 5 minut — zmiany innego admina
+    // pojawiaja sie bez przeladowania strony.
+    useAutoRefresh(() => fetchData(true));
 
     const handleCreateTeam = async () => {
         if (!isAdminOrManager) return;
@@ -132,6 +144,20 @@ export default function UsersPage() {
             fetchData();
         } catch (err) {
             alert(err.message);
+        }
+    };
+
+    // @anchor handle-export-users
+    // Eksport tabeli uzytkownikow do XLSX — plik sluzy jednoczesnie jako szablon importu,
+    // dlatego wychodzi z niego pelen komplet kolumn potrzebnych do zalozenia pracownika.
+    const handleExportUsers = async () => {
+        setExporting(true);
+        try {
+            await exportUsersWorkbook(rowData, { companies: companyOptions, teams });
+        } catch (err) {
+            alert(`Nie udalo sie przygotowac pliku: ${err.message}`);
+        } finally {
+            setExporting(false);
         }
     };
 
@@ -454,12 +480,43 @@ export default function UsersPage() {
                             <span>Dodaj Użytkownika</span>
                         </button>
                     )}
+                    {/* @anchor users-export-button */}
+                    {isAdminOrManager && (
+                        <button
+                            onClick={handleExportUsers}
+                            disabled={exporting}
+                            title="Pobierz arkusz z kompletem kolumn potrzebnych do założenia pracownika"
+                            className="ml-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white px-4 py-2 rounded-md transition-all shadow-lg flex items-center gap-2"
+                        >
+                            <span>⬇</span>
+                            <span>{exporting ? 'Przygotowuję…' : 'Eksport tabeli użytkowników'}</span>
+                        </button>
+                    )}
+                    {/* @anchor users-import-button */}
+                    {isAdminOrManager && (
+                        <button
+                            onClick={() => setIsImportUsersModalOpen(true)}
+                            title="Wczytaj plik Excel o strukturze z eksportu"
+                            className="ml-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-md transition-all shadow-lg flex items-center gap-2"
+                        >
+                            <span>⬆</span>
+                            <span>Import użytkowników</span>
+                        </button>
+                    )}
                 </div>
             </div>
 
             <AddUserModal
                 isOpen={isAddUserModalOpen}
                 onClose={() => setIsAddUserModalOpen(false)}
+                onSuccess={fetchData}
+            />
+
+            <ImportUsersModal
+                isOpen={isImportUsersModalOpen}
+                onClose={() => setIsImportUsersModalOpen(false)}
+                users={rowData}
+                teams={teams}
                 onSuccess={fetchData}
             />
 

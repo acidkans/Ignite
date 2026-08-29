@@ -98,12 +98,12 @@ export class LeaveBalancesService {
   /// wszystkich (ADMIN, DAK) albo przełożony.
   async read(userId: string, roles: string[], targetUserId?: string) {
     const access = await this.leaves.resolveAccess(userId, roles);
-    if (!access.enabled) throw new ForbiddenException('Moduł Urlopy niedostępny dla tego użytkownika.');
+    if (!access.enabled) throw new ForbiddenException('Nie masz dostępu do modułu Urlopy.');
 
     let subjectId = userId;
     if (targetUserId && targetUserId !== userId) {
       const allowed = access.canViewAll || (await this.isSupervisorOf(userId, targetUserId));
-      if (!allowed) throw new ForbiddenException('Brak uprawnień do salda tego pracownika.');
+      if (!allowed) throw new ForbiddenException('Nie masz wglądu w saldo tego pracownika.');
       subjectId = targetUserId;
     }
     return { userId: subjectId, canEdit: access.canEdit, ...(await this.getBalance(subjectId)) };
@@ -113,22 +113,22 @@ export class LeaveBalancesService {
   /// Ustawienie puli dni za dany rok — wyłącznie ADMIN.
   async setEntitlement(userId: string, roles: string[], dto: SetEntitlementDto) {
     const access = await this.leaves.resolveAccess(userId, roles);
-    if (!access.canEdit) throw new ForbiddenException('Pulę dni urlopowych może ustawiać tylko administrator.');
-    if (!dto?.userId) throw new BadRequestException('Brak pracownika.');
+    if (!access.canEdit) throw new ForbiddenException('Pulę dni urlopowych ustawia administrator.');
+    if (!dto?.userId) throw new BadRequestException('Wskaż pracownika.');
 
     const year = Number(dto.year);
     if (!LeaveBalancesService.window().includes(year)) {
-      throw new BadRequestException('Rok poza oknem salda (rok bieżący i 4 lata wstecz).');
+      throw new BadRequestException('Saldo prowadzimy dla roku bieżącego i 4 lat wstecz — ten rok jest poza zakresem.');
     }
     const days = Number(dto.entitlementDays);
-    if (!isFinite(days) || days < 0) throw new BadRequestException('Liczba dni musi być nieujemna.');
+    if (!isFinite(days) || days < 0) throw new BadRequestException('Liczba dni nie może być ujemna.');
 
     const existing = await this.prisma.leaveBalance.findUnique({
       where: { userId_year: { userId: dto.userId, year } },
     });
     if (existing && days < existing.usedDays) {
       throw new BadRequestException(
-        `Pula za ${year} nie może być mniejsza niż już wykorzystane ${existing.usedDays} dni.`,
+        `Pula za ${year} nie może być mniejsza niż wykorzystane już ${existing.usedDays} dni.`,
       );
     }
 
@@ -145,11 +145,11 @@ export class LeaveBalancesService {
   async assertDaysAvailable(subjectId: string, days: number): Promise<void> {
     const { totalRemaining } = await this.getBalance(subjectId);
     if (totalRemaining <= 0) {
-      throw new BadRequestException('Brak dostępnych dni urlopu — wniosku nie można złożyć.');
+      throw new BadRequestException('Nie masz już wolnych dni urlopu — sprawdź saldo w zakładce „Moje dane".');
     }
     if (days > totalRemaining) {
       throw new BadRequestException(
-        `Wniosek na ${days} dni przekracza dostępne ${totalRemaining} dni urlopu.`,
+        `Chcesz wziąć ${days} dni, a zostało Ci ${totalRemaining}. Skróć termin albo sprawdź saldo.`,
       );
     }
   }
@@ -178,7 +178,7 @@ export class LeaveBalancesService {
     }, 0);
     if (days > Math.round(available * 100) / 100) {
       throw new BadRequestException(
-        `Brak wystarczającej puli dni — do wybrania ${Math.round(available * 100) / 100}, wniosek na ${days}.`,
+        `Do wybrania zostało ${Math.round(available * 100) / 100} dni, a wniosek jest na ${days}.`,
       );
     }
 

@@ -80,8 +80,8 @@ export const LEAVE_COMMENT_MIN_LENGTH = 20;
 // @anchor care-leave-comment-hint-front
 // Wymogi z art. 173(1) par. 5 Kodeksu pracy — pokazywane pod polem komentarza.
 export const CARE_LEAVE_COMMENT_HINT =
-    'Urlop opiekuńczy wymaga uzasadnienia: przyczyna konieczności zapewnienia osobistej opieki ' +
-    'lub wsparcia oraz stopień pokrewieństwa z pracownikiem (dla osoby spoza rodziny — adres zamieszkania).';
+    'Napisz, dlaczego musisz zapewnić opiekę lub wsparcie i kim jest dla Ciebie ta osoba ' +
+    '(jeśli to ktoś spoza rodziny — podaj jej adres zamieszkania).';
 
 // @anchor saturday-holiday-code-front
 // Rodzaj urlopu odbieranego za swieto wypadajace w sobote — lustro back-stala

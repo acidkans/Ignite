@@ -8,6 +8,7 @@ import { fetchLeaveUsage } from './leaveUsage';
 import DraggableCard from './DraggableCard';
 import { resolveCardOverlaps } from './cardsLayout';
 import { leavesGridTheme, leavesDefaultColDef, warsawDayKey } from './leavesTheme';
+import useAutoRefresh from '../../../hooks/useAutoRefresh';
 
 // @anchor my-leaves-default-layout
 /// Domyslne rozmieszczenie kart — punkt wyjscia, gdy uzytkownik nie zapisal wlasnego ukladu.
@@ -92,6 +93,11 @@ export default function MyLeavesTab({ access, leaveTypes, employees, currentUser
     }, []);
 
     useEffect(() => { loadHolidays(); }, [loadHolidays]);
+
+    // @anchor my-leaves-auto-refresh
+    // Saldo, wykorzystane dni i lista swiat odswiezaja sie same co 5 minut —
+    // zadna z tych funkcji nie ustawia spinnera, wiec widok nie miga.
+    useAutoRefresh(() => { fetchSummary(); loadUsage(); loadHolidays(); });
 
     const year = new Date().getFullYear();
 

@@ -15,7 +15,7 @@ export async function fetchLeaveUsage(leaveTypes, currentUserId) {
     return Promise.all(
         leaveTypes.map(async (t) => {
             const res = await fetch(`${API_URL}/leaves?leaveTypeId=${t.id}`, { headers });
-            if (!res.ok) throw new Error(`Błąd pobierania urlopów (${res.status})`);
+            if (!res.ok) throw new Error(`Nie udało się pobrać urlopów (${res.status}) — odśwież stronę.`);
             const leaves = await res.json();
             const mine = leaves.filter(l => l.userId === currentUserId);
 

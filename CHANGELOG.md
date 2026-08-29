@@ -1,3 +1,24 @@
+## 2026-08-29 — eksport/import użytkowników w Excelu, autoodświeżanie co 5 min, luźniejszy język komunikatów
+
+### architektura / API
+- dodano `apps/frontend/src/utils/usersExcel.js` — jedna definicja struktury arkusza użytkowników, wspólna dla eksportu i importu (kolumny, mapa nagłówek→pole, role)
+- dodano `apps/frontend/src/components/shared/ImportUsersModal.jsx` — import XLSX dwoma przebiegami: najpierw zakładanie kont (`POST /users`), potem uzupełnianie danych i powiązań (`PATCH /users/:id`), żeby przełożony mógł powstać w tym samym pliku co jego podwładni
+- dodano `apps/frontend/src/hooks/useAutoRefresh.js` — cykliczne odświeżanie danych co 5 min, wstrzymane gdy karta przeglądarki jest schowana
+- podpięto autoodświeżanie w `UsersPage`, `LeavesPage`, `LeaveRequestsTab`, `LeavesDashboardTab`, `MyLeavesTab`
+- przepisano komunikaty modułu Urlopy (backend + frontend) na drugą osobę i mniej formalny ton
+
+### słownik
+- dodano `normalize-key`, `user-role-labels`, `user-role-by-label`, `users-excel-columns`, `users-excel-header-map`, `export-users-workbook`, `parse-users-workbook` — struktura i obsługa arkusza użytkowników
+- dodano `import-users-modal`, `run-users-import` — modal importu i sam przebieg wczytywania
+- dodano `users-import-modal-state`, `handle-export-users`, `users-export-button`, `users-import-button`, `users-auto-refresh` — obsługa w `UsersPage`
+- dodano `use-auto-refresh`, `auto-refresh-interval-ms` — hook autoodświeżania
+- dodano `leaves-meta-auto-refresh`, `leaves-auto-refresh-note`, `leave-requests-auto-refresh`, `leaves-dashboard-auto-refresh`, `my-leaves-auto-refresh` — autoodświeżanie w module Urlopy
+
+### wytyczne
+- komunikaty dla użytkownika piszemy w drugiej osobie i mniej formalnie („Masz już wniosek na ten termin — sprawdź kalendarz” zamiast „Termin nachodzi na inny wniosek tego pracownika”). Dotyczy walidacji backendu, blokad w formularzach i tekstów pomocniczych w UI
+- `use-auto-refresh` — odświeżanie w tle nigdy nie ustawia spinnera ani nie kasuje danych z ekranu przy błędzie sieci; każda funkcja pobierająca dane dostaje parametr `silent`
+- struktura arkusza użytkowników żyje wyłącznie w `users-excel-columns` — eksport i import czytają ją z jednego miejsca, nowa kolumna = jeden wpis w tej tablicy
+
 ## 2026-08-29 — feat(urlopy): wycofanie zatwierdzonego urlopu za zgodą przełożonego (v2026.08.29.917)
 
 ### schema.prisma

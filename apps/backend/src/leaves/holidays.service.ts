@@ -88,12 +88,12 @@ export class HolidaysService {
   // @anchor add-custom-holiday-day-off
   /// Wlasny dzien wolny administratora — awaryjne uzupelnienie, gdy kalendarz swiat nie wystarcza.
   async addCustom(userId: string, isAdmin: boolean, date: string, name?: string) {
-    if (!isAdmin) throw new ForbiddenException('Dni wolne za święta zatwierdza administrator.');
+    if (!isAdmin) throw new ForbiddenException('Dni wolne za święta zatwierdza administrator — Ty tego nie zmienisz.');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) {
       throw new BadRequestException('Podaj datę w formacie YYYY-MM-DD.');
     }
     const day = new Date(`${date}T00:00:00.000Z`);
-    if (isNaN(day.getTime())) throw new BadRequestException('Nieprawidłowa data.');
+    if (isNaN(day.getTime())) throw new BadRequestException('Ta data wygląda dziwnie — wpisz ją jeszcze raz.');
 
     const year = day.getUTCFullYear();
     const now = new Date();
@@ -120,13 +120,13 @@ export class HolidaysService {
   // @anchor remove-custom-holiday-day-off
   /// Usuwa wlasny dzien administratora. Dni z kalendarza swiat tylko odznaczamy — nie kasujemy.
   async removeCustom(userId: string, isAdmin: boolean, date: string) {
-    if (!isAdmin) throw new ForbiddenException('Dni wolne za święta zatwierdza administrator.');
+    if (!isAdmin) throw new ForbiddenException('Dni wolne za święta zatwierdza administrator — Ty tego nie zmienisz.');
     const day = new Date(`${date}T00:00:00.000Z`);
-    if (isNaN(day.getTime())) throw new BadRequestException('Nieprawidłowa data.');
+    if (isNaN(day.getTime())) throw new BadRequestException('Ta data wygląda dziwnie — wpisz ją jeszcze raz.');
 
     const year = day.getUTCFullYear();
     if (HolidaysService.proposalsForYear(year).some(p => p.date === date)) {
-      throw new BadRequestException('Dzień z kalendarza świąt można tylko odznaczyć, nie usunąć.');
+      throw new BadRequestException('Dzień z kalendarza świąt możesz tylko odznaczyć, nie usunąć.');
     }
     await this.prisma.holidayDayOff.deleteMany({ where: { date: day } });
     return this.list(year);
@@ -136,7 +136,7 @@ export class HolidaysService {
   /// Decyzja administratora — `dates` to komplet dat zatwierdzonych dla roku,
   /// wszystko spoza listy wraca do stanu niezatwierdzonego.
   async setApproved(userId: string, isAdmin: boolean, year: number, dates: string[]) {
-    if (!isAdmin) throw new ForbiddenException('Dni wolne za święta zatwierdza administrator.');
+    if (!isAdmin) throw new ForbiddenException('Dni wolne za święta zatwierdza administrator — Ty tego nie zmienisz.');
 
     // decyzja obejmuje kalendarz świąt ORAZ dni dodane ręcznie — odznaczenie tu jest cofnięciem
     const existing = await this.prisma.holidayDayOff.findMany({ where: { year }, select: { date: true, name: true } });

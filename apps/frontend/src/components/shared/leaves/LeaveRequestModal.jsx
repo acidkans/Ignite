@@ -177,7 +177,7 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
         : !form.comment.trim()
             ? CARE_LEAVE_COMMENT_HINT
             : form.comment.trim().length < LEAVE_COMMENT_MIN_LENGTH
-                ? `Uzasadnienie jest za krótkie (min. ${LEAVE_COMMENT_MIN_LENGTH} znaków).`
+                ? `Twoje uzasadnienie jest za krótkie — potrzeba min. ${LEAVE_COMMENT_MIN_LENGTH} znaków.`
                 : null;
 
     // @anchor fetch-dependents
@@ -298,9 +298,9 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
     const balanceBlock = !consumesBalance || !balance
         ? null
         : totalRemaining <= 0
-            ? 'Brak dostępnych dni urlopu — wniosku nie można złożyć.'
+            ? 'Nie masz już wolnych dni urlopu — sprawdź saldo w zakładce „Moje dane”.'
             : requestedDays > totalRemaining
-                ? `Wniosek na ${requestedDays} dni przekracza dostępne ${totalRemaining} dni.`
+                ? `Chcesz wziąć ${requestedDays} dni, a zostało Ci ${totalRemaining}. Skróć termin.`
                 : null;
 
     // @anchor submit-block
@@ -310,14 +310,14 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
     const submitBlock = useMemo(() => {
         if (!form.userId) return 'Wybierz pracownika.';
         if (!form.leaveTypeId) return 'Wybierz rodzaj urlopu.';
-        if (isCareLeave && !form.dependentId) return 'Urlop opiekuńczy wymaga wskazania podopiecznego.';
+        if (isCareLeave && !form.dependentId) return 'Wskaż, kim się opiekujesz.';
         if (isSaturdayHolidayLeave && !form.holidayDayOffId) {
-            return 'Wskaż, za które święto wypadające w sobotę odbierasz dzień wolny.';
+            return 'Wskaż, za które sobotnie święto odbierasz dzień wolny.';
         }
-        if (!form.dateStart || !form.dateEnd) return 'Podaj datę od i do.';
-        if (form.dateEnd < form.dateStart) return 'Data „do" nie może być wcześniejsza niż „od".';
+        if (!form.dateStart || !form.dateEnd) return 'Podaj datę od i datę do.';
+        if (form.dateEnd < form.dateStart) return 'Data „do" wypada przed datą „od" — popraw termin.';
         if (commentBlock) return commentBlock;
-        if (!(Number(form.daysCount) > 0)) return 'Wniosek musi obejmować co najmniej jeden dzień pracy.';
+        if (!(Number(form.daysCount) > 0)) return 'Zaznacz przynajmniej jeden dzień pracy.';
         if (balanceBlock) return balanceBlock;
         return null;
     }, [
@@ -356,7 +356,7 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                throw new Error(data.message || 'Błąd zapisu');
+                throw new Error(data.message || 'Nie udało się zapisać wniosku — spróbuj jeszcze raz.');
             }
             onSuccess();
             onClose();
@@ -450,7 +450,7 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
                             <p className="text-sm text-gray-500">Wczytywanie podopiecznych...</p>
                         ) : dependents.length === 0 ? (
                             <p className="text-sm text-amber-300">
-                                Ten pracownik nie ma zapisanych podopiecznych. Dodaj ich w zakładce „Moje dane”,
+                                Nie masz jeszcze zapisanych podopiecznych. Dodaj ich w zakładce „Moje dane”,
                                 sekcja Podopieczni.
                             </p>
                         ) : (
@@ -505,11 +505,11 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
                             <p className="text-sm text-red-300">{holidayDaysError}</p>
                         ) : holidayDays.length === 0 ? (
                             <p className="text-sm text-amber-300">
-                                Administrator nie zatwierdził na ten rok żadnego święta wypadającego w sobotę.
+                                Na ten rok nie ma jeszcze zatwierdzonego żadnego sobotniego święta — daj znać administratorowi.
                             </p>
                         ) : holidayDays.every(h => h.used) ? (
                             <p className="text-sm text-amber-300">
-                                Za każde zatwierdzone święto złożyłeś już wniosek.
+                                Za każde zatwierdzone święto już złożyłeś wniosek — nie ma czego odbierać.
                             </p>
                         ) : (
                             <select

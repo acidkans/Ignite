@@ -2123,6 +2123,28 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-kolumna | akcje wniosku (Dashboard) | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor dashboard-request-actions |
 | ui-stan | balanceRows (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-balance-years |
 
+| ui-funkcja | normalizeKey | apps/frontend/src/utils/usersExcel.js | @anchor normalize-key |
+| ui-stala | USER_ROLE_LABELS | apps/frontend/src/utils/usersExcel.js | @anchor user-role-labels |
+| ui-stala | USER_ROLE_BY_LABEL | apps/frontend/src/utils/usersExcel.js | @anchor user-role-by-label |
+| ui-stala | USERS_EXCEL_COLUMNS | apps/frontend/src/utils/usersExcel.js | @anchor users-excel-columns |
+| ui-stala | HEADER_TO_KEY | apps/frontend/src/utils/usersExcel.js | @anchor users-excel-header-map |
+| ui-funkcja | exportUsersWorkbook | apps/frontend/src/utils/usersExcel.js | @anchor export-users-workbook |
+| ui-funkcja | parseUsersWorkbook | apps/frontend/src/utils/usersExcel.js | @anchor parse-users-workbook |
+| ui-modal | ImportUsersModal | apps/frontend/src/components/shared/ImportUsersModal.jsx | @anchor import-users-modal |
+| ui-funkcja | runImport (ImportUsersModal) | apps/frontend/src/components/shared/ImportUsersModal.jsx | @anchor run-users-import |
+| ui-stan | isImportUsersModalOpen | apps/frontend/src/UsersPage.jsx | @anchor users-import-modal-state |
+| ui-funkcja | handleExportUsers | apps/frontend/src/UsersPage.jsx | @anchor handle-export-users |
+| ui-przycisk | Eksport tabeli użytkowników | apps/frontend/src/UsersPage.jsx | @anchor users-export-button |
+| ui-przycisk | Import użytkowników | apps/frontend/src/UsersPage.jsx | @anchor users-import-button |
+| ui-hook | useAutoRefresh | apps/frontend/src/hooks/useAutoRefresh.js | @anchor use-auto-refresh |
+| ui-stala | AUTO_REFRESH_MS | apps/frontend/src/hooks/useAutoRefresh.js | @anchor auto-refresh-interval-ms |
+| ui-funkcja | autoodświeżanie listy użytkowników | apps/frontend/src/UsersPage.jsx | @anchor users-auto-refresh |
+| ui-funkcja | autoodświeżanie metadanych Urlopów | apps/frontend/src/LeavesPage.jsx | @anchor leaves-meta-auto-refresh |
+| ui-sekcja | nota o autoodświeżaniu | apps/frontend/src/LeavesPage.jsx | @anchor leaves-auto-refresh-note |
+| ui-funkcja | autoodświeżanie wniosków | apps/frontend/src/components/shared/leaves/LeaveRequestsTab.jsx | @anchor leave-requests-auto-refresh |
+| ui-funkcja | autoodświeżanie dashboardu | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor leaves-dashboard-auto-refresh |
+| ui-funkcja | autoodświeżanie „Moje dane” | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-auto-refresh |
+
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)

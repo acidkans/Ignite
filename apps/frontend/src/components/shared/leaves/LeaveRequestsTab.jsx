@@ -4,6 +4,7 @@ import { AgGridReact } from 'ag-grid-react';
 import LeaveRequestModal from './LeaveRequestModal';
 import { leavesGridTheme, leavesDefaultColDef, formatDateTime, statusMeta, warsawDayKey, isWithdrawalPending } from './leavesTheme';
 import LeaveWithdrawalModal from './LeaveWithdrawalModal';
+import useAutoRefresh from '../../../hooks/useAutoRefresh';
 
 // @anchor leave-requests-tab
 // Zakładka „Wnioski" (mode='mine') i „Wnioski moich podwładnych" (mode='subordinates').
@@ -20,8 +21,9 @@ export default function LeaveRequestsTab({ mode, access, leaveTypes, employees, 
     const isAdmin = access?.canEdit;
 
     // @anchor fetch-leave-requests
-    const fetchRequests = useCallback(async () => {
-        setLoading(true);
+    // `silent` = odswiezanie w tle (co 5 min) — bez spinnera, zeby tabela nie migala
+    const fetchRequests = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
             const token = sessionStorage.getItem('token');
             const res = await fetch(`${API_URL}/leave-requests/${isSubordinates ? 'subordinates' : 'mine'}`, {
@@ -29,12 +31,13 @@ export default function LeaveRequestsTab({ mode, access, leaveTypes, employees, 
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                throw new Error(data.message || 'Błąd pobierania wniosków');
+                throw new Error(data.message || 'Nie udało się pobrać wniosków — odśwież stronę.');
             }
             setRequests(await res.json());
             setError(null);
         } catch (err) {
-            setError(err.message);
+            // odswiezanie w tle milczy przy bledzie — lista zostaje taka, jaka byla
+            if (!silent) setError(err.message);
         } finally {
             setLoading(false);
         }
@@ -42,12 +45,16 @@ export default function LeaveRequestsTab({ mode, access, leaveTypes, employees, 
 
     useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
+    // @anchor leave-requests-auto-refresh
+    // Decyzja przelozonego dociera do pracownika sama — bez odswiezania strony.
+    useAutoRefresh(() => fetchRequests(true));
+
     // @anchor decide-leave-request-front
     // Zatwierdzenie / odrzucenie / cofnięcie decyzji — jeden endpoint, on pilnuje puli dni.
     const setDecision = async (row, status) => {
         let decisionComment = null;
         if (status === 'REJECTED') {
-            decisionComment = window.prompt('Powód odrzucenia wniosku (opcjonalnie):', '');
+            decisionComment = window.prompt('Napisz, dlaczego odrzucasz ten wniosek (możesz zostawić puste):', '');
             if (decisionComment === null) return; // Anuluj
         }
         try {
@@ -59,7 +66,7 @@ export default function LeaveRequestsTab({ mode, access, leaveTypes, employees, 
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                throw new Error(data.message || 'Błąd zapisu');
+                throw new Error(data.message || 'Nie udało się zapisać decyzji — spróbuj jeszcze raz.');
             }
             fetchRequests();
         } catch (err) {
@@ -77,7 +84,7 @@ export default function LeaveRequestsTab({ mode, access, leaveTypes, employees, 
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                throw new Error(data.message || 'Nie udało się usunąć wniosku');
+                throw new Error(data.message || 'Nie udało się usunąć wniosku — spróbuj jeszcze raz.');
             }
             fetchRequests();
         } catch (err) {
@@ -98,7 +105,7 @@ export default function LeaveRequestsTab({ mode, access, leaveTypes, employees, 
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                throw new Error(data.message || 'Nie udało się wysłać prośby o wycofanie');
+                throw new Error(data.message || 'Nie udało się wysłać prośby o wycofanie — spróbuj jeszcze raz.');
             }
             setWithdrawal(null);
             fetchRequests();
@@ -118,7 +125,7 @@ export default function LeaveRequestsTab({ mode, access, leaveTypes, employees, 
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                throw new Error(data.message || 'Nie udało się zapisać decyzji');
+                throw new Error(data.message || 'Nie udało się zapisać decyzji — spróbuj jeszcze raz.');
             }
             setWithdrawal(null);
             fetchRequests();

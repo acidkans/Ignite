@@ -23,7 +23,7 @@ export default function DependentsSection({ currentUserId, onCountChange }) {
             });
             if (!res.ok) {
                 const d = await res.json().catch(() => ({}));
-                throw new Error(d.message || 'Błąd pobierania podopiecznych');
+                throw new Error(d.message || 'Nie udało się pobrać podopiecznych — odśwież stronę.');
             }
             const list = await res.json();
             setDependents(list);
@@ -66,7 +66,7 @@ export default function DependentsSection({ currentUserId, onCountChange }) {
             });
             if (!res.ok) {
                 const d = await res.json().catch(() => ({}));
-                throw new Error(d.message || 'Błąd zapisu podopiecznego');
+                throw new Error(d.message || 'Nie udało się zapisać podopiecznego — spróbuj jeszcze raz.');
             }
             resetDraft();
             setError(null);
@@ -94,7 +94,7 @@ export default function DependentsSection({ currentUserId, onCountChange }) {
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                throw new Error(data.message || 'Nie udało się usunąć podopiecznego');
+                throw new Error(data.message || 'Nie udało się usunąć podopiecznego — spróbuj jeszcze raz.');
             }
             if (editingId === d.id) resetDraft();
             fetchDependents();

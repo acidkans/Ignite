@@ -85,8 +85,8 @@ export const LEAVE_TYPES_REQUIRING_COMMENT: string[] = [CARE_LEAVE_CODE];
 // @anchor care-leave-comment-hint
 /// Tresc podpowiedzi i komunikatu bledu — jedno zrodlo dla backendu i tekstu w modalu.
 export const CARE_LEAVE_COMMENT_HINT =
-  'Urlop opiekunczy wymaga uzasadnienia: przyczyna koniecznosci zapewnienia osobistej opieki ' +
-  'lub wsparcia oraz stopien pokrewienstwa z pracownikiem (dla osoby spoza rodziny — adres zamieszkania).';
+  'Przy urlopie opiekuńczym napisz, dlaczego musisz zapewnić opiekę lub wsparcie ' +
+  'i kim jest dla Ciebie ta osoba (jeśli to ktoś spoza rodziny — podaj jej adres zamieszkania).';
 
 // @anchor hourly-leave-codes
 /// Rodzaje urlopu, ktore prawo pozwala dzielic na godziny — zrodlo wartosci startowej
@@ -215,7 +215,7 @@ export class LeaveRequestsService {
       if (access.scope === 'ALL' || (await this.isSupervisorOf(userId, targetUserId))) {
         subjectId = targetUserId;
       } else {
-        throw new ForbiddenException('Brak uprawnień do danych tego pracownika.');
+        throw new ForbiddenException('Nie masz wglądu w dane tego pracownika.');
       }
     }
     return this.holidays.listApprovedForUser(subjectId, year || new Date().getFullYear(), excludeRequestId);
@@ -232,7 +232,7 @@ export class LeaveRequestsService {
       if (access.scope === 'ALL' || (await this.isSupervisorOf(userId, targetUserId))) {
         subjectId = targetUserId;
       } else {
-        throw new ForbiddenException('Brak uprawnień do danych tego pracownika.');
+        throw new ForbiddenException('Nie masz wglądu w dane tego pracownika.');
       }
     }
 
@@ -332,7 +332,7 @@ export class LeaveRequestsService {
     const entitlement = await this.holidays.approvedDaysCount(year);
     if (!entitlement) {
       throw new BadRequestException(
-        `Na ${year} rok administrator nie zatwierdził jeszcze dni wolnych za święta wypadające w sobotę.`,
+        `Na ${year} rok nie ma jeszcze zatwierdzonych dni wolnych za święta wypadające w sobotę — daj znać administratorowi.`,
       );
     }
 
@@ -351,7 +351,7 @@ export class LeaveRequestsService {
 
     if (used + daysCount > entitlement) {
       throw new BadRequestException(
-        `Za święta w sobotę przysługuje w ${year} roku ${entitlement} dni, wykorzystano lub złożono wnioski na ${used}.`,
+        `Za święta w sobotę masz w ${year} roku ${entitlement} dni, a już wykorzystałeś albo zaklepałeś wnioskami ${used}.`,
       );
     }
   }
@@ -388,8 +388,8 @@ export class LeaveRequestsService {
     const rodzaj = clash.leaveType?.name ? `„${clash.leaveType.name}"` : 'nieobecność';
     const stan = clash.status === 'APPROVED' ? 'zatwierdzony' : 'nierozpatrzony';
     throw new BadRequestException(
-      `Termin nachodzi na inny wniosek tego pracownika: ${rodzaj} ${okres} (${stan}). ` +
-        'Skoryguj daty albo wycofaj tamten wniosek.',
+      `Masz już wniosek na ten termin: ${rodzaj} ${okres} (${stan}). ` +
+        'Sprawdź kalendarz — zmień daty albo wycofaj tamten wniosek.',
     );
   }
 
@@ -426,7 +426,7 @@ export class LeaveRequestsService {
 
     if (used + daysCount > limit) {
       throw new BadRequestException(
-        `Limit ustawowy: „${type.name}" to ${limit} dni w ${year} roku, wykorzystano lub złożono wnioski na ${used}.`,
+        `„${type.name}" to ${limit} dni na rok — tyle daje Kodeks pracy. W ${year} masz już ${used}.`,
       );
     }
   }
@@ -541,32 +541,32 @@ export class LeaveRequestsService {
       where: { id },
       include: { user: { select: { supervisorId: true } } },
     });
-    if (!existing) throw new NotFoundException('Wniosek nie istnieje.');
+    if (!existing) throw new NotFoundException('Nie ma takiego wniosku — pewnie ktoś go w międzyczasie usunął.');
 
     const isOwner = existing.userId === userId;
     const isSupervisor = existing.user?.supervisorId === userId;
 
     if (!access.canEdit && !isSupervisor) {
-      if (!isOwner) throw new ForbiddenException('Brak uprawnień do edycji tego wniosku.');
+      if (!isOwner) throw new ForbiddenException('To nie jest Twój wniosek — edytować możesz tylko własne.');
       if (existing.status !== 'PENDING') {
-        throw new ForbiddenException('Rozpatrzonego wniosku nie można już edytować.');
+        throw new ForbiddenException('Ten wniosek jest już rozpatrzony — nie zmienisz go. Złóż nowy.');
       }
     }
     // zmiana treści zatwierdzonego wniosku rozjechałaby odjęte dni z pulą
     if (existing.status === 'APPROVED') {
-      throw new BadRequestException('Cofnij zatwierdzenie, zanim zmienisz treść wniosku.');
+      throw new BadRequestException('Najpierw cofnij zatwierdzenie, potem zmienisz treść wniosku.');
     }
 
     if (dto.leaveTypeId !== undefined && !dto.leaveTypeId) {
-      throw new BadRequestException('Rodzaj urlopu jest wymagany.');
+      throw new BadRequestException('Wybierz rodzaj urlopu.');
     }
     if ((dto.dateStart !== undefined && !dto.dateStart) || (dto.dateEnd !== undefined && !dto.dateEnd)) {
-      throw new BadRequestException('Data od i data do sa wymagane.');
+      throw new BadRequestException('Podaj datę od i datę do.');
     }
     {
       const from = new Date(dto.dateStart ?? existing.dateStart);
       const to = new Date(dto.dateEnd ?? existing.dateEnd);
-      if (to < from) throw new BadRequestException('Data do nie moze byc wczesniejsza niz data od.');
+      if (to < from) throw new BadRequestException('Data do wypada przed datą od — popraw termin.');
     }
 
     if (dto.leaveTypeId !== undefined || dto.dependentId !== undefined) {
@@ -658,16 +658,16 @@ export class LeaveRequestsService {
         leaveType: { select: { consumesBalance: true } },
       },
     });
-    if (!existing) throw new NotFoundException('Wniosek nie istnieje.');
+    if (!existing) throw new NotFoundException('Nie ma takiego wniosku — pewnie ktoś go w międzyczasie usunął.');
 
     const isSupervisor = existing.user?.supervisorId === userId;
     if (!access.canEdit && !isSupervisor) {
-      throw new ForbiddenException('Wnioski rozpatruje przełożony albo administrator.');
+      throw new ForbiddenException('Wnioski rozpatruje przełożony albo administrator — Ty nie zdecydujesz o tym wniosku.');
     }
 
     const status = dto?.status;
     if (!['PENDING', 'APPROVED', 'REJECTED'].includes(status)) {
-      throw new BadRequestException('Nieprawidłowy status wniosku.');
+      throw new BadRequestException('Nie znam takiego statusu wniosku.');
     }
     if (status === existing.status) {
       return this.prisma.leaveRequest.findUnique({ where: { id }, include: REQUEST_INCLUDE });
@@ -963,15 +963,15 @@ export class LeaveRequestsService {
   async requestWithdrawal(userId: string, roles: string[], id: string, dto?: RequestWithdrawalDto) {
     await this.assertEnabled(userId, roles);
     const existing = await this.prisma.leaveRequest.findUnique({ where: { id }, include: REQUEST_INCLUDE });
-    if (!existing) throw new NotFoundException('Wniosek nie istnieje.');
+    if (!existing) throw new NotFoundException('Nie ma takiego wniosku — pewnie ktoś go w międzyczasie usunął.');
     if (existing.userId !== userId) {
-      throw new ForbiddenException('O wycofanie urlopu prosi sam pracownik.');
+      throw new ForbiddenException('O wycofanie urlopu prosi jego właściciel — poproś pracownika, żeby zrobił to sam.');
     }
     if (existing.status !== 'APPROVED') {
-      throw new BadRequestException('Wycofać można tylko zatwierdzony urlop. Nierozpatrzony wniosek usuń.');
+      throw new BadRequestException('Wycofasz tylko zatwierdzony urlop. Ten czeka jeszcze na decyzję — po prostu go usuń.');
     }
     if (existing.withdrawalRequestedAt) {
-      throw new BadRequestException('Prośba o wycofanie tego urlopu już czeka na decyzję przełożonego.');
+      throw new BadRequestException('Już poprosiłeś o wycofanie tego urlopu — czekamy na decyzję przełożonego.');
     }
 
     const updated = await this.prisma.leaveRequest.update({
@@ -993,14 +993,14 @@ export class LeaveRequestsService {
       where: { id },
       include: { user: { select: { supervisorId: true } } },
     });
-    if (!existing) throw new NotFoundException('Wniosek nie istnieje.');
+    if (!existing) throw new NotFoundException('Nie ma takiego wniosku — pewnie ktoś go w międzyczasie usunął.');
 
     const isSupervisor = existing.user?.supervisorId === userId;
     if (!access.canEdit && !isSupervisor) {
-      throw new ForbiddenException('Wycofanie urlopu potwierdza przełożony albo administrator.');
+      throw new ForbiddenException('Wycofanie urlopu potwierdza przełożony albo administrator — Ty tego nie zatwierdzisz.');
     }
     if (!existing.withdrawalRequestedAt) {
-      throw new BadRequestException('Ten urlop nie ma prośby o wycofanie.');
+      throw new BadRequestException('Nikt nie prosił o wycofanie tego urlopu.');
     }
     if (existing.status !== 'APPROVED') {
       throw new BadRequestException('Urlop nie jest już zatwierdzony — nie ma czego wycofywać.');
@@ -1200,11 +1200,11 @@ export class LeaveRequestsService {
   async remove(userId: string, roles: string[], id: string) {
     const access = await this.assertEnabled(userId, roles);
     const existing = await this.prisma.leaveRequest.findUnique({ where: { id }, include: REQUEST_INCLUDE });
-    if (!existing) throw new NotFoundException('Wniosek nie istnieje.');
+    if (!existing) throw new NotFoundException('Nie ma takiego wniosku — pewnie ktoś go w międzyczasie usunął.');
 
     const isOwner = existing.userId === userId;
     if (!access.canEdit && !(isOwner && existing.status === 'PENDING')) {
-      throw new ForbiddenException('Brak uprawnień do usunięcia tego wniosku.');
+      throw new ForbiddenException('To nie jest Twój wniosek — usunąć możesz tylko własny.');
     }
     const removed = await this.prisma.$transaction(async tx => {
       // usunięcie zatwierdzonego wniosku musi oddać dni do puli — kaskada sama tego nie zrobi
@@ -1297,7 +1297,7 @@ export class LeaveRequestsService {
       if (access.canViewAll || (await this.isSupervisorOf(userId, targetUserId))) {
         subjectId = targetUserId;
       } else {
-        throw new ForbiddenException('Brak uprawnień do danych tego pracownika.');
+        throw new ForbiddenException('Nie masz wglądu w dane tego pracownika.');
       }
     }
     const yearStart = new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1));
@@ -1416,12 +1416,12 @@ export class LeaveRequestsService {
   // @anchor assert-request-fields-valid
   /// Rodzaj urlopu i obie daty sa obowiazkowe; zakres musi byc chronologiczny.
   private assertRequestFieldsValid(leaveTypeId?: string | null, dateStart?: string, dateEnd?: string): void {
-    if (!leaveTypeId) throw new BadRequestException('Rodzaj urlopu jest wymagany.');
-    if (!dateStart || !dateEnd) throw new BadRequestException('Data od i data do sa wymagane.');
+    if (!leaveTypeId) throw new BadRequestException('Wybierz rodzaj urlopu.');
+    if (!dateStart || !dateEnd) throw new BadRequestException('Podaj datę od i datę do.');
     const from = new Date(dateStart);
     const to = new Date(dateEnd);
-    if (isNaN(from.getTime()) || isNaN(to.getTime())) throw new BadRequestException('Nieprawidlowy format daty.');
-    if (to < from) throw new BadRequestException('Data do nie moze byc wczesniejsza niz data od.');
+    if (isNaN(from.getTime()) || isNaN(to.getTime())) throw new BadRequestException('Ta data wygląda dziwnie — wpisz ją jeszcze raz.');
+    if (to < from) throw new BadRequestException('Data do wypada przed datą od — popraw termin.');
   }
 
   // @anchor assert-dependent-valid
@@ -1437,7 +1437,7 @@ export class LeaveRequestsService {
     const isCareLeave = type?.code === CARE_LEAVE_CODE;
 
     if (isCareLeave && !dependentId) {
-      throw new BadRequestException('Urlop opiekunczy wymaga wskazania podopiecznego.');
+      throw new BadRequestException('Przy urlopie opiekuńczym wskaż, kim się opiekujesz.');
     }
     if (!dependentId) return;
 
@@ -1445,9 +1445,9 @@ export class LeaveRequestsService {
       where: { id: dependentId },
       select: { userId: true },
     });
-    if (!dependent) throw new BadRequestException('Wskazany podopieczny nie istnieje.');
+    if (!dependent) throw new BadRequestException('Nie znajduję takiego podopiecznego — dodaj go w zakładce „Moje dane".');
     if (dependent.userId !== applicantId) {
-      throw new BadRequestException('Wskazany podopieczny nie nalezy do tego pracownika.');
+      throw new BadRequestException('Ten podopieczny nie jest przypisany do Ciebie.');
     }
   }
 
@@ -1468,22 +1468,22 @@ export class LeaveRequestsService {
 
     if (!isSaturdayHoliday) {
       if (holidayDayOffId) {
-        throw new BadRequestException('Swieto w sobote wskazuje sie tylko we wniosku „Do wyboru za swieto w sobote".');
+        throw new BadRequestException('Święto w sobotę wskazujesz tylko we wniosku „Do wyboru za święto w sobotę".');
       }
       return;
     }
 
     if (!holidayDayOffId) {
-      throw new BadRequestException('Wskaz, za ktore swieto wypadajace w sobote odbierasz dzien wolny.');
+      throw new BadRequestException('Wskaż, za które sobotnie święto odbierasz dzień wolny.');
     }
 
     const holiday = await this.prisma.holidayDayOff.findUnique({
       where: { id: holidayDayOffId },
       select: { approved: true, date: true, name: true },
     });
-    if (!holiday) throw new BadRequestException('Wskazane swieto nie istnieje.');
+    if (!holiday) throw new BadRequestException('Nie znajduję takiego święta na liście.');
     if (!holiday.approved) {
-      throw new BadRequestException('Za to swieto administrator nie zatwierdzil dnia wolnego.');
+      throw new BadRequestException('Za to święto nie ma jeszcze zatwierdzonego dnia wolnego — daj znać administratorowi.');
     }
 
     const alreadyTaken = await this.prisma.leaveRequest.findFirst({
@@ -1497,7 +1497,7 @@ export class LeaveRequestsService {
     });
     if (alreadyTaken) {
       const label = `${holiday.date.toISOString().slice(0, 10)} ${holiday.name}`;
-      throw new BadRequestException(`Dzien wolny za swieto ${label} zostal juz przez Ciebie odebrany.`);
+      throw new BadRequestException(`Dzień wolny za święto ${label} już odebrałeś.`);
     }
   }
 
@@ -1517,7 +1517,7 @@ export class LeaveRequestsService {
     for (const value of [timeStart, timeEnd]) {
       if (!value) continue;
       if (!/^([01]\d|2[0-3]):00$/.test(value)) {
-        throw new BadRequestException('Urlop godzinowy przyjmuje wylacznie pelne godziny (minuty 00).');
+        throw new BadRequestException('Przy urlopie godzinowym wpisz pełne godziny — minuty zostaw na 00.');
       }
     }
   }
@@ -1538,7 +1538,7 @@ export class LeaveRequestsService {
     if (!text) throw new BadRequestException(CARE_LEAVE_COMMENT_HINT);
     if (text.length < LEAVE_COMMENT_MIN_LENGTH) {
       throw new BadRequestException(
-        `Uzasadnienie jest za krotkie (min. ${LEAVE_COMMENT_MIN_LENGTH} znakow). ${CARE_LEAVE_COMMENT_HINT}`,
+        `Twoje uzasadnienie jest za krótkie — potrzeba min. ${LEAVE_COMMENT_MIN_LENGTH} znaków. ${CARE_LEAVE_COMMENT_HINT}`,
       );
     }
   }
@@ -1554,7 +1554,7 @@ export class LeaveRequestsService {
 
   private async assertEnabled(userId: string, roles: string[]) {
     const access = await this.leaves.resolveAccess(userId, roles);
-    if (!access.enabled) throw new ForbiddenException('Moduł Urlopy niedostępny dla tego użytkownika.');
+    if (!access.enabled) throw new ForbiddenException('Nie masz dostępu do modułu Urlopy.');
     return access;
   }
 }

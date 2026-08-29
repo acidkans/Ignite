@@ -23,7 +23,7 @@ export default function HolidayAdminPanel({ onChanged }) {
     const load = useCallback(async (y) => {
         try {
             const res = await fetch(`${API_URL}/leaves/holidays?year=${y}`, { headers: authHeaders() });
-            if (!res.ok) throw new Error(`Błąd pobierania (${res.status})`);
+            if (!res.ok) throw new Error(`Nie udało się pobrać listy świąt (${res.status}) — odśwież stronę.`);
             setData(await res.json());
             setError(null);
         } catch (err) {

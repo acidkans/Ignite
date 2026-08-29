@@ -5,6 +5,7 @@ import LeaveRequestsTab from './components/shared/leaves/LeaveRequestsTab';
 import LeavesDashboardTab from './components/shared/leaves/LeavesDashboardTab';
 import LeavesCalendarTab from './components/shared/leaves/LeavesCalendarTab';
 import SmtpSettingsPanel from './components/shared/SmtpSettingsPanel';
+import useAutoRefresh, { AUTO_REFRESH_MS } from './hooks/useAutoRefresh';
 
 // @anchor leaves-gov-url
 /// Rządowa strona z zasadami urlopów i zwolnień od pracy — link w nagłówku modułu.
@@ -42,8 +43,9 @@ export default function LeavesPage() {
     };
 
     // @anchor fetch-leaves-meta
-    const fetchMeta = useCallback(async () => {
-        setLoading(true);
+    // `silent` = odswiezanie w tle (co 5 min) — bez ekranu ladowania
+    const fetchMeta = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
             const token = sessionStorage.getItem('token');
             const headers = { Authorization: `Bearer ${token}` };
@@ -54,7 +56,7 @@ export default function LeavesPage() {
             } catch { /* token bez czytelnego payloadu — currentUserId zostaje null */ }
 
             const accessRes = await fetch(`${API_URL}/leaves/access`, { headers });
-            if (!accessRes.ok) throw new Error('Błąd pobierania uprawnień');
+            if (!accessRes.ok) throw new Error('Nie udało się sprawdzić Twoich uprawnień — odśwież stronę.');
             const accessData = await accessRes.json();
             setAccess(accessData);
             if (!accessData.enabled) return;
@@ -66,7 +68,9 @@ export default function LeavesPage() {
             if (typesRes.ok) setLeaveTypes(await typesRes.json());
             if (employeesRes.ok) setEmployees(await employeesRes.json());
         } catch (err) {
-            setError(err.message);
+            // przy odswiezaniu w tle chwilowy blad sieci nie moze zasloniac calego modulu —
+            // zostawiamy to, co uzytkownik ma na ekranie, i probujemy za 5 minut
+            if (!silent) setError(err.message);
         } finally {
             setLoading(false);
         }
@@ -74,10 +78,13 @@ export default function LeavesPage() {
 
     useEffect(() => { fetchMeta(); }, [fetchMeta]);
 
+    // @anchor leaves-meta-auto-refresh
+    useAutoRefresh(() => fetchMeta(true));
+
     if (loading) return <div className="p-8 text-center text-gray-400">Ładowanie...</div>;
     if (error) return <div className="p-8 text-center text-red-400">Błąd: {error}</div>;
     if (access && !access.enabled) {
-        return <div className="p-8 text-center text-gray-400">Moduł Urlopy jest dostępny tylko dla wybranych firm.</div>;
+        return <div className="p-8 text-center text-gray-400">Nie masz dostępu do modułu Urlopy — działa on tylko dla wybranych firm.</div>;
     }
 
     // zakładka podwładnych ma sens tylko dla przełożonego / admina, konfiguracja SMTP — tylko dla ADMIN
@@ -101,6 +108,10 @@ export default function LeavesPage() {
                                 : access?.scope === 'SUBORDINATES'
                                     ? 'Widok przełożonego — Ty i Twoi podwładni'
                                     : 'Widok pracownika — tylko Twoje dane'}
+                    </p>
+                    {/* @anchor leaves-auto-refresh-note */}
+                    <p className="text-[10px] text-gray-600 mt-1">
+                        Dane odświeżają się same co {Math.round(AUTO_REFRESH_MS / 60000)} min — nie musisz przeładowywać strony.
                     </p>
                 </div>
 

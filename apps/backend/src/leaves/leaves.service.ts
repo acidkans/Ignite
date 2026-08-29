@@ -163,7 +163,7 @@ export class LeavesService {
   // @anchor assert-leave-enabled
   private async assertEnabled(userId: string, roles: string[]): Promise<LeaveAccess> {
     const access = await this.resolveAccess(userId, roles);
-    if (!access.enabled) throw new ForbiddenException('Moduł Urlopy niedostępny dla tego użytkownika.');
+    if (!access.enabled) throw new ForbiddenException('Nie masz dostępu do modułu Urlopy.');
     return access;
   }
 
@@ -225,7 +225,7 @@ export class LeavesService {
   // @anchor create-leave
   async create(userId: string, roles: string[], dto: CreateLeaveDto) {
     const access = await this.assertEnabled(userId, roles);
-    if (!access.canEdit) throw new ForbiddenException('Brak uprawnień do dodawania wpisów urlopowych.');
+    if (!access.canEdit) throw new ForbiddenException('Nie możesz dodawać wpisów urlopowych.');
 
     return this.prisma.leave.create({
       data: {
@@ -246,10 +246,10 @@ export class LeavesService {
   // @anchor update-leave
   async update(userId: string, roles: string[], id: string, dto: UpdateLeaveDto) {
     const access = await this.assertEnabled(userId, roles);
-    if (!access.canEdit) throw new ForbiddenException('Brak uprawnień do edycji wpisów urlopowych.');
+    if (!access.canEdit) throw new ForbiddenException('Nie możesz edytować wpisów urlopowych.');
 
     const existing = await this.prisma.leave.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('Wpis urlopowy nie istnieje.');
+    if (!existing) throw new NotFoundException('Nie ma takiego wpisu urlopowego.');
 
     const data: any = {};
     if (dto.userId !== undefined) data.userId = dto.userId;
@@ -272,7 +272,7 @@ export class LeavesService {
   // @anchor remove-leave
   async remove(userId: string, roles: string[], id: string) {
     const access = await this.assertEnabled(userId, roles);
-    if (!access.canEdit) throw new ForbiddenException('Brak uprawnień do usuwania wpisów urlopowych.');
+    if (!access.canEdit) throw new ForbiddenException('Nie możesz usuwać wpisów urlopowych.');
     return this.prisma.leave.delete({ where: { id } });
   }
 
