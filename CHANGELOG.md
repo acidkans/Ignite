@@ -1,3 +1,113 @@
+## 2026-08-29 — feat(urlopy): wycofanie zatwierdzonego urlopu za zgodą przełożonego (v2026.08.29.917)
+
+### schema.prisma
+
+- dodano wartość `WITHDRAWN` w enumie `LeaveRequestStatus` — urlop był zatwierdzony, ale pracownik poprosił o wycofanie, a przełożony to potwierdził
+- dodano pole `withdrawalRequestedAt` w modelu `LeaveRequest` — kiedy pracownik poprosił o wycofanie. Wniosek zostaje `APPROVED` do czasu decyzji, więc sama prośba niczego nie cofa
+- dodano pola `withdrawalDecidedAt`, `withdrawalDecidedById` w modelu `LeaveRequest` oraz relację `withdrawalDecidedBy` / `User.leaveWithdrawalDecisions` — kto i kiedy rozpatrzył prośbę (osobno od `decidedById`, który zatwierdzał sam urlop)
+- migracja `20260829180000_leave_request_withdrawal`
+
+### architektura / API
+
+- **`POST /leave-requests/:id/withdrawal` — pracownik prosi o wycofanie WŁASNEGO zatwierdzonego urlopu.** Zatwierdzonego urlopu nie da się usunąć samodzielnie (`remove` przepuszcza właściciela tylko przy `PENDING`), a to była jedyna droga. Prośba wymaga statusu `APPROVED`, nie może się dublować i przyjmuje opcjonalny powód, który trafia do maila
+- **`PATCH /leave-requests/:id/withdrawal` — decyzja przełożonego albo administratora.** Potwierdzenie idzie tą samą ścieżką co wyjście ze stanu APPROVED: `revertDeductions` oddaje dni do puli, wpis `Leave` znika, `syncGoogleCalendar` kasuje zdarzenie i zeruje `googleEventId`, status przechodzi na `WITHDRAWN`. Odmowa czyści samą prośbę — urlop zostaje w mocy
+- **`GET /leave-requests/withdrawal-link?token=` — przycisk z maila, bez logowania.** Osobny endpoint i osobny rodzaj tokenu (`kind: 'WITHDRAWAL'` w `LeaveDecisionTokenPayload`), żeby podpis decyzji o wniosku nie działał na wycofanie i odwrotnie. Brak pola `kind` = stary token = `DECISION`, więc linki wysłane wcześniej nadal działają. Te same trzy warunki tożsamości co przy decyzji o wniosku
+- **`sendLeaveWithdrawalRequest` — mail do przełożonego z przyciskiem „Wycofaj zatwierdzony urlop {imię nazwisko}".** Nazwisko jest w treści przycisku, bo przełożony może mieć w skrzynce kilka takich próśb naraz. Drugi przycisk „Zostaw urlop" zamyka ścieżkę odmowy bez wchodzenia do aplikacji
+- **`sendLeaveWithdrawalDecision`** — mail do pracownika z rozstrzygnięciem i skutkami (dni wróciły do puli / urlop zostaje w mocy)
+- **`renderResult` w `LeaveDecisionLinkController`** — wspólna strona wyniku dla obu przycisków z maila, wcześniej wklejona w `decisionLink`
+
+### słownik
+
+- dodano `requestWithdrawal`, `decideWithdrawal`, `withdrawByToken`, `notifySupervisorWithdrawalRequest`, `notifyApplicantWithdrawalDecision`, `leave-withdrawal-link-urls`, `RequestWithdrawalDto`, `DecideWithdrawalDto`, `sendLeaveWithdrawalRequest`, `sendLeaveWithdrawalDecision`, trzy endpointy wycofania, `renderResult`, cztery pola i dwie relacje wycofania w schemacie, `LeaveWithdrawalModal`, `isWithdrawalPending`, `requestWithdrawal (front)`, `decideWithdrawal (front)`
+
+### wytyczne
+
+- `schema-pole` `LeaveRequest.withdrawalRequestedAt` — wypełnione pole przy statusie `APPROVED` znaczy „prośba czeka na decyzję", a NIE „urlop wycofany". Każde miejsce liczące nieobecności ma traktować taki urlop jak obowiązujący, dopóki status nie zmieni się na `WITHDRAWN`
+- `back-typ` `LeaveDecisionTokenPayload.kind` — dokładając nowy rodzaj przycisku w mailu dodaj nową wartość `kind` i osobny endpoint. Nigdy nie rozszerzaj znaczenia istniejącego tokenu: jeden podpis ma otwierać dokładnie jedną akcję
+
+## 2026-08-29 — feat(urlopy): mail do przełożonego po wycofaniu wniosku przez pracownika (v2026.08.29.916)
+
+### architektura / API
+
+- **`MailService.sendLeaveRequestWithdrawn` — wycofanie wniosku zawiadamia przełożonego.** Domknięcie drugiej strony powiadomień przy `DELETE /leave-requests/:id`: gdy kasuje właściciel, mail idzie do przełożonego; gdy kasuje ktoś inny, do wnioskodawcy (`notifyApplicantDeleted`). Przełożony ma w skrzynce wiadomość z przyciskami Zatwierdź / Odrzuć, które po usunięciu wniosku prowadzą do „Wniosek nie istnieje" — mail mówi wprost, że te linki są już martwe i że nie trzeba nic robić
+- **`notifySupervisorWithdrawn`** — adresatem jest `User.supervisorId` wnioskodawcy, ten sam, który dostał pierwotne powiadomienie o złożeniu wniosku. Brak przełożonego albo adresu = brak maila. Przy wniosku wcześniej zatwierdzonym treść dodaje, że dni wróciły do puli, a wpis zniknął z kalendarza
+
+### słownik
+
+- dodano `MailService.sendLeaveRequestWithdrawn`, `notifySupervisorWithdrawn`
+
+## 2026-08-29 — feat(urlopy): mail do wnioskodawcy po usunięciu jego wniosku (v2026.08.29.915)
+
+### architektura / API
+
+- **`MailService.sendLeaveRequestDeleted` — usunięcie wniosku zawiadamia wnioskodawcę.** Dotąd `DELETE /leave-requests/:id` kasowało wniosek bez śladu: pracownik widział tylko, że pozycja zniknęła z listy, bez informacji kto i dlaczego. Usunięcie nie jest odrzuceniem — nie zostawia statusu ani uzasadnienia, więc mail jest jedynym nośnikiem tej informacji
+- **`notifyApplicantDeleted` — powiadomienie tylko gdy kasuje ktoś inny.** Właściciel kasujący własny wniosek maila nie dostaje. Przy wniosku wcześniej zatwierdzonym mail mówi wprost, że dni wróciły do puli i wpis zniknął z kalendarza urlopowego. Best-effort — błąd SMTP nie cofa usunięcia
+- **`remove` czyta wniosek z `REQUEST_INCLUDE`** — potrzebne dane pracownika i rodzaju urlopu do treści maila
+
+### słownik
+
+- dodano `MailService.sendLeaveRequestDeleted`, `notifyApplicantDeleted`
+
+## 2026-08-29 — fix(urlopy): pula dni liczona ze stażu, gdy administrator jej nie wpisał (v2026.08.29.914)
+
+### architektura / API
+
+- **`defaultEntitlementDays` — wymiar urlopu ze stażu jako źródło puli.** Dotąd saldo brało się wyłącznie z wierszy `leave_balances`, zakładanych ręcznie przez `PUT /leave-balances/entitlement`. Pracownik bez wpisanej puli miał `0 − 0 = 0` dni i nie mógł złożyć ŻADNEGO wniosku konsumującego saldo — mimo widocznego w UsersPage wyliczonego wymiaru. Na dev dotyczyło to 6 z 8 aktywnych pracowników modułu. Brak wiersza na rok bieżący oznacza teraz wymiar z `calculateLeaveEntitlement` (20/26 dni wg art. 154 §1 KP)
+- **`fallbackYear` — podstawianie tylko za rok bieżący.** Lata wsteczne w oknie salda zostają zerami: pula z lat minionych to urlop zaległy, którego wysokość zna kadra i wpisuje ręcznie. Automatyczne wypełnienie całego okna dałoby 5 × 26 dni z powietrza
+- **Ręcznie wpisana pula ma pierwszeństwo.** Fallback działa wyłącznie przy BRAKU wiersza, więc jawnie ustawione przez administratora 0 zostaje zerem
+- **`applyDeductions` używa tego samego fallbacku i materializuje wiersz.** Bez tego wniosek przechodziłby walidację na puli wyliczonej, a przy odejmowaniu dni trafiał na zero i zatwierdzenie by się wywracało. Zakładany wiersz dostaje wyliczony wymiar, więc saldo przestaje być liczone w locie i zgadza się z tym, co pracownik widział składając wniosek
+
+### słownik
+
+- dodano `defaultEntitlementDays`, `fallbackYear`
+
+### wytyczne
+
+- `back-funkcja` `defaultEntitlementDays` — powiązanie „na żądanie" z pulą wypoczynkowego jest zamierzone i zgodne z art. 167² KP: 4 dni na żądanie mieszczą się W RAMACH wymiaru urlopu wypoczynkowego. `NA_ZADANIE.consumesBalance` ma zostać `true`, a `maxDaysPerYear = 4` pilnuje limitu rocznego. Odłączenie dałoby pracownikowi 26 + 4 dni
+- `schema-pole` `LeaveBalance.entitlementDays` — wiersz w bazie jest nadrzędny wobec wyliczenia ze stażu. Dokładając nowe miejsce czytające pulę, użyj tego samego fallbacku co `getBalance`, inaczej walidacja i odejmowanie dni rozjadą się między sobą
+
+## 2026-08-29 — feat(urlopy): blokada nachodzących nieobecności tego samego pracownika (v2026.08.29.912)
+
+### architektura / API
+
+- **`assertNoSelfOverlap` — ten sam pracownik nie może mieć dwóch nieobecności w tym samym terminie.** Walidacja wpięta w `create` (nowy wniosek) i w `update` (zmiana dat, z pominięciem edytowanego wniosku przez `excludeRequestId`). Kolizję liczymy względem wniosków `PENDING` i `APPROVED` — nierozpatrzony też blokuje, inaczej dwa równoległe wnioski przeszłyby oba. Komunikat błędu nazywa kolidujący wniosek: rodzaj, okres i stan
+- **`findOverlappingAbsences` przestaje wycinać wnioskodawcę.** Dotąd warunek `userId: { not: request.userId }` ukrywał najważniejszą możliwą kolizję — własną nieobecność pracownika w tym samym terminie. Nowe wnioski blokuje już walidacja, ale dane sprzed blokady takie pary mają, więc przełożony musi je widzieć. Wiersze własne idą na górę listy, są wyróżnione w mailu i poprzedzone ostrzeżeniem „dwa urlopy tej samej osoby naraz"
+
+### słownik
+
+- dodano `assertNoSelfOverlap`
+- zmieniono `OverlappingAbsence` — doszło pole `self` (nieobecność samego wnioskodawcy)
+
+### wytyczne
+
+- `back-funkcja` `assertNoSelfOverlap` — blokada obejmuje WSZYSTKIE rodzaje nieobecności, także L4 nachodzące na zaplanowany urlop wypoczynkowy. Jeśli taki przypadek ma być dopuszczalny (choroba przerywa urlop), wyjątek trzeba dodać jawnie po kodzie rodzaju, a nie przez rozluźnienie warunku dat
+
+## 2026-08-29 — feat(urlopy): kolizje urlopów w mailu, powiadomienie managerów i zapis do kalendarza Google (v2026.08.29.911)
+
+### schema.prisma
+
+- dodano pole `googleEventId` w modelu `LeaveRequest` — id zdarzenia założonego we wspólnym kalendarzu Google przy zatwierdzeniu wniosku. NULL = brak zdarzenia (wniosek nierozpatrzony, integracja wyłączona albo API odmówiło)
+- migracja `20260829120000_leave_request_google_event_id`
+
+### architektura / API
+
+- **Sekcja „W tym samym czasie nieobecni" w mailu z wnioskiem.** `findOverlappingAbsences` zbiera wnioski `PENDING` i `APPROVED`, których okres nachodzi na wnioskowany (`dateStart <= cudzy koniec AND dateEnd >= cudzy start`), z wyłączeniem samego wnioskodawcy i bieżącego wniosku. Zakres to wszystkie firmy z `LEAVE_COMPANIES` — Airtel Systems, Airtel Services i LinkedTeam działają jako jedna grupa obsadowa. Pusta lista też się renderuje: „w tym terminie nikt inny nie jest nieobecny" jest informacją tak samo istotną jak kolizja
+- **`MailService.sendLeaveApprovalBroadcast` — zatwierdzony urlop osoby kluczowej idzie do managerów.** Wyzwalają go role z `LEAVE_BROADCAST_TRIGGER_ROLES` (LOGISTYK, MANAGER); odbiorcami są aktywni użytkownicy z rolą z `LEAVE_MANAGER_ROLES` w firmach `LEAVE_COMPANIES`, bez wnioskodawcy i bez osoby podejmującej decyzję — oboje już wiedzą. Mail niesie to samo zestawienie kolizji, co wniosek
+- **`GoogleCalendarModule` / `GoogleCalendarService` — zapis zatwierdzonych urlopów do wspólnego kalendarza.** Dotąd kalendarz `airtel.urlopy@gmail.com` był tylko do odczytu (iframe w zakładce „Kalendarz"). Uwierzytelnienie kontem serwisowym: JWT RS256 podpisany `crypto` → token OAuth2 → REST Calendar v3 przez `axios`, bez nowej zależności npm. Zdarzenia całodniowe, data końca +1 dzień (Google traktuje ją jako wyłączną), daty liczone w `Europe/Warsaw`
+- **Cykl życia zdarzenia w kalendarzu.** `decide` → APPROVED zakłada/aktualizuje zdarzenie i zapisuje `googleEventId`; wyjście z APPROVED kasuje zdarzenie i zeruje pole. `update` zatwierdzonego wniosku przestawia termin zdarzenia zamiast tworzyć drugie. `remove` kasuje zdarzenie po usunięciu wniosku. Zdarzenie skasowane ręcznie w kalendarzu (404/410) jest zakładane od nowa; `leaveRequestId` w `extendedProperties` pozwala je odnaleźć bez zapisanego id
+- **Integracja bez kompletu zmiennych środowiskowych jest wyłączona.** `GOOGLE_SERVICE_ACCOUNT_EMAIL` + `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` (opcjonalnie `GOOGLE_CALENDAR_ID`, `GOOGLE_CALENDAR_IMPERSONATE`) — bez nich `isEnabled()` zwraca false i wszystkie metody są no-opem. Instrukcja konfiguracji po stronie Google w `apps/ENV_README.md`
+
+### słownik
+
+- dodano `OverlappingAbsence`, `formatLeaveDay`, `overlappingBlock`, `sendLeaveRequest.overlapping`, `MailService.sendLeaveApprovalBroadcast`, `LEAVE_BROADCAST_TRIGGER_ROLES`, `LEAVE_MANAGER_ROLES`, `findOverlappingAbsences`, `syncGoogleCalendar`, `notifyManagers`, `GoogleCalendarService`, `GoogleCalendarModule`, `DEFAULT_CALENDAR_ID`, `GoogleLeaveEventParams`, `toCalendarDate`, `addDays`, `isEnabled`, `accessToken`, `eventBody`, `upsertLeaveEvent`, `findEventId`, `deleteLeaveEvent`, `LeaveRequest.googleEventId`
+
+### wytyczne
+
+- `back-serwis` `GoogleCalendarService` — wszystkie metody są best-effort i nie rzucają wyjątków. Zapis do kalendarza nigdy nie może cofnąć ani zablokować decyzji o urlopie, która jest już w bazie; awarie idą do logu, nie do użytkownika
+- `back-funkcja` `toCalendarDate` — nie używaj `toISOString().slice(0,10)` dla dat kalendarzowych. Daty urlopowe siedzą w bazie o północy UTC i przy dodatnim offsecie Warszawy naiwna konwersja przesuwa dzień
+- `schema-pole` `LeaveRequest.googleEventId` — jedyne źródło powiązania wniosku ze zdarzeniem. Każda ścieżka zmieniająca status na inny niż APPROVED musi je wyczyścić razem z kasowaniem zdarzenia, inaczej kolejne zatwierdzenie odtworzy zdarzenie w starym terminie
+- `back-stala` `LEAVE_BROADCAST_TRIGGER_ROLES` — lista ról, których nieobecność jest informacją dla kierownictwa. Rozszerzając ją pamiętaj, że rola musi istnieć w tabeli `roles` (patrz `ensure-roles.js`)
+
 ## 2026-08-29 — feat(users): rola DAK z podglądem urlopów wszystkich i rozpoczęcie pracy zamiast ręcznego stażu (v2026.08.29.910)
 
 ### schema.prisma

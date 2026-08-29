@@ -10,6 +10,16 @@ export const LEAVE_COMPANIES = ['Airtel Services', 'Airtel Systems', 'LinkedTeam
 /// DAK (dział administracyjno-księgowy) — wyłącznie podgląd (bez edycji i decyzji).
 export const LEAVE_VIEW_ALL_ROLES = ['ADMIN', 'DAK'];
 
+// @anchor leave-broadcast-trigger-roles
+/// Role, ktorych zatwierdzony urlop jest informacja dla calego kierownictwa —
+/// nieobecnosc logistyka albo managera trzeba obsadzic z wyprzedzeniem.
+export const LEAVE_BROADCAST_TRIGGER_ROLES = ['LOGISTYK', 'MANAGER'];
+
+// @anchor leave-manager-roles
+/// Role odbierajace powiadomienie o zatwierdzonym urlopie osoby kluczowej.
+/// Krag adresatow zawezaja dodatkowo firmy z LEAVE_COMPANIES.
+export const LEAVE_MANAGER_ROLES = ['MANAGER'];
+
 // @anchor leave-entitlement-threshold-years
 /// Prog stazu, od ktorego przysluguje 26 dni urlopu (Kodeks pracy art. 154).
 export const LEAVE_ENTITLEMENT_THRESHOLD_YEARS = 10;

@@ -22,6 +22,11 @@ export default function DraggableCard({
     const [zIndex, setZIndex] = useState(10);
     const dragRef = useRef(null);
     const rootRef = useRef(null);
+    // @anchor draggable-card-offset-ref
+    // Ostatnie przesunięcie myszy trzymane POZA stanem. Bez tego handleMouseUp musiałby
+    // sięgać po świeże dx/dy z wnętrza updatera setDrag, a updatery React wykonuje w fazie
+    // renderu — wołanie stamtąd onDragEnd aktualizowało rodzica w trakcie renderowania karty.
+    const offsetRef = useRef({ dx: 0, dy: 0 });
 
     const x = position.x + (drag?.dx || 0);
     const y = position.y + (drag?.dy || 0);
@@ -45,6 +50,7 @@ export default function DraggableCard({
         if (e.button !== 0 || e.target.closest('button, input, select, a')) return;
         e.preventDefault();
         dragRef.current = { startX: e.clientX, startY: e.clientY };
+        offsetRef.current = { dx: 0, dy: 0 };
         setDrag({ dx: 0, dy: 0 });
         setZIndex(50);
     };
@@ -52,21 +58,19 @@ export default function DraggableCard({
     const handleMouseMove = useCallback((e) => {
         if (!dragRef.current) return;
         const { startX, startY } = dragRef.current;
-        setDrag({ dx: e.clientX - startX, dy: e.clientY - startY });
+        offsetRef.current = { dx: e.clientX - startX, dy: e.clientY - startY };
+        setDrag(offsetRef.current);
     }, []);
 
     const handleMouseUp = useCallback(() => {
         if (!dragRef.current) return;
         dragRef.current = null;
+        const { dx, dy } = offsetRef.current;
+        offsetRef.current = { dx: 0, dy: 0 };
         setZIndex(10);
-        setDrag(d => {
-            const next = {
-                x: Math.max(0, position.x + (d?.dx || 0)),
-                y: Math.max(0, position.y + (d?.dy || 0)),
-            };
-            onDragEnd?.(id, next);
-            return null;
-        });
+        setDrag(null);
+        // poza updaterem stanu — inaczej rodzic dostaje setState w trakcie renderu tej karty
+        onDragEnd?.(id, { x: Math.max(0, position.x + dx), y: Math.max(0, position.y + dy) });
     }, [id, onDragEnd, position.x, position.y]);
 
     useEffect(() => {

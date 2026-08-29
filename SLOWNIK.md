@@ -1755,6 +1755,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-sekcja | pasek zakladek Urlopy | apps/frontend/src/LeavesPage.jsx | @anchor leaves-tab-selector |
 | ui-karta | DraggableCard | apps/frontend/src/components/shared/leaves/DraggableCard.jsx | @anchor draggable-card |
 | ui-funkcja | handleMouseDown (DraggableCard) | apps/frontend/src/components/shared/leaves/DraggableCard.jsx | @anchor draggable-card-start |
+| ui-stan | offsetRef (DraggableCard) | apps/frontend/src/components/shared/leaves/DraggableCard.jsx | @anchor draggable-card-offset-ref |
 | ui-stala | CARD_IDS | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-card-ids |
 | ui-sekcja | warstwa kart (Moje dane) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-cards-layer |
 | ui-przycisk | Nowy wniosek (karta dane osobowe) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor card-new-request-button |
@@ -2032,6 +2033,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | LeaveBalancesService.read | apps/backend/src/leaves/leave-balances.service.ts | @anchor read-leave-balance |
 | back-funkcja | LeaveBalancesService.setEntitlement | apps/backend/src/leaves/leave-balances.service.ts | @anchor set-leave-entitlement |
 | back-funkcja | LeaveBalancesService.assertDaysAvailable | apps/backend/src/leaves/leave-balances.service.ts | @anchor assert-days-available |
+| back-funkcja | LeaveBalancesService.defaultEntitlementDays | apps/backend/src/leaves/leave-balances.service.ts | @anchor default-entitlement-days |
+| back-funkcja | LeaveBalancesService.fallbackYear | apps/backend/src/leaves/leave-balances.service.ts | @anchor entitlement-fallback-year |
 | back-funkcja | LeaveBalancesService.applyDeductions | apps/backend/src/leaves/leave-balances.service.ts | @anchor apply-leave-deductions |
 | back-funkcja | LeaveBalancesService.revertDeductions | apps/backend/src/leaves/leave-balances.service.ts | @anchor revert-leave-deductions |
 | back-funkcja | LeaveBalancesService.isSupervisorOf | apps/backend/src/leaves/leave-balances.service.ts | @anchor balance-is-supervisor-of |
@@ -2042,6 +2045,60 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | MailService.sendLeaveRequest | apps/backend/src/mail/mail.service.ts | @anchor mail-send-leave-request |
 | back-funkcja | MailService.sendLeaveDecision | apps/backend/src/mail/mail.service.ts | @anchor mail-send-leave-decision |
 | back-funkcja | formatLeaveDate | apps/backend/src/mail/mail.service.ts | @anchor format-leave-mail-date |
+| back-typ | OverlappingAbsence | apps/backend/src/mail/mail.service.ts | @anchor overlapping-absence |
+| back-funkcja | formatLeaveDay | apps/backend/src/mail/mail.service.ts | @anchor format-leave-mail-day |
+| back-funkcja | overlappingBlock | apps/backend/src/mail/mail.service.ts | @anchor mail-overlapping-absences-block |
+| back-typ | sendLeaveRequest.overlapping | apps/backend/src/mail/mail.service.ts | @anchor mail-leave-request-overlapping |
+| back-funkcja | MailService.sendLeaveApprovalBroadcast | apps/backend/src/mail/mail.service.ts | @anchor mail-send-leave-approval-broadcast |
+| back-funkcja | MailService.sendLeaveRequestDeleted | apps/backend/src/mail/mail.service.ts | @anchor mail-send-leave-request-deleted |
+| back-funkcja | MailService.sendLeaveRequestWithdrawn | apps/backend/src/mail/mail.service.ts | @anchor mail-send-leave-request-withdrawn |
+| back-stala | LEAVE_BROADCAST_TRIGGER_ROLES | apps/backend/src/leaves/leaves.service.ts | @anchor leave-broadcast-trigger-roles |
+| back-stala | LEAVE_MANAGER_ROLES | apps/backend/src/leaves/leaves.service.ts | @anchor leave-manager-roles |
+| back-funkcja | LeaveRequestsService.findOverlappingAbsences | apps/backend/src/leaves/leave-requests.service.ts | @anchor find-overlapping-absences |
+| back-funkcja | LeaveRequestsService.assertNoSelfOverlap | apps/backend/src/leaves/leave-requests.service.ts | @anchor assert-no-self-overlap |
+| back-funkcja | LeaveRequestsService.syncGoogleCalendar | apps/backend/src/leaves/leave-requests.service.ts | @anchor sync-google-calendar-leave |
+| back-funkcja | LeaveRequestsService.notifyManagers | apps/backend/src/leaves/leave-requests.service.ts | @anchor notify-managers-leave-approved |
+| back-funkcja | LeaveRequestsService.notifyApplicantDeleted | apps/backend/src/leaves/leave-requests.service.ts | @anchor notify-applicant-request-deleted |
+| back-funkcja | LeaveRequestsService.notifySupervisorWithdrawn | apps/backend/src/leaves/leave-requests.service.ts | @anchor notify-supervisor-request-withdrawn |
+| back-funkcja | LeaveRequestsService.requestWithdrawal | apps/backend/src/leaves/leave-requests.service.ts | @anchor request-leave-withdrawal |
+| back-funkcja | LeaveRequestsService.decideWithdrawal | apps/backend/src/leaves/leave-requests.service.ts | @anchor decide-leave-withdrawal |
+| back-funkcja | LeaveRequestsService.withdrawByToken | apps/backend/src/leaves/leave-requests.service.ts | @anchor withdraw-by-token |
+| back-funkcja | LeaveRequestsService.notifySupervisorWithdrawalRequest | apps/backend/src/leaves/leave-requests.service.ts | @anchor notify-supervisor-withdrawal-request |
+| back-funkcja | LeaveRequestsService.notifyApplicantWithdrawalDecision | apps/backend/src/leaves/leave-requests.service.ts | @anchor notify-applicant-withdrawal-decision |
+| back-funkcja | linki wycofania w mailu | apps/backend/src/leaves/leave-requests.service.ts | @anchor leave-withdrawal-link-urls |
+| back-dto | RequestWithdrawalDto | apps/backend/src/leaves/leave-requests.service.ts | @anchor request-withdrawal-dto |
+| back-dto | DecideWithdrawalDto | apps/backend/src/leaves/leave-requests.service.ts | @anchor decide-withdrawal-dto |
+| back-funkcja | MailService.sendLeaveWithdrawalRequest | apps/backend/src/mail/mail.service.ts | @anchor mail-send-leave-withdrawal-request |
+| back-funkcja | MailService.sendLeaveWithdrawalDecision | apps/backend/src/mail/mail.service.ts | @anchor mail-send-leave-withdrawal-decision |
+| back-endpoint | POST /leave-requests/:id/withdrawal | apps/backend/src/leaves/leave-requests.controller.ts | @anchor leave-requests-withdrawal-request-endpoint |
+| back-endpoint | PATCH /leave-requests/:id/withdrawal | apps/backend/src/leaves/leave-requests.controller.ts | @anchor leave-requests-withdrawal-decision-endpoint |
+| back-endpoint | GET /leave-requests/withdrawal-link | apps/backend/src/leaves/leave-decision-link.controller.ts | @anchor leave-withdrawal-link-endpoint |
+| back-funkcja | renderResult (strona wyniku z maila) | apps/backend/src/leaves/leave-decision-link.controller.ts | @anchor render-decision-result-page |
+| schema-pole | LeaveRequest.withdrawalRequestedAt | apps/backend/prisma/schema.prisma | @anchor leave-request-withdrawal-requested-at |
+| schema-pole | LeaveRequest.withdrawalDecidedAt | apps/backend/prisma/schema.prisma | @anchor leave-request-withdrawal-decided-at |
+| schema-pole | LeaveRequest.withdrawalDecidedById | apps/backend/prisma/schema.prisma | @anchor leave-request-withdrawal-decided-by-id |
+| schema-relacja | LeaveRequest.withdrawalDecidedBy | apps/backend/prisma/schema.prisma | @anchor leave-request-withdrawal-decided-by |
+| schema-relacja | User.leaveWithdrawalDecisions | apps/backend/prisma/schema.prisma | @anchor user-leave-withdrawal-decisions |
+| ui-modal | LeaveWithdrawalModal | apps/frontend/src/components/shared/leaves/LeaveWithdrawalModal.jsx | @anchor leave-withdrawal-modal |
+| ui-stan | reason (LeaveWithdrawalModal) | apps/frontend/src/components/shared/leaves/LeaveWithdrawalModal.jsx | @anchor withdrawal-reason-state |
+| ui-input | Powod wycofania | apps/frontend/src/components/shared/leaves/LeaveWithdrawalModal.jsx | @anchor withdrawal-reason-field |
+| ui-stan | withdrawal (LeaveRequestsTab) | apps/frontend/src/components/shared/leaves/LeaveRequestsTab.jsx | @anchor withdrawal-modal-state |
+| ui-funkcja | requestWithdrawal (front) | apps/frontend/src/components/shared/leaves/LeaveRequestsTab.jsx | @anchor request-withdrawal-front |
+| ui-funkcja | decideWithdrawal (front) | apps/frontend/src/components/shared/leaves/LeaveRequestsTab.jsx | @anchor decide-withdrawal-front |
+| ui-funkcja | isWithdrawalPending | apps/frontend/src/components/shared/leaves/leavesTheme.js | @anchor withdrawal-pending-front |
+| back-serwis | GoogleCalendarService | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-service |
+| back-modul | GoogleCalendarModule | apps/backend/src/google-calendar/google-calendar.module.ts | @anchor google-calendar-module |
+| back-stala | DEFAULT_CALENDAR_ID | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-default-id |
+| back-typ | GoogleLeaveEventParams | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-event-params |
+| back-funkcja | toCalendarDate | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor to-calendar-date |
+| back-funkcja | addDays | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor add-days |
+| back-funkcja | GoogleCalendarService.isEnabled | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-is-enabled |
+| back-funkcja | GoogleCalendarService.accessToken | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-access-token |
+| back-funkcja | GoogleCalendarService.eventBody | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-event-body |
+| back-funkcja | GoogleCalendarService.upsertLeaveEvent | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-upsert-leave-event |
+| back-funkcja | GoogleCalendarService.findEventId | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-find-event-id |
+| back-funkcja | GoogleCalendarService.deleteLeaveEvent | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-delete-leave-event |
+| schema-pole | LeaveRequest.googleEventId | apps/backend/prisma/schema.prisma | @anchor leave-request-google-event-id |
 | back-funkcja | LeaveRequestsService.notifyApplicant | apps/backend/src/leaves/leave-requests.service.ts | @anchor notify-applicant-leave-decision |
 | back-endpoint | GET /leave-balances | apps/backend/src/leaves/leave-balances.controller.ts | @anchor leave-balances-read-endpoint |
 | back-endpoint | PUT /leave-balances/entitlement | apps/backend/src/leaves/leave-balances.controller.ts | @anchor leave-balances-entitlement-endpoint |

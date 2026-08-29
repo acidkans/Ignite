@@ -3,7 +3,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   CreateLeaveRequestDto,
   DecideLeaveRequestDto,
+  DecideWithdrawalDto,
   LeaveRequestsService,
+  RequestWithdrawalDto,
   UpdateLeaveRequestDto,
 } from './leave-requests.service';
 
@@ -71,6 +73,20 @@ export class LeaveRequestsController {
   @Patch(':id/decision')
   decide(@Req() req: any, @Param('id') id: string, @Body() dto: DecideLeaveRequestDto) {
     return this.requests.decide(req.user.userId, req.user.roles || [], id, dto);
+  }
+
+  // @anchor leave-requests-withdrawal-request-endpoint
+  /// Pracownik prosi o wycofanie WLASNEGO zatwierdzonego urlopu.
+  @Post(':id/withdrawal')
+  requestWithdrawal(@Req() req: any, @Param('id') id: string, @Body() dto: RequestWithdrawalDto) {
+    return this.requests.requestWithdrawal(req.user.userId, req.user.roles || [], id, dto);
+  }
+
+  // @anchor leave-requests-withdrawal-decision-endpoint
+  /// Przelozony albo administrator potwierdza wycofanie (albo je odrzuca).
+  @Patch(':id/withdrawal')
+  decideWithdrawal(@Req() req: any, @Param('id') id: string, @Body() dto: DecideWithdrawalDto) {
+    return this.requests.decideWithdrawal(req.user.userId, req.user.roles || [], id, dto);
   }
 
   // @anchor leave-requests-update-endpoint

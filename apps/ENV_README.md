@@ -76,6 +76,23 @@ cp .env.server .env
 - `AI_MODEL` - Model AI do użycia
 - `EMBEDDING_MODEL` - Model embeddingów
 
+### Kalendarz Google (moduł Urlopy — zapis zatwierdzonych urlopów)
+- `GOOGLE_CALENDAR_ID` - adres kalendarza urlopowego (domyślnie `airtel.urlopy@gmail.com`)
+- `GOOGLE_SERVICE_ACCOUNT_EMAIL` - adres konta serwisowego z Google Cloud (`...@....iam.gserviceaccount.com`)
+- `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` - klucz prywatny konta serwisowego, w jednej linii ze znakami `
+`
+- `GOOGLE_CALENDAR_IMPERSONATE` - opcjonalnie, tylko dla Google Workspace z delegacją ogólnodomenową
+
+Bez `GOOGLE_SERVICE_ACCOUNT_EMAIL` i `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` integracja jest wyłączona —
+moduł Urlopy działa normalnie, po prostu nic nie trafia do kalendarza.
+
+Konfiguracja po stronie Google (jednorazowo):
+1. Google Cloud Console → nowy projekt → włącz **Google Calendar API**
+2. IAM → Konta usługi → utwórz konto serwisowe → Klucze → nowy klucz JSON
+3. Z pliku JSON weź `client_email` i `private_key` do zmiennych powyżej
+4. W kalendarzu `airtel.urlopy@gmail.com` → Ustawienia → Udostępnij określonym osobom →
+   dodaj adres konta serwisowego z uprawnieniem **„Wprowadzanie zmian w wydarzeniach"**
+
 ### Inne
 - `NODE_ENV` - Środowisko (development/production)
 - `FRONTEND_URL` - URL frontendu (dla linków w mailach)

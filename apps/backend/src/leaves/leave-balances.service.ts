@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { LeavesService } from './leaves.service';
+import { LeavesService, calculateLeaveEntitlement, calculateWorkExperienceYears } from './leaves.service';
 
 // @anchor leave-balance-years-back
 /// Okno lat, z których można wybierać urlop: rok bieżący i 4 lata wstecz.
@@ -39,8 +39,32 @@ export class LeaveBalancesService {
     return years;
   }
 
+  // @anchor default-entitlement-days
+  /// Wymiar urlopu wyliczony ze stazu pracownika (art. 154 par. 1 KP: 20 albo 26 dni) —
+  /// uzywany, gdy administrator nie wpisal puli recznie. Bez tego pracownik bez wiersza
+  /// w `leave_balances` mial pule 0 i nie mogl zlozyc zadnego wniosku.
+  /// Wpisana recznie pula ma pierwszenstwo: fallback dziala tylko przy BRAKU wiersza,
+  /// wiec jawnie ustawione 0 zostaje zerem.
+  private async defaultEntitlementDays(subjectId: string, tx: any = this.prisma): Promise<number> {
+    const user = await tx.user.findUnique({
+      where: { id: subjectId },
+      select: { workStartYear: true, workStartMonth: true, workExperienceYears: true },
+    });
+    const years = calculateWorkExperienceYears(user?.workStartYear, user?.workStartMonth, user?.workExperienceYears);
+    return calculateLeaveEntitlement(years) ?? 0;
+  }
+
+  // @anchor entitlement-fallback-year
+  /// Wyliczony wymiar podstawiamy WYLACZNIE za rok biezacy. Lata wsteczne zostaja zerami,
+  /// bo pula z lat minionych to urlop zalegly — jego wysokosc zna tylko kadra i wpisuje ja
+  /// recznie. Automatyczne wypelnienie calego okna dalo by 5 x 26 dni z powietrza.
+  static fallbackYear(now: Date = new Date()): number {
+    return now.getUTCFullYear();
+  }
+
   // @anchor get-leave-balance
-  /// Saldo pracownika w oknie lat — lata bez wiersza w bazie zwracane jako zera.
+  /// Saldo pracownika w oknie lat — lata bez wiersza w bazie zwracane jako zera,
+  /// z wyjatkiem roku biezacego, gdzie brak wiersza oznacza wymiar wyliczony ze stazu.
   async getBalance(subjectId: string): Promise<{ years: LeaveBalanceYear[]; totalRemaining: number }> {
     const years = LeaveBalancesService.window();
     const rows = await this.prisma.leaveBalance.findMany({
@@ -48,9 +72,12 @@ export class LeaveBalancesService {
     });
     const byYear = new Map(rows.map(r => [r.year, r]));
 
+    const fallbackYear = LeaveBalancesService.fallbackYear();
+    const fallbackDays = byYear.has(fallbackYear) ? 0 : await this.defaultEntitlementDays(subjectId);
+
     const list = years.map(year => {
       const row = byYear.get(year);
-      const entitlementDays = row?.entitlementDays ?? 0;
+      const entitlementDays = row?.entitlementDays ?? (year === fallbackYear ? fallbackDays : 0);
       const usedDays = row?.usedDays ?? 0;
       return {
         year,
@@ -136,9 +163,18 @@ export class LeaveBalancesService {
     const rows = await tx.leaveBalance.findMany({ where: { userId: subjectId, year: { in: years } } });
     const byYear = new Map(rows.map((r: any) => [r.year, r]));
 
+    // ten sam fallback co w getBalance — inaczej wniosek przechodzi walidacje na wyliczonej
+    // puli, a przy odejmowaniu dni trafia na zero i zatwierdzenie sie wywraca
+    const fallbackYear = LeaveBalancesService.fallbackYear();
+    const fallbackDays = byYear.has(fallbackYear) ? 0 : await this.defaultEntitlementDays(subjectId, tx);
+    const entitlementFor = (year: number): number => {
+      const r: any = byYear.get(year);
+      return r?.entitlementDays ?? (year === fallbackYear ? fallbackDays : 0);
+    };
+
     const available = years.reduce((sum, y) => {
       const r: any = byYear.get(y);
-      return sum + Math.max(0, (r?.entitlementDays ?? 0) - (r?.usedDays ?? 0));
+      return sum + Math.max(0, entitlementFor(y) - (r?.usedDays ?? 0));
     }, 0);
     if (days > Math.round(available * 100) / 100) {
       throw new BadRequestException(
@@ -150,7 +186,8 @@ export class LeaveBalancesService {
     for (const year of years) {
       if (left <= 0) break;
       const row: any = byYear.get(year);
-      const remaining = Math.max(0, (row?.entitlementDays ?? 0) - (row?.usedDays ?? 0));
+      const entitlement = entitlementFor(year);
+      const remaining = Math.max(0, entitlement - (row?.usedDays ?? 0));
       if (remaining <= 0) continue;
 
       const take = Math.round(Math.min(remaining, left) * 100) / 100;
@@ -158,7 +195,9 @@ export class LeaveBalancesService {
 
       await tx.leaveBalance.upsert({
         where: { userId_year: { userId: subjectId, year } },
-        create: { userId: subjectId, year, entitlementDays: row?.entitlementDays ?? 0, usedDays: take },
+        // materializacja wiersza: zapisujemy wyliczony wymiar, zeby saldo przestalo byc
+        // liczone w locie i zgadzalo sie z tym, co pracownik widzial skladajac wniosek
+        create: { userId: subjectId, year, entitlementDays: entitlement, usedDays: take },
         update: { usedDays: { increment: take } },
       });
       await tx.leaveDeduction.create({ data: { leaveRequestId: requestId, year, days: take } });

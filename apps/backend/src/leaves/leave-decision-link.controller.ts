@@ -18,10 +18,26 @@ export class LeaveDecisionLinkController {
     private readonly config: ConfigService,
   ) {}
 
+  // @anchor leave-withdrawal-link-endpoint
+  /// Przycisk „Wycofaj zatwierdzony urlop …" z maila — osobny endpoint i osobny rodzaj
+  /// tokenu, zeby podpis decyzji o wniosku nie dzialal na wycofanie i odwrotnie.
+  @Get('withdrawal-link')
+  async withdrawalLink(@Query('token') token: string, @Res() res: Response) {
+    return this.renderResult(await this.requests.withdrawByToken(token), res);
+  }
+
   // @anchor leave-decision-link-endpoint
   @Get('decision-link')
   async decisionLink(@Query('token') token: string, @Res() res: Response) {
-    const result = await this.requests.decideByToken(token);
+    return this.renderResult(await this.requests.decideByToken(token), res);
+  }
+
+  // @anchor render-decision-result-page
+  /// Wspolna strona wyniku dla obu przyciskow z maila.
+  private renderResult(
+    result: { ok: boolean; title: string; message: string; applicantName?: string; period?: string },
+    res: Response,
+  ) {
     const appUrl = `${this.config.get('FRONTEND_URL') || 'http://localhost:5174'}/urlopy`;
     const accent = result.ok ? '#2e7d32' : '#c62828';
 

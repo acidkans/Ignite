@@ -2,13 +2,17 @@ import { API_URL } from '../../../config';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import LeaveRequestModal from './LeaveRequestModal';
-import { leavesGridTheme, leavesDefaultColDef, formatDateTime, statusMeta, warsawDayKey } from './leavesTheme';
+import { leavesGridTheme, leavesDefaultColDef, formatDateTime, statusMeta, warsawDayKey, isWithdrawalPending } from './leavesTheme';
+import LeaveWithdrawalModal from './LeaveWithdrawalModal';
 
 // @anchor leave-requests-tab
 // Zakładka „Wnioski" (mode='mine') i „Wnioski moich podwładnych" (mode='subordinates').
 export default function LeaveRequestsTab({ mode, access, leaveTypes, employees, currentUserId }) {
     const [requests, setRequests] = useState([]);
     const [modalRequest, setModalRequest] = useState(null);
+    // @anchor withdrawal-modal-state
+    // { row, mode: 'request' | 'confirm' | 'reject' } — własny modal zamiast window.confirm
+    const [withdrawal, setWithdrawal] = useState(null);
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(true);
 
@@ -75,6 +79,48 @@ export default function LeaveRequestsTab({ mode, access, leaveTypes, employees, 
                 const data = await res.json().catch(() => ({}));
                 throw new Error(data.message || 'Nie udało się usunąć wniosku');
             }
+            fetchRequests();
+        } catch (err) {
+            alert(err.message);
+        }
+    };
+
+    // @anchor request-withdrawal-front
+    // Pracownik prosi o wycofanie WŁASNEGO zatwierdzonego urlopu. Prośba niczego nie cofa —
+    // urlop obowiązuje do czasu potwierdzenia przez przełożonego.
+    const requestWithdrawal = async (row, reason) => {
+        try {
+            const token = sessionStorage.getItem('token');
+            const res = await fetch(`${API_URL}/leave-requests/${row.id}/withdrawal`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ reason: reason || null }),
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.message || 'Nie udało się wysłać prośby o wycofanie');
+            }
+            setWithdrawal(null);
+            fetchRequests();
+        } catch (err) {
+            alert(err.message);
+        }
+    };
+
+    // @anchor decide-withdrawal-front
+    const decideWithdrawal = async (row, confirmed) => {
+        try {
+            const token = sessionStorage.getItem('token');
+            const res = await fetch(`${API_URL}/leave-requests/${row.id}/withdrawal`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ confirmed }),
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.message || 'Nie udało się zapisać decyzji');
+            }
+            setWithdrawal(null);
             fetchRequests();
         } catch (err) {
             alert(err.message);
@@ -155,6 +201,13 @@ export default function LeaveRequestsTab({ mode, access, leaveTypes, employees, 
                     decider ? `przez ${decider}` : null,
                     p.data.decisionComment || null,
                 ].filter(Boolean).join(' — ');
+                if (isWithdrawalPending(p.data)) {
+                    return (
+                        <span className="text-orange-400" title={`Prośba o wycofanie z ${formatDateTime(p.data.withdrawalRequestedAt)}`}>
+                            ● Wycofanie w toku
+                        </span>
+                    );
+                }
                 return <span className={meta.color} title={title || undefined}>● {meta.label}</span>;
             },
             flex: 1.1,
@@ -178,6 +231,23 @@ export default function LeaveRequestsTab({ mode, access, leaveTypes, employees, 
                             <button onClick={() => setDecision(p.data, 'PENDING')} title="Cofnij decyzję"
                                 className="bg-amber-500/10 hover:bg-amber-500/30 text-amber-400 px-2 rounded transition-colors">↩</button>
                         )}
+                        {p.data.userId === currentUserId && code === 'APPROVED' && !isWithdrawalPending(p.data) && (
+                            <button onClick={() => setWithdrawal({ row: p.data, mode: 'request' })}
+                                title="Poproś przełożonego o wycofanie tego zatwierdzonego urlopu"
+                                className="bg-orange-500/10 hover:bg-orange-500/30 text-orange-400 px-2 rounded transition-colors">↩ Wycofaj</button>
+                        )}
+                        {canApprove(p.data) && isWithdrawalPending(p.data) && (
+                            <>
+                                <button onClick={() => setWithdrawal({ row: p.data, mode: 'confirm' })}
+                                    title="Potwierdź wycofanie — dni wrócą do puli, wpis zniknie z kalendarza"
+                                    className="bg-orange-500/10 hover:bg-orange-500/30 text-orange-400 px-2 rounded transition-colors whitespace-nowrap">
+                                    Wycofaj zatwierdzony urlop {`${p.data.user?.firstName || ''} ${p.data.user?.lastName || ''}`.trim()}
+                                </button>
+                                <button onClick={() => setWithdrawal({ row: p.data, mode: 'reject' })}
+                                    title="Odmów wycofania — urlop zostaje w mocy"
+                                    className="bg-gray-500/10 hover:bg-gray-500/30 text-gray-300 px-2 rounded transition-colors">Zostaw</button>
+                            </>
+                        )}
                         {canEditRow(p.data) && (
                             <button onClick={() => setModalRequest(p.data)} title="Edytuj wniosek"
                                 className="bg-blue-500/10 hover:bg-blue-500/30 text-blue-400 px-2 rounded transition-colors">✎</button>
@@ -189,7 +259,7 @@ export default function LeaveRequestsTab({ mode, access, leaveTypes, employees, 
                     </div>
                 );
             },
-            width: 240, sortable: false, filter: false,
+            width: 420, sortable: false, filter: false,
         },
     ], [isSubordinates, isAdmin, showApplicant, currentUserId]);
 
@@ -215,6 +285,19 @@ export default function LeaveRequestsTab({ mode, access, leaveTypes, employees, 
                     </button>
                 )}
             </div>
+
+            {withdrawal && (
+                <LeaveWithdrawalModal
+                    row={withdrawal.row}
+                    mode={withdrawal.mode}
+                    onCancel={() => setWithdrawal(null)}
+                    onConfirm={(reason) =>
+                        withdrawal.mode === 'request'
+                            ? requestWithdrawal(withdrawal.row, reason)
+                            : decideWithdrawal(withdrawal.row, withdrawal.mode === 'confirm')
+                    }
+                />
+            )}
 
             {modalRequest && (
                 <LeaveRequestModal

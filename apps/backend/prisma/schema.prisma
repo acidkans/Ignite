@@ -60,6 +60,8 @@ model User {
   leaveBalances     LeaveBalance[]
   /// @anchor user-leave-decisions
   leaveDecisions    LeaveRequest[]     @relation("LeaveRequestDecider")
+  /// @anchor user-leave-withdrawal-decisions
+  leaveWithdrawalDecisions LeaveRequest[] @relation("LeaveRequestWithdrawalDecider")
   /// @anchor user-holiday-days-off
   approvedHolidayDaysOff HolidayDayOff[] @relation("HolidayDayOffApprover")
   /// @anchor user-leaf-actuals
@@ -1564,6 +1566,9 @@ enum LeaveRequestStatus {
   PENDING
   APPROVED
   REJECTED
+  /// Urlop byl zatwierdzony, ale pracownik poprosil o wycofanie, a przelozony to potwierdzil.
+  /// Dni wrocily do puli, wpis urlopowy i zdarzenie w kalendarzu zostaly skasowane.
+  WITHDRAWN
 }
 
 /// @anchor leave-request
@@ -1621,6 +1626,18 @@ model LeaveRequest {
   remainingY1         Float     @default(0) // zaległy sprzed roku
   /// @anchor leave-request-remaining-current
   remainingCurrentYear Float    @default(0) // z tego roku
+  /// @anchor leave-request-withdrawal-requested-at
+  /// Kiedy pracownik poprosil o wycofanie zatwierdzonego urlopu. Wniosek zostaje APPROVED
+  /// (urlop nadal obowiazuje) az do potwierdzenia przez przelozonego — sama prosba niczego nie cofa.
+  withdrawalRequestedAt   DateTime?
+  /// @anchor leave-request-withdrawal-decided-at
+  withdrawalDecidedAt     DateTime?
+  /// @anchor leave-request-withdrawal-decided-by-id
+  withdrawalDecidedById   String?
+  /// @anchor leave-request-google-event-id
+  /// Id zdarzenia we wspolnym kalendarzu Google, zalozonego przy zatwierdzeniu wniosku.
+  /// NULL = brak zdarzenia (wniosek nierozpatrzony, integracja wylaczona albo API odmowilo).
+  googleEventId       String?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -1634,6 +1651,8 @@ model LeaveRequest {
   holidayDayOff HolidayDayOff? @relation(fields: [holidayDayOffId], references: [id], onDelete: SetNull)
   /// @anchor leave-request-decided-by
   decidedBy User? @relation("LeaveRequestDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  /// @anchor leave-request-withdrawal-decided-by
+  withdrawalDecidedBy User? @relation("LeaveRequestWithdrawalDecider", fields: [withdrawalDecidedById], references: [id], onDelete: SetNull)
   /// @anchor leave-request-deductions
   deductions LeaveDeduction[]
   /// @anchor leave-request-leave

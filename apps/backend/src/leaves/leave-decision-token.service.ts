@@ -16,6 +16,10 @@ export interface LeaveDecisionTokenPayload {
   deciderEmail: string;
   /// APPROVED albo REJECTED — akcja jest wpisana w podpis, nie w parametr URL
   decision: 'APPROVED' | 'REJECTED';
+  /// Czego dotyczy token: decyzji o wniosku (domyslnie) czy prosby o wycofanie
+  /// zatwierdzonego urlopu. Brak pola = stary token sprzed wycofywania = DECISION,
+  /// dzieki czemu linki wyslane wczesniej dalej dzialaja.
+  kind?: 'DECISION' | 'WITHDRAWAL';
   /// wygasniecie, epoch w sekundach
   exp: number;
 }

@@ -49,7 +49,14 @@ export const LEAVE_REQUEST_STATUSES = {
     PENDING: { label: 'Oczekuje', color: 'text-amber-400' },
     APPROVED: { label: 'Zatwierdzony', color: 'text-green-400' },
     REJECTED: { label: 'Odrzucony', color: 'text-red-400' },
+    WITHDRAWN: { label: 'Wycofany', color: 'text-gray-400' },
 };
+
+// @anchor withdrawal-pending-front
+// Czy zatwierdzony urlop czeka na potwierdzenie wycofania przez przełożonego.
+// Sama prośba niczego nie cofa — status wniosku dalej jest APPROVED.
+export const isWithdrawalPending = (row) =>
+    !!row?.withdrawalRequestedAt && (row?.status || 'PENDING') === 'APPROVED';
 
 // @anchor leave-request-status-meta
 // Status wniosku z fallbackiem na approvedAt (wnioski sprzed wprowadzenia pola status).

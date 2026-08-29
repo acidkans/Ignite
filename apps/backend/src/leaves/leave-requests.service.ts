@@ -1,9 +1,15 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { LeavesService } from './leaves.service';
+import {
+  LeavesService,
+  LEAVE_COMPANIES,
+  LEAVE_BROADCAST_TRIGGER_ROLES,
+  LEAVE_MANAGER_ROLES,
+} from './leaves.service';
 import { LeaveBalancesService } from './leave-balances.service';
-import { MailService } from '../mail/mail.service';
+import { MailService, OverlappingAbsence } from '../mail/mail.service';
+import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { HolidaysService } from './holidays.service';
 import { LeaveDecisionTokenService } from './leave-decision-token.service';
 
@@ -34,6 +40,18 @@ export interface DecideLeaveRequestDto {
   decisionComment?: string | null;
 }
 
+// @anchor request-withdrawal-dto
+export interface RequestWithdrawalDto {
+  /// powod wycofania — nieobowiazkowy, trafia do maila przelozonego
+  reason?: string | null;
+}
+
+// @anchor decide-withdrawal-dto
+export interface DecideWithdrawalDto {
+  /// true = przelozony potwierdza wycofanie, false = urlop zostaje w mocy
+  confirmed: boolean;
+}
+
 const REQUEST_INCLUDE = {
   user: {
     select: { id: true, firstName: true, lastName: true, email: true, company: true, supervisorId: true },
@@ -42,6 +60,7 @@ const REQUEST_INCLUDE = {
   dependent: { select: { id: true, firstName: true, lastName: true, birthDate: true } },
   holidayDayOff: { select: { id: true, date: true, name: true } },
   decidedBy: { select: { id: true, firstName: true, lastName: true } },
+  withdrawalDecidedBy: { select: { id: true, firstName: true, lastName: true } },
 };
 
 // @anchor care-leave-code
@@ -95,6 +114,7 @@ export class LeaveRequestsService {
     private config: ConfigService,
     private holidays: HolidaysService,
     private decisionTokens: LeaveDecisionTokenService,
+    private googleCalendar: GoogleCalendarService,
   ) {}
 
   // @anchor list-own-leave-requests
@@ -152,6 +172,7 @@ export class LeaveRequestsService {
 
     await this.assertSaturdayHolidayDaysAvailable(targetUserId, dto.leaveTypeId, dto.dateStart, daysCount);
     await this.assertStatutoryLimit(targetUserId, dto.leaveTypeId, dto.dateStart, daysCount);
+    await this.assertNoSelfOverlap(targetUserId, dto.dateStart, dto.dateEnd);
 
     const created = await this.prisma.leaveRequest.create({
       data: {
@@ -335,6 +356,43 @@ export class LeaveRequestsService {
     }
   }
 
+  // @anchor assert-no-self-overlap
+  /// Ten sam pracownik nie moze miec dwoch nieobecnosci w tym samym terminie.
+  /// Kolizja liczy sie wzgledem wnioskow PENDING i APPROVED — nierozpatrzony wniosek
+  /// tez blokuje, bo inaczej dwa rownolegle wnioski przeszlyby oba.
+  /// Warunek nakladania: nowy start <= istniejacy koniec ORAZ nowy koniec >= istniejacy start.
+  private async assertNoSelfOverlap(
+    userId: string,
+    dateStart: string | Date,
+    dateEnd: string | Date,
+    excludeRequestId?: string,
+  ): Promise<void> {
+    const start = dateStart instanceof Date ? dateStart : new Date(dateStart);
+    const end = dateEnd instanceof Date ? dateEnd : new Date(dateEnd);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
+
+    const clash = await this.prisma.leaveRequest.findFirst({
+      where: {
+        userId,
+        status: { in: ['PENDING', 'APPROVED'] },
+        dateStart: { lte: end },
+        dateEnd: { gte: start },
+        ...(excludeRequestId ? { id: { not: excludeRequestId } } : {}),
+      },
+      orderBy: { dateStart: 'asc' },
+      include: { leaveType: { select: { name: true } } },
+    });
+    if (!clash) return;
+
+    const okres = `${LeaveRequestsService.warsawDayKey(clash.dateStart)} — ${LeaveRequestsService.warsawDayKey(clash.dateEnd)}`;
+    const rodzaj = clash.leaveType?.name ? `„${clash.leaveType.name}"` : 'nieobecność';
+    const stan = clash.status === 'APPROVED' ? 'zatwierdzony' : 'nierozpatrzony';
+    throw new BadRequestException(
+      `Termin nachodzi na inny wniosek tego pracownika: ${rodzaj} ${okres} (${stan}). ` +
+        'Skoryguj daty albo wycofaj tamten wniosek.',
+    );
+  }
+
   // @anchor assert-statutory-limit
   /// Ustawowy limit dni w roku kalendarzowym z `LeaveType.maxDaysPerYear`
   /// (na żądanie 4, opiekuńczy 5). Liczymy wnioski PENDING i APPROVED z tego samego roku.
@@ -383,6 +441,49 @@ export class LeaveRequestsService {
     return !!type?.consumesBalance;
   }
 
+  // @anchor find-overlapping-absences
+  /// Kto jeszcze bedzie nieobecny w terminie wniosku — po to, zeby przelozony
+  /// decydowal widzac obsade, a nie na slepo. Zakres: wszystkie firmy z LEAVE_COMPANIES
+  /// (Airtel Systems, Airtel Services, LinkedTeam dzialaja jako jedna grupa),
+  /// wnioski PENDING i APPROVED, bez biezacego wniosku.
+  /// Wnioskodawcy NIE wycinamy: jego wlasna nieobecnosc w tym terminie to najwazniejsza
+  /// kolizja, jaka moze byc — nowe wnioski blokuje assertNoSelfOverlap, ale dane historyczne
+  /// takie pary maja i przelozony musi je zobaczyc, a nie zgadywac.
+  /// Warunek nakladania sie okresow: start <= cudzy koniec ORAZ koniec >= cudzy start.
+  private async findOverlappingAbsences(request: any): Promise<OverlappingAbsence[]> {
+    try {
+      const rows = await this.prisma.leaveRequest.findMany({
+        where: {
+          id: { not: request.id },
+          status: { in: ['PENDING', 'APPROVED'] },
+          dateStart: { lte: request.dateEnd },
+          dateEnd: { gte: request.dateStart },
+          user: { isActive: true, company: { in: LEAVE_COMPANIES } },
+        },
+        orderBy: { dateStart: 'asc' },
+        include: {
+          user: { select: { id: true, firstName: true, lastName: true, email: true, company: true } },
+          leaveType: { select: { name: true } },
+        },
+      });
+      return rows
+        .map(r => ({
+          name: [r.user?.firstName, r.user?.lastName].filter(Boolean).join(' ') || r.user?.email || '',
+          company: r.user?.company ?? null,
+          leaveTypeName: r.leaveType?.name ?? null,
+          dateStart: r.dateStart,
+          dateEnd: r.dateEnd,
+          pending: r.status === 'PENDING',
+          self: r.userId === request.userId,
+        }))
+        // kolizja z wlasna nieobecnoscia wnioskodawcy na gorze listy
+        .sort((a, b) => Number(b.self) - Number(a.self));
+    } catch {
+      // zestawienie jest dodatkiem do maila — jego brak nie moze wstrzymac powiadomienia
+      return [];
+    }
+  }
+
   // @anchor notify-supervisor-leave-request
   /// Mail do przełożonego wnioskodawcy. Brak SMTP / brak przełożonego nie wywraca zapisu wniosku.
   private async notifySupervisor(request: any): Promise<void> {
@@ -419,6 +520,7 @@ export class LeaveRequestsService {
         to,
         approveUrl: decisionUrl('APPROVED'),
         rejectUrl: decisionUrl('REJECTED'),
+        overlapping: await this.findOverlappingAbsences(request),
         applicantName:
           [applicant?.firstName, applicant?.lastName].filter(Boolean).join(' ') || applicant?.email || 'Pracownik',
         leaveTypeName: request.leaveType?.name ?? null,
@@ -522,13 +624,26 @@ export class LeaveRequestsService {
     if (dto.submittedAt !== undefined) data.submittedAt = dto.submittedAt ? new Date(dto.submittedAt) : null;
 
     // po zmianie zakresu / rodzaju sprawdzamy pulę ponownie
+    // zmiana terminu tez nie moze wejsc w inny wniosek tego samego pracownika
+    if (data.dateStart !== undefined || data.dateEnd !== undefined) {
+      await this.assertNoSelfOverlap(
+        existing.userId,
+        data.dateStart ?? existing.dateStart,
+        data.dateEnd ?? existing.dateEnd,
+        id,
+      );
+    }
+
     const newTypeId = dto.leaveTypeId !== undefined ? dto.leaveTypeId : existing.leaveTypeId;
     const newDays = data.daysCount ?? existing.daysCount;
     if ((data.daysCount !== undefined || dto.leaveTypeId !== undefined) && (await this.consumesBalance(newTypeId))) {
       await this.balances.assertDaysAvailable(existing.userId, newDays);
     }
 
-    return this.prisma.leaveRequest.update({ where: { id }, data, include: REQUEST_INCLUDE });
+    const updated = await this.prisma.leaveRequest.update({ where: { id }, data, include: REQUEST_INCLUDE });
+    // edycja zatwierdzonego wniosku (np. przesuniecie terminu) musi przestawic zdarzenie w kalendarzu
+    if (updated.status === 'APPROVED') await this.syncGoogleCalendar(updated);
+    return updated;
   }
 
   // @anchor decide-leave-request
@@ -610,8 +725,12 @@ export class LeaveRequestsService {
       });
     });
 
+    // Kalendarz i maile sa skutkiem ubocznym decyzji — poza transakcja i best-effort,
+    // zeby awaria Google/SMTP nie cofala zapisanego rozstrzygniecia.
+    await this.syncGoogleCalendar(updated);
     // cofnięcie decyzji nie jest rozstrzygnięciem — wnioskodawcy nie zawiadamiamy
     if (status !== 'PENDING') await this.notifyApplicant(updated, status === 'APPROVED');
+    if (status === 'APPROVED') await this.notifyManagers(updated);
     return updated;
   }
 
@@ -627,7 +746,9 @@ export class LeaveRequestsService {
     period?: string;
   }> {
     const payload = this.decisionTokens.verify(token);
-    if (!payload) {
+    // token wycofania ma wlasny endpoint — tu go nie przyjmujemy, zeby jeden podpis
+    // nie dzialal na dwie rozne akcje
+    if (!payload || (payload.kind && payload.kind !== 'DECISION')) {
       return {
         ok: false,
         title: 'Link nieważny',
@@ -719,6 +840,95 @@ export class LeaveRequestsService {
     };
   }
 
+  // @anchor sync-google-calendar-leave
+  /// Zatwierdzony wniosek trafia do wspolnego kalendarza Google, cofniety albo odrzucony
+  /// znika z niego. Id zdarzenia zapisujemy przy wniosku, zeby kolejna zmiana terminu
+  /// aktualizowala to samo zdarzenie zamiast mnozyc duplikaty.
+  private async syncGoogleCalendar(request: any): Promise<void> {
+    if (!this.googleCalendar.isEnabled()) return;
+    try {
+      if (request.status !== 'APPROVED') {
+        if (!request.googleEventId) return;
+        await this.googleCalendar.deleteLeaveEvent(request.googleEventId, request.id);
+        await this.prisma.leaveRequest.update({ where: { id: request.id }, data: { googleEventId: null } });
+        return;
+      }
+
+      const name =
+        [request.user?.firstName, request.user?.lastName].filter(Boolean).join(' ') || request.user?.email || 'Pracownik';
+      const typeName = request.leaveType?.name || 'Urlop';
+      const eventId = await this.googleCalendar.upsertLeaveEvent({
+        leaveRequestId: request.id,
+        googleEventId: request.googleEventId,
+        summary: `${name} — ${typeName}`,
+        description: [
+          request.user?.company ? `Firma: ${request.user.company}` : null,
+          request.daysCount ? `Dni: ${request.daysCount}` : null,
+          request.comment ? `Komentarz: ${request.comment}` : null,
+          'Wpis wygenerowany z modułu Urlopy — nie edytuj ręcznie.',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        dateStart: request.dateStart,
+        dateEnd: request.dateEnd,
+      });
+      if (eventId && eventId !== request.googleEventId) {
+        await this.prisma.leaveRequest.update({ where: { id: request.id }, data: { googleEventId: eventId } });
+      }
+    } catch {
+      /* kalendarz jest best-effort — decyzja jest juz zapisana */
+    }
+  }
+
+  // @anchor notify-managers-leave-approved
+  /// Zatwierdzony urlop logistyka albo managera idzie do wiadomosci pozostalych managerow
+  /// w Airtel Systems, Airtel Services i LinkedTeam — ich nieobecnosc trzeba obsadzic.
+  /// Wnioskodawca i osoba podejmujaca decyzje sa z listy wylaczeni: oboje juz wiedza.
+  private async notifyManagers(request: any): Promise<void> {
+    try {
+      const applicant = await this.prisma.user.findUnique({
+        where: { id: request.userId },
+        select: { userRoles: { select: { role: { select: { name: true } } } } },
+      });
+      const applicantRoles = (applicant?.userRoles || []).map(r => r.role.name);
+      if (!applicantRoles.some(r => LEAVE_BROADCAST_TRIGGER_ROLES.includes(r))) return;
+
+      const excluded = [request.userId, request.decidedById].filter(Boolean) as string[];
+      const managers = await this.prisma.user.findMany({
+        where: {
+          isActive: true,
+          id: { notIn: excluded },
+          company: { in: LEAVE_COMPANIES },
+          userRoles: { some: { role: { name: { in: LEAVE_MANAGER_ROLES } } } },
+        },
+        select: { email: true },
+      });
+      const recipients = managers.map(m => m.email).filter(e => !!e && e.includes('@'));
+      if (!recipients.length) return;
+
+      const appUrl = `${this.config.get('FRONTEND_URL') || 'http://localhost:5174'}/urlopy`;
+      await this.mail.sendLeaveApprovalBroadcast({
+        recipients,
+        employeeName:
+          [request.user?.firstName, request.user?.lastName].filter(Boolean).join(' ') || request.user?.email || 'Pracownik',
+        employeeCompany: request.user?.company ?? null,
+        // etykieta roli w mailu — pierwsza z rol, ktore wyzwolily powiadomienie
+        employeeRoleLabel: applicantRoles.find(r => LEAVE_BROADCAST_TRIGGER_ROLES.includes(r)) || null,
+        deciderName: request.decidedBy
+          ? [request.decidedBy.firstName, request.decidedBy.lastName].filter(Boolean).join(' ') || null
+          : null,
+        leaveTypeName: request.leaveType?.name ?? null,
+        dateStart: request.dateStart,
+        dateEnd: request.dateEnd,
+        daysCount: request.daysCount ?? null,
+        appUrl,
+        overlapping: await this.findOverlappingAbsences(request),
+      });
+    } catch {
+      /* powiadomienie jest best-effort — decyzja jest juz zapisana */
+    }
+  }
+
   // @anchor notify-applicant-leave-decision
   /// Mail do wnioskodawcy o decyzji przełożonego. Best-effort — błąd SMTP nie cofa decyzji.
   private async notifyApplicant(request: any, approved: boolean): Promise<void> {
@@ -746,23 +956,335 @@ export class LeaveRequestsService {
     }
   }
 
+  // @anchor request-leave-withdrawal
+  /// Prosba pracownika o wycofanie ZATWIERDZONEGO urlopu. Sama prosba niczego nie cofa —
+  /// wniosek zostaje APPROVED, dni dalej sa odjete, wpis w kalendarzu zostaje.
+  /// Dopiero potwierdzenie przelozonego (`decideWithdrawal`) faktycznie kasuje urlop.
+  async requestWithdrawal(userId: string, roles: string[], id: string, dto?: RequestWithdrawalDto) {
+    await this.assertEnabled(userId, roles);
+    const existing = await this.prisma.leaveRequest.findUnique({ where: { id }, include: REQUEST_INCLUDE });
+    if (!existing) throw new NotFoundException('Wniosek nie istnieje.');
+    if (existing.userId !== userId) {
+      throw new ForbiddenException('O wycofanie urlopu prosi sam pracownik.');
+    }
+    if (existing.status !== 'APPROVED') {
+      throw new BadRequestException('Wycofać można tylko zatwierdzony urlop. Nierozpatrzony wniosek usuń.');
+    }
+    if (existing.withdrawalRequestedAt) {
+      throw new BadRequestException('Prośba o wycofanie tego urlopu już czeka na decyzję przełożonego.');
+    }
+
+    const updated = await this.prisma.leaveRequest.update({
+      where: { id },
+      data: { withdrawalRequestedAt: new Date(), withdrawalDecidedAt: null, withdrawalDecidedById: null },
+      include: REQUEST_INCLUDE,
+    });
+    await this.notifySupervisorWithdrawalRequest(updated, dto?.reason ?? null);
+    return updated;
+  }
+
+  // @anchor decide-leave-withdrawal
+  /// Decyzja przelozonego o prosbie o wycofanie. Potwierdzenie przechodzi ta sama sciezka
+  /// co wyjscie ze stanu APPROVED: dni wracaja do puli, wpis urlopowy znika, zdarzenie
+  /// w kalendarzu jest kasowane. Odmowa tylko czysci prosbe — urlop zostaje w mocy.
+  async decideWithdrawal(userId: string, roles: string[], id: string, dto: DecideWithdrawalDto) {
+    const access = await this.assertEnabled(userId, roles);
+    const existing = await this.prisma.leaveRequest.findUnique({
+      where: { id },
+      include: { user: { select: { supervisorId: true } } },
+    });
+    if (!existing) throw new NotFoundException('Wniosek nie istnieje.');
+
+    const isSupervisor = existing.user?.supervisorId === userId;
+    if (!access.canEdit && !isSupervisor) {
+      throw new ForbiddenException('Wycofanie urlopu potwierdza przełożony albo administrator.');
+    }
+    if (!existing.withdrawalRequestedAt) {
+      throw new BadRequestException('Ten urlop nie ma prośby o wycofanie.');
+    }
+    if (existing.status !== 'APPROVED') {
+      throw new BadRequestException('Urlop nie jest już zatwierdzony — nie ma czego wycofywać.');
+    }
+
+    const confirmed = !!dto?.confirmed;
+    const now = new Date();
+    const updated = await this.prisma.$transaction(async tx => {
+      if (confirmed) {
+        // ta sama kolejnosc co przy cofnieciu decyzji: najpierw dni wracaja do puli
+        await this.balances.revertDeductions(tx, id, existing.userId);
+        await tx.leave.deleteMany({ where: { leaveRequestId: id } });
+      }
+      return tx.leaveRequest.update({
+        where: { id },
+        data: confirmed
+          ? {
+              status: 'WITHDRAWN' as any,
+              withdrawalDecidedAt: now,
+              withdrawalDecidedById: userId,
+              approvedAt: null,
+            }
+          : { withdrawalRequestedAt: null, withdrawalDecidedAt: now, withdrawalDecidedById: userId },
+        include: REQUEST_INCLUDE,
+      });
+    });
+
+    // status inny niz APPROVED — syncGoogleCalendar sam skasuje zdarzenie i wyczysci googleEventId
+    if (confirmed) await this.syncGoogleCalendar(updated);
+    await this.notifyApplicantWithdrawalDecision(updated, confirmed);
+    return updated;
+  }
+
+  // @anchor withdraw-by-token
+  /// Decyzja o wycofaniu z przycisku w mailu — bez logowania, tozsamosc z podpisu tokenu.
+  /// Zwraca opis wyniku dla strony potwierdzenia; nie rzuca wyjatkow na bledny token.
+  async withdrawByToken(token: string | undefined): Promise<{
+    ok: boolean;
+    title: string;
+    message: string;
+    applicantName?: string;
+    period?: string;
+  }> {
+    const payload = this.decisionTokens.verify(token);
+    if (!payload || payload.kind !== 'WITHDRAWAL') {
+      return {
+        ok: false,
+        title: 'Link nieważny',
+        message: 'Link wygasł albo jest nieprawidłowy. Otwórz moduł Urlopy i rozpatrz prośbę w aplikacji.',
+      };
+    }
+
+    const existing = await this.prisma.leaveRequest.findUnique({
+      where: { id: payload.requestId },
+      include: REQUEST_INCLUDE,
+    });
+    if (!existing) {
+      return { ok: false, title: 'Wniosek nie istnieje', message: 'Wniosek został w międzyczasie usunięty.' };
+    }
+
+    const applicantName =
+      [existing.user?.firstName, existing.user?.lastName].filter(Boolean).join(' ') || existing.user?.email || '';
+    const period = `${LeaveRequestsService.warsawDayKey(existing.dateStart)} — ${LeaveRequestsService.warsawDayKey(existing.dateEnd)}`;
+
+    if (!existing.withdrawalRequestedAt || existing.status !== 'APPROVED') {
+      return {
+        ok: false,
+        title: 'Prośba już rozpatrzona',
+        message:
+          existing.status === 'WITHDRAWN'
+            ? 'Ten urlop został już wycofany. Nic nie zmieniono.'
+            : 'Ta prośba o wycofanie została już rozpatrzona albo urlop nie jest zatwierdzony. Nic nie zmieniono.',
+        applicantName,
+        period,
+      };
+    }
+
+    // te same trzy warunki tozsamosci co przy decyzji o wniosku
+    const decider = await this.prisma.user.findUnique({
+      where: { id: payload.deciderId },
+      select: {
+        id: true,
+        email: true,
+        userRoles: { select: { role: { select: { name: true } } } },
+      },
+    });
+    const denied = {
+      ok: false,
+      title: 'Brak uprawnień',
+      message: 'Ten link nie należy już do przełożonego tego pracownika. Rozpatrz prośbę w aplikacji.',
+      applicantName,
+      period,
+    };
+    if (!decider) return denied;
+    const norm = (v: string | null | undefined) => (v || '').trim().toLowerCase();
+    if (!norm(decider.email) || norm(decider.email) !== norm(payload.deciderEmail)) return denied;
+    const applicant = await this.prisma.user.findUnique({
+      where: { id: existing.userId },
+      select: { supervisorId: true },
+    });
+    if (applicant?.supervisorId !== decider.id) return denied;
+
+    const roles = decider.userRoles.map(r => r.role.name);
+    const confirmed = payload.decision === 'APPROVED';
+    try {
+      await this.decideWithdrawal(decider.id, roles, existing.id, { confirmed });
+    } catch (err: any) {
+      return {
+        ok: false,
+        title: 'Nie udało się zapisać decyzji',
+        message: err?.message || 'Spróbuj rozpatrzyć prośbę w aplikacji.',
+        applicantName,
+        period,
+      };
+    }
+
+    return {
+      ok: true,
+      title: confirmed ? 'Urlop wycofany' : 'Urlop zostaje w mocy',
+      message: confirmed
+        ? 'Dni wróciły do puli pracownika, wpis urlopowy i zdarzenie w kalendarzu zostały skasowane.'
+        : 'Prośba została odrzucona — urlop obowiązuje bez zmian.',
+      applicantName,
+      period,
+    };
+  }
+
+  // @anchor notify-supervisor-withdrawal-request
+  /// Mail do przelozonego z przyciskiem nazywajacym akcje i pracownika wprost.
+  private async notifySupervisorWithdrawalRequest(request: any, reason: string | null): Promise<void> {
+    try {
+      const supervisorId = request.user?.supervisorId;
+      if (!supervisorId) return;
+      const supervisor = await this.prisma.user.findUnique({
+        where: { id: supervisorId },
+        select: { email: true },
+      });
+      const to = supervisor?.email;
+      if (!to) return;
+
+      const baseUrl = this.config.get('FRONTEND_URL') || 'http://localhost:5174';
+      // @anchor leave-withdrawal-link-urls
+      const withdrawalUrl = (decision: 'APPROVED' | 'REJECTED') =>
+        `${baseUrl}/api/leave-requests/withdrawal-link?token=${encodeURIComponent(
+          this.decisionTokens.issue({
+            requestId: request.id,
+            deciderId: supervisorId,
+            deciderEmail: to,
+            decision,
+            kind: 'WITHDRAWAL',
+          }),
+        )}`;
+
+      await this.mail.sendLeaveWithdrawalRequest({
+        to,
+        applicantName:
+          [request.user?.firstName, request.user?.lastName].filter(Boolean).join(' ') ||
+          request.user?.email ||
+          'Pracownik',
+        leaveTypeName: request.leaveType?.name ?? null,
+        dateStart: request.dateStart,
+        dateEnd: request.dateEnd,
+        daysCount: request.daysCount ?? null,
+        reason,
+        appUrl: `${baseUrl}/urlopy`,
+        confirmUrl: withdrawalUrl('APPROVED'),
+        rejectUrl: withdrawalUrl('REJECTED'),
+      });
+    } catch {
+      /* powiadomienie jest best-effort — prosba jest juz zapisana */
+    }
+  }
+
+  // @anchor notify-applicant-withdrawal-decision
+  private async notifyApplicantWithdrawalDecision(request: any, confirmed: boolean): Promise<void> {
+    try {
+      const to = request.user?.email;
+      if (!to) return;
+      await this.mail.sendLeaveWithdrawalDecision({
+        to,
+        applicantName: [request.user?.firstName, request.user?.lastName].filter(Boolean).join(' ') || to,
+        deciderName: request.withdrawalDecidedBy
+          ? [request.withdrawalDecidedBy.firstName, request.withdrawalDecidedBy.lastName].filter(Boolean).join(' ') || null
+          : null,
+        confirmed,
+        leaveTypeName: request.leaveType?.name ?? null,
+        dateStart: request.dateStart,
+        dateEnd: request.dateEnd,
+        appUrl: `${this.config.get('FRONTEND_URL') || 'http://localhost:5174'}/urlopy`,
+      });
+    } catch {
+      /* powiadomienie jest best-effort — decyzja jest juz zapisana */
+    }
+  }
+
   // @anchor remove-leave-request
   async remove(userId: string, roles: string[], id: string) {
     const access = await this.assertEnabled(userId, roles);
-    const existing = await this.prisma.leaveRequest.findUnique({ where: { id } });
+    const existing = await this.prisma.leaveRequest.findUnique({ where: { id }, include: REQUEST_INCLUDE });
     if (!existing) throw new NotFoundException('Wniosek nie istnieje.');
 
     const isOwner = existing.userId === userId;
     if (!access.canEdit && !(isOwner && existing.status === 'PENDING')) {
       throw new ForbiddenException('Brak uprawnień do usunięcia tego wniosku.');
     }
-    return this.prisma.$transaction(async tx => {
+    const removed = await this.prisma.$transaction(async tx => {
       // usunięcie zatwierdzonego wniosku musi oddać dni do puli — kaskada sama tego nie zrobi
       if (existing.status === 'APPROVED') {
         await this.balances.revertDeductions(tx, id, existing.userId);
       }
       return tx.leaveRequest.delete({ where: { id } });
     });
+    // wniosku juz nie ma w bazie, wiec zdarzenie w kalendarzu tez musi zniknac
+    if (existing.googleEventId || existing.status === 'APPROVED') {
+      await this.googleCalendar.deleteLeaveEvent(existing.googleEventId, id).catch(() => undefined);
+    }
+    // kasujacy sam siebie nie zawiadamia — wie, co zrobil przed chwila;
+    // w druga strone o wycofaniu dowiaduje sie przelozony, bo ma w mailu martwe juz przyciski decyzji
+    if (isOwner) await this.notifySupervisorWithdrawn(existing);
+    else await this.notifyApplicantDeleted(existing, userId);
+    return removed;
+  }
+
+  // @anchor notify-applicant-request-deleted
+  /// Mail do wnioskodawcy o usunieciu jego wniosku przez administratora albo przelozonego.
+  /// Usuniecie nie zostawia sladu w module — bez maila pracownik zobaczylby tylko, ze
+  /// wniosek zniknal. Best-effort: blad SMTP nie cofa usuniecia, ktore juz sie stalo.
+  private async notifyApplicantDeleted(request: any, deletedById: string): Promise<void> {
+    try {
+      const to = request.user?.email;
+      if (!to) return;
+
+      const deleter = await this.prisma.user.findUnique({
+        where: { id: deletedById },
+        select: { firstName: true, lastName: true, email: true },
+      });
+      const appUrl = `${this.config.get('FRONTEND_URL') || 'http://localhost:5174'}/urlopy`;
+      await this.mail.sendLeaveRequestDeleted({
+        to,
+        applicantName: [request.user?.firstName, request.user?.lastName].filter(Boolean).join(' ') || to,
+        deletedByName:
+          [deleter?.firstName, deleter?.lastName].filter(Boolean).join(' ') || deleter?.email || null,
+        leaveTypeName: request.leaveType?.name ?? null,
+        dateStart: request.dateStart,
+        dateEnd: request.dateEnd,
+        wasApproved: request.status === 'APPROVED',
+        appUrl,
+      });
+    } catch {
+      /* powiadomienie jest best-effort — wniosek jest juz usuniety */
+    }
+  }
+
+  // @anchor notify-supervisor-request-withdrawn
+  /// Mail do przelozonego, gdy pracownik sam wycofal swoj wniosek. Bez tego przelozony
+  /// zostaje z mailem, ktorego przyciski Zatwierdz / Odrzuc prowadza donikad.
+  /// Best-effort: blad SMTP nie cofa usuniecia, ktore juz sie stalo.
+  private async notifySupervisorWithdrawn(request: any): Promise<void> {
+    try {
+      const supervisorId = request.user?.supervisorId;
+      if (!supervisorId) return;
+      const supervisor = await this.prisma.user.findUnique({
+        where: { id: supervisorId },
+        select: { email: true },
+      });
+      const to = supervisor?.email;
+      if (!to) return;
+
+      const appUrl = `${this.config.get('FRONTEND_URL') || 'http://localhost:5174'}/urlopy`;
+      await this.mail.sendLeaveRequestWithdrawn({
+        to,
+        applicantName:
+          [request.user?.firstName, request.user?.lastName].filter(Boolean).join(' ') ||
+          request.user?.email ||
+          'Pracownik',
+        leaveTypeName: request.leaveType?.name ?? null,
+        dateStart: request.dateStart,
+        dateEnd: request.dateEnd,
+        wasApproved: request.status === 'APPROVED',
+        appUrl,
+      });
+    } catch {
+      /* powiadomienie jest best-effort — wniosek jest juz usuniety */
+    }
   }
 
   // @anchor leave-dashboard-summary
