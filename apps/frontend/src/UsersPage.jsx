@@ -4,7 +4,7 @@ import { AgGridReact } from 'ag-grid-react';
 import { themeQuartz } from 'ag-grid-community';
 import AddUserModal from './components/shared/AddUserModal';
 import EditUserModal from './components/shared/EditUserModal';
-import { LEAVE_COMPANIES, calculateLeaveEntitlement } from './utils/leaveCompanies';
+import { LEAVE_COMPANIES, calculateLeaveEntitlement, formatWorkExperience } from './utils/leaveCompanies';
 
 export default function UsersPage() {
     const [activeTab, setActiveTab] = useState('users'); // 'users' | 'teams'
@@ -151,18 +151,37 @@ export default function UsersPage() {
             valueGetter: p => p.data.company || 'Brak',
             flex: 1.2
         },
+        // @anchor users-work-start-column
+        // Rozpoczecie pracy (MM.RRRR) — edycja w modalu „Edycja uzytkownika", stad kolumna
+        // tylko do odczytu; to z niej system liczy staz.
+        {
+            field: 'workStartYear',
+            headerName: 'Rozpoczęcie pracy',
+            width: 160,
+            editable: false,
+            valueGetter: p => p.data?.workStartYear
+                ? `${String(p.data.workStartMonth || 1).padStart(2, '0')}.${p.data.workStartYear}`
+                : null,
+            valueFormatter: p => p.value || (LEAVE_COMPANIES.includes(p.data?.company) ? '—' : '')
+        },
         // @anchor users-work-experience-column
-        // Staz pracy — edytowalny tylko dla firm z modulem Urlopy (Airtel, LinkedTeam).
+        // Staz pracy liczony z rozpoczecia pracy (co miesiac sam rosnie). Reczna edycja
+        // zostaje tylko dla pracownikow bez podanej daty — dane historyczne.
         {
             field: 'workExperienceYears',
-            headerName: 'Staż pracy (lata)',
+            headerName: 'Staż pracy',
             width: 150,
-            editable: p => isAdminOrManager && LEAVE_COMPANIES.includes(p.data.company),
+            editable: p => isAdminOrManager && LEAVE_COMPANIES.includes(p.data.company) && !p.data.workStartYear,
             cellEditor: 'agNumberCellEditor',
             cellEditorParams: { min: 0, max: 60, precision: 1 },
-            valueFormatter: p => (p.value === null || p.value === undefined || p.value === '')
-                ? (LEAVE_COMPANIES.includes(p.data?.company) ? '—' : '')
-                : String(p.value)
+            valueFormatter: p => {
+                if (p.data?.workExperienceMonths !== null && p.data?.workExperienceMonths !== undefined) {
+                    return formatWorkExperience(p.data.workExperienceMonths);
+                }
+                return (p.value === null || p.value === undefined || p.value === '')
+                    ? (LEAVE_COMPANIES.includes(p.data?.company) ? '—' : '')
+                    : `${p.value} lat`;
+            }
         },
         // @anchor users-leave-entitlement-column
         // Wymiar urlopu liczony ze stazu (20 dni ponizej 10 lat, 26 od 10 lat) — pole nieedytowalne.
@@ -241,7 +260,7 @@ export default function UsersPage() {
         let payload = {};
 
         if (colId === 'Uprawnienia') {
-            const roleMap = { 'Pracownik': 'USER', 'Logistyk': 'LOGISTYK', 'Menadżer': 'MANAGER', 'Administrator': 'ADMIN' };
+            const roleMap = { 'Pracownik': 'USER', 'Logistyk': 'LOGISTYK', 'Menadżer': 'MANAGER', 'DAK': 'DAK', 'Administrator': 'ADMIN' };
             payload = { roleName: roleMap[newValue] };
         } else if (colId === 'Przełożony') {
             if (newValue === 'Brak') {

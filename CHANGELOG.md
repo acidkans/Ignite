@@ -1,3 +1,30 @@
+## 2026-08-29 — feat(users): rola DAK z podglądem urlopów wszystkich i rozpoczęcie pracy zamiast ręcznego stażu (v2026.08.29.910)
+
+### schema.prisma
+
+- dodano pole `workStartYear` w modelu `User` — rok rozpoczęcia pracy (z zaliczonymi okresami nauki)
+- dodano pole `workStartMonth` w modelu `User` — miesiąc rozpoczęcia pracy (1–12), brak = styczeń. Razem z rokiem jest źródłem prawdy dla stażu, który liczy się w runtime i rośnie co miesiąc
+- migracja `20260823150000_user_work_start_year`
+
+### architektura / API
+
+- **Rola `DAK` (dział administracyjno-księgowy) w uprawnieniach użytkownika.** Wybierana w `AddUserModal` i `EditUserModal`, etykieta zostaje skrótem — pełna nazwa tylko w tooltipie
+- **`LeaveAccess.canViewAll` — nowa flaga oddzielająca podgląd od decyzji.** ADMIN i DAK widzą w module Urlopy wszystkich pracowników (`visibleUserIds` → null, `GET /leave-requests/dashboard?userId=` dla dowolnego pracownika, `GET /leave-balances?userId=`), ale rozpatrywanie wniosków i edycja wpisów dalej wiszą na `canEdit` (ADMIN) albo byciu przełożonym. `canDecideSubject` liczy się teraz z `canEdit`, nie ze `scope === 'ALL'`
+- **`enabled` w `resolveAccess` uwzględnia role podglądowe** — DAK wchodzi do modułu niezależnie od firmy, tak jak ADMIN
+- **`calculateWorkExperienceMonths` / `calculateWorkExperienceYears`** — staż liczony z roku i miesiąca rozpoczęcia pracy. `GET /users` zwraca wyliczony staż (`workExperienceYears`, `workExperienceMonths`) i wymiar urlopu; ręcznie wpisany staż z bazy służy już tylko jako fallback dla pracowników bez daty rozpoczęcia
+- **`PATCH /users/:id` przyjmuje `workStartYear` i `workStartMonth`** — walidacja (rok 1950–bieżący, miesiąc 1–12), przeliczenie stażu przy każdej zmianie, wyczyszczenie roku kasuje też miesiąc i wyliczony staż
+- **`apps/backend/prisma/ensure-roles.js`** — idempotentny upsert samych ról systemowych (ADMIN, MANAGER, USER, LOGISTYK, DAK), bez danych użytkowników. Do uruchomienia po dodaniu nowej roli, także na produkcji
+
+### słownik
+
+- dodano `LEAVE_VIEW_ALL_ROLES`, `LeaveAccess.canViewAll`, `calculateWorkExperienceMonths`, `calculateWorkExperienceYears`, `user-update-work-start-date`, `ensure-roles.js`, `User.workStartYear`, `User.workStartMonth`, `calculateWorkExperienceMonths (front)`, `calculateWorkExperienceYears (front)`, `formatWorkExperience (front)`, `ROLE_OPTIONS (EditUserModal)`, `MONTH_OPTIONS (EditUserModal)`, `edit-user-work-start-field`, `edit-user-experience-preview`, `users-work-start-column`, `dashboard-can-pick-employee`
+
+### wytyczne
+
+- `back-typ` `LeaveAccess.canViewAll` — flaga daje wyłącznie podgląd. Nowy warunek „widzi cudze dane" opieraj na niej, a nie na `scope === 'ALL'`; `scope === 'ALL'` i `canEdit` zostawiaj tam, gdzie chodzi o zmianę danych albo decyzję o wniosku
+- `back-stala` `LEAVE_VIEW_ALL_ROLES` — dokładając rolę do tej listy dodaj ją też w `ensure-roles.js` i w `seed.js`, inaczej PATCH użytkownika poleci na `Roles ... not found` (role są wierszami w tabeli `roles`, nie enumem)
+- `schema-pole` `User.workExperienceYears` — nie jest już polem do ręcznej edycji, gdy pracownik ma `workStartYear`. Trzymana wartość to fallback dla danych historycznych; do wyliczeń zawsze bierz wynik `calculateWorkExperienceYears`
+
 ## 2026-08-23 — feat(urlopy): przyciski Zatwierdź / Odrzuć w mailu do przełożonego (v2026.08.23.908)
 
 ### architektura / API

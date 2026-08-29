@@ -118,6 +118,8 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }) {
                             <option value="USER" className="bg-[#1a1c1e]">Pracownik</option>
                             <option value="LOGISTYK" className="bg-[#1a1c1e]">Logistyk</option>
                             <option value="MANAGER" className="bg-[#1a1c1e]">Menadżer</option>
+                            {/* skrót DAK = dział administracyjno-księgowy (podgląd urlopów wszystkich) */}
+                            <option value="DAK" className="bg-[#1a1c1e]">DAK</option>
                             <option value="ADMIN" className="bg-[#1a1c1e]">Administrator</option>
                         </select>
                     </div>

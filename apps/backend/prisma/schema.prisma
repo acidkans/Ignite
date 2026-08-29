@@ -20,7 +20,16 @@ model User {
   /// @anchor user-work-experience-years
   /// Ogolny staz pracy w latach (zatrudnienie + zaliczone okresy nauki) — podstawa
   /// wyliczenia wymiaru urlopu wypoczynkowego (20 dni ponizej 10 lat, 26 od 10 lat).
+  /// Wpisywany recznie tylko dla pracownikow bez workStartYear (dane historyczne);
+  /// gdy rok rozpoczecia pracy jest znany, staz liczy sie z niego w runtime.
   workExperienceYears Float?
+  /// @anchor user-work-start-year
+  /// Rok rozpoczecia pracy (wliczajac zaliczone okresy nauki). Razem z workStartMonth
+  /// jest zrodlem prawdy dla stazu — staz liczy sie w runtime, wiec rosnie co miesiac.
+  workStartYear     Int?
+  /// @anchor user-work-start-month
+  /// Miesiac rozpoczecia pracy (1-12). Brak = styczen, bo staz przelicza sie na miesiace.
+  workStartMonth    Int?
   isActive          Boolean            @default(true)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt

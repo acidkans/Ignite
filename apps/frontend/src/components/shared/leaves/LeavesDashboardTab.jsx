@@ -60,7 +60,9 @@ export default function LeavesDashboardTab({ access, employees, currentUserId, o
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    const canPick = access?.scope !== 'SELF';
+    // @anchor dashboard-can-pick-employee
+    // Wybór pracownika: przełożony i ADMIN (scope != SELF) oraz role podglądowe (DAK) z canViewAll.
+    const canPick = !!access?.canViewAll || access?.scope !== 'SELF';
 
     // @anchor fetch-leaves-dashboard
     const fetchDashboard = useCallback(async (userId) => {

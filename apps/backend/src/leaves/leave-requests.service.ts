@@ -769,10 +769,10 @@ export class LeaveRequestsService {
   /// Dane zakładki Dashboard — saldo dni, wnioski oczekujące, urlopy wg rodzaju w bieżącym roku.
   async dashboard(userId: string, roles: string[], targetUserId?: string) {
     const access = await this.assertEnabled(userId, roles);
-    // podgląd innego pracownika — tylko ADMIN albo jego bezpośredni przełożony
+    // podgląd innego pracownika — role z LEAVE_VIEW_ALL_ROLES (ADMIN, DAK) albo jego przełożony
     let subjectId = userId;
     if (targetUserId && targetUserId !== userId) {
-      if (access.scope === 'ALL' || (await this.isSupervisorOf(userId, targetUserId))) {
+      if (access.canViewAll || (await this.isSupervisorOf(userId, targetUserId))) {
         subjectId = targetUserId;
       } else {
         throw new ForbiddenException('Brak uprawnień do danych tego pracownika.');
@@ -825,9 +825,10 @@ export class LeaveRequestsService {
         : { user: { supervisorId: userId }, status: 'PENDING' },
     });
 
-    // czy oglądający może rozpatrywać wnioski wyświetlanego pracownika
+    // czy oglądający może rozpatrywać wnioski wyświetlanego pracownika —
+    // DAK ma sam podgląd (canViewAll bez canEdit), więc decyzji nie dostaje
     const canDecideSubject =
-      access.scope === 'ALL' || (subjectId !== userId && (await this.isSupervisorOf(userId, subjectId)));
+      access.canEdit || (subjectId !== userId && (await this.isSupervisorOf(userId, subjectId)));
 
     return {
       subject: subject

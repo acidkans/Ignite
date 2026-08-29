@@ -2,7 +2,7 @@ import { Injectable, ConflictException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, User } from '@prisma/client';
 import * as argon2 from 'argon2';
-import { calculateLeaveEntitlement } from '../leaves/leaves.service';
+import { calculateLeaveEntitlement, calculateWorkExperienceMonths, calculateWorkExperienceYears } from '../leaves/leaves.service';
 
 import { ConfigService } from '@nestjs/config';
 
@@ -147,6 +147,56 @@ export class UsersService {
       }
     }
 
+    // @anchor user-update-work-start-date
+    // Rok i miesiac rozpoczecia pracy — zrodlo prawdy dla stazu. Zapisujemy tez wyliczony
+    // staz w workExperienceYears, zeby stare odczyty pola nadal dostawaly sensowna wartosc.
+    if ('workStartMonth' in updateData) {
+      const rawMonth = updateData.workStartMonth;
+      if (rawMonth === null || rawMonth === undefined || rawMonth === '') {
+        updateData.workStartMonth = null;
+      } else {
+        const month = Number(rawMonth);
+        if (!Number.isInteger(month) || month < 1 || month > 12) {
+          throw new BadRequestException('Miesiąc rozpoczęcia pracy musi być liczbą z zakresu 1–12.');
+        }
+        updateData.workStartMonth = month;
+      }
+    }
+
+    if ('workStartYear' in updateData) {
+      const raw = updateData.workStartYear;
+      if (raw === null || raw === undefined || raw === '') {
+        updateData.workStartYear = null;
+        // bez roku miesiac nic nie znaczy — czyscimy, zeby nie zostal sierotą
+        if (!('workStartMonth' in updateData)) updateData.workStartMonth = null;
+      } else {
+        const parsed = Number(raw);
+        const thisYear = new Date().getFullYear();
+        if (!Number.isInteger(parsed) || parsed < 1950 || parsed > thisYear) {
+          throw new BadRequestException(`Rok rozpoczęcia pracy musi być liczbą z zakresu 1950–${thisYear}.`);
+        }
+        updateData.workStartYear = parsed;
+      }
+    }
+
+    // staz przeliczamy gdy zmienil sie rok albo miesiac — bierzemy wartosci po normalizacji,
+    // brakujace uzupelniamy tym co juz jest w bazie
+    if ('workStartYear' in updateData || 'workStartMonth' in updateData) {
+      const current = await this.prisma.user.findUnique({
+        where: { id },
+        select: { workStartYear: true, workStartMonth: true },
+      });
+      const year = 'workStartYear' in updateData ? updateData.workStartYear : current?.workStartYear ?? null;
+      const month = 'workStartMonth' in updateData ? updateData.workStartMonth : current?.workStartMonth ?? null;
+      if (year !== null && year !== undefined) {
+        updateData.workExperienceYears = calculateWorkExperienceYears(year, month);
+      } else if ('workStartYear' in updateData && !('workExperienceYears' in data)) {
+        // wyczyszczenie daty rozpoczecia zeruje tez wyliczony staz — inaczej zostalaby
+        // w bazie martwa wartosc sprzed kasowania
+        updateData.workExperienceYears = null;
+      }
+    }
+
     // Obsługa przełożonego
     if ('supervisorId' in otherData) {
       updateData.supervisorId = otherData.supervisorId ?? null;
@@ -176,6 +226,8 @@ export class UsersService {
         phone: true,
         company: true,
         workExperienceYears: true,
+        workStartYear: true,
+        workStartMonth: true,
         createdAt: true,
         userRoles: {
           select: {
@@ -201,10 +253,18 @@ export class UsersService {
       },
     });
 
-    return users.map(u => ({
-      ...u,
-      leaveEntitlementDays: calculateLeaveEntitlement(u.workExperienceYears),
-    }));
+    // staz liczony w runtime z roku rozpoczecia pracy — pole w bazie sluzy tylko
+    // jako fallback dla pracownikow bez podanego roku
+    return users.map(u => {
+      const experience = calculateWorkExperienceYears(u.workStartYear, u.workStartMonth, u.workExperienceYears);
+      return {
+        ...u,
+        workExperienceYears: experience,
+        // staz w miesiacach — grid pokazuje go jako „X lat Y mies."
+        workExperienceMonths: calculateWorkExperienceMonths(u.workStartYear, u.workStartMonth),
+        leaveEntitlementDays: calculateLeaveEntitlement(experience),
+      };
+    });
   }
 
   async suggest(q: string) {

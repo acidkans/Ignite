@@ -96,9 +96,11 @@ export default function LeavesPage() {
                     <p className="text-xs text-gray-500 mt-1">
                         {access?.scope === 'ALL'
                             ? 'Widok pełny — edycja wszystkich wpisów'
-                            : access?.scope === 'SUBORDINATES'
-                                ? 'Widok przełożonego — Ty i Twoi podwładni'
-                                : 'Widok pracownika — tylko Twoje dane'}
+                            : access?.canViewAll
+                                ? 'Widok DAK — podgląd wszystkich pracowników, bez edycji'
+                                : access?.scope === 'SUBORDINATES'
+                                    ? 'Widok przełożonego — Ty i Twoi podwładni'
+                                    : 'Widok pracownika — tylko Twoje dane'}
                     </p>
                 </div>
 

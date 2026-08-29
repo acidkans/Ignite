@@ -1980,6 +1980,23 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | normalizacja stażu w update | apps/backend/src/users/users.service.ts | @anchor user-update-work-experience |
 | schema-pole | User.workExperienceYears | apps/backend/prisma/schema.prisma | @anchor user-work-experience-years |
 | ui-input | Firma (EditUserModal) | apps/frontend/src/components/shared/EditUserModal.jsx | @anchor edit-user-company-field |
+| back-stala | LEAVE_VIEW_ALL_ROLES | apps/backend/src/leaves/leaves.service.ts | @anchor leave-view-all-roles |
+| back-typ | LeaveAccess.canViewAll | apps/backend/src/leaves/leaves.service.ts | @anchor leave-access-can-view-all |
+| back-funkcja | calculateWorkExperienceMonths | apps/backend/src/leaves/leaves.service.ts | @anchor calculate-work-experience-months |
+| back-funkcja | calculateWorkExperienceYears | apps/backend/src/leaves/leaves.service.ts | @anchor calculate-work-experience-years |
+| back-funkcja | normalizacja rozpoczęcia pracy w update | apps/backend/src/users/users.service.ts | @anchor user-update-work-start-date |
+| back-skrypt | ensure-roles.js | apps/backend/prisma/ensure-roles.js | @anchor ensure-roles-script |
+| schema-pole | User.workStartYear | apps/backend/prisma/schema.prisma | @anchor user-work-start-year |
+| schema-pole | User.workStartMonth | apps/backend/prisma/schema.prisma | @anchor user-work-start-month |
+| ui-funkcja | calculateWorkExperienceMonths (front) | apps/frontend/src/utils/leaveCompanies.js | @anchor calculate-work-experience-months-front |
+| ui-funkcja | calculateWorkExperienceYears (front) | apps/frontend/src/utils/leaveCompanies.js | @anchor calculate-work-experience-years-front |
+| ui-funkcja | formatWorkExperience (front) | apps/frontend/src/utils/leaveCompanies.js | @anchor format-work-experience-front |
+| ui-stala | ROLE_OPTIONS (EditUserModal) | apps/frontend/src/components/shared/EditUserModal.jsx | @anchor edit-user-role-options |
+| ui-stala | MONTH_OPTIONS (EditUserModal) | apps/frontend/src/components/shared/EditUserModal.jsx | @anchor month-options |
+| ui-input | Rozpoczęcie pracy (EditUserModal) | apps/frontend/src/components/shared/EditUserModal.jsx | @anchor edit-user-work-start-field |
+| ui-stan | experienceYears / entitlementDays (EditUserModal) | apps/frontend/src/components/shared/EditUserModal.jsx | @anchor edit-user-experience-preview |
+| ui-kolumna | Rozpoczęcie pracy (UsersPage) | apps/frontend/src/UsersPage.jsx | @anchor users-work-start-column |
+| ui-stan | canPick (Dashboard) | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor dashboard-can-pick-employee |
 | ui-dropdown | Przełożony (EditUserModal) | apps/frontend/src/components/shared/EditUserModal.jsx | @anchor supervisor-options |
 | schema-enum | LeaveRequestStatus | apps/backend/prisma/schema.prisma | @anchor leave-request-status |
 | schema-pole | LeaveRequest.status | apps/backend/prisma/schema.prisma | @anchor leave-request-status-field |

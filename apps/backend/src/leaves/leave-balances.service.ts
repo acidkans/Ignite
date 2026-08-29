@@ -67,14 +67,15 @@ export class LeaveBalancesService {
   }
 
   // @anchor read-leave-balance
-  /// Odczyt salda z kontrolą dostępu: swoje zawsze, cudze tylko ADMIN albo przełożony.
+  /// Odczyt salda z kontrolą dostępu: swoje zawsze, cudze tylko role z podglądem
+  /// wszystkich (ADMIN, DAK) albo przełożony.
   async read(userId: string, roles: string[], targetUserId?: string) {
     const access = await this.leaves.resolveAccess(userId, roles);
     if (!access.enabled) throw new ForbiddenException('Moduł Urlopy niedostępny dla tego użytkownika.');
 
     let subjectId = userId;
     if (targetUserId && targetUserId !== userId) {
-      const allowed = access.scope === 'ALL' || (await this.isSupervisorOf(userId, targetUserId));
+      const allowed = access.canViewAll || (await this.isSupervisorOf(userId, targetUserId));
       if (!allowed) throw new ForbiddenException('Brak uprawnień do salda tego pracownika.');
       subjectId = targetUserId;
     }

@@ -5,6 +5,11 @@ import { PrismaService } from '../prisma/prisma.service';
 /// Firmy, dla których moduł Urlopy jest dostępny.
 export const LEAVE_COMPANIES = ['Airtel Services', 'Airtel Systems', 'LinkedTeam'];
 
+// @anchor leave-view-all-roles
+/// Role widzące w module Urlopy wszystkich pracowników. ADMIN — pełne uprawnienia,
+/// DAK (dział administracyjno-księgowy) — wyłącznie podgląd (bez edycji i decyzji).
+export const LEAVE_VIEW_ALL_ROLES = ['ADMIN', 'DAK'];
+
 // @anchor leave-entitlement-threshold-years
 /// Prog stazu, od ktorego przysluguje 26 dni urlopu (Kodeks pracy art. 154).
 export const LEAVE_ENTITLEMENT_THRESHOLD_YEARS = 10;
@@ -30,12 +35,46 @@ export function calculateLeaveEntitlement(years: number | null | undefined): num
     : LEAVE_ENTITLEMENT_DAYS_BELOW;
 }
 
+// @anchor calculate-work-experience-months
+/// Staz pracy w miesiacach od podanego roku i miesiaca rozpoczecia pracy. Liczony
+/// w runtime, wiec rosnie sam z kazdym miesiacem. Brak miesiaca => styczen.
+export function calculateWorkExperienceMonths(
+  workStartYear: number | null | undefined,
+  workStartMonth?: number | null,
+): number | null {
+  if (workStartYear === null || workStartYear === undefined) return null;
+  const year = Number(workStartYear);
+  if (!Number.isInteger(year)) return null;
+  const rawMonth = Number(workStartMonth);
+  const month = Number.isInteger(rawMonth) && rawMonth >= 1 && rawMonth <= 12 ? rawMonth : 1;
+  const now = new Date();
+  const diff = (now.getFullYear() - year) * 12 + (now.getMonth() + 1 - month);
+  return diff < 0 ? 0 : diff;
+}
+
+// @anchor calculate-work-experience-years
+/// Staz pracy w latach (z dokladnoscia do miesiaca) — podstawa progu 10 lat z art. 154.
+/// Brak roku rozpoczecia => fallback na recznie wpisany staz z bazy.
+export function calculateWorkExperienceYears(
+  workStartYear: number | null | undefined,
+  workStartMonth?: number | null,
+  fallbackYears: number | null | undefined = null,
+): number | null {
+  const months = calculateWorkExperienceMonths(workStartYear, workStartMonth);
+  if (months === null) return fallbackYears ?? null;
+  return Math.round((months / 12) * 100) / 100;
+}
+
 // @anchor leave-access-dto
 export interface LeaveAccess {
   /// czy moduł Urlopy jest w ogóle dostępny dla usera
   enabled: boolean;
   /// czy user może edytować wpisy (tylko ADMIN)
   canEdit: boolean;
+  // @anchor leave-access-can-view-all
+  /// czy user widzi dane wszystkich pracowników (ADMIN i DAK) — sam podgląd,
+  /// uprawnienia do edycji i decyzji nadal zależą od canEdit / bycia przełożonym
+  canViewAll: boolean;
   /// 'ALL' | 'SUBORDINATES' | 'SELF'
   scope: 'ALL' | 'SUBORDINATES' | 'SELF';
   company: string | null;
@@ -96,12 +135,16 @@ export class LeavesService {
       select: { id: true, company: true, subordinates: { select: { id: true } } },
     });
     const isAdmin = roles.includes('ADMIN');
+    // DAK widzi wszystkich, ale nie edytuje wpisów ani nie rozpatruje wniosków —
+    // dlatego osobna flaga zamiast scope 'ALL' (to ostatnie daje też prawo decyzji).
+    const canViewAll = roles.some(r => LEAVE_VIEW_ALL_ROLES.includes(r));
     const company = user?.company ?? null;
     const companyAllowed = !!company && LEAVE_COMPANIES.includes(company);
 
     return {
-      enabled: isAdmin || companyAllowed,
+      enabled: canViewAll || companyAllowed,
       canEdit: isAdmin,
+      canViewAll,
       scope: isAdmin ? 'ALL' : (user?.subordinates?.length ? 'SUBORDINATES' : 'SELF'),
       company,
     };
@@ -117,7 +160,7 @@ export class LeavesService {
   // @anchor visible-user-ids
   /// Zbiór userId, których wpisy urlopowe user może zobaczyć. null = wszyscy.
   private async visibleUserIds(userId: string, access: LeaveAccess): Promise<string[] | null> {
-    if (access.scope === 'ALL') return null;
+    if (access.scope === 'ALL' || access.canViewAll) return null;
     if (access.scope === 'SELF') return [userId];
     const subs = await this.prisma.user.findMany({
       where: { supervisorId: userId },

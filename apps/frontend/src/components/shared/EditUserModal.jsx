@@ -1,11 +1,28 @@
 import { API_URL } from '../../config';
 import { useState, useEffect } from 'react';
-import { LEAVE_COMPANIES } from '../../utils/leaveCompanies';
+import {
+    LEAVE_COMPANIES,
+    calculateLeaveEntitlement,
+    calculateWorkExperienceMonths,
+    calculateWorkExperienceYears,
+    formatWorkExperience,
+} from '../../utils/leaveCompanies';
 
+// @anchor month-options
+// Miesiace do selecta rozpoczecia pracy — indeks + 1 to numer miesiaca w bazie.
+const MONTH_OPTIONS = [
+    'styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec',
+    'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień',
+];
+
+// @anchor edit-user-role-options
+// Etykieta DAK celowo pozostaje skrótem — pełna nazwa (dział administracyjno-księgowy)
+// tylko w tooltipie, żeby pigułka roli nie rozpychała formularza.
 const ROLE_OPTIONS = [
     { value: 'USER', label: 'Pracownik' },
     { value: 'LOGISTYK', label: 'Logistyk' },
     { value: 'MANAGER', label: 'Menadżer' },
+    { value: 'DAK', label: 'DAK', title: 'Dział administracyjno-księgowy — podgląd urlopów wszystkich pracowników' },
     { value: 'ADMIN', label: 'Administrator' },
 ];
 
@@ -16,6 +33,8 @@ export default function EditUserModal({ user, users, teams, onClose, onSuccess }
         email: user.email || '',
         company: user.company || '',
         roles: user.userRoles?.map(r => r.role.name) || ['USER'],
+        workStartYear: user.workStartYear ?? '',
+        workStartMonth: user.workStartMonth ?? '',
         supervisorId: user.supervisor?.id || '',
         teamIds: Array.isArray(user.teams) ? user.teams.map(t => t.id) : [],
         newPassword: '',
@@ -62,6 +81,8 @@ export default function EditUserModal({ user, users, teams, onClose, onSuccess }
             firstName: form.firstName,
             lastName: form.lastName,
             company: form.company || null,
+            workStartYear: form.workStartYear === '' ? null : Number(form.workStartYear),
+            workStartMonth: form.workStartMonth === '' ? null : Number(form.workStartMonth),
             roles: form.roles,
             supervisorId: form.supervisorId || null,
             teamIds: form.teamIds,
@@ -91,6 +112,16 @@ export default function EditUserModal({ user, users, teams, onClose, onSuccess }
             setSaving(false);
         }
     };
+
+    // @anchor edit-user-experience-preview
+    // Podglad stazu i wymiaru urlopu liczony na biezaco z wpisanego roku i miesiaca —
+    // te same funkcje co backend, wiec zapis nie zmieni wyniku.
+    const experienceMonths = calculateWorkExperienceMonths(form.workStartYear, form.workStartMonth);
+    const experienceYears = calculateWorkExperienceYears(form.workStartYear, form.workStartMonth, user.workExperienceYears ?? null);
+    const entitlementDays = calculateLeaveEntitlement(experienceYears);
+    const experienceLabel = experienceMonths !== null
+        ? formatWorkExperience(experienceMonths)
+        : (experienceYears !== null ? `${experienceYears} lat` : null);
 
     // Close on backdrop click
     const handleBackdrop = (e) => {
@@ -164,6 +195,39 @@ export default function EditUserModal({ user, users, teams, onClose, onSuccess }
                     </span>
                 </div>
 
+                {/* Rozpoczecie pracy — staz i wymiar urlopu system liczy sam, co miesiac */}
+                {/* @anchor edit-user-work-start-field */}
+                <div className="flex flex-col gap-1">
+                    <label className="text-xs text-gray-400 uppercase tracking-widest">Rozpoczęcie pracy</label>
+                    <div className="grid grid-cols-2 gap-3">
+                        <select
+                            value={form.workStartMonth}
+                            onChange={e => set('workStartMonth', e.target.value)}
+                            className="bg-gray-800 border border-white/10 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500/50"
+                        >
+                            <option value="">miesiąc</option>
+                            {MONTH_OPTIONS.map((name, idx) => (
+                                <option key={name} value={idx + 1}>{String(idx + 1).padStart(2, '0')} — {name}</option>
+                            ))}
+                        </select>
+                        <input
+                            type="number"
+                            min="1950"
+                            max={new Date().getFullYear()}
+                            step="1"
+                            value={form.workStartYear}
+                            onChange={e => set('workStartYear', e.target.value)}
+                            placeholder="rok, np. 2014"
+                            className="bg-white/5 border border-white/10 rounded px-3 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
+                        />
+                    </div>
+                    <span className="text-[10px] text-gray-500">
+                        {experienceLabel === null
+                            ? 'Wliczaj zaliczone okresy nauki. Staż i wymiar urlopu system wyliczy sam.'
+                            : `Staż pracy: ${experienceLabel} · wymiar urlopu: ${entitlementDays} dni (Kodeks pracy art. 154 §1)`}
+                    </span>
+                </div>
+
                 {/* Role */}
                 <div className="flex flex-col gap-1">
                     <label className="text-xs text-gray-400 uppercase tracking-widest">Uprawnienia</label>
@@ -172,6 +236,7 @@ export default function EditUserModal({ user, users, teams, onClose, onSuccess }
                             <button
                                 key={r.value}
                                 type="button"
+                                title={r.title || r.label}
                                 onClick={() => toggleRole(r.value)}
                                 className={`px-3 py-1 rounded-full text-sm border transition-all ${
                                     form.roles.includes(r.value)

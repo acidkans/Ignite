@@ -3,7 +3,8 @@ const prisma = new PrismaClient();
 
 async function main() {
     // Seed roles
-    const roles = ['ADMIN', 'MANAGER', 'USER'];
+    // DAK = dzial administracyjno-ksiegowy (podglad urlopow wszystkich pracownikow)
+    const roles = ['ADMIN', 'MANAGER', 'USER', 'LOGISTYK', 'DAK'];
     const roleRecords = {};
 
     for (const roleName of roles) {
