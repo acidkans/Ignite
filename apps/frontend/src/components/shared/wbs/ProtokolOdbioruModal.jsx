@@ -416,29 +416,23 @@ export default function ProtokolOdbioruModal({
             + podpis;
     }, [pola.data, profil]);
 
-    // @anchor protokol-pelna-wartosc — czy protokół bierze CAŁĄ ofertę ruszonych gałęzi.
-    // Dwa warunki naraz: żadna pozycja ruszonej gałęzi nie zostaje poza protokołem (poza już
-    // domkniętymi) i każda odbierana idzie za pełną pozostałą kwotę. Liczy się KWOTA, a nie
-    // przełącznik „domknij": pozycja zamknięta na kwotę niższą od oferty to nadal odbiór
-    // części wartości, choćby nikt nie zamierzał wracać po resztę.
+    // @anchor protokol-pelna-wartosc — czy KAŻDA odbierana pozycja idzie za pełną pozostałą
+    // kwotę. Liczy się wyłącznie zaznaczony zakres: protokół na dwa liście z pięciu, ale każdy
+    // odebrany w całości, to odbiór całościowy tych dwóch pozycji — reszta gałęzi pójdzie
+    // osobnym dokumentem. Liczy się KWOTA, a nie przełącznik „domknij": pozycja zamknięta na
+    // kwotę niższą od oferty to nadal odbiór części wartości.
     const pelnaWartosc = useMemo(() => {
         if (!wybrane.length) return false;
-        return grupy
-            .filter((g) => branches.includes(g.nazwa))
-            .every((g) => g.pozycje.every((r) =>
-                domknieteOf(r) || (zaznaczone.has(r.node.id) && kwotaOdbioru(r) >= pozostaloOf(r) - 0.005),
-            ));
-    }, [grupy, branches, zaznaczone, wybrane.length, domknieteOf, kwotaOdbioru, pozostaloOf]);
+        return wybrane.every((r) => kwotaOdbioru(r) >= pozostaloOf(r) - 0.005);
+    }, [wybrane, kwotaOdbioru, pozostaloOf]);
 
-    // @anchor protokol-auto-odbior — rodzaj odbioru idzie za wartością. Kwota niższa od oferty
-    // ZAWSZE daje „częściowy", także po ręcznym wyborze — dokument na 60% oferty opisany jako
-    // odbiór całościowy zamykałby pozycję, za którą nikt nie zapłacił do końca (przycisk
-    // „Całościowy" jest wtedy nieaktywny, żeby reguła była widoczna, a nie działa się w tle).
-    // Ręczny wybór zostaje tylko przy pełnej kwocie — o częściowości decyduje wtedy stan robót,
-    // a tego aplikacja nie wie. „Zakres nie odebrany" to osobna oś i nie podlega wyliczeniu.
+    // @anchor protokol-auto-odbior — rodzaj odbioru to WARTOŚĆ DOMYŚLNA wyliczona z kwot:
+    // wszystkie zaznaczone pozycje za pełną kwotę → „całościowy", cokolwiek niżej → „częściowy".
+    // Podpowiedź, nie blokada — po ręcznym kliknięciu (`odbiorRecznie`) automat milczy, bo
+    // o częściowości decyduje stan robót, a tego aplikacja nie wie. „Zakres nie odebrany"
+    // to osobna oś i nie podlega wyliczeniu.
     useEffect(() => {
-        if (!wybrane.length || pola.odbior === 'NIE_DOTYCZY') return;
-        if (pelnaWartosc && pola.odbiorRecznie) return;
+        if (!wybrane.length || pola.odbior === 'NIE_DOTYCZY' || pola.odbiorRecznie) return;
         // Zapis tylko przy realnej zmianie: `ustaw` składa nowy obiekt stanu, więc
         // bezwarunkowe wołanie przerysowywałoby modal po każdym przeliczeniu kwot.
         const rodzaj = pelnaWartosc ? 'CALOSCIOWY' : 'CZESCIOWY';
@@ -827,16 +821,15 @@ export default function ProtokolOdbioruModal({
                                     ['CZESCIOWY', 'Częściowy', 'Częściowy odbiór pozycji'],
                                     ['NIE_DOTYCZY', 'Nie odebrany', 'Zakres nie odebrany z uwagi na wady/braki'],
                                 ].map(([k, l, tytul]) => {
-                                    // „Całościowy" wypada z gry, gdy odbierana kwota nie sięga oferty —
-                                    // patrz `protokol-auto-odbior`. Nieaktywny przycisk pokazuje regułę
-                                    // wprost, zamiast cofać wybór użytkownika chwilę po kliknięciu.
-                                    const zablokowany = k === 'CALOSCIOWY' && wybrane.length > 0 && !pelnaWartosc;
+                                    // Żaden rodzaj nie jest blokowany — patrz `protokol-auto-odbior`.
+                                    // Automat podpowiada wartość domyślną z kwot, użytkownik może ją
+                                    // nadpisać; przy rozjeździe z kwotami dokładamy ostrzeżenie w tooltipie.
+                                    const niespojny = k === 'CALOSCIOWY' && wybrane.length > 0 && !pelnaWartosc;
                                     return (
                                     <button
                                         key={k}
-                                        disabled={zablokowany}
-                                        title={zablokowany
-                                            ? 'Odbierana kwota jest niższa od oferty — to odbiór częściowy'
+                                        title={niespojny
+                                            ? 'Uwaga: odbierana kwota jest niższa od oferty — zwykle to odbiór częściowy'
                                             : tytul}
                                         // Wybór „nie odebrany" przestawia też wynik na negatywny — dokument
                                         // z nieodebranym zakresem i pozytywnym wynikiem przeczyłby sam sobie.
@@ -848,10 +841,10 @@ export default function ProtokolOdbioruModal({
                                         }}
                                         className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold border transition-all ${
                                             pola.odbior === k
-                                                ? 'bg-blue-500/15 border-blue-500/40 text-blue-200'
-                                                : zablokowany
-                                                    ? 'bg-white/[0.02] border-white/5 text-gray-600 cursor-not-allowed'
-                                                    : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                                                ? (niespojny
+                                                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-200'
+                                                    : 'bg-blue-500/15 border-blue-500/40 text-blue-200')
+                                                : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
                                         }`}
                                     >{l}</button>
                                     );
