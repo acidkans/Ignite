@@ -1,3 +1,11 @@
+## 2026-08-30 — role systemowe: brak wiersza DAK na produkcji
+
+### architektura / API
+- brak zmian w kodzie — na produkcji brakowalo wiersza `DAK` w tabeli `roles`, przez co zapis uzytkownika z ta rola konczyl sie bledem `Roles DAK not found` (users.service.ts, `update`). Naprawione uruchomieniem `apps/backend/prisma/ensure-roles.js` na kontenerze erp-backend
+
+### wytyczne
+- `back-skrypt` `ensure-roles.js` — po KAZDYM dodaniu nowej roli w kodzie odpalic na produkcji zaraz po deployu: `docker exec -w /usr/src/app erp-backend node prisma/ensure-roles.js`. Rola dodana tylko w UI i w logice uprawnien nie istnieje w tabeli `roles`, a `users.service.ts` rzuca `Roles <NAZWA> not found` przy zapisie uzytkownika. Skrypt jest idempotentny i dotyka WYLACZNIE slownika rol — nie jest seedem danych, wiec nie lamie zasady „zadnego seedowania na produkcji"
+
 ## 2026-08-30 — protokoly: lista wystawionych i bilans kwotowy w jednej karcie
 
 ### architektura / API
