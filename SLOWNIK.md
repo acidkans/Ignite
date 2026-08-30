@@ -2281,11 +2281,14 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-funkcja | uploadToOneDrive | apps/frontend/src/utils/exportMail.js | @anchor upload-to-onedrive |
 | ui-stan | statusOdbioru | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-status-odbioru |
 | ui-stan | kwotyReczne | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-kwoty-reczne |
-| ui-stan | domknijReczne | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-domknij-reczne |
+| ui-stan | odblokowaneKwoty | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-kwota-odblokowana |
+| ui-stan | domknieciaCzesciowe | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-domkniecie-czesciowe |
 | ui-funkcja | pozostaloOf | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-pozostalo-of |
 | ui-funkcja | domknieteOf | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-domkniete-of |
 | ui-funkcja | kwotaOdbioru | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-kwota-odbioru |
 | ui-funkcja | pelnyOf | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-pelny-of |
+| ui-funkcja | pelnaKwotaOf | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-pelna-kwota-of |
+| ui-funkcja | kwotaZablokowanaOf | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-kwota-zablokowana-of |
 | ui-funkcja | roznice (wobec oferty) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-adnotacja-roznic |
 | ui-funkcja | adnotacjaRoznic | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-tekst-roznic |
 | ui-funkcja | poEksporcie | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-po-eksporcie |
@@ -2303,6 +2306,7 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-input | kwota odbioru pozycji | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-kwota-input |
 | ui-input | kwota zablokowana zamknięciem pozycji | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-kwota-zablokowana |
 | ui-przycisk | blokada kwoty (Odblokuj / Zablokuj pozycję) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-blokada-kwoty |
+| ui-przycisk | domknij mimo niższej kwoty | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-domknij-nizsza |
 | ui-wiersz | różnica kwoty wobec oferty | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-roznica-kwoty |
 | ui-sekcja | DpPortal (portal kalendarza protokołu) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-dp-portal |
 | ui-funkcja | parsujDate | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-parsuj-date |

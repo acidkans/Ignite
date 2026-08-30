@@ -129,9 +129,15 @@ export default function ProtokolOdbioruModal({
     // @anchor protokol-kwoty-reczne — kwoty odbioru nadpisane ręcznie, `wbsRootId → liczba`.
     // Pozycje spoza tej mapy odbierane są w całości pozostałej kwoty.
     const [kwotyReczne, setKwotyReczne] = useState({});
-    // @anchor protokol-domknij-reczne — świadoma decyzja „ta pozycja jest odebrana do końca",
-    // `wbsRootId → bool`. Poza mapą decyduje porównanie kwoty z pozostałą częścią.
-    const [domknijReczne, setDomknijReczne] = useState({});
+    // @anchor protokol-kwota-odblokowana — pozycje z ODBLOKOWANYM polem kwoty, `wbsRootId → bool`.
+    // Sama blokada pola, NIC WIĘCEJ: wcześniej ten sam przełącznik decydował też o domknięciu
+    // pozycji, więc ponowne kliknięcie „Zablokuj" przy obniżonej kwocie zamykało odbiór na tej
+    // kwocie — pozostała część znikała z puli, mimo że nikt jej nie odebrał.
+    const [odblokowaneKwoty, setOdblokowaneKwoty] = useState({});
+    // @anchor protokol-domkniecie-czesciowe — świadoma decyzja „odbieram MNIEJ, ale pozycję
+    // zamykam" (rabat, korekta zakresu), `wbsRootId → bool`. Osobny, jawny przełącznik: przy
+    // pełnej kwocie domknięcie wynika z samej kwoty i tej mapy nie dotyka.
+    const [domknieciaCzesciowe, setDomknieciaCzesciowe] = useState({});
     const [zapisanoOdbior, setZapisanoOdbior] = useState(false);
     // @anchor protokol-wystawione — wystawione protokoły zamówienia. Pokazujemy je w modalu,
     // bo bez tej listy pomyłkowy odbiór wyszarzałby pozycję bez żadnej drogi odwrotu.
@@ -202,7 +208,7 @@ export default function ProtokolOdbioruModal({
     useEffect(() => {
         if (!open) {
             setZaznaczone(new Set()); setNumerRecznie(false); setPodwykonawcaRecznie(false);
-            setEksportOtwarty(false); setKwotyReczne({}); setDomknijReczne({});
+            setEksportOtwarty(false); setKwotyReczne({}); setOdblokowaneKwoty({}); setDomknieciaCzesciowe({});
             setZapisanoOdbior(false); setStatusBlad(''); setDoWycofania(null); setWysylka('');
             setListaOtwarta(false);
         }
@@ -278,7 +284,8 @@ export default function ProtokolOdbioruModal({
     const resetFormularza = useCallback(() => {
         setZaznaczone(new Set());
         setKwotyReczne({});
-        setDomknijReczne({});
+        setOdblokowaneKwoty({});
+        setDomknieciaCzesciowe({});
         setNumerRecznie(false);
         setPodwykonawcaRecznie(false);
         setZapisanoOdbior(false);
@@ -354,15 +361,27 @@ export default function ProtokolOdbioruModal({
         return Math.max(0, Math.round((Number(reczna) || 0) * 100) / 100);
     }, [kwotyReczne, pozostaloOf]);
 
-    // @anchor protokol-pelny-of — czy pozycja zostaje TYM protokołem domknięta. Domyślnie
-    // tak, gdy kwota pokrywa całą pozostałą część. Przełącznik jest jednak jawny, bo odbiór
-    // za kwotę NIŻSZĄ od oferty (rabat, korekta zakresu) też domyka pozycję — samo porównanie
-    // liczb wzięłoby to za odbiór częściowy i zostawiło resztę wiszącą w nieskończoność.
-    const pelnyOf = useCallback((row) => {
-        const reczne = domknijReczne[protokolRootOf(row.node)];
-        if (reczne != null) return reczne;
-        return kwotaOdbioru(row) >= pozostaloOf(row) - 0.005;
-    }, [domknijReczne, kwotaOdbioru, pozostaloOf]);
+    // @anchor protokol-pelna-kwota-of — czy pozycja idzie za CAŁĄ pozostałą kwotę.
+    const pelnaKwotaOf = useCallback(
+        (row) => kwotaOdbioru(row) >= pozostaloOf(row) - 0.005,
+        [kwotaOdbioru, pozostaloOf],
+    );
+
+    // @anchor protokol-pelny-of — czy pozycja zostaje TYM protokołem DOMKNIĘTA. Pełna kwota
+    // domyka zawsze; kwota niższa tylko wtedy, gdy odbierający jawnie to zaznaczy
+    // (`domknieciaCzesciowe`). Blokada pola kwoty NIE ma tu nic do rzeczy — mylenie tych
+    // dwóch rzeczy zamykało pozycje odebrane w części.
+    const pelnyOf = useCallback(
+        (row) => pelnaKwotaOf(row) || !!domknieciaCzesciowe[protokolRootOf(row.node)],
+        [pelnaKwotaOf, domknieciaCzesciowe],
+    );
+
+    // @anchor protokol-kwota-zablokowana-of — pole kwoty stoi zablokowane, dopóki odbieramy
+    // całą pozostałą kwotę i nikt tego nie odblokował.
+    const kwotaZablokowanaOf = useCallback(
+        (row) => pelnaKwotaOf(row) && !odblokowaneKwoty[protokolRootOf(row.node)],
+        [pelnaKwotaOf, odblokowaneKwoty],
+    );
 
     // @anchor protokol-podsumowanie — kwotowy bilans odbiorów zamówienia liczony po tych
     // samych wierszach, które widać w tabeli: plan z wyceny, ile zabrały dotychczasowe
@@ -420,7 +439,7 @@ export default function ProtokolOdbioruModal({
         pelny: pelnyOf(r),
     })))),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [wybrane, kwotyReczne, domknijReczne, statusOdbioru]);
+        [wybrane, kwotyReczne, domknieciaCzesciowe, statusOdbioru]);
 
     // @anchor protokol-auto-podwykonawca — przedstawiciel podwykonawcy podpowiada się
     // właścicielem odbieranej gałęzi. Wpisujemy TYLKO wartość niepustą: gałąź bez właściciela
@@ -625,86 +644,94 @@ export default function ProtokolOdbioruModal({
 
                     <div className="p-5 overflow-y-auto custom-scrollbar flex flex-col gap-5">
 
-                        {/* @anchor protokol-pasek-podsumowania — bilans kwotowy odbiorów nad
-                            całą resztą modalu: pierwsze, co widać po otwarciu, to ile z
-                            zamówienia jest już zatwierdzone protokołami. */}
-                        <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                <div>
-                                    <div className="text-[10px] uppercase tracking-wider text-gray-500">Wartość zakresu</div>
-                                    <div className="text-sm font-mono font-bold text-gray-100">{fmtZlProtokol(podsumowanie.plan)}</div>
+                        {/* @anchor protokol-lista-wystawionych — historia odbiorów i bilans
+                            kwotowy w JEDNEJ karcie: lista mówi „co odebrano", podsumowanie pod nią
+                            „ile z tego wyszło" — rozdzielone czytały się jak dwie niezależne sekcje
+                            o tej samej rzeczy. Lista zwija się, bilans zostaje zawsze widoczny, bo
+                            to on odpowiada na pytanie zadawane przy każdym otwarciu modalu. */}
+                        <div className="rounded-xl border border-white/10 bg-white/[0.03]">
+                            {wystawione.length > 0 && (
+                                <>
+                                    <button
+                                        onClick={() => setListaOtwarta((v) => !v)}
+                                        className="w-full flex items-center gap-2 px-4 py-2.5 rounded-t-xl hover:bg-white/[0.04] transition-colors"
+                                    >
+                                        <History size={13} className="text-teal-400 shrink-0" />
+                                        <span className="text-xs font-bold text-gray-200 flex-1 text-left">
+                                            Wystawione protokoły ({wystawione.length})
+                                        </span>
+                                        <span className="text-[10px] uppercase tracking-wider text-gray-500">
+                                            {listaOtwarta ? 'zwiń' : 'rozwiń'}
+                                        </span>
+                                    </button>
+
+                                    {listaOtwarta && (
+                                        <div className="border-t border-white/10 divide-y divide-white/5">
+                                            {wystawione.map((pr) => {
+                                                const suma = (pr.items || []).reduce((a, i) => a + (Number(i.wartosc) || 0), 0);
+                                                const autor = pr.author
+                                                    ? [pr.author.firstName, pr.author.lastName].filter(Boolean).join(' ') || pr.author.email
+                                                    : '';
+                                                return (
+                                                    <div key={pr.id} className="px-3 py-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-xs text-gray-200 truncate flex-1" title={pr.numer}>{pr.numer}</span>
+                                                            <span className="text-[11px] font-mono text-emerald-300 shrink-0">{fmtZlProtokol(suma)}</span>
+                                                            <button
+                                                                onClick={() => setDoWycofania(pr)}
+                                                                title="Wycofaj wpis — pozycje wrócą do odbioru. Plik na OneDrive zostaje."
+                                                                className="flex items-center gap-1 px-2 py-0.5 rounded border border-red-500/25 bg-red-500/10 text-red-300 text-[10px] font-bold uppercase tracking-wider hover:bg-red-500/20 transition-colors shrink-0"
+                                                            >
+                                                                <Undo2 size={11} /> cofnij
+                                                            </button>
+                                                        </div>
+                                                        <div className="text-[10px] text-gray-500 mt-0.5">
+                                                            {pr.data} · {pr.odbior === 'CALOSCIOWY' ? 'całościowy' : pr.odbior === 'CZESCIOWY' ? 'częściowy' : 'nie odebrany'}
+                                                            {' · '}{(pr.items || []).length} poz.
+                                                            {autor ? ` · ${autor}` : ''}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </>
+                            )}
+
+                            {/* @anchor protokol-pasek-podsumowania — bilans kwotowy odbiorów:
+                                plan całego widocznego zakresu, ile zabrały protokoły, ile zostaje
+                                i ile bierze ten protokół. Stoi POD listą, bo czyta się jak jej
+                                podsumowanie; widoczny także wtedy, gdy żadnego protokołu jeszcze
+                                nie ma — wtedy odpowiada „nic nie odebrano, do wzięcia tyle". */}
+                            <div className={`px-4 py-3 ${wystawione.length > 0 ? 'border-t border-white/10' : ''}`}>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-wider text-gray-500">Wartość zakresu</div>
+                                        <div className="text-sm font-mono font-bold text-gray-100">{fmtZlProtokol(podsumowanie.plan)}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-wider text-gray-500">
+                                            Odebrane{wystawione.length > 0 ? ` (${wystawione.length} prot.)` : ''}
+                                        </div>
+                                        <div className="text-sm font-mono font-bold text-emerald-300">{fmtZlProtokol(podsumowanie.odebrane)}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-wider text-gray-500">Pozostało</div>
+                                        <div className="text-sm font-mono font-bold text-amber-300">{fmtZlProtokol(podsumowanie.pozostalo)}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-wider text-gray-500">W tym protokole</div>
+                                        <div className="text-sm font-mono font-bold text-blue-300">{fmtZlProtokol(suma)}</div>
+                                    </div>
                                 </div>
-                                <div>
-                                    <div className="text-[10px] uppercase tracking-wider text-gray-500">Odebrane ({wystawione.length} prot.)</div>
-                                    <div className="text-sm font-mono font-bold text-emerald-300">{fmtZlProtokol(podsumowanie.odebrane)}</div>
+                                <div className="mt-3 flex items-center gap-2">
+                                    <div className="h-1.5 flex-1 rounded-full bg-white/10 overflow-hidden">
+                                        <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all" style={{ width: `${podsumowanie.procent}%` }} />
+                                    </div>
+                                    <span className="text-[10px] font-mono text-gray-400 shrink-0">{podsumowanie.procent}% odebrane</span>
                                 </div>
-                                <div>
-                                    <div className="text-[10px] uppercase tracking-wider text-gray-500">Pozostało</div>
-                                    <div className="text-sm font-mono font-bold text-amber-300">{fmtZlProtokol(podsumowanie.pozostalo)}</div>
-                                </div>
-                                <div>
-                                    <div className="text-[10px] uppercase tracking-wider text-gray-500">W tym protokole</div>
-                                    <div className="text-sm font-mono font-bold text-blue-300">{fmtZlProtokol(suma)}</div>
-                                </div>
-                            </div>
-                            <div className="mt-3 flex items-center gap-2">
-                                <div className="h-1.5 flex-1 rounded-full bg-white/10 overflow-hidden">
-                                    <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all" style={{ width: `${podsumowanie.procent}%` }} />
-                                </div>
-                                <span className="text-[10px] font-mono text-gray-400 shrink-0">{podsumowanie.procent}% odebrane</span>
                             </div>
                         </div>
-
-                        {/* @anchor protokol-lista-wystawionych — zwinięta sekcja z historią
-                            odbiorów. Otwiera się sama, gdy coś już wystawiono, żeby nikt nie
-                            zastanawiał się, czemu pozycje są wyszarzone. */}
-                        {wystawione.length > 0 && (
-                            <div>
-                                <button
-                                    onClick={() => setListaOtwarta((v) => !v)}
-                                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] transition-colors"
-                                >
-                                    <History size={13} className="text-teal-400 shrink-0" />
-                                    <span className="text-xs font-bold text-gray-200 flex-1 text-left">
-                                        Wystawione protokoły ({wystawione.length})
-                                    </span>
-                                    <span className="text-[10px] uppercase tracking-wider text-gray-500">
-                                        {listaOtwarta ? 'zwiń' : 'rozwiń'}
-                                    </span>
-                                </button>
-
-                                {listaOtwarta && (
-                                    <div className="mt-2 rounded-xl border border-white/10 divide-y divide-white/5">
-                                        {wystawione.map((pr) => {
-                                            const suma = (pr.items || []).reduce((a, i) => a + (Number(i.wartosc) || 0), 0);
-                                            const autor = pr.author
-                                                ? [pr.author.firstName, pr.author.lastName].filter(Boolean).join(' ') || pr.author.email
-                                                : '';
-                                            return (
-                                                <div key={pr.id} className="px-3 py-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-xs text-gray-200 truncate flex-1" title={pr.numer}>{pr.numer}</span>
-                                                        <span className="text-[11px] font-mono text-emerald-300 shrink-0">{fmtZlProtokol(suma)}</span>
-                                                        <button
-                                                            onClick={() => setDoWycofania(pr)}
-                                                            title="Wycofaj wpis — pozycje wrócą do odbioru. Plik na OneDrive zostaje."
-                                                            className="flex items-center gap-1 px-2 py-0.5 rounded border border-red-500/25 bg-red-500/10 text-red-300 text-[10px] font-bold uppercase tracking-wider hover:bg-red-500/20 transition-colors shrink-0"
-                                                        >
-                                                            <Undo2 size={11} /> cofnij
-                                                        </button>
-                                                    </div>
-                                                    <div className="text-[10px] text-gray-500 mt-0.5">
-                                                        {pr.data} · {pr.odbior === 'CALOSCIOWY' ? 'całościowy' : pr.odbior === 'CZESCIOWY' ? 'częściowy' : 'nie odebrany'}
-                                                        {' · '}{(pr.items || []).length} poz.
-                                                        {autor ? ` · ${autor}` : ''}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        )}
 
                         {/* ─ Zakres ─────────────────────────────────────────────── */}
                         <div>
@@ -795,7 +822,8 @@ export default function ProtokolOdbioruModal({
                                                             // stoi na pełnej kwocie i nie da się go tknąć przypadkiem; droga do
                                                             // odbioru częściowego wiedzie przez „Odblokuj pozycję". Stan pola idzie
                                                             // dokładnie za tym, co pokazuje przycisk — patrz `protokol-blokada-kwoty`.
-                                                            const zablokowana = pelnyOf(r);
+                                                            const zablokowana = kwotaZablokowanaOf(r);
+                                                            const nizszaKwota = !pelnaKwotaOf(r);
                                                             return (
                                                             <div className="flex items-center gap-2 pl-[3.25rem] pr-3 pb-1.5">
                                                                 <span className="text-[10px] uppercase tracking-wider text-gray-500">Odbieram</span>
@@ -827,7 +855,15 @@ export default function ProtokolOdbioruModal({
                                                                     zablokowanym polu) czytała się jak polecenie zamknięcia czegoś, co już
                                                                     było zamknięte. */}
                                                                 <button
-                                                                    onClick={() => setDomknijReczne((d) => ({ ...d, [root]: !pelnyOf(r) }))}
+                                                                    onClick={() => {
+                                                                        if (zablokowana) { setOdblokowaneKwoty((d) => ({ ...d, [root]: true })); return; }
+                                                                        // Powrót do odbioru CAŁEJ pozycji musi też skasować wpisaną kwotę —
+                                                                        // inaczej pole pokazywało obniżoną liczbę i zamykało na niej odbiór,
+                                                                        // wbrew własnemu podpisowi „wróć do odbioru całej pozycji".
+                                                                        setKwotyReczne((k) => { const n = { ...k }; delete n[root]; return n; });
+                                                                        setDomknieciaCzesciowe((d) => { const n = { ...d }; delete n[root]; return n; });
+                                                                        setOdblokowaneKwoty((d) => ({ ...d, [root]: false }));
+                                                                    }}
                                                                     title={zablokowana
                                                                         ? 'Odbierasz całą pozycję — kliknij, żeby odblokować kwotę i odebrać tylko część'
                                                                         : 'Kwota odblokowana — kliknij, żeby wrócić do odbioru całej pozycji'}
@@ -841,6 +877,29 @@ export default function ProtokolOdbioruModal({
                                                                         ? <><Unlock size={11} /> Odblokuj pozycję</>
                                                                         : <><Lock size={11} /> Zablokuj pozycję</>}
                                                                 </button>
+
+                                                                {/* @anchor protokol-domknij-nizsza — jedyna droga do zamknięcia pozycji
+                                                                    na kwocie NIŻSZEJ niż pozostała (rabat, korekta zakresu). Osobno od
+                                                                    blokady pola i domyślnie wyłączone: odbiór części kwoty prawie zawsze
+                                                                    znaczy „reszta przyjdzie kolejnym protokołem", a ciche domknięcie
+                                                                    kasowało tę resztę bez pytania. */}
+                                                                {nizszaKwota && (
+                                                                    <button
+                                                                        onClick={() => setDomknieciaCzesciowe((d) => ({ ...d, [root]: !d[root] }))}
+                                                                        title={domknieciaCzesciowe[root]
+                                                                            ? 'Pozycja zostanie zamknięta na tej kwocie — reszta NIE wróci do kolejnego protokołu'
+                                                                            : 'Reszta kwoty zostaje do odbioru kolejnym protokołem — kliknij, jeśli pozycja ma być zamknięta mimo niższej kwoty'}
+                                                                        className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border transition-all ${
+                                                                            domknieciaCzesciowe[root]
+                                                                                ? 'bg-red-500/20 border-red-500/50 text-red-300 hover:bg-red-500/30'
+                                                                                : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                                                                        }`}
+                                                                    >
+                                                                        {domknieciaCzesciowe[root]
+                                                                            ? <><CheckSquare size={11} /> Domykam na tej kwocie</>
+                                                                            : <><Square size={11} /> Domknij mimo niższej kwoty</>}
+                                                                    </button>
+                                                                )}
 
                                                                 {/* @anchor protokol-roznica-kwoty — różnica wobec oferty przy KAŻDEJ kwocie
                                                                     innej niż ofertowa, nie tylko przy domkniętej pozycji. Dopisek mówi, co się

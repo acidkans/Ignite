@@ -1,3 +1,29 @@
+## 2026-08-30 — protokoly: lista wystawionych i bilans kwotowy w jednej karcie
+
+### architektura / API
+- bez zmian w API — zmiana ukladu modalu protokolu odbioru
+
+### slownik
+- zmieniono `protokol-lista-wystawionych` — karta obejmuje teraz zwijana liste protokolow ORAZ bilans pod nia
+- zmieniono `protokol-pasek-podsumowania` — bilans stoi wewnatrz karty protokolow, pod lista; widoczny takze bez zadnego protokolu
+
+## 2026-08-30 — protokoly: blokada pola kwoty odcieta od domkniecia pozycji
+
+### architektura / API
+- bez zmian w API — poprawka wylacznie w modalu protokolu odbioru
+
+### slownik
+- usunieto `protokol-domknij-reczne` — jeden przelacznik odpowiadal za dwie rozne rzeczy
+- dodano `protokol-kwota-odblokowana` — pozycje z odblokowanym polem kwoty (sama blokada pola)
+- dodano `protokol-domkniecie-czesciowe` — jawna zgoda na zamkniecie pozycji na nizszej kwocie
+- dodano `protokol-pelna-kwota-of` — czy pozycja idzie za cala pozostala kwote
+- dodano `protokol-kwota-zablokowana-of` — czy pole kwoty jest zablokowane
+- dodano `protokol-domknij-nizsza` — przycisk „domknij mimo nizszej kwoty"
+
+### wytyczne
+- `ui-funkcja` `pelnyOf` — domkniecie pozycji wynika WYLACZNIE z pelnej kwoty albo z jawnego przelacznika `domknieciaCzesciowe`; stan blokady pola kwoty nie ma prawa go dotykac
+- `ui-przycisk` `protokol-blokada-kwoty` — powrot do odbioru calej pozycji kasuje wpisana kwote i zgode na domkniecie czesciowe
+
 ## 2026-08-30 — onedrive: jedno konto MS dla calej aplikacji, samonaprawa folderu kategorii
 
 ### architektura / API
