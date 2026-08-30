@@ -93,6 +93,7 @@ export class OrderRequirementsService {
             // wbsDescription i offerText są per-version — nie trafiają do baseline
             if (data.clientProjectManager !== undefined) requirementFields.clientProjectManager = data.clientProjectManager;
             if (data.clientProjectManagerCompany !== undefined) requirementFields.clientProjectManagerCompany = data.clientProjectManagerCompany;
+            if (data.clientProjectManagerNip !== undefined) requirementFields.clientProjectManagerNip = data.clientProjectManagerNip;
             if (data.clientProjectManagerPhone !== undefined) requirementFields.clientProjectManagerPhone = data.clientProjectManagerPhone;
             if (data.clientProjectManagerEmail !== undefined) requirementFields.clientProjectManagerEmail = data.clientProjectManagerEmail;
             if (data.clientContacts !== undefined) requirementFields.clientContacts = data.clientContacts;

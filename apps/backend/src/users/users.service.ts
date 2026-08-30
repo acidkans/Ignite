@@ -282,10 +282,13 @@ export class UsersService {
     });
   }
 
+  // @anchor users-find-by-role
+  // `company` w wyniku, bo sama rola nie wystarcza do wyboru adresata: rolę DAK ma po
+  // jednej osobie w każdej spółce, a protokół odbioru idzie do DAK-a Airtel Services.
   async findByRole(roleName: string) {
     return this.prisma.user.findMany({
       where: { userRoles: { some: { role: { name: roleName } } } },
-      select: { id: true, email: true, firstName: true, lastName: true },
+      select: { id: true, email: true, firstName: true, lastName: true, company: true },
     });
   }
 

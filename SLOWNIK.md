@@ -852,6 +852,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | sendExport | apps/frontend/src/utils/exportMail.js | @anchor send-export |
 | ui-input | RecipientInput | apps/frontend/src/components/shared/RecipientInput.jsx | @anchor recipient-input |
 | ui-modal | ExportChoiceModal | apps/frontend/src/components/shared/ExportChoiceModal.jsx | @anchor export-choice-modal |
+| ui-stan | cc (DW w mailu) | apps/frontend/src/components/shared/ExportChoiceModal.jsx | @anchor export-choice-cc |
 | ui-widok | SmtpSettingsPage | apps/frontend/src/SmtpSettingsPage.jsx | @anchor smtp-settings-page |
 | ui-sekcja | SmtpSettingsPanel | apps/frontend/src/components/shared/SmtpSettingsPanel.jsx | @anchor smtp-settings-panel |
 | ui-zakladka | Urlopy SMTP (meta) | apps/frontend/src/LeavesPage.jsx | @anchor leaves-smtp-tab-meta |
@@ -866,6 +867,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | Switch (panel powiadomień) | apps/frontend/src/NotificationSettingsPage.jsx | @anchor notification-switch |
 | ui-stan | pendingExport (WBS) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor pending-export |
 | ui-stan | pendingExport (Requirements) | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-pending-export |
+| ui-funkcja | pobierzFirmePoNip | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-nip-lookup |
+| ui-funkcja | statusNip | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-nip-status |
 | ui-stan | pendingExport (DocumentViewer) | apps/frontend/src/components/shared/DocumentViewer.jsx | @anchor document-viewer-pending-export |
 | ui-stan | pendingExport (DocSidebar) | apps/frontend/src/components/Documentation/DocumentationSidebar.jsx | @anchor doc-sidebar-pending-export |
 | ui-funkcja | buildDownloadArtifact | apps/frontend/src/utils/downloadPdfWithHighlights.js | @anchor build-download-artifact |
@@ -2144,6 +2147,168 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | autoodświeżanie wniosków | apps/frontend/src/components/shared/leaves/LeaveRequestsTab.jsx | @anchor leave-requests-auto-refresh |
 | ui-funkcja | autoodświeżanie dashboardu | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor leaves-dashboard-auto-refresh |
 | ui-funkcja | autoodświeżanie „Moje dane” | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-auto-refresh |
+
+### Moduł Protokół odbioru robót (acceptance protocols)
+
+Odwzorowanie formularza Airtela „protokół odbioru technicznego.docx" zasilane liśćmi WBS zamówienia.
+Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backend, biblioteka `docx`).
+
+#### Backend (`apps/backend/src/acceptance-protocols/`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-modul | AcceptanceProtocolsModule | apps/backend/src/acceptance-protocols/acceptance-protocols.module.ts | @anchor acceptance-protocols-module |
+| back-controller | AcceptanceProtocolsController | apps/backend/src/acceptance-protocols/acceptance-protocols.controller.ts | @anchor acceptance-protocols-controller |
+| back-serwis | AcceptanceProtocolsService | apps/backend/src/acceptance-protocols/acceptance-protocols.service.ts | @anchor acceptance-protocols-service |
+| back-funkcja | findByRole | apps/backend/src/users/users.service.ts | @anchor users-find-by-role |
+| back-dto | acceptance-protocol.dto (moduł) | apps/backend/src/acceptance-protocols/acceptance-protocol.dto.ts | @anchor acceptance-protocol-dto |
+| back-typ | OdbiorWynik (wynik odbioru) | apps/backend/src/acceptance-protocols/acceptance-protocol.dto.ts | @anchor acceptance-protocol-result |
+| back-dto | ProtokolStronaDto | apps/backend/src/acceptance-protocols/acceptance-protocol.dto.ts | @anchor acceptance-protocol-party-dto |
+| back-dto | ProtokolWartoscDto | apps/backend/src/acceptance-protocols/acceptance-protocol.dto.ts | @anchor acceptance-protocol-value-row-dto |
+| back-dto | ProtokolOdbioruDto | apps/backend/src/acceptance-protocols/acceptance-protocol.dto.ts | @anchor acceptance-protocol-payload-dto |
+| back-dto | daty podpisu (Airtel / Podwykonawca / Inspektor) | apps/backend/src/acceptance-protocols/acceptance-protocol.dto.ts | @anchor acceptance-protocol-signature-dates |
+| back-funkcja | buildDocx | apps/backend/src/acceptance-protocols/acceptance-protocols.service.ts | @anchor acceptance-protocols-build-docx |
+| back-funkcja | dataUrlToBuffer | apps/backend/src/acceptance-protocols/acceptance-protocols.service.ts | @anchor acceptance-protocol-data-url-to-buffer |
+| back-funkcja | wierszEtykiety | apps/backend/src/acceptance-protocols/acceptance-protocols.service.ts | @anchor acceptance-protocol-label-row |
+| back-funkcja | tabelaWartosci | apps/backend/src/acceptance-protocols/acceptance-protocols.service.ts | @anchor acceptance-protocol-value-table |
+| back-funkcja | wierszeStron | apps/backend/src/acceptance-protocols/acceptance-protocols.service.ts | @anchor acceptance-protocol-parties-rows |
+| back-funkcja | wierszWynikuOdbioru | apps/backend/src/acceptance-protocols/acceptance-protocols.service.ts | @anchor acceptance-protocol-result-row |
+| back-funkcja | tabelaPodpisow | apps/backend/src/acceptance-protocols/acceptance-protocols.service.ts | @anchor acceptance-protocol-signature |
+| back-stala | rozmiar skanu podpisu (80% kolumny) | apps/backend/src/acceptance-protocols/acceptance-protocols.service.ts | @anchor acceptance-protocol-signature-size |
+| back-funkcja | ensureSubfolder | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-ensure-subfolder |
+
+#### Frontend (`apps/frontend/src/utils/protokolOdbioruExport.js`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-funkcja | protokolOdbioruExport (moduł) | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-odbioru-export |
+| ui-funkcja | fmtZlProtokol | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-fmt-zl |
+| ui-funkcja | fmtDataProtokol | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-fmt-data |
+| ui-funkcja | branchOfLeaf | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-branch-of |
+| ui-funkcja | buildBranchIndex | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-branch-index |
+| ui-funkcja | buildBranchOwners | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-branch-owners |
+| ui-funkcja | ownersOfSelection | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-selected-owners |
+| ui-funkcja | buildSekcjeIWartosci | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-build-sections |
+| ui-funkcja | normalizujNip | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-norm-nip |
+| ui-funkcja | firmaWlasciciela | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-firma-wlasciciela |
+| ui-funkcja | osobaWlasciciela | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-osoba-wlasciciela |
+| ui-funkcja | stronaZamawiajacego | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-strona-zamawiajacego |
+| ui-funkcja | stronaWykonawcy | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-strona-wykonawcy |
+| ui-funkcja | strona (komórka strony w PDF) | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-strony |
+| ui-funkcja | domyslnyNumer | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-default-number |
+| ui-funkcja | protokolFilename | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-filename |
+| ui-funkcja | fetchDataUrl | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-fetch-data-url |
+| ui-stala | PROTOKOL_CSS | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-css |
+| ui-funkcja | lab (komórka etykiety) | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-lab-cell |
+| ui-funkcja | buildProtokolBodyHtml | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-build-body-html |
+| ui-funkcja | buildProtokolHtml | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-build-html |
+| ui-funkcja | openProtokolPdf | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-open-pdf |
+| ui-funkcja | makeProtokolDocx | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-make-docx |
+| ui-funkcja | makeProtokolPdf | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-make-pdf |
+
+#### Frontend (`apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx`)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-modal | ProtokolOdbioruModal | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-odbioru-modal |
+| ui-stala | PAMIETANE (pola pamiętane w przeglądarce) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-remembered-fields |
+| ui-stan | grupy (liście pogrupowane po gałęzi) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-modal-groups |
+| ui-funkcja | autonumeracja protokołu | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-auto-number |
+| ui-funkcja | autowykrywanie rodzaju odbioru | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-auto-odbior |
+| ui-stan | wynik (wynik odbioru) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-wynik-odbioru |
+| ui-stan | pelnaWartosc (kwota = 100% oferty) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-pelna-wartosc |
+| ui-funkcja | podpowiadanie przedstawiciela podwykonawcy | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-auto-podwykonawca |
+| ui-formularz | pola podpisów (osoba + data na uczestnika) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-signature-fields |
+| ui-stan | protokolOtwarty | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-protokol-open |
+
+
+#### Rejestr odbiorów — `schema.prisma`
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| schema-pole | OrderRequirements.clientProjectManagerNip | apps/backend/prisma/schema.prisma | @anchor order-requirements-pm-nip |
+| schema-model | AcceptanceProtocolRecord | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-record |
+| schema-pole | AcceptanceProtocolRecord.id | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-record-id |
+| schema-pole | AcceptanceProtocolRecord.nodeId | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-record-node-id |
+| schema-pole | AcceptanceProtocolRecord.numer | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-record-numer |
+| schema-pole | AcceptanceProtocolRecord.data | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-record-data |
+| schema-pole | AcceptanceProtocolRecord.odbior | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-record-odbior |
+| schema-pole | AcceptanceProtocolRecord.authorId | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-record-author-id |
+| schema-relacja | AcceptanceProtocolRecord.node | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-record-node |
+| schema-relacja | AcceptanceProtocolRecord.author | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-record-author |
+| schema-relacja | AcceptanceProtocolRecord.items | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-record-items |
+| schema-model | AcceptanceProtocolItem | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-item |
+| schema-pole | AcceptanceProtocolItem.id | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-item-id |
+| schema-pole | AcceptanceProtocolItem.protocolId | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-item-protocol-id |
+| schema-pole | AcceptanceProtocolItem.wbsRootId | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-item-wbs-root-id |
+| schema-pole | AcceptanceProtocolItem.nazwa | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-item-nazwa |
+| schema-pole | AcceptanceProtocolItem.wartosc | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-item-wartosc |
+| schema-pole | AcceptanceProtocolItem.pelny | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-item-pelny |
+| schema-relacja | AcceptanceProtocolItem.protocol | apps/backend/prisma/schema.prisma | @anchor acceptance-protocol-item-protocol |
+| schema-relacja | ProcessNode.acceptanceProtocols | apps/backend/prisma/schema.prisma | @anchor process-node-acceptance-protocols |
+
+#### Rejestr odbiorów — backend
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-dto | ZapisProtokoluDto | apps/backend/src/acceptance-protocols/acceptance-protocol.dto.ts | @anchor acceptance-protocol-record-dto |
+| back-dto | StatusOdbioruDto | apps/backend/src/acceptance-protocols/acceptance-protocol.dto.ts | @anchor acceptance-protocol-status-dto |
+| back-funkcja | getStatus | apps/backend/src/acceptance-protocols/acceptance-protocols.service.ts | @anchor acceptance-protocols-status |
+| back-funkcja | record | apps/backend/src/acceptance-protocols/acceptance-protocols.service.ts | @anchor acceptance-protocols-record |
+| back-funkcja | list | apps/backend/src/acceptance-protocols/acceptance-protocols.service.ts | @anchor acceptance-protocols-list |
+| back-funkcja | remove | apps/backend/src/acceptance-protocols/acceptance-protocols.service.ts | @anchor acceptance-protocols-remove |
+| back-endpoint | GET /acceptance-protocols/:nodeId/status | apps/backend/src/acceptance-protocols/acceptance-protocols.controller.ts | @anchor acceptance-protocols-status-endpoint |
+| back-endpoint | POST /acceptance-protocols/:nodeId/record | apps/backend/src/acceptance-protocols/acceptance-protocols.controller.ts | @anchor acceptance-protocols-record-endpoint |
+| back-endpoint | GET /acceptance-protocols/:nodeId | apps/backend/src/acceptance-protocols/acceptance-protocols.controller.ts | @anchor acceptance-protocols-list-endpoint |
+| back-endpoint | DELETE /acceptance-protocols/:nodeId/:protocolId | apps/backend/src/acceptance-protocols/acceptance-protocols.controller.ts | @anchor acceptance-protocols-remove-endpoint |
+
+#### Rejestr odbiorów — frontend
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| ui-funkcja | fetchStatusOdbioru | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-fetch-status |
+| ui-funkcja | protokolRootOf | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-wbs-root-of |
+| ui-funkcja | pozostaloDoOdbioru | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-pozostalo |
+| ui-funkcja | zapiszOdbior | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-zapisz-odbior |
+| ui-funkcja | fetchProtokoly | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-fetch-protokoly |
+| ui-funkcja | usunProtokol | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-usun |
+| ui-funkcja | pozycjaZamknieta | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-zamknieta |
+| ui-funkcja | budujRoznice | apps/frontend/src/utils/protokolOdbioruExport.js | @anchor protokol-buduj-roznice |
+| ui-funkcja | uploadToOneDrive | apps/frontend/src/utils/exportMail.js | @anchor upload-to-onedrive |
+| ui-stan | statusOdbioru | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-status-odbioru |
+| ui-stan | kwotyReczne | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-kwoty-reczne |
+| ui-stan | domknijReczne | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-domknij-reczne |
+| ui-funkcja | pozostaloOf | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-pozostalo-of |
+| ui-funkcja | domknieteOf | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-domkniete-of |
+| ui-funkcja | kwotaOdbioru | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-kwota-odbioru |
+| ui-funkcja | pelnyOf | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-pelny-of |
+| ui-funkcja | roznice (wobec oferty) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-adnotacja-roznic |
+| ui-funkcja | adnotacjaRoznic | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-tekst-roznic |
+| ui-funkcja | poEksporcie | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-po-eksporcie |
+| ui-stan | wystawione (lista protokołów) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-wystawione |
+| ui-funkcja | odswiezRejestr | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-odswiez-rejestr |
+| ui-funkcja | naOneDrive | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-na-onedrive |
+| ui-funkcja | wycofaj | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-wycofaj |
+| ui-sekcja | lista wystawionych protokołów | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-lista-wystawionych |
+| ui-modal | potwierdzenie wycofania protokołu | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-wycofaj-potwierdzenie |
+| ui-wiersz | pozycja domknięta (przekreślona) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-pozycja-domknieta |
+| ui-funkcja | nadwyzkaOdbioru | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-nadwyzka |
+| ui-input | kwota odbioru pozycji | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-kwota-input |
+| ui-input | kwota zablokowana zamknięciem pozycji | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-kwota-zablokowana |
+| ui-przycisk | blokada kwoty (Odblokuj / Zablokuj pozycję) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-blokada-kwoty |
+| ui-wiersz | różnica kwoty wobec oferty | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-roznica-kwoty |
+| ui-sekcja | DpPortal (portal kalendarza protokołu) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-dp-portal |
+| ui-funkcja | parsujDate | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-parsuj-date |
+| ui-input | PoleDaty (kalendarz dd.mm.rrrr) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-pole-daty |
+| ui-funkcja | emailWlasciciela | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-email-wlasciciela |
+| ui-stan | profil (zalogowany do podpisu maila) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-profil |
+| ui-stan | kontakty (książka adresowa zamówienia) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-kontakty |
+| ui-funkcja | pobranie profilu i kontaktów do maila | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-pobierz-mail-dane |
+| ui-funkcja | domyslniOdbiorcy | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-mail-domyslni |
+| ui-stan | dakOdbiorcy (DW: dział DAK) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-dak-odbiorcy |
+| ui-stan | firmaNasza / kontaktyZamowienia / dostawcy | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-strony-danych |
+| ui-stala | DAK_SPOLKA (spółka DAK-a do DW) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-dak-spolka |
+| ui-funkcja | domyslnaTresc | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-mail-tresc |
 
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)

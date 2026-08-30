@@ -157,3 +157,19 @@ input[type=number] {
 .ignite-dp .react-datepicker-popper[data-placement^=bottom] .react-datepicker__triangle::after { border-bottom-color: #111827; }
 .ignite-dp .react-datepicker-popper[data-placement^=top] .react-datepicker__triangle::before,
 .ignite-dp .react-datepicker-popper[data-placement^=top] .react-datepicker__triangle::after { border-top-color: #0d1520; }
+
+/* Pole daty w formularzu (klasa na kontenerze, nie na portalu kalendarza).
+   `.react-datepicker-wrapper` jest inline-block, więc bez tego input z `w-full`
+   nie rozciąga się na szerokość kolumny, tylko zostaje przy domyślnej szerokości.
+   Krzyżyk czyszczenia domyślnie rysuje się na jasno — na ciemnym tle był niewidoczny. */
+.ignite-dp-field .react-datepicker-wrapper { width: 100%; }
+.ignite-dp-field .react-datepicker__close-icon { padding-right: 8px; }
+.ignite-dp-field .react-datepicker__close-icon::after {
+  background: rgba(255,255,255,0.12);
+  color: #e5e7eb;
+  font-size: 14px;
+  line-height: 1;
+  height: 16px;
+  width: 16px;
+}
+.ignite-dp-field .react-datepicker__close-icon:hover::after { background: rgba(248,113,113,0.35); color: #fff; }

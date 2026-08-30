@@ -165,6 +165,9 @@ export class OneDriveService {
   }
 
   // @anchor onedrive-upload-file
+  // `subfolder` — opcjonalny podkatalog W ŚRODKU folderu kategorii, zakładany przy pierwszym
+  // zapisie i potem odnajdywany po nazwie (patrz `ensureSubfolder`). Używa go eksport protokołu
+  // odbioru, który ląduje w `pliki_finansowe/<nazwa gałęzi WBS>`.
   async uploadFile(
     userId: string,
     nodeId: string,
@@ -172,13 +175,17 @@ export class OneDriveService {
     filename: string,
     buffer: Buffer,
     mimeType = 'application/octet-stream',
+    subfolder?: string,
   ): Promise<{ webUrl: string; itemId: string }> {
     const node = await this.prisma.processNode.findUnique({ where: { id: nodeId } });
     if (!node?.oneDriveFolderId) throw new NotFoundException('Folder OneDrive nie jest powiązany z tą gałęzią');
 
     const token = await this.getValidToken(userId);
     const driveId = node.oneDriveDriveId;
-    const folderId = category === 'finanse' ? node.oneDriveFinanseId : node.oneDriveDocumentacjaId;
+    const categoryFolderId = category === 'finanse' ? node.oneDriveFinanseId : node.oneDriveDocumentacjaId;
+    const folderId = subfolder
+      ? await this.ensureSubfolder(token, driveId, categoryFolderId, subfolder)
+      : categoryFolderId;
 
     const uploadUrl = driveId
       ? `${GRAPH_BASE}/drives/${driveId}/items/${folderId}:/${encodeURIComponent(filename)}:/content?@microsoft.graph.conflictBehavior=rename`
@@ -276,6 +283,54 @@ export class OneDriveService {
       { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } },
     );
     return response.data.id;
+  }
+
+  // @anchor onedrive-ensure-subfolder
+  // Podkatalog „załóż albo znajdź". `createFolder` NIE nadaje się do powtarzalnego wywołania —
+  // ma `conflictBehavior: 'rename'`, więc drugi protokół z tej samej gałęzi trafiłby do
+  // „Uszczelnienie przejść 1", trzeci do „… 2". Tutaj najpierw szukamy po nazwie, a zakładamy
+  // dopiero gdy nie ma; przy wyścigu dwóch zapisów `fail` zwraca 409 i wtedy szukamy ponownie.
+  private async ensureSubfolder(
+    token: string,
+    driveId: string | null,
+    parentId: string,
+    name: string,
+  ): Promise<string> {
+    // OneDrive odrzuca w nazwach " * : < > ? / \ | — nazwa gałęzi WBS bywa zdaniem z ukośnikiem.
+    const safe = String(name).replace(/["*:<>?/\\|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120);
+    if (!safe) return parentId;
+
+    const base = driveId ? `${GRAPH_BASE}/drives/${driveId}/items/${parentId}` : `${GRAPH_BASE}/me/drive/items/${parentId}`;
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const znajdz = async (): Promise<string | null> => {
+      try {
+        const res = await axios.get(`${base}/children?$select=id,name,folder&$top=200`, { headers });
+        const hit = (res.data?.value || []).find((it: any) => it.folder && it.name === safe);
+        return hit?.id ?? null;
+      } catch {
+        return null;
+      }
+    };
+
+    const istniejacy = await znajdz();
+    if (istniejacy) return istniejacy;
+
+    try {
+      const res = await axios.post(
+        `${base}/children`,
+        { name: safe, folder: {}, '@microsoft.graph.conflictBehavior': 'fail' },
+        { headers: { ...headers, 'Content-Type': 'application/json' } },
+      );
+      return res.data.id;
+    } catch (e: any) {
+      if (e?.response?.status === 409) {
+        const powtorka = await znajdz();
+        if (powtorka) return powtorka;
+      }
+      this.logger.warn(`Nie udało się założyć podkatalogu „${safe}" — zapis idzie do folderu kategorii`);
+      return parentId;
+    }
   }
 
   // @anchor onedrive-encrypt

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
 import {
-    ChevronRight, ChevronDown, Plus, Trash2, AlertCircle, CornerDownLeft, ShoppingCart, X, FileSpreadsheet,
+    ChevronRight, ChevronDown, Plus, Trash2, AlertCircle, CornerDownLeft, ShoppingCart, X, FileSpreadsheet, FileText,
 } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { API_URL } from '../../config';
 import SupplierPicker from './SupplierPicker';
 import { RequirementImageBox } from './wbs/WbsMaterialsPanel';
 import AutoResizeTextarea from './wbs/AutoResizeTextarea';
+import ProtokolOdbioruModal from './wbs/ProtokolOdbioruModal';
 import { sanitizeQtyInput, parsePriceInput, DRAWER, STRUCTURE_STATUS_META, statusMetaForType, statusOptionsForType, statusLabelForType, resolveStatusCode, usesWorkStatuses } from './wbs/wbsConstants';
 import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath,
@@ -839,6 +840,7 @@ export default function RealizationTab({
     orderName = '',
     accepted = false,
     refreshKey = 0,
+    oneDriveFolderName = null,
 }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
 
@@ -872,6 +874,9 @@ export default function RealizationTab({
     const [productConfirm, setProductConfirm] = useState(null);
 
     const [exporting, setExporting] = useState(false);
+    // @anchor realization-protokol-open — modal protokołu odbioru prac. Zaznaczenie liści
+    // i pytania mieszkają w modalu, tutaj zostaje tylko przycisk i dane wejściowe.
+    const [protokolOtwarty, setProtokolOtwarty] = useState(false);
 
     const [sortConfig, setSortConfig] = useState({ key: 'parent', direction: 'asc' });
     const [colFilters, setColFilters] = useState({});
@@ -1789,6 +1794,16 @@ export default function RealizationTab({
                     <FileSpreadsheet size={12} />
                     {exporting ? 'eksportuję…' : 'Excel'}
                 </button>
+                {/* Protokół odbioru stoi obok eksportu, bo to też działanie na całej tabeli —
+                    odbierane pozycje wybiera się dopiero w modalu, nie zaznaczeniem wierszy. */}
+                <button
+                    onClick={() => setProtokolOtwarty(true)}
+                    disabled={rows.length === 0}
+                    title="Protokół odbioru prac — wybór odbieranych pozycji, wartości z wyceny, wyjście w PDF i DOCX"
+                    className="flex items-center gap-1.5 px-2 py-1 rounded border border-violet-500/25 bg-violet-500/10 text-violet-300 text-[10px] font-bold uppercase tracking-wider hover:bg-violet-500/20 disabled:opacity-40 transition-colors flex-shrink-0">
+                    <FileText size={12} />
+                    Protokół
+                </button>
                 <div className="h-4 w-px bg-white/10" />
                 <span className="text-xs text-gray-400">
                     Pozycje: <span className="font-mono text-gray-200">{totals.done}/{totals.count}</span>
@@ -2010,6 +2025,20 @@ export default function RealizationTab({
                     onAnswer={resolveProductConfirm}
                 />
             )}
+
+            {/* Protokół dostaje `rows`, czyli DOKŁADNIE to, co widać w tabeli po filtrach —
+                odbiera się to, na co się patrzy. `planValueOf` idzie tą samą drogą, żeby
+                kwota w protokole zgadzała się z kolumną planu co do grosza. */}
+            <ProtokolOdbioruModal
+                open={protokolOtwarty}
+                onClose={() => setProtokolOtwarty(false)}
+                rows={rows}
+                wbsNodes={wbsNodes}
+                nodeId={nodeId}
+                orderName={orderName}
+                planValueOf={planValueOf}
+                oneDriveFolderName={oneDriveFolderName}
+            />
         </div>
     );
 }

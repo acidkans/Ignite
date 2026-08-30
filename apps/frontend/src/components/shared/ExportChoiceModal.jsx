@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Download, Mail, Send, Loader2, CheckCircle, ArrowLeft, Cloud } from 'lucide-react';
 import RecipientInput from './RecipientInput';
-import { resolveArtifact, downloadBlob, sendExport } from '../../utils/exportMail';
+import { resolveArtifact, downloadBlob, sendExport, uploadToOneDrive } from '../../utils/exportMail';
 import { API_URL } from '../../config';
 
 // @anchor export-choice-modal
@@ -9,21 +9,38 @@ import { API_URL } from '../../config';
 // makeArtifact: async () => ({ blob, filename }) | ({ html, filename }) — generuje plik dopiero po wyborze.
 // oneDriveFolderName: string|null — gdy podany, folder jest powiązany i przycisk OneDrive jest aktywny.
 // oneDriveCategory: 'finanse'|'dokumentacja' — domyślnie 'finanse'.
-export default function ExportChoiceModal({ open, onClose, title = 'Eksport', defaultFilename = 'plik', nodeId, makeArtifact, oneDriveFolderName, oneDriveCategory = 'finanse' }) {
+// oneDriveSubfolder: string|null — podkatalog W ŚRODKU folderu kategorii, zakładany przy
+//   pierwszym zapisie. Protokoły odbioru lądują w `pliki_finansowe/<nazwa gałęzi WBS>`.
+// onExported: () => void | Promise — wołane po UDANYM eksporcie (pobranie, mail, OneDrive).
+//   Używa go protokół odbioru: dopiero wyjście dokumentu z aplikacji zapisuje odbiór w rejestrze.
+// defaultTo / defaultCc / defaultSubject / defaultMessage — podpowiedzi formularza maila. Tylko
+//   wartości startowe: każde pole zostaje w pełni edytowalne, bo adresat i treść bywają inne niż
+//   domyślne (protokół idzie czasem do inwestora, nie do wykonawcy zakresu).
+export default function ExportChoiceModal({ open, onClose, title = 'Eksport', defaultFilename = 'plik', nodeId, makeArtifact, oneDriveFolderName, oneDriveCategory = 'finanse', oneDriveSubfolder = '', onExported, defaultTo, defaultCc, defaultSubject, defaultMessage }) {
   const [mode, setMode] = useState('choice'); // 'choice' | 'email'
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState('');
   const [to, setTo] = useState([]);
+  // @anchor export-choice-cc — „Do wiadomości". Osobne pole, a nie dopisek do `to`: adresaci
+  // z kopii nie są stroną korespondencji, a rozdzielenie ich widać po stronie odbiorcy.
+  const [cc, setCc] = useState([]);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
 
+  // Reset TYLKO na otwarciu modala. Świadomie bez podpowiedzi w zależnościach: domyślna
+  // treść zmienia się przy każdym przeliczeniu zakresu, a wpadnięcie tu w trakcie pisania
+  // skasowałoby użytkownikowi wpisany tekst.
   useEffect(() => {
     if (open) {
       setMode('choice'); setBusy(false); setError(''); setDone('');
-      setTo([]); setSubject(title || defaultFilename || 'Eksport'); setMessage('');
+      setTo(defaultTo?.length ? [...defaultTo] : []);
+      setCc(defaultCc?.length ? [...defaultCc] : []);
+      setSubject(defaultSubject || title || defaultFilename || 'Eksport');
+      setMessage(defaultMessage || '');
     }
-  }, [open, title, defaultFilename]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   if (!open) return null;
 
@@ -34,6 +51,7 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
     try {
       const art = await resolveArtifact(await makeArtifact());
       downloadBlob(art.blob, art.filename);
+      await onExported?.();
       onClose();
     } catch (e) {
       setError(e?.message || 'Błąd generowania pliku');
@@ -45,19 +63,13 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
     setBusy(true); setError('');
     try {
       const art = await resolveArtifact(await makeArtifact());
-      const token = localStorage.getItem('token');
-      const form = new FormData();
-      form.append('file', art.blob, art.filename);
-      form.append('nodeId', nodeId || '');
-      form.append('category', oneDriveCategory);
-      const res = await fetch(`${API_URL}/onedrive/upload`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: form,
+      const { webUrl } = await uploadToOneDrive({
+        blob: art.blob, filename: art.filename, nodeId,
+        category: oneDriveCategory, subfolder: oneDriveSubfolder,
       });
-      if (!res.ok) throw new Error('Błąd uploadu na OneDrive');
-      const { webUrl } = await res.json();
-      setDone(`Zapisano na OneDrive${oneDriveFolderName ? ` → ${oneDriveFolderName}` : ''}`);
+      await onExported?.();
+      const sciezka = [oneDriveFolderName, oneDriveCategory === 'finanse' ? 'pliki_finansowe' : 'dokumentacja_projektowa', oneDriveSubfolder].filter(Boolean).join(' → ');
+      setDone(`Zapisano na OneDrive${sciezka ? ` → ${sciezka}` : ''}`);
       setBusy(false);
       if (webUrl) setTimeout(() => window.open(webUrl, '_blank'), 400);
       setTimeout(onClose, 2000);
@@ -72,8 +84,9 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
     setBusy(true); setError('');
     try {
       const art = await resolveArtifact(await makeArtifact());
-      await sendExport({ blob: art.blob, filename: art.filename, to, subject: subject || title, message, nodeId });
-      setDone(`Wysłano do: ${to.join(', ')}`);
+      await sendExport({ blob: art.blob, filename: art.filename, to, cc, subject: subject || title, message, nodeId });
+      await onExported?.();
+      setDone(`Wysłano do: ${to.join(', ')}${cc.length ? ` (DW: ${cc.join(', ')})` : ''}`);
       setBusy(false);
       setTimeout(onClose, 1600);
     } catch (e) {
@@ -86,7 +99,7 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
 
   return (
     <div className="fixed inset-0 z-[140] bg-[#05070bcc] backdrop-blur-sm flex items-center justify-center p-4" onClick={close}>
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0b0f17] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md max-h-[90vh] flex flex-col rounded-2xl border border-white/10 bg-[#0b0f17] shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
             {mode === 'email' && !done && (
@@ -97,7 +110,7 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
           <button onClick={close} disabled={busy} className="p-2 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 transition-all"><X size={14} /></button>
         </div>
 
-        <div className="p-5">
+        <div className="p-5 overflow-y-auto custom-scrollbar">
           {done ? (
             <div className="flex flex-col items-center gap-3 py-6 text-center">
               <CheckCircle size={40} className="text-emerald-400" />
@@ -129,12 +142,18 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
                 <RecipientInput value={to} onChange={setTo} nodeId={nodeId} />
               </div>
               <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">DW (do wiadomości)</label>
+                <RecipientInput value={cc} onChange={setCc} nodeId={nodeId} />
+              </div>
+              <div>
                 <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Temat</label>
                 <input value={subject} onChange={(e) => setSubject(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Wiadomość (opcjonalnie)</label>
-                <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={3} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-none custom-scrollbar" placeholder="Treść wiadomości…" />
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">
+                  Wiadomość {defaultMessage ? '(do edycji)' : '(opcjonalnie)'}
+                </label>
+                <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={defaultMessage ? 10 : 3} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-y custom-scrollbar" placeholder="Treść wiadomości…" />
               </div>
               <button onClick={handleSend} disabled={busy} className={`${btnBase} bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white mt-1`}>
                 {busy ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {busy ? 'Wysyłanie…' : 'Wyślij załącznik'}

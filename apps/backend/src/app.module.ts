@@ -42,6 +42,7 @@ import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { QuickQuotesModule } from './quick-quotes/quick-quotes.module';
 import { OrdersModule } from './orders/orders.module';
+import { AcceptanceProtocolsModule } from './acceptance-protocols/acceptance-protocols.module';
 import { LeavesModule } from './leaves/leaves.module';
 import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
 import { LeafActualsModule } from './leaf-actuals/leaf-actuals.module';
@@ -93,6 +94,7 @@ import { LeafActualsModule } from './leaf-actuals/leaf-actuals.module';
     SuppliersModule,
     QuickQuotesModule,
     OrdersModule,
+    AcceptanceProtocolsModule,
     LeavesModule,
     GoogleCalendarModule,
     LeafActualsModule,

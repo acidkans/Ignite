@@ -403,6 +403,7 @@ export class VersioningService {
                     clientContacts: sourceReq.clientContacts,
                     clientProjectManager: sourceReq.clientProjectManager,
                     clientProjectManagerCompany: (sourceReq as any).clientProjectManagerCompany ?? null,
+                    clientProjectManagerNip: (sourceReq as any).clientProjectManagerNip ?? null,
                     clientProjectManagerEmail: sourceReq.clientProjectManagerEmail,
                     clientProjectManagerPhone: sourceReq.clientProjectManagerPhone,
                     offerStatus: sourceReq.offerStatus,

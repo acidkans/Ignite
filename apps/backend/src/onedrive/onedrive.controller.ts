@@ -72,11 +72,14 @@ export class OneDriveController {
   upload(
     @Req() req: any,
     @UploadedFile() file: Express.Multer.File,
-    @Body() body: { nodeId: string; category: 'finanse' | 'dokumentacja' },
+    @Body() body: { nodeId: string; category: 'finanse' | 'dokumentacja'; subfolder?: string },
   ) {
     const filename = Buffer.from(file.originalname || 'eksport', 'latin1').toString('utf8');
+    // `subfolder` przychodzi z FormData, więc pusty wybór to pusty string, a nie undefined —
+    // bez tego `ensureSubfolder` próbowałby założyć katalog o pustej nazwie.
+    const subfolder = (body.subfolder || '').trim() || undefined;
     return this.oneDriveService.uploadFile(
-      req.user.userId, body.nodeId, body.category, filename, file.buffer, file.mimetype,
+      req.user.userId, body.nodeId, body.category, filename, file.buffer, file.mimetype, subfolder,
     );
   }
 

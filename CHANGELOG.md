@@ -1,3 +1,217 @@
+## 2026-08-30 — protokół: strony Zamawiający/Wykonawca, NIP w kontaktach zamówienia
+
+### schema.prisma
+- dodano pole `clientProjectManagerNip` w modelu `OrderRequirements` — NIP firmy PM-a zamówienia; sam klucz, bo nazwę, adres i status VAT trzyma rejestr firm. Migracja `20260830140000_order_contacts_nip`. Dopisane do `cloneVersionData` w `versioning.service.ts`
+- NIP dodatkowych kontaktów siedzi w JSON-ie `clientContacts` (pole `nip`) — bez zmiany schematu
+
+### architektura / API
+- protokół dostał dwa wiersze NAD „Dotyczy Umowy nr.": nagłówki „Zamawiający / Ordering party" i „Wykonawca / Contractor", pod nimi nazwa, adres i NIP każdej strony. Braki drukują się jako „—", żeby było widać, czego nie uzupełniono
+- `ProtokolOdbioruDto` dostał `zamawiajacy` i `wykonawca` typu `ProtokolStronaDto` (nazwa, adres, nip)
+- „Zamawiający" bierze się z singletona `Company` (nazwa + adres + `number`, które w panelu firmy jest opisane jako „np. NIP, REGON, kod"). „Wykonawca" składa się z trzech źródeł: etykieta właściciela gałęzi WBS („Firma — Imię Nazwisko") mówi kto, kontakt zamówienia dokłada NIP, rejestr firm pełną nazwę i adres
+- sekcja „Kontakty" w zakładce „Informacje o zamówieniu" ma pole NIP przy PM-ie i przy każdym dodatkowym kontakcie; siatka z 4 na 5 kolumn. Wyjście z pola woła `POST /suppliers`, które dociąga dane z Białej listy VAT i zapisuje firmę w rejestrze (dedup po NIP). Nazwa firmy podstawia się tylko do PUSTEGO pola — ręcznie wpisany skrót zostaje
+- `UsersService.findByRole` zwraca `company` (z poprzedniego wpisu) — bez zmian tutaj
+
+- `stronaWykonawcy` dopasowuje firmę czterema drogami po kolei: kontakt zamówienia o tej samej firmie → wpis rejestru o zbieżnej NAZWIE → wpis rejestru, którego OSOBA KONTAKTOWA to właściciel gałęzi → jedyny kontakt z NIP-em. Trzeci krok jest niezbędny dla jednoosobowych działalności: Biała lista zna „Elnets" jako „TADEUSZ LIBUSZEWSKI", więc bez niego wypadały z protokołu
+- dane firm zamówienia CMC uzupełnione skryptem `test/uzupelnij-firmy-cmc.ts` (9 firm w rejestrze + NIP-y w kontaktach wszystkich wersji zamówienia); skrypt pobiera NIP-y z Białej listy przy każdym uruchomieniu i robi backup kontaktów przed zapisem
+
+### słownik
+- dodano `order-requirements-pm-nip`, `acceptance-protocol-party-dto`, `acceptance-protocol-parties-rows`
+- dodano `protokol-osoba-wlasciciela` — osoba z etykiety właściciela gałęzi
+- dodano `protokol-norm-nip`, `protokol-firma-wlasciciela`, `protokol-strona-zamawiajacego`, `protokol-strona-wykonawcy`, `protokol-strony`, `protokol-strony-danych`
+- dodano `requirements-nip-lookup`, `requirements-nip-status`
+
+### wytyczne
+- `schema-model` `Supplier` — JEDEN rejestr firm dla całej aplikacji: dostawcy materiałów i wykonawcy robót to ten sam wpis, kluczowany NIP-em (`nip` unique, dedup w `SuppliersService.create`). Nie zakładać drugiej tabeli na kontrahentów — przypisanie roli robi relacja, nie osobny byt. Nazwa modelu została historyczna
+- `schema-pole` `OrderRequirements.clientProjectManagerNip` — w zamówieniu trzymamy WYŁĄCZNIE NIP. Nazwa i adres firmy mają jedno źródło (rejestr firm + Biała lista); kopiowanie ich do zamówienia rozjeżdża dane przy pierwszej zmianie w rejestrze
+
+## 2026-08-30 — protokół odbioru: częściowy z wartości, blokada kwoty jako kłódka, DW do działu DAK
+
+### architektura / API
+- rodzaj odbioru idzie za KWOTĄ: kwota niższa od pozostałej oferty ustawia „częściowy" zawsze, także po ręcznym wyborze; przycisk „Całościowy" jest wtedy nieaktywny z wyjaśnieniem w dymku. Ręczny wybór zostaje tylko przy pełnej kwocie, a „Zakres nie odebrany" nie podlega wyliczeniu. Poprzednia reguła patrzyła na przełącznik domknięcia, więc pozycja zamknięta na 60% oferty przechodziła jako odbiór całościowy
+- przycisk blokady kwoty mówi, CO ZROBI: przy pełnej (zablokowanej) kwocie „Odblokuj pozycję", po odblokowaniu pomarańczowy „Zablokuj pozycję". Zastąpił zielone „Zamknij pozycję", które przy zablokowanym polu czytało się jak polecenie zamknięcia czegoś już zamkniętego
+- różnica wobec oferty pokazywana przy KAŻDEJ kwocie innej niż ofertowa (wcześniej tylko przy pozycji domkniętej), z dopiskiem, czy różnica wraca do puli („zostanie do odbioru"), czy przepada („pozycja domknięta"); nadwyżka nadal na czerwono
+- `ExportChoiceModal` dostał pole „DW (do wiadomości)" (`defaultCc`) — `sendExport` i `POST /mail/send-export` obsługiwały `cc` od początku, brakowało tylko pola w formularzu
+- protokół odbioru wypełnia DW adresem DAK-a Airtel Services (`GET /users/by-role/DAK` + filtr po `User.company`) — protokół jest podstawą faktury, więc księgowość dostaje kopię bez proszenia. Rolę DAK ma po jednej osobie w każdej spółce grupy, więc bez filtra kopia szła też do Airtel Systems; brak trafienia na spółkę → cały dział. Pole zostaje edytowalne
+- `UsersService.findByRole` zwraca dodatkowo `company` — bez tego nie da się odróżnić DAK-ów poszczególnych spółek
+
+### słownik
+- dodano `protokol-pelna-wartosc` — czy protokół bierze 100% oferty ruszonych gałęzi
+- dodano `protokol-blokada-kwoty`, `protokol-roznica-kwoty` — przycisk kłódki i różnica wobec oferty
+- dodano `protokol-dak-odbiorcy`, `protokol-dak-spolka` — adresy DW z roli DAK zawężone do spółki
+- dodano `users-find-by-role` — lista użytkowników roli wraz z firmą
+- dodano `export-choice-cc` — stan pola DW w modalu eksportu
+
+### wytyczne
+- `ui-stan` `pelnaWartosc` — „całościowy" liczy się z KWOT, nie z przełącznika domknięcia. Domknięcie mówi „nie wracamy po resztę", a nie „odebrano całość oferty" — te dwa pojęcia nie mogą się skleić z powrotem
+- `ui-przycisk` `protokol-blokada-kwoty` — etykieta przycisku nazywa AKCJĘ (co się stanie po kliknięciu), nie stan pola. Ta sama zasada obowiązuje przy każdym przełączniku blokującym input w tym modalu
+
+## 2026-08-30 — protokół odbioru: tytuł „prac", opis zakresu zwinięty w tabelę wartości
+
+### architektura / API
+- tytuł dokumentu (PDF i DOCX) zmieniony z „PROTOKÓŁ ODBIORU ROBÓT" na „PROTOKÓŁ ODBIORU PRAC" — angielskie „COMMISIONING PROTOCOL" (z literówką ze wzoru Airtela) zostaje bez zmian
+- usunięty punkt „Opis zakresu robót"; tabela wartości przeniesiona na jego miejsce (nad rodzaj i wynik odbioru) i przemianowana na „Opis i wartość odbieranego zakresu / Description and value of commissioned scope" — dwa punkty wymieniały te same pozycje, jeden z kwotami, drugi bez
+- usunięte `ProtokolSekcjaDto` i pole `ProtokolOdbioruDto.sekcje` wraz z generatorem `opisZakresu()` (DOCX) i renderem `zakres` (HTML) — po zwinięciu punktu nie miały już odbiorcy. `buildSekcjeIWartosci` zwraca `{ wartosci, suma, branches }`
+- z `PROTOKOL_CSS` wypadły martwe klasy `.pr-sec` i `.pr-poz`; `.pr-poz-row` (wcięcie liścia w tabeli wartości) zostaje
+- nagłówek modala i tooltip przycisku w `RealizationTab` mówią teraz „Protokół odbioru prac"
+
+### słownik
+- usunięto `acceptance-protocol-section-dto` — `ProtokolSekcjaDto` nie istnieje
+- usunięto `acceptance-protocol-scope-paragraphs` — `opisZakresu()` nie istnieje
+
+### wytyczne
+- `back-dto` `ProtokolOdbioruDto` — opis odbieranego zakresu żyje WYŁĄCZNIE w `wartosci` (gałąź → liście z kwotami). Nie wracać do osobnej listy nazw bez kwot: dwa źródła tych samych pozycji rozjeżdżały się przy każdej zmianie zaznaczenia
+
+## 2026-08-30 — protokół odbioru: wynik odbioru, zakres nie odebrany, opis bez numeracji WBS
+
+### architektura / API
+- `ProtokolOdbioruDto.wynik` (`POZYTYWNY` | `NEGATYWNY`) — nowa oś, niezależna od `odbior`: rodzaj mówi ILE odebrano, wynik mówi JAK. Renderowany jako wiersz dwóch pól wyboru pod rodzajem odbioru, w PDF (`buildProtokolBodyHtml`) i w DOCX (`wierszWynikuOdbioru`)
+- trzecia opcja rodzaju odbioru zmieniona z „Nie dotyczy / Not applicable" na „Zakres nie odebrany z uwagi na wady/braki / Scope not accepted due to defects/deficiencies" — wybór tej opcji w modalu przestawia wynik na negatywny (podpowiedź, nie blokada)
+- blok wyboru (rodzaj + wynik odbioru) przeniesiony NAD tabelę „Wartość odbieranego zakresu" — kwotę czyta się po tym, czy roboty przeszły, a nie przed
+- `ProtokolSekcjaDto.nr` usunięty — nagłówki w „Opisie zakresu robót" idą bez numeru gałęzi z drzewa WBS (odbierający widział „4." bez pozycji 1–3). Kolejność sekcji nadal bierze się z `branchIndex`
+- tabela wyboru w PDF stoi na `<colgroup>` sześciu kolumn: rodzaj odbioru zajmuje po 2, wynik po 3, więc oba wiersze dzielą jedną siatkę `table-layout: fixed`
+
+### słownik
+- dodano `acceptance-protocol-result` — typ `OdbiorWynik`, `acceptance-protocol.dto.ts`
+- dodano `acceptance-protocol-result-row` — wiersz wyniku odbioru w DOCX, `acceptance-protocols.service.ts`
+- dodano `protokol-wynik-odbioru` — stan wyniku odbioru w modalu, `ProtokolOdbioruModal.jsx`
+
+### wytyczne
+- `back-dto` `ProtokolOdbioruDto.wynik` — wynik i rodzaj odbioru to DWA niezależne pola; odbiór częściowy bywa pozytywny, całościowy da się zakwestionować. Nie sklejać ich w jedno pole ani nie wyprowadzać jednego z drugiego w renderze
+- `ui-stan` `wynik` — sprzężenie „nie odebrany → negatywny" żyje TYLKO w handlerze przycisku rodzaju odbioru. Ma być nadpisywalne ręcznie, więc nie przenosić go do `useEffect`
+
+## 2026-08-30 — protokoły: wysyłka mailem z podpowiedzianym adresatem, tematem i treścią
+
+### architektura / API
+- `GET /users/profile` zwraca dodatkowo `firstName`, `lastName`, `phone` — pola dopisane do obiektu z `JwtStrategy.validate()`, więc jadą z każdym `req.user` bez dodatkowego zapytania do bazy (rekord użytkownika jest tam już wczytany). Potrzebne do podpisu pod mailem z protokołem
+- `ExportChoiceModal` przyjmuje `defaultTo`, `defaultSubject`, `defaultMessage` — wartości startowe formularza maila, wszystkie pola zostają edytowalne. Reset formularza zawężony do momentu OTWARCIA modala: wcześniej zależał też od `title` i `defaultFilename`, a przy dynamicznej treści kasowałby tekst w trakcie pisania
+- protokół odbioru podpowiada mail: adresat = osoby odpowiedzialne za odbierany zakres (te same, co nad kreską „Przedstawiciel Podwykonawcy"), temat = numer protokołu, treść = standardowa formuła z datą odbioru i podpisem zalogowanego użytkownika
+- adres właściciela odzyskiwany po nazwisku z `GET /mail/recipients/:nodeId`, bo `WbsNode.owner` trzyma tylko ETYKIETĘ z listy wyboru („Firma — Imię Nazwisko"), nie klucz obcy. Brak trafienia zostawia puste pole „Do"
+- pozycja odebrana w całości nie jest już wygaszana przezroczystością (`opacity-40`) — zostaje przekreślenie i czytelny tekst; kwota odebrana ponad ofertę wyświetla się na czerwono
+- „Zamknij pozycję" blokuje pole kwoty odbioru — zamknięcie znaczy „tyle i koniec". Odbiór częściowy wymaga ODZNACZENIA przełącznika, dzięki czemu stan pola idzie dokładnie za tym, co pokazuje przycisk
+- pola dat w protokole (data odbioru + trzy daty podpisu) to kalendarz `react-datepicker` zamiast wpisywania tekstu — ten sam wzorzec co w urlopach: portal `ignite-dp` z ciemnym motywem, format `dd.MM.yyyy`, wartość pusta dozwolona
+- daty podpisu podwykonawcy i inspektora startują PUSTE (Airtel nadal z dzisiejszą). W chwili wystawiania dokumentu nikt nie wie, kiedy tamci podpiszą; PDF i DOCX drukują wtedy „Data —" do wypełnienia długopisem
+- dodano `.ignite-dp-field` w `index.css` — wrapper `react-datepicker` jest inline-block, więc bez tego input z `w-full` nie rozciąga się na kolumnę; przy okazji ciemny krzyżyk czyszczenia daty
+
+### słownik
+- dodano `protokol-email-wlasciciela` — etykieta właściciela gałęzi → adres e-mail, `ProtokolOdbioruModal.jsx`
+- dodano `protokol-profil`, `protokol-kontakty`, `protokol-pobierz-mail-dane` — dane do podpisu i książka adresowa zamówienia
+- dodano `protokol-mail-domyslni`, `protokol-mail-tresc` — domyślny adresat i domyślna treść maila
+- dodano `protokol-nadwyzka` — czy odebrano ponad ofertę (sygnał czerwonej czcionki)
+- zmieniono `protokol-pozycja-domknieta` — opis „wyszarzona" → „przekreślona"
+
+### wytyczne
+- `ui-funkcja` `emailWlasciciela` — `WbsNode.owner` to etykieta, NIE relacja do `User`. Każde mapowanie właściciela na konto/adres musi iść przez dopasowanie nazwiska i znosić brak trafienia; nie zakładaj, że właściciel ma konto w systemie
+- `ui-propsy` `defaultMessage` — podpowiedzi `ExportChoiceModal` wolno czytać TYLKO przy otwarciu modala. Wciągnięcie ich do zależności `useEffect` kasuje tekst pisany przez użytkownika przy każdym przeliczeniu zakresu
+- `ui-input` `protokol-kwota-zablokowana` — blokada pola idzie za `pelnyOf(r)`, czyli za stanem przycisku, a NIE za samym ręcznym domknięciem. Rozjazd tych dwóch dawałby przycisk pokazujący „zamknięte" nad polem, które nadal da się edytować
+- `ui-input` `protokol-pole-daty` — kalendarz w modalu MUSI iść przez `popperContainer` (portal), bo formularz protokołu scrolluje się w `overflow-y-auto`, który przyciąłby rozwinięty kalendarz. Portal siedzi w drzewie Reacta pod kartą modala, więc kliknięcie w dzień nie dochodzi do backdropu i nie zamyka modala
+
+## 2026-08-30 — protokoły: pozycja z wyczerpaną kwotą zamknięta na froncie i na backendzie
+
+### architektura / API
+- `POST /acceptance-protocols/:nodeId/record` odrzuca (400) protokół zawierający pozycję domkniętą INNYM protokołem — komunikat wskazuje nazwę pozycji i numer protokołu, który ją zamknął. Ponowny eksport tego samego numeru nie blokuje sam siebie (filtr po `numer`, nie po id), więc upsert działa jak dotąd
+- `zapiszOdbior` przepuszcza komunikat backendu zamiast samego kodu HTTP — bez tego odbierający widział „nie udało się zapisać odbioru (400)" bez powodu
+- modal protokołu zamyka pozycję nie tylko flagą `pelny` z rejestru, ale też przy WYCZERPANIU kwoty (odebrano cały plan albo więcej). Wcześniej protokół wystawiony na pełną kwotę bez zaznaczenia „domyka" zostawiał pozycję z zerem do odbioru, a mimo to klikalną — dało się ją odebrać drugi raz na dowolną kwotę
+- wyszarzona pozycja pokazuje kwotę ODEBRANĄ, nie plan; dymek podaje numery protokołów, kwotę wobec planu i drogę odwrotu (wycofanie protokołu)
+- przełącznik „domyka" przy pozycji nazywa się teraz „Zamknij pozycję"
+- testy: `test/test-protokol-blokada.mjs` — 12 przypadków na `pozycjaZamknieta`; `test/test-protokol-rejestr.ts` rozszerzony o 4 przypadki blokady. Wszystkie przechodzą
+
+### słownik
+- dodano `protokol-zamknieta` — reguła „pozycja niedostępna do odbioru" wyjęta z komponentu do czystej funkcji w utilu
+
+### wytyczne
+- `ui-funkcja` `pozycjaZamknieta` — o dostępności pozycji do odbioru decyduje TA JEDNA funkcja. Warunek `odebrane > 0` jest w niej konieczny: bez niego pozycja bez wyceny (plan = 0) byłaby zamknięta, zanim ktokolwiek ją tknął
+- blokada odbioru musi stać po OBU stronach — front wyszarza, backend odrzuca. Sam front nie wystarczy: rejestr bywa nieodświeżony, a drugi odbiór tej samej roboty to podwójna płatność
+
+## 2026-08-30 — protokoły: lista wystawionych z wycofaniem, zapis wprost na OneDrive, adnotacja o różnicy dla każdej pozycji
+
+### architektura / API
+- modal protokołu pokazuje listę wystawionych protokołów zamówienia (numer, data, rodzaj odbioru, suma, autor) z przyciskiem „cofnij"; wycofanie kasuje WPIS w rejestrze i zwraca pozycje do puli, plik na OneDrive zostaje
+- przycisk „Generuj na OneDrive" wgrywa dokument wprost do podpiętego folderu zamówienia: `pliki_finansowe/<nazwa gałęzi>` — i dopiero ten zapis odkłada odbiór w rejestrze. Pobranie i mail zostały pod osobnym przyciskiem „Pobierz / wyślij"
+- dodano `uploadToOneDrive` w `apps/frontend/src/utils/exportMail.js` — jedna implementacja uploadu dla modala eksportu i dla przycisku w protokole
+- adnotacja o różnicy wobec oferty liczy się dla KAŻDEJ odbieranej pozycji, nie tylko domykanej — akceptacja bywa wystawiona na inną kwotę już w pierwszym protokole. Pozycja pozostawiona otwarta dostaje dopisek o reszcie do odbioru, żeby „odbiór niższy od oferty" nie czytało się jak rabat
+- logika różnic wyjęta z komponentu do czystych funkcji `budujRoznice` / `tekstRoznic`; test `test/test-protokol-roznice.mjs` — 8 przypadków, wszystkie przechodzą
+
+### słownik
+- dodano `protokol-fetch-protokoly`, `protokol-usun`, `protokol-buduj-roznice`, `upload-to-onedrive`
+- dodano `protokol-wystawione`, `protokol-odswiez-rejestr`, `protokol-na-onedrive`, `protokol-wycofaj`, `protokol-lista-wystawionych`, `protokol-wycofaj-potwierdzenie`
+
+### wytyczne
+- `ui-funkcja` `protokol-buduj-roznice` — tekst dokumentu składany w czystych funkcjach w utilu, nie w `useMemo` komponentu. Inaczej nie da się go pokryć testem, a przy pierwszym zgłoszeniu „nie pojawiła się adnotacja" zostaje zgadywanie
+- testy porównujące sformatowane kwoty budują oczekiwania TYM SAMYM formaterem co kod — `toLocaleString('pl-PL')` daje różny separator tysięcy w Node bez pełnego ICU i w przeglądarce, więc kwota wpisana w test na sztywno wywraca go na jednym z tych środowisk
+
+## 2026-08-30 — rejestr odbiorów: co odebrane zostaje odebrane, kwoty edytowalne, adnotacja o różnicy wobec oferty
+
+### schema.prisma
+- dodano model `AcceptanceProtocolRecord` — nagłówek wystawionego protokołu odbioru (`numer`, `data`, `odbior`, `authorId`). Klucz unikalny `nodeId + numer`: powtórny eksport tego samego protokołu nadpisuje wpis zamiast podwajać odebrane kwoty
+- dodano model `AcceptanceProtocolItem` — ile z danego liścia odebrano danym protokołem (`wbsRootId`, `nazwa`, `wartosc`, `pelny`)
+- dodano relację `ProcessNode.acceptanceProtocols` oraz `User.acceptanceProtocols`
+- migracja `20260830120000_acceptance_protocols`
+
+### architektura / API
+- dodano `GET /acceptance-protocols/:nodeId/status` — ile z której pozycji już odebrano i czy jest domknięta
+- dodano `POST /acceptance-protocols/:nodeId/record` — zapis wystawionego protokołu (upsert po `nodeId + numer`, pozycje wymieniane w transakcji)
+- dodano `GET /acceptance-protocols/:nodeId` oraz `DELETE /acceptance-protocols/:nodeId/:protocolId` — lista i wycofanie zapisu
+- `ExportChoiceModal` dostał props `onExported` — wołany po UDANYM eksporcie (pobranie, mail, OneDrive). Protokół zapisuje odbiór dopiero wtedy; podgląd niczego nie odbiera
+- modal protokołu pokazuje pozycje odebrane w całości jako wyszarzone i nieklikalne, a przy pozycjach ruszonych — ile już odebrano i ile zostaje
+- kwota odbioru pozycji jest edytowalna i NIE jest ograniczona wyceną: akceptacja bywa wystawiona na inną kwotę niż oferta
+- doszedł przełącznik „domyka" per pozycja — odbiór za kwotę niższą od oferty (rabat, korekta zakresu) też zamyka pozycję
+- różnica między ofertą a kwotą odbioru domykanych pozycji dokleja się automatycznie do „Innych uwag" protokołu, z rozbiciem na pozycje i sumą
+- test `test/test-protokol-rejestr.ts` — 8 przypadków na bazie dev (zapis, brak podwojenia przy powtórnym eksporcie, domknięcie w drugim protokole, wycofanie, kaskada)
+
+### słownik
+- dodano `acceptance-protocol-record`, `acceptance-protocol-item` wraz z polami i relacjami — modele rejestru odbiorów
+- dodano `acceptance-protocols-status`, `acceptance-protocols-record`, `acceptance-protocols-list`, `acceptance-protocols-remove` i odpowiadające im endpointy
+- dodano `acceptance-protocol-record-dto`, `acceptance-protocol-status-dto`
+- dodano `protokol-fetch-status`, `protokol-wbs-root-of`, `protokol-pozostalo`, `protokol-zapisz-odbior` — warstwa klienta rejestru
+- dodano `protokol-status-odbioru`, `protokol-kwoty-reczne`, `protokol-domknij-reczne`, `protokol-pozostalo-of`, `protokol-domkniete-of`, `protokol-kwota-odbioru`, `protokol-pelny-of`, `protokol-adnotacja-roznic`, `protokol-tekst-roznic`, `protokol-po-eksporcie`, `protokol-pozycja-domknieta`, `protokol-kwota-input` — stan i obsługa w modalu
+
+### wytyczne
+- `schema-model` `AcceptanceProtocolRecord`, `AcceptanceProtocolItem` — kluczowane po `nodeId` i `wbsRootId`, ŚWIADOMIE bez `versionId`, tak samo jak `LeafActual`. Odbiór zdarzył się w świecie rzeczywistym i NIE wchodzi do `cloneVersionData` w `versioning.service.ts`
+- `schema-pole` `AcceptanceProtocolItem.pelny` — domknięcie pozycji trzymamy jako FLAGĘ, nie wyliczamy z porównania kwot. Późniejsza zmiana wyceny nie ma prawa otworzyć podpisanego odbioru
+- `schema-pole` `AcceptanceProtocolItem.nazwa` — nazwa liścia kopiowana w chwili odbioru. Protokół jest dokumentem, nie widokiem: zmiana nazwy pozycji w WBS nie może zmienić treści podpisanego papieru
+- `ui-funkcja` `protokol-po-eksporcie` — odbiór zapisujemy dopiero gdy dokument OPUŚCI aplikację. Zapis przy generowaniu podglądu zamykałby pozycje przy każdym zerknięciu na wydruk
+- `ui-funkcja` `protokol-kwota-odbioru` — kwoty odbioru NIE obcinamy do wyceny. Dokument ma nieść to, na co opiewa akceptacja; rozjazd z ofertą opisuje adnotacja w uwagach, a nie ciche zaokrąglenie w dół
+
+## 2026-08-30 — protokoły odbioru robót z liści WBS (PDF + DOCX, archiwum na OneDrive)
+
+### architektura / API
+- dodano moduł `apps/backend/src/acceptance-protocols/` — generator protokołu odbioru robót odwzorowujący formularz Airtela („protokół odbioru technicznego.docx"). Dokument budowany OD ZERA biblioteką `docx` (już w zależnościach), a nie podmianą tekstu w szablonie: opis zakresu i tabela wartości mają zmienną liczbę wierszy
+- dodano `POST /acceptance-protocols/docx` — protokół jako plik Word z danych przysłanych przez front
+- dodano `apps/frontend/src/utils/protokolOdbioruExport.js` — ten sam kształt danych renderowany do HTML, a dalej do PDF przez istniejące `buildPdfDocument` + `POST /pdf/render`. Jedno źródło treści dla obu wyjść
+- dodano `apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx` — wybór odbieranych liści WBS + pytania o pola, których w bazie nie ma (umowa, wady, uwagi, załączniki, przedstawiciele)
+- zmieniono sygnaturę `OneDriveService.uploadFile` — doszedł opcjonalny `subfolder`; `POST /onedrive/upload` przyjmuje go w `FormData`. Protokoły lądują w `pliki_finansowe/<nazwa gałęzi WBS>`
+- zmieniono `ExportChoiceModal` — nowy props `oneDriveSubfolder`, komunikat po zapisie pokazuje pełną ścieżkę
+- dodano `apps/frontend/public/podpis-airtel.png` — skan podpisu przedstawiciela Airtel wyjęty z oryginalnego formularza, wklejany do protokołu automatycznie
+- protokół NIE jest zapisywany w bazie — jedynym archiwum jest OneDrive
+- zmieniono `PDF_BASE_CSS` i `buildPdfDocument` w `apps/frontend/src/utils/wbsPdfExport.js` — `@page` ma teraz margines 0, a marginesy dokumentu daje padding wewnątrz `.outer-wrap` (nagłówek tabeli powtarza się na każdej stronie, doszła pusta stopka-rozpórka). Chrome drukuje własny nagłówek i stopkę w marginesie strony, więc przy zerowym marginesie znika z wydruku adres `blob:http://localhost:5174/…`, data i numer strony. Dotyczy WSZYSTKICH eksportów PDF aplikacji
+- rozbito wspólną datę podpisu na trzy osobne — `dataPodpisuAirtel`, `dataPodpisuPodwykonawcy`, `dataPodpisuInspektora`. Data stoi nad podpisem w kolumnie danego uczestnika, bo każda strona podpisuje protokół kiedy indziej
+- skan podpisu skaluje się do 80% szerokości kolumny, wysokość z proporcji pliku. Miejsce na podpis rezerwuje KAŻDA kolumna, także ta bez skanu — inaczej kreski pod podpisami stoją na różnych wysokościach
+- przycięto `apps/frontend/public/podpis-airtel.png` do zawartości (361x137 → 318x58) — plik miał wokół podpisu przezroczysty margines, przez co obrazek rozciągnięty na 80% kolumny dawał widoczny podpis na jakieś 60%
+- tabela „Wartość odbieranego zakresu" schodzi do POZIOMU LIŚCIA — gałąź niesie podsumę, pod nią stoją pojedyncze pozycje z własnymi kwotami. `ProtokolWartoscDto` dostało pole `pozycje`
+- przedstawiciel podwykonawcy podpowiada się właścicielem odbieranej gałęzi (`WbsNode.owner` węzła top-level, z zejściem do właścicieli zaznaczonych liści gdy gałąź go nie ma). Podpowiedź wchodzi TYLKO gdy wartość jest niepusta i ustępuje ręcznej edycji
+- usunięto `przedstawicielPodwykonawcy` z pól pamiętanych w przeglądarce — ma teraz własne źródło danych, a zapamiętane nazwisko wjeżdżałoby do protokołu dotyczącego innej gałęzi i innego wykonawcy
+- domyślny numer protokołu to `Protokół odbioru prac -{zamówienie} {gałąź} {data}` — myślnik przykleja się do nazwy zamówienia bez spacji, tak jak w numerach wpisywanych dotąd ręcznie
+
+### słownik
+- dodano `acceptance-protocols-module`, `acceptance-protocols-controller`, `acceptance-protocols-service`, `acceptance-protocols-build-docx` — moduł generatora DOCX
+- dodano `acceptance-protocol-dto`, `acceptance-protocol-section-dto`, `acceptance-protocol-value-row-dto`, `acceptance-protocol-payload-dto` — kształt protokołu wspólny dla PDF i DOCX
+- dodano `acceptance-protocol-data-url-to-buffer`, `acceptance-protocol-label-row`, `acceptance-protocol-value-table`, `acceptance-protocol-scope-paragraphs`, `acceptance-protocol-signature` — klocki dokumentu Word
+- dodano `onedrive-ensure-subfolder` — podkatalog „załóż albo znajdź"
+- dodano `protokol-odbioru-export`, `protokol-fmt-zl`, `protokol-fmt-data`, `protokol-branch-of`, `protokol-branch-index`, `protokol-build-sections`, `protokol-default-number`, `protokol-filename`, `protokol-fetch-data-url`, `protokol-css`, `protokol-lab-cell`, `protokol-build-body-html`, `protokol-build-html`, `protokol-open-pdf`, `protokol-make-docx`, `protokol-make-pdf` — warstwa danych i renderowania po stronie frontu
+- dodano `protokol-odbioru-modal`, `protokol-remembered-fields`, `protokol-modal-groups`, `protokol-auto-number`, `protokol-auto-odbior`, `realization-protokol-open` — modal i jego podpięcie w zakładce Realizacja
+- dodano `acceptance-protocol-signature-dates`, `protokol-signature-fields` — osobna data podpisu dla każdego uczestnika
+- dodano `acceptance-protocol-signature-size` — wyliczany rozmiar skanu podpisu w DOCX
+- dodano `protokol-branch-owners`, `protokol-selected-owners`, `protokol-auto-podwykonawca` — właściciel gałęzi jako przedstawiciel podwykonawcy
+
+### wytyczne
+- `ui-funkcja` `buildSekcjeIWartosci` — wartość w protokole liczy się funkcją `planValueOf` przekazaną z `RealizationTab`, nie własną formułą. Kwota w dokumencie ma się zgadzać co do grosza z kolumną planu, na którą patrzy odbierający
+- `ui-funkcja` `protokol-branch-index` — numer sekcji opisu zakresu to pozycja gałęzi w CAŁYM zamówieniu, nie kolejność w protokole. Wzór z 21.08.2026 zaczyna się od „2.", bo gałąź pierwsza nie była odbierana; renumerowanie od 1 zrywa zgodność z ofertą
+- `ui-stala` `PROTOKOL_CSS` — wnętrze template literal: backticki w komentarzach CSS kończą string i wywracają build. Zdarzyło się raz, kosztowało jeden przebieg
+- `back-funkcja` `ensureSubfolder` — do powtarzalnego zakładania katalogu NIE używać `createFolder`: ma `conflictBehavior: 'rename'`, więc drugi zapis tworzy „nazwa 1", trzeci „nazwa 2"
+- literówka „COMMISIONING PROTOCOL" jest w oryginalnym formularzu Airtela i zostaje w generowanych dokumentach — zgodność znakowa z wzorem obiegającym u klienta jest ważniejsza niż poprawność pisowni
+- `ui-funkcja` `protokol-fetch-data-url` — obrazki wklejane do dokumentów trzymamy PRZYCIĘTE do zawartości. Przezroczysty margines w pliku nie jest widoczny w podglądzie assetu, a w dokumencie zjada procenty szerokości i wygląda jak błąd skalowania
+- `ui-stala` `PDF_BASE_CSS` — marginesy strony trzymamy w paddingu `.outer-wrap`, NIE w `@page { margin }`. Niezerowy margines `@page` to dla Chrome miejsce na jego własny nagłówek i stopkę, przez co w każdym wydruku z przeglądarki lądował adres `blob:…`
+
 ## 2026-08-29 — eksport/import użytkowników w Excelu, autoodświeżanie co 5 min, luźniejszy język komunikatów
 
 ### architektura / API
