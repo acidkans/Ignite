@@ -1,3 +1,35 @@
+## 2026-08-30 — onedrive: jedno konto MS dla calej aplikacji, samonaprawa folderu kategorii
+
+### architektura / API
+- operacje plikowe OneDrive (upload, lista, pobranie, przegladanie folderow, wiazanie folderu) korzystaja z JEDNEGO konta Microsoft — `getSharedToken()` zamiast tokenu zalogowanego uzytkownika. Konto wskazuje `MS_SHARED_ACCOUNT_EMAIL`, bez zmiennej brany jest najstarszy podpiety token
+- `getValidToken(userId)` zostaje bez zmian dla MS To Do (prywatne zadania uzytkownika)
+- `GET /onedrive/status` zwraca teraz stan konta WSPOLNEGO + pola `shared` i `own`
+- id folderow `pliki_finansowe` / `dokumentacja_projektowa` sa weryfikowane przed uzyciem i odtwarzane po nazwie, gdy Graph zwroci 404 (folder skasowany albo odtworzony recznie na OneDrive dostaje nowe id)
+
+### slownik
+- dodano `onedrive-shared-token` — token wspolnego konta MS dla operacji plikowych, onedrive.service.ts
+- dodano `onedrive-token-from-record` — odswiezanie access tokenu z wpisu w bazie, onedrive.service.ts
+- dodano `onedrive-ensure-category-folder` — weryfikacja i odtworzenie folderu kategorii, onedrive.service.ts
+- dodano `MS_SHARED_ACCOUNT_EMAIL` — adres uzytkownika ERP z podpietym kontem uslugowym OneDrive
+
+### wytyczne
+- `back-serwis` `OneDriveService` — kazda NOWA operacja na plikach zamowienia ma isc przez `getSharedToken()`; `getValidToken(userId)` tylko dla rzeczy prywatnych uzytkownika (MS To Do)
+- `schema-pole` `ProcessNode.oneDriveFinanseId` — traktowac jako cache, nie zrodlo prawdy: id moze wskazywac na skasowany folder, zawsze przez `ensureCategoryFolder`
+
+## 2026-08-30 — protokoly: podsumowanie kwotowe odbiorow i reset formularza po wystawieniu
+
+### architektura / API
+- bez zmian w API — podsumowanie liczone na froncie z danych, ktore modal juz pobiera (`/acceptance-protocols/:nodeId/status`)
+
+### slownik
+- dodano `protokol-reset-formularza` — czysci tresc protokolu przy kazdym otwarciu modalu, ProtokolOdbioruModal.jsx
+- dodano `protokol-podsumowanie` — bilans plan / odebrane / pozostalo liczony po wierszach tabeli, ProtokolOdbioruModal.jsx
+- dodano `protokol-pasek-podsumowania` — sekcja UI z bilansem i paskiem procentowym, ProtokolOdbioruModal.jsx
+
+### wytyczne
+- `ui-funkcja` `resetFormularza` — modal protokolu nie jest odmontowywany po zamknieciu (steruje nim `open`), wiec kazde nowe pole formularza trzeba dopisac takze tutaj, inaczej przeniesie sie do kolejnego protokolu
+- `ui-funkcja` `podsumowanie` — `odebrane` przycinane do planu pozycji, zeby protokol na kwote wyzsza od oferty nie wypychal paska ponad 100%
+
 ## 2026-08-30 — protokół: strony Zamawiający/Wykonawca, NIP w kontaktach zamówienia
 
 ### schema.prisma

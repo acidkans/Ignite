@@ -2176,6 +2176,10 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-funkcja | tabelaPodpisow | apps/backend/src/acceptance-protocols/acceptance-protocols.service.ts | @anchor acceptance-protocol-signature |
 | back-stala | rozmiar skanu podpisu (80% kolumny) | apps/backend/src/acceptance-protocols/acceptance-protocols.service.ts | @anchor acceptance-protocol-signature-size |
 | back-funkcja | ensureSubfolder | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-ensure-subfolder |
+| back-serwis | getSharedToken | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-shared-token |
+| back-funkcja | tokenFromRecord | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-token-from-record |
+| back-funkcja | ensureCategoryFolder | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-ensure-category-folder |
+| back-env | MS_SHARED_ACCOUNT_EMAIL | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-shared-token |
 
 #### Frontend (`apps/frontend/src/utils/protokolOdbioruExport.js`)
 
@@ -2290,6 +2294,9 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-funkcja | naOneDrive | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-na-onedrive |
 | ui-funkcja | wycofaj | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-wycofaj |
 | ui-sekcja | lista wystawionych protokołów | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-lista-wystawionych |
+| ui-funkcja | resetFormularza | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-reset-formularza |
+| ui-funkcja | podsumowanie (bilans odbiorów) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-podsumowanie |
+| ui-sekcja | pasek podsumowania kwotowego | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-pasek-podsumowania |
 | ui-modal | potwierdzenie wycofania protokołu | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-wycofaj-potwierdzenie |
 | ui-wiersz | pozycja domknięta (przekreślona) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-pozycja-domknieta |
 | ui-funkcja | nadwyzkaOdbioru | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-nadwyzka |

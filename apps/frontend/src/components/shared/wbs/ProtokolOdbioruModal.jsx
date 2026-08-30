@@ -269,6 +269,37 @@ export default function ProtokolOdbioruModal({
         return () => { zyje = false; };
     }, [open, nodeId]);
 
+    // @anchor protokol-reset-formularza — czyści treść protokołu przy każdym otwarciu modalu.
+    // Modal nie jest odmontowywany po zamknięciu (steruje nim samo `open`), więc bez tego
+    // kolejny protokół startował z zaznaczeniem, kwotami i uwagami poprzedniego — jedynym
+    // sposobem na czysty formularz było wyjście z Realizacji i wejście z powrotem.
+    // Pola zapamiętane w przeglądarce (`PAMIETANE`) zostają: to nawyk odbierającego, nie
+    // treść konkretnego protokołu.
+    const resetFormularza = useCallback(() => {
+        setZaznaczone(new Set());
+        setKwotyReczne({});
+        setDomknijReczne({});
+        setNumerRecznie(false);
+        setPodwykonawcaRecznie(false);
+        setZapisanoOdbior(false);
+        setStatusBlad('');
+        setWysylka('');
+        setListaOtwarta(false);
+        const d = fmtDataProtokol(new Date());
+        setPola((p) => ({
+            ...p,
+            numer: '', data: d, umowa: '',
+            odbior: 'CALOSCIOWY', odbiorRecznie: false,
+            wynik: 'POZYTYWNY', wady: '', protokolUsterkowy: null,
+            uwagi: '', zalaczniki: '',
+            dataPodpisuAirtel: d, dataPodpisuPodwykonawcy: '', dataPodpisuInspektora: '',
+            przedstawicielPodwykonawcy: '',
+            podkatalog: '', podkatalogRecznie: false,
+        }));
+    }, []);
+
+    useEffect(() => { if (open) resetFormularza(); }, [open, resetFormularza]);
+
     // @anchor protokol-odswiez-rejestr — stan pozycji i lista protokołów zawsze razem:
     // rozjazd między nimi pokazywałby wyszarzoną pozycję bez protokołu, który ją zamknął.
     const odswiezRejestr = useCallback(async () => {
@@ -332,6 +363,31 @@ export default function ProtokolOdbioruModal({
         if (reczne != null) return reczne;
         return kwotaOdbioru(row) >= pozostaloOf(row) - 0.005;
     }, [domknijReczne, kwotaOdbioru, pozostaloOf]);
+
+    // @anchor protokol-podsumowanie — kwotowy bilans odbiorów zamówienia liczony po tych
+    // samych wierszach, które widać w tabeli: plan z wyceny, ile zabrały dotychczasowe
+    // protokoły i ile zostaje. Bez tego jedyną informacją o zatwierdzonych pracach było
+    // wyszarzenie pozycji — nikt nie wiedział, na jaką kwotę zamówienie jest już odebrane.
+    // `odebrane` przycinamy do planu pozycji, żeby protokół wystawiony na kwotę wyższą od
+    // oferty (akceptacja na inną kwotę) nie wypychał paska ponad 100%.
+    const podsumowanie = useMemo(() => {
+        let plan = 0; let odebrane = 0; let pozostalo = 0;
+        for (const r of rows) {
+            const p = Number(planValueOf(r.node, r.card)) || 0;
+            const st = statusOdbioru[protokolRootOf(r.node)];
+            const od = Number(st?.odebrane) || 0;
+            plan += p;
+            odebrane += p > 0 ? Math.min(od, p) : od;
+            pozostalo += pozostaloDoOdbioru(p, st);
+        }
+        const zaokr = (x) => Math.round(x * 100) / 100;
+        return {
+            plan: zaokr(plan),
+            odebrane: zaokr(odebrane),
+            pozostalo: zaokr(pozostalo),
+            procent: plan > 0 ? Math.min(100, Math.round((odebrane / plan) * 100)) : 0,
+        };
+    }, [rows, planValueOf, statusOdbioru]);
 
     const wybrane = useMemo(
         () => rows.filter((r) => zaznaczone.has(r.node.id) && !domknieteOf(r)),
@@ -568,6 +624,36 @@ export default function ProtokolOdbioruModal({
                     </div>
 
                     <div className="p-5 overflow-y-auto custom-scrollbar flex flex-col gap-5">
+
+                        {/* @anchor protokol-pasek-podsumowania — bilans kwotowy odbiorów nad
+                            całą resztą modalu: pierwsze, co widać po otwarciu, to ile z
+                            zamówienia jest już zatwierdzone protokołami. */}
+                        <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <div>
+                                    <div className="text-[10px] uppercase tracking-wider text-gray-500">Wartość zakresu</div>
+                                    <div className="text-sm font-mono font-bold text-gray-100">{fmtZlProtokol(podsumowanie.plan)}</div>
+                                </div>
+                                <div>
+                                    <div className="text-[10px] uppercase tracking-wider text-gray-500">Odebrane ({wystawione.length} prot.)</div>
+                                    <div className="text-sm font-mono font-bold text-emerald-300">{fmtZlProtokol(podsumowanie.odebrane)}</div>
+                                </div>
+                                <div>
+                                    <div className="text-[10px] uppercase tracking-wider text-gray-500">Pozostało</div>
+                                    <div className="text-sm font-mono font-bold text-amber-300">{fmtZlProtokol(podsumowanie.pozostalo)}</div>
+                                </div>
+                                <div>
+                                    <div className="text-[10px] uppercase tracking-wider text-gray-500">W tym protokole</div>
+                                    <div className="text-sm font-mono font-bold text-blue-300">{fmtZlProtokol(suma)}</div>
+                                </div>
+                            </div>
+                            <div className="mt-3 flex items-center gap-2">
+                                <div className="h-1.5 flex-1 rounded-full bg-white/10 overflow-hidden">
+                                    <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all" style={{ width: `${podsumowanie.procent}%` }} />
+                                </div>
+                                <span className="text-[10px] font-mono text-gray-400 shrink-0">{podsumowanie.procent}% odebrane</span>
+                            </div>
+                        </div>
 
                         {/* @anchor protokol-lista-wystawionych — zwinięta sekcja z historią
                             odbiorów. Otwiera się sama, gdy coś już wystawiono, żeby nikt nie
