@@ -22,6 +22,11 @@ export interface SetEntitlementDto {
   entitlementDays: number;
 }
 
+// @anchor recalculate-entitlement-dto
+export interface RecalculateEntitlementDto {
+  userId: string;
+}
+
 // @anchor leave-balances-service
 @Injectable()
 export class LeaveBalancesService {
@@ -129,6 +134,41 @@ export class LeaveBalancesService {
     if (existing && days < existing.usedDays) {
       throw new BadRequestException(
         `Pula za ${year} nie może być mniejsza niż wykorzystane już ${existing.usedDays} dni.`,
+      );
+    }
+
+    await this.prisma.leaveBalance.upsert({
+      where: { userId_year: { userId: dto.userId, year } },
+      create: { userId: dto.userId, year, entitlementDays: days },
+      update: { entitlementDays: days },
+    });
+    return this.getBalance(dto.userId);
+  }
+
+  // @anchor recalculate-entitlement-from-experience
+  /// Podstawia do puli roku BIEZACEGO wymiar wyliczony ze stazu (art. 154 par. 1 KP).
+  /// Wywolywane recznie przez administratora — automat nie rusza salda, bo nie odroznia
+  /// wiersza wpisanego przez kadre od zmaterializowanego przy zatwierdzaniu wniosku.
+  async recalculateFromExperience(userId: string, roles: string[], dto: RecalculateEntitlementDto) {
+    const access = await this.leaves.resolveAccess(userId, roles);
+    if (!access.canEdit) throw new ForbiddenException('Pulę dni urlopowych ustawia administrator.');
+    if (!dto?.userId) throw new BadRequestException('Wskaż pracownika.');
+
+    const days = await this.defaultEntitlementDays(dto.userId);
+    if (!(days > 0)) {
+      throw new BadRequestException(
+        'Nie da się wyliczyć wymiaru urlopu — uzupełnij pracownikowi datę rozpoczęcia pracy albo staż.',
+      );
+    }
+
+    const year = LeaveBalancesService.fallbackYear();
+    const existing = await this.prisma.leaveBalance.findUnique({
+      where: { userId_year: { userId: dto.userId, year } },
+    });
+    // ta sama bariera co przy recznym zapisie — pula nigdy ponizej juz wykorzystanych dni
+    if (existing && days < existing.usedDays) {
+      throw new BadRequestException(
+        `Ze stażu wychodzi ${days} dni, a pracownik wykorzystał już ${existing.usedDays} w ${year} roku. Popraw pulę ręcznie.`,
       );
     }
 
