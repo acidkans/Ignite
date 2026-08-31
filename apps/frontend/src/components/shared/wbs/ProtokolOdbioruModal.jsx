@@ -119,6 +119,10 @@ export default function ProtokolOdbioruModal({
     const [zaznaczone, setZaznaczone] = useState(() => new Set());
     const [numerRecznie, setNumerRecznie] = useState(false);
     const [podwykonawcaRecznie, setPodwykonawcaRecznie] = useState(false);
+    // @anchor protokol-adnotacja-reczna — ręcznie poprawiona treść adnotacji o rozjeździe
+    // z ofertą. null = trzymamy się tekstu liczonego z kwot; string = odbierający przepisał
+    // go po swojemu i od tej chwili przeliczenie go NIE nadpisuje (jak przy numerze protokołu).
+    const [adnotacjaReczna, setAdnotacjaReczna] = useState(null);
     const [format, setFormat] = useState('pdf');
     const [eksportOtwarty, setEksportOtwarty] = useState(false);
     const [obrazki, setObrazki] = useState({ logo: '', podpis: '' });
@@ -211,6 +215,7 @@ export default function ProtokolOdbioruModal({
             setEksportOtwarty(false); setKwotyReczne({}); setOdblokowaneKwoty({}); setDomknieciaCzesciowe({});
             setZapisanoOdbior(false); setStatusBlad(''); setDoWycofania(null); setWysylka('');
             setListaOtwarta(false);
+        setAdnotacjaReczna(null);
         }
     }, [open]);
 
@@ -441,6 +446,10 @@ export default function ProtokolOdbioruModal({
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [wybrane, kwotyReczne, domknieciaCzesciowe, statusOdbioru]);
 
+    // @anchor protokol-adnotacja-finalna — to, co naprawdę wejdzie do dokumentu: wersja
+    // ręczna, jeśli istnieje, inaczej wyliczona z kwot.
+    const adnotacjaFinalna = adnotacjaReczna ?? adnotacjaRoznic;
+
     // @anchor protokol-auto-podwykonawca — przedstawiciel podwykonawcy podpowiada się
     // właścicielem odbieranej gałęzi. Wpisujemy TYLKO wartość niepustą: gałąź bez właściciela
     // nie ma czym nadpisać tego, co odbierający zdążył już wpisać ręcznie. Po ręcznej edycji
@@ -543,7 +552,7 @@ export default function ProtokolOdbioruModal({
         wynik: pola.wynik,
         wady: pola.wady,
         protokolUsterkowy: pola.protokolUsterkowy,
-        uwagi: [pola.uwagi, adnotacjaRoznic].filter(Boolean).join('\n\n'),
+        uwagi: [pola.uwagi, adnotacjaFinalna].filter(Boolean).join('\n\n'),
         zalaczniki: pola.zalaczniki,
         dataPodpisuAirtel: pola.dataPodpisuAirtel,
         dataPodpisuPodwykonawcy: pola.dataPodpisuPodwykonawcy,
@@ -1048,12 +1057,25 @@ export default function ProtokolOdbioruModal({
                         <div>
                             <label className={ETYKIETA}>Inne uwagi</label>
                             <AutoResizeTextarea value={pola.uwagi} onChange={(e) => ustaw('uwagi', e.target.value)} className={POLE} />
-                            {adnotacjaRoznic && (
+                            {(adnotacjaRoznic || adnotacjaReczna !== null) && (
                                 <div className="mt-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2">
-                                    <div className="text-[10px] font-bold uppercase tracking-widest text-amber-400/80 mb-1">
-                                        Doklei się do uwag w dokumencie
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="text-[10px] font-bold uppercase tracking-widest text-amber-400/80 flex-1">
+                                            Doklei się do uwag w dokumencie
+                                        </div>
+                                        {adnotacjaReczna !== null && (
+                                            <button
+                                                onClick={() => setAdnotacjaReczna(null)}
+                                                className="px-2 py-0.5 rounded-md text-[10px] font-bold border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 transition-all"
+                                                title="Wróć do treści wyliczonej z kwot"
+                                            >Przywróć wyliczoną</button>
+                                        )}
                                     </div>
-                                    <pre className="text-[11px] text-amber-200/90 whitespace-pre-wrap font-sans m-0">{adnotacjaRoznic}</pre>
+                                    <AutoResizeTextarea
+                                        value={adnotacjaFinalna}
+                                        onChange={(e) => setAdnotacjaReczna(e.target.value)}
+                                        className="w-full bg-black/20 border border-amber-500/20 rounded-md px-2 py-1 text-[11px] text-amber-200/90 outline-none focus:border-amber-500/50"
+                                    />
                                 </div>
                             )}
                         </div>

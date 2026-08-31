@@ -85,10 +85,25 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
     try {
       const art = await resolveArtifact(await makeArtifact());
       await sendExport({ blob: art.blob, filename: art.filename, to, cc, subject: subject || title, message, nodeId });
+      // Archiwizacja na OneDrive z TEGO SAMEGO artefaktu — plik w teczce jest bit w bit tym,
+      // co poszło mailem. Jej błąd nie unieważnia wysyłki: mail już wyszedł, więc mówimy
+      // o nim wprost i dopisujemy, czego nie udało się odłożyć.
+      let odInfo = '';
+      if (oneDriveFolderName) {
+        try {
+          await uploadToOneDrive({
+            blob: art.blob, filename: art.filename, nodeId,
+            category: oneDriveCategory, subfolder: oneDriveSubfolder,
+          });
+          odInfo = ` · zapisano na OneDrive → ${[oneDriveFolderName, oneDriveCategory === 'finanse' ? 'pliki_finansowe' : 'dokumentacja_projektowa', oneDriveSubfolder].filter(Boolean).join(' → ')}`;
+        } catch (e) {
+          setError(`Mail wysłany, ale zapis na OneDrive się nie udał: ${e?.message || 'błąd'}`);
+        }
+      }
       await onExported?.();
-      setDone(`Wysłano do: ${to.join(', ')}${cc.length ? ` (DW: ${cc.join(', ')})` : ''}`);
+      setDone(`Wysłano do: ${to.join(', ')}${cc.length ? ` (DW: ${cc.join(', ')})` : ''}${odInfo}`);
       setBusy(false);
-      setTimeout(onClose, 1600);
+      setTimeout(onClose, odInfo ? 2400 : 1600);
     } catch (e) {
       setError(e?.message || 'Błąd wysyłki maila');
       setBusy(false);
@@ -156,9 +171,17 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
                 <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={defaultMessage ? 10 : 3} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-y custom-scrollbar" placeholder="Treść wiadomości…" />
               </div>
               <button onClick={handleSend} disabled={busy} className={`${btnBase} bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white mt-1`}>
-                {busy ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {busy ? 'Wysyłanie…' : 'Wyślij załącznik'}
+                {busy ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {busy ? 'Wysyłanie…' : (oneDriveFolderName ? 'Wyślij załącznik i zapisz na OneDrive' : 'Wyślij załącznik')}
               </button>
-              <p className="text-[10px] text-gray-500 text-center">Załącznik = ten sam plik, który zostałby pobrany.</p>
+              {/* @anchor export-choice-mail-na-od — wysyłka ZAWSZE archiwizuje ten sam plik
+                  w folderze gałęzi. Bez wyboru: dokument, który poszedł do klienta, musi być
+                  w teczce projektu, a osobny klik po wysyłce był krokiem do zapomnienia. */}
+              <p className="text-[10px] text-gray-500 text-center">
+                Załącznik = ten sam plik, który zostałby pobrany.
+                {oneDriveFolderName
+                  ? ` Kopia trafia na OneDrive → ${[oneDriveFolderName, oneDriveCategory === 'finanse' ? 'pliki_finansowe' : 'dokumentacja_projektowa', oneDriveSubfolder].filter(Boolean).join(' → ')}.`
+                  : ' Gałąź nie ma folderu OneDrive — kopia nie zostanie zarchiwizowana.'}
+              </p>
             </div>
           )}
 

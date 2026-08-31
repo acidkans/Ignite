@@ -1,3 +1,17 @@
+## 2026-08-31 — adnotacja o rozbieżnościach edytowalna, mail eksportu archiwizuje na OneDrive (v2026.08.31.942)
+
+### architektura / API
+- `ui-sekcja` `ExportChoiceModal` — wysyłka mailem po udanym `sendExport` wgrywa TEN SAM artefakt przez `uploadToOneDrive` (kategoria i podkatalog jak w przycisku OneDrive). Wcześniej trzy akcje modala były rozłączne i protokół wysłany mailem nie trafiał do teczki projektu.
+- `ui-stan` `adnotacjaReczna` w `ProtokolOdbioruModal` — adnotacja o rozjeździe oferta↔odbiór jest polem edytowalnym; do dokumentu wchodzi wersja ręczna, a `Przywróć wyliczoną` wraca do treści liczonej z kwot.
+
+### słownik
+- dodano `export-choice-mail-na-od` — archiwizacja maila na OneDrive, ExportChoiceModal.jsx
+- dodano `protokol-adnotacja-reczna` — ręcznie poprawiona treść adnotacji o rozbieżnościach
+- dodano `protokol-adnotacja-finalna` — treść adnotacji faktycznie doklejana do uwag dokumentu
+
+### wytyczne
+- `ui-sekcja` `ExportChoiceModal` — każda ścieżka wysyłki dokumentu na zewnątrz musi archiwizować plik na OneDrive; błąd uploadu nie unieważnia wysłanego maila, tylko dopisuje ostrzeżenie.
+
 ## 2026-08-30 — role systemowe: brak wiersza DAK na produkcji
 
 ### architektura / API

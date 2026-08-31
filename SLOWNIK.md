@@ -853,6 +853,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-input | RecipientInput | apps/frontend/src/components/shared/RecipientInput.jsx | @anchor recipient-input |
 | ui-modal | ExportChoiceModal | apps/frontend/src/components/shared/ExportChoiceModal.jsx | @anchor export-choice-modal |
 | ui-stan | cc (DW w mailu) | apps/frontend/src/components/shared/ExportChoiceModal.jsx | @anchor export-choice-cc |
+| ui-sekcja | archiwizacja maila na OneDrive | apps/frontend/src/components/shared/ExportChoiceModal.jsx | @anchor export-choice-mail-na-od |
 | ui-widok | SmtpSettingsPage | apps/frontend/src/SmtpSettingsPage.jsx | @anchor smtp-settings-page |
 | ui-sekcja | SmtpSettingsPanel | apps/frontend/src/components/shared/SmtpSettingsPanel.jsx | @anchor smtp-settings-panel |
 | ui-zakladka | Urlopy SMTP (meta) | apps/frontend/src/LeavesPage.jsx | @anchor leaves-smtp-tab-meta |
@@ -2291,6 +2292,8 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-funkcja | kwotaZablokowanaOf | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-kwota-zablokowana-of |
 | ui-funkcja | roznice (wobec oferty) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-adnotacja-roznic |
 | ui-funkcja | adnotacjaRoznic | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-tekst-roznic |
+| ui-stan | adnotacjaReczna | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-adnotacja-reczna |
+| ui-funkcja | adnotacjaFinalna | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-adnotacja-finalna |
 | ui-funkcja | poEksporcie | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-po-eksporcie |
 | ui-stan | wystawione (lista protokołów) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-wystawione |
 | ui-funkcja | odswiezRejestr | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-odswiez-rejestr |
