@@ -1,3 +1,55 @@
+## 2026-08-31 — urlopy: rozklad urlopow na miesiace (raport placowy dla DAK)
+
+### architektura / API
+- dodano `back-endpoint` `GET /leaves/monthly-breakdown?from=YYYY-MM&to=YYYY-MM` — kazdy urlop dotykajacy okna z rozpiska ile dni przypada na ktory miesiac; brak parametrow = miesiac poprzedni. Dostep wylacznie dla rol z `LEAVE_VIEW_ALL_ROLES` (ADMIN, DAK), bo to dane placowe calej firmy
+- dodano `back-funkcja` `monthlyBreakdown()`, `splitDaysIntoMonths()`, `monthRange()`, `previousMonthKey()`, `monthKey()` w `LeavesService`
+- dodano `back-dto` `MonthlyBreakdownRow` i `MonthlyBreakdownResult`
+- dodano `ui-modal` `LeaveMonthlyBreakdownModal` — tabela raportu z filtrem miesiecy i eksportem do Excela
+- dodano `ui-funkcja` `buildLeaveMonthlyWorkbook()` / `downloadLeaveMonthlyExcel()` w nowym pliku `apps/frontend/src/utils/leaveMonthlyExcel.js`
+- dodano `ui-sekcja` `dashboard-monthly-breakdown-card` w zakladce Dashboard — przycisk otwierajacy raport
+
+### wytyczne
+- `back-funkcja` `splitDaysIntoMonths()` — rozbicie miesieczne trzyma sie zapisanego `Leave.daysCount`, NIE przeliczonych dni roboczych. Dni robocze (pn-pt) sluza wylacznie jako wagi podzialu, a reszta z zaokraglen ladu je w ostatnim miesiacu. Powod: DAK liczy wyplaty z wymiaru zapisanego na wpisie — raport nie moze pokazywac innej sumy niz sam wpis
+- `back-funkcja` `monthlyBreakdown()` — urlop wchodzacy w okno tylko czescia dni pokazuje w tabeli WYLACZNIE miesiace z okna; suma kolumn miesiecy bywa wtedy mniejsza niz kolumna „Dni razem". Wiersze z `mismatch = true` (urlop godzinowy, wpis reczny) sa podswietlone i wymagaja recznej weryfikacji
+- `ui-funkcja` `buildLeaveMonthlyWorkbook()` — sumy w kolumnach miesiecy to zywe formule `SUM()`, zgodnie z zasada eksportow Excel
+
+## 2026-08-31 — saldo urlopowe: pula za rok biezacy liczona ze stazu, reczna edycja na zadanie
+
+### architektura / API
+- dodano `back-endpoint` `POST /leave-balances/entitlement/recalculate` — podstawia do puli roku biezacego wymiar wyliczony ze stazu (art. 154 par. 1 KP), z bariera „nigdy ponizej juz wykorzystanych dni"
+- dodano `back-funkcja` `recalculateFromExperience()` i `back-dto` `RecalculateEntitlementDto` w `LeaveBalancesService`
+- `ui-input` pula za rok biezacy w panelu „Dni jeszcze do wybrania" jest domyslnie zablokowany; odblokowuje go przycisk „Edytuj recznie". Lata wsteczne (urlop zalegly) pozostaja edytowalne jak dotad
+- dodano naglowki kolumn (rok / przysluguje / zostalo) w panelu salda dni
+
+### slownik
+- dodano `dashboard-balance-head`, `dashboard-manual-entitlement`, `dashboard-current-balance-year`, `dashboard-recalculate-entitlement`, `dashboard-entitlement-actions`
+- dodano `recalculate-entitlement-dto`, `recalculate-entitlement-from-experience`, `leave-balances-recalculate-endpoint`
+
+### wytyczne
+- `schema-pole` `LeaveBalance.entitlementDays` — wyliczenie ze stazu NIE dzieje sie automatycznie po uzupelnieniu daty rozpoczecia pracy. Powod: model nie odroznia wiersza wpisanego przez kadre od zmaterializowanego przez `applyDeductions()` przy zatwierdzaniu wniosku, wiec automat kasowalby reczne korekty. Przeliczenie uruchamia administrator przyciskiem „Przelicz ze stazu"
+- `back-funkcja` `defaultEntitlementDays()` — fallback ze stazu dziala WYLACZNIE gdy brak wiersza za rok biezacy; pierwszy zatwierdzony wniosek materializuje wiersz i fallback przestaje dzialac na zawsze
+
+## 2026-08-31 — urlopy: jedna karta „Przegląd urlopowy", koniec przeciągalnych kart
+
+### architektura / API
+- usunieto `back-endpoint` `GET /leaves/layout` i `PUT /leaves/layout` — uklad kart zakladki „Moje dane" przestal istniec, wiec nie ma czego zapisywac
+- usunieto `back-funkcja` `getLayout()` i `saveLayout()` z `LeavesService` oraz `back-stala` `LEAVES_LAYOUT_ENTITY` (`leaves-cards-layout`)
+- usunieto `ui-karta` `DraggableCard.jsx` i `ui-funkcja` `resolveCardOverlaps()` (`cardsLayout.js`) — pliki bez zadnych uzyc po scaleniu kart
+- scalono karty zakladki „Moje dane" w jeden panel: cztery sekcje w rzedzie (dane osobowe z podopiecznymi, saldo, wykorzystane dni, swieta w sobote) plus tabela „Moje urlopy" na pelnej szerokosci pod nimi
+- przeniesiono `ui-sekcja` `HolidayAdminPanel` z zakladki „Moje dane" do zakladki „Dashboard" (obok panelu synchronizacji kalendarza, nadal tylko ADMIN)
+
+### slownik
+- usunieto `draggable-card`, `draggable-card-start`, `draggable-card-offset-ref`, `draggable-card-measure`, `cards-layout-gap`, `resolve-card-overlaps`
+- usunieto `leaves-layout-get-endpoint`, `leaves-layout-put-endpoint`, `leaves-layout-entity-type`, `get-leaves-layout`, `save-leaves-layout`
+- usunieto `my-leaves-default-layout`, `my-leaves-card-ids`, `my-leaves-layout-state`, `my-leaves-layout-dirty`, `my-leaves-cards-layer`, `my-leaves-layout-toolbar`, `my-leaves-save-layout-button`, `my-leaves-save-layout`, `my-leaves-reset-layout`, `my-leaves-measure-card`, `my-leaves-drag-end`, `fetch-my-layout`, `card-dependents`, `card-holidays-admin`
+- dodano `card-overview` — karta „Przeglad urlopowy" skupiajaca wszystkie sekcje zakladki „Moje dane"
+- dodano `my-leaves-section` — podpanel sekcji wewnatrz tej karty (wspolna wysokosc w rzedzie)
+- dodano `card-personal-dependents-section` — podopieczni wewnatrz karty danych osobowych
+- dodano `dashboard-holidays-admin-panel` — zarzadzanie dniami wolnymi w zakladce Dashboard
+
+### wytyczne
+- `back-endpoint` `/leaves/layout` — wiersze `UserEntityConfig` z `entityType = 'leaves-cards-layout'` zostaja w bazie jako martwe dane; nie czyscimy ich migracja, bo nic ich nie odczytuje
+
 ## 2026-08-31 — kalendarz Google: zatwierdzone urlopy w formacie AppSheet, pasek przerywany dniami wolnymi
 
 ### schema.prisma

@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 // @anchor leave-companies
@@ -110,33 +110,47 @@ export interface UpdateLeaveDto {
   note?: string;
 }
 
-// @anchor leaves-layout-entity-type
-/// Klucz w `UserEntityConfig` pod ktorym trzymamy uklad kart zakladki „Moje dane".
-export const LEAVES_LAYOUT_ENTITY = 'leaves-cards-layout';
+// @anchor monthly-breakdown-row-dto
+/// Jeden urlop w raporcie dla DAK: dane pracownika, zakres i rozbicie dni na miesiace.
+export interface MonthlyBreakdownRow {
+  leaveId: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  company: string | null;
+  typeName: string;
+  typeCode: string;
+  dateFrom: string;
+  dateTo: string;
+  /// `daysCount` zapisany przy wpisie — zrodlo prawdy dla wyplaty
+  daysCount: number;
+  /// dni robocze (pn-pt) policzone z zakresu dat — do kontroli spojnosci
+  workingDays: number;
+  /// true = zapisany `daysCount` rozni sie od dni roboczych z zakresu (wpis reczny, urlop godzinowy)
+  mismatch: boolean;
+  note: string | null;
+  /// { 'YYYY-MM': dni } — suma zawsze rowna `daysCount`
+  months: Record<string, number>;
+}
+
+// @anchor monthly-breakdown-result-dto
+export interface MonthlyBreakdownResult {
+  /// pierwszy miesiac okna, format `YYYY-MM`
+  from: string;
+  /// ostatni miesiac okna wlacznie, format `YYYY-MM`
+  to: string;
+  /// wszystkie miesiace okna po kolei — naglowki kolumn tabeli
+  months: string[];
+  rows: MonthlyBreakdownRow[];
+  /// suma dni w kazdym miesiacu okna
+  totals: Record<string, number>;
+}
 
 // @anchor leaves-service
 @Injectable()
 export class LeavesService {
   constructor(private prisma: PrismaService) {}
-
-  // @anchor get-leaves-layout
-  /// Uklad kart zapisany per uzytkownik — wspolny dla kazdej przegladarki.
-  async getLayout(userId: string) {
-    const row = await this.prisma.userEntityConfig.findUnique({
-      where: { userId_entityType: { userId, entityType: LEAVES_LAYOUT_ENTITY } },
-    });
-    return row?.config ?? null;
-  }
-
-  // @anchor save-leaves-layout
-  async saveLayout(userId: string, config: any) {
-    const row = await this.prisma.userEntityConfig.upsert({
-      where: { userId_entityType: { userId, entityType: LEAVES_LAYOUT_ENTITY } },
-      create: { userId, entityType: LEAVES_LAYOUT_ENTITY, config: config ?? {} },
-      update: { config: config ?? {} },
-    });
-    return row.config;
-  }
 
   // @anchor resolve-leave-access
   async resolveAccess(userId: string, roles: string[]): Promise<LeaveAccess> {
@@ -274,6 +288,165 @@ export class LeavesService {
     const access = await this.assertEnabled(userId, roles);
     if (!access.canEdit) throw new ForbiddenException('Nie możesz usuwać wpisów urlopowych.');
     return this.prisma.leave.delete({ where: { id } });
+  }
+
+  // @anchor month-key
+  /// Klucz miesiaca `YYYY-MM` z daty UTC.
+  private static monthKey(ms: number): string {
+    const d = new Date(ms);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+
+  // @anchor previous-month-key
+  /// Domyslne okno raportu dla DAK: miesiac poprzedni, bo wyplaty licza sie wstecz.
+  static previousMonthKey(now: Date = new Date()): string {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+
+  // @anchor month-range
+  /// Lista miesiecy `YYYY-MM` od `from` do `to` wlacznie.
+  private static monthRange(from: string, to: string): string[] {
+    const [fy, fm] = from.split('-').map(Number);
+    const [ty, tm] = to.split('-').map(Number);
+    const out: string[] = [];
+    let y = fy;
+    let m = fm;
+    // twardy limit 120 miesiecy — bez niego blad w parametrach zapetla petle
+    for (let guard = 0; guard < 120; guard++) {
+      out.push(`${y}-${String(m).padStart(2, '0')}`);
+      if (y === ty && m === tm) break;
+      m += 1;
+      if (m > 12) { m = 1; y += 1; }
+    }
+    return out;
+  }
+
+  // @anchor split-days-into-months
+  /// Rozbicie urlopu na miesiace. Podstawa sa dni robocze (pn-pt) w kazdym miesiacu,
+  /// ale suma MUSI sie zgadzac z zapisanym `daysCount` — inaczej DAK dostalby inne
+  /// liczby niz widnieja na wpisie. Gdy `daysCount` odbiega od dni roboczych
+  /// (wpis reczny, urlop godzinowy), rozdzielamy go proporcjonalnie, a reszte
+  /// z zaokraglen dopisujemy do ostatniego miesiaca.
+  private static splitDaysIntoMonths(from: Date, to: Date, daysCount: number): {
+    months: Record<string, number>;
+    workingDays: number;
+  } {
+    const start = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
+    const end = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate());
+    if (isNaN(start) || isNaN(end) || end < start) return { months: {}, workingDays: 0 };
+
+    const perMonth: Record<string, number> = {};
+    let workingDays = 0;
+    for (let ms = start; ms <= end; ms += 86400000) {
+      const dow = new Date(ms).getUTCDay();
+      if (dow === 0 || dow === 6) continue;
+      const key = LeavesService.monthKey(ms);
+      perMonth[key] = (perMonth[key] || 0) + 1;
+      workingDays++;
+    }
+
+    // urlop w calosci na weekendzie — bez dni roboczych rozbijamy po dniach kalendarzowych
+    if (workingDays === 0) {
+      for (let ms = start; ms <= end; ms += 86400000) {
+        const key = LeavesService.monthKey(ms);
+        perMonth[key] = (perMonth[key] || 0) + 1;
+        workingDays++;
+      }
+    }
+
+    const keys = Object.keys(perMonth);
+    const months: Record<string, number> = {};
+    let assigned = 0;
+    keys.forEach((key, i) => {
+      if (i === keys.length - 1) {
+        months[key] = Math.round((daysCount - assigned) * 100) / 100;
+        return;
+      }
+      const share = Math.round((daysCount * perMonth[key] / workingDays) * 100) / 100;
+      months[key] = share;
+      assigned = Math.round((assigned + share) * 100) / 100;
+    });
+
+    return { months, workingDays };
+  }
+
+  // @anchor monthly-breakdown
+  /// Raport dla DAK: kazdy urlop dotykajacy okna z rozpiska ile dni przypada na ktory miesiac.
+  /// Widza go wylacznie role z LEAVE_VIEW_ALL_ROLES (ADMIN, DAK) — to dane placowe calej firmy.
+  async monthlyBreakdown(
+    userId: string,
+    roles: string[],
+    fromMonth?: string,
+    toMonth?: string,
+  ): Promise<MonthlyBreakdownResult> {
+    const access = await this.assertEnabled(userId, roles);
+    if (!access.canViewAll) {
+      throw new ForbiddenException('Rozkład urlopów na miesiące jest dostępny dla administratora i DAK.');
+    }
+
+    const monthPattern = /^\d{4}-(0[1-9]|1[0-2])$/;
+    const fallback = LeavesService.previousMonthKey();
+    const from = monthPattern.test(fromMonth || '') ? (fromMonth as string) : fallback;
+    const to = monthPattern.test(toMonth || '') ? (toMonth as string) : from;
+    if (to < from) throw new BadRequestException('Miesiąc „do" jest wcześniejszy niż „od".');
+
+    const months = LeavesService.monthRange(from, to);
+    const [fy, fm] = from.split('-').map(Number);
+    const [ty, tm] = to.split('-').map(Number);
+    const windowStart = new Date(Date.UTC(fy, fm - 1, 1));
+    const windowEnd = new Date(Date.UTC(ty, tm, 0, 23, 59, 59));
+
+    // urlop wchodzi do raportu, gdy zachodzi na okno choc jednym dniem
+    const leaves = await this.prisma.leave.findMany({
+      where: { dateFrom: { lte: windowEnd }, dateTo: { gte: windowStart } },
+      include: {
+        leaveType: { select: { name: true, code: true } },
+        user: { select: { id: true, firstName: true, lastName: true, email: true, company: true } },
+      },
+      orderBy: [{ dateFrom: 'asc' }],
+    });
+
+    const inWindow = new Set(months);
+    const totals: Record<string, number> = {};
+    months.forEach(m => { totals[m] = 0; });
+
+    const rows: MonthlyBreakdownRow[] = leaves.map(l => {
+      const { months: split, workingDays } = LeavesService.splitDaysIntoMonths(
+        new Date(l.dateFrom),
+        new Date(l.dateTo),
+        l.daysCount,
+      );
+      // do tabeli trafiaja tylko miesiace z okna — czesc urlopu spoza okna zostaje pominieta
+      const visible: Record<string, number> = {};
+      for (const [key, value] of Object.entries(split)) {
+        if (!inWindow.has(key) || !value) continue;
+        visible[key] = value;
+        totals[key] = Math.round((totals[key] + value) * 100) / 100;
+      }
+      return {
+        leaveId: l.id,
+        userId: l.user.id,
+        firstName: l.user.firstName,
+        lastName: l.user.lastName,
+        email: l.user.email,
+        company: l.user.company ?? null,
+        typeName: l.leaveType.name,
+        typeCode: l.leaveType.code,
+        dateFrom: l.dateFrom.toISOString().slice(0, 10),
+        dateTo: l.dateTo.toISOString().slice(0, 10),
+        daysCount: l.daysCount,
+        workingDays,
+        mismatch: Math.abs(l.daysCount - workingDays) > 0.001,
+        note: l.note ?? null,
+        months: visible,
+      };
+    })
+      // urlop moze zachodzic na okno, ale caly przypadac poza nim po odsianiu weekendow
+      .filter(r => Object.keys(r.months).length > 0)
+      .sort((a, b) => (a.lastName || '').localeCompare(b.lastName || '', 'pl') || a.dateFrom.localeCompare(b.dateFrom));
+
+    return { from, to, months, rows, totals };
   }
 
   // @anchor working-days-between

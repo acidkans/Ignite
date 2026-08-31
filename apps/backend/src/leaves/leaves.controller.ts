@@ -30,16 +30,11 @@ export class LeavesController {
     return this.leaves.listEmployees(req.user.userId, req.user.roles || []);
   }
 
-  // @anchor leaves-layout-get-endpoint
-  @Get('layout')
-  getLayout(@Req() req: any) {
-    return this.leaves.getLayout(req.user.userId);
-  }
-
-  // @anchor leaves-layout-put-endpoint
-  @Put('layout')
-  saveLayout(@Req() req: any, @Body() body: any) {
-    return this.leaves.saveLayout(req.user.userId, body);
+  // @anchor leaves-monthly-breakdown-endpoint
+  /// Rozklad urlopow na miesiace — raport dla DAK do podliczenia wyplat.
+  @Get('monthly-breakdown')
+  monthlyBreakdown(@Req() req: any, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.leaves.monthlyBreakdown(req.user.userId, req.user.roles || [], from, to);
   }
 
   // @anchor leaves-holidays-get-endpoint

@@ -7,6 +7,8 @@ import { pl } from 'date-fns/locale/pl';
 import { statusMeta, warsawDayKey } from './leavesTheme';
 import useAutoRefresh from '../../../hooks/useAutoRefresh';
 import CalendarSyncPanel from './CalendarSyncPanel';
+import HolidayAdminPanel from './HolidayAdminPanel';
+import LeaveMonthlyBreakdownModal from './LeaveMonthlyBreakdownModal';
 
 registerLocale('pl', pl);
 
@@ -55,6 +57,13 @@ const FilterDateField = ({ label, value, onChange }) => (
 // Zakładka „Dashboard" — panel FILTR, szczegóły pracownika, saldo dni i jego wnioski.
 export default function LeavesDashboardTab({ access, employees, currentUserId, onNewRequest }) {
     const [selectedUserId, setSelectedUserId] = useState(currentUserId || '');
+    // @anchor dashboard-manual-entitlement
+    /// Pula za rok biezacy jest domyslnie zablokowana — liczy sie ze stazu.
+    /// Ten przelacznik odslania pole na zadanie administratora, dla jednego pracownika.
+    const [manualEntitlement, setManualEntitlement] = useState(false);
+    // @anchor dashboard-monthly-modal-state
+    const [monthlyOpen, setMonthlyOpen] = useState(false);
+    useEffect(() => { setManualEntitlement(false); }, [selectedUserId]);
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
     const [onlyPending, setOnlyPending] = useState(false);
@@ -116,6 +125,9 @@ export default function LeavesDashboardTab({ access, employees, currentUserId, o
     // Lata przychodzą z backendu (rok bieżący i 4 wstecz) — front nic nie zaszywa na sztywno.
     const balanceYears = data?.balance?.years || [];
     const balanceTotal = data?.balance?.totalRemaining ?? 0;
+    // @anchor dashboard-current-balance-year
+    /// Ostatni rocznik okna salda = rok biezacy; tylko jego pule liczymy ze stazu.
+    const currentBalanceYear = balanceYears.length ? balanceYears[balanceYears.length - 1].year : new Date().getFullYear();
 
     // @anchor dashboard-can-decide
     // Przycisk akceptacji w tabeli — gdy oglądany pracownik jest moim podwładnym (albo jestem adminem).
@@ -147,6 +159,27 @@ export default function LeavesDashboardTab({ access, employees, currentUserId, o
 
     // @anchor dashboard-save-entitlement
     // ADMIN ustawia pulę dni za dany rok — bez tego nikt nie może złożyć wniosku urlopowego.
+    // @anchor dashboard-recalculate-entitlement
+    /// Podstawia pule roku biezacego wyliczona ze stazu pracownika.
+    const recalculateEntitlement = async () => {
+        try {
+            const token = sessionStorage.getItem('token');
+            const res = await fetch(`${API_URL}/leave-balances/entitlement/recalculate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ userId: data?.subject?.id }),
+            });
+            if (!res.ok) {
+                const d = await res.json().catch(() => ({}));
+                throw new Error(d.message || 'Nie udało się przeliczyć puli ze stażu.');
+            }
+            setManualEntitlement(false);
+            fetchDashboard(selectedUserId);
+        } catch (err) {
+            setError(err.message);
+        }
+    };
+
     const saveEntitlement = async (year, value) => {
         const days = Number(String(value).replace(',', '.'));
         if (!isFinite(days) || days < 0) return;
@@ -260,10 +293,6 @@ export default function LeavesDashboardTab({ access, employees, currentUserId, o
                                 <p className={fieldLabelCls}>uprawnienia</p>
                                 <p className={fieldValueCls}>{(data.subject.roles || []).join(', ') || '—'}</p>
                             </div>
-                            <div>
-                                <p className={fieldLabelCls}>wybrany w tym roku ({data.currentYear.year})</p>
-                                <p className="text-lg font-semibold text-blue-300">{data.currentYear.totalDays}</p>
-                            </div>
                         </div>
                     ) : (
                         <p className="text-gray-500 text-sm">Brak danych</p>
@@ -276,6 +305,20 @@ export default function LeavesDashboardTab({ access, employees, currentUserId, o
                     <p className={panelTitleCls}>Dni jeszcze do wybrania</p>
                     {data ? (
                         <div className="flex flex-col gap-2">
+                            {/* @anchor dashboard-balance-head */}
+                            <div className="flex justify-between items-center pb-1 border-b border-white/10">
+                                <span className={fieldLabelCls}>rok</span>
+                                <span className="flex items-center gap-2">
+                                    {access?.canEdit && (
+                                        <span className={`${fieldLabelCls} w-16 text-center`} title="Pula dni przysługujących za dany rok">
+                                            przysługuje
+                                        </span>
+                                    )}
+                                    <span className={`${fieldLabelCls} w-10 text-right`} title="Pula pomniejszona o dni już wykorzystane">
+                                        zostało
+                                    </span>
+                                </span>
+                            </div>
                             {balanceYears.map(y => (
                                 <div key={y.year} className="flex justify-between items-center py-1.5 border-b border-white/5">
                                     <span className="text-sm text-gray-400" title={`przysługuje ${y.entitlementDays}, wykorzystano ${y.usedDays}`}>
@@ -287,19 +330,48 @@ export default function LeavesDashboardTab({ access, employees, currentUserId, o
                                                 type="number" step="0.5" min="0"
                                                 defaultValue={y.entitlementDays}
                                                 key={`${y.year}-${y.entitlementDays}`}
+                                                disabled={y.year === currentBalanceYear && !manualEntitlement}
                                                 onBlur={e => {
                                                     if (Number(e.target.value) !== y.entitlementDays) saveEntitlement(y.year, e.target.value);
                                                 }}
-                                                title="Pula dni przysługujących za ten rok"
-                                                className="w-16 bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-xs text-gray-300 focus:outline-none focus:border-blue-500/50"
+                                                title={y.year === currentBalanceYear
+                                                    ? 'Pula za rok bieżący liczy się ze stażu — odblokuj, żeby wpisać ręcznie'
+                                                    : 'Pula dni przysługujących za ten rok (urlop zaległy wpisuje kadra)'}
+                                                className={`w-16 bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-xs text-gray-300 focus:outline-none focus:border-blue-500/50
+                                                    ${y.year === currentBalanceYear && !manualEntitlement ? 'opacity-50 cursor-not-allowed' : ''}`}
                                             />
                                         )}
-                                        <span className={`text-sm font-semibold ${y.remainingDays > 0 ? 'text-green-300' : 'text-gray-600'}`}>
+                                        <span className={`w-10 text-right text-sm font-semibold ${y.remainingDays > 0 ? 'text-green-300' : 'text-gray-600'}`}>
                                             {y.remainingDays}
                                         </span>
                                     </span>
                                 </div>
                             ))}
+                            {/* @anchor dashboard-entitlement-actions */}
+                            {access?.canEdit && (
+                                <div className="flex flex-wrap items-center gap-2 pt-1">
+                                    <button
+                                        onClick={recalculateEntitlement}
+                                        title="Podstaw za rok bieżący wymiar wyliczony ze stażu pracownika"
+                                        className="text-[11px] px-2.5 py-1 rounded-lg bg-blue-600/25 hover:bg-blue-600/50 text-blue-200 border border-blue-500/30 transition-colors"
+                                    >
+                                        ⟳ Przelicz ze stażu
+                                    </button>
+                                    <button
+                                        onClick={() => setManualEntitlement(v => !v)}
+                                        title={manualEntitlement
+                                            ? 'Zablokuj pole puli za rok bieżący'
+                                            : 'Odblokuj pole puli za rok bieżący do ręcznego wpisania'}
+                                        className="text-[11px] px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-colors"
+                                    >
+                                        {manualEntitlement ? '🔒 Zablokuj edycję' : '✎ Edytuj ręcznie'}
+                                    </button>
+                                    <span className="text-[10px] text-gray-600">
+                                        {manualEntitlement ? `pula za ${currentBalanceYear} otwarta do edycji` : `pula za ${currentBalanceYear} ze stażu`}
+                                    </span>
+                                </div>
+                            )}
+
                             <div className="flex justify-between items-center pt-2">
                                 <span className="text-xs uppercase tracking-widest text-gray-500">Razem</span>
                                 <span className="text-xl font-bold text-blue-300">{balanceTotal}</span>
@@ -401,13 +473,47 @@ export default function LeavesDashboardTab({ access, employees, currentUserId, o
                 </div>
             </div>
 
-            {/* PANEL 5 — synchronizacja kalendarza Google, tylko ADMIN */}
-            {/* @anchor dashboard-calendar-sync-panel */}
-            {isAdmin && (
-                <div className="mt-4 max-w-2xl">
-                    <CalendarSyncPanel className={panelCls} titleClassName={panelTitleCls} />
+            {/* @anchor dashboard-monthly-breakdown-card */}
+            {/* Raport placowy — widza go ADMIN i DAK, dlatego stoi poza karta admina */}
+            {access?.canViewAll && (
+                <div className="mt-4 bg-gray-900/95 border border-white/10 rounded-xl shadow-2xl p-4">
+                    <div className={panelCls}>
+                        <p className={panelTitleCls}>Rozkład urlopów na miesiące</p>
+                        <div className="flex flex-wrap items-center gap-3">
+                            <button
+                                onClick={() => setMonthlyOpen(true)}
+                                title="Tabela dla DAK: ile dni z każdego urlopu przypada na który miesiąc"
+                                className="text-xs px-3 py-2 rounded-lg bg-blue-600/30 hover:bg-blue-600/60 text-blue-200 border border-blue-500/30 transition-colors"
+                            >
+                                📊 Rozkład urlopów na miesiące
+                            </button>
+                            <span className="text-[11px] text-gray-500">
+                                każdy urlop rozbity na miesiące — domyślnie miesiąc poprzedni, z eksportem do Excela
+                            </span>
+                        </div>
+                    </div>
                 </div>
             )}
+
+            {/* KARTA ADMINA — obie sekcje jedna pod druga w jednym module */}
+            {/* @anchor dashboard-admin-card */}
+            {isAdmin && (
+                <div className="mt-4 bg-gray-900/95 border border-white/10 rounded-xl shadow-2xl p-4 flex flex-col gap-4">
+                    {/* PANEL 5 — synchronizacja kalendarza Google, tylko ADMIN */}
+                    {/* @anchor dashboard-calendar-sync-panel */}
+                    <CalendarSyncPanel className={panelCls} titleClassName={panelTitleCls} />
+
+                    {/* PANEL 6 — zarządzanie dniami wolnymi za święta, tylko ADMIN */}
+                    {/* @anchor dashboard-holidays-admin-panel */}
+                    <div className={panelCls}>
+                        <p className={panelTitleCls}>Święta przypadające w sobotę</p>
+                        <HolidayAdminPanel />
+                    </div>
+                </div>
+            )}
+
+            {/* @anchor dashboard-monthly-breakdown-modal */}
+            {monthlyOpen && <LeaveMonthlyBreakdownModal onClose={() => setMonthlyOpen(false)} />}
         </div>
     );
 }

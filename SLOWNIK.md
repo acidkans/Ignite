@@ -1757,14 +1757,12 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-endpoint | DELETE /leave-requests/:id | apps/backend/src/leaves/leave-requests.controller.ts | @anchor leave-requests-delete-endpoint |
 | ui-stala | LEAVE_TABS | apps/frontend/src/LeavesPage.jsx | @anchor leaves-tab-meta |
 | ui-sekcja | pasek zakladek Urlopy | apps/frontend/src/LeavesPage.jsx | @anchor leaves-tab-selector |
-| ui-karta | DraggableCard | apps/frontend/src/components/shared/leaves/DraggableCard.jsx | @anchor draggable-card |
-| ui-funkcja | handleMouseDown (DraggableCard) | apps/frontend/src/components/shared/leaves/DraggableCard.jsx | @anchor draggable-card-start |
-| ui-stan | offsetRef (DraggableCard) | apps/frontend/src/components/shared/leaves/DraggableCard.jsx | @anchor draggable-card-offset-ref |
-| ui-stala | CARD_IDS | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-card-ids |
-| ui-sekcja | warstwa kart (Moje dane) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-cards-layer |
 | ui-przycisk | Nowy wniosek (karta dane osobowe) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor card-new-request-button |
+| ui-sekcja | sekcja podopiecznych wewnatrz karty danych osobowych | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor card-personal-dependents-section |
 | ui-stan | modalRequest (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-request-modal-state |
 | ui-modal | wniosek w Moich danych | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-request-modal |
+| ui-karta | karta „Przeglad urlopowy" — cztery sekcje w jednym module | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor card-overview |
+| ui-sekcja | podpanel sekcji wewnatrz karty Przeglad urlopowy | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-section |
 | ui-karta | karta dane osobowe | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor card-personal-data |
 | ui-karta | karta saldo dni | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor card-balance |
 | ui-karta | karta wykorzystane dni | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor card-usage |
@@ -1816,7 +1814,6 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | limit wnioskow za swieto w sobote | apps/backend/src/leaves/leave-requests.service.ts | @anchor assert-saturday-holiday-days |
 | ui-karta | karta dni wolne za swieta | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor card-holidays |
 | ui-tabela | tabela dni wolnych za swieta | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-holidays-table |
-| ui-karta | karta zarzadzania dniami wolnymi (admin) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor card-holidays-admin |
 | ui-stan | holidays (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-holidays-state |
 | ui-funkcja | loadHolidays (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor fetch-my-holidays |
 | ui-panel | HolidayAdminPanel | apps/frontend/src/components/shared/leaves/HolidayAdminPanel.jsx | @anchor holiday-admin-panel |
@@ -1838,7 +1835,6 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-endpoint | DELETE /leaves/holidays/custom | apps/backend/src/leaves/leaves.controller.ts | @anchor leaves-holidays-custom-delete-endpoint |
 | ui-typ | currentYearDays (leaveUsage) | apps/frontend/src/components/shared/leaves/leaveUsage.js | @anchor leave-usage-current-year-days |
 | ui-typ | items (leaveUsage) | apps/frontend/src/components/shared/leaves/leaveUsage.js | @anchor leave-usage-items |
-| ui-karta | karta podopieczni | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor card-dependents |
 | ui-stala | GOV_LEAVES_URL | apps/frontend/src/LeavesPage.jsx | @anchor leaves-gov-url |
 | ui-ikona | link gov.pl urlopy (naglowek) | apps/frontend/src/LeavesPage.jsx | @anchor link-gov-leaves |
 | ui-zakladka | Kalendarz (Urlopy) | apps/frontend/src/components/shared/leaves/LeavesCalendarTab.jsx | @anchor leaves-calendar-tab |
@@ -1848,26 +1844,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | GOOGLE_CALENDAR_EMBED_URL | apps/frontend/src/components/shared/leaves/LeavesCalendarTab.jsx | @anchor leaves-google-calendar-embed-url |
 | ui-ikona | link kalendarz Google | apps/frontend/src/components/shared/leaves/LeavesCalendarTab.jsx | @anchor link-google-calendar |
 | ui-sekcja | osadzony kalendarz Google | apps/frontend/src/components/shared/leaves/LeavesCalendarTab.jsx | @anchor google-calendar-embed |
-| ui-funkcja | pomiar karty (DraggableCard) | apps/frontend/src/components/shared/leaves/DraggableCard.jsx | @anchor draggable-card-measure |
-| ui-stala | DEFAULT_LAYOUT (Moje dane) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-default-layout |
-| ui-stan | layout kart (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-layout-state |
-| ui-stan | layoutDirty (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-layout-dirty |
-| ui-funkcja | pobranie ukladu kart | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor fetch-my-layout |
-| ui-funkcja | handleMeasure (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-measure-card |
-| ui-funkcja | handleDragEnd (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-drag-end |
-| ui-funkcja | handleSaveLayout (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-save-layout |
-| ui-sekcja | pasek zapisu ukladu kart | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-layout-toolbar |
-| ui-przycisk | Zapisz polozenie kart | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-save-layout-button |
-| ui-stala | GAP siatki kart | apps/frontend/src/components/shared/leaves/cardsLayout.js | @anchor cards-layout-gap |
 | ui-funkcja | findFreeSpot | apps/frontend/src/components/shared/leaves/cardsLayout.js | @anchor find-free-spot |
-| ui-funkcja | resolveCardOverlaps | apps/frontend/src/components/shared/leaves/cardsLayout.js | @anchor resolve-card-overlaps |
-| back-stala | LEAVES_LAYOUT_ENTITY | apps/backend/src/leaves/leaves.service.ts | @anchor leaves-layout-entity-type |
-| back-serwis | getLayout (LeavesService) | apps/backend/src/leaves/leaves.service.ts | @anchor get-leaves-layout |
-| back-serwis | saveLayout (LeavesService) | apps/backend/src/leaves/leaves.service.ts | @anchor save-leaves-layout |
-| back-endpoint | GET /leaves/layout | apps/backend/src/leaves/leaves.controller.ts | @anchor leaves-layout-get-endpoint |
-| back-endpoint | PUT /leaves/layout | apps/backend/src/leaves/leaves.controller.ts | @anchor leaves-layout-put-endpoint |
 | ui-funkcja | fetchSummary (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor fetch-my-summary |
-| ui-funkcja | handleResetLayout | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-reset-layout |
 | ui-zakladka | MyLeavesTab (Moje dane) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-tab |
 | ui-stan | me / meOnly (MyLeavesTab) | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor my-leaves-self |
 | ui-zakladka | podzakladki rodzajow urlopu | apps/frontend/src/components/shared/leaves/MyLeavesTab.jsx | @anchor leaves-type-subtabs |
@@ -2158,7 +2136,38 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | runNow | apps/frontend/src/components/shared/leaves/CalendarSyncPanel.jsx | @anchor run-calendar-sync-now |
 | ui-przycisk | Włącz/Wyłącz synchronizację | apps/frontend/src/components/shared/leaves/CalendarSyncPanel.jsx | @anchor calendar-sync-toggle-button |
 | ui-przycisk | Synchronizuj teraz | apps/frontend/src/components/shared/leaves/CalendarSyncPanel.jsx | @anchor calendar-sync-run-now-button |
+| ui-karta | karta admina w Dashboardzie — kalendarz i swieta jedna pod druga | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor dashboard-admin-card |
+| ui-sekcja | karta z przyciskiem raportu rozkladu urlopow | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor dashboard-monthly-breakdown-card |
+| ui-stan | otwarcie modala rozkladu urlopow na miesiace | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor dashboard-monthly-modal-state |
+| ui-modal | modal rozkladu urlopow na miesiace (raport DAK) | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor dashboard-monthly-breakdown-modal |
+| ui-modal | okno raportu rozkladu urlopow na miesiace | apps/frontend/src/components/shared/leaves/LeaveMonthlyBreakdownModal.jsx | @anchor leave-monthly-breakdown-modal |
+| ui-funkcja | domyslny miesiac raportu (poprzedni) po stronie UI | apps/frontend/src/components/shared/leaves/LeaveMonthlyBreakdownModal.jsx | @anchor previous-month-key-ui |
+| ui-funkcja | pobranie rozkladu urlopow z backendu | apps/frontend/src/components/shared/leaves/LeaveMonthlyBreakdownModal.jsx | @anchor load-monthly-breakdown |
+| ui-sekcja | naglowek modala rozkladu urlopow | apps/frontend/src/components/shared/leaves/LeaveMonthlyBreakdownModal.jsx | @anchor monthly-modal-header |
+| ui-sekcja | filtr miesiecy w modalu rozkladu urlopow | apps/frontend/src/components/shared/leaves/LeaveMonthlyBreakdownModal.jsx | @anchor monthly-modal-filter |
+| ui-tabela | tabela rozkladu urlopow na miesiace | apps/frontend/src/components/shared/leaves/LeaveMonthlyBreakdownModal.jsx | @anchor monthly-modal-table |
+| ui-funkcja | etykieta miesiaca po polsku w eksporcie | apps/frontend/src/utils/leaveMonthlyExcel.js | @anchor month-label-pl |
+| ui-funkcja | budowa arkusza Excel z rozkladem urlopow | apps/frontend/src/utils/leaveMonthlyExcel.js | @anchor build-leave-monthly-workbook |
+| ui-wiersz | wiersz RAZEM z zywymi formulami SUM w arkuszu | apps/frontend/src/utils/leaveMonthlyExcel.js | @anchor leave-monthly-total-row |
+| ui-funkcja | pobranie arkusza rozkladu urlopow | apps/frontend/src/utils/leaveMonthlyExcel.js | @anchor download-leave-monthly-excel |
+| back-dto | wiersz raportu rozkladu urlopow | apps/backend/src/leaves/leaves.service.ts | @anchor monthly-breakdown-row-dto |
+| back-dto | wynik raportu rozkladu urlopow | apps/backend/src/leaves/leaves.service.ts | @anchor monthly-breakdown-result-dto |
+| back-funkcja | klucz miesiaca YYYY-MM z daty UTC | apps/backend/src/leaves/leaves.service.ts | @anchor month-key |
+| back-funkcja | domyslny miesiac raportu (poprzedni) | apps/backend/src/leaves/leaves.service.ts | @anchor previous-month-key |
+| back-funkcja | lista miesiecy okna raportu | apps/backend/src/leaves/leaves.service.ts | @anchor month-range |
+| back-funkcja | rozbicie dni urlopu na miesiace | apps/backend/src/leaves/leaves.service.ts | @anchor split-days-into-months |
+| back-funkcja | raport rozkladu urlopow na miesiace | apps/backend/src/leaves/leaves.service.ts | @anchor monthly-breakdown |
+| back-endpoint | GET /leaves/monthly-breakdown | apps/backend/src/leaves/leaves.controller.ts | @anchor leaves-monthly-breakdown-endpoint |
 | ui-sekcja | panel synchronizacji kalendarza w Dashboardzie | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor dashboard-calendar-sync-panel |
+| ui-wiersz | naglowek kolumn w panelu salda dni w Dashboardzie | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor dashboard-balance-head |
+| ui-stan | odblokowanie recznej edycji puli za rok biezacy | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor dashboard-manual-entitlement |
+| ui-stala | rok biezacy okna salda w Dashboardzie | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor dashboard-current-balance-year |
+| ui-funkcja | przeliczenie puli roku biezacego ze stazu | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor dashboard-recalculate-entitlement |
+| ui-sekcja | przyciski przelicz ze stazu / edytuj recznie | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor dashboard-entitlement-actions |
+| back-dto | DTO przeliczenia puli ze stazu | apps/backend/src/leaves/leave-balances.service.ts | @anchor recalculate-entitlement-dto |
+| back-funkcja | podstawienie puli roku biezacego z wyliczonego stazu | apps/backend/src/leaves/leave-balances.service.ts | @anchor recalculate-entitlement-from-experience |
+| back-endpoint | POST /leave-balances/entitlement/recalculate | apps/backend/src/leaves/leave-balances.controller.ts | @anchor leave-balances-recalculate-endpoint |
+| ui-sekcja | panel zarzadzania dniami wolnymi za swieta (admin) w Dashboardzie | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor dashboard-holidays-admin-panel |
 | ui-stan | isAdmin (LeavesDashboardTab) | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor dashboard-is-admin |
 | back-funkcja | LeaveRequestsService.notifyApplicant | apps/backend/src/leaves/leave-requests.service.ts | @anchor notify-applicant-leave-decision |
 | back-endpoint | GET /leave-balances | apps/backend/src/leaves/leave-balances.controller.ts | @anchor leave-balances-read-endpoint |

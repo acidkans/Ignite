@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Put, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { LeaveBalancesService, SetEntitlementDto } from './leave-balances.service';
+import { LeaveBalancesService, RecalculateEntitlementDto, SetEntitlementDto } from './leave-balances.service';
 
 // @anchor leave-balances-controller
 @Controller('leave-balances')
@@ -18,5 +18,11 @@ export class LeaveBalancesController {
   @Put('entitlement')
   setEntitlement(@Req() req: any, @Body() dto: SetEntitlementDto) {
     return this.balances.setEntitlement(req.user.userId, req.user.roles || [], dto);
+  }
+
+  // @anchor leave-balances-recalculate-endpoint
+  @Post('entitlement/recalculate')
+  recalculate(@Req() req: any, @Body() dto: RecalculateEntitlementDto) {
+    return this.balances.recalculateFromExperience(req.user.userId, req.user.roles || [], dto);
   }
 }

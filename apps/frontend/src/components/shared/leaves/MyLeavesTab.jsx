@@ -1,35 +1,33 @@
 import { API_URL } from '../../../config';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import LeaveRequestModal from './LeaveRequestModal';
 import DependentsSection from './DependentsSection';
-import HolidayAdminPanel from './HolidayAdminPanel';
 import { fetchLeaveUsage } from './leaveUsage';
-import DraggableCard from './DraggableCard';
-import { resolveCardOverlaps } from './cardsLayout';
 import { leavesGridTheme, leavesDefaultColDef, warsawDayKey } from './leavesTheme';
 import useAutoRefresh from '../../../hooks/useAutoRefresh';
 
-// @anchor my-leaves-default-layout
-/// Domyslne rozmieszczenie kart — punkt wyjscia, gdy uzytkownik nie zapisal wlasnego ukladu.
-const DEFAULT_LAYOUT = {
-    'dane-osobowe': { x: 0, y: 0 },
-    'saldo': { x: 440, y: 0 },
-    'podopieczni': { x: 800, y: 0 },
-    'wykorzystane': { x: 800, y: 300 },
-    'swieta': { x: 440, y: 400 },
-    'swieta-admin': { x: 880, y: 730 },
-    'historia': { x: 0, y: 620, w: 1120, h: 520 },
-};
-
-// @anchor my-leaves-card-ids
-const CARD_IDS = Object.keys(DEFAULT_LAYOUT);
+// @anchor my-leaves-section
+/// Podpanel wewnatrz karty „Przeglad" — wyglada jak osobna karta, ale nie jest przeciagalny.
+/// Wszystkie sekcje w rzedzie maja te sama wysokosc (h-full na siatce items-stretch).
+const Section = ({ title, subtitle, accent, children }) => (
+    <div className="h-full flex flex-col bg-white/[0.03] border border-white/10 rounded-xl overflow-hidden">
+        <div
+            className="px-4 py-2.5 border-b border-white/5 shrink-0"
+            style={{ background: `linear-gradient(90deg, ${accent}22, transparent)` }}
+        >
+            <p className="text-xs font-bold uppercase tracking-widest text-gray-300 truncate">{title}</p>
+            {subtitle && <p className="text-[10px] text-gray-500 truncate">{subtitle}</p>}
+        </div>
+        <div className="p-4 flex-1 min-h-0 overflow-auto">{children}</div>
+    </div>
+);
 
 // @anchor my-leaves-tab
 // Zakładka „Moje dane" — WYŁĄCZNIE dane zalogowanego użytkownika.
-// Karty (dane osobowe, saldo, podopieczni) są przeciągalne, tabela urlopów leży pod nimi.
-export default function MyLeavesTab({ access, leaveTypes, employees, currentUserId }) {
-    const canApproveHolidays = !!access?.canEdit;
+// Karta „Przegląd urlopowy" skupia dane osobowe, saldo, wykorzystanie i święta w jednym rzędzie sekcji;
+// tabela „Moje urlopy" leży pod nią. Obie karty są przeciągalne.
+export default function MyLeavesTab({ leaveTypes, employees, currentUserId }) {
     // @anchor my-leaves-request-modal-state
     const [modalRequest, setModalRequest] = useState(null);
     const [summary, setSummary] = useState(null);
@@ -41,15 +39,6 @@ export default function MyLeavesTab({ access, leaveTypes, employees, currentUser
     // @anchor my-leaves-usage-rows
     const [usageRows, setUsageRows] = useState(null);
     const [error, setError] = useState(null);
-    // @anchor my-leaves-layout-state
-    const [layout, setLayout] = useState(DEFAULT_LAYOUT);
-    // @anchor my-leaves-layout-dirty
-    const [layoutDirty, setLayoutDirty] = useState(false);
-    const [layoutSaving, setLayoutSaving] = useState(false);
-    const [layoutSavedAt, setLayoutSavedAt] = useState(null);
-    // rozmiary mierzone w DOM — potrzebne tylko do wykrywania kolizji
-    const sizesRef = useRef({});
-    const layerRef = useRef(null);
 
     // @anchor my-leaves-self
     const me = employees.find(u => u.id === currentUserId) || null;
@@ -153,81 +142,6 @@ export default function MyLeavesTab({ access, leaveTypes, employees, currentUser
     const balanceRows = [...(balance?.years || [])].reverse();
     const balanceTotal = balance?.totalRemaining ?? 0;
 
-    // @anchor fetch-my-layout
-    /// Uklad kart zapisany per uzytkownik — ten sam na kazdym komputerze.
-    useEffect(() => {
-        (async () => {
-            try {
-                const token = sessionStorage.getItem('token');
-                const res = await fetch(`${API_URL}/leaves/layout`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (!res.ok) return;
-                const saved = await res.json();
-                if (saved && typeof saved === 'object') {
-                    setLayout(prev => {
-                        const merged = { ...prev };
-                        for (const id of CARD_IDS) {
-                            const s = saved[id];
-                            if (s && typeof s.x === 'number' && typeof s.y === 'number') merged[id] = s;
-                        }
-                        return merged;
-                    });
-                }
-            } catch { /* brak zapisanego ukladu — zostaja pozycje domyslne */ }
-        })();
-    }, []);
-
-    // @anchor my-leaves-measure-card
-    const handleMeasure = useCallback((id, w, h) => {
-        sizesRef.current[id] = { w, h };
-    }, []);
-
-    // @anchor my-leaves-drag-end
-    /// Po puszczeniu karty przesuwamy spod niej te, ktore zostalyby przykryte.
-    const handleDragEnd = useCallback((id, pos) => {
-        setLayout(prev => {
-            const containerWidth = layerRef.current?.clientWidth || 1200;
-            const moved = { ...prev, [id]: { ...prev[id], ...pos } };
-            return resolveCardOverlaps(moved, sizesRef.current, id, containerWidth);
-        });
-        setLayoutDirty(true);
-        setLayoutSavedAt(null);
-    }, []);
-
-    // @anchor my-leaves-save-layout
-    const handleSaveLayout = async () => {
-        setLayoutSaving(true);
-        try {
-            const token = sessionStorage.getItem('token');
-            // rozmiar karty z uchwytem resize tez wedruje na serwer
-            const payload = { ...layout };
-            const tableSize = sizesRef.current['tabela'];
-            if (tableSize) payload['tabela'] = { ...payload['tabela'], w: tableSize.w, h: tableSize.h };
-
-            const res = await fetch(`${API_URL}/leaves/layout`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify(payload),
-            });
-            if (!res.ok) throw new Error(`Nie udało się zapisać układu (${res.status})`);
-            setLayout(payload);
-            setLayoutDirty(false);
-            setLayoutSavedAt(new Date());
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLayoutSaving(false);
-        }
-    };
-
-    // @anchor my-leaves-reset-layout
-    const handleResetLayout = () => {
-        setLayout(DEFAULT_LAYOUT);
-        setLayoutDirty(true);
-        setLayoutSavedAt(null);
-    };
-
     const Field = ({ label, value, strong }) => (
         <div className="py-1.5 border-b border-white/5 last:border-b-0">
             <p className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</p>
@@ -239,252 +153,181 @@ export default function MyLeavesTab({ access, leaveTypes, employees, currentUser
         <div className="flex flex-col">
             {error && <div className="mb-3 p-3 bg-red-600/20 border border-red-500/40 rounded text-red-300 text-sm">{error}</div>}
 
-            {/* @anchor my-leaves-layout-toolbar */}
-            <div className="flex justify-end items-center gap-3 mb-2">
-                {layoutSavedAt && !layoutDirty && (
-                    <span className="text-[11px] text-green-400">układ zapisany</span>
-                )}
-                {layoutDirty && (
-                    <span className="text-[11px] text-amber-400">niezapisane zmiany układu</span>
-                )}
-                <button onClick={handleResetLayout}
-                    className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
-                    title="Przywróć domyślne rozmieszczenie kart">
-                    ⤢ Ułóż karty od nowa
-                </button>
-                {/* @anchor my-leaves-save-layout-button */}
-                <button onClick={handleSaveLayout}
-                    disabled={layoutSaving}
-                    className="text-[11px] px-3 py-1.5 rounded-lg bg-blue-600/60 hover:bg-blue-500 disabled:opacity-50 text-white transition-colors"
-                    title="Zapisz rozmieszczenie kart na swoim koncie">
-                    {layoutSaving ? 'Zapisywanie...' : '💾 Zapisz położenie kart'}
-                </button>
-            </div>
-
-            {/* Warstwa kart przeciągalnych */}
-            {/* @anchor my-leaves-cards-layer */}
-            <div ref={layerRef} className="relative" style={{ minHeight: 1200 }}>
-                {/* KARTA 1 — dane osobowe */}
-                {/* @anchor card-personal-data */}
-                <DraggableCard
-                    id="dane-osobowe"
-                    title={me ? `${me.firstName} ${me.lastName}` : 'Moje dane'}
-                    subtitle={me?.email}
-                    position={layout['dane-osobowe']}
-                    onDragEnd={handleDragEnd}
-                    onMeasure={handleMeasure}
-                    width={420}
-                    accent="#3b82f6"
-                >
-                    {/* @anchor card-new-request-button */}
-                    <div className="mb-3">
-                        <button onClick={() => setModalRequest({})}
-                            className="w-full bg-blue-600/70 hover:bg-blue-500 text-white px-3 py-2 rounded-lg text-sm transition-all">
-                            Nowy wniosek
-                        </button>
-                    </div>
-
-                    <Field label="imię i nazwisko" value={me ? `${me.firstName} ${me.lastName}` : null} />
-                    <Field label="email logowania" value={me?.email} />
-                    <Field label="firma" value={me?.company} />
-                    <Field label="przełożony" value={summary?.subject?.supervisorName} />
-                    <Field label="uprawnienia" value={(summary?.subject?.roles || []).join(', ') || null} />
-                    <Field label="podopieczni" value={dependentsCount} />
-                    <Field label={`wybrany w tym roku (${summary?.currentYear?.year ?? year})`} value={summary?.currentYear?.totalDays ?? 0} strong />
-                </DraggableCard>
-
-                {/* KARTA 2 — saldo dni na lata */}
-                {/* @anchor card-balance */}
-                <DraggableCard
-                    id="saldo"
-                    title="Urlop wypoczynkowy do wybrania"
-                    subtitle={balance ? `źródło: ${balance.source}` : undefined}
-                    position={layout['saldo']}
-                    onDragEnd={handleDragEnd}
-                    onMeasure={handleMeasure}
-                    width={340}
-                    accent="#22c55e"
-                >
-                    {balance ? (
-                        <>
-                            <div className="mb-3 pb-3 border-b border-white/10">
-                                <p className="text-[10px] text-gray-500 uppercase tracking-wider">pozostało mi do wybrania</p>
-                                <p className="text-3xl font-bold text-green-300">{balanceTotal}</p>
-                            </div>
-                            {balanceRows.map(y => (
-                                <div key={y.year} className="flex justify-between items-center py-2 border-b border-white/5 last:border-b-0">
-                                    <span className="text-sm text-gray-400" title={`przysługuje ${y.entitlementDays}, wykorzystano ${y.usedDays}`}>
-                                        urlop z {y.year}
-                                    </span>
-                                    <span className={`text-lg font-semibold ${y.remainingDays > 0 ? 'text-green-300' : 'text-gray-600'}`}>
-                                        {y.remainingDays}
-                                    </span>
-                                </div>
-                            ))}
-                        </>
-                    ) : (
-                        <p className="text-sm text-gray-500">Brak danych o puli dni — ustawia ją administrator.</p>
-                    )}
-                </DraggableCard>
-
-                {/* KARTA 3 — podopieczni */}
-                {/* @anchor card-dependents */}
-                <DraggableCard
-                    id="podopieczni"
-                    title="Podopieczni"
-                    subtitle="urlop opiekuńczy"
-                    position={layout['podopieczni']}
-                    onDragEnd={handleDragEnd}
-                    onMeasure={handleMeasure}
-                    width={320}
-                    accent="#14b8a6"
-                >
-                    <DependentsSection
-                        currentUserId={currentUserId}
-                        onCountChange={setDependentsCount}
-                    />
-                </DraggableCard>
-
-                {/* KARTA 4 — wykorzystane dni wg rodzaju urlopu */}
-                {/* @anchor card-usage */}
-                <DraggableCard
-                    id="wykorzystane"
-                    title="Wykorzystane dni"
-                    subtitle={`rok ${year} — licznik zeruje się 1 stycznia`}
-                    position={layout['wykorzystane']}
-                    onDragEnd={handleDragEnd}
-                    onMeasure={handleMeasure}
-                    width={420}
-                    accent="#a855f7"
-                >
-                    {usageRows ? (
-                        <>
-                            {usageRows.map(r => (
-                                <div key={r.id} className="flex justify-between items-center py-2 border-b border-white/5 last:border-b-0">
-                                    <span className="inline-flex items-center gap-2 text-sm text-gray-300">
-                                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: r.color }} />
-                                        {r.name}
-                                    </span>
-                                    {/* @anchor card-usage-limit */}
-                                    <span className="text-right whitespace-nowrap">
-                                        <span className={`text-lg font-semibold ${r.currentYearDays > 0 ? 'text-purple-300' : 'text-gray-600'}`}>
-                                            {r.currentYearDays}
-                                        </span>
-                                        {r.maxDaysPerYear ? (
-                                            <span className="text-xs text-gray-500" title={`Limit ustawowy: ${r.maxDaysPerYear} dni w roku`}>
-                                                {' / '}{r.maxDaysPerYear}
-                                            </span>
-                                        ) : null}
-                                    </span>
-                                </div>
-                            ))}
-                        </>
-                    ) : (
-                        <p className="text-sm text-gray-500">Liczenie dni...</p>
-                    )}
-                </DraggableCard>
-
-                {/* KARTA 4b — dni wolne za święta w sobotę */}
-                {/* @anchor card-holidays */}
-                <DraggableCard
-                    id="swieta"
-                    title="Dni wolne za święta"
-                    subtitle={`święta w sobotę — rok ${year}`}
-                    position={layout['swieta']}
-                    onDragEnd={handleDragEnd}
-                    onMeasure={handleMeasure}
-                    width={420}
-                    accent="#eab308"
-                >
-                    {holidays ? (
-                        holidays.items?.length ? (
-                            <>
-                                <div className="mb-2 pb-2 border-b border-white/10 flex items-baseline gap-2">
-                                    <span className="text-2xl font-bold text-yellow-300">{holidays.approvedDays}</span>
-                                    <span className="text-[11px] text-gray-500">dni zatwierdzonych do odebrania</span>
-                                </div>
-                                {/* @anchor my-leaves-holidays-table */}
-                                <table className="w-full text-sm">
-                                    <tbody>
-                                        {holidays.items.map(h => (
-                                            <tr key={h.date} className="border-b border-white/5 last:border-b-0">
-                                                <td className="py-1.5 text-gray-300 whitespace-nowrap">{h.date}</td>
-                                                <td className="py-1.5 text-gray-400 text-xs">{h.name}</td>
-                                                <td className={`py-1.5 text-right text-[11px] whitespace-nowrap ${h.approved ? 'text-green-400' : 'text-gray-600'}`}>
-                                                    {h.approved ? '✓ zatwierdzony' : 'propozycja'}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </>
-                        ) : (
-                            <p className="text-sm text-gray-500">W {year} roku żadne święto nie wypada w sobotę.</p>
-                        )
-                    ) : (
-                        <p className="text-sm text-gray-500">Ładowanie...</p>
-                    )}
-
-                </DraggableCard>
-
-                {/* KARTA 4c — zarządzanie dniami wolnymi, tylko ADMIN */}
-                {/* @anchor card-holidays-admin */}
-                {canApproveHolidays && (
-                    <DraggableCard
-                        id="swieta-admin"
-                        title="Dni wolne — zarządzanie"
-                        subtitle="tylko administrator"
-                        position={layout['swieta-admin']}
-                        onDragEnd={handleDragEnd}
-                        onMeasure={handleMeasure}
-                        width={520}
-                        accent="#f97316"
-                    >
-                        <HolidayAdminPanel onChanged={loadHolidays} />
-                    </DraggableCard>
-                )}
-
-                {/* KARTA 5 — wszystkie wpisy urlopowe, jedna tabela z filtrem lat */}
-                {/* @anchor card-history */}
-                <DraggableCard
-                    id="historia"
-                    title="Moje urlopy"
-                    subtitle="wszystkie wpisy urlopowe (nie wnioski), filtr po roku"
-                    position={layout['historia']}
-                    size={layout['historia']?.w ? { w: layout['historia'].w, h: layout['historia'].h } : undefined}
-                    onDragEnd={handleDragEnd}
-                    onMeasure={handleMeasure}
-                    width={1120}
-                    height={520}
-                    resizable
-                    accent="#3b82f6"
-                >
-                    {/* @anchor my-leaves-history-filter */}
-                    <div className="flex items-center gap-2 bg-white/5 rounded-t-lg p-2 border border-b-0 border-white/10">
-                        <label className="text-[11px] text-gray-500 uppercase tracking-wider">rok</label>
-                        <select
-                            value={historyYear}
-                            onChange={e => setHistoryYear(e.target.value)}
-                            className="bg-gray-800 border border-white/10 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-blue-500/50"
+            {/* KARTA PRZEGLAD — cztery sekcje w rzedzie plus tabela urlopow pod nimi, bez naglowka */}
+            {/* @anchor card-overview */}
+            <div className="bg-gray-900/95 border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+                <div className="p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1.15fr_0.9fr_1fr_1.05fr] gap-4 items-stretch">
+                        {/* SEKCJA 1 — dane osobowe */}
+                        {/* @anchor card-personal-data */}
+                        <Section
+                            title={me ? `${me.firstName} ${me.lastName}` : 'Moje dane'}
+                            subtitle={me?.email}
+                            accent="#3b82f6"
                         >
-                            <option value="all">wszystkie lata</option>
-                            {historyYears.map(y => <option key={y} value={y}>{y}</option>)}
-                        </select>
-                        <span className="ml-auto text-[11px] text-gray-500">{historyRows.length} wpisów</span>
+                            {/* @anchor card-new-request-button */}
+                            <div className="mb-3">
+                                <button onClick={() => setModalRequest({})}
+                                    className="w-full bg-blue-600/70 hover:bg-blue-500 text-white px-3 py-2 rounded-lg text-sm transition-all">
+                                    Nowy wniosek
+                                </button>
+                            </div>
+
+                            <Field label="imię i nazwisko" value={me ? `${me.firstName} ${me.lastName}` : null} />
+                            <Field label="email logowania" value={me?.email} />
+                            <Field label="firma" value={me?.company} />
+                            <Field label="przełożony" value={summary?.subject?.supervisorName} />
+                            <Field label="uprawnienia" value={(summary?.subject?.roles || []).join(', ') || null} />
+                            <Field label="podopieczni" value={dependentsCount} />
+                            <Field label={`wybrany w tym roku (${summary?.currentYear?.year ?? year})`} value={summary?.currentYear?.totalDays ?? 0} strong />
+
+                            {/* @anchor card-personal-dependents-section */}
+                            <div className="mt-4 pt-3 border-t border-white/10">
+                                <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">podopieczni — urlop opiekuńczy</p>
+                                <DependentsSection
+                                    currentUserId={currentUserId}
+                                    onCountChange={setDependentsCount}
+                                />
+                            </div>
+                        </Section>
+
+                        {/* SEKCJA 2 — saldo dni na lata */}
+                        {/* @anchor card-balance */}
+                        <Section
+                            title="Urlop wypoczynkowy do wybrania"
+                            subtitle={balance ? `źródło: ${balance.source}` : undefined}
+                            accent="#22c55e"
+                        >
+                            {balance ? (
+                                <>
+                                    <div className="mb-3 pb-3 border-b border-white/10">
+                                        <p className="text-[10px] text-gray-500 uppercase tracking-wider">pozostało mi do wybrania</p>
+                                        <p className="text-3xl font-bold text-green-300">{balanceTotal}</p>
+                                    </div>
+                                    {balanceRows.map(y => (
+                                        <div key={y.year} className="flex justify-between items-center py-2 border-b border-white/5 last:border-b-0">
+                                            <span className="text-sm text-gray-400" title={`przysługuje ${y.entitlementDays}, wykorzystano ${y.usedDays}`}>
+                                                urlop z {y.year}
+                                            </span>
+                                            <span className={`text-lg font-semibold ${y.remainingDays > 0 ? 'text-green-300' : 'text-gray-600'}`}>
+                                                {y.remainingDays}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </>
+                            ) : (
+                                <p className="text-sm text-gray-500">Brak danych o puli dni — ustawia ją administrator.</p>
+                            )}
+                        </Section>
+
+                        {/* SEKCJA 3 — wykorzystane dni wg rodzaju urlopu */}
+                        {/* @anchor card-usage */}
+                        <Section
+                            title="Wykorzystane dni"
+                            subtitle={`rok ${year} — licznik zeruje się 1 stycznia`}
+                            accent="#a855f7"
+                        >
+                            {usageRows ? (
+                                <>
+                                    {usageRows.map(r => (
+                                        <div key={r.id} className="flex justify-between items-center py-2 border-b border-white/5 last:border-b-0">
+                                            <span className="inline-flex items-center gap-2 text-sm text-gray-300">
+                                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: r.color }} />
+                                                {r.name}
+                                            </span>
+                                            {/* @anchor card-usage-limit */}
+                                            <span className="text-right whitespace-nowrap">
+                                                <span className={`text-lg font-semibold ${r.currentYearDays > 0 ? 'text-purple-300' : 'text-gray-600'}`}>
+                                                    {r.currentYearDays}
+                                                </span>
+                                                {r.maxDaysPerYear ? (
+                                                    <span className="text-xs text-gray-500" title={`Limit ustawowy: ${r.maxDaysPerYear} dni w roku`}>
+                                                        {' / '}{r.maxDaysPerYear}
+                                                    </span>
+                                                ) : null}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </>
+                            ) : (
+                                <p className="text-sm text-gray-500">Liczenie dni...</p>
+                            )}
+                        </Section>
+
+                        {/* SEKCJA 4 — dni wolne za święta w sobotę */}
+                        {/* @anchor card-holidays */}
+                        <Section
+                            title="Święta przypadające w sobotę"
+                            subtitle={`rok ${year}`}
+                            accent="#eab308"
+                        >
+                            {holidays ? (
+                                holidays.items?.length ? (
+                                    <>
+                                        <div className="mb-2 pb-2 border-b border-white/10 flex items-baseline gap-2">
+                                            <span className="text-2xl font-bold text-yellow-300">{holidays.approvedDays}</span>
+                                            <span className="text-[11px] text-gray-500">dni zatwierdzonych do odebrania</span>
+                                        </div>
+                                        {/* @anchor my-leaves-holidays-table */}
+                                        <table className="w-full text-sm">
+                                            <tbody>
+                                                {holidays.items.map(h => (
+                                                    <tr key={h.date} className="border-b border-white/5 last:border-b-0">
+                                                        <td className="py-1.5 text-gray-300 whitespace-nowrap align-top">{h.date}</td>
+                                                        <td className="py-1.5 text-gray-400 text-xs">{h.name}</td>
+                                                        <td className={`py-1.5 text-right text-[11px] whitespace-nowrap align-top ${h.approved ? 'text-green-400' : 'text-gray-600'}`}>
+                                                            {h.approved ? '✓ zatwierdzony' : 'propozycja'}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </>
+                                ) : (
+                                    <p className="text-sm text-gray-500">W {year} roku żadne święto nie wypada w sobotę.</p>
+                                )
+                            ) : (
+                                <p className="text-sm text-gray-500">Ładowanie...</p>
+                            )}
+                        </Section>
                     </div>
 
-                    <div className="flex-1 min-h-0 w-full rounded-b-lg overflow-hidden shadow-2xl border border-white/10">
-                        <AgGridReact
-                            rowData={historyRows}
-                            columnDefs={historyColDefs}
-                            defaultColDef={leavesDefaultColDef}
-                            animateRows={true}
-                            pagination={true}
-                            paginationPageSize={20}
-                            theme={leavesGridTheme}
-                        />
+                    {/* SEKCJA 5 — wszystkie wpisy urlopowe, pelna szerokosc pod siatka sekcji */}
+                    {/* @anchor card-history */}
+                    <div className="mt-4">
+                        <Section
+                            title="Moje urlopy"
+                            subtitle="wszystkie wpisy urlopowe (nie wnioski), filtr po roku"
+                            accent="#3b82f6"
+                        >
+                            {/* @anchor my-leaves-history-filter */}
+                            <div className="flex items-center gap-2 bg-white/5 rounded-t-lg p-2 border border-b-0 border-white/10">
+                                <label className="text-[11px] text-gray-500 uppercase tracking-wider">rok</label>
+                                <select
+                                    value={historyYear}
+                                    onChange={e => setHistoryYear(e.target.value)}
+                                    className="bg-gray-800 border border-white/10 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                                >
+                                    <option value="all">wszystkie lata</option>
+                                    {historyYears.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                                <span className="ml-auto text-[11px] text-gray-500">{historyRows.length} wpisów</span>
+                            </div>
+
+                            <div className="h-[clamp(320px,50vh,520px)] w-full rounded-b-lg overflow-hidden shadow-2xl border border-white/10">
+                                <AgGridReact
+                                    rowData={historyRows}
+                                    columnDefs={historyColDefs}
+                                    defaultColDef={leavesDefaultColDef}
+                                    animateRows={true}
+                                    pagination={true}
+                                    paginationPageSize={20}
+                                    theme={leavesGridTheme}
+                                />
+                            </div>
+                        </Section>
                     </div>
-                </DraggableCard>
+                </div>
             </div>
 
             {/* @anchor my-leaves-request-modal */}
