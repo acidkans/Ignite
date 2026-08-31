@@ -10,6 +10,7 @@ import { DependentsService } from './dependents.service';
 import { HolidaysService } from './holidays.service';
 import { LeaveDecisionTokenService } from './leave-decision-token.service';
 import { LeaveDecisionLinkController } from './leave-decision-link.controller';
+import { LeaveCalendarCronService } from './leave-calendar-cron.service';
 import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
 
 // @anchor leaves-module
@@ -29,6 +30,7 @@ import { GoogleCalendarModule } from '../google-calendar/google-calendar.module'
     DependentsService,
     HolidaysService,
     LeaveDecisionTokenService,
+    LeaveCalendarCronService,
   ],
   exports: [LeavesService, LeaveRequestsService, LeaveBalancesService, DependentsService, HolidaysService],
 })

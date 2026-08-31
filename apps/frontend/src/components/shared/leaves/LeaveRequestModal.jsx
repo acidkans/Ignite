@@ -1,6 +1,20 @@
 import { API_URL } from '../../../config';
 import { useEffect, useMemo, useState } from 'react';
 import { CARE_LEAVE_CODE, SATURDAY_HOLIDAY_CODE, LEAVE_TYPES_REQUIRING_COMMENT, LEAVE_COMMENT_MIN_LENGTH, CARE_LEAVE_COMMENT_HINT } from './leavesTheme';
+import { nonWorkingDayReason, nextWorkingDayFrom, previousWorkingDayFrom } from './polishHolidays';
+
+// @anchor day-off-notice
+// Komunikat pod polem daty: dlaczego wybrany dzien odpadl i na co zostal przestawiony.
+// Czerwony, bo ma rzucac sie w oczy — zmiana zaszla bez udzialu uzytkownika.
+const DayOffNotice = ({ notice }) => {
+    const dzien = (d) => d.split('-').reverse().join('.');
+    return (
+        <p className="text-[11px] text-red-400">
+            {dzien(notice.wybrany)} — to {notice.powod}, urlopu nie bierze się w dzień wolny.
+            Ustawiliśmy {dzien(notice.ustawiony)}.
+        </p>
+    );
+};
 
 // @anchor leave-request-modal
 // Modal „Nowy wniosek urlopowy" — układ wg formularza źródłowego:
@@ -20,12 +34,13 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
     const pad = n => String(n).padStart(2, '0');
 
     // @anchor next-working-day
-    // Domyslna data wniosku nie moze wypasc w weekend — urlopu udziela sie w dni pracy,
-    // a wyliczanie dni pomija soboty i niedziele, wiec sobota jako start dawala 0 dni.
+    // Domyslna data wniosku nie moze wypasc w dzien wolny — urlopu udziela sie w dni pracy,
+    // a wyliczanie dni pomija weekendy i swieta, wiec sobota jako start dawala 0 dni.
     const nextWorkingDayStr = (from) => {
         const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-        while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        // weekend i swieta omija `next-working-day-from` — jedna lista dla domyslnej daty
+        // i dla bezpiecznika przy recznym wyborze
+        return nextWorkingDayFrom(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
     };
     const dayStr = nextWorkingDayStr(new Date());
 
@@ -44,6 +59,15 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
     // @anchor days-touched
     // Dopóki użytkownik nie nadpisze pola ręcznie, liczba dni jest wyliczana z zakresu dat.
     const [daysTouched, setDaysTouched] = useState(!!request?.id);
+    // @anchor end-auto-adjusted
+    // true = date „do" przestawil bezpiecznik, bo wypadala przed data „od". Pole robi sie
+    // czerwone z notka, zeby zmiana nie przeszla niezauwazona; gasnie po recznej edycji „do".
+    const [endAutoAdjusted, setEndAutoAdjusted] = useState(false);
+    // @anchor day-notices
+    // Komunikat „wybrany dzien jest wolny" osobno dla kazdej z dat:
+    // { powod: 'sobota' | 'niedziela' | nazwa swieta, wybrany, ustawiony }. null = dzien roboczy.
+    const [dayNotices, setDayNotices] = useState({ dateStart: null, dateEnd: null });
+    const setDayNotice = (field, notice) => setDayNotices(n => (n[field] === notice ? n : { ...n, [field]: notice }));
     const [dependents, setDependents] = useState([]);
     const [loadingDependents, setLoadingDependents] = useState(false);
     // @anchor leave-request-modal-balance
@@ -134,10 +158,51 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
 
     // @anchor set-day-part
     // Zmiana daty zachowuje godzine; przy rodzaju pelnodniowym doklejamy granice doby.
-    const setDayPart = (field, day, fallbackTime) => {
-        if (!day) return set(field, '');
+    // Bezpiecznik: przesuniecie daty „od" za date „do" pociaga „do" za soba, zeby zakres
+    // nigdy nie byl odwrocony. Zmiane sygnalizujemy na czerwono — patrz `end-auto-adjusted`.
+    const setDayPart = (field, wybranyDzien, fallbackTime) => {
+        if (!wybranyDzien) {
+            setDayNotice(field, null);
+            return set(field, '');
+        }
+
+        // Bezpiecznik 1: weekend i swieto. Nie blokujemy zapisu — przesuwamy wybor na
+        // sasiedni dzien roboczy i mowimy, dlaczego, bo urlopu w dzien wolny sie nie bierze.
+        // Poczatek idzie w przod, koniec COFA sie do poprzedniego dnia roboczego — inaczej
+        // zamkniecie urlopu w sobote wydluzaloby nieobecnosc o poniedzialek.
+        const powod = nonWorkingDayReason(wybranyDzien);
+        let day = wybranyDzien;
+        if (powod) {
+            day = field === 'dateEnd' ? previousWorkingDayFrom(wybranyDzien) : nextWorkingDayFrom(wybranyDzien);
+            // cofniecie nie moze wjechac przed date „od" — wtedy urlop trwa jeden dzien
+            if (field === 'dateEnd' && day < dayPart(form.dateStart)) day = dayPart(form.dateStart);
+        }
+        setDayNotice(field, powod ? { powod, wybrany: wybranyDzien, ustawiony: day } : null);
+
         const time = allowsHourly ? `${hourPart(form[field]) || '00'}:00` : fallbackTime;
-        set(field, `${day}T${time}`);
+        const value = `${day}T${time}`;
+
+        if (field === 'dateEnd') {
+            // reczna zmiana daty „do" kasuje ostrzezenie o odwroconym zakresie —
+            // uzytkownik wlasnie podal swoja wartosc
+            setEndAutoAdjusted(false);
+            return set(field, value);
+        }
+
+        if (field !== 'dateStart') return set(field, value);
+
+        // Bezpiecznik 2: data „od" nie moze wyprzedzic daty „do" — koniec idzie za poczatkiem.
+        setForm(f => {
+            const next = { ...f, dateStart: value };
+            if (dayPart(f.dateEnd) >= day) return next;
+            // przy rodzaju godzinowym koniec nie moze wypasc przed poczatkiem tej samej doby
+            const endHour = allowsHourly
+                ? String(Math.max(Number(hourPart(f.dateEnd) || '00'), Number(hourPart(value) || '00'))).padStart(2, '0')
+                : null;
+            next.dateEnd = allowsHourly ? `${day}T${endHour}:00` : `${day}T23:59`;
+            return next;
+        });
+        setEndAutoAdjusted(dayPart(form.dateEnd) < day);
     };
 
     const setHourPart = (field, hour) => {
@@ -534,11 +599,16 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
                     <div className="flex flex-col gap-1">
                         <label className={labelCls}>Data od <span className="text-amber-500">*</span></label>
                         <div className="flex gap-2">
+                            {/* @anchor leave-request-date-start-input */}
                             <input
                                 type="date"
                                 value={dayPart(form.dateStart)}
                                 onChange={e => setDayPart('dateStart', e.target.value, '00:00')}
-                                className={`${inputCls} flex-1 min-w-0`}
+                                className={`${
+                                    dayNotices.dateStart
+                                        ? `${inputCls.replace('text-white', 'text-red-400 font-semibold')} border-red-500/60`
+                                        : inputCls
+                                } flex-1 min-w-0`}
                             />
                             {allowsHourly && (
                                 <select
@@ -550,15 +620,24 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
                                 </select>
                             )}
                         </div>
+                        {/* @anchor leave-request-date-start-notice */}
+                        {dayNotices.dateStart && <DayOffNotice notice={dayNotices.dateStart} />}
                     </div>
                     <div className="flex flex-col gap-1">
                         <label className={labelCls}>Data do <span className="text-amber-500">*</span></label>
                         <div className="flex gap-2">
+                            {/* @anchor leave-request-date-end-input */}
+                            {/* Kolor podmieniamy w `inputCls`, a nie dopisujemy obok — `text-white`
+                                i `text-red-400` maja ta sama specyficznosc, wiec dopisany przegrywa. */}
                             <input
                                 type="date"
                                 value={dayPart(form.dateEnd)}
                                 onChange={e => setDayPart('dateEnd', e.target.value, '23:59')}
-                                className={`${inputCls} flex-1 min-w-0`}
+                                className={`${
+                                    endAutoAdjusted || dayNotices.dateEnd
+                                        ? `${inputCls.replace('text-white', 'text-red-400 font-semibold')} border-red-500/60`
+                                        : inputCls
+                                } flex-1 min-w-0`}
                             />
                             {allowsHourly && (
                                 <select
@@ -570,6 +649,14 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
                                 </select>
                             )}
                         </div>
+                        {/* @anchor leave-request-date-end-notice */}
+                        {dayNotices.dateEnd && <DayOffNotice notice={dayNotices.dateEnd} />}
+                        {/* @anchor leave-request-date-end-adjusted-note */}
+                        {endAutoAdjusted && (
+                            <p className="text-[11px] text-red-400">
+                                Data „do" wypadała przed datą „od" — ustawiliśmy ją na ten sam dzień. Popraw, jeśli urlop ma trwać dłużej.
+                            </p>
+                        )}
                     </div>
                 </div>
 

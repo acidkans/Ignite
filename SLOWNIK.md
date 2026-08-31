@@ -1959,6 +1959,20 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | setDayPart (LeaveRequestModal) | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor set-day-part |
 | ui-hook | normalizacja godzin przy zmianie rodzaju | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor normalize-times-on-type-change |
 | ui-input | Data od / Data do (LeaveRequestModal) | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor leave-request-date-fields |
+| ui-input | Data do — pole z bezpiecznikiem (LeaveRequestModal) | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor leave-request-date-end-input |
+| ui-input | Data od — pole z bezpiecznikiem (LeaveRequestModal) | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor leave-request-date-start-input |
+| ui-sekcja | notka o dniu wolnym pod „Data od" | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor leave-request-date-start-notice |
+| ui-sekcja | notka o dniu wolnym pod „Data do" | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor leave-request-date-end-notice |
+| ui-stan | dayNotices | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor day-notices |
+| ui-sekcja | DayOffNotice | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor day-off-notice |
+| ui-stala | POLISH_FIXED_HOLIDAYS (frontend) | apps/frontend/src/components/shared/leaves/polishHolidays.js | @anchor polish-fixed-holidays-frontend |
+| ui-funkcja | easterSunday (frontend) | apps/frontend/src/components/shared/leaves/polishHolidays.js | @anchor easter-sunday-frontend |
+| ui-funkcja | holidayNames | apps/frontend/src/components/shared/leaves/polishHolidays.js | @anchor polish-holiday-names-frontend |
+| ui-funkcja | nonWorkingDayReason | apps/frontend/src/components/shared/leaves/polishHolidays.js | @anchor non-working-day-reason |
+| ui-funkcja | nextWorkingDayFrom | apps/frontend/src/components/shared/leaves/polishHolidays.js | @anchor next-working-day-from |
+| ui-funkcja | previousWorkingDayFrom | apps/frontend/src/components/shared/leaves/polishHolidays.js | @anchor previous-working-day-from |
+| ui-sekcja | notka o automatycznej zmianie daty „do" | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor leave-request-date-end-adjusted-note |
+| ui-stan | endAutoAdjusted | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor end-auto-adjusted |
 | back-funkcja | assertCommentValid | apps/backend/src/leaves/leave-requests.service.ts | @anchor assert-comment-valid |
 | back-stala | LEAVE_TYPES_REQUIRING_COMMENT | apps/backend/src/leaves/leave-requests.service.ts | @anchor leave-types-requiring-comment |
 | back-stala | LEAVE_COMMENT_MIN_LENGTH | apps/backend/src/leaves/leave-requests.service.ts | @anchor leave-comment-min-length |
@@ -2095,10 +2109,53 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | GoogleCalendarService.isEnabled | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-is-enabled |
 | back-funkcja | GoogleCalendarService.accessToken | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-access-token |
 | back-funkcja | GoogleCalendarService.eventBody | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-event-body |
-| back-funkcja | GoogleCalendarService.upsertLeaveEvent | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-upsert-leave-event |
-| back-funkcja | GoogleCalendarService.findEventId | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-find-event-id |
-| back-funkcja | GoogleCalendarService.deleteLeaveEvent | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-delete-leave-event |
-| schema-pole | LeaveRequest.googleEventId | apps/backend/prisma/schema.prisma | @anchor leave-request-google-event-id |
+| back-funkcja | GoogleCalendarService.syncLeaveEvents | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-sync-leave-events |
+| back-funkcja | GoogleCalendarService.findEventIds | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-find-event-ids |
+| back-funkcja | GoogleCalendarService.deleteEvent | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-delete-event |
+| back-funkcja | GoogleCalendarService.deleteLeaveEvents | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-delete-leave-events |
+| back-stala | IGNITE_EVENT_SOURCE | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-source-marker |
+| back-typ | LeaveEventSegment | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-event-segment |
+| back-typ | GoogleSyncResult | apps/backend/src/google-calendar/google-calendar.service.ts | @anchor google-calendar-sync-result |
+| schema-pole | LeaveRequest.googleEventIds | apps/backend/prisma/schema.prisma | @anchor leave-request-google-event-ids |
+| schema-pole | LeaveRequest.googleSyncedAt | apps/backend/prisma/schema.prisma | @anchor leave-request-google-synced-at |
+| schema-pole | LeaveRequest.googleSyncError | apps/backend/prisma/schema.prisma | @anchor leave-request-google-sync-error |
+| schema-pole | User.calendarInitials | apps/backend/prisma/schema.prisma | @anchor user-calendar-initials |
+| schema-pole | LeaveType.calendarLabel | apps/backend/prisma/schema.prisma | @anchor leave-type-calendar-label |
+| back-stala | CALENDAR_LABELS | apps/backend/src/leaves/leave-requests.service.ts | @anchor calendar-labels |
+| back-stala | CALENDAR_SURNAME_LETTERS | apps/backend/src/leaves/leave-requests.service.ts | @anchor calendar-initials-length |
+| back-funkcja | buildCalendarInitials | apps/backend/src/leaves/leave-requests.service.ts | @anchor build-calendar-initials |
+| back-funkcja | LeaveRequestsService.calendarSummary | apps/backend/src/leaves/leave-requests.service.ts | @anchor calendar-event-summary |
+| back-funkcja | LeaveRequestsService.calendarDescription | apps/backend/src/leaves/leave-requests.service.ts | @anchor calendar-event-description |
+| back-funkcja | LeaveRequestsService.calendarSegments | apps/backend/src/leaves/leave-requests.service.ts | @anchor calendar-event-segments |
+| back-funkcja | LeaveRequestsService.resyncGoogleCalendar | apps/backend/src/leaves/leave-requests.service.ts | @anchor resync-google-calendar |
+| back-funkcja | HolidaysService.easterSunday | apps/backend/src/leaves/holidays.service.ts | @anchor easter-sunday |
+| back-funkcja | HolidaysService.holidayKeys | apps/backend/src/leaves/holidays.service.ts | @anchor polish-holiday-keys |
+| back-endpoint | POST /leave-requests/calendar/resync | apps/backend/src/leaves/leave-requests.controller.ts | @anchor leave-requests-calendar-resync-endpoint |
+| back-typ | CalendarResyncResult | apps/backend/src/leaves/leave-requests.service.ts | @anchor calendar-resync-result |
+| back-funkcja | LeaveRequestsService.calendarSyncStatus | apps/backend/src/leaves/leave-requests.service.ts | @anchor calendar-sync-status |
+| back-funkcja | LeaveRequestsService.setCalendarSync | apps/backend/src/leaves/leave-requests.service.ts | @anchor set-calendar-sync |
+| back-funkcja | LeaveRequestsService.isCalendarSyncEnabled | apps/backend/src/leaves/leave-requests.service.ts | @anchor calendar-sync-is-enabled |
+| back-funkcja | LeaveRequestsService.reconcileCalendar | apps/backend/src/leaves/leave-requests.service.ts | @anchor reconcile-calendar |
+| back-serwis | LeaveCalendarCronService | apps/backend/src/leaves/leave-calendar-cron.service.ts | @anchor leave-calendar-cron-service |
+| back-funkcja | LeaveCalendarCronService.run | apps/backend/src/leaves/leave-calendar-cron.service.ts | @anchor leave-calendar-cron-run |
+| back-stala | CRON_MONTHS_BACK | apps/backend/src/leaves/leave-calendar-cron.service.ts | @anchor leave-calendar-cron-months-back |
+| schema-model | LeaveCalendarSettings | apps/backend/prisma/schema.prisma | @anchor leave-calendar-settings |
+| schema-pole | LeaveCalendarSettings.id | apps/backend/prisma/schema.prisma | @anchor leave-calendar-settings-id |
+| schema-pole | LeaveCalendarSettings.syncEnabled | apps/backend/prisma/schema.prisma | @anchor leave-calendar-sync-enabled |
+| schema-pole | LeaveCalendarSettings.lastRunAt | apps/backend/prisma/schema.prisma | @anchor leave-calendar-last-run-at |
+| schema-pole | LeaveCalendarSettings.lastRunSummary | apps/backend/prisma/schema.prisma | @anchor leave-calendar-last-run-summary |
+| schema-pole | LeaveCalendarSettings.updatedById | apps/backend/prisma/schema.prisma | @anchor leave-calendar-updated-by-id |
+| back-endpoint | GET /leave-requests/calendar/sync | apps/backend/src/leaves/leave-requests.controller.ts | @anchor leave-requests-calendar-sync-status-endpoint |
+| back-endpoint | PATCH /leave-requests/calendar/sync | apps/backend/src/leaves/leave-requests.controller.ts | @anchor leave-requests-calendar-sync-toggle-endpoint |
+| ui-panel | CalendarSyncPanel | apps/frontend/src/components/shared/leaves/CalendarSyncPanel.jsx | @anchor calendar-sync-panel |
+| ui-funkcja | formatSyncDate | apps/frontend/src/components/shared/leaves/CalendarSyncPanel.jsx | @anchor format-sync-date |
+| ui-funkcja | fetchStatus (CalendarSyncPanel) | apps/frontend/src/components/shared/leaves/CalendarSyncPanel.jsx | @anchor fetch-calendar-sync-status |
+| ui-funkcja | toggleSync | apps/frontend/src/components/shared/leaves/CalendarSyncPanel.jsx | @anchor toggle-calendar-sync |
+| ui-funkcja | runNow | apps/frontend/src/components/shared/leaves/CalendarSyncPanel.jsx | @anchor run-calendar-sync-now |
+| ui-przycisk | Włącz/Wyłącz synchronizację | apps/frontend/src/components/shared/leaves/CalendarSyncPanel.jsx | @anchor calendar-sync-toggle-button |
+| ui-przycisk | Synchronizuj teraz | apps/frontend/src/components/shared/leaves/CalendarSyncPanel.jsx | @anchor calendar-sync-run-now-button |
+| ui-sekcja | panel synchronizacji kalendarza w Dashboardzie | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor dashboard-calendar-sync-panel |
+| ui-stan | isAdmin (LeavesDashboardTab) | apps/frontend/src/components/shared/leaves/LeavesDashboardTab.jsx | @anchor dashboard-is-admin |
 | back-funkcja | LeaveRequestsService.notifyApplicant | apps/backend/src/leaves/leave-requests.service.ts | @anchor notify-applicant-leave-decision |
 | back-endpoint | GET /leave-balances | apps/backend/src/leaves/leave-balances.controller.ts | @anchor leave-balances-read-endpoint |
 | back-endpoint | PUT /leave-balances/entitlement | apps/backend/src/leaves/leave-balances.controller.ts | @anchor leave-balances-entitlement-endpoint |

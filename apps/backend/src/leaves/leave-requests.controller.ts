@@ -63,6 +63,32 @@ export class LeaveRequestsController {
     );
   }
 
+  // @anchor leave-requests-calendar-sync-status-endpoint
+  /// Stan przelacznika synchronizacji kalendarza — panel administratora w Dashboardzie.
+  @Get('calendar/sync')
+  calendarSyncStatus(@Req() req: any) {
+    return this.requests.calendarSyncStatus(req.user.userId, req.user.roles || []);
+  }
+
+  // @anchor leave-requests-calendar-sync-toggle-endpoint
+  /// Wlaczenie / wylaczenie cyklicznej synchronizacji (tylko ADMIN).
+  @Patch('calendar/sync')
+  setCalendarSync(@Req() req: any, @Body() dto: { enabled: boolean }) {
+    return this.requests.setCalendarSync(req.user.userId, req.user.roles || [], !!dto?.enabled);
+  }
+
+  // @anchor leave-requests-calendar-resync-endpoint
+  /// Recznie uruchamiana rekoncyliacja wspolnego kalendarza Google (tylko ADMIN).
+  /// `months` = ile miesiecy wstecz sprawdzic; domyslnie 3.
+  @Post('calendar/resync')
+  resyncCalendar(@Req() req: any, @Query('months') months?: string) {
+    return this.requests.resyncGoogleCalendar(
+      req.user.userId,
+      req.user.roles || [],
+      months ? Number(months) : undefined,
+    );
+  }
+
   // @anchor leave-requests-create-endpoint
   @Post()
   create(@Req() req: any, @Body() dto: CreateLeaveRequestDto) {

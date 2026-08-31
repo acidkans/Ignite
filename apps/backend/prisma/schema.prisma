@@ -30,6 +30,11 @@ model User {
   /// @anchor user-work-start-month
   /// Miesiac rozpoczecia pracy (1-12). Brak = styczen, bo staz przelicza sie na miesiace.
   workStartMonth    Int?
+  /// @anchor user-calendar-initials
+  /// Skrot pokazywany w tytule wydarzenia we wspolnym kalendarzu urlopowym (np. „AWL").
+  /// NULL = liczony w runtime z imienia i nazwiska przez back-funkcja buildCalendarInitials();
+  /// wartosc wpisana recznie ma pierwszenstwo i sluzy do rozroznienia kolizji skrotow.
+  calendarInitials  String?
   isActive          Boolean            @default(true)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
@@ -1327,6 +1332,28 @@ model UserMsToken {
 }
 
 /// Singleton — globalne ustawienia powiadomień: Web Push, sync MS To Do, alarmy (jeden wiersz, id = "singleton").
+/// @anchor leave-calendar-settings
+/// Ustawienia synchronizacji wspolnego kalendarza urlopowego Google. Jeden wiersz
+/// ("singleton") — przelacznik ma byc wspolny dla calej instalacji, a nie per user.
+model LeaveCalendarSettings {
+  /// @anchor leave-calendar-settings-id
+  id           String   @id @default("singleton")
+  /// @anchor leave-calendar-sync-enabled
+  /// false = cron nie rusza kalendarza. Domyslnie wylaczone, bo dopoki wnioski pisze
+  /// takze AppSheet, automat mnozylby wpisy — wlaczamy dopiero po odcieciu AppSheet.
+  syncEnabled  Boolean  @default(false)
+  /// @anchor leave-calendar-last-run-at
+  lastRunAt    DateTime?
+  /// @anchor leave-calendar-last-run-summary
+  /// Wynik ostatniego przebiegu w formie gotowej do pokazania w panelu administratora.
+  lastRunSummary String?
+  /// @anchor leave-calendar-updated-by-id
+  updatedById  String?
+  updatedAt    DateTime @updatedAt
+
+  @@map("leave_calendar_settings")
+}
+
 model SystemNotificationSettings {
   /// @anchor notif-settings-id
   id                        String   @id @default("singleton")
@@ -1474,6 +1501,10 @@ model LeaveType {
   /// false = urlop pelnodniowy, formularz pokazuje sam kalendarz bez godzin.
   /// Podstawa prawna per rodzaj opisana w back-stala HOURLY_LEAVE_CODES.
   allowsHourly Boolean @default(false)
+  /// @anchor leave-type-calendar-label
+  /// Tekst po mysliku w tytule wydarzenia kalendarza („AWL-urlop"). NULL = uzywamy
+  /// mapy CALENDAR_LABELS po kodzie rodzaju, a gdy kodu tam nie ma — pola `name`.
+  calendarLabel String?
   /// @anchor leave-type-max-days-per-year
   /// Ustawowy limit dni w roku kalendarzowym (Kodeks pracy): NA_ZADANIE = 4 (art. 167(2)),
   /// OPIEKA = 5 (art. 173(1)). NULL = brak limitu ustawowego (L4, bezpłatny) albo limit
@@ -1634,10 +1665,19 @@ model LeaveRequest {
   withdrawalDecidedAt     DateTime?
   /// @anchor leave-request-withdrawal-decided-by-id
   withdrawalDecidedById   String?
-  /// @anchor leave-request-google-event-id
-  /// Id zdarzenia we wspolnym kalendarzu Google, zalozonego przy zatwierdzeniu wniosku.
-  /// NULL = brak zdarzenia (wniosek nierozpatrzony, integracja wylaczona albo API odmowilo).
-  googleEventId       String?
+  /// @anchor leave-request-google-event-ids
+  /// Id zdarzen we wspolnym kalendarzu Google zalozonych przy zatwierdzeniu wniosku.
+  /// Lista, bo urlop przerwany weekendem albo swietem to kilka osobnych zdarzen —
+  /// Google nie umie zrobic dziury w srodku zdarzenia calodniowego.
+  /// Pusta = brak zdarzen (wniosek nierozpatrzony, integracja wylaczona albo API odmowilo).
+  googleEventIds      String[]  @default([])
+  /// @anchor leave-request-google-synced-at
+  /// Kiedy ostatnio stan kalendarza zgodzil sie z wnioskiem. NULL przy niezerowym
+  /// googleSyncError oznacza wpis, ktory nie trafil do kalendarza — do ponowienia.
+  googleSyncedAt      DateTime?
+  /// @anchor leave-request-google-sync-error
+  /// Komunikat ostatniego nieudanego zapisu do kalendarza; NULL gdy poszlo dobrze.
+  googleSyncError     String?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 

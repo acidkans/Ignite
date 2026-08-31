@@ -6,6 +6,7 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { pl } from 'date-fns/locale/pl';
 import { statusMeta, warsawDayKey } from './leavesTheme';
 import useAutoRefresh from '../../../hooks/useAutoRefresh';
+import CalendarSyncPanel from './CalendarSyncPanel';
 
 registerLocale('pl', pl);
 
@@ -64,6 +65,11 @@ export default function LeavesDashboardTab({ access, employees, currentUserId, o
     // @anchor dashboard-can-pick-employee
     // Wybór pracownika: przełożony i ADMIN (scope != SELF) oraz role podglądowe (DAK) z canViewAll.
     const canPick = !!access?.canViewAll || access?.scope !== 'SELF';
+
+    // @anchor dashboard-is-admin
+    // Panel synchronizacji kalendarza widzi wylacznie ADMIN — `canEdit` jest ustawiane
+    // tylko dla tej roli (LeavesService.resolveAccess).
+    const isAdmin = !!access?.canEdit;
 
     // @anchor fetch-leaves-dashboard
     // `silent` = odswiezanie w tle (co 5 min) — bez spinnera, zeby karty nie migaly
@@ -394,6 +400,14 @@ export default function LeavesDashboardTab({ access, employees, currentUserId, o
                     </div>
                 </div>
             </div>
+
+            {/* PANEL 5 — synchronizacja kalendarza Google, tylko ADMIN */}
+            {/* @anchor dashboard-calendar-sync-panel */}
+            {isAdmin && (
+                <div className="mt-4 max-w-2xl">
+                    <CalendarSyncPanel className={panelCls} titleClassName={panelTitleCls} />
+                </div>
+            )}
         </div>
     );
 }

@@ -47,6 +47,46 @@ export class HolidaysService {
       .map(x => ({ date: x.d.toISOString().slice(0, 10), name: x.name }));
   }
 
+  // @anchor easter-sunday
+  /// Niedziela wielkanocna danego roku (algorytm Meeusa/Jonesa/Butchera, w UTC).
+  /// Potrzebna, bo swieta ruchome wypadaja w dni robocze (Boze Cialo = czwartek)
+  /// i tak samo jak weekend przerywaja pasek urlopu w kalendarzu.
+  static easterSunday(year: number): Date {
+    const a = year % 19;
+    const b = Math.floor(year / 100);
+    const c = year % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const month = Math.floor((h + l - 7 * m + 114) / 31);
+    const day = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(Date.UTC(year, month - 1, day));
+  }
+
+  // @anchor polish-holiday-keys
+  /// Wszystkie dni ustawowo wolne w danym roku jako klucze 'YYYY-MM-DD':
+  /// swieta o stalej dacie plus ruchome liczone od Wielkanocy (Poniedzialek Wielkanocny,
+  /// Zielone Swiatki, Boze Cialo). Sama Wielkanoc i Zielone Swiatki wypadaja w niedziele,
+  /// ale trzymamy je na liscie, zeby zbior byl kompletny niezaleznie od kontekstu uzycia.
+  static holidayKeys(year: number): Set<string> {
+    const key = (d: Date) => d.toISOString().slice(0, 10);
+    const easter = HolidaysService.easterSunday(year);
+    const shift = (days: number) => key(new Date(easter.getTime() + days * 86400000));
+    return new Set([
+      ...POLISH_FIXED_HOLIDAYS.map(h => key(new Date(Date.UTC(year, h.month - 1, h.day)))),
+      key(easter),
+      shift(1), // Poniedzialek Wielkanocny
+      shift(49), // Zielone Swiatki
+      shift(60), // Boze Cialo
+    ]);
+  }
+
   // @anchor list-holiday-days-off
   /// Lista dni wolnych na rok: propozycje z kalendarza wzbogacone o stan decyzji z bazy
   /// plus dni dodane recznie przez administratora (spoza kalendarza swiat).

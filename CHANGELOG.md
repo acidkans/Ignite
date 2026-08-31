@@ -1,3 +1,55 @@
+## 2026-08-31 — kalendarz Google: zatwierdzone urlopy w formacie AppSheet, pasek przerywany dniami wolnymi
+
+### schema.prisma
+- usunieto pole `googleEventId` w modelu `LeaveRequest` — jeden wniosek moze dac kilka zdarzen, wiec pojedyncze id przestalo wystarczac (kolumna w bazie zostaje martwa do czasu merge galezi `urlopy`, kod jej nie uzywa)
+- dodano pole `googleEventIds` (`String[]`) w modelu `LeaveRequest` — lista zdarzen kalendarza zalozonych dla wniosku
+- dodano pole `googleSyncedAt` w modelu `LeaveRequest` — kiedy stan kalendarza ostatnio zgodzil sie z wnioskiem
+- dodano pole `googleSyncError` w modelu `LeaveRequest` — komunikat ostatniego nieudanego zapisu, podstawa do ponowienia
+- dodano pole `calendarInitials` w modelu `User` — reczny skrot do tytulu wydarzenia, rozwiazuje kolizje trzyznakowych skrotow
+- dodano pole `calendarLabel` w modelu `LeaveType` — tekst po mysliku w tytule wydarzenia, zmienialny bez deployu
+- dodano model `LeaveCalendarSettings` (singleton) — przelacznik `syncEnabled` plus slad ostatniego przebiegu automatu (`lastRunAt`, `lastRunSummary`)
+- migracje `20260831120000_leave_calendar_multi_event`, `20260831150000_leave_calendar_settings`
+
+### architektura / API
+- `GoogleCalendarService.upsertLeaveEvent` zastapiony przez `syncLeaveEvents` — przyjmuje liste segmentow i doprowadza kalendarz do stanu z wniosku: aktualizuje istniejace zdarzenia, zaklada brakujace, kasuje nadmiarowe po skroceniu urlopu
+- kazde zdarzenie Ignite dostaje `extendedProperties.private.source=ignite` — rekoncyliacja rusza wylacznie wlasne wpisy, reczne (spotkania, wyjazdy, „HO") zostaja nietkniete
+- tytul wydarzenia w formacie zastanym po AppSheet: `AWL-urlop` (pierwsza litera imienia + dwie nazwiska, bez kropki, etykieta rodzaju po mysliku)
+- opis wydarzenia obciety do liczby dni i noty o zrodle — kalendarz oglada cala firma, komentarz z wniosku przy „L4" bywa informacja o zdrowiu
+- zakres wniosku tniemy na ciagle bloki dni roboczych — weekend i swieto ustawowe przerywaja pasek, bo Google nie umie zrobic dziury w srodku zdarzenia calodniowego
+- urlop wypoczynkowy z godzinami zapisuje sie jako zdarzenie godzinowe w `Europe/Warsaw` zamiast calodniowego
+- dodano `POST /leave-requests/calendar/resync?months=N` (ADMIN) — reczna rekoncyliacja kalendarza z baza, zwraca liczbe sprawdzonych, poprawionych i bledow
+- home office („HO" w kalendarzu, 19 wpisow w 2026) swiadomie poza modulem — brak rodzaju urlopu w bazie, wpisy robione recznie
+- dodano `back-serwis` `LeaveCalendarCronService` — cogodzinna rekoncyliacja kalendarza z baza, uruchamiana wylacznie gdy administrator wlaczy przelacznik (domyslnie OFF, bo rownolegly zapis z AppSheet mnozylby wpisy)
+- dodano `GET /leave-requests/calendar/sync` i `PATCH /leave-requests/calendar/sync` (ADMIN) — odczyt i przelaczanie synchronizacji; stan trzymany w bazie, wiec przezywa restart kontenera i nie wymaga deployu
+- dodano `ui-panel` `CalendarSyncPanel` w zakladce Dashboard modulu Urlopy (tylko ADMIN) — przelacznik automatu, przycisk jednorazowego przebiegu i wynik ostatniej synchronizacji
+- dodano `test/gcal-resync.js` — rekoncyliacja z linii polecen, domyslnie tylko raport, zapis po `--zapisz`
+
+- dodano `apps/frontend/src/components/shared/leaves/polishHolidays.js` — lista dni ustawowo wolnych po stronie frontendu (swieta stale + ruchome liczone od Wielkanocy), blizniacza do `HolidaysService.holidayKeys()`
+- bezpieczniki dat we wniosku urlopowym: data „od" pozniejsza niz „do" pociaga „do" za soba; dzien wolny w polu „od" przesuwa wybor na najblizszy dzien roboczy, a w polu „do" cofa na poprzedni. Zapis nie jest blokowany — pole robi sie czerwone z wyjasnieniem, co i dlaczego zostalo zmienione
+
+### słownik
+- usunieto `google-calendar-upsert-leave-event`, `google-calendar-find-event-id`, `google-calendar-delete-leave-event`, `leave-request-google-event-id`
+- dodano `google-calendar-sync-leave-events`, `google-calendar-find-event-ids`, `google-calendar-delete-event`, `google-calendar-delete-leave-events`, `google-calendar-source-marker`, `google-calendar-event-segment`, `google-calendar-sync-result` — nowe API serwisu kalendarza
+- dodano `leave-request-google-event-ids`, `leave-request-google-synced-at`, `leave-request-google-sync-error`, `user-calendar-initials`, `leave-type-calendar-label` — nowe pola schematu
+- dodano `calendar-labels`, `calendar-initials-length`, `build-calendar-initials`, `calendar-event-summary`, `calendar-event-description`, `calendar-event-segments`, `resync-google-calendar` — logika tytulu i segmentow w module Urlopy
+- dodano `easter-sunday`, `polish-holiday-keys` — swieta ruchome potrzebne do przerywania paska
+- dodano `leave-requests-calendar-resync-endpoint`, `leave-requests-calendar-sync-status-endpoint`, `leave-requests-calendar-sync-toggle-endpoint` — endpointy rekoncyliacji i przelacznika
+- dodano `calendar-resync-result`, `calendar-sync-status`, `set-calendar-sync`, `calendar-sync-is-enabled`, `reconcile-calendar` — obsluga przelacznika i wspolny rdzen rekoncyliacji
+- dodano `leave-calendar-settings`, `leave-calendar-settings-id`, `leave-calendar-sync-enabled`, `leave-calendar-last-run-at`, `leave-calendar-last-run-summary`, `leave-calendar-updated-by-id` — model ustawien
+- dodano `leave-calendar-cron-service`, `leave-calendar-cron-run`, `leave-calendar-cron-months-back` — cron rekoncyliacji
+- dodano `calendar-sync-panel`, `format-sync-date`, `fetch-calendar-sync-status`, `toggle-calendar-sync`, `run-calendar-sync-now`, `calendar-sync-toggle-button`, `calendar-sync-run-now-button`, `dashboard-calendar-sync-panel`, `dashboard-is-admin` — panel administratora w Dashboardzie
+
+### wytyczne
+- `schema-pole` `LeaveRequest.googleEventIds` — kolejnosc id odpowiada kolejnosci segmentow; przy zmianie logiki ciecia zakresu zawsze przepuszczaj wniosek przez `syncLeaveEvents`, nie zapisuj id recznie
+- `back-stala` `IGNITE_EVENT_SOURCE` — kazde zdarzenie zapisywane do wspolnego kalendarza musi niesc ten znacznik; bez niego rekoncyliacja uzna wpis za reczny i go nie ruszy, a duplikatu nie wykryje
+- `back-funkcja` `calendarSegments` — dni wolne biora sie z `HolidaysService.holidayKeys()` (swieta stale + ruchome liczone od Wielkanocy), a nie z samego weekendu; ta sama lista ma obowiazywac wszedzie, gdzie liczymy dni robocze
+- `back-funkcja` `calendarDescription` — do opisu wydarzenia nie wpisujemy komentarza wniosku ani danych osobowych; kalendarz jest wspolny dla calej firmy
+- `back-serwis` `LeaveCalendarCronService` — automatu nie wlaczac, dopoki AppSheet pisze do tego samego kalendarza; przelacznik istnieje wlasnie po to, zeby wlaczenie bylo swiadoma decyzja po migracji
+- `back-env` `GOOGLE_CALENDAR_ID` — dev MUSI wskazywac osobny kalendarz testowy; przy wspolnym adresie kazde zatwierdzenie wniosku na dev laduje w firmowym kalendarzu
+- synchronizacja jest jednokierunkowa: baza jest zrodlem prawdy, skasowanie wydarzenia w Google nie unieważnia urlopu (automat je odtworzy) — urlop odwoluje sie decyzja w aplikacji
+- dev na Dockerze: zmiana kodu = `docker restart erp-backend`, zmiana `.env` = `docker compose up -d backend` (restart nie doczytuje `env_file`)
+- konto serwisowe kalendarza wymaga uprawnienia „Wprowadzaj zmiany i wyswietlaj wszystkie szczegoly wydarzen" — wariant „wydarzenia prywatne jako zajete" zaslania szczegoly i psuje rekoncyliacje
+
 ## 2026-08-29 — eksport/import użytkowników w Excelu, autoodświeżanie co 5 min, luźniejszy język komunikatów
 
 ### architektura / API

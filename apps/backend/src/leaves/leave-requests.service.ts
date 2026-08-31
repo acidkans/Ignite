@@ -9,7 +9,7 @@ import {
 } from './leaves.service';
 import { LeaveBalancesService } from './leave-balances.service';
 import { MailService, OverlappingAbsence } from '../mail/mail.service';
-import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { GoogleCalendarService, LeaveEventSegment } from '../google-calendar/google-calendar.service';
 import { HolidaysService } from './holidays.service';
 import { LeaveDecisionTokenService } from './leave-decision-token.service';
 
@@ -54,9 +54,27 @@ export interface DecideWithdrawalDto {
 
 const REQUEST_INCLUDE = {
   user: {
-    select: { id: true, firstName: true, lastName: true, email: true, company: true, supervisorId: true },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      company: true,
+      supervisorId: true,
+      calendarInitials: true,
+    },
   },
-  leaveType: { select: { id: true, code: true, name: true, color: true, consumesBalance: true } },
+  leaveType: {
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      color: true,
+      consumesBalance: true,
+      allowsHourly: true,
+      calendarLabel: true,
+    },
+  },
   dependent: { select: { id: true, firstName: true, lastName: true, birthDate: true } },
   holidayDayOff: { select: { id: true, date: true, name: true } },
   decidedBy: { select: { id: true, firstName: true, lastName: true } },
@@ -102,6 +120,50 @@ export const CARE_LEAVE_COMMENT_HINT =
 ///   ZA_SWIETO_SOB — art. 130 par. 2 KP: za swieto w sobote nalezy sie caly dzien wolny. PELNODNIOWY.
 ///   L4            — zwolnienie lekarskie w dniach kalendarzowych, nie wniosek. PELNODNIOWY.
 export const HOURLY_LEAVE_CODES: string[] = ['WYPOCZYNKOWY'];
+
+// @anchor calendar-resync-result
+/// Wynik rekoncyliacji kalendarza — ten sam ksztalt dla endpointu administratora i dla crona.
+export interface CalendarResyncResult {
+  /// false = integracja nieskonfigurowana (brak zmiennych GOOGLE_*)
+  enabled: boolean;
+  sprawdzone: number;
+  poprawione: number;
+  bledy: number;
+  szczegoly: string[];
+}
+
+// @anchor calendar-labels
+/// Tekst po mysliku w tytule wydarzenia kalendarza, per kod rodzaju urlopu. Odwzorowuje
+/// nazewnictwo zastane w kalendarzu po AppSheet (inwentaryzacja: „urlop" 142 wpisy,
+/// „L4" 4, „opieka" 4), zeby nowe wpisy nie odstawaly od historycznych. Zrodlem prawdy
+/// jest kolumna `LeaveType.calendarLabel` — ta mapa dziala, dopoki jej nie wypelniono.
+/// Home office („HO" w kalendarzu) swiadomie poza modulem: nie ma rodzaju urlopu w bazie,
+/// ludzie wpisuja go recznie i automat go nie dotyka.
+export const CALENDAR_LABELS: Record<string, string> = {
+  WYPOCZYNKOWY: 'urlop',
+  L4: 'L4',
+  BEZPLATNY: 'bezpłatny',
+  OPIEKA: 'opieka',
+  NA_ZADANIE: 'na żądanie',
+  ZA_SWIETO_SOB: 'za święto',
+};
+
+// @anchor calendar-initials-length
+/// Ile liter nazwiska wchodzi do skrotu. Razem z pierwsza litera imienia daje 3 znaki
+/// („Anna Wlodarczyk" -> „AWL") — format ustalony z uzytkownikiem, bez kropki na koncu.
+const CALENDAR_SURNAME_LETTERS = 2;
+
+// @anchor build-calendar-initials
+/// Skrot pracownika do tytulu wydarzenia: pierwsza litera imienia + dwie nazwiska,
+/// wielkimi literami, z zachowaniem polskich znakow. Kolizje sa przy 3 znakach
+/// nieuniknione — rozwiazuje je recznie wpisany `User.calendarInitials`.
+export const buildCalendarInitials = (firstName?: string | null, lastName?: string | null): string => {
+  const first = (firstName || '').trim();
+  const last = (lastName || '').trim();
+  const skrot = `${first.slice(0, 1)}${last.slice(0, CALENDAR_SURNAME_LETTERS)}`.toUpperCase();
+  // brak imienia albo nazwiska (dane niekompletne) — lepiej cokolwiek czytelnego niz pusty tytul
+  return skrot || (first || last).slice(0, 3).toUpperCase() || '???';
+};
 
 // @anchor leave-requests-service
 @Injectable()
@@ -840,44 +902,236 @@ export class LeaveRequestsService {
     };
   }
 
+  // @anchor calendar-event-summary
+  /// Tytul wydarzenia w formacie zastanym po AppSheet: „AWL-urlop".
+  /// Skrot bierze sie z `User.calendarInitials`, a gdy pole jest puste — z imienia i nazwiska.
+  private static calendarSummary(request: any): string {
+    const initials =
+      (request.user?.calendarInitials || '').trim() ||
+      buildCalendarInitials(request.user?.firstName, request.user?.lastName);
+    const code = request.leaveType?.code || '';
+    const label =
+      (request.leaveType?.calendarLabel || '').trim() ||
+      CALENDAR_LABELS[code] ||
+      (request.leaveType?.name || 'urlop').toLowerCase();
+    return `${initials}-${label}`;
+  }
+
+  // @anchor calendar-event-description
+  /// Opis wydarzenia trzymamy przy kosci: kalendarz oglada cala firma, a przy „AWL-L4"
+  /// komentarz z wniosku bywa informacja o zdrowiu. Zostaje liczba dni i informacja,
+  /// ze wpisu nie nalezy poprawiac recznie (i tak nadpisze go kolejna synchronizacja).
+  private static calendarDescription(request: any): string {
+    return [
+      request.daysCount ? `Dni: ${request.daysCount}` : null,
+      'Wpis wygenerowany z modułu Urlopy — nie edytuj ręcznie.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  // @anchor calendar-event-segments
+  /// Zakres wniosku pociety na ciagle bloki dni roboczych — weekend i swieto przerywaja
+  /// pasek w kalendarzu, a Google nie umie zrobic dziury w srodku jednego zdarzenia.
+  /// Urlop godzinowy (wypoczynkowy z godzinami) zostaje jednym zdarzeniem z godzinami.
+  static calendarSegments(request: any): LeaveEventSegment[] {
+    const timed = !!request.leaveType?.allowsHourly && !!request.timeStart && !!request.timeEnd;
+    if (timed) {
+      return [
+        {
+          dateStart: request.dateStart,
+          dateEnd: request.dateEnd,
+          timeStart: request.timeStart,
+          timeEnd: request.timeEnd,
+        },
+      ];
+    }
+
+    const [fy, fm, fd] = LeaveRequestsService.warsawDayKey(request.dateStart).split('-').map(Number);
+    const [ty, tm, td] = LeaveRequestsService.warsawDayKey(request.dateEnd).split('-').map(Number);
+    const start = Date.UTC(fy, fm - 1, fd);
+    const end = Date.UTC(ty, tm - 1, td);
+    if (isNaN(start) || isNaN(end) || end < start) return [];
+
+    // swieta liczymy raz na rok wystepujacy w zakresie — wniosek potrafi przejsc przez sylwestra
+    const holidays = new Set<string>();
+    for (let y = fy; y <= ty; y++) HolidaysService.holidayKeys(y).forEach(k => holidays.add(k));
+
+    const segments: LeaveEventSegment[] = [];
+    let blockStart: number | null = null;
+    for (let ms = start; ms <= end; ms += 86400000) {
+      const day = new Date(ms);
+      const dow = day.getUTCDay(); // 0 = niedziela, 6 = sobota
+      const wolne = dow === 0 || dow === 6 || holidays.has(day.toISOString().slice(0, 10));
+      if (wolne) {
+        if (blockStart !== null) {
+          segments.push({ dateStart: new Date(blockStart), dateEnd: new Date(ms - 86400000) });
+          blockStart = null;
+        }
+        continue;
+      }
+      if (blockStart === null) blockStart = ms;
+    }
+    if (blockStart !== null) segments.push({ dateStart: new Date(blockStart), dateEnd: new Date(end) });
+    return segments;
+  }
+
   // @anchor sync-google-calendar-leave
   /// Zatwierdzony wniosek trafia do wspolnego kalendarza Google, cofniety albo odrzucony
-  /// znika z niego. Id zdarzenia zapisujemy przy wniosku, zeby kolejna zmiana terminu
-  /// aktualizowala to samo zdarzenie zamiast mnozyc duplikaty.
+  /// znika z niego. Id zdarzen zapisujemy przy wniosku, zeby kolejna zmiana terminu
+  /// aktualizowala te same zdarzenia zamiast mnozyc duplikaty.
   private async syncGoogleCalendar(request: any): Promise<void> {
     if (!this.googleCalendar.isEnabled()) return;
     try {
+      const known: string[] = request.googleEventIds || [];
       if (request.status !== 'APPROVED') {
-        if (!request.googleEventId) return;
-        await this.googleCalendar.deleteLeaveEvent(request.googleEventId, request.id);
-        await this.prisma.leaveRequest.update({ where: { id: request.id }, data: { googleEventId: null } });
+        if (!known.length) return;
+        await this.googleCalendar.deleteLeaveEvents(known, request.id);
+        await this.prisma.leaveRequest.update({
+          where: { id: request.id },
+          data: { googleEventIds: [], googleSyncedAt: new Date(), googleSyncError: null },
+        });
         return;
       }
 
-      const name =
-        [request.user?.firstName, request.user?.lastName].filter(Boolean).join(' ') || request.user?.email || 'Pracownik';
-      const typeName = request.leaveType?.name || 'Urlop';
-      const eventId = await this.googleCalendar.upsertLeaveEvent({
+      const segments = LeaveRequestsService.calendarSegments(request);
+      const result = await this.googleCalendar.syncLeaveEvents({
         leaveRequestId: request.id,
-        googleEventId: request.googleEventId,
-        summary: `${name} — ${typeName}`,
-        description: [
-          request.user?.company ? `Firma: ${request.user.company}` : null,
-          request.daysCount ? `Dni: ${request.daysCount}` : null,
-          request.comment ? `Komentarz: ${request.comment}` : null,
-          'Wpis wygenerowany z modułu Urlopy — nie edytuj ręcznie.',
-        ]
-          .filter(Boolean)
-          .join('\n'),
-        dateStart: request.dateStart,
-        dateEnd: request.dateEnd,
+        knownEventIds: known,
+        summary: LeaveRequestsService.calendarSummary(request),
+        description: LeaveRequestsService.calendarDescription(request),
+        segments,
       });
-      if (eventId && eventId !== request.googleEventId) {
-        await this.prisma.leaveRequest.update({ where: { id: request.id }, data: { googleEventId: eventId } });
-      }
-    } catch {
-      /* kalendarz jest best-effort — decyzja jest juz zapisana */
+
+      await this.prisma.leaveRequest.update({
+        where: { id: request.id },
+        data: {
+          googleEventIds: result.eventIds,
+          // znacznik czasu tylko przy pelnym sukcesie — inaczej zostaje blad do ponowienia
+          googleSyncedAt: result.ok ? new Date() : null,
+          googleSyncError: result.ok ? null : result.error || 'Kalendarz nie przyjął wszystkich wpisów.',
+        },
+      });
+    } catch (err: any) {
+      /* kalendarz jest best-effort — decyzja jest juz zapisana, blad zostaje przy wniosku */
+      await this.prisma.leaveRequest
+        .update({
+          where: { id: request.id },
+          data: { googleSyncedAt: null, googleSyncError: err?.message || 'Nieznany błąd zapisu do kalendarza.' },
+        })
+        .catch(() => undefined);
     }
+  }
+
+  // @anchor resync-google-calendar
+  /// Rekoncyliacja kalendarza: przechodzi zatwierdzone wnioski z zadanego okna czasu
+  /// i doprowadza kalendarz do stanu z bazy — zaklada brakujace wpisy (np. skasowane
+  /// recznie albo takie, ktore nie przeszly przy decyzji), poprawia rozjechane terminy
+  /// i tytuly. Wpisow bez znacznika `source=ignite` nie rusza — spotkania, wyjazdy i „HO"
+  /// wpisywane recznie zostaja nietkniete.
+  /// Uruchamiane recznie przez administratora; naturalne miejsce na crona w przyszlosci.
+  async resyncGoogleCalendar(
+    userId: string,
+    roles: string[],
+    monthsBack = 3,
+  ): Promise<CalendarResyncResult> {
+    const access = await this.assertEnabled(userId, roles);
+    if (!access.canEdit) throw new ForbiddenException('Synchronizację kalendarza uruchamia administrator.');
+    return this.reconcileCalendar(monthsBack);
+  }
+
+  // @anchor calendar-sync-status
+  /// Stan przelacznika synchronizacji dla panelu administratora: czy integracja ma komplet
+  /// zmiennych srodowiskowych, czy cron jest wlaczony i co zrobil za ostatnim razem.
+  async calendarSyncStatus(userId: string, roles: string[]) {
+    const access = await this.assertEnabled(userId, roles);
+    if (!access.canEdit) throw new ForbiddenException('Ustawienia kalendarza widzi administrator.');
+    const settings = await this.prisma.leaveCalendarSettings.findUnique({ where: { id: 'singleton' } });
+    return {
+      /// false = brak konta serwisowego w .env; przelacznik nie ma wtedy czego wlaczac
+      configured: this.googleCalendar.isEnabled(),
+      syncEnabled: settings?.syncEnabled ?? false,
+      lastRunAt: settings?.lastRunAt ?? null,
+      lastRunSummary: settings?.lastRunSummary ?? null,
+      calendarId: this.config.get<string>('GOOGLE_CALENDAR_ID') || null,
+    };
+  }
+
+  // @anchor set-calendar-sync
+  /// Wlaczenie / wylaczenie cyklicznej synchronizacji. Zapis w bazie, wiec przezywa restart
+  /// kontenera i nie wymaga deployu — wlaczamy dopiero po odcieciu AppSheet od kalendarza.
+  async setCalendarSync(userId: string, roles: string[], enabled: boolean) {
+    const access = await this.assertEnabled(userId, roles);
+    if (!access.canEdit) throw new ForbiddenException('Synchronizację kalendarza przełącza administrator.');
+    if (enabled && !this.googleCalendar.isEnabled()) {
+      throw new BadRequestException(
+        'Brak konfiguracji konta serwisowego Google — uzupełnij zmienne GOOGLE_* zanim włączysz synchronizację.',
+      );
+    }
+    await this.prisma.leaveCalendarSettings.upsert({
+      where: { id: 'singleton' },
+      create: { id: 'singleton', syncEnabled: enabled, updatedById: userId },
+      update: { syncEnabled: enabled, updatedById: userId },
+    });
+    return this.calendarSyncStatus(userId, roles);
+  }
+
+  // @anchor calendar-sync-is-enabled
+  /// Czy cron ma dzis cokolwiek robic — czyta przelacznik z bazy przy kazdym przebiegu,
+  /// zeby wlaczenie w panelu dzialalo bez restartu backendu.
+  async isCalendarSyncEnabled(): Promise<boolean> {
+    if (!this.googleCalendar.isEnabled()) return false;
+    const settings = await this.prisma.leaveCalendarSettings.findUnique({ where: { id: 'singleton' } });
+    return !!settings?.syncEnabled;
+  }
+
+  // @anchor reconcile-calendar
+  /// Samo porownanie bazy z kalendarzem, bez sprawdzania uprawnien — wolane i przez
+  /// endpoint administratora, i przez crona. Wynik zapisuje sie w ustawieniach, zeby panel
+  /// pokazywal, kiedy i z jakim skutkiem automat chodzil ostatni raz.
+  async reconcileCalendar(monthsBack = 3): Promise<CalendarResyncResult> {
+    if (!this.googleCalendar.isEnabled()) {
+      return { enabled: false, sprawdzone: 0, poprawione: 0, bledy: 0, szczegoly: [] };
+    }
+
+    const from = new Date();
+    from.setMonth(from.getMonth() - monthsBack);
+    const requests = await this.prisma.leaveRequest.findMany({
+      where: { status: 'APPROVED', dateEnd: { gte: from } },
+      include: REQUEST_INCLUDE,
+      orderBy: [{ dateStart: 'asc' }],
+    });
+
+    let poprawione = 0;
+    let bledy = 0;
+    const szczegoly: string[] = [];
+    for (const request of requests) {
+      const przed = [...((request as any).googleEventIds || [])];
+      await this.syncGoogleCalendar(request);
+      const po = await this.prisma.leaveRequest.findUnique({
+        where: { id: request.id },
+        select: { googleEventIds: true, googleSyncError: true },
+      });
+      const zmiana = przed.join(',') !== (po?.googleEventIds || []).join(',');
+      if (po?.googleSyncError) {
+        bledy++;
+        szczegoly.push(`${LeaveRequestsService.calendarSummary(request)}: ${po.googleSyncError}`);
+      } else if (zmiana) {
+        poprawione++;
+        szczegoly.push(`${LeaveRequestsService.calendarSummary(request)}: uzupełniono wpisy w kalendarzu`);
+      }
+    }
+
+    const podsumowanie =
+      `sprawdzone: ${requests.length}, poprawione: ${poprawione}, błędy: ${bledy}` +
+      (szczegoly.length ? ` — ${szczegoly.slice(0, 3).join('; ')}` : '');
+    await this.prisma.leaveCalendarSettings.upsert({
+      where: { id: 'singleton' },
+      create: { id: 'singleton', lastRunAt: new Date(), lastRunSummary: podsumowanie },
+      update: { lastRunAt: new Date(), lastRunSummary: podsumowanie },
+    });
+
+    return { enabled: true, sprawdzone: requests.length, poprawione, bledy, szczegoly };
   }
 
   // @anchor notify-managers-leave-approved
@@ -1028,7 +1282,7 @@ export class LeaveRequestsService {
       });
     });
 
-    // status inny niz APPROVED — syncGoogleCalendar sam skasuje zdarzenie i wyczysci googleEventId
+    // status inny niz APPROVED — syncGoogleCalendar sam skasuje zdarzenia i wyczysci googleEventIds
     if (confirmed) await this.syncGoogleCalendar(updated);
     await this.notifyApplicantWithdrawalDecision(updated, confirmed);
     return updated;
@@ -1214,8 +1468,8 @@ export class LeaveRequestsService {
       return tx.leaveRequest.delete({ where: { id } });
     });
     // wniosku juz nie ma w bazie, wiec zdarzenie w kalendarzu tez musi zniknac
-    if (existing.googleEventId || existing.status === 'APPROVED') {
-      await this.googleCalendar.deleteLeaveEvent(existing.googleEventId, id).catch(() => undefined);
+    if (existing.googleEventIds?.length || existing.status === 'APPROVED') {
+      await this.googleCalendar.deleteLeaveEvents(existing.googleEventIds, id).catch(() => undefined);
     }
     // kasujacy sam siebie nie zawiadamia — wie, co zrobil przed chwila;
     // w druga strone o wycofaniu dowiaduje sie przelozony, bo ma w mailu martwe juz przyciski decyzji
