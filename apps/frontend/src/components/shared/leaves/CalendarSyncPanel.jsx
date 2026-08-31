@@ -10,6 +10,20 @@ const formatSyncDate = (iso) => {
     });
 };
 
+// @anchor rollout-step
+/// Jeden krok listy „czego brakuje": zielony = zrobione, bursztynowy = do zrobienia,
+/// szary = poza aplikacja (nie umiemy tego sprawdzic z kodu, wie o tym czlowiek).
+const RolloutStep = ({ stan, children }) => {
+    const ikona = { zrobione: '✓', czeka: '○', reczne: '•' }[stan];
+    const kolor = { zrobione: 'text-emerald-400', czeka: 'text-amber-300', reczne: 'text-gray-500' }[stan];
+    return (
+        <li className={`flex gap-2 ${stan === 'zrobione' ? 'text-gray-500' : 'text-gray-300'}`}>
+            <span className={`${kolor} shrink-0`}>{ikona}</span>
+            <span>{children}</span>
+        </li>
+    );
+};
+
 // @anchor calendar-sync-panel
 /// Panel administratora: przelacznik cogodzinnej synchronizacji wspolnego kalendarza Google
 /// i przycisk jednorazowego przebiegu. Wlaczac dopiero po odcieciu AppSheet od kalendarza —
@@ -165,6 +179,40 @@ export default function CalendarSyncPanel({ className = '', titleClassName = '' 
                             ))}
                         </div>
                     )}
+
+                    {/* @anchor calendar-rollout-checklist */}
+                    {/* Czego brakuje do pelnego uruchomienia. Widoczne tylko dla administratora,
+                        bo caly panel renderuje sie wylacznie przy `access.canEdit`. */}
+                    <div className="border-t border-white/5 pt-3">
+                        <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-2">
+                            Zanim automat ruszy — stan przygotowań
+                        </p>
+                        <ul className="flex flex-col gap-1.5 text-[11px] leading-snug">
+                            <RolloutStep stan="zrobione">
+                                Kod synchronizacji wdrożony — zatwierdzony wniosek umie założyć wydarzenia,
+                                a zmiana terminu i cofnięcie decyzji je poprawiają.
+                            </RolloutStep>
+                            <RolloutStep stan={skonfigurowana ? 'zrobione' : 'czeka'}>
+                                Konto serwisowe w zmiennych <code>GOOGLE_*</code> backendu.
+                                {!skonfigurowana && ' Brak — do wgrania po odcięciu AppSheet (sam restart kontenera nie wystarczy, potrzebne przeładowanie z env_file).'}
+                            </RolloutStep>
+                            <RolloutStep stan="reczne">
+                                Wyłączenie zapisu do tego kalendarza po stronie AppSheet — dopóki oba systemy piszą,
+                                wpisy się dublują. Tego aplikacja nie sprawdzi za Ciebie.
+                            </RolloutStep>
+                            <RolloutStep stan="czeka">
+                                Import wydarzeń już stojących w kalendarzu (dopięcie ich do wniosków, żeby automat
+                                ich nie zdublował). Skrypt jeszcze nie powstał.
+                            </RolloutStep>
+                            <RolloutStep stan="czeka">
+                                Osobny kalendarz testowy dla środowiska deweloperskiego — dziś dev pisze pod ten sam
+                                adres, więc testowy wniosek ląduje w firmowym widoku.
+                            </RolloutStep>
+                            <RolloutStep stan={wlaczona ? 'zrobione' : 'czeka'}>
+                                Włączenie automatu — ostatni krok, po sprawdzeniu wyniku „Synchronizuj teraz".
+                            </RolloutStep>
+                        </ul>
+                    </div>
 
                     <p className="text-[11px] text-gray-600 leading-snug">
                         Baza jest źródłem prawdy: automat odtwarza w kalendarzu wpisy skasowane ręcznie i nie dotyka

@@ -2152,6 +2152,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-endpoint | GET /leave-requests/calendar/sync | apps/backend/src/leaves/leave-requests.controller.ts | @anchor leave-requests-calendar-sync-status-endpoint |
 | back-endpoint | PATCH /leave-requests/calendar/sync | apps/backend/src/leaves/leave-requests.controller.ts | @anchor leave-requests-calendar-sync-toggle-endpoint |
 | ui-panel | CalendarSyncPanel | apps/frontend/src/components/shared/leaves/CalendarSyncPanel.jsx | @anchor calendar-sync-panel |
+| ui-sekcja | RolloutStep | apps/frontend/src/components/shared/leaves/CalendarSyncPanel.jsx | @anchor rollout-step |
+| ui-sekcja | lista braków przed włączeniem synchronizacji | apps/frontend/src/components/shared/leaves/CalendarSyncPanel.jsx | @anchor calendar-rollout-checklist |
 | ui-funkcja | formatSyncDate | apps/frontend/src/components/shared/leaves/CalendarSyncPanel.jsx | @anchor format-sync-date |
 | ui-funkcja | fetchStatus (CalendarSyncPanel) | apps/frontend/src/components/shared/leaves/CalendarSyncPanel.jsx | @anchor fetch-calendar-sync-status |
 | ui-funkcja | toggleSync | apps/frontend/src/components/shared/leaves/CalendarSyncPanel.jsx | @anchor toggle-calendar-sync |
