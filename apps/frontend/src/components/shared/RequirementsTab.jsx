@@ -84,6 +84,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
         projectGoal: '',
         pmName: '',
         pmCompany: '',
+        pmNip: '',
         clientProjectManagerPhone: '',
         clientProjectManagerEmail: '',
         clientContacts: [],
@@ -279,6 +280,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                             projectGoal: data.projectGoal || '',
                             pmName,
                             pmCompany: data.clientProjectManagerCompany || '',
+                            pmNip: data.clientProjectManagerNip || '',
                             clientProjectManagerPhone: data.clientProjectManagerPhone || '',
                             clientProjectManagerEmail: data.clientProjectManagerEmail || '',
                             clientContacts: data.clientContacts ? JSON.parse(data.clientContacts).map(c => ({
@@ -325,6 +327,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                 projectGoal: form.projectGoal || null,
                 clientProjectManager: form.pmName || null,
                 clientProjectManagerCompany: form.pmCompany || null,
+                clientProjectManagerNip: form.pmNip || null,
                 clientProjectManagerPhone: form.clientProjectManagerPhone || null,
                 clientProjectManagerEmail: form.clientProjectManagerEmail || null,
                 clientContacts: JSON.stringify(overrideContacts ?? form.clientContacts),
@@ -355,7 +358,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
     const addContact = () => {
         setForm(prev => ({
             ...prev,
-            clientContacts: [...prev.clientContacts, { id: crypto.randomUUID(), name: '', company: '', role: '', phone: '', email: '' }]
+            clientContacts: [...prev.clientContacts, { id: crypto.randomUUID(), name: '', company: '', nip: '', role: '', phone: '', email: '' }]
         }));
     };
 
@@ -372,6 +375,49 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
             clientContacts: prev.clientContacts.filter(c => c.id !== id)
         }));
         setContactSuggest(prev => { const n = { ...prev }; delete n[id]; return n; });
+    };
+
+    // @anchor requirements-nip-lookup — NIP → dane firmy. `POST /suppliers` robi dwie rzeczy
+    // naraz: dociąga nazwę i adres z Białej listy VAT i ZAPISUJE firmę w rejestrze `suppliers`
+    // (dedup po NIP), więc ten sam wpis obsługuje dostawcę materiału i wykonawcę robót —
+    // rozdzielone rejestry rozjeżdżałyby dane tej samej firmy. Protokół odbioru czyta stąd
+    // „Wykonawcę". Nazwę firmy nadpisujemy TYLKO gdy pole jest puste: ręcznie wpisany skrót
+    // („Netformers") bywa czytelniejszy od pełnej nazwy z rejestru.
+    const [nipStan, setNipStan] = useState({});
+    const pobierzFirmePoNip = async (klucz, nip, ustawFirme) => {
+        const cyfry = String(nip || '').replace(/\D/g, '');
+        if (cyfry.length !== 10) {
+            setNipStan(p => ({ ...p, [klucz]: cyfry ? { stan: 'blad', tekst: 'NIP musi mieć 10 cyfr' } : null }));
+            return;
+        }
+        setNipStan(p => ({ ...p, [klucz]: { stan: 'ladowanie' } }));
+        try {
+            const token = sessionStorage.getItem('token');
+            const res = await fetch(`${API_URL}/suppliers`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ nip: cyfry }),
+            });
+            if (!res.ok) {
+                const powod = await res.json().catch(() => ({}));
+                setNipStan(p => ({ ...p, [klucz]: { stan: 'blad', tekst: powod?.message || 'Nie znaleziono firmy' } }));
+                return;
+            }
+            const firma = await res.json();
+            ustawFirme(firma);
+            setNipStan(p => ({ ...p, [klucz]: { stan: 'ok', tekst: [firma?.name, firma?.vatStatus && `VAT: ${firma.vatStatus}`].filter(Boolean).join(' · ') } }));
+        } catch {
+            setNipStan(p => ({ ...p, [klucz]: { stan: 'blad', tekst: 'Biała lista VAT niedostępna' } }));
+        }
+    };
+
+    // @anchor requirements-nip-status — komunikat pod polem NIP: nazwa z rejestru albo powód
+    // niepowodzenia. Bez niego użytkownik nie wie, czy firma faktycznie się zapisała.
+    const statusNip = (klucz) => {
+        const st = nipStan[klucz];
+        if (!st) return null;
+        const kolor = st.stan === 'blad' ? 'text-red-400' : st.stan === 'ok' ? 'text-green-400' : 'text-gray-500';
+        return <div className={`text-[11px] mt-1 ml-1 truncate ${kolor}`} title={st.tekst || ''}>{st.stan === 'ladowanie' ? 'Sprawdzam w Białej liście VAT…' : st.tekst}</div>;
     };
 
     const [teamSaving, setTeamSaving] = useState({});
@@ -682,12 +728,12 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                                         </div>
                                         <span className="text-[14px] font-bold uppercase tracking-wider text-gray-400">Project Manager</span>
                                     </div>
-                                    <div className="grid grid-cols-4 gap-3">
+                                    <div className="grid grid-cols-5 gap-3">
                                         <div>
                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię i Nazwisko</label>
                                             <input type="text" value={form.pmName} onChange={e => {
                                             if (!e.target.value) {
-                                                setForm(prev => ({ ...prev, pmName: '', pmCompany: '', clientProjectManagerPhone: '', clientProjectManagerEmail: '' }));
+                                                setForm(prev => ({ ...prev, pmName: '', pmCompany: '', pmNip: '', clientProjectManagerPhone: '', clientProjectManagerEmail: '' }));
                                             } else {
                                                 setForm(prev => ({ ...prev, pmName: e.target.value }));
                                             }
@@ -696,6 +742,26 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                                         <div>
                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Firma</label>
                                             <input type="text" value={form.pmCompany} onChange={set('pmCompany')} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">NIP</label>
+                                            <input
+                                                type="text"
+                                                value={form.pmNip || ''}
+                                                onChange={set('pmNip')}
+                                                onBlur={async (e) => {
+                                                    await pobierzFirmePoNip('pm', e.target.value, (firma) => setForm(prev => ({
+                                                        ...prev,
+                                                        pmNip: firma?.nip || prev.pmNip,
+                                                        pmCompany: prev.pmCompany || firma?.name || '',
+                                                    })));
+                                                    handleSave();
+                                                }}
+                                                placeholder="10 cyfr"
+                                                title="Po wpisaniu NIP-u dane firmy pobiorą się z Białej listy VAT i zapiszą w rejestrze firm"
+                                                className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30"
+                                            />
+                                            {statusNip('pm')}
                                         </div>
                                         <div>
                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Telefon</label>
@@ -756,7 +822,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                                                             <Trash2 size={12} />
                                                         </button>
                                                     </div>
-                                                    <div className="grid grid-cols-4 gap-3">
+                                                    <div className="grid grid-cols-5 gap-3">
                                                         <div className="relative">
                                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię i Nazwisko</label>
                                                             <input
@@ -791,6 +857,27 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                                                         <div>
                                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Firma</label>
                                                             <input type="text" value={contact.company || ''} onChange={e => updateContact(contact.id, 'company', e.target.value)} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">NIP</label>
+                                                            <input
+                                                                type="text"
+                                                                value={contact.nip || ''}
+                                                                onChange={e => updateContact(contact.id, 'nip', e.target.value)}
+                                                                onBlur={async (e) => {
+                                                                    await pobierzFirmePoNip(contact.id, e.target.value, (firma) => setForm(prev => ({
+                                                                        ...prev,
+                                                                        clientContacts: prev.clientContacts.map(c => c.id === contact.id
+                                                                            ? { ...c, nip: firma?.nip || c.nip, company: c.company || firma?.name || '' }
+                                                                            : c),
+                                                                    })));
+                                                                    handleSave();
+                                                                }}
+                                                                placeholder="10 cyfr"
+                                                                title="Po wpisaniu NIP-u dane firmy pobiorą się z Białej listy VAT i zapiszą w rejestrze firm"
+                                                                className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30"
+                                                            />
+                                                            {statusNip(contact.id)}
                                                         </div>
                                                         <div>
                                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Telefon</label>

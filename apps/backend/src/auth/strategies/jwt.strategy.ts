@@ -26,6 +26,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // Map roles to ensure they are up to date
     const roles = (user as any).userRoles?.map(ur => ur.role.name) || [];
 
-    return { userId: user.id, email: user.email, company: user.company ?? null, roles: roles, teamIds: (user as any).teams?.map(t => t.id) || [] };
+    // firstName/lastName/phone jadą razem z tokenem, bo podpis pod mailem („Z wyrazami
+    // szacunku, Imię Nazwisko, telefon") składa się na froncie z `GET /users/profile`.
+    // Rekord użytkownika i tak jest tu wczytany — osobny strzał po profil byłby zbędny.
+    return {
+      userId: user.id,
+      email: user.email,
+      firstName: user.firstName ?? null,
+      lastName: user.lastName ?? null,
+      phone: user.phone ?? null,
+      company: user.company ?? null,
+      roles: roles,
+      teamIds: (user as any).teams?.map(t => t.id) || [],
+    };
   }
 }

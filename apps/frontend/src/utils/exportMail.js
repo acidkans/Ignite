@@ -70,6 +70,27 @@ export async function resolveArtifact(artifact) {
   return { blob, filename: filename || 'plik' };
 }
 
+// @anchor upload-to-onedrive
+// Wrzuca gotowy plik do folderu OneDrive powiązanego z zamówieniem:
+// `<folder zamówienia>/pliki_finansowe/<subfolder>` (albo `dokumentacja_projektowa`).
+// Jedna implementacja dla modala eksportu i dla przycisku „Generuj" w protokole odbioru —
+// przy dwóch kopiach jedna zawsze zostaje bez poprawki.
+export async function uploadToOneDrive({ blob, filename, nodeId, category = 'finanse', subfolder = '' }) {
+  const form = new FormData();
+  form.append('file', blob, filename);
+  form.append('nodeId', nodeId || '');
+  form.append('category', category);
+  if (subfolder) form.append('subfolder', subfolder);
+
+  const res = await fetch(`${API_URL}/onedrive/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token()}` },
+    body: form,
+  });
+  if (!res.ok) throw new Error(`Błąd uploadu na OneDrive (${res.status})`);
+  return res.json();
+}
+
 // @anchor fetch-recipients
 // Podpowiedzi adresów: zespół + kontakty zamówienia (owner, uprawnieni, klient, lokalizacja, firma).
 export async function fetchRecipients(nodeId) {

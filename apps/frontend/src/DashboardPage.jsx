@@ -1063,6 +1063,7 @@ export default function DashboardPage() {
                                     userRoles={currentRoles}
                                     orderName={activeNode?.name || ''}
                                     accepted={baselineAccepted}
+                                    oneDriveFolderName={activeNode?.oneDriveFolderName || null}
                                 />
                             </div>
                         )}

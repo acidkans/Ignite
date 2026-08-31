@@ -71,6 +71,7 @@ model User {
   approvedHolidayDaysOff HolidayDayOff[] @relation("HolidayDayOffApprover")
   /// @anchor user-leaf-actuals
   leafActuals            LeafActual[]    @relation("LeafActualAuthor")
+  acceptanceProtocols    AcceptanceProtocolRecord[] @relation("AcceptanceProtocolAuthor")
 
   @@map("users")
 }
@@ -258,6 +259,8 @@ model ProcessNode {
   quickQuotes               QuickQuote[]
   /// @anchor process-node-leaf-actuals
   leafActuals               LeafActual[]
+  /// @anchor process-node-acceptance-protocols
+  acceptanceProtocols       AcceptanceProtocolRecord[]
 
   @@map("process_nodes")
 }
@@ -318,6 +321,11 @@ model OrderRequirements {
   clientContacts            String?
   clientProjectManager        String?
   clientProjectManagerCompany String?
+  /// @anchor order-requirements-pm-nip
+  /// NIP firmy PM-a zamowienia. Dane firmy (nazwa, adres, status VAT) sciaga Biala lista VAT
+  /// i zapisuje je rejestr `Supplier` (dedup po NIP) — tutaj zostaje sam klucz, zeby jedna
+  /// firma nie mial dwoch rozjezdzajacych sie opisow. Protokol odbioru bierze stad "Wykonawce".
+  clientProjectManagerNip     String?
   clientProjectManagerEmail   String?
   clientProjectManagerPhone   String?
   offerStatus               String?
@@ -1291,6 +1299,81 @@ model LeafActual {
   @@index([nodeId])
   @@index([wbsRootId])
   @@map("leaf_actuals")
+}
+
+/// @anchor acceptance-protocol-record
+/// Nagłówek wystawionego protokołu odbioru robót. Sam PLIK tu nie leży — archiwum
+/// dokumentów to OneDrive (`pliki_finansowe/<gałąź>`). W bazie zostaje wyłącznie to, co
+/// musi przeżyć do NASTĘPNEGO protokołu: która pozycja i za ile została już odebrana.
+///
+/// Zapis powstaje dopiero gdy dokument OPUŚCI aplikację (pobranie, mail albo OneDrive) —
+/// samo otwarcie modala i podgląd niczego nie odbierają.
+///
+/// Kluczowany po `nodeId`, ŚWIADOMIE bez `versionId` — tak samo jak `LeafActual`. Odbiór
+/// zdarzył się w świecie rzeczywistym i nie należy do żadnej wersji wyceny, więc NIE wchodzi
+/// do `cloneVersionData` w `versioning.service.ts`.
+model AcceptanceProtocolRecord {
+  /// @anchor acceptance-protocol-record-id
+  id        String   @id @default(uuid())
+  /// @anchor acceptance-protocol-record-node-id
+  nodeId    String // ProcessNode — zamówienie
+  /// @anchor acceptance-protocol-record-numer
+  /// Numer z formularza. Razem z `nodeId` tworzy klucz unikalny: powtórny eksport tego
+  /// samego protokołu (pobranie, a chwilę potem mail) NADPISUJE wpis zamiast dokładać
+  /// drugi i podwajać odebrane kwoty.
+  numer     String
+  /// @anchor acceptance-protocol-record-data
+  data      String // DD.MM.RRRR — zapis z formularza, nie znacznik czasu
+  /// @anchor acceptance-protocol-record-odbior
+  odbior    String // CALOSCIOWY | CZESCIOWY | NIE_DOTYCZY
+  /// @anchor acceptance-protocol-record-author-id
+  authorId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// @anchor acceptance-protocol-record-node
+  node   ProcessNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  /// @anchor acceptance-protocol-record-author
+  author User?       @relation("AcceptanceProtocolAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  /// @anchor acceptance-protocol-record-items
+  items  AcceptanceProtocolItem[]
+
+  @@unique([nodeId, numer])
+  @@index([nodeId])
+  @@map("acceptance_protocols")
+}
+
+/// @anchor acceptance-protocol-item
+/// Jedna pozycja protokołu: ile z danego liścia odebrano TYM dokumentem. Suma pozycji po
+/// wszystkich protokołach zamówienia daje „ile już odebrane", a różnica wobec planu z wyceny
+/// — ile zostaje do odbioru w kolejnym protokole.
+model AcceptanceProtocolItem {
+  /// @anchor acceptance-protocol-item-id
+  id         String @id @default(uuid())
+  /// @anchor acceptance-protocol-item-protocol-id
+  protocolId String
+  /// @anchor acceptance-protocol-item-wbs-root-id
+  /// `WbsNode.sourceWbsNodeId ?? WbsNode.id` — ten sam klucz co w `LeafActual`, dzięki czemu
+  /// odbiór przeżywa utworzenie nowej wersji wyceny. Bez FK z tego samego powodu: liść bywa
+  /// usuwany i odtwarzany w kolejnej wersji, a odbiór ma zostać.
+  wbsRootId  String
+  /// @anchor acceptance-protocol-item-nazwa
+  /// Nazwa liścia W CHWILI ODBIORU. Protokół jest dokumentem, nie widokiem — późniejsza
+  /// zmiana nazwy pozycji w WBS nie może zmienić treści podpisanego papieru.
+  nazwa      String
+  /// @anchor acceptance-protocol-item-wartosc
+  wartosc    Float
+  /// @anchor acceptance-protocol-item-pelny
+  /// Czy tym protokołem pozycja została DOMKNIĘTA. Liczone z kwoty (odebrano całą resztę),
+  /// ale trzymane osobno: późniejsza zmiana wyceny nie ma prawa otworzyć zamkniętego odbioru.
+  pelny      Boolean @default(false)
+
+  /// @anchor acceptance-protocol-item-protocol
+  protocol AcceptanceProtocolRecord @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+
+  @@index([protocolId])
+  @@index([wbsRootId])
+  @@map("acceptance_protocol_items")
 }
 
 /// @anchor wbs-node-material

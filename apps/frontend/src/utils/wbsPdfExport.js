@@ -52,10 +52,19 @@ export const PDF_BASE_CSS = `
   tr { page-break-inside: avoid; break-inside: avoid; }
   .outer-wrap { border-collapse: collapse; width: 100%; }
   .outer-wrap > thead > tr > td,
-  .outer-wrap > tbody > tr > td { border: none; padding: 0; background: none; }
+  .outer-wrap > tbody > tr > td,
+  .outer-wrap > tfoot > tr > td { border: none; background: none; }
   .outer-wrap > tbody > tr { page-break-inside: auto; break-inside: auto; }
   .budget-table { table-layout: fixed; word-wrap: break-word; }
-  @page { margin: 14mm; size: A4 portrait; }
+  /* Chrome drukuje własny nagłówek i stopkę (data, tytuł, adres strony — przy eksporcie
+     z blobu wychodzi z tego „blob:http://localhost:5174/…" — oraz numer strony) W MARGINESIE
+     strony. Zerowy margines @page nie zostawia na nie miejsca i przeglądarka je pomija.
+     Marginesy dokumentu odtwarzamy paddingiem wewnątrz outer-wrap: nagłówek tabeli powtarza
+     się na każdej stronie, więc górny odstęp też, a pusta stopka-rozpórka daje dolny. */
+  @page { margin: 0; size: A4 portrait; }
+  .outer-wrap > thead > tr > td { padding: 14mm 14mm 0 14mm; }
+  .outer-wrap > tbody > tr > td { padding: 0 14mm; }
+  .outer-wrap > tfoot > tr > td { padding: 0; height: 12mm; }
   @media print {
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .summary-grid { display: block; }
@@ -109,6 +118,9 @@ ${extraCss}
   <tbody>
     <tr><td>${bodyHtml}</td></tr>
   </tbody>
+  <tfoot>
+    <tr><td></td></tr>
+  </tfoot>
 </table>
 </body>
 </html>`;

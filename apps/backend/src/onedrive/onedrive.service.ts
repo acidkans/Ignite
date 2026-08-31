@@ -93,10 +93,41 @@ export class OneDriveService {
     });
   }
 
+  // @anchor onedrive-shared-token
+  // Pliki zamówień żyją na JEDNYM dysku firmowym, więc wszystkie operacje plikowe idą przez
+  // JEDNO konto Microsoft — konto usługowe wskazane w `MS_SHARED_ACCOUNT_EMAIL` (adres
+  // użytkownika ERP, który podpiął OneDrive). Wcześniej każdy użytkownik zapisywał na SWOIM
+  // koncie: kto nie miał podpiętego MS, dostawał „Brak połączonego konta", a folder zamówienia
+  // i tak wskazywał na dysk kogoś innego.
+  //
+  // Bez zmiennej środowiskowej bierzemy najstarszy podpięty token — na jednokontowej instalacji
+  // to dokładnie to samo konto, więc brak konfiguracji niczego nie psuje.
+  //
+  // UWAGA: `getValidToken(userId)` zostaje osobno dla MS To Do — tam synchronizują się PRYWATNE
+  // zadania użytkownika i wspólne konto byłoby błędem.
+  async getSharedToken(): Promise<string> {
+    const email = this.config.get<string>('MS_SHARED_ACCOUNT_EMAIL') || '';
+    const record = (email
+      ? await this.prisma.userMsToken.findFirst({ where: { user: { email } } })
+      : null)
+      || await this.prisma.userMsToken.findFirst({ orderBy: { createdAt: 'asc' } });
+    if (!record) throw new UnauthorizedException('Konto Microsoft aplikacji nie jest podpięte — połącz OneDrive na koncie usługowym');
+    return this.tokenFromRecord(record);
+  }
+
   // @anchor onedrive-get-valid-token
   async getValidToken(userId: string): Promise<string> {
     const record = await this.prisma.userMsToken.findUnique({ where: { userId } });
     if (!record) throw new UnauthorizedException('Brak połączonego konta Microsoft');
+    return this.tokenFromRecord(record);
+  }
+
+  // @anchor onedrive-token-from-record
+  // Ważny access token z wpisu w bazie: świeży zwracamy wprost, wygasły odświeżamy refresh
+  // tokenem i zapisujemy z powrotem pod TYM SAMYM `userId`, z którego wpis pochodzi.
+  private async tokenFromRecord(
+    record: { userId: string; accessToken: string; refreshToken: string; expiresAt: Date },
+  ): Promise<string> {
 
     if (record.expiresAt > new Date()) {
       return this.decrypt(record.accessToken);
@@ -120,7 +151,7 @@ export class OneDriveService {
     const expiresAt = new Date(Date.now() + expires_in * 1000);
 
     await this.prisma.userMsToken.update({
-      where: { userId },
+      where: { userId: record.userId },
       data: {
         accessToken: this.encrypt(access_token),
         refreshToken: this.encrypt(refresh_token || refreshToken),
@@ -132,10 +163,25 @@ export class OneDriveService {
   }
 
   // @anchor onedrive-get-status
-  async getStatus(userId: string): Promise<{ connected: boolean; msAccountEmail?: string; msDisplayName?: string }> {
-    const record = await this.prisma.userMsToken.findUnique({ where: { userId } });
-    if (!record) return { connected: false };
-    return { connected: true, msAccountEmail: record.msAccountEmail, msDisplayName: record.msDisplayName };
+  // `connected` mówi o koncie, którym aplikacja NAPRAWDĘ zapisuje pliki — czyli o koncie
+  // wspólnym. Gdyby pytać o token zalogowanego, każdy poza właścicielem konta usługowego
+  // widziałby „niepołączone" i klikał autoryzację, mimo że zapis i tak idzie wspólnym kontem.
+  // `own` zostaje osobno dla MS To Do, które synchronizuje prywatne zadania użytkownika.
+  async getStatus(userId: string): Promise<{ connected: boolean; msAccountEmail?: string; msDisplayName?: string; shared: boolean; own: boolean }> {
+    const wlasny = await this.prisma.userMsToken.findUnique({ where: { userId } });
+    const email = this.config.get<string>('MS_SHARED_ACCOUNT_EMAIL') || '';
+    const wspolny = (email
+      ? await this.prisma.userMsToken.findFirst({ where: { user: { email } } })
+      : null)
+      || await this.prisma.userMsToken.findFirst({ orderBy: { createdAt: 'asc' } });
+    if (!wspolny) return { connected: false, shared: false, own: !!wlasny };
+    return {
+      connected: true,
+      msAccountEmail: wspolny.msAccountEmail ?? undefined,
+      msDisplayName: wspolny.msDisplayName ?? undefined,
+      shared: wspolny.userId !== userId,
+      own: !!wlasny,
+    };
   }
 
   // @anchor onedrive-disconnect
@@ -151,7 +197,7 @@ export class OneDriveService {
     driveId: string,
     folderName: string,
   ): Promise<void> {
-    const token = await this.getValidToken(userId);
+    const token = await this.getSharedToken();
 
     const [finanseId, dokumentacjaId] = await Promise.all([
       this.createFolder(token, driveId, folderId, 'pliki_finansowe'),
@@ -165,6 +211,9 @@ export class OneDriveService {
   }
 
   // @anchor onedrive-upload-file
+  // `subfolder` — opcjonalny podkatalog W ŚRODKU folderu kategorii, zakładany przy pierwszym
+  // zapisie i potem odnajdywany po nazwie (patrz `ensureSubfolder`). Używa go eksport protokołu
+  // odbioru, który ląduje w `pliki_finansowe/<nazwa gałęzi WBS>`.
   async uploadFile(
     userId: string,
     nodeId: string,
@@ -172,13 +221,17 @@ export class OneDriveService {
     filename: string,
     buffer: Buffer,
     mimeType = 'application/octet-stream',
+    subfolder?: string,
   ): Promise<{ webUrl: string; itemId: string }> {
     const node = await this.prisma.processNode.findUnique({ where: { id: nodeId } });
     if (!node?.oneDriveFolderId) throw new NotFoundException('Folder OneDrive nie jest powiązany z tą gałęzią');
 
-    const token = await this.getValidToken(userId);
+    const token = await this.getSharedToken();
     const driveId = node.oneDriveDriveId;
-    const folderId = category === 'finanse' ? node.oneDriveFinanseId : node.oneDriveDocumentacjaId;
+    const categoryFolderId = await this.ensureCategoryFolder(token, node, category);
+    const folderId = subfolder
+      ? await this.ensureSubfolder(token, driveId, categoryFolderId, subfolder)
+      : categoryFolderId;
 
     const uploadUrl = driveId
       ? `${GRAPH_BASE}/drives/${driveId}/items/${folderId}:/${encodeURIComponent(filename)}:/content?@microsoft.graph.conflictBehavior=rename`
@@ -196,9 +249,9 @@ export class OneDriveService {
     const node = await this.prisma.processNode.findUnique({ where: { id: nodeId } });
     if (!node?.oneDriveFolderId) return [];
 
-    const token = await this.getValidToken(userId);
+    const token = await this.getSharedToken();
     const driveId = node.oneDriveDriveId;
-    const folderId = category === 'finanse' ? node.oneDriveFinanseId : node.oneDriveDocumentacjaId;
+    const folderId = await this.ensureCategoryFolder(token, node, category).catch(() => null);
     if (!folderId) return [];
 
     const url = driveId
@@ -225,7 +278,7 @@ export class OneDriveService {
     const node = await this.prisma.processNode.findUnique({ where: { id: nodeId } });
     if (!node?.oneDriveFolderId) throw new NotFoundException('Folder OneDrive nie jest powiązany z tą gałęzią');
 
-    const token = await this.getValidToken(userId);
+    const token = await this.getSharedToken();
     const driveId = node.oneDriveDriveId;
     const metaUrl = driveId
       ? `${GRAPH_BASE}/drives/${driveId}/items/${itemId}`
@@ -244,7 +297,7 @@ export class OneDriveService {
   // @anchor onedrive-browse-folders
   // Listuje podfoldery OneDrive (for Business) przez Graph — zastępuje konsumencki picker js.live.net.
   async browseFolders(userId: string, parentId?: string): Promise<{ id: string; name: string; driveId: string; childCount: number }[]> {
-    const token = await this.getValidToken(userId);
+    const token = await this.getSharedToken();
     const url = parentId
       ? `${GRAPH_BASE}/me/drive/items/${parentId}/children`
       : `${GRAPH_BASE}/me/drive/root/children`;
@@ -276,6 +329,90 @@ export class OneDriveService {
       { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } },
     );
     return response.data.id;
+  }
+
+  // @anchor onedrive-ensure-subfolder
+  // Podkatalog „załóż albo znajdź". `createFolder` NIE nadaje się do powtarzalnego wywołania —
+  // ma `conflictBehavior: 'rename'`, więc drugi protokół z tej samej gałęzi trafiłby do
+  // „Uszczelnienie przejść 1", trzeci do „… 2". Tutaj najpierw szukamy po nazwie, a zakładamy
+  // dopiero gdy nie ma; przy wyścigu dwóch zapisów `fail` zwraca 409 i wtedy szukamy ponownie.
+  // @anchor onedrive-ensure-category-folder
+  // Zwraca AKTUALNE id folderu kategorii (`pliki_finansowe` / `dokumentacja_projektowa`).
+  // Id zapisane przy wiązaniu zamówienia bywa martwe: folder skasowany albo odtworzony ręcznie
+  // na OneDrive dostaje nowe id, a Graph odpowiada wtedy 404 i eksport wywalał się komunikatem
+  // „nie udało się zapisać", mimo że folder projektu istniał. Dlatego id jest WERYFIKOWANE,
+  // a przy braku trafienia katalog zakładany na nowo po nazwie i zapisywany do bazy.
+  private async ensureCategoryFolder(
+    token: string,
+    node: { id: string; oneDriveDriveId: string | null; oneDriveFolderId: string | null; oneDriveFinanseId: string | null; oneDriveDocumentacjaId: string | null },
+    category: 'finanse' | 'dokumentacja',
+  ): Promise<string> {
+    const driveId = node.oneDriveDriveId;
+    const zapisane = category === 'finanse' ? node.oneDriveFinanseId : node.oneDriveDocumentacjaId;
+    const nazwa = category === 'finanse' ? 'pliki_finansowe' : 'dokumentacja_projektowa';
+
+    if (zapisane) {
+      const url = driveId
+        ? `${GRAPH_BASE}/drives/${driveId}/items/${zapisane}`
+        : `${GRAPH_BASE}/me/drive/items/${zapisane}`;
+      try {
+        await axios.get(url, { headers: { Authorization: `Bearer ${token}` }, params: { $select: 'id' } });
+        return zapisane;
+      } catch {
+        this.logger.warn(`Folder „${nazwa}" zamówienia ${node.id} nie istnieje pod zapisanym id — zakładam ponownie`);
+      }
+    }
+
+    if (!node.oneDriveFolderId) throw new NotFoundException('Folder OneDrive nie jest powiązany z tą gałęzią');
+    const swieze = await this.ensureSubfolder(token, driveId, node.oneDriveFolderId, nazwa);
+    await this.prisma.processNode.update({
+      where: { id: node.id },
+      data: category === 'finanse' ? { oneDriveFinanseId: swieze } : { oneDriveDocumentacjaId: swieze },
+    });
+    return swieze;
+  }
+
+  private async ensureSubfolder(
+    token: string,
+    driveId: string | null,
+    parentId: string,
+    name: string,
+  ): Promise<string> {
+    // OneDrive odrzuca w nazwach " * : < > ? / \ | — nazwa gałęzi WBS bywa zdaniem z ukośnikiem.
+    const safe = String(name).replace(/["*:<>?/\\|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120);
+    if (!safe) return parentId;
+
+    const base = driveId ? `${GRAPH_BASE}/drives/${driveId}/items/${parentId}` : `${GRAPH_BASE}/me/drive/items/${parentId}`;
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const znajdz = async (): Promise<string | null> => {
+      try {
+        const res = await axios.get(`${base}/children?$select=id,name,folder&$top=200`, { headers });
+        const hit = (res.data?.value || []).find((it: any) => it.folder && it.name === safe);
+        return hit?.id ?? null;
+      } catch {
+        return null;
+      }
+    };
+
+    const istniejacy = await znajdz();
+    if (istniejacy) return istniejacy;
+
+    try {
+      const res = await axios.post(
+        `${base}/children`,
+        { name: safe, folder: {}, '@microsoft.graph.conflictBehavior': 'fail' },
+        { headers: { ...headers, 'Content-Type': 'application/json' } },
+      );
+      return res.data.id;
+    } catch (e: any) {
+      if (e?.response?.status === 409) {
+        const powtorka = await znajdz();
+        if (powtorka) return powtorka;
+      }
+      this.logger.warn(`Nie udało się założyć podkatalogu „${safe}" — zapis idzie do folderu kategorii`);
+      return parentId;
+    }
   }
 
   // @anchor onedrive-encrypt
