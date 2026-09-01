@@ -1,3 +1,44 @@
+## 2026-09-01 — Po ujednoliceniu materiałów eksport startuje od nowa (świeże dane)
+
+### architektura / API
+- `ui-funkcja` `startGuardedExcelExport` — jeden punkt startu eksportów Excel przechodzących przez bramki (rozjazd jednostek/typów, braki wyceny); zastępuje logikę wklejoną w trzy `onClick`.
+- `ui-stan` `queuedExport` + efekt ponawiający — „Ujednolić i eksportuj" przerywa bieżący przebieg i uruchamia go ponownie po odświeżeniu `wbsData`. Wcześniej `makeArtifact` przekazany do `ExportChoiceModal` domykał się nad starym stanem, więc mimo poprawki do pliku szły przedpoprawkowe typy i jednostki.
+
+### wytyczne
+- `ui-funkcja` `openExport` — `makeArtifact` zamraża stan z chwili wywołania; po każdej zmianie danych, która ma trafić do pliku, przerwij przebieg i wywołaj eksport ponownie zamiast kontynuować istniejący.
+
+## 2026-09-01 — Rozjazd jednostek/typów wykrywany na wszystkich liściach WBS
+
+### architektura / API
+- `ui-funkcja` `validateMaterialConsistency` — reguła obejmowała tylko liście typu Materiał/Sprzęt, więc ta sama nazwa raz jako `material`, raz jako `work` (przypadek „kabel" na dev) przechodziła bez ostrzeżenia. Teraz sprawdzane są WSZYSTKIE liście (bez gałęzi grupujących i węzłów z dziećmi), a selektor typu w modalu oferuje pełne `LEAF_TYPE_OPTIONS` zamiast pary Materiał/Sprzęt.
+
+### wytyczne
+- konflikt liczony jest per nazwa liścia (case-insensitive) w obrębie zlecenia i wersji — ta sama nazwa z różną jednostką LUB różnym typem; gałęzie i węzły z dziećmi nigdy nie wchodzą do porównania.
+
+## 2026-09-01 — Ujednolicanie jednostek/typów materiałów wprost w modalu eksportu
+
+### architektura / API
+- `ui-funkcja` `handleUnifyMaterialConflicts` — w modalu rozjazdu można wybrać docelową jednostkę (i typ, gdy się różni) i zapisać ją na wszystkich pozycjach konfliktu bez wracania do `WBSHybridTable`. Zapis idzie przez `ui-funkcja` `updateNodeField`, więc ciągnie tę samą synchronizację do kart materiałowych co ręczna edycja; ilości NIE są przeliczane.
+- `ui-modal` `material-conflict-modal` — dropdown „Ujednolić do" per konflikt (jednostki obecne w projekcie + `UNIT_OPTIONS`), oznaczenie „← zmieni się" przy pozycjach do zmiany, przyciski „Ujednolić i eksportuj" / „Eksportuj mimo to" / „Anuluj — poprawię"; domyślny wariant = ten z największej liczby pozycji (remis → większa łączna ilość).
+
+### słownik
+- dodano `handleUnifyMaterialConflicts`, `materialUnifyChoices`, `materialUnifying` — `apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx`
+
+### wytyczne
+- ujednolicenie zmienia wyłącznie etykietę jednostki/typ — nigdy nie przeliczaj przy nim ilości; przeliczenie metrów na sztuki wymaga decyzji człowieka.
+
+## 2026-09-01 — Ostrzeżenie o rozjeździe jednostek/typów materiałów przed eksportem
+
+### architektura / API
+- `ui-funkcja` `validateMaterialConsistency` — wykrywa liście typu Materiał/Sprzęt o tej samej nazwie (case-insensitive), ale różnej jednostce lub różnym typie. To one rozbijają klucz agregacji `typ||nazwa||wymagania||jednostka` w arkuszu `Materiały (agregacja)` na kilka wierszy (przypadek: korytko 250 „metry" osobno od 100 „sztuki").
+- `ui-funkcja` `guardMaterialConsistencyBeforeExport` + `ui-modal` `material-conflict-modal` — ostrzeżenie (nie blokada) przed eksportami „Tabele oferty (Excel)", „Analiza projektu (Excel)" i „Materiały (Excel)": lista konfliktów z ilością, jednostką, typem i ścieżką WBS oraz wybór „Eksportuj mimo to" / „Anuluj — poprawię".
+
+### słownik
+- dodano `validateMaterialConsistency`, `guardMaterialConsistencyBeforeExport`, `askMaterialConflict`, `materialConflictPrompt`, modal `material-conflict-modal` — `apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx`
+
+### wytyczne
+- rozjazd jednostek jest ostrzeżeniem, nie błędem — ta sama nazwa w różnych jednostkach bywa zamierzona; nigdy nie scalaj takich pozycji automatycznie w agregacji, bo sumowałoby to metry ze sztukami.
+
 ## 2026-09-01 — Eksport bez cen: pozycje o cenie 0 zostają w arkuszach oferty
 
 ### architektura / API

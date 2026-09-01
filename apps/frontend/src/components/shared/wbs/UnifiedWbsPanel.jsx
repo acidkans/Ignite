@@ -345,6 +345,25 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const askPricingGap = useCallback((invalid) => new Promise((resolve) => {
         setPricingGapPrompt({ invalid, resolve });
     }), []);
+    // @anchor material-conflict-prompt
+    // Modal ostrzeżenia o rozjeździe jednostek/typów materiałów: { conflicts, resolve }.
+    const [materialConflictPrompt, setMaterialConflictPrompt] = useState(null);
+    // @anchor ask-material-conflict
+    // Pyta, czy eksportować mimo rozjazdu. Zwraca Promise<boolean>.
+    const askMaterialConflict = useCallback((conflicts, kind) => new Promise((resolve) => {
+        setMaterialConflictPrompt({ conflicts, kind, resolve });
+    }), []);
+    // @anchor queued-export
+    // Eksport do ponowienia po ujednoliceniu. Nie da się kontynuować bieżącego
+    // przebiegu: `makeArtifact` przekazany do modalu eksportu domyka się nad STARYM
+    // `wbsData`, więc do pliku poszłyby przedpoprawkowe typy i jednostki. Zamiast tego
+    // przerywamy przebieg i startujemy go ponownie z już odświeżonych danych.
+    const [queuedExport, setQueuedExport] = useState(null);
+    // @anchor material-unify-choices
+    // Wybór docelowej jednostki/typu per konflikt w modalu: { [nazwa]: { unit, type } }.
+    const [materialUnifyChoices, setMaterialUnifyChoices] = useState({});
+    // @anchor material-unifying
+    const [materialUnifying, setMaterialUnifying] = useState(false);
     const safeFileBase = () => String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|\s]+/g, '_') || 'projekt';
     const ganttExportRef = useRef(null);
     const ganttGetHtmlRef = useRef(null);
@@ -1323,6 +1342,140 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         exportNoPricesRef.current = true;
         return true;
     };
+
+    // @anchor validate-material-consistency
+    // Wykrywa pozycje o TEJ SAMEJ nazwie, ale różnej jednostce lub różnym typie.
+    // Klucz agregacji arkusza „Materiały (agregacja)" to
+    // `typ||nazwa||wymagania||jednostka`, więc taki rozjazd rozbija jedną pozycję na
+    // kilka wierszy (np. korytko 250 „metry" osobno od 100 „sztuki") i psuje
+    // zamówienie. Sprawdzamy WSZYSTKIE liście, nie tylko Materiał/Sprzęt — ten sam
+    // „kabel" raz jako Materiał, raz jako Praca to zwykle literówka w typie i też
+    // rozjeżdża ofertę. Gałęzie grupujące pomijamy (ich wartość to suma dzieci).
+    // Zwraca listę konfliktów (pusta = OK).
+    const validateMaterialConsistency = () => {
+        const parentIds = new Set(wbsData.map(n => n.parentId).filter(Boolean));
+        const byName = new Map();
+        for (const n of wbsData) {
+            const type = String(n.type || '').toLowerCase();
+            if (type === 'group' || parentIds.has(n.id)) continue;
+            const name = String(n.name || '').trim();
+            if (!name) continue;
+            const key = name.toLowerCase();
+            if (!byName.has(key)) byName.set(key, { name, entries: [] });
+            byName.get(key).entries.push({
+                id: n.id,
+                type,
+                unit: String(n.unit || 'szt').trim().toLowerCase() || 'szt',
+                quantity: Math.max(0, parseFloat(n.quantity) || 0),
+                path: String(n.path || '').trim(),
+            });
+        }
+        const conflicts = [];
+        for (const group of byName.values()) {
+            const units = new Set(group.entries.map(e => e.unit));
+            const types = new Set(group.entries.map(e => e.type));
+            if (units.size < 2 && types.size < 2) continue;
+            conflicts.push({ name: group.name, mixedUnits: units.size > 1, mixedTypes: types.size > 1, entries: group.entries });
+        }
+        return conflicts;
+    };
+
+    // @anchor guard-material-consistency-before-export
+    // Ostrzeżenie, nie blokada: rozjazd jednostek/typów może być zamierzony, więc
+    // użytkownik decyduje, czy eksportować mimo to. Zwraca false = eksport przerwany.
+    const guardMaterialConsistencyBeforeExport = async (kind) => {
+        const conflicts = validateMaterialConsistency();
+        if (!conflicts.length) return true;
+        // Domyślny cel ujednolicenia = wariant występujący w największej liczbie
+        // pozycji (remis → o większej łącznej ilości). Zwykle „ten drugi" jest
+        // literówką w jednej pozycji, więc domyślnie proponujemy większość.
+        const defaults = {};
+        for (const c of conflicts) {
+            const rank = (field) => {
+                const stat = new Map();
+                for (const e of c.entries) {
+                    const cur = stat.get(e[field]) || { count: 0, qty: 0 };
+                    cur.count += 1; cur.qty += e.quantity;
+                    stat.set(e[field], cur);
+                }
+                return [...stat.entries()].sort((a, b) => (b[1].count - a[1].count) || (b[1].qty - a[1].qty))[0][0];
+            };
+            defaults[c.name] = { unit: rank('unit'), type: rank('type') };
+        }
+        setMaterialUnifyChoices(defaults);
+        return await askMaterialConflict(conflicts, kind);
+    };
+
+    // @anchor handle-unify-material-conflicts
+    // Ujednolica jednostkę/typ wszystkich pozycji konfliktu do wariantu wybranego
+    // w modalu — bez wracania do WBS. Zapis idzie przez `updateNodeField`, więc
+    // ciągnie za sobą tę samą synchronizację do kart materiałowych co ręczna edycja.
+    // ILOŚCI NIE SĄ PRZELICZANE — zmieniamy tylko etykietę jednostki.
+    const handleUnifyMaterialConflicts = async () => {
+        const prompt = materialConflictPrompt;
+        if (!prompt) return;
+        setMaterialUnifying(true);
+        try {
+            for (const c of prompt.conflicts) {
+                const choice = materialUnifyChoices[c.name] || {};
+                for (const e of c.entries) {
+                    if (choice.unit && e.unit !== choice.unit) await updateNodeField(e.id, 'unit', choice.unit);
+                    if (choice.type && e.type !== choice.type) await updateNodeField(e.id, 'type', choice.type);
+                }
+            }
+            await refreshWbsNodes();
+            setReqRefreshKey(k => k + 1);
+        } catch (err) {
+            console.error('[ujednolicenie materiałów]', err);
+        } finally {
+            setMaterialUnifying(false);
+        }
+        // resolve(false) = przerwij bieżący przebieg (jego buildery mają stare dane);
+        // `queuedExport` odpala eksport od nowa już po odświeżeniu wbsData.
+        prompt.resolve(false);
+        setMaterialConflictPrompt(null);
+        if (prompt.kind) setQueuedExport(prompt.kind);
+    };
+
+    // @anchor start-guarded-excel-export
+    // Wspólny start eksportów Excel przechodzących przez bramki (rozjazd jednostek,
+    // braki wyceny). Trzyma je w JEDNYM miejscu, bo po ujednoliceniu materiałów cały
+    // przebieg jest odpalany od nowa — z handlerami z bieżącego renderu, czyli ze
+    // świeżym `wbsData`.
+    const startGuardedExcelExport = async (kind) => {
+        if (!(await guardMaterialConsistencyBeforeExport(kind))) return;
+        if (kind === 'materials') {
+            exportNoPricesRef.current = false;
+            openExport({ title: 'Materiały (Excel)', defaultFilename: `${safeFileBase()}_materialy.xlsx`, makeArtifact: () => materialsExportFn.current?.() });
+            return;
+        }
+        if (!(await guardPricingBeforeExport())) return;
+        if (kind === 'oferta') {
+            const fn = `Airtel_oferta_${safeFileBase()}.xlsx`;
+            openExport({
+                title: exportNoPricesRef.current ? 'Tabele oferty (Excel) — BEZ CEN' : 'Tabele oferty (Excel)',
+                defaultFilename: exportNoPricesRef.current ? noPricesFilename(fn) : fn,
+                makeArtifact: handleExportOfertaWbsExcel,
+            });
+            return;
+        }
+        const fn = `${safeFileBase()}_budzet.xlsx`;
+        openExport({
+            title: exportNoPricesRef.current ? 'Analiza projektu (Excel) — BEZ CEN' : 'Analiza projektu (Excel)',
+            defaultFilename: exportNoPricesRef.current ? noPricesFilename(fn) : fn,
+            makeArtifact: handleExportBudgetExcel,
+        });
+    };
+
+    // Ponowienie eksportu po ujednoliceniu — efekt odpala się w renderze, który ma już
+    // odświeżone `wbsData`, więc buildery arkuszy widzą nowe typy i jednostki.
+    useEffect(() => {
+        if (!queuedExport) return;
+        const kind = queuedExport;
+        setQueuedExport(null);
+        startGuardedExcelExport(kind);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [queuedExport]);
 
     // @anchor handle-export-pdf
     const handleExportPDF = async (sectionKey = 'all') => {
@@ -6061,7 +6214,7 @@ ${ganttSectionHtml}
                             />
                         </div>
                     ), () => handleExportPDF('oferta'), (
-                        <button onClick={async (e) => { e.stopPropagation(); if (!(await guardPricingBeforeExport())) return; const fn = `Airtel_oferta_${safeFileBase()}.xlsx`; openExport({ title: exportNoPricesRef.current ? 'Tabele oferty (Excel) — BEZ CEN' : 'Tabele oferty (Excel)', defaultFilename: exportNoPricesRef.current ? noPricesFilename(fn) : fn, makeArtifact: handleExportOfertaWbsExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                        <button onClick={(e) => { e.stopPropagation(); startGuardedExcelExport('oferta'); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                             <FileDown size={11} /> Eksport tabel oferty
                         </button>
                     ));
@@ -6214,7 +6367,7 @@ ${ganttSectionHtml}
                         </>
                     ), null, (
                         <div className="flex items-center gap-2">
-                            <button onClick={async (e) => { e.stopPropagation(); if (!(await guardPricingBeforeExport())) return; const fn = `${safeFileBase()}_budzet.xlsx`; openExport({ title: exportNoPricesRef.current ? 'Analiza projektu (Excel) — BEZ CEN' : 'Analiza projektu (Excel)', defaultFilename: exportNoPricesRef.current ? noPricesFilename(fn) : fn, makeArtifact: handleExportBudgetExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                            <button onClick={(e) => { e.stopPropagation(); startGuardedExcelExport('budget'); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                                 <FileDown size={11} /> Analiza projektu do Excel
                             </button>
                             <button onClick={(e) => { e.stopPropagation(); budgetImportFileInputRef.current?.click(); }} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all">
@@ -6256,7 +6409,7 @@ ${ganttSectionHtml}
                         />
                     ), null, (
                         <>
-                            <button onClick={e => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'Materiały (Excel)', defaultFilename: `${safeFileBase()}_materialy.xlsx`, makeArtifact: () => materialsExportFn.current?.() }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
+                            <button onClick={(e) => { e.stopPropagation(); startGuardedExcelExport('materials'); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
                                 <FileDown size={11} /> Excel
                             </button>
                             {/* @anchor materials-comparison-chip — „Δ +x% · pokrycie n/m", klik → panel porównawczy (F5) */}
@@ -6309,6 +6462,90 @@ ${ganttSectionHtml}
 
             {allTasksOpen && (
                 <AllTasksModal nodeId={nodeId} versionId={versionId} onChanged={onWbsUpdate} onClose={() => setAllTasksOpen(false)} />
+            )}
+
+            {/* @anchor material-conflict-modal — ta sama nazwa materiału z różną jednostką lub typem */}
+            {materialConflictPrompt && (
+                <div className="fixed inset-0 z-[140] bg-[#05070bcc] backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-amber-500/30 bg-[#0b0f17] shadow-2xl">
+                        <div className="px-5 py-3 border-b border-white/10 flex-shrink-0">
+                            <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-amber-300">Rozjazd jednostek / typów materiałów</h3>
+                            <p className="text-[11px] text-gray-400 mt-1">
+                                {materialConflictPrompt.conflicts.length} {materialConflictPrompt.conflicts.length === 1 ? 'materiał ma' : 'materiały mają'} tę samą nazwę,
+                                ale różną jednostkę lub typ. Arkusz <strong className="text-white">Materiały (agregacja)</strong> nie zsumuje ich w jedną
+                                pozycję — do zamówienia pójdzie kilka osobnych wierszy, a różny typ dodatkowo rozjeżdża podział oferty.
+                                Możesz ujednolicić je tutaj, bez wracania do struktury WBS;
+                                <strong className="text-white"> ilości nie są przeliczane</strong> — zmienia się sama jednostka.
+                            </p>
+                        </div>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-3 flex flex-col gap-3">
+                            {materialConflictPrompt.conflicts.map((c, idx) => (
+                                <div key={idx} className="rounded-lg border border-white/10 bg-black/20 p-3">
+                                    <div className="text-xs font-semibold text-white">{c.name}</div>
+                                    <div className="text-[10px] text-amber-300/80 uppercase tracking-widest mt-0.5">
+                                        {[c.mixedUnits ? 'różne jednostki' : null, c.mixedTypes ? 'różne typy' : null].filter(Boolean).join(' · ')}
+                                    </div>
+                                    <div className="mt-2 flex flex-col gap-1">
+                                        {c.entries.map((e, i) => {
+                                            const choice = materialUnifyChoices[c.name] || {};
+                                            const willChange = (choice.unit && e.unit !== choice.unit) || (choice.type && e.type !== choice.type);
+                                            return (
+                                                <div key={i} className={`text-[11px] flex items-start gap-2 ${willChange ? 'text-amber-200/90' : 'text-gray-300'}`}>
+                                                    <span className="font-mono text-amber-200 whitespace-nowrap">{fmtQty(e.quantity) || '0'} {e.unit}</span>
+                                                    <span className="text-gray-500">·</span>
+                                                    <span className="text-gray-400">{TYPE_LABELS[e.type] || e.type}</span>
+                                                    <span className="text-gray-500">·</span>
+                                                    <span className="text-gray-500 break-all">{e.path || '—'}</span>
+                                                    {willChange && <span className="text-[10px] text-amber-400 whitespace-nowrap">← zmieni się</span>}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    {/* Ujednolicenie bez wracania do WBS: wybór docelowej jednostki/typu. */}
+                                    <div className="mt-3 pt-2 border-t border-white/10 flex flex-wrap items-center gap-2">
+                                        <span className="text-[10px] text-gray-500 uppercase tracking-widest">Ujednolić do</span>
+                                        <select
+                                            value={(materialUnifyChoices[c.name] || {}).unit || ''}
+                                            onChange={ev => setMaterialUnifyChoices(prev => ({ ...prev, [c.name]: { ...(prev[c.name] || {}), unit: ev.target.value } }))}
+                                            className="px-2 py-1 rounded-md bg-black/40 border border-white/10 text-[11px] text-white"
+                                        >
+                                            {Array.from(new Set([...c.entries.map(e => e.unit), ...UNIT_OPTIONS.filter(Boolean)])).map(u => (
+                                                <option key={u} value={u}>{u}</option>
+                                            ))}
+                                        </select>
+                                        {c.mixedTypes && (
+                                            <select
+                                                value={(materialUnifyChoices[c.name] || {}).type || ''}
+                                                onChange={ev => setMaterialUnifyChoices(prev => ({ ...prev, [c.name]: { ...(prev[c.name] || {}), type: ev.target.value } }))}
+                                                className="px-2 py-1 rounded-md bg-black/40 border border-white/10 text-[11px] text-white"
+                                            >
+                                                {Array.from(new Set([...c.entries.map(e => e.type), ...LEAF_TYPE_OPTIONS])).map(t => (
+                                                    <option key={t} value={t}>{TYPE_LABELS[t] || t}</option>
+                                                ))}
+                                            </select>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="px-5 py-3 border-t border-white/10 flex items-center justify-end gap-2 flex-shrink-0">
+                            <button
+                                onClick={() => { materialConflictPrompt.resolve(false); setMaterialConflictPrompt(null); }}
+                                className="px-3 py-1.5 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 text-[10px] font-bold uppercase tracking-widest transition-all"
+                            >Anuluj — poprawię</button>
+                            <button
+                                disabled={materialUnifying}
+                                onClick={() => { materialConflictPrompt.resolve(true); setMaterialConflictPrompt(null); }}
+                                className="px-3 py-1.5 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 text-[10px] font-bold uppercase tracking-widest transition-all disabled:opacity-40"
+                            >Eksportuj mimo to</button>
+                            <button
+                                disabled={materialUnifying}
+                                onClick={handleUnifyMaterialConflicts}
+                                className="px-3 py-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 text-[10px] font-bold uppercase tracking-widest transition-all disabled:opacity-40"
+                            >{materialUnifying ? 'Ujednolicam…' : 'Ujednolić i eksportuj'}</button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* @anchor pricing-gap-modal — braki w wycenie: eksport bez wartości albo anulowanie */}

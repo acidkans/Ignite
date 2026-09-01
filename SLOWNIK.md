@@ -449,6 +449,16 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | exportNoPricesRef | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor export-no-prices |
 | ui-stan | pricingGapPrompt | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor pricing-gap-prompt |
 | ui-modal | modal braków w wycenie (eksport bez cen) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor pricing-gap-modal |
+| ui-funkcja | validateMaterialConsistency | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor validate-material-consistency |
+| ui-funkcja | guardMaterialConsistencyBeforeExport | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor guard-material-consistency-before-export |
+| ui-funkcja | askMaterialConflict | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor ask-material-conflict |
+| ui-stan | materialConflictPrompt | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor material-conflict-prompt |
+| ui-modal | modal rozjazdu jednostek/typów materiałów | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor material-conflict-modal |
+| ui-stan | materialUnifyChoices | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor material-unify-choices |
+| ui-stan | materialUnifying | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor material-unifying |
+| ui-funkcja | handleUnifyMaterialConflicts | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-unify-material-conflicts |
+| ui-funkcja | startGuardedExcelExport | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor start-guarded-excel-export |
+| ui-stan | queuedExport | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor queued-export |
 | ui-stala | MONEY_HEADER_RE | apps/frontend/src/utils/exportWithoutPrices.js | @anchor money-header-re |
 | ui-stala | NO_PRICES_NOTE | apps/frontend/src/utils/exportWithoutPrices.js | @anchor no-prices-note |
 | ui-funkcja | noPricesFilename | apps/frontend/src/utils/exportWithoutPrices.js | @anchor no-prices-filename |
