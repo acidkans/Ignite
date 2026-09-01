@@ -151,7 +151,11 @@ export async function fetchLogoDataUrl() {
  * @param {1|2|3} depth
  * @returns {string} HTML tabeli
  */
-export function buildWbsHtmlTable(wbsData, depth) {
+export function buildWbsHtmlTable(wbsData, depth, opts = {}) {
+    // includeZeroPriced — tryb „eksport bez cen": pozycje z ceną 0 (brak kosztu lub
+    // narzutu) MUSZĄ zostać w tabeli, bo to właśnie one są przedmiotem oferty; przy
+    // normalnym eksporcie cena 0 oznacza pozycję niewycenioną i jest pomijana.
+    const includeZeroPriced = !!opts.includeZeroPriced;
     const localById = new Map(wbsData.map(n => [n.id, n]));
     // Cena ofertowa pozycji — formuła IDENTYCZNA z handleExportOfertaWbsExcel /
     // appendBudgetSheet: brak narzutu ⇒ cena ofertowa 0 (nie koszt); gałęzie
@@ -186,7 +190,7 @@ export function buildWbsHtmlTable(wbsData, depth) {
         for (const item of wbsData) {
             if (!item.parentId) continue;
             const price = localPriceOf(item);
-            if (price <= 0) continue;
+            if (price <= 0 && !includeZeroPriced) continue;
             const chain = localChain(item.id);
             const d1 = chain[0];
             if (!d1) continue;
@@ -213,7 +217,7 @@ export function buildWbsHtmlTable(wbsData, depth) {
         for (const item of wbsData) {
             if (!item.parentId) continue;
             const price = localPriceOf(item);
-            if (price <= 0) continue;
+            if (price <= 0 && !includeZeroPriced) continue;
             const chain = localChain(item.id);
             const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)];
             if (!d1) continue;
@@ -239,7 +243,7 @@ export function buildWbsHtmlTable(wbsData, depth) {
         for (const item of wbsData) {
             if (!item.parentId) continue;
             const price = localPriceOf(item);
-            if (price <= 0) continue;
+            if (price <= 0 && !includeZeroPriced) continue;
             const chain = localChain(item.id);
             const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)], d3 = chain[Math.min(2, chain.length - 1)];
             if (!d1) continue;

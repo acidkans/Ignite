@@ -1,3 +1,12 @@
+## 2026-09-01 — Eksport bez cen: pozycje o cenie 0 zostają w arkuszach oferty
+
+### architektura / API
+- `ui-funkcja` `handleExportOfertaWbsExcel` — arkusze `Oferta-podział na Typy`, `WBS1 - Zakresy`, `WBS2 - Składowe`, `WBS3 - Szczegóły` filtrowały pozycje warunkiem `price <= 0`, więc w eksporcie „bez cen" wypadały dokładnie te liście, dla których ten eksport powstaje (z 26 materiałów do WBS3 wchodził 1). Filtr działa teraz tylko poza trybem „bez cen".
+- `ui-funkcja` `buildWbsHtmlTable` — nowy parametr `opts.includeZeroPriced` (domyślnie false); PDF oferty w trybie „bez cen" przekazuje `true`, dzięki czemu tabele `{tabela wbs1..3}` pokazują pełny zakres.
+
+### wytyczne
+- każdy nowy arkusz/tabela oferty odsiewająca pozycje po cenie MUSI respektować `ui-stan` `exportNoPricesRef` — inaczej eksport bez cen wychodzi niekompletny.
+
 ## 2026-09-01 — Eksport oferty/budżetu „bez cen" zamiast twardej blokady przy brakach wyceny
 
 ### architektura / API

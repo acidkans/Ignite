@@ -1436,7 +1436,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             const parts = text.split(/(\{tabela wbs[123]?\})/gi);
             return parts.map(part => {
                 const m = part.match(/^\{tabela wbs([123]?)\}$/i);
-                if (m) return buildWbsHtmlTable(wbsData, parseInt(m[1]) || 2);
+                if (m) return buildWbsHtmlTable(wbsData, parseInt(m[1]) || 2, { includeZeroPriced: exportNoPricesRef.current });
                 return renderStrategyHtml(part);
             }).join('');
         })();
@@ -3894,7 +3894,9 @@ ${ganttSectionHtml}
             for (const item of wbsData) {
                 if (!item.parentId) continue;
                 const price = localPriceOf(item);
-                if (price <= 0) continue;
+                // Tryb „bez cen": pozycje bez wyceny zostają — inaczej z oferty wypadłyby
+                // dokładnie te liście, dla których eksport bez cen w ogóle powstaje.
+                if (price <= 0 && !exportNoPricesRef.current) continue;
                 const t = item.type || '—';
                 if (!byType.has(t)) byType.set(t, { label: TYPE_LABELS[t] || t, total: 0 });
                 byType.get(t).total += price;
@@ -3938,7 +3940,9 @@ ${ganttSectionHtml}
             for (const item of wbsData) {
                 if (!item.parentId) continue;
                 const price = localPriceOf(item);
-                if (price <= 0) continue;
+                // Tryb „bez cen": pozycje bez wyceny zostają — inaczej z oferty wypadłyby
+                // dokładnie te liście, dla których eksport bez cen w ogóle powstaje.
+                if (price <= 0 && !exportNoPricesRef.current) continue;
                 const d1 = localChain(item.id)[0];
                 if (!d1) continue;
                 if (!groups.has(d1.id)) groups.set(d1.id, { id: d1.id, name: d1.name || '', type: d1.type || '', strategy: d1.strategy || '', total: 0 });
@@ -3981,7 +3985,9 @@ ${ganttSectionHtml}
             for (const item of wbsData) {
                 if (!item.parentId) continue;
                 const price = localPriceOf(item);
-                if (price <= 0) continue;
+                // Tryb „bez cen": pozycje bez wyceny zostają — inaczej z oferty wypadłyby
+                // dokładnie te liście, dla których eksport bez cen w ogóle powstaje.
+                if (price <= 0 && !exportNoPricesRef.current) continue;
                 const chain = localChain(item.id);
                 const d1 = chain[0], d2 = chain[Math.min(1, chain.length - 1)];
                 if (!d1) continue;
@@ -4028,7 +4034,9 @@ ${ganttSectionHtml}
             for (const item of wbsData) {
                 if (!item.parentId) continue;
                 const price = localPriceOf(item);
-                if (price <= 0) continue;
+                // Tryb „bez cen": pozycje bez wyceny zostają — inaczej z oferty wypadłyby
+                // dokładnie te liście, dla których eksport bez cen w ogóle powstaje.
+                if (price <= 0 && !exportNoPricesRef.current) continue;
                 const chain = localChain(item.id);
                 // Pozycja = realny liść (item) — żeby kolumna Typ pokazywała typ liścia
                 // (praca, materiał, sprzęt…), a nie typ gałęzi grupującej.
