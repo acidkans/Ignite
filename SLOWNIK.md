@@ -444,6 +444,17 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | handleRequirementMerge | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-requirement-merge |
 | ui-funkcja | handleExportPDF | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-pdf |
 | ui-funkcja | validateBudgetPricing | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor validate-budget-pricing |
+| ui-funkcja | guardPricingBeforeExport | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor guard-pricing-before-export |
+| ui-funkcja | askPricingGap | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor ask-pricing-gap |
+| ui-stan | exportNoPricesRef | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor export-no-prices |
+| ui-stan | pricingGapPrompt | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor pricing-gap-prompt |
+| ui-modal | modal braków w wycenie (eksport bez cen) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor pricing-gap-modal |
+| ui-stala | MONEY_HEADER_RE | apps/frontend/src/utils/exportWithoutPrices.js | @anchor money-header-re |
+| ui-stala | NO_PRICES_NOTE | apps/frontend/src/utils/exportWithoutPrices.js | @anchor no-prices-note |
+| ui-funkcja | noPricesFilename | apps/frontend/src/utils/exportWithoutPrices.js | @anchor no-prices-filename |
+| ui-funkcja | stripPricesFromWorkbook | apps/frontend/src/utils/exportWithoutPrices.js | @anchor strip-prices-from-workbook |
+| ui-funkcja | stripPricesFromHtml | apps/frontend/src/utils/exportWithoutPrices.js | @anchor strip-prices-from-html |
+| ui-funkcja | noPricesBannerHtml | apps/frontend/src/utils/exportWithoutPrices.js | @anchor no-prices-banner-html |
 | ui-funkcja | handleExportBudgetExcel | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-budget-excel |
 | ui-funkcja | buildWbsTreeDump | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor build-wbs-tree-dump |
 | ui-funkcja | handleExportOfertaWbsExcel | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-oferta-wbs-excel |

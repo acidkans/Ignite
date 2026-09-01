@@ -1,0 +1,30 @@
+<!doctype html><meta charset="utf-8"><title>Test strip HTML bez cen</title>
+<body>
+<!-- Bundle: npx esbuild apps/frontend/src/utils/exportWithoutPrices.js --bundle --format=iife --global-name=EWP --outfile=test/.exportWithoutPrices.iife.js
+     Uruchamiać przez serwer http (python -m http.server), nie z file:// --><pre id="out">…</pre>
+<script src="./.exportWithoutPrices.iife.js"></script>
+<script>
+const html = `
+<div class="wbs-offer-table"><table><thead><tr><th>Zakresy</th><th>Cena ofertowa (PLN)</th></tr></thead>
+<tbody><tr><td>Instalacje</td><td>12 340,00</td></tr>
+<tr><td colspan="1" style="text-align:right"><strong>Razem</strong></td><td><strong>12 340,00</strong></td></tr></tbody></table></div>
+<table class="kv"><tr><th>Wartość oferty</th><td>12 340,00 PLN</td></tr><tr><th>Liczba pozycji</th><td>7</td></tr></table>
+<table class="mat-table"><thead><tr><th>Lp.</th><th>Materiał</th><th>Ilość</th><th>Koszt jednostkowy</th></tr></thead>
+<tbody><tr><td>1</td><td>Szafa RACK</td><td>4</td><td>250,00</td></tr></tbody></table>`;
+const out = EWP.stripPricesFromHtml(html);
+const doc = new DOMParser().parseFromString(out, 'text/html');
+const cells = t => [...doc.querySelectorAll(t)].map(c => c.textContent.trim());
+const checks = [
+  ['cena w tabeli oferty pusta', cells('.wbs-offer-table tbody tr:first-child td')[1] === '—'],
+  ['nazwa zakresu zostaje', cells('.wbs-offer-table tbody tr:first-child td')[0] === 'Instalacje'],
+  ['suma Razem pusta', cells('.wbs-offer-table tbody tr:last-child td')[1] === '—'],
+  ['wartość oferty w kv pusta', cells('.kv tr:first-child td')[0] === '—'],
+  ['liczba pozycji (nie-pieniężna) zostaje', cells('.kv tr:last-child td')[0] === '7'],
+  ['koszt jedn. materiału pusty', cells('.mat-table tbody td')[3] === '—'],
+  ['ilość materiału zostaje', cells('.mat-table tbody td')[2] === '4'],
+  ['lp. materiału zostaje', cells('.mat-table tbody td')[0] === '1'],
+];
+document.getElementById('out').textContent =
+  checks.map(([l, ok]) => `${ok ? 'OK  ' : 'FAIL'} ${l}`).join('\n') +
+  `\n\nbłędów: ${checks.filter(c => !c[1]).length}\n\n--- wynik ---\n` + out;
+</script>

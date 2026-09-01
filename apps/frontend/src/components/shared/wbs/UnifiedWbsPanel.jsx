@@ -12,6 +12,7 @@ import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLoo
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
+import { stripPricesFromWorkbook, stripPricesFromHtml, noPricesFilename, noPricesBannerHtml } from '../../../utils/exportWithoutPrices';
 import { buildSchematSectionHtml, SCHEMAT_SECTION_CSS } from '../../../utils/schematPdfExport';
 import ExportChoiceModal from '../ExportChoiceModal';
 import WBSHybridTable from './WBSHybridTable';
@@ -332,6 +333,18 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // Wspólny modal wyboru „Pobierz / Wyślij mailem" dla wszystkich eksportów panelu.
     const [pendingExport, setPendingExport] = useState(null);
     const openExport = useCallback((cfg) => setPendingExport(cfg), []);
+    // @anchor export-no-prices
+    // true = bieżący eksport idzie w trybie „bez cen" (braki w wycenie). Ref, bo
+    // czytają go buildery arkuszy/HTML uruchamiane po wyborze akcji w modalu.
+    const exportNoPricesRef = useRef(false);
+    // @anchor pricing-gap-prompt
+    // Modal decyzji przy brakach w wycenie: { invalid: string[], resolve: fn }.
+    const [pricingGapPrompt, setPricingGapPrompt] = useState(null);
+    // @anchor ask-pricing-gap
+    // Pyta użytkownika, czy eksportować bez wartości. Zwraca Promise<boolean>.
+    const askPricingGap = useCallback((invalid) => new Promise((resolve) => {
+        setPricingGapPrompt({ invalid, resolve });
+    }), []);
     const safeFileBase = () => String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|\s]+/g, '_') || 'projekt';
     const ganttExportRef = useRef(null);
     const ganttGetHtmlRef = useRef(null);
@@ -1296,18 +1309,27 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         return invalidRows;
     };
 
+    // @anchor guard-pricing-before-export
+    // Braki w wycenie NIE blokują już eksportu: użytkownik decyduje w modalu, czy
+    // wypuścić dokument BEZ WARTOŚCI (nic się nie policzy — patrz
+    // `stripPricesFromWorkbook` / `stripPricesFromHtml`), czy anulować i uzupełnić.
+    // Zwraca false = eksport przerwany. Ustawia `exportNoPricesRef` dla builderów.
+    const guardPricingBeforeExport = async () => {
+        exportNoPricesRef.current = false;
+        const invalid = validateBudgetPricing();
+        if (!invalid.length) return true;
+        const withoutPrices = await askPricingGap(invalid);
+        if (!withoutPrices) return false;
+        exportNoPricesRef.current = true;
+        return true;
+    };
+
     // @anchor handle-export-pdf
     const handleExportPDF = async (sectionKey = 'all') => {
         if (sectionKey === 'oferta' || sectionKey === 'budget' || sectionKey === 'all') {
-            const invalidPricing = validateBudgetPricing();
-            if (invalidPricing.length > 0) {
-                alert(
-                    `Eksport wstrzymany — ${invalidPricing.length} pozycji wymaga uzupełnienia:\n\n` +
-                    invalidPricing.join('\n') +
-                    `\n\nUzupełnij koszt jednostkowy i narzut tych pozycji, po czym ponów eksport.`
-                );
-                return;
-            }
+            if (!(await guardPricingBeforeExport())) return;
+        } else {
+            exportNoPricesRef.current = false;
         }
         if (sectionKey === 'oferta' || sectionKey === 'all') {
             const unanswered = wbsData.filter(n =>
@@ -1322,7 +1344,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             }
         }
         const labels = { oferta: 'Oferta', strategy: 'Jak to chcemy zrobić', wbs: 'Struktura projektu', budget: 'Budżet', gantt: 'Harmonogram', materials: 'Materiały', all: 'Pełny projekt' };
-        const filename = `${safeFileBase()}_${sectionKey}.pdf`;
+        const baseFilename = `${safeFileBase()}_${sectionKey}.pdf`;
+        const filename = exportNoPricesRef.current ? noPricesFilename(baseFilename) : baseFilename;
         // Modal otwieramy natychmiast; ciężki build HTML (fetch logo, schematów,
         // materiałów, wklejanie obrazów base64) dzieje się dopiero po wyborze akcji —
         // wcześniej klik blokował UI na kilka sekund zanim modal się pojawił.
@@ -1682,6 +1705,13 @@ ${ganttSectionHtml}
 </body>
 </html>`;
 
+                // Tryb „bez cen": z gotowego HTML-a usuwamy wszystkie wartości
+                // (kolumny cenowe, sumy, narzuty) i dokładamy pasek ostrzegawczy.
+                if (exportNoPricesRef.current) {
+                    const stripped = stripPricesFromHtml(html)
+                        .replace(/(<td class="doc-body-cell">)/, `$1${noPricesBannerHtml()}`);
+                    return { html: stripped, filename };
+                }
                 return { html, filename };
             },
         });
@@ -1702,8 +1732,11 @@ ${ganttSectionHtml}
 
         // Walidacja pozycji liściowych — zerowy koszt jednostkowy lub narzut
         // blokują eksport (wspólna logika z eksportem PDF: validateBudgetPricing).
+        // W trybie „bez cen" (użytkownik świadomie eksportuje mimo braków) arkusz
+        // powstaje normalnie, a wartości znikają dopiero w `stripPricesFromWorkbook`
+        // tuż przed zapisem pliku — dzięki temu nie ma dwóch ścieżek budowania.
         const invalidRows = validateBudgetPricing();
-        if (invalidRows.length) return { ok: false, empty: false, invalidRows };
+        if (invalidRows.length && !exportNoPricesRef.current) return { ok: false, empty: false, invalidRows };
 
         // Przelicz tak samo jak BudgetTable (calcDerived: uc×qty).
         const rows = rawRows.map(r => {
@@ -3503,9 +3536,13 @@ ${ganttSectionHtml}
             orderSheet.views = [{ state: 'frozen', ySplit: 1 }];
         }
 
+        // Tryb „bez cen": czyścimy wszystkie wartości i formuły w całym skoroszycie.
+        const noPrices = exportNoPricesRef.current;
+        if (noPrices) stripPricesFromWorkbook(workbook);
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        return { blob, filename: `${safeProjectName}_budzet.xlsx` };
+        const budgetFilename = `${safeProjectName}_budzet.xlsx`;
+        return { blob, filename: noPrices ? noPricesFilename(budgetFilename) : budgetFilename };
     };
 
     // @anchor kwota-slownie
@@ -3823,7 +3860,8 @@ ${ganttSectionHtml}
         const workDaysFmt = workDaysMemo % 1 === 0 ? String(workDaysMemo) : workDaysMemo.toFixed(1);
         const resolveOfferTokens = (t) => (t || '')
             .replace(/\{nazwa projektu\}/g, orderName || projectName || '')
-            .replace(/\{wartość oferty\}/g, fmtPLN(offerRevenueTotal) + ' PLN')
+            // Tryb „bez cen" — wartość oferty nie trafia do dokumentu.
+            .replace(/\{wartość oferty\}/g, exportNoPricesRef.current ? '—' : fmtPLN(offerRevenueTotal) + ' PLN')
             .replace(/\{data oferty\}/g, offerDate)
             .replace(/\{tabela wbs1\}/gi, wbsTablesByDepth[1] || '')
             .replace(/\{tabela wbs2\}/gi, wbsTablesByDepth[2] || '')
@@ -4436,9 +4474,13 @@ ${ganttSectionHtml}
             if (qaIdx > 0) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: qaIdx + 1, column: 3 } };
         }
 
+        // Tryb „bez cen": czyścimy wszystkie wartości i formuły w całym skoroszycie.
+        const noPrices = exportNoPricesRef.current;
+        if (noPrices) stripPricesFromWorkbook(workbook);
         const buf = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        return { blob, filename: `Airtel_oferta_${safeProjectName}.xlsx` };
+        const offerFilename = `Airtel_oferta_${safeProjectName}.xlsx`;
+        return { blob, filename: noPrices ? noPricesFilename(offerFilename) : offerFilename };
     };
 
     // @anchor handle-export-gantt-excel
@@ -5903,7 +5945,7 @@ ${ganttSectionHtml}
                         )}
                         {(key === 'wbs' || key === 'wbs-hybrid') && (
                             <button
-                                onClick={(e) => { e.stopPropagation(); openExport({ title: 'Q&A PDF', defaultFilename: `Q&A_${safeFileBase()}.pdf`, makeArtifact: () => exportQaFormPdf(wbsData, orderName || projectName || 'Projekt') }); }}
+                                onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'Q&A PDF', defaultFilename: `Q&A_${safeFileBase()}.pdf`, makeArtifact: () => exportQaFormPdf(wbsData, orderName || projectName || 'Projekt') }); }}
                                 className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                             >
                                 <FileDown size={11} /> Q&A PDF
@@ -5911,7 +5953,7 @@ ${ganttSectionHtml}
                         )}
                         {(key === 'wbs' || key === 'wbs-hybrid' || onExport) && (
                             <button
-                                onClick={(e) => { e.stopPropagation(); openExport({ title: 'PDF — wszystkie sekcje', defaultFilename: `${safeFileBase()}_projekt.pdf`, makeArtifact: () => buildProjectPdfArtifact({ nodeId, versionId, projectName, orderName, ganttHtml: ganttGetHtmlRef.current?.() || null }) }); }}
+                                onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'PDF — wszystkie sekcje', defaultFilename: `${safeFileBase()}_projekt.pdf`, makeArtifact: () => buildProjectPdfArtifact({ nodeId, versionId, projectName, orderName, ganttHtml: ganttGetHtmlRef.current?.() || null }) }); }}
                                 className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                             >
                                 <FileDown size={11} /> PDF wszystkie sekcje
@@ -6011,7 +6053,7 @@ ${ganttSectionHtml}
                             />
                         </div>
                     ), () => handleExportPDF('oferta'), (
-                        <button onClick={(e) => { e.stopPropagation(); const invalid = validateBudgetPricing(); if (invalid.length) { alert(`Eksport wstrzymany — ${invalid.length} pozycji wymaga uzupełnienia:\n\n${invalid.join('\n')}\n\nUzupełnij koszt jednostkowy i narzut tych pozycji, po czym ponów eksport.`); return; } openExport({ title: 'Tabele oferty (Excel)', defaultFilename: `Airtel_oferta_${safeFileBase()}.xlsx`, makeArtifact: handleExportOfertaWbsExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                        <button onClick={async (e) => { e.stopPropagation(); if (!(await guardPricingBeforeExport())) return; const fn = `Airtel_oferta_${safeFileBase()}.xlsx`; openExport({ title: exportNoPricesRef.current ? 'Tabele oferty (Excel) — BEZ CEN' : 'Tabele oferty (Excel)', defaultFilename: exportNoPricesRef.current ? noPricesFilename(fn) : fn, makeArtifact: handleExportOfertaWbsExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                             <FileDown size={11} /> Eksport tabel oferty
                         </button>
                     ));
@@ -6066,7 +6108,7 @@ ${ganttSectionHtml}
                             projectEndDate={ganttProjectEnd}
                         />
                     ), () => handleExportPDF('gantt'), (
-                        <button onClick={(e) => { e.stopPropagation(); openExport({ title: 'Harmonogram (Excel)', defaultFilename: `Harmonogram_${safeFileBase()}.xlsx`, makeArtifact: handleExportGanttExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                        <button onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'Harmonogram (Excel)', defaultFilename: `Harmonogram_${safeFileBase()}.xlsx`, makeArtifact: handleExportGanttExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                             <FileDown size={11} /> Eksport do Excel
                         </button>
                     ));
@@ -6164,7 +6206,7 @@ ${ganttSectionHtml}
                         </>
                     ), null, (
                         <div className="flex items-center gap-2">
-                            <button onClick={(e) => { e.stopPropagation(); const invalid = validateBudgetPricing(); if (invalid.length) { alert(`Eksport wstrzymany — ${invalid.length} pozycji wymaga uzupełnienia:\n\n${invalid.join('\n')}\n\nUzupełnij koszt jednostkowy i narzut tych pozycji, po czym ponów eksport.`); return; } openExport({ title: 'Analiza projektu (Excel)', defaultFilename: `${safeFileBase()}_budzet.xlsx`, makeArtifact: handleExportBudgetExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                            <button onClick={async (e) => { e.stopPropagation(); if (!(await guardPricingBeforeExport())) return; const fn = `${safeFileBase()}_budzet.xlsx`; openExport({ title: exportNoPricesRef.current ? 'Analiza projektu (Excel) — BEZ CEN' : 'Analiza projektu (Excel)', defaultFilename: exportNoPricesRef.current ? noPricesFilename(fn) : fn, makeArtifact: handleExportBudgetExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                                 <FileDown size={11} /> Analiza projektu do Excel
                             </button>
                             <button onClick={(e) => { e.stopPropagation(); budgetImportFileInputRef.current?.click(); }} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all">
@@ -6206,7 +6248,7 @@ ${ganttSectionHtml}
                         />
                     ), null, (
                         <>
-                            <button onClick={e => { e.stopPropagation(); openExport({ title: 'Materiały (Excel)', defaultFilename: `${safeFileBase()}_materialy.xlsx`, makeArtifact: () => materialsExportFn.current?.() }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
+                            <button onClick={e => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'Materiały (Excel)', defaultFilename: `${safeFileBase()}_materialy.xlsx`, makeArtifact: () => materialsExportFn.current?.() }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
                                 <FileDown size={11} /> Excel
                             </button>
                             {/* @anchor materials-comparison-chip — „Δ +x% · pokrycie n/m", klik → panel porównawczy (F5) */}
@@ -6261,10 +6303,39 @@ ${ganttSectionHtml}
                 <AllTasksModal nodeId={nodeId} versionId={versionId} onChanged={onWbsUpdate} onClose={() => setAllTasksOpen(false)} />
             )}
 
+            {/* @anchor pricing-gap-modal — braki w wycenie: eksport bez wartości albo anulowanie */}
+            {pricingGapPrompt && (
+                <div className="fixed inset-0 z-[140] bg-[#05070bcc] backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-xl max-h-[85vh] flex flex-col rounded-2xl border border-amber-500/30 bg-[#0b0f17] shadow-2xl">
+                        <div className="px-5 py-3 border-b border-white/10 flex-shrink-0">
+                            <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-amber-300">Braki w wycenie</h3>
+                            <p className="text-[11px] text-gray-400 mt-1">
+                                {pricingGapPrompt.invalid.length} pozycji nie ma kosztu jednostkowego lub narzutu.
+                                Możesz wyeksportować dokument <strong className="text-white">bez cen</strong> — żadna wartość
+                                ani suma nie zostanie policzona, więc nie wyślesz niepełnej oferty.
+                            </p>
+                        </div>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-3 text-[11px] text-gray-300 whitespace-pre-wrap">
+                            {pricingGapPrompt.invalid.join('\n')}
+                        </div>
+                        <div className="px-5 py-3 border-t border-white/10 flex items-center justify-end gap-2 flex-shrink-0">
+                            <button
+                                onClick={() => { pricingGapPrompt.resolve(false); setPricingGapPrompt(null); }}
+                                className="px-3 py-1.5 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 text-[10px] font-bold uppercase tracking-widest transition-all"
+                            >Anuluj — uzupełnię ceny</button>
+                            <button
+                                onClick={() => { pricingGapPrompt.resolve(true); setPricingGapPrompt(null); }}
+                                className="px-3 py-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 text-[10px] font-bold uppercase tracking-widest transition-all"
+                            >Eksportuj bez cen</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {pendingExport && (
                 <ExportChoiceModal
                     open={!!pendingExport}
-                    onClose={() => setPendingExport(null)}
+                    onClose={() => { setPendingExport(null); exportNoPricesRef.current = false; }}
                     nodeId={nodeId}
                     title={pendingExport.title}
                     defaultFilename={pendingExport.defaultFilename}

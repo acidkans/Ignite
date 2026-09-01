@@ -1,3 +1,20 @@
+## 2026-09-01 — Eksport oferty/budżetu „bez cen" zamiast twardej blokady przy brakach wyceny
+
+### architektura / API
+- nowy plik `apps/frontend/src/utils/exportWithoutPrices.js` — post-processing artefaktu eksportu: `ui-funkcja` `stripPricesFromWorkbook` (ExcelJS) i `ui-funkcja` `stripPricesFromHtml` (HTML PDF-a) usuwają WSZYSTKIE wartości i formuły pieniężne (kolumny wg nagłówka `ui-stala` `MONEY_HEADER_RE`, wiersze etykieta→wartość, sumy „Razem"). Nic się nie przelicza — komórki są puste, nie zerowe.
+- `ui-funkcja` `validateBudgetPricing` — nadal wykrywa braki (koszt jedn. = 0 lub narzut = 0), ale NIE przerywa już eksportu; decyzję podejmuje użytkownik w `ui-modal` `pricing-gap-modal` („Eksportuj bez cen" / „Anuluj — uzupełnię ceny").
+- `ui-funkcja` `guardPricingBeforeExport` — wspólna bramka dla eksportów PDF (oferta/budżet/pełny projekt), „Tabele oferty (Excel)" i „Analiza projektu (Excel)"; ustawia `ui-stan` `exportNoPricesRef` dla builderów.
+- `ui-funkcja` `appendBudgetSheet` — w trybie „bez cen" buduje arkusz normalnie (zamiast zwracać `ok:false`); wartości znikają dopiero przy zapisie pliku.
+- eksport bez cen dostaje znacznik w nazwie pliku (`_BEZ-CEN`, `ui-funkcja` `noPricesFilename`) i czerwony pasek ostrzegawczy w PDF (`ui-funkcja` `noPricesBannerHtml`, `ui-stala` `NO_PRICES_NOTE`).
+
+### słownik
+- dodano `stripPricesFromWorkbook`, `stripPricesFromHtml`, `noPricesFilename`, `noPricesBannerHtml`, `MONEY_HEADER_RE`, `NO_PRICES_NOTE` — `apps/frontend/src/utils/exportWithoutPrices.js`
+- dodano `guardPricingBeforeExport`, `askPricingGap`, `exportNoPricesRef`, `pricingGapPrompt`, modal `pricing-gap-modal` — `apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx`
+
+### wytyczne
+- `ui-stan` `exportNoPricesRef` — eksporty spoza bramki (Q&A, harmonogram, materiały, pełny PDF projektu) MUSZĄ zerować tę flagę przed `openExport`, żeby nie odziedziczyć trybu „bez cen" po poprzednim eksporcie.
+- nowe kolumny/arkusze z wartościami nie wymagają zmian w sanitizerze pod warunkiem, że nagłówek zawiera słowo pieniężne (cena/koszt/narzut/rabat/wartość/zysk/kwota) — inaczej dopisz wzorzec do `MONEY_HEADER_RE`.
+
 ## 2026-09-01 — WBS: gałąź „Koszty ogólne" zamiast „Zarządzanie projektem"/„Gwarancja 24m", narzut na automatycznym Paliwie
 
 ### architektura / API
