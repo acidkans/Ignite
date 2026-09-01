@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { API_URL } from '../../config';
 import { enqueueUpload, removeFromQueue, flushPendingUploads } from '../../utils/uploadQueue';
 import {
@@ -6,14 +6,23 @@ import {
     MousePointer2, Minus, Type, ZoomIn, ZoomOut, Maximize, Minimize2, Hand, Camera, Download, FileText, Save, FileDown,
     RefreshCw, HardDrive, FolderOpen, List, CheckSquare, Square, Layers, ChevronDown, ChevronLeft, ChevronRight, Plus, Check, Pencil, Video, Play, HelpCircle
 } from 'lucide-react';
+import { wbsTypeFromAny } from './wbs/wbsConstants';
 import QaTreeView from './wbs/QaTreeView';
 
-function flattenWbsNodes(nodes, prefix = '') {
+// Typy lisci nieprzypisywalnych do znacznikow (paliwo, nocleg) - wycinane z podgalezia.
+// @anchor schemat-wbs-hidden-marker-types
+const WBS_HIDDEN_MARKER_TYPES = ['fuel', 'lodging'];
+
+// @anchor schemat-flatten-wbs-nodes - plaska lista z depth/parentId/hasChildren
+function flattenWbsNodes(nodes, prefix = '', depth = 0, parentId = null) {
     const result = [];
     nodes.forEach((n, i) => {
         const label = prefix ? `${prefix}.${i + 1}` : `${i + 1}`;
-        result.push({ id: n.id, name: n.name || '(bez nazwy)', path: label });
-        if (n.children?.length) result.push(...flattenWbsNodes(n.children, label));
+        const type = wbsTypeFromAny(n.type);
+        if (WBS_HIDDEN_MARKER_TYPES.includes(type)) return;
+        const children = n.children?.length ? flattenWbsNodes(n.children, label, depth + 1, n.id) : [];
+        result.push({ id: n.id, name: n.name || '(bez nazwy)', path: label, type, depth, parentId, hasChildren: children.length > 0 });
+        result.push(...children);
     });
     return result;
 }
@@ -1630,6 +1639,8 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
     const [wbsNodes, setWbsNodes] = useState([]);
     const [wbsLinks, setWbsLinks] = useState([]);
     const [wbsToggling, setWbsToggling] = useState(null);
+    // @anchor schemat-expanded-wbs
+    const [expandedWbs, setExpandedWbs] = useState(() => new Set());
     const [addWbsMode, setAddWbsMode] = useState(null); // null | 'item' | 'requirement'
     const [addWbsParentId, setAddWbsParentId] = useState('');
     const [addWbsName, setAddWbsName] = useState('');
@@ -1738,12 +1749,52 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
         onMarkerUpdated?.({ id: marker.id, name: editName });
     };
 
+    // @anchor schemat-toggle-wbs-expand
+    const toggleWbsExpand = (id) => setExpandedWbs(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
+
+    // @anchor schemat-visible-wbs-nodes - korzenie + dzieci rozwinietych galezi
+    const visibleWbsNodes = useMemo(() => {
+        const byId = new Map(wbsNodes.map(n => [n.id, n]));
+        return wbsNodes.filter(n => {
+            let p = n.parentId;
+            while (p) {
+                if (!expandedWbs.has(p)) return false;
+                p = byId.get(p)?.parentId;
+            }
+            return true;
+        });
+    }, [wbsNodes, expandedWbs]);
+
+    // Rozwin galezie nadrzedne przypisanych wezlow - inaczej istniejace przypisania
+    // do lisci sa niewidoczne po otwarciu znacznika.
+    useEffect(() => {
+        if (!wbsNodes.length || !wbsLinks.length) return;
+        const byId = new Map(wbsNodes.map(n => [n.id, n]));
+        setExpandedWbs(prev => {
+            const next = new Set(prev);
+            let changed = false;
+            for (const l of wbsLinks) {
+                let p = byId.get(l.wbsNodeId)?.parentId;
+                while (p) {
+                    if (!next.has(p)) { next.add(p); changed = true; }
+                    p = byId.get(p)?.parentId;
+                }
+            }
+            return changed ? next : prev;
+        });
+    }, [wbsNodes, wbsLinks]);
+
     const openAddWbs = (mode) => {
         setAddWbsMode(mode);
         setAddWbsName('');
         if (mode === 'requirement') {
-            const rootNodes = wbsNodes.filter(n => n.path.split('.').length === 1);
-            setAddWbsParentId(rootNodes[0]?.id || '');
+            const linkedId = wbsLinks[0]?.wbsNodeId;
+            const selected = linkedId && wbsNodes.find(n => n.id === linkedId);
+            setAddWbsParentId(selected?.id || wbsNodes[0]?.id || '');
         } else {
             setAddWbsParentId('');
         }
@@ -1782,6 +1833,7 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                 setWbsLinks(prev => [...prev, link]);
                 window.dispatchEvent(new CustomEvent('wbs-link-changed'));
             }
+            if (addWbsMode === 'requirement' && addWbsParentId) setExpandedWbs(prev => new Set(prev).add(addWbsParentId));
             setAddWbsMode(null);
         } catch (err) {
             alert(err.message);
@@ -2017,27 +2069,38 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                             </label>
                         </div>
                         <div className="space-y-1 max-h-52 overflow-y-auto">
-                            {wbsNodes.filter(n => !n.path.includes('.')).map(node => {
+                            {visibleWbsNodes.map(node => {
                                 const linked = wbsLinks.some(l => l.wbsNodeId === node.id);
                                 const toggling = wbsToggling === node.id;
+                                const open = expandedWbs.has(node.id);
                                 return (
-                                    <button
-                                        key={node.id}
-                                        onClick={() => toggleWbsLink(node.id)}
-                                        disabled={toggling}
-                                        className={`w-full flex items-center gap-2 py-1.5 px-2 rounded-lg text-left text-xs transition-all ${
-                                            linked
-                                                ? 'bg-blue-500/15 border border-blue-500/30 text-blue-300'
-                                                : 'bg-black/20 border border-white/5 text-gray-400 hover:bg-white/5 hover:text-gray-200'
-                                        } ${toggling ? 'opacity-50' : ''}`}
-                                    >
-                                        {linked
-                                            ? <CheckSquare size={12} className="text-blue-400 flex-shrink-0" />
-                                            : <Square size={12} className="text-gray-600 flex-shrink-0" />
-                                        }
-                                        <span className="font-mono text-[10px] text-gray-500 flex-shrink-0">{node.path}</span>
-                                        <span className="truncate">{node.name}</span>
-                                    </button>
+                                    <div key={node.id} className="flex items-center gap-0.5" style={{ paddingLeft: node.depth * 12 }}>
+                                        {node.hasChildren ? (
+                                            <button
+                                                onClick={() => toggleWbsExpand(node.id)}
+                                                title={open ? 'Zwin' : 'Rozwin'}
+                                                className="p-0.5 text-gray-500 hover:text-gray-200 flex-shrink-0 transition-colors"
+                                            >
+                                                {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                                            </button>
+                                        ) : <span className="w-[17px] flex-shrink-0" />}
+                                        <button
+                                            onClick={() => toggleWbsLink(node.id)}
+                                            disabled={toggling}
+                                            className={`flex-1 min-w-0 flex items-center gap-2 py-1.5 px-2 rounded-lg text-left text-xs transition-all ${
+                                                linked
+                                                    ? 'bg-blue-500/15 border border-blue-500/30 text-blue-300'
+                                                    : 'bg-black/20 border border-white/5 text-gray-400 hover:bg-white/5 hover:text-gray-200'
+                                            } ${toggling ? 'opacity-50' : ''}`}
+                                        >
+                                            {linked
+                                                ? <CheckSquare size={12} className="text-blue-400 flex-shrink-0" />
+                                                : <Square size={12} className="text-gray-600 flex-shrink-0" />
+                                            }
+                                            <span className="font-mono text-[10px] text-gray-500 flex-shrink-0">{node.path}</span>
+                                            <span className="truncate">{node.name}</span>
+                                        </button>
+                                    </div>
                                 );
                             })}
                         </div>
@@ -2048,14 +2111,14 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
                                 <p className="text-[10px] text-gray-400 uppercase font-bold">
                                     {addWbsMode === 'item' ? '+ Nowy przedmiot' : '+ Nowe wymaganie'}
                                 </p>
-                                {addWbsMode === 'requirement' && wbsNodes.filter(n => n.path.split('.').length === 1).length > 0 && (
+                                {addWbsMode === 'requirement' && wbsNodes.length > 0 && (
                                     <select
                                         value={addWbsParentId}
                                         onChange={e => setAddWbsParentId(e.target.value)}
                                         className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-blue-500/50"
                                     >
-                                        {wbsNodes.filter(n => n.path.split('.').length === 1).map(n => (
-                                            <option key={n.id} value={n.id}>{n.path} {n.name}</option>
+                                        {wbsNodes.map(n => (
+                                            <option key={n.id} value={n.id}>{'\u00A0'.repeat(n.depth * 4)}{n.path} {n.name}</option>
                                         ))}
                                     </select>
                                 )}

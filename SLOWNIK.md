@@ -197,6 +197,17 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-modal | ConfirmDeleteModal | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor confirm-delete-modal |
 | ui-stan | confirmState | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor marker-confirm-state |
 | ui-stan | orphanPanelOpen | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor orphan-panel-open |
+| ui-stala | WBS_HIDDEN_MARKER_TYPES | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor wbs-hidden-marker-types |
+| ui-funkcja | flattenWbsNodes | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor flatten-wbs-nodes |
+| ui-stan | expandedWbs | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor expanded-wbs |
+| ui-funkcja | toggleWbsExpand | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor toggle-wbs-expand |
+| ui-stala | visibleWbsNodes | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor visible-wbs-nodes |
+| ui-funkcja | renderWbsRows | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor render-wbs-rows |
+| ui-stala | WBS_HIDDEN_MARKER_TYPES | apps/frontend/src/components/shared/SchematTab.jsx | @anchor schemat-wbs-hidden-marker-types |
+| ui-funkcja | flattenWbsNodes | apps/frontend/src/components/shared/SchematTab.jsx | @anchor schemat-flatten-wbs-nodes |
+| ui-stan | expandedWbs | apps/frontend/src/components/shared/SchematTab.jsx | @anchor schemat-expanded-wbs |
+| ui-funkcja | toggleWbsExpand | apps/frontend/src/components/shared/SchematTab.jsx | @anchor schemat-toggle-wbs-expand |
+| ui-stala | visibleWbsNodes | apps/frontend/src/components/shared/SchematTab.jsx | @anchor schemat-visible-wbs-nodes |
 | ui-widok | OrphanAttachmentsPanel | apps/frontend/src/components/shared/OrphanAttachmentsPanel.jsx | @anchor orphan-attachments-panel |
 | ui-funkcja | loadOrphans | apps/frontend/src/components/shared/OrphanAttachmentsPanel.jsx | @anchor load-orphans-panel |
 | ui-funkcja | assign | apps/frontend/src/components/shared/OrphanAttachmentsPanel.jsx | @anchor assign-orphan-to-marker |

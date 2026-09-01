@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, MapPin, Mic, Camera, FilePlus, Trash2, Save, ChevronDown, ChevronLeft, Download, Image as ImageIcon, CheckSquare, Square, Layers, Plus, Check, Video, Play, HelpCircle } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { X, MapPin, Mic, Camera, FilePlus, Trash2, Save, ChevronDown, ChevronRight, ChevronLeft, Download, Image as ImageIcon, CheckSquare, Square, Layers, Plus, Check, Video, Play, HelpCircle } from 'lucide-react';
 import { API_URL } from '../../config';
 import { useNetwork } from '../../hooks/useNetwork';
 import { enqueue, updateTempMarkerPayload, getOrphanedAttachments, reassignOrphanedAttachment } from '../../services/repos/outboxRepo';
 import { syncOutbox } from '../../services/sync/syncOutbox';
 import { db } from '../../services/db';
+import { wbsTypeFromAny } from './wbs/wbsConstants';
 import QaTreeView from './wbs/QaTreeView';
 import OrphanAttachmentsPanel from './OrphanAttachmentsPanel';
 
@@ -57,13 +58,23 @@ export function ConfirmDeleteModal({ title, message, onConfirm, onCancel }) {
     );
 }
 
+// Typy liści, ktorych nie przypisujemy do znacznikow (koszty wlasne generowane
+// automatycznie przez WBS) — paliwo i nocleg. Wycinane razem z podgalezia.
+// @anchor wbs-hidden-marker-types
+const WBS_HIDDEN_MARKER_TYPES = ['fuel', 'lodging'];
+
 // Flatten all WBS nodes recursively with path label
-function flattenWbsNodes(nodes, prefix = '') {
+// @anchor flatten-wbs-nodes — zwraca plaska liste z depth/parentId/hasChildren,
+// dzieki czemu panel znacznika renderuje rozwijane drzewo az do lisci.
+function flattenWbsNodes(nodes, prefix = '', depth = 0, parentId = null) {
     const result = [];
     nodes.forEach((n, i) => {
         const label = prefix ? `${prefix}.${i + 1}` : `${i + 1}`;
-        result.push({ id: n.id, name: n.name || '(bez nazwy)', path: label });
-        if (n.children?.length) result.push(...flattenWbsNodes(n.children, label));
+        const type = wbsTypeFromAny(n.type);
+        if (WBS_HIDDEN_MARKER_TYPES.includes(type)) return;
+        const children = n.children?.length ? flattenWbsNodes(n.children, label, depth + 1, n.id) : [];
+        result.push({ id: n.id, name: n.name || '(bez nazwy)', path: label, type, depth, parentId, hasChildren: children.length > 0 });
+        result.push(...children);
     });
     return result;
 }
@@ -101,6 +112,8 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     const [wbsLinks, setWbsLinks] = useState([]); // [{id, wbsNodeId, markerId}]
     const wbsLinksRef = useRef([]);
     const [wbsToggling, setWbsToggling] = useState(null);
+    // @anchor expanded-wbs — rozwiniete galezie drzewa WBS w panelu znacznika
+    const [expandedWbs, setExpandedWbs] = useState(() => new Set());
     const [addWbsMode, setAddWbsMode] = useState(null); // null | 'item' | 'requirement'
     const [addWbsParentId, setAddWbsParentId] = useState('');
     const [addWbsName, setAddWbsName] = useState('');
@@ -774,6 +787,8 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                 body: JSON.stringify({ wbsNodeId: newNode.id, markerId: marker.id })
             });
             if (linkRes.ok) { const link = await linkRes.json(); setWbsLinks(prev => [...prev, link]); window.dispatchEvent(new CustomEvent('wbs-link-changed')); }
+            // Rozwin galaz rodzica, zeby swiezo dodane wymaganie bylo widoczne na liscie
+            if (addWbsMode === 'requirement' && addWbsParentId) setExpandedWbs(prev => new Set(prev).add(addWbsParentId));
             setAddWbsMode(null);
         } catch (err) {
             alert(err.message);
@@ -781,6 +796,70 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
             setAddWbsSaving(false);
         }
     };
+
+    // @anchor toggle-wbs-expand
+    const toggleWbsExpand = (id) => setExpandedWbs(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
+
+    // Widoczne wezly = korzenie + dzieci galezi rozwinietych.
+    // @anchor visible-wbs-nodes
+    const visibleWbsNodes = useMemo(() => {
+        const byId = new Map(wbsNodes.map(n => [n.id, n]));
+        return wbsNodes.filter(n => {
+            let p = n.parentId;
+            while (p) {
+                if (!expandedWbs.has(p)) return false;
+                p = byId.get(p)?.parentId;
+            }
+            return true;
+        });
+    }, [wbsNodes, expandedWbs]);
+
+    // Po wczytaniu przypisan rozwin galezie nadrzedne, zeby istniejace wymagania
+    // przypisane do lisci byly widoczne od razu po otwarciu panelu.
+    useEffect(() => {
+        if (!wbsNodes.length || !wbsLinks.length) return;
+        const byId = new Map(wbsNodes.map(n => [n.id, n]));
+        setExpandedWbs(prev => {
+            const next = new Set(prev);
+            let changed = false;
+            for (const l of wbsLinks) {
+                let p = byId.get(l.wbsNodeId)?.parentId;
+                while (p) {
+                    if (!next.has(p)) { next.add(p); changed = true; }
+                    p = byId.get(p)?.parentId;
+                }
+            }
+            return changed ? next : prev;
+        });
+    }, [wbsNodes, wbsLinks]);
+
+    // Wiersz drzewa WBS: strzalka rozwijania + checkbox przypisania.
+    // @anchor render-wbs-rows
+    const renderWbsRows = (mobile) => visibleWbsNodes.map(node => {
+        const linked = wbsLinks.some(l => l.wbsNodeId === node.id);
+        const toggling = wbsToggling === node.id;
+        const open = expandedWbs.has(node.id);
+        return (
+            <div key={node.id} className="flex items-center gap-1" style={{ paddingLeft: node.depth * 16 }}>
+                {node.hasChildren ? (
+                    <button onClick={() => toggleWbsExpand(node.id)} title={open ? 'Zwin' : 'Rozwin'}
+                        className="p-1.5 text-gray-500 hover:text-gray-200 flex-shrink-0 transition-colors">
+                        {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    </button>
+                ) : <span className="w-7 flex-shrink-0" />}
+                <button onClick={() => toggleWbsLink(node.id)} disabled={toggling}
+                    className={`flex-1 min-w-0 flex items-center gap-3 ${mobile ? 'py-3.5' : 'py-3'} px-4 rounded-2xl text-left text-sm transition-all ${linked ? 'bg-blue-500/15 border border-blue-500/30 text-blue-300' : `bg-[#1e293b]/40 border border-white/5 text-gray-400 ${mobile ? 'active:bg-white/5' : 'hover:bg-white/5 hover:text-gray-200'}`} ${toggling ? 'opacity-50' : ''}`}>
+                    {linked ? <CheckSquare size={mobile ? 18 : 16} className="text-blue-400 flex-shrink-0" /> : <Square size={mobile ? 18 : 16} className="text-gray-600 flex-shrink-0" />}
+                    <span className="font-mono text-xs text-gray-500 flex-shrink-0">{node.path}</span>
+                    <span className="font-medium truncate">{node.name}</span>
+                </button>
+            </div>
+        );
+    });
 
     const getFileUrl = (fileName) => `${API_URL}/schematics/file/${fileName}`;
 
@@ -1182,28 +1261,17 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                 {/* Przedmiot projektu */}
                                 {expandedSection === 'wbs' && nodeId && (
                                     <div className="space-y-3">
-                                        {wbsNodes.filter(n => !n.path.includes('.')).map(node => {
-                                            const linked = wbsLinks.some(l => l.wbsNodeId === node.id);
-                                            const toggling = wbsToggling === node.id;
-                                            return (
-                                                <button key={node.id} onClick={() => toggleWbsLink(node.id)} disabled={toggling}
-                                                    className={`w-full flex items-center gap-3 py-3.5 px-4 rounded-2xl text-left text-sm transition-all ${linked ? 'bg-blue-500/15 border border-blue-500/30 text-blue-300' : 'bg-[#1e293b]/40 border border-white/5 text-gray-400 active:bg-white/5'} ${toggling ? 'opacity-50' : ''}`}>
-                                                    {linked ? <CheckSquare size={18} className="text-blue-400 flex-shrink-0" /> : <Square size={18} className="text-gray-600 flex-shrink-0" />}
-                                                    <span className="font-mono text-xs text-gray-500 flex-shrink-0">{node.path}</span>
-                                                    <span className="font-medium truncate">{node.name}</span>
-                                                </button>
-                                            );
-                                        })}
+                                        {renderWbsRows(true)}
                                         {addWbsMode ? (
                                             <div className="p-4 bg-black/40 border border-white/10 rounded-2xl space-y-3">
                                                 <p className="text-[11px] text-gray-400 uppercase font-black tracking-widest">{addWbsMode === 'item' ? '+ Nowy przedmiot' : '+ Nowe wymaganie'}</p>
-                                                {addWbsMode === 'requirement' && wbsNodes.filter(n => !n.path.includes('.')).length > 0 && (
+                                                {addWbsMode === 'requirement' && wbsNodes.length > 0 && (
                                                     <>
                                                         <select value={addWbsParentId} onChange={e => setAddWbsParentId(e.target.value)} className={`w-full bg-[#1e293b] border rounded-xl px-3 py-3 text-sm text-gray-200 focus:outline-none focus:border-blue-500/50 ${addWbsParentId ? 'border-white/10' : 'border-amber-500/50'}`}>
-                                                            <option value="" disabled>— wybierz gałąź —</option>
-                                                            {wbsNodes.filter(n => !n.path.includes('.')).map(n => <option key={n.id} value={n.id}>{n.path} {n.name}</option>)}
+                                                            <option value="" disabled>— wybierz gałąź lub liść —</option>
+                                                            {wbsNodes.map(n => <option key={n.id} value={n.id}>{' '.repeat(n.depth * 4)}{n.path} {n.name}</option>)}
                                                         </select>
-                                                        {!addWbsParentId && <p className="text-[11px] text-amber-400/80 px-1">Wybierz gałąź, do której dodać wymaganie.</p>}
+                                                        {!addWbsParentId && <p className="text-[11px] text-amber-400/80 px-1">Wybierz gałąź lub liść, do którego dodać wymaganie.</p>}
                                                     </>
                                                 )}
                                                 <input ref={addWbsInputRef} value={addWbsName} onChange={e => setAddWbsName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') createWbsNode(); if (e.key === 'Escape') setAddWbsMode(null); }} placeholder="Nazwa..." className="w-full bg-[#1e293b] border border-white/10 rounded-xl px-3 py-3 text-sm text-gray-200 focus:outline-none focus:border-blue-500/50 placeholder-gray-600" />
@@ -1504,28 +1572,17 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                             {/* Przedmiot projektu */}
                             {expandedSection === 'wbs' && nodeId && (
                                 <div className="space-y-3">
-                                    {wbsNodes.filter(n => !n.path.includes('.')).map(node => {
-                                        const linked = wbsLinks.some(l => l.wbsNodeId === node.id);
-                                        const toggling = wbsToggling === node.id;
-                                        return (
-                                            <button key={node.id} onClick={() => toggleWbsLink(node.id)} disabled={toggling}
-                                                className={`w-full flex items-center gap-3 py-3 px-4 rounded-2xl text-left text-sm transition-all ${linked ? 'bg-blue-500/15 border border-blue-500/30 text-blue-300' : 'bg-[#1e293b]/40 border border-white/5 text-gray-400 hover:bg-white/5 hover:text-gray-200'} ${toggling ? 'opacity-50' : ''}`}>
-                                                {linked ? <CheckSquare size={16} className="text-blue-400 flex-shrink-0" /> : <Square size={16} className="text-gray-600 flex-shrink-0" />}
-                                                <span className="font-mono text-xs text-gray-500 flex-shrink-0">{node.path}</span>
-                                                <span className="font-medium truncate">{node.name}</span>
-                                            </button>
-                                        );
-                                    })}
+                                    {renderWbsRows(false)}
                                     {addWbsMode ? (
                                         <div className="p-4 bg-black/40 border border-white/10 rounded-2xl space-y-3">
                                             <p className="text-[11px] text-gray-400 uppercase font-black tracking-widest">{addWbsMode === 'item' ? '+ Nowy przedmiot' : '+ Nowe wymaganie'}</p>
-                                            {addWbsMode === 'requirement' && wbsNodes.filter(n => !n.path.includes('.')).length > 0 && (
+                                            {addWbsMode === 'requirement' && wbsNodes.length > 0 && (
                                                 <>
                                                     <select value={addWbsParentId} onChange={e => setAddWbsParentId(e.target.value)} className={`w-full bg-[#1e293b] border rounded-xl px-3 py-2.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500/50 ${addWbsParentId ? 'border-white/10' : 'border-amber-500/50'}`}>
-                                                        <option value="" disabled>— wybierz gałąź —</option>
-                                                        {wbsNodes.filter(n => !n.path.includes('.')).map(n => <option key={n.id} value={n.id}>{n.path} {n.name}</option>)}
+                                                        <option value="" disabled>— wybierz gałąź lub liść —</option>
+                                                        {wbsNodes.map(n => <option key={n.id} value={n.id}>{' '.repeat(n.depth * 4)}{n.path} {n.name}</option>)}
                                                     </select>
-                                                    {!addWbsParentId && <p className="text-[11px] text-amber-400/80 px-1">Wybierz gałąź, do której dodać wymaganie.</p>}
+                                                    {!addWbsParentId && <p className="text-[11px] text-amber-400/80 px-1">Wybierz gałąź lub liść, do którego dodać wymaganie.</p>}
                                                 </>
                                             )}
                                             {addWbsMode === 'requirement' && wbsNodes.length === 0 && <p className="text-[11px] text-amber-400/80 px-1">Brak gałęzi w drzewie — najpierw utwórz przedmiot.</p>}

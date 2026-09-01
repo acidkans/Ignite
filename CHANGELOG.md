@@ -1,3 +1,20 @@
+## 2026-09-01 — Schemat: przypisywanie znacznika do liści drzewa WBS
+
+### architektura / API
+- `ui-funkcja` `flattenWbsNodes` (MarkerDetailsPanel) — zwraca teraz `depth`, `parentId`, `hasChildren` i znormalizowany `type`; wycina podgałęzie typu `fuel` i `lodging`
+- panel znacznika renderuje rozwijane drzewo WBS zamiast samych korzeni — znacznik można przypiąć do dowolnego liścia
+- dropdown „+ Nowe wymaganie" listuje całe drzewo (wcięcia wg poziomu), nie tylko gałęzie najwyższego poziomu
+
+- ten sam mechanizm w `SchematTab.jsx` (panel znacznika w widoku desktopowym Schemat) — tam trafia klik w znacznik na schemacie
+
+### słownik
+- dodano `schemat-wbs-hidden-marker-types`, `schemat-flatten-wbs-nodes`, `schemat-expanded-wbs`, `schemat-toggle-wbs-expand`, `schemat-visible-wbs-nodes` — drzewo WBS w panelu znacznika SchematTab
+- dodano `wbs-hidden-marker-types` — lista typów WBS nieprzypisywalnych do znaczników (paliwo, nocleg)
+- dodano `expanded-wbs`, `toggle-wbs-expand`, `visible-wbs-nodes`, `render-wbs-rows`, `flatten-wbs-nodes` — stan i render drzewa WBS w MarkerDetailsPanel
+
+### wytyczne
+- `ui-stan` `expandedWbs` — po wczytaniu `wbsLinks` gałęzie nadrzędne przypisanych węzłów rozwijają się automatycznie, inaczej istniejące przypisania do liści są niewidoczne
+
 ## 2026-08-31 — urlopy: rozklad urlopow na miesiace (raport placowy dla DAK)
 
 ### architektura / API
