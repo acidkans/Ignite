@@ -424,6 +424,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-karta | ProductCard w rozwinięciu wiersza Materiałów | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-product-card |
 | ui-stala | GROUP_SPINE (kręgosłup rozwiniętej pozycji) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor materials-group-spine |
 | ui-stala | CARD_SURFACE (płaszczyzna karty produktu) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor materials-card-surface |
+| ui-stan | imageHover (ProductCard) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-image-hover |
+| ui-stala | TOTAL_COLS | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-total-cols |
 | ui-wiersz | domknięcie grupy rozwiniętej pozycji | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor materials-group-cap |
 | ui-sekcja | PurchasesBar (pasek „Zakupy / wykonanie") | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor purchases-bar |
 | ui-stan | purchasesOpen (zwinięcie sekcji wpisów, localStorage) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-purchases-open |
@@ -1631,6 +1633,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | deleteImage (pozycja) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-delete-image |
 | back-endpoint | DELETE /material-requirements/:id/image | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-delete-image-endpoint |
 | ui-sekcja | RequirementImageBox | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor requirement-image-box |
+| ui-stan | imageHover (RequirementImageBox) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor requirement-image-hover |
 | ui-ikona | kosz i lupka na kaflu zdjęcia w karcie produktu | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card-image-actions |
 
 ### Moduł SnapshotEditGuard (blokada edycji nieaktywnego snapszota)

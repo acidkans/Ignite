@@ -681,7 +681,13 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
         if (pdfBlobUrlRef.current) { URL.revokeObjectURL(pdfBlobUrlRef.current); pdfBlobUrlRef.current = null; }
     }, []);
     const fileInputRef = useRef(null);
-    const pasteInputRef = useRef(null);
+    // @anchor product-image-hover — Ctrl+V nad kafelkiem zdjecia. Wczesniej robil to ukryty
+    // input, ktory na `mouseenter` przejmowal focus; w szufladzie WBS focus wracal do pola
+    // edytowanego w tabeli (albo w ogole nie schodzil z niego), wiec `paste` nigdy nie trafial
+    // w pulapke i wklejanie nie dzialalo. Teraz sluchamy `paste` na dokumencie tak dlugo, jak
+    // kursor jest nad kafelkiem — dziala niezaleznie od tego, co ma focus, i nie wyrywa go
+    // uzytkownikowi w trakcie pisania.
+    const [imageHover, setImageHover] = useState(false);
     const localImageUrlRef = useRef(null);
     const fetchedImageUrlRef = useRef(null);
     const catalogImageUrlRef = useRef(null);
@@ -786,6 +792,15 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
         const blob = imgItem.getAsFile();
         if (blob) uploadBlob(blob, 'screenshot.png');
     }, [uploadBlob]);
+
+    useEffect(() => {
+        if (!imageHover || readOnly) return;
+        // capture: gdy focus siedzi w polu tekstowym karty, chcemy zobaczyc zdarzenie zanim
+        // przegladarka wklei tresc do inputa. Obraz i tak nie wchodzi do <input>, a dla
+        // schowka bez obrazka handler nie robi nic i wklejanie tekstu dziala normalnie.
+        document.addEventListener('paste', handlePaste, true);
+        return () => document.removeEventListener('paste', handlePaste, true);
+    }, [imageHover, readOnly, handlePaste]);
 
     const handleFileSelect = useCallback(async (e) => {
         const file = e.target.files?.[0];
@@ -1118,22 +1133,14 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
             {/* Prawa kolumna — kliknięcie = file picker, hover+Ctrl+V = schowek,
                 lupka = pełny podgląd, kosz = usunięcie obrazka */}
             <div
-                onMouseEnter={() => !readOnly && pasteInputRef.current?.focus()}
+                onMouseEnter={() => setImageHover(true)}
+                onMouseLeave={() => setImageHover(false)}
                 onClick={() => !readOnly && fileInputRef.current?.click()}
-                className={`group relative w-44 flex-shrink-0 border-l transition-colors ${readOnly ? 'cursor-default' : 'cursor-pointer hover:border-blue-500/30 hover:bg-blue-500/5'} border-white/5 bg-black/10`}
+                className={`group relative w-72 min-h-[180px] flex-shrink-0 border-l transition-colors ${readOnly ? 'cursor-default' : 'cursor-pointer hover:border-blue-500/30 hover:bg-blue-500/5'} border-white/5 bg-black/10`}
                 title="Kliknij aby wybrać plik | Najedź i Ctrl+V aby wkleić ze schowka"
             >
                 {/* file picker */}
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} style={{ display: 'none' }} />
-                {/* paste trap — uncontrolled text input, dostaje focus na hover */}
-                <input
-                    ref={pasteInputRef}
-                    type="text"
-                    onPaste={handlePaste}
-                    tabIndex={-1}
-                    aria-hidden="true"
-                    style={{ position: 'absolute', opacity: 0, width: 0, height: 0, border: 'none', outline: 'none', padding: 0 }}
-                />
                 {(localImageUrl || fetchedImageUrl) ? (
                     <>
                     <img
@@ -1330,7 +1337,9 @@ export function RequirementImageBox({ card, token, onRefresh, className = '' }) 
     const localRef = useRef(null);
     const fetchedRef = useRef(null);
     const fileInputRef = useRef(null);
-    const pasteInputRef = useRef(null);
+    // @anchor requirement-image-hover — patrz `product-image-hover`: ten sam powod porzucenia
+    // ukrytej pulapki na focus.
+    const [imageHover, setImageHover] = useState(false);
 
     // Blob URL zamiast <img src> — endpoint wymaga nagłówka Authorization.
     useEffect(() => {
@@ -1387,6 +1396,12 @@ export function RequirementImageBox({ card, token, onRefresh, className = '' }) 
         if (blob) uploadBlob(blob, 'screenshot.png');
     }, [uploadBlob]);
 
+    useEffect(() => {
+        if (!imageHover) return;
+        document.addEventListener('paste', handlePaste, true);
+        return () => document.removeEventListener('paste', handlePaste, true);
+    }, [imageHover, handlePaste]);
+
     const handleFileSelect = useCallback(async (e) => {
         const file = e.target.files?.[0];
         if (file) await uploadBlob(file, file.name);
@@ -1410,18 +1425,13 @@ export function RequirementImageBox({ card, token, onRefresh, className = '' }) 
 
     return (
         <div
-            onMouseEnter={() => pasteInputRef.current?.focus()}
+            onMouseEnter={() => setImageHover(true)}
+            onMouseLeave={() => setImageHover(false)}
             onClick={() => fileInputRef.current?.click()}
             title="Kliknij aby wybrać plik | Najedź i Ctrl+V aby wkleić ze schowka"
             className={`group relative w-44 h-[86px] flex-shrink-0 rounded border border-white/10 bg-black/30 cursor-pointer hover:border-blue-500/40 hover:bg-blue-500/5 transition-colors ${className}`}
         >
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} style={{ display: 'none' }} />
-            {/* pułapka na wklejenie — niewidoczny input dostaje focus po najechaniu myszą */}
-            <input
-                ref={pasteInputRef} type="text" onPaste={handlePaste} tabIndex={-1} aria-hidden="true"
-                data-guard-ignore
-                style={{ position: 'absolute', opacity: 0, width: 0, height: 0, border: 'none', outline: 'none', padding: 0 }}
-            />
             {src ? (
                 <>
                     <img src={src} alt="podgląd produktu" className="absolute inset-0 w-full h-full object-contain p-1.5" />

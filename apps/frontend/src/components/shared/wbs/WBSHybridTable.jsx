@@ -1503,6 +1503,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // pomija wiersze zwinięte/odfiltrowane przez wyszukiwarkę, więc Góra/Dół trafiają
     // tylko w faktycznie widoczne wiersze.
     const navRowOrder = [];
+    // @anchor wbs-total-cols — liczba kolumn <col> tabeli: uchwyt + nazwa/typ/ilosc/jednostka
+    // + (manager: cena_netto/narzut/cena_ofert) + status/wlasciciel/komentarz/strategia/qa/zalaczniki
+    // + kolumna domykajaca. Wiersze rozpiete na calej szerokosci (szuflada karty produktu,
+    // listwa domykajaca, pusty stan) MUSZA uzywac tej wartosci — zaszyty colSpan=12 obcinal
+    // szuflade przed kolumnami Q&A i Attach., przez co karta byla wezsza niz wiersz drzewa.
+    const TOTAL_COLS = isManager ? 15 : 12;
     // @anchor grid-nav-column-order
     const GRID_COLUMN_ORDER = ['nazwa', 'typ', 'ilosc', 'jednostka', ...(isManager ? ['cena_netto', 'narzut'] : []), 'status', 'wlasciciel', 'komentarz', 'strategia'];
     // @anchor handle-grid-key-down
@@ -2193,7 +2199,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     className={drawerSpine ? 'wbs-drawer-row' : ''}
                     style={drawerSpine ? { '--wbs-spine': drawerSpine } : undefined}
                 >
-                    <td colSpan={12} className={`p-0 ${DRAWER.surface}`}>
+                    <td colSpan={TOTAL_COLS} className={`p-0 ${DRAWER.surface}`}>
                         <MaterialReqExpandPanel
                             node={node}
                             req={(() => {
@@ -2251,7 +2257,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         if (isDrawerHead && !spine) {
             rows.push(
                 <tr key={`${rowId}-drawer-end`} className="wbs-drawer-end" style={{ '--wbs-spine': drawerSpine }}>
-                    <td colSpan={12} />
+                    <td colSpan={TOTAL_COLS} />
                 </tr>
             );
         }
@@ -2261,7 +2267,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         if (items.length === 0) {
             rows.push(
                 <tr key="empty">
-                    <td colSpan={11} className="px-3 py-3 pl-16 text-[14px] text-gray-700 italic">
+                    <td colSpan={TOTAL_COLS} className="px-3 py-3 pl-16 text-[14px] text-gray-700 italic">
                         Brak przedmiotów — kliknij <span className="text-gray-500">+</span> przy projekcie, aby dodać
                     </td>
                 </tr>
