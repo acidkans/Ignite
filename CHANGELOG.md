@@ -1,3 +1,18 @@
+## 2026-09-01 — WBS: gałąź „Koszty ogólne" zamiast „Zarządzanie projektem"/„Gwarancja 24m", narzut na automatycznym Paliwie
+
+### architektura / API
+- `back-serwis` `ProcessTreeService.create` — gałąź domyślna nowego zlecenia zmieniła nazwę z `Zarządzanie projektem` na `Koszty ogólne`; dołożone liście `Dokumentacja powykonawcza` (work, pakiet), `Wizyta gwarancyjna` (work, dni, ilość 2) i `Logistyka` (work, pakiet) — obok istniejących `Zarządzanie projektem`, `Wizja lokalna`, `Paliwo`. Mirror `OrderRequirements.wbsTree` zaktualizowany o te same węzły.
+- `ui-tabela` `WBSHybridTable` — usunięta gałąź `Gwarancja 24m` zakładana przy każdym nowym przedmiocie projektu (`buildDefaultWarrantyBranch`); wizyta gwarancyjna żyje teraz raz na zlecenie w `Koszty ogólne`.
+- `ui-funkcja` `buildFuelLeaf` — nowy builder liścia `Paliwo`: bierze jednostkę, cenę i NARZUT z modalu „Domyślne wartości" (`leafDefaults.fuel`), fallback `kilometry` / `0,70 zł`. Wcześniej narzut nie był wypełniany i automatycznie dodane paliwo wchodziło do oferty z pustym narzutem.
+
+### słownik
+- dodano `buildFuelLeaf` — builder liścia Paliwo z wartościami domyślnymi, `apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx`, `@anchor build-fuel-leaf`
+- usunięto `buildDefaultWarrantyBranch`
+
+### wytyczne
+- `ui-funkcja` `buildFuelLeaf` — każdy automatycznie dodawany liść Paliwo MUSI przechodzić przez ten builder, żeby dostać narzut z domyślnych; nie twórz go inline.
+- `back-serwis` `ProcessTreeService.create` — liście `Koszty ogólne` powstają przed zapisem `wbs-leaf-defaults` zlecenia, więc nie mają narzutu z modalu; użytkownik ustawia go ręcznie lub przez „Domyślne wartości".
+
 ## 2026-09-01 — Schemat: przypisywanie znacznika do liści drzewa WBS
 
 ### architektura / API

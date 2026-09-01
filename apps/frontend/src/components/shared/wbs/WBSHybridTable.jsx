@@ -1247,37 +1247,39 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         setTimeout(() => onSave?.(), 0);
     };
 
+    // @anchor build-fuel-leaf
+    // Liść Paliwo z wartościami domyślnymi z modalu „Domyślne wartości” (jednostka,
+    // cena, NARZUT). Wcześniej narzut nie był wypełniany — automatycznie dodane paliwo
+    // wchodziło do oferty z pustym narzutem. Fallback: kilometry, 0,70 zł/km.
+    const buildFuelLeaf = (extra = {}) => {
+        const defs = getLeafDefaultFrom(leafDefaults, 'fuel') || {};
+        const unit = defs.unit || 'kilometry';
+        const unitCost = defs.unitCost != null && Number(defs.unitCost) !== 0 ? defs.unitCost : 0.7;
+        const leaf = { ...mkNode(false, 'fuel'), name: 'Paliwo', unit, unitCost, ...extra };
+        if (defs.margin != null) leaf.margin = defs.margin;
+        return leaf;
+    };
+
     // @anchor ensure-fuel-leaf
     // Każda gałąź typ=praca dostaje automatycznie liść Paliwo z domyślnymi
-    // wartościami (kilometry, 0,70 zł/km). Pomija gdy liść Paliwo już istnieje.
+    // wartościami. Pomija gdy liść Paliwo już istnieje.
     const ensureFuelLeaf = (parentId) => {
         setWbsTree(t => {
             const parent = findNode(t.items || [], parentId);
             if (!parent || (parent.children || []).some(c => c.type === 'fuel')) return t;
-            const fuel = { ...mkNode(false, 'fuel'), name: 'Paliwo', unit: 'kilometry', unitCost: 0.7, comment: 'utworzony automatycznie' };
+            const fuel = buildFuelLeaf({ comment: 'utworzony automatycznie' });
             return { ...t, items: addChildTo(t.items || [], parentId, fuel) };
         });
         open(`node_${parentId}`);
         setTimeout(() => onSave?.(), 0);
     };
 
-    // @anchor build-default-warranty-branch
-    // Każdy nowy projekt (przedmiot projektu w WBS) dostaje automatycznie gałąź
-    // „Gwarancja 24m" z dwiema podgałęziami: wizyta gwarancyjna (praca, 2 dni)
-    // oraz Paliwo (fuel, bez ilości). Wymóg biznesowy — wszystkie projekty
-    // muszą mieć budżet gwarancyjny zarezerwowany od razu.
-    const buildDefaultWarrantyBranch = () => {
-        const warranty = { ...mkNode(false, 'group'), name: 'Gwarancja 24m' };
-        const visit = { ...mkNode(false, 'work'), name: 'Wizyta gwarancyjna', unit: 'dni', quantity: 2 };
-        const fuel = { ...mkNode(false, 'fuel'), name: 'Paliwo', unit: 'kilometry', unitCost: 0.7 };
-        warranty.children = [visit, fuel];
-        return warranty;
-    };
-
+    // Przedmiot projektu nie dostaje już własnej gałęzi „Gwarancja 24m" — wizyta
+    // gwarancyjna, paliwo, zarządzanie, dokumentacja powykonawcza i logistyka żyją
+    // w gałęzi „Koszty ogólne" tworzonej raz na zlecenie (process-tree.service.ts).
     const handleAddTopLevel = e => {
         e?.stopPropagation();
         const item = mkNode(true);
-        item.children = [buildDefaultWarrantyBranch()];
         setWbsTree(t => ({ ...t, items: [...(t.items || []), item] }));
         open('root');
         open(`node_${item.id}`);

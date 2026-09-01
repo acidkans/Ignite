@@ -391,8 +391,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-kolumna | wbs-offer-price-cell | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-offer-price-cell |
 | ui-input | wbs-margin-input | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-margin-input |
 | ui-funkcja | findDepth | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor find-depth |
+| ui-funkcja | buildFuelLeaf | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor build-fuel-leaf |
 | ui-funkcja | ensureFuelLeaf | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor ensure-fuel-leaf |
-| ui-funkcja | buildDefaultWarrantyBranch | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor build-default-warranty-branch |
 | ui-input | wbs-unit-cost-input | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-unit-price-input |
 | ui-stan | matReqByWbsId | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-req-by-wbs-id |
 | ui-stan | matReqByName | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-req-by-name |

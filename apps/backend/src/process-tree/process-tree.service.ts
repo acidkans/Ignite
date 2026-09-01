@@ -77,20 +77,17 @@ export class ProcessTreeService {
                     },
                 });
 
-                // Gałąź "Zarządzanie projektem" z liściem "Zarządzanie" — tworzona
+                // Gałąź "Koszty ogólne" (wcześniej "Zarządzanie projektem") — tworzona
                 // dla każdego nowego zlecenia, analogicznie do "PYTANIA OGÓLNE".
-                // Właściciel liścia pobierany z istniejącego użytkownika Michał Ranik.
-                const mgmtOwner = await tx.user.findFirst({
-                    where: { firstName: 'Michał', lastName: 'Ranik' },
-                });
-                const mgmtOwnerName = mgmtOwner
-                    ? `${mgmtOwner.firstName ?? ''} ${mgmtOwner.lastName ?? ''}`.trim()
-                    : 'Michał Ranik';
+                // Zbiera koszty nieprzypisane do przedmiotu projektu: zarządzanie,
+                // wizję lokalną, paliwo, dokumentację powykonawczą, wizytę
+                // gwarancyjną i logistykę.
+                // Właściciel liści zostaje pusty — przypisuje go użytkownik w WBS.
                 const mgmtBranch = await tx.wbsNode.create({
                     data: {
                         nodeId: node.id,
                         versionId: versionId,
-                        name: 'Zarządzanie projektem',
+                        name: 'Koszty ogólne',
                         status: '',
                         sortOrder: 1,
                     },
@@ -104,7 +101,7 @@ export class ProcessTreeService {
                         type: 'work',
                         status: '',
                         unit: 'pakiet',
-                        owner: mgmtOwnerName,
+                        owner: '',
                         comment: 'utworzony automatycznie',
                         sortOrder: 0,
                     },
@@ -120,7 +117,7 @@ export class ProcessTreeService {
                         status: '',
                         unit: 'dni',
                         quantity: 1,
-                        owner: mgmtOwnerName,
+                        owner: '',
                         comment: 'utworzony automatycznie',
                         sortOrder: 1,
                     },
@@ -138,6 +135,49 @@ export class ProcessTreeService {
                         unitCost: 0.7,
                         comment: 'utworzony automatycznie',
                         sortOrder: 2,
+                    },
+                });
+                // Liść "Dokumentacja powykonawcza" — praca rozliczana pakietowo
+                const dokumentacjaLeaf = await tx.wbsNode.create({
+                    data: {
+                        nodeId: node.id,
+                        versionId: versionId,
+                        parentId: mgmtBranch.id,
+                        name: 'Dokumentacja powykonawcza',
+                        type: 'work',
+                        status: '',
+                        unit: 'pakiet',
+                        comment: 'utworzony automatycznie',
+                        sortOrder: 3,
+                    },
+                });
+                // Liść "Wizyta gwarancyjna" — praca, 2 dni (budżet gwarancyjny 24m)
+                const gwarancjaLeaf = await tx.wbsNode.create({
+                    data: {
+                        nodeId: node.id,
+                        versionId: versionId,
+                        parentId: mgmtBranch.id,
+                        name: 'Wizyta gwarancyjna',
+                        type: 'work',
+                        status: '',
+                        unit: 'dni',
+                        quantity: 2,
+                        comment: 'utworzony automatycznie',
+                        sortOrder: 4,
+                    },
+                });
+                // Liść "Logistyka" — praca rozliczana pakietowo
+                const logistykaLeaf = await tx.wbsNode.create({
+                    data: {
+                        nodeId: node.id,
+                        versionId: versionId,
+                        parentId: mgmtBranch.id,
+                        name: 'Logistyka',
+                        type: 'work',
+                        status: '',
+                        unit: 'pakiet',
+                        comment: 'utworzony automatycznie',
+                        sortOrder: 5,
                     },
                 });
 
@@ -164,7 +204,7 @@ export class ProcessTreeService {
                                 },
                                 {
                                     id: mgmtBranch.id,
-                                    name: 'Zarządzanie projektem',
+                                    name: 'Koszty ogólne',
                                     type: '',
                                     status: '',
                                     unit: '',
@@ -181,7 +221,7 @@ export class ProcessTreeService {
                                             type: 'work',
                                             status: '',
                                             unit: 'pakiet',
-                                            owner: mgmtOwnerName,
+                                            owner: '',
                                             resources: '',
                                             cost: '',
                                             comment: 'utworzony automatycznie',
@@ -196,7 +236,7 @@ export class ProcessTreeService {
                                             status: '',
                                             unit: 'dni',
                                             quantity: 1,
-                                            owner: mgmtOwnerName,
+                                            owner: '',
                                             resources: '',
                                             cost: '',
                                             comment: 'utworzony automatycznie',
@@ -211,6 +251,49 @@ export class ProcessTreeService {
                                             status: '',
                                             unit: 'kilometry',
                                             unitCost: 0.7,
+                                            owner: '',
+                                            resources: '',
+                                            cost: '',
+                                            comment: 'utworzony automatycznie',
+                                            tags: [],
+                                            qa: [],
+                                            children: [],
+                                        },
+                                        {
+                                            id: dokumentacjaLeaf.id,
+                                            name: 'Dokumentacja powykonawcza',
+                                            type: 'work',
+                                            status: '',
+                                            unit: 'pakiet',
+                                            owner: '',
+                                            resources: '',
+                                            cost: '',
+                                            comment: 'utworzony automatycznie',
+                                            tags: [],
+                                            qa: [],
+                                            children: [],
+                                        },
+                                        {
+                                            id: gwarancjaLeaf.id,
+                                            name: 'Wizyta gwarancyjna',
+                                            type: 'work',
+                                            status: '',
+                                            unit: 'dni',
+                                            quantity: 2,
+                                            owner: '',
+                                            resources: '',
+                                            cost: '',
+                                            comment: 'utworzony automatycznie',
+                                            tags: [],
+                                            qa: [],
+                                            children: [],
+                                        },
+                                        {
+                                            id: logistykaLeaf.id,
+                                            name: 'Logistyka',
+                                            type: 'work',
+                                            status: '',
+                                            unit: 'pakiet',
                                             owner: '',
                                             resources: '',
                                             cost: '',
