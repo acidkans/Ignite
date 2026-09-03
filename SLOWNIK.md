@@ -581,6 +581,12 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | aggregateBranchStatus | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor aggregate-branch-status |
 | ui-funkcja | summarizeStatusCodes | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor summarize-status-codes |
 | ui-funkcja | buildAggregatedStatusMap | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor build-aggregated-status-map |
+| ui-stala | AXIS_STATUS_META (słowniki trzech osi) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor axis-status-meta |
+| ui-stala | AXIS_STATUS_ORDER (porządek osi realizacji) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor axis-status-order |
+| ui-funkcja | axisGateOf (bramka etapu realizacji) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor axis-gate-of |
+| ui-funkcja | axisStatusCodeOf (kod liścia dla osi) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor axis-status-code-of |
+| ui-funkcja | suggestAxisStatus (podpowiedź z wpisów realizacji) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor suggest-axis-status |
+| ui-funkcja | handedOverFromProtocol („Odebrane" z rejestru protokołów) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor handed-over-from-protocol |
 | ui-sekcja | AggregatedStatusBadge (plakietka statusu gałęzi) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor aggregated-status-badge |
 | ui-stan | aggregatedStatusByNodeId | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor wbs-branch-status-map |
 
@@ -1578,6 +1584,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | exportExcel (widok + podsumowanie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-excel |
 | ui-funkcja | arkusz „Zakupy" w eksporcie Excel (wpisy zakupu + wymaganie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchases |
 | ui-kolumna | Cena ofertowa vs cena zakupu (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchase-vs-offer |
+| ui-kolumna | trzy osie statusu w arkuszu „Realizacja" | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-status-cols |
 | ui-input | zakres wpisu (liście bez karty) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-scope |
 | ui-kolumna | Status (WbsNode.status, edytowalny) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-status-col |
 | ui-funkcja | statusLabel (etykieta statusu liścia) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-status-label |
@@ -1608,6 +1615,19 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | entryNoun / newEntryLabel / ADD_ENTRY_LABEL (zakup vs wykonanie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-noun |
 | ui-wiersz | RealizationRow | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row |
 | ui-przycisk | „+" dopisania wpisu (lewa strona wiersza) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-add-button |
+| ui-funkcja | execCodeOf (kod osi wykonania do pokazania) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-exec-code-of |
+| ui-przycisk | StatusHint (podpowiedź statusu do zatwierdzenia) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-status-hint |
+| ui-stan | hints (podpowiedzi osi dla wiersza) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-hints |
+| ui-sekcja | plakietka „Odebrane" wyliczona z protokołu | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-handed-over-badge |
+| ui-sekcja | BranchAxisBadge (plakietka osi na gałęzi) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-branch-badge |
+| ui-sekcja | AxisGateBadge (plakietka etapu za bramką) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-gate-badge |
+| ui-stan | purchaseGate / execGate (bramki wiersza) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-gates |
+| ui-wiersz | RealizationGroupRow (wiersz gałęzi) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-group-row |
+| ui-stan | groups (pozycje pod nagłówkami gałęzi) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-groups |
+| ui-stan | collapsedGroups (zwinięte gałęzie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-collapsed-groups |
+| ui-stan | nodeById (węzeł WBS po id) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-node-by-id |
+| ui-stan | odbiorByRoot (rejestr odbiorów zamówienia) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-odbior-status |
+| ui-funkcja | fetchOdbior (odczyt rejestru odbiorów) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-fetch-odbior |
 | ui-wiersz | osadzenie wierszy wpisów w tabeli realizacji | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-tab-entry-rows |
 | ui-wiersz | stopka „Razem" (podsumowanie kosztów całkowitych) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-totals-row |
 | ui-wiersz | pusty wynik filtra wewnątrz tabeli (nagłówek filtrów zostaje) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-empty-filter-row |

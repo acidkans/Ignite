@@ -461,6 +461,11 @@ export const planStatusLabel = (status) => PLAN_STATUS_META[planStatusFromAny(st
 export const PURCHASE_STATUS_META = {
   TO_ORDER:  { label: 'Do zamówienia',  color: 'text-slate-300' },
   ORDERED:   { label: 'Zamówione',      color: 'text-violet-400' },
+  // `PARTIALLY_DELIVERED` opisuje towar W DRODZE: część dojechała, reszta nie. Bez tego kodu
+  // pozycja z trzema dostawami na pięć zamówionych sztuk stała na „Zamówione" albo skakała
+  // na „Dostarczone" — i w obu przypadkach kolumna kłamała. Kod rodzi się razem z etapem 5
+  // (podpowiedzi z wpisów realizacji), więc w bazie nie ma ani jednego wiersza do migracji.
+  PARTIALLY_DELIVERED: { label: 'Dostawa częściowa', color: 'text-amber-400' },
   DELIVERED: { label: 'Dostarczone',    color: 'text-cyan-400' },
   ISSUED:    { label: 'Wydane',         color: 'text-emerald-400' },
   INVOICED:  { label: 'Zafakturowane',  color: 'text-teal-400' },
@@ -541,19 +546,117 @@ export const nodeHasOwnStatus = (node, depth = 1, hasChildren = null) => {
   return !kids;
 };
 
+// ── Trzy osie, jedna agregacja ────────────────────────────────────────────────
+// Gałąź opisuje ten sam zbiór pozycji na każdej z trzech osi, więc sumowanie jest jedno,
+// a różni je wyłącznie to, KTÓRY kod bierzemy z liścia i JAKIM słownikiem go nazywamy.
+// Rozdzielenie tego na trzy komplety funkcji skończyłoby się trzema regułami rekurencji,
+// które przy pierwszej zmianie zaczęłyby dawać różne wyniki dla tego samego drzewa.
+
+// @anchor axis-status-meta — słownik etykiet właściwy dla osi. Oś wykonania bierze etykiety
+// NEUTRALNE (`label`, nie `montaz`): pod gałęzią wisi materiał obok pracy, więc „Zainstalowane"
+// opisywałoby połowę zbioru, a drugiej połowie kłamało.
+export const AXIS_STATUS_META = {
+  plan:     PLAN_STATUS_META,
+  purchase: PURCHASE_STATUS_META,
+  exec:     EXEC_STATUS_META,
+};
+
+// @anchor axis-status-order — porządek osi realizacji: o ile dalej dana wartość leży na
+// drodze pozycji. Służy WYŁĄCZNIE podpowiedziom (`suggestAxisStatus`), żeby fakt z wpisów
+// nie cofał statusu ustawionego ręcznie: pozycja „Zafakturowana" nie ma wracać na
+// „Dostarczone" tylko dlatego, że ktoś dopisał brakujący wpis dostawy.
+// Kody ZAMYKAJĄCE (anulowane, niedokończone) dostają `Infinity` — po nich nie podpowiadamy
+// już nic, bo zamknięcia nie unieważnia żaden wpis w dzienniku.
+export const AXIS_STATUS_ORDER = {
+  purchase: { TO_ORDER: 0, ORDERED: 1, PARTIALLY_DELIVERED: 2, DELIVERED: 3, ISSUED: 4, INVOICED: 5, CANCELLED: Infinity },
+  // `ON_HOLD` stoi na tej samej wysokości co `IN_PROGRESS`, więc podpowiedź „W toku" nie
+  // odwiesza pozycji świadomie wstrzymanej — wznowienie jest decyzją, nie skutkiem wpisu.
+  exec:     { TO_DO: 0, IN_PROGRESS: 1, ON_HOLD: 1, DONE: 2, HANDED_OVER: 3, UNFINISHED: Infinity, CANCELLED: Infinity },
+};
+
+// @anchor axis-gate-of — czy oś realizacji CZEKA jeszcze na poprzedni etap. Zwraca opis
+// oczekiwania albo `null`, gdy oś jest otwarta. Łańcuch jest trzyczłonowy:
+//   plan → zakup → montaż
+// Dopóki klient nie przyjął pozycji, nie ma czego kupować ani wykonywać (`isRealizationOpen`);
+// dopóki towar nie zaczął dojeżdżać, nie ma czego montować. Bez tego świeżo dopisana pozycja
+// pokazywała „Do zamówienia" i „Do montażu" obok statusu oferty „Nowe" — trzy kolumny mówiły
+// o trzech różnych światach i żadna nie zdradzała, że dwie z nich są jeszcze puste.
+//
+// DWA istotne ograniczenia zakresu:
+//
+// 1. Bramka blokuje WYŁĄCZNIE etap, który jeszcze nie ruszył (oś stoi na NULL). Oś z zapisaną
+//    wartością pokazujemy zawsze, nawet gdy warunek nie jest spełniony — na produkcji siedzą
+//    pozycje „Nowe" z zapisanym `ORDERED` po migracji, a schowanie ich za plakietką ukryłoby
+//    dokładnie ten rozjazd, który trzeba naprawić. Bramka ma nie pozwolić ZACZĄĆ etapu poza
+//    kolejnością, a nie przepisywać historii.
+//
+// 2. Bramka „czeka na dostawę" dotyczy tylko materiału i sprzętu (`usesMontageLabels`) — tam
+//    kupno i montaż to dwa różne zdarzenia. USŁUGA ma obie osie (jest w `PURCHASE_LEAF_TYPES`),
+//    ale „dostarczona" i „wykonana" to dla niej ten sam akt: bramka zapętliłaby ją na starcie,
+//    bo oś zakupu ruszy dopiero z wpisu, który jest zarazem wykonaniem.
+export const axisGateOf = (node, axis) => {
+  if (axis !== 'purchase' && axis !== 'exec') return null;
+  if (axis === 'purchase' && !hasPurchaseAxis(node?.type)) return null;
+  if (axis === 'exec' && !hasExecAxis(node?.type)) return null;
+
+  // Etap, który już ruszył, nie wraca za bramkę — patrz ograniczenie 1 wyżej.
+  if (axis === 'purchase' ? node?.purchaseStatus : node?.execStatus) return null;
+
+  const plan = planStatusFromAny(node?.status);
+  if (plan === 'REJECTED') return {
+    label: 'Oferta odrzucona',
+    title: 'Klient odrzucił tę pozycję — nie ma jej czego kupować ani wykonywać. '
+         + 'Status planu zmienia się w Strukturze projektu.',
+  };
+  if (!isRealizationOpen(plan)) return {
+    label: 'Czeka na akceptację',
+    title: `Pozycja ma status oferty „${PLAN_STATUS_META[plan].label}". Realizacja otwiera się `
+         + 'dopiero po akceptacji („Zaakceptowane") — status planu zmienia się w Strukturze projektu.',
+  };
+
+  if (axis === 'exec' && usesMontageLabels(node?.type)) {
+    const zakup = node?.purchaseStatus || DEFAULT_PURCHASE_STATUS;
+    if (zakup === 'CANCELLED') return {
+      label: 'Zakup anulowany',
+      title: 'Zakup tej pozycji został anulowany — nie ma czego montować.',
+    };
+    if ((AXIS_STATUS_ORDER.purchase[zakup] ?? 0) < AXIS_STATUS_ORDER.purchase.PARTIALLY_DELIVERED) return {
+      label: 'Czeka na dostawę',
+      title: `Zakup stoi na „${PURCHASE_STATUS_META[zakup].label}". Montaż otwiera się, gdy towar `
+           + 'zacznie dojeżdżać („Dostawa częściowa" albo dalej).',
+    };
+  }
+  return null;
+};
+
+// @anchor axis-status-code-of — kod, którym liść wchodzi do sumy gałęzi na danej osi.
+// `null` = liść tej osi NIE MA (praca nie ma zakupu, paliwo nie ma wykonania) i wypada
+// z sumy zamiast wchodzić do niej jako „Do zamówienia" — inaczej gałąź z samą robocizną
+// pokazywałaby oś zakupu, której nikt na niej nie prowadzi.
+export const axisStatusCodeOf = (node, axis = 'plan') => {
+  // Oś ZA BRAMKĄ nie ma jeszcze kodu — do sumy gałęzi wchodzi tak samo jak oś, której liść
+  // w ogóle nie ma: nie wchodzi. Inaczej gałąź świeżych pozycji meldowałaby „Do zamówienia 12"
+  // nad zbiorem, w którym nikt niczego jeszcze nie może zamówić.
+  if (axisGateOf(node, axis)) return null;
+  if (axis === 'purchase') return hasPurchaseAxis(node?.type) ? (node?.purchaseStatus || DEFAULT_PURCHASE_STATUS) : null;
+  if (axis === 'exec')     return hasExecAxis(node?.type)     ? (node?.execStatus     || DEFAULT_EXEC_STATUS)     : null;
+  // Kody planu sprowadzamy do PLANISTYCZNYCH (`planStatusFromAny`), bo `WbsNode.status` niesie
+  // w starych danych też kody realizacyjne. Bez tego plakietka mówiła „Nowe 34, Oczekuje 24" —
+  // dwa słowa na jeden stan — albo wyświetlała nad gałęzią „Na magazynie" z jednej pozycji,
+  // która zdążyła dojechać.
+  return planStatusFromAny(node?.status);
+};
+
 // @anchor collect-own-status-codes — kody statusów pozycji, z których liczy się status gałęzi.
 // Rekurencja ZATRZYMUJE SIĘ na pierwszym węźle z własnym statusem: pozycja kosztowa z dziećmi
 // wchodzi do sumy sama, a jej podpozycje są jej sprawą, nie sprawą gałęzi wyżej.
-//
-// Kody sprowadzamy do PLANISTYCZNYCH (`planStatusFromAny`), bo gałąź żyje w planowaniu.
-// Bez tego plakietka mówiła „Nowe 34, Oczekuje 24" — dwa słowa na jeden stan — albo
-// wyświetlała nad gałęzią „Na magazynie" z pojedynczej pozycji, która zdążyła dojechać.
-export const collectOwnStatusCodes = (node, depth = 0, out = []) => {
+export const collectOwnStatusCodes = (node, depth = 0, out = [], axis = 'plan') => {
   for (const kid of (node?.children || [])) {
     if (nodeHasOwnStatus(kid, depth + 1)) {
-      out.push(planStatusFromAny(kid.status));
+      const code = axisStatusCodeOf(kid, axis);
+      if (code) out.push(code);
     } else {
-      collectOwnStatusCodes(kid, depth + 1, out);
+      collectOwnStatusCodes(kid, depth + 1, out, axis);
     }
   }
   return out;
@@ -561,15 +664,16 @@ export const collectOwnStatusCodes = (node, depth = 0, out = []) => {
 
 // @anchor aggregate-branch-status — status gałęzi z sumy statusów jej pozycji, liczony na
 // DRZEWIE (węzeł niesie `children`). Wariant dla płaskiej listy: `buildAggregatedStatusMap`.
-export const aggregateBranchStatus = (node, depth = 0) =>
-  summarizeStatusCodes(collectOwnStatusCodes(node, depth));
+// `axis` wybiera oś: `plan` (domyślnie), `purchase`, `exec`.
+export const aggregateBranchStatus = (node, depth = 0, axis = 'plan') =>
+  summarizeStatusCodes(collectOwnStatusCodes(node, depth, [], axis), axis);
 
 // @anchor build-aggregated-status-map — te same wyliczone statusy gałęzi, tylko liczone na
 // PŁASKIEJ liście węzłów (`/wbs-nodes/unified/:nodeId` zwraca listę, nie drzewo). Mapa trzyma
 // WYŁĄCZNIE węzły bez własnego statusu, więc obecność klucza znaczy „to gałąź".
 // Jedno źródło dla widoku Budżet i eksportów: bez tego tabela pokazywała status wyliczony,
 // a Excel obok — starą wartość z bazy, której w drzewie już nikt nie widział.
-export const buildAggregatedStatusMap = (flatItems = []) => {
+export const buildAggregatedStatusMap = (flatItems = [], axis = 'plan') => {
   const kidsByParent = new Map();
   for (const item of flatItems) {
     const p = item?.parentId || '__root__';
@@ -581,8 +685,10 @@ export const buildAggregatedStatusMap = (flatItems = []) => {
 
   const collect = (item, out = []) => {
     for (const kid of (kidsByParent.get(item?.id) || [])) {
-      if (hasOwn(kid)) out.push(planStatusFromAny(kid.status));
-      else collect(kid, out);
+      if (hasOwn(kid)) {
+        const code = axisStatusCodeOf(kid, axis);
+        if (code) out.push(code);
+      } else collect(kid, out);
     }
     return out;
   };
@@ -590,7 +696,7 @@ export const buildAggregatedStatusMap = (flatItems = []) => {
   const map = new Map();
   for (const item of flatItems) {
     if (hasOwn(item)) continue;
-    map.set(item.id, summarizeStatusCodes(collect(item)));
+    map.set(item.id, summarizeStatusCodes(collect(item), axis));
   }
   return map;
 };
@@ -599,10 +705,11 @@ export const buildAggregatedStatusMap = (flatItems = []) => {
 // jeden wspólny kod → ten kod, więcej niż jeden → `MIXED`, brak pozycji → pusty kod („Brak").
 // `breakdown` niesie rozbicie do tooltipa, żeby „Mieszany" dało się rozwinąć bez wchodzenia w drzewo.
 //
-// Etykiety bierzemy ze słownika PLANU: gałąź żyje w planowaniu i opisuje zbiór wierszy oferty,
-// więc mówi „Nowe" i „Zaakceptowane", a nie magazynowe „Nowy" czy „Na magazynie".
-export const summarizeStatusCodes = (codes = []) => {
-  const label = code => PLAN_STATUS_META[code]?.label || STRUCTURE_STATUS_META[code]?.label || code;
+// Etykiety bierzemy ze słownika WYBRANEJ OSI; `STRUCTURE_STATUS_META` zostaje jako awaryjne
+// źródło dla kodów spoza słownika (stare dane) oraz dla `MIXED` i pustki.
+export const summarizeStatusCodes = (codes = [], axis = 'plan') => {
+  const meta = AXIS_STATUS_META[axis] || PLAN_STATUS_META;
+  const label = code => meta[code]?.label || STRUCTURE_STATUS_META[code]?.label || code;
   const counts = new Map();
   for (const c of codes) counts.set(c, (counts.get(c) || 0) + 1);
   const breakdown = [...counts.entries()]
@@ -613,6 +720,61 @@ export const summarizeStatusCodes = (codes = []) => {
   if (breakdown.length === 1) return { ...breakdown[0], count: codes.length, breakdown };
   return { code: 'MIXED', label: STRUCTURE_STATUS_META.MIXED.label, count: codes.length, breakdown };
 };
+
+// ── Statusy realizacji z FAKTÓW ────────────────────────────────────────────
+// Wpis realizacji (`LeafActual`) i podpisany protokół odbioru są zdarzeniami, które mówią coś
+// o stanie pozycji. Etap 5 pozwala im ten stan PODPOWIADAĆ, ale nie przestawiać: wpis bywa
+// zaliczką, a nie dostawą, i tylko człowiek wie, który to przypadek.
+
+// @anchor suggest-axis-status — podpowiedź statusów realizacji z dziennika wpisów pozycji.
+// Zwraca WYŁĄCZNIE osie, na których fakt mówi coś nowego; pusty obiekt = nie ma co podpowiadać.
+// Reguły (z etapu 5):
+//   0 < Σ ilości < plan   → zakup „Dostawa częściowa"
+//   Σ ilości >= plan      → zakup „Dostarczone"
+//   pierwszy wpis         → wykonanie „W toku"
+// Podpowiedź nigdy nie COFA: porównanie przez `AXIS_STATUS_ORDER` odrzuca propozycję, która
+// leży bliżej początku drogi niż wartość ustawiona ręcznie. Pozycja ROZLICZONA (`realizationClosed`)
+// nie dostaje podpowiedzi w ogóle — to świadome „zamykam mimo niedowykonania", więc dopowiadanie
+// jej „Dostawa częściowa" podważałoby decyzję, którą ktoś przed chwilą podjął.
+// Oś ZA BRAMKĄ (`axisGateOf`) też nie dostaje podpowiedzi: łańcuch etapów jest ważniejszy niż
+// fakt z dziennika. Wpis na pozycji, której klient jeszcze nie przyjął, jest sygnałem, że coś
+// jest nie tak ze statusem oferty — a nie powodem, żeby po cichu otworzyć realizację.
+export const suggestAxisStatus = (node, { qty = 0, plan = 0, entriesCount = 0 } = {}) => {
+  const out = {};
+  if (!node || node.realizationClosed) return out;
+
+  const dalej = (axis, current, proposed) => {
+    if (!proposed || proposed === current) return false;
+    const order = AXIS_STATUS_ORDER[axis] || {};
+    return (order[proposed] ?? 0) > (order[current] ?? 0);
+  };
+
+  if (hasPurchaseAxis(node.type) && !axisGateOf(node, 'purchase') && qty > 1e-9) {
+    const current = node.purchaseStatus || DEFAULT_PURCHASE_STATUS;
+    const proposed = (plan > 0 && qty >= plan - 1e-9) ? 'DELIVERED' : 'PARTIALLY_DELIVERED';
+    if (dalej('purchase', current, proposed)) out.purchaseStatus = proposed;
+  }
+
+  if (hasExecAxis(node.type) && !axisGateOf(node, 'exec') && entriesCount > 0) {
+    const current = node.execStatus || DEFAULT_EXEC_STATUS;
+    if (dalej('exec', current, 'IN_PROGRESS')) out.execStatus = 'IN_PROGRESS';
+  }
+
+  return out;
+};
+
+// @anchor handed-over-from-protocol — „Odebrane" WYLICZONE z rejestru protokołów, nigdy
+// zapisywane. `odbior` to wpis z `GET /acceptance-protocols/:nodeId/status` dla korzenia
+// liścia (`wbsRootOf`); `domkniete` znaczy, że któryś protokół objął pozycję w całości.
+//
+// Warunek `DONE` jest tu istotny: odbiór nie może wyprzedzić wykonania. Protokół potrafi
+// domknąć pozycję kwotowo, zanim ktokolwiek oznaczy ją jako zrobioną — i wtedy „Odebrane"
+// nad pozycją „Do montażu" opisywałoby stan, którego nie ma.
+//
+// Wartość nie idzie do bazy świadomie: wycofanie protokołu (`acceptance-protocols-remove`)
+// samo cofa etykietę, a zapisany `HANDED_OVER` zostałby na pozycji po skasowanym dokumencie.
+export const handedOverFromProtocol = (node, odbior) =>
+  hasExecAxis(node?.type) && node?.execStatus === 'DONE' && !!odbior?.domkniete;
 
 // @anchor is-leaf-node
 export const isLeafNode = node => !node || !node.children || node.children.length === 0;

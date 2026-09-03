@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
 import {
     ChevronRight, ChevronDown, Plus, Trash2, AlertCircle, CornerDownLeft, ShoppingCart, X, FileSpreadsheet, FileText,
+    Link, Sparkles, Hourglass,
 } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { API_URL } from '../../config';
@@ -8,9 +9,12 @@ import SupplierPicker from './SupplierPicker';
 import { RequirementImageBox } from './wbs/WbsMaterialsPanel';
 import AutoResizeTextarea from './wbs/AutoResizeTextarea';
 import ProtokolOdbioruModal from './wbs/ProtokolOdbioruModal';
+import { fetchStatusOdbioru } from '../../utils/protokolOdbioruExport';
 import { sanitizeQtyInput, parsePriceInput, DRAWER, STRUCTURE_STATUS_META, statusMetaForType, statusOptionsForType, statusLabelForType, resolveStatusCode, usesWorkStatuses,
     PLAN_STATUS_META, planStatusFromAny, PURCHASE_STATUS_META, EXEC_STATUS_META, execStatusLabel,
-    hasPurchaseAxis, hasExecAxis, DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS } from './wbs/wbsConstants';
+    hasPurchaseAxis, hasExecAxis, DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS,
+    suggestAxisStatus, handedOverFromProtocol, summarizeStatusCodes, axisStatusCodeOf, axisGateOf,
+    AXIS_STATUS_META } from './wbs/wbsConstants';
 import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath,
     leafNodesOf, buildCardMap, wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf,
@@ -71,10 +75,30 @@ export const statusLabel = (node) => PLAN_STATUS_META[planStatusFromAny(node?.st
 // @anchor realization-axis-labels — etykiety osi realizacji dla szukajki i sortowania.
 // Muszą czytać dokładnie to, co komórka: inaczej wpisanie „zamówione" nie znajduje pozycji,
 // którą widać na ekranie.
-export const purchaseStatusLabel = (node) =>
-    hasPurchaseAxis(node?.type) ? (PURCHASE_STATUS_META[node?.purchaseStatus || DEFAULT_PURCHASE_STATUS]?.label || '') : '';
-export const execStatusLabelOf = (node) =>
-    hasExecAxis(node?.type) ? execStatusLabel(node?.type, node?.execStatus || DEFAULT_EXEC_STATUS) : '';
+export const purchaseStatusLabel = (node) => {
+    if (!hasPurchaseAxis(node?.type)) return '';
+    const gate = axisGateOf(node, 'purchase');
+    if (gate) return gate.label;
+    return PURCHASE_STATUS_META[node?.purchaseStatus || DEFAULT_PURCHASE_STATUS]?.label || '';
+};
+// `odbior` (wpis z rejestru protokołów dla korzenia liścia) podmienia etykietę na „Odebrane"
+// dokładnie tam, gdzie robi to komórka — inaczej wpisanie „odebrane" w wyszukiwarkę nie
+// znajdowałoby pozycji, którą widać na ekranie.
+export const execStatusLabelOf = (node, odbior = null) => {
+    if (!hasExecAxis(node?.type)) return '';
+    const gate = axisGateOf(node, 'exec');
+    if (gate) return gate.label;
+    const code = handedOverFromProtocol(node, odbior) ? 'HANDED_OVER' : (node?.execStatus || DEFAULT_EXEC_STATUS);
+    return execStatusLabel(node?.type, code);
+};
+
+// @anchor realization-exec-code-of — kod osi wykonania DO POKAZANIA: zapisany `execStatus`
+// albo wyliczone z protokołu „Odebrane". Jedno źródło dla komórki, dla plakietki gałęzi
+// i dla eksportu, żeby żadne z nich nie mówiło czegoś innego niż pozostałe.
+export const execCodeOf = (node, odbior = null) =>
+    axisGateOf(node, 'exec') ? null
+        : handedOverFromProtocol(node, odbior) ? 'HANDED_OVER'
+        : axisStatusCodeOf(node, 'exec');
 
 // @anchor realization-forecast-min-share — próg wiarygodności prognozy wydatków: dopóki
 // wykonanie rodzaju kosztów nie osiągnie tego udziału w jego wycenie, prognoza zostaje na
@@ -175,6 +199,65 @@ const FORMULA_HINT = 'Można wpisać działanie, np. =4,3*220 — zapisze się w
 // koszt jedn.): tam nie ma czego pokazywać, a złamanie liczby na dwie linie psuje kolumnę.
 const growsWithText = (k) => k !== 'entryDate' && !NUMERIC_ENTRY_FIELDS.has(k);
 
+// @anchor realization-status-hint — PODPOWIEDŹ statusu realizacji: wynik faktów z dziennika
+// wpisów, postawiony obok selecta jako osobny, klikalny znacznik. Świadomie nie jest
+// automatem — wpis bywa zaliczką albo dostawą częściową opisaną jedną fakturą, a tego
+// dokumentu nie da się odróżnić od pełnej dostawy inaczej niż pytając człowieka.
+// Klik ZAPISUJE podpowiadaną wartość tą samą drogą co ręczna zmiana w selekcie; brak kliku
+// nie zmienia niczego, więc znacznik może wisieć nad pozycją dowolnie długo.
+export function StatusHint({ label, color, title, onAccept, disabled }) {
+    if (disabled) return null;
+    return (
+        <button
+            type="button"
+            onClick={onAccept}
+            title={title}
+            className={`mt-1 w-full inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-dashed border-white/20 bg-white/[0.03] text-[11px] font-medium hover:bg-white/10 hover:border-white/40 transition-colors ${color || 'text-gray-300'}`}
+        >
+            <Sparkles size={9} className="flex-shrink-0" />
+            <span className="truncate">→ {label}</span>
+        </button>
+    );
+}
+
+// @anchor realization-gate-badge — plakietka etapu, który jeszcze nie ruszył (`axisGateOf`).
+// Zamiast dropdowna, nie obok niego: skoro oś czeka na poprzedni etap, nie ma czego wybierać,
+// a wyszarzony select czytałoby się jak brak uprawnień. Klepsydra odróżnia „czeka na coś"
+// od „wyliczone z pozycji poddrzewa" (łańcuch w `BranchAxisBadge`) — oba są nieedytowalne,
+// ale z zupełnie innego powodu, i tooltip każdej mówi, co ją odblokuje.
+export function AxisGateBadge({ gate }) {
+    return (
+        <span
+            title={gate.title}
+            className="inline-flex items-center gap-1 max-w-full px-1.5 py-0.5 rounded border border-dashed border-white/15 bg-black/30 text-sm font-medium text-gray-500 cursor-default"
+        >
+            <Hourglass size={9} className="flex-shrink-0" />
+            <span className="truncate">{gate.label}</span>
+        </span>
+    );
+}
+
+// @anchor realization-branch-badge — plakietka statusu GAŁĘZI: wartość wyliczona z pozycji,
+// nigdy zapisana i nigdy edytowalna. Ta sama ikona łańcucha co w `AggregatedStatusBadge`
+// w drzewie WBS, żeby „wyliczone" wyglądało w obu widokach tak samo.
+export function BranchAxisBadge({ agg, axis, opis }) {
+    const meta = (AXIS_STATUS_META[axis] || {})[agg.code];
+    const color = meta?.color || 'text-gray-500';
+    const title = agg.count === 0
+        ? 'Brak pozycji z tą osią w tej gałęzi'
+        : `${opis} — wyliczone z ${agg.count} widocznych pozycji: `
+          + agg.breakdown.map(b => `${b.label} ${b.count}`).join(', ');
+    return (
+        <span
+            title={title}
+            className={`inline-flex items-center gap-1 max-w-full px-1.5 py-0.5 rounded border border-white/10 bg-black/40 text-sm font-medium cursor-default ${color}`}
+        >
+            <Link size={9} className="flex-shrink-0" />
+            <span className="truncate">{agg.label}</span>
+        </span>
+    );
+}
+
 // ─── Wiersz pozycji ───────────────────────────────────────────────────────────
 
 // Podkomponenty poniżej są eksportowane WYŁĄCZNIE dla `test/test-realization-render.mjs`.
@@ -186,7 +269,7 @@ const growsWithText = (k) => k !== 'entryDate' && !NUMERIC_ENTRY_FIELDS.has(k);
 // @anchor realization-row — jeden liść WBS: plan z wyceny obok realizacji z wpisów.
 // Wiersz jest tylko odczytem — wszystko, co się wpisuje, siedzi w wierszach potomnych,
 // więc klik w tabelę nie może przypadkiem zmienić wyceny.
-export function RealizationRow({ node, card, realization, isExpanded, onToggle, onAddClick, onSaveComment, onSaveStatus, onSaveAxis, readOnly }) {
+export function RealizationRow({ node, card, realization, odbior, isExpanded, onToggle, onAddClick, onSaveComment, onSaveStatus, onSaveAxis, readOnly }) {
     const meta = TYPE_META[node.type] || TYPE_META.material;
     const TypeIcon = meta.icon;
     const r = realization;
@@ -208,6 +291,18 @@ export function RealizationRow({ node, card, realization, isExpanded, onToggle, 
         if (v === (node.comment || '')) return;
         onSaveComment(node.id, v);
     };
+
+    // @anchor realization-row-hints — co dziennik wpisów i rejestr odbiorów mówią o tej pozycji.
+    // `hints` bywa pustym obiektem — wtedy pod selectami nie ma nic i wiersz wygląda jak dotąd.
+    const hints = suggestAxisStatus(node, { qty: r.qty, plan: r.plan, entriesCount: r.entries.length });
+    // @anchor realization-row-gates — etapy, które na tej pozycji jeszcze nie ruszyły.
+    // Bramka wygrywa z każdą inną zawartością komórki: nie ma dropdowna, podpowiedzi ani
+    // plakietki odbioru na osi, której nie wolno jeszcze zacząć.
+    const purchaseGate = axisGateOf(node, 'purchase');
+    const execGate = axisGateOf(node, 'exec');
+    const handedOver = !execGate && handedOverFromProtocol(node, odbior);
+    const hintTitle = `Podpowiedź z ${r.entries.length} ${r.entries.length === 1 ? 'wpisu' : 'wpisów'} realizacji `
+        + `(${fmtQty(r.qty)} z ${fmtQty(r.plan)} ${node.unit || 'szt'}). Kliknij, aby ustawić — nic się nie zapisze, dopóki nie klikniesz.`;
 
     const planUnit = planUnitOf(node, card);
     const planValue = planUnit != null ? planUnit * (Number(node.quantity) || 0) : null;
@@ -385,7 +480,8 @@ export function RealizationRow({ node, card, realization, isExpanded, onToggle, 
             {/* ZAKUP — droga towaru albo zlecenia (`WbsNode.purchaseStatus`). Praca własna tej
                 osi nie ma: nie da się zamówić dnia pracy własnej ekipy. */}
             <td className="px-3 py-2.5 overflow-hidden" onClick={e => e.stopPropagation()}>
-                {hasPurchaseAxis(node.type) ? (
+                {!hasPurchaseAxis(node.type) ? <span className="text-sm text-gray-700">—</span>
+                : purchaseGate ? <AxisGateBadge gate={purchaseGate} /> : (
                     <select
                         value={node.purchaseStatus || DEFAULT_PURCHASE_STATUS}
                         onChange={e => onSaveAxis(node, 'purchaseStatus', e.target.value)}
@@ -397,13 +493,23 @@ export function RealizationRow({ node, card, realization, isExpanded, onToggle, 
                             <option key={c} value={c} className="bg-gray-900 text-white">{m.label}</option>
                         ))}
                     </select>
-                ) : <span className="text-sm text-gray-700">—</span>}
+                )}
+                {hints.purchaseStatus && (
+                    <StatusHint
+                        label={PURCHASE_STATUS_META[hints.purchaseStatus].label}
+                        color={PURCHASE_STATUS_META[hints.purchaseStatus].color}
+                        title={hintTitle}
+                        disabled={readOnly}
+                        onAccept={() => onSaveAxis(node, 'purchaseStatus', hints.purchaseStatus)}
+                    />
+                )}
             </td>
 
             {/* WYKONANIE — droga roboty (`WbsNode.execStatus`). Materiał i sprzęt czytają tę oś
                 jako MONTAŻ („Zainstalowane" zamiast „Wykonane"); nocleg i paliwo jej nie mają. */}
             <td className="px-3 py-2.5 overflow-hidden" onClick={e => e.stopPropagation()}>
-                {hasExecAxis(node.type) ? (
+                {!hasExecAxis(node.type) ? <span className="text-sm text-gray-700">—</span>
+                : execGate ? <AxisGateBadge gate={execGate} /> : (
                     <select
                         value={node.execStatus || DEFAULT_EXEC_STATUS}
                         onChange={e => onSaveAxis(node, 'execStatus', e.target.value)}
@@ -415,7 +521,30 @@ export function RealizationRow({ node, card, realization, isExpanded, onToggle, 
                             <option key={c} value={c} className="bg-gray-900 text-white">{execStatusLabel(node.type, c)}</option>
                         ))}
                     </select>
-                ) : <span className="text-sm text-gray-700">—</span>}
+                )}
+                {/* @anchor realization-handed-over-badge — „Odebrane" WYLICZONE z protokołu,
+                    a nie wybrane w selekcie: stan bierze się z podpisanego dokumentu, więc
+                    wycofanie protokołu sam go cofa. Select zostaje na `DONE` i pozostaje
+                    edytowalny — plakietka opisuje fakt, nie blokuje pozycji. */}
+                {handedOver && (
+                    <span
+                        title={`Odebrane protokołem: ${(odbior?.protokoly || []).map(x => x.numer).join(', ') || '—'}. `
+                            + 'Wyliczone z rejestru odbiorów — wycofanie protokołu cofa tę wartość.'}
+                        className={`mt-1 w-full inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-white/10 bg-black/40 text-[11px] font-medium cursor-default ${EXEC_STATUS_META.HANDED_OVER.color}`}
+                    >
+                        <Link size={9} className="flex-shrink-0" />
+                        <span className="truncate">{execStatusLabel(node.type, 'HANDED_OVER')}</span>
+                    </span>
+                )}
+                {hints.execStatus && !handedOver && (
+                    <StatusHint
+                        label={execStatusLabel(node.type, hints.execStatus)}
+                        color={EXEC_STATUS_META[hints.execStatus].color}
+                        title={hintTitle}
+                        disabled={readOnly}
+                        onAccept={() => onSaveAxis(node, 'execStatus', hints.execStatus)}
+                    />
+                )}
             </td>
 
             {/* Komentarz pozycji — `WbsNode.comment`, wspólny z WBSHybridTable i panelem Materiały */}
@@ -438,6 +567,72 @@ export function RealizationRow({ node, card, realization, isExpanded, onToggle, 
                     {r.entries.length || '—'}
                 </span>
             </td>
+        </tr>
+    );
+}
+
+// @anchor realization-group-row — wiersz GAŁĘZI: nagłówek grupy pozycji, które pod nią wiszą.
+// Gałąź własnego statusu nie ma na żadnej z trzech osi (`nodeHasOwnStatus`), więc wszystkie
+// trzy komórki niosą wartość WYLICZONĄ i nieedytowalną.
+//
+// Sumujemy pozycje WIDOCZNE w tej grupie, nie całe poddrzewo z bazy — ta sama zasada, co
+// w stopce tabeli (`realization-totals`): po zawężeniu filtrem nagłówek ma mówić o tym,
+// na co się właśnie patrzy. Rozjazd między plakietką a wierszami pod nią czytałoby się
+// jak błąd danych, a nie jak inny zakres.
+export function RealizationGroupRow({ group, collapsed, onToggle }) {
+    return (
+        <tr className="border-y border-white/10 bg-white/[0.04]">
+            <td className="px-1.5 py-2">
+                <button onClick={onToggle} title={collapsed ? 'Rozwiń gałąź' : 'Zwiń gałąź'}
+                    className="transition-colors align-middle text-gray-400 hover:text-teal-300">
+                    {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                </button>
+            </td>
+            {COL_DEFS.map(c => {
+                const base = 'px-3 py-2';
+                if (c.key === 'parent') return (
+                    <td key={c.key} className={base}>
+                        <button onClick={onToggle} className="text-sm font-bold text-white break-words text-left hover:text-teal-200 transition-colors" title={group.path}>
+                            {group.label}
+                        </button>
+                    </td>
+                );
+                if (c.key === 'name') return (
+                    <td key={c.key} className={base}>
+                        <span className="text-xs text-gray-400">
+                            {group.rows.length} {group.rows.length === 1 ? 'pozycja' : 'pozycji'}
+                        </span>
+                    </td>
+                );
+                if (c.key === 'total') return (
+                    <td key={c.key} className={`${base} text-right font-mono text-sm whitespace-nowrap`}>
+                        {/* Ten sam podział kolorów co w wierszach — patrz `realization-total-plan-color`. */}
+                        <div className="text-orange-400/80" title="Suma kosztów całkowitych z wyceny w tej gałęzi">{fmtZl(group.plan)} zł</div>
+                        <div className="text-red-400/80" title="Suma kosztów całkowitych zakupu w tej gałęzi">{fmtZl(group.real)} zł</div>
+                    </td>
+                );
+                if (c.key === 'status') return (
+                    <td key={c.key} className={`${base} overflow-hidden`}>
+                        <BranchAxisBadge agg={group.axes.plan} axis="plan" opis="Status oferty gałęzi" />
+                    </td>
+                );
+                if (c.key === 'purchaseStatus') return (
+                    <td key={c.key} className={`${base} overflow-hidden`}>
+                        <BranchAxisBadge agg={group.axes.purchase} axis="purchase" opis="Status zakupu gałęzi" />
+                    </td>
+                );
+                if (c.key === 'execStatus') return (
+                    <td key={c.key} className={`${base} overflow-hidden`}>
+                        <BranchAxisBadge agg={group.axes.exec} axis="exec" opis="Status wykonania gałęzi" />
+                    </td>
+                );
+                if (c.key === 'actions') return (
+                    <td key={c.key} className={`${base} text-right`}>
+                        <span className="text-xs text-gray-500 font-mono">{group.entries || '—'}</span>
+                    </td>
+                );
+                return <td key={c.key} className={base} />;
+            })}
         </tr>
     );
 }
@@ -904,6 +1099,20 @@ export default function RealizationTab({
     // @anchor realization-protokol-open — modal protokołu odbioru prac. Zaznaczenie liści
     // i pytania mieszkają w modalu, tutaj zostaje tylko przycisk i dane wejściowe.
     const [protokolOtwarty, setProtokolOtwarty] = useState(false);
+    // @anchor realization-odbior-status — rejestr odbiorów zamówienia, `wbsRootId → { odebrane,
+    // domkniete, protokoly }`. Z niego bierze się wyliczone „Odebrane" na osi wykonania
+    // (`handedOverFromProtocol`). Odczyt pomocniczy: brak odpowiedzi zostawia pustą mapę,
+    // czyli tabelę bez plakietek odbioru — a nie pustą tabelę.
+    const [odbiorByRoot, setOdbiorByRoot] = useState({});
+    // @anchor realization-collapsed-groups — zwinięte gałęzie, po id węzła nadrzędnego.
+    // Zwijanie jest FOLDEM widoku, nie filtrem: stopka nadal sumuje pozycje z gałęzi zwiniętej,
+    // bo one wciąż należą do tego, co pokazuje filtr.
+    const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
+    const toggleGroup = useCallback((key) => setCollapsedGroups(prev => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key); else next.add(key);
+        return next;
+    }), []);
 
     const [sortConfig, setSortConfig] = useState({ key: 'parent', direction: 'asc' });
     const [colFilters, setColFilters] = useState({});
@@ -964,6 +1173,16 @@ export default function RealizationTab({
     }, [token]);
 
     useEffect(() => { fetchAll(); }, [fetchAll, refreshKey]);
+
+    // @anchor realization-fetch-odbior — stan odbiorów osobno od drzewa WBS: wystawienie
+    // protokołu zmienia go bez ruszania wyceny, więc zamknięcie modalu przeładowuje TYLKO to.
+    const fetchOdbior = useCallback(() => {
+        if (!nodeId) return;
+        fetchStatusOdbioru(nodeId)
+            .then(setOdbiorByRoot)
+            .catch(() => { /* odczyt pomocniczy — bez rejestru po prostu nie ma plakietek odbioru */ });
+    }, [nodeId]);
+    useEffect(() => { fetchOdbior(); }, [fetchOdbior, refreshKey]);
 
     // ─ Mutacje ───────────────────────────────────────────────────────────────
 
@@ -1165,6 +1384,10 @@ export default function RealizationTab({
 
     const leaves = useMemo(() => leafNodesOf(wbsNodes, visibleTypes), [wbsNodes, visibleTypes]);
 
+    // @anchor realization-node-by-id — węzeł po id; nagłówek grupy potrzebuje NAZWY gałęzi,
+    // a liść niesie tylko własną ścieżkę.
+    const nodeById = useMemo(() => new Map(wbsNodes.map(n => [n.id, n])), [wbsNodes]);
+
     const actualsByRoot = useMemo(() => {
         const map = {};
         for (const a of actuals) {
@@ -1203,7 +1426,7 @@ export default function RealizationTab({
                 (card?.technicalSpec || '').toLowerCase().includes(q) ||
                 statusLabel(node).toLowerCase().includes(q) ||
                 purchaseStatusLabel(node).toLowerCase().includes(q) ||
-                execStatusLabelOf(node).toLowerCase().includes(q) ||
+                execStatusLabelOf(node, odbiorByRoot[wbsRootOf(node)]).toLowerCase().includes(q) ||
                 (node.comment || '').toLowerCase().includes(q) ||
                 realization.entries.some(e =>
                     (e.docNumber || '').toLowerCase().includes(q) ||
@@ -1240,7 +1463,7 @@ export default function RealizationTab({
                 if (key === 'total')         return `${Math.round(planValueOf(node, card) * 100) / 100} ${realization.value}`.includes(q);
                 if (key === 'status')        return statusLabel(node).toLowerCase().includes(q);
                 if (key === 'purchaseStatus') return purchaseStatusLabel(node).toLowerCase().includes(q);
-                if (key === 'execStatus')     return execStatusLabelOf(node).toLowerCase().includes(q);
+                if (key === 'execStatus')     return execStatusLabelOf(node, odbiorByRoot[wbsRootOf(node)]).toLowerCase().includes(q);
                 if (key === 'comment')       return (node.comment || '').toLowerCase().includes(q);
                 if (key === 'actions')       return String(realization.entries.length).includes(q);
                 return true;
@@ -1266,14 +1489,58 @@ export default function RealizationTab({
             else if (k === 'total')        cmp = (a.realization.value - planValueOf(a.node, a.card)) - (b.realization.value - planValueOf(b.node, b.card));
             else if (k === 'status')       cmp = statusLabel(a.node).localeCompare(statusLabel(b.node), 'pl');
             else if (k === 'purchaseStatus') cmp = purchaseStatusLabel(a.node).localeCompare(purchaseStatusLabel(b.node), 'pl');
-            else if (k === 'execStatus')     cmp = execStatusLabelOf(a.node).localeCompare(execStatusLabelOf(b.node), 'pl');
+            else if (k === 'execStatus')     cmp = execStatusLabelOf(a.node, odbiorByRoot[wbsRootOf(a.node)]).localeCompare(execStatusLabelOf(b.node, odbiorByRoot[wbsRootOf(b.node)]), 'pl');
             else if (k === 'comment')      cmp = (a.node.comment || '').localeCompare(b.node.comment || '', 'pl');
             else if (k === 'actions')      cmp = a.realization.entries.length - b.realization.entries.length;
             return sortConfig.direction === 'asc' ? cmp : -cmp;
         });
 
         return list;
-    }, [leaves, cards, actualsByRoot, searchQuery, colFilters, sortConfig]);
+    }, [leaves, cards, actualsByRoot, odbiorByRoot, searchQuery, colFilters, sortConfig]);
+
+    // @anchor realization-groups — widoczne pozycje pod nagłówkami GAŁĘZI, po węźle nadrzędnym.
+    // Kolejność grup bierze się z KOLEJNOŚCI SORTOWANIA wierszy (pierwsze wystąpienie gałęzi),
+    // więc sortowanie po dowolnej kolumnie nadal rządzi widokiem, a grupy jadą za nim zamiast
+    // narzucać własny porządek. Nagłówek liczy statusy trzech osi z pozycji w swojej grupie —
+    // patrz `realization-group-row`.
+    const groups = useMemo(() => {
+        const map = new Map();
+        for (const row of rows) {
+            const key = row.node.parentId || '__root__';
+            if (!map.has(key)) {
+                const parent = nodeById.get(key) || null;
+                map.set(key, {
+                    key,
+                    label: parent?.name || getParentPath(row.node.path),
+                    path: parent?.path || getParentPath(row.node.path),
+                    rows: [],
+                });
+            }
+            map.get(key).rows.push(row);
+        }
+        return [...map.values()].map(g => {
+            const codes = axis => g.rows
+                .map(({ node }) => (axis === 'exec' ? execCodeOf(node, odbiorByRoot[wbsRootOf(node)]) : axisStatusCodeOf(node, axis)))
+                .filter(Boolean);
+            let plan = 0, real = 0, entries = 0;
+            for (const { node, card, realization } of g.rows) {
+                plan += planValueOf(node, card);
+                real += realization.value;
+                entries += realization.entries.length;
+            }
+            return {
+                ...g,
+                plan: Math.round(plan * 100) / 100,
+                real: Math.round(real * 100) / 100,
+                entries,
+                axes: {
+                    plan:     summarizeStatusCodes(codes('plan'), 'plan'),
+                    purchase: summarizeStatusCodes(codes('purchase'), 'purchase'),
+                    exec:     summarizeStatusCodes(codes('exec'), 'exec'),
+                },
+            };
+        });
+    }, [rows, nodeById, odbiorByRoot]);
 
     // @anchor realization-totals — sumy z WIDOCZNYCH wierszy, nie z całego zamówienia:
     // po zawężeniu filtrem stopka ma mówić o tym, na co się właśnie patrzy.
@@ -1383,13 +1650,23 @@ export default function RealizationTab({
                 { header: 'Koszt całk. wyceny', key: 'valuePlan', width: 18 },
                 { header: 'Koszt całk. realizacji', key: 'valueReal', width: 20 },
                 { header: 'Δ wartość', key: 'delta', width: 14 },
+                // @anchor realization-export-status-cols — trzy osie statusu w tej samej
+                // kolejności co na ekranie. Oś, której dany typ liścia NIE MA (praca nie ma
+                // zakupu, paliwo nie ma wykonania), dostaje „—", a nie pustą komórkę: puste
+                // znaczyłoby „nikt jeszcze nie ustawił", a to zupełnie inna informacja.
+                // Oś wykonania niesie stan WYLICZONY (`execStatusLabelOf` z rejestrem odbiorów),
+                // więc pozycja odebrana protokołem wychodzi w Excelu jako „Odebrane" — tak samo
+                // jak w tabeli, mimo że w bazie stoi na „Wykonane".
+                { header: 'Status oferty', key: 'statusPlan', width: 16 },
+                { header: 'Status zakupu', key: 'statusPurchase', width: 18 },
+                { header: 'Status wykonania', key: 'statusExec', width: 20 },
                 { header: 'Rozliczone', key: 'closed', width: 11 },
                 { header: 'Wpisy', key: 'entries', width: 8 },
                 { header: 'Komentarz', key: 'comment', width: 40 },
             ];
             ws.getRow(1).font = { bold: true };
             ws.views = [{ state: 'frozen', ySplit: 1 }];
-            ws.autoFilter = 'A1:R1';
+            ws.autoFilter = 'A1:U1';
 
             rows.forEach(({ node, card, realization: r }, i) => {
                 const n = i + 2;
@@ -1416,6 +1693,9 @@ export default function RealizationTab({
                     // Zakup to SUMA wpisów o różnych cenach, nie iloczyn — zostaje wartością.
                     valueReal: hasReal ? r.value : null,
                     delta: planValue != null && hasReal ? { formula: `N${n}-M${n}`, result: Math.round((r.value - planValue) * 100) / 100 } : null,
+                    statusPlan: statusLabel(node),
+                    statusPurchase: purchaseStatusLabel(node) || '—',
+                    statusExec: execStatusLabelOf(node, odbiorByRoot[wbsRootOf(node)]) || '—',
                     closed: node.realizationClosed ? 'tak' : 'nie',
                     entries: r.entries.length,
                     comment: node.comment || '',
@@ -1428,7 +1708,7 @@ export default function RealizationTab({
                 valuePlan: { formula: `SUM(M2:M${last})`, result: totals.plan },
                 valueReal: { formula: `SUM(N2:N${last})`, result: totals.real },
                 delta: { formula: `SUM(O2:O${last})`, result: totals.delta },
-                entries: { formula: `SUM(Q2:Q${last})`, result: totals.entries },
+                entries: { formula: `SUM(T2:T${last})`, result: totals.entries },
             });
             sum.font = { bold: true };
             // Kwoty jako waluta PLN, ilości bez formatu (ogólne) — jednostka siedzi w osobnej
@@ -1723,7 +2003,7 @@ export default function RealizationTab({
                 ps.addRow({
                     a: t,
                     b: { formula: `COUNTIF(Realizacja!$C$2:$C$${last},$A${n})`, result: mine.length },
-                    c: { formula: `COUNTIFS(Realizacja!$C$2:$C$${last},$A${n},Realizacja!$P$2:$P$${last},"tak")`, result: mine.filter(x => x.node.realizationClosed).length },
+                    c: { formula: `COUNTIFS(Realizacja!$C$2:$C$${last},$A${n},Realizacja!$S$2:$S$${last},"tak")`, result: mine.filter(x => x.node.realizationClosed).length },
                     d: { formula: `SUMIF(Realizacja!$C$2:$C$${last},$A${n},Realizacja!$M$2:$M$${last})`, result: planT },
                     e: { formula: `SUMIF(Realizacja!$C$2:$C$${last},$A${n},Realizacja!$N$2:$N$${last})`, result: realT },
                     f: { formula: `E${n}-D${n}`, result: Math.round((realT - planT) * 100) / 100 },
@@ -1958,7 +2238,14 @@ export default function RealizationTab({
                                     </td>
                                 </tr>
                             )}
-                            {rows.map(({ node, card, realization }) => {
+                            {groups.map(group => (
+                              <React.Fragment key={`grp-${group.key}`}>
+                                <RealizationGroupRow
+                                    group={group}
+                                    collapsed={collapsedGroups.has(group.key)}
+                                    onToggle={() => toggleGroup(group.key)}
+                                />
+                                {!collapsedGroups.has(group.key) && group.rows.map(({ node, card, realization }) => {
                                 const isExpanded = expandedId === node.id;
                                 const hasCard = TYPE_META[node.type]?.hasCard !== false;
                                 const remaining = Math.round((realization.plan - realization.qty) * 1000) / 1000;
@@ -1968,6 +2255,7 @@ export default function RealizationTab({
                                             node={node}
                                             card={card}
                                             realization={realization}
+                                            odbior={odbiorByRoot[wbsRootOf(node)] || null}
                                             isExpanded={isExpanded}
                                             readOnly={readOnly}
                                             onSaveComment={saveComment}
@@ -2035,6 +2323,8 @@ export default function RealizationTab({
                                     </React.Fragment>
                                 );
                             })}
+                              </React.Fragment>
+                            ))}
                         </tbody>
                         {/* @anchor realization-totals-row — podsumowanie kosztów całkowitych wyceny
                             i zakupów dla wszystkich widocznych wierszy; przyklejone do dołu, żeby
@@ -2087,7 +2377,7 @@ export default function RealizationTab({
                 kwota w protokole zgadzała się z kolumną planu co do grosza. */}
             <ProtokolOdbioruModal
                 open={protokolOtwarty}
-                onClose={() => setProtokolOtwarty(false)}
+                onClose={() => { setProtokolOtwarty(false); fetchOdbior(); }}
                 rows={rows}
                 wbsNodes={wbsNodes}
                 nodeId={nodeId}
