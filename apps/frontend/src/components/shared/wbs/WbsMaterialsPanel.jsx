@@ -10,7 +10,7 @@ import {
 import { API_URL } from '../../../config';
 import { useDevice } from '../../../hooks/useDevice';
 import SupplierPicker from '../SupplierPicker';
-import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula, parsePriceInput, DRAWER, usesWorkStatuses, statusMetaForType, statusOptionsForType, statusLabelForType, resolveStatusCode } from './wbsConstants';
+import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula, parsePriceInput, DRAWER, usesWorkStatuses, resolveStatusCode, PLAN_STATUS_META, planStatusFromAny, planStatusLabel } from './wbsConstants';
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
 import { guardOfferEdit, requestOfferUnlock, offerLockInputProps } from '../OfferLockGuard';
 import AutoResizeTextarea from './AutoResizeTextarea';
@@ -1482,9 +1482,7 @@ const GROUP_SPINE = `${DRAWER.spine} ${DRAWER.accent.offer.spine}`;
 // Szukajka i sortowanie MUSZĄ czytać to samo, co komórka — inaczej wpisanie „nowe" nie
 // znajduje pozycji, którą widać na ekranie.
 const rowStatusLabel = (node, card) =>
-    usesWorkStatuses(node?.type)
-        ? statusLabelForType(node.type, node?.status)
-        : (STATUS_META[card?.status]?.label || card?.status || '');
+    planStatusLabel(usesWorkStatuses(node?.type) ? node?.status : card?.status);
 
 // @anchor materials-card-surface — karta produktu dostaje własną, jaśniejszą i chłodniejszą
 // płaszczyznę zamiast `bg-black/20`. Poprzednio różnica względem wiersza tabeli wynosiła
@@ -1754,44 +1752,49 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
                     </td>
                 );
             })()}
-            {/* Status — edytowalny dropdown. Materiał i sprzęt edytują status KARTY
-                (`MaterialRequirement.status`), praca, usługa, nocleg i paliwo — status
-                WĘZŁA (`WbsNode.status`), bo karty nie mają. Do tej pory ta kolumna
-                pokazywała nad nimi „—" i nie dało się z tego widoku ruszyć ich stanu. */}
+            {/* Status oferty — ETAP PLANU, więc lista jest JEDNA dla wszystkich typów liści:
+                Nowe → Zaproponowane → Zaakceptowane / Odrzucone. Wcześniej ta kolumna miała
+                dwie różne pełne listy (magazynową nad materiałem, robociznową nad pracą)
+                i dało się w planie ustawić „Na magazynie" albo „Rozpoczęte" — stany, które
+                zaczynają się dopiero PO akceptacji oferty.
+
+                Miejsce ZAPISU zostaje bez zmian: materiał i sprzęt piszą do karty
+                (`MaterialRequirement.status`), praca, usługa, nocleg i paliwo do węzła
+                (`WbsNode.status`), bo karty nie mają. */}
             <td className="px-3 py-2.5">
                 {usesWorkStatuses(node.type) ? (() => {
-                    const statusMap = statusMetaForType(node.type);
-                    // Kod materiałowy zapisany tu przed rozdzieleniem list pokazuje się jako
-                    // „Nowe"; bazy nie ruszamy, dopiero wybór z listy utrwala nowy kod.
-                    const code = resolveStatusCode(node.type, node.status);
+                    const code = planStatusFromAny(node.status);
                     return (
                         <select
                             value={code}
                             onChange={e => { if (!readOnly) onPatchNode?.(node.id, { status: e.target.value }); }}
                             disabled={readOnly}
-                            className={`bg-transparent border border-white/10 rounded px-1.5 py-0.5 text-xs font-semibold outline-none cursor-pointer hover:bg-white/5 transition-colors ${statusMap[code]?.color || 'text-gray-500'}`}
+                            className={`bg-transparent border border-white/10 rounded px-1.5 py-0.5 text-xs font-semibold outline-none cursor-pointer hover:bg-white/5 transition-colors ${PLAN_STATUS_META[code].color}`}
                             style={{ WebkitAppearance: 'auto' }}
                         >
-                            {statusOptionsForType(node.type).map(c => (
-                                <option key={c} value={c} className="bg-gray-900 text-white font-normal">{statusMap[c].label}</option>
+                            {Object.entries(PLAN_STATUS_META).map(([c, m]) => (
+                                <option key={c} value={c} className="bg-gray-900 text-white font-normal">{m.label}</option>
                             ))}
                         </select>
                     );
-                })() : card ? (
-                    <select
-                        value={card.status || 'NEW'}
-                        onChange={async e => {
-                            if (!readOnly && onPatchCard) await onPatchCard(card.id, { status: e.target.value });
-                        }}
-                        disabled={readOnly}
-                        className={`bg-transparent border border-white/10 rounded px-1.5 py-0.5 text-xs font-semibold outline-none cursor-pointer hover:bg-white/5 transition-colors ${StatusMeta?.color || 'text-gray-500'}`}
-                        style={{ WebkitAppearance: 'auto' }}
-                    >
-                        {Object.entries(STATUS_META).map(([v, m]) => (
-                            <option key={v} value={v} className="bg-gray-900 text-white font-normal">{m.label}</option>
-                        ))}
-                    </select>
-                ) : (
+                })() : card ? (() => {
+                    const code = planStatusFromAny(card.status);
+                    return (
+                        <select
+                            value={code}
+                            onChange={async e => {
+                                if (!readOnly && onPatchCard) await onPatchCard(card.id, { status: e.target.value });
+                            }}
+                            disabled={readOnly}
+                            className={`bg-transparent border border-white/10 rounded px-1.5 py-0.5 text-xs font-semibold outline-none cursor-pointer hover:bg-white/5 transition-colors ${PLAN_STATUS_META[code].color}`}
+                            style={{ WebkitAppearance: 'auto' }}
+                        >
+                            {Object.entries(PLAN_STATUS_META).map(([c, m]) => (
+                                <option key={c} value={c} className="bg-gray-900 text-white font-normal">{m.label}</option>
+                            ))}
+                        </select>
+                    );
+                })() : (
                     <span className="text-sm text-gray-600">—</span>
                 )}
             </td>

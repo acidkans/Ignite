@@ -403,6 +403,217 @@ export const statusLabelForType = (type, status, fallback = '') => {
 export const statusOptionsForType = type =>
   Object.keys(statusMetaForType(type)).filter(code => code !== 'MIXED');
 
+// ── Statusy ETAPU PLANU ──────────────────────────────────────────────────────
+// W planowaniu pozycja nie jest rzeczą ani robotą — jest WIERSZEM OFERTY. Może dopiero
+// powstać, pójść do klienta, zostać przyjęta albo odrzucona i na tym etap się kończy.
+// „Zamówione", „Na magazynie", „Wydane", „Rozpoczęte", „Zakończone" opisują świat, który
+// zaczyna się PO akceptacji — w planie nie mają czego opisywać i dlatego ich tu nie ma.
+//
+// Ta sama lista dla KAŻDEGO typu liścia. Rozdział na słownik materiałowy i robociznowy
+// (`STRUCTURE_STATUS_META` / `WORK_STATUS_META`) dotyczy wyłącznie REALIZACJI: tam materiał
+// jedzie przez magazyn, a robocizna przez postęp prac. Na etapie planu switch i dzień pracy
+// ekipy są tym samym — pozycją, którą klient przyjmie albo nie.
+
+// @anchor plan-status-meta
+export const PLAN_STATUS_META = {
+  NEW:       { label: 'Nowe',            color: 'text-slate-300' },
+  PROPOSAL:  { label: 'Zaproponowane',   color: 'text-blue-400' },
+  CONFIRMED: { label: 'Zaakceptowane',   color: 'text-emerald-400' },
+  REJECTED:  { label: 'Odrzucone',       color: 'text-red-400' },
+};
+
+// @anchor plan-status-codes — kolejność opcji w dropdownie planowania: droga pozycji od
+// utworzenia do decyzji klienta.
+export const PLAN_STATUS_CODES = Object.keys(PLAN_STATUS_META);
+
+// @anchor plan-status-from-any — kod planistyczny do POKAZANIA dla pozycji, która w bazie
+// ma cokolwiek innego. Kolumna `WbsNode.status` jest wspólna dla obu etapów, więc w danych
+// siedzą też kody realizacyjne (`ORDERED`, `IN_STOCK`, `STARTED`…) i materiałowe `PENDING`.
+// Reguły:
+//   pusty / PENDING / NEW      → NEW        („Oczekuje" znaczyło „czeka na ofertę dostawcy",
+//                                            czyli pozycja dopiero powstała — to jest NEW)
+//   PROPOSAL                   → PROPOSAL
+//   REJECTED                   → REJECTED
+//   wszystko pozostałe         → CONFIRMED  (skoro pozycję zamówiono, wydano albo ekipa ją
+//                                            zaczęła, to klient ją wcześniej przyjął)
+// Nic tu NIE JEST zapisywane do bazy — to wyłącznie odczyt. Zapis idzie kodem z tej listy.
+export const planStatusFromAny = (status) => {
+  const code = normalizeStatusCode(status);
+  if (!code || code === 'PENDING' || code === 'NEW') return 'NEW';
+  if (code === 'PROPOSAL' || code === 'REJECTED') return code;
+  return 'CONFIRMED';
+};
+
+// @anchor plan-status-label
+export const planStatusLabel = (status) => PLAN_STATUS_META[planStatusFromAny(status)].label;
+
+// ── Statusy ETAPU REALIZACJI ─────────────────────────────────────────────────
+// Realizacja ma DWIE niezależne osie, bo pozycja przechodzi przez dwa różne światy:
+//   ZAKUP     — droga towaru albo zlecenia: zamawiamy, przyjeżdża, wydajemy, fakturujemy
+//   WYKONANIE — droga roboty: ekipa zaczyna, kończy, odbiór podpisuje protokół
+// Materiał i sprzęt mają OBIE naraz — kupione to jeszcze nie zamontowane. Praca własna ma
+// tylko wykonanie (nie ma czego zamawiać), nocleg i paliwo tylko zakup (nie ma czego wykonywać).
+//
+// Osie żyją we WŁASNYCH kolumnach (`WbsNode.purchaseStatus`, `WbsNode.execStatus`), więc
+// zmiana w planowaniu nie kasuje już stanu realizacji — a to była cena za jedno wspólne pole.
+
+// @anchor purchase-status-meta
+export const PURCHASE_STATUS_META = {
+  TO_ORDER:  { label: 'Do zamówienia',  color: 'text-slate-300' },
+  ORDERED:   { label: 'Zamówione',      color: 'text-violet-400' },
+  DELIVERED: { label: 'Dostarczone',    color: 'text-cyan-400' },
+  ISSUED:    { label: 'Wydane',         color: 'text-emerald-400' },
+  INVOICED:  { label: 'Zafakturowane',  color: 'text-teal-400' },
+  CANCELLED: { label: 'Anulowane',      color: 'text-red-400' },
+};
+
+// @anchor exec-status-meta — jeden zestaw kodów, dwa zestawy etykiet. Materiał i sprzęt się
+// MONTUJE, pracę i usługę WYKONUJE; ten sam kod `DONE` znaczy w obu przypadkach „zrobione",
+// więc rozdzielanie go na dwa kody kazałoby każdemu odczytowi pytać o typ, zanim odpowie.
+export const EXEC_STATUS_META = {
+  TO_DO:       { label: 'Do wykonania', montaz: 'Do montażu',      color: 'text-slate-300' },
+  IN_PROGRESS: { label: 'W toku',       montaz: 'Montaż w toku',   color: 'text-blue-400' },
+  ON_HOLD:     { label: 'Wstrzymane',   montaz: 'Wstrzymany',      color: 'text-amber-400' },
+  DONE:        { label: 'Wykonane',     montaz: 'Zainstalowane',   color: 'text-emerald-400' },
+  HANDED_OVER: { label: 'Odebrane',     montaz: 'Odebrane',        color: 'text-lime-400' },
+  // Trzy kody ZAMYKAJĄ pozycję i celowo się nie sklejają: DONE = plan wykonany,
+  // UNFINISHED = przerwane przed metą i rozliczone jak jest, CANCELLED = nigdy nie ruszyło.
+  // `UNFINISHED` jest też jedynym miejscem, w które ma dokąd trafić stary robociznowy kod
+  // o tej samej nazwie przy migracji danych (patrz test/migracja-statusy-realizacja.sql).
+  UNFINISHED:  { label: 'Niedokończone', montaz: 'Montaż niedokończony', color: 'text-orange-400' },
+  CANCELLED:   { label: 'Odwołane',     montaz: 'Montaż odwołany', color: 'text-red-400' },
+};
+
+// @anchor purchase-leaf-types — liście, które się KUPUJE. Praca własna nie ma tej osi.
+export const PURCHASE_LEAF_TYPES = ['material', 'equipment', 'service', 'lodging', 'fuel'];
+
+// @anchor exec-leaf-types — liście, przy których ktoś fizycznie coś ROBI: montuje materiał
+// i sprzęt albo wykonuje pracę i usługę. Nocleg i paliwo są nabywane i na tym się kończy.
+export const EXEC_LEAF_TYPES = ['material', 'equipment', 'work', 'service'];
+
+// @anchor has-purchase-axis
+export const hasPurchaseAxis = type => PURCHASE_LEAF_TYPES.includes(String(type || '').toLowerCase().trim());
+
+// @anchor has-exec-axis
+export const hasExecAxis = type => EXEC_LEAF_TYPES.includes(String(type || '').toLowerCase().trim());
+
+// @anchor uses-montage-labels — materiał i sprzęt czyta się jako montaż, nie jako robotę.
+export const usesMontageLabels = type => ['material', 'equipment'].includes(String(type || '').toLowerCase().trim());
+
+// @anchor exec-status-label — etykieta osi wykonania właściwa dla typu liścia.
+export const execStatusLabel = (type, code) => {
+  const meta = EXEC_STATUS_META[code];
+  if (!meta) return '';
+  return usesMontageLabels(type) ? meta.montaz : meta.label;
+};
+
+// @anchor realization-open-status — czy pozycja weszła już do realizacji. Otwiera ją wyłącznie
+// akceptacja w planie: dopóki klient nie przyjął pozycji, nie ma czego kupować ani wykonywać.
+export const isRealizationOpen = planCode => planCode === 'CONFIRMED';
+
+// @anchor default-purchase-status / @anchor default-exec-status — stan startowy każdej osi
+// w chwili, gdy pozycja wchodzi do realizacji. Zapisywany dopiero przy pierwszej zmianie:
+// NULL w bazie znaczy „jeszcze nikt tej pozycji nie ruszył", a to jest inna informacja niż
+// „do zamówienia" i chcemy ją odróżniać w raportach.
+export const DEFAULT_PURCHASE_STATUS = 'TO_ORDER';
+export const DEFAULT_EXEC_STATUS = 'TO_DO';
+
+// ── Status gałęzi — WYLICZANY, nigdy zapisywany ──────────────────────────────
+// Gałąź grupująca i przedmiot projektu (depth 0) NIE mają własnego statusu: ich stan to
+// suma stanów pozycji, które pod nimi wiszą. Wcześniej dało się im ustawić status ręcznie
+// i gałąź „Kamery" pokazywała „Zamówione", gdy pod nią 12 z 20 pozycji było dopiero nowych.
+// Taka wartość nie opisywała niczego, a mimo to szła do eksportu i do panelu Materiały.
+//
+// Pozycja KOSZTOWA z dziećmi (typ material / equipment / work / service / lodging / fuel)
+// ZACHOWUJE własny status: niesie własny koszt i własny wiersz oferty, więc kosztowo jest
+// liściem — ta sama reguła co `leafNodesOf()` w realizationShared.js, gdzie „Avigilon +
+// licencje" (equipment z dzieckiem „licencja ACC7") liczy się jako pozycja, nie jako grupa.
+
+// @anchor node-has-own-status — czy węzeł ma WŁASNY status (dropdown), czy wyliczany z dzieci.
+// `depth` liczone jak w drzewie WBS: 0 = przedmiot projektu (korzeń), 1+ = kolejne poziomy.
+// `hasChildren` podaje się tylko tam, gdzie dane są PŁASKIE i węzeł nie niesie `children`
+// (widok Budżet, eksporty) — domyślne `null` czyta dzieci wprost z węzła drzewa.
+export const nodeHasOwnStatus = (node, depth = 1, hasChildren = null) => {
+  if (depth === 0) return false;
+  const type = String(node?.type || '').toLowerCase().trim();
+  if (LEAF_TYPE_OPTIONS.includes(type)) return true;
+  const kids = hasChildren === null ? (node?.children || []).length > 0 : !!hasChildren;
+  return !kids;
+};
+
+// @anchor collect-own-status-codes — kody statusów pozycji, z których liczy się status gałęzi.
+// Rekurencja ZATRZYMUJE SIĘ na pierwszym węźle z własnym statusem: pozycja kosztowa z dziećmi
+// wchodzi do sumy sama, a jej podpozycje są jej sprawą, nie sprawą gałęzi wyżej.
+//
+// Kody sprowadzamy do PLANISTYCZNYCH (`planStatusFromAny`), bo gałąź żyje w planowaniu.
+// Bez tego plakietka mówiła „Nowe 34, Oczekuje 24" — dwa słowa na jeden stan — albo
+// wyświetlała nad gałęzią „Na magazynie" z pojedynczej pozycji, która zdążyła dojechać.
+export const collectOwnStatusCodes = (node, depth = 0, out = []) => {
+  for (const kid of (node?.children || [])) {
+    if (nodeHasOwnStatus(kid, depth + 1)) {
+      out.push(planStatusFromAny(kid.status));
+    } else {
+      collectOwnStatusCodes(kid, depth + 1, out);
+    }
+  }
+  return out;
+};
+
+// @anchor aggregate-branch-status — status gałęzi z sumy statusów jej pozycji, liczony na
+// DRZEWIE (węzeł niesie `children`). Wariant dla płaskiej listy: `buildAggregatedStatusMap`.
+export const aggregateBranchStatus = (node, depth = 0) =>
+  summarizeStatusCodes(collectOwnStatusCodes(node, depth));
+
+// @anchor build-aggregated-status-map — te same wyliczone statusy gałęzi, tylko liczone na
+// PŁASKIEJ liście węzłów (`/wbs-nodes/unified/:nodeId` zwraca listę, nie drzewo). Mapa trzyma
+// WYŁĄCZNIE węzły bez własnego statusu, więc obecność klucza znaczy „to gałąź".
+// Jedno źródło dla widoku Budżet i eksportów: bez tego tabela pokazywała status wyliczony,
+// a Excel obok — starą wartość z bazy, której w drzewie już nikt nie widział.
+export const buildAggregatedStatusMap = (flatItems = []) => {
+  const kidsByParent = new Map();
+  for (const item of flatItems) {
+    const p = item?.parentId || '__root__';
+    if (!kidsByParent.has(p)) kidsByParent.set(p, []);
+    kidsByParent.get(p).push(item);
+  }
+  const hasOwn = item =>
+    nodeHasOwnStatus(item, item?.parentId ? 1 : 0, (kidsByParent.get(item?.id) || []).length > 0);
+
+  const collect = (item, out = []) => {
+    for (const kid of (kidsByParent.get(item?.id) || [])) {
+      if (hasOwn(kid)) out.push(planStatusFromAny(kid.status));
+      else collect(kid, out);
+    }
+    return out;
+  };
+
+  const map = new Map();
+  for (const item of flatItems) {
+    if (hasOwn(item)) continue;
+    map.set(item.id, summarizeStatusCodes(collect(item)));
+  }
+  return map;
+};
+
+// @anchor summarize-status-codes — wspólne domknięcie obu wariantów agregacji (drzewo i lista):
+// jeden wspólny kod → ten kod, więcej niż jeden → `MIXED`, brak pozycji → pusty kod („Brak").
+// `breakdown` niesie rozbicie do tooltipa, żeby „Mieszany" dało się rozwinąć bez wchodzenia w drzewo.
+//
+// Etykiety bierzemy ze słownika PLANU: gałąź żyje w planowaniu i opisuje zbiór wierszy oferty,
+// więc mówi „Nowe" i „Zaakceptowane", a nie magazynowe „Nowy" czy „Na magazynie".
+export const summarizeStatusCodes = (codes = []) => {
+  const label = code => PLAN_STATUS_META[code]?.label || STRUCTURE_STATUS_META[code]?.label || code;
+  const counts = new Map();
+  for (const c of codes) counts.set(c, (counts.get(c) || 0) + 1);
+  const breakdown = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([code, count]) => ({ code, count, label: label(code) }));
+
+  if (breakdown.length === 0) return { code: '', label: 'Brak', count: 0, breakdown };
+  if (breakdown.length === 1) return { ...breakdown[0], count: codes.length, breakdown };
+  return { code: 'MIXED', label: STRUCTURE_STATUS_META.MIXED.label, count: codes.length, breakdown };
+};
+
 // @anchor is-leaf-node
 export const isLeafNode = node => !node || !node.children || node.children.length === 0;
 

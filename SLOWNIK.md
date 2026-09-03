@@ -547,6 +547,42 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | ZERO_LEAF_DEFAULTS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor zero-leaf-defaults |
 | ui-funkcja | mergeLeafDefaults | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor merge-leaf-defaults |
 | ui-funkcja | getLeafDefaultFrom | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor get-leaf-default-from |
+| ui-stala | PURCHASE_STATUS_META | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor purchase-status-meta |
+| ui-stala | EXEC_STATUS_META | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor exec-status-meta |
+| ui-stala | PURCHASE_LEAF_TYPES | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor purchase-leaf-types |
+| ui-stala | EXEC_LEAF_TYPES | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor exec-leaf-types |
+| ui-funkcja | hasPurchaseAxis | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor has-purchase-axis |
+| ui-funkcja | hasExecAxis | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor has-exec-axis |
+| ui-funkcja | usesMontageLabels | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor uses-montage-labels |
+| ui-funkcja | execStatusLabel | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor exec-status-label |
+| ui-funkcja | isRealizationOpen | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor realization-open-status |
+| ui-stala | DEFAULT_PURCHASE_STATUS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor default-purchase-status |
+| ui-stala | DEFAULT_EXEC_STATUS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor default-exec-status |
+| ui-kolumna | Status zakupu (Realizacja) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-purchase-col |
+| ui-kolumna | Status wykonania (Realizacja) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-exec-col |
+| ui-funkcja | saveAxis | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-save-axis |
+| ui-funkcja | purchaseStatusLabel / execStatusLabelOf | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-axis-labels |
+| ui-stan | wyborStatusu | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-wybor-statusu |
+| ui-funkcja | patchStatusWezla | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-patch-status |
+| ui-funkcja | poOdbiorzeUstawStatusy | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-po-odbiorze-statusy |
+| ui-funkcja | zastosujWyborStatusu | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-zastosuj-wybor |
+| ui-modal | wybór statusu po odbiorze | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-modal-wybor-statusu |
+| schema-pole | WbsNode.purchaseStatus | apps/backend/prisma/schema.prisma | @anchor wbs-node-purchase-status |
+| schema-pole | WbsNode.execStatus | apps/backend/prisma/schema.prisma | @anchor wbs-node-exec-status |
+| ui-stala | PLAN_STATUS_META | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor plan-status-meta |
+| ui-stala | PLAN_STATUS_CODES | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor plan-status-codes |
+| ui-funkcja | planStatusFromAny | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor plan-status-from-any |
+| ui-funkcja | planStatusLabel | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor plan-status-label |
+| ui-stala | PLAN_STRUCT_STATUS_META | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor plan-struct-status-meta |
+| ui-funkcja | getInheritedMaterialStatus (status planu pozycji) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor wbs-plan-status-of |
+| ui-kolumna | komórka Strategia gałęzi (scroll) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-strategy-cell-scroll |
+| ui-funkcja | nodeHasOwnStatus | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor node-has-own-status |
+| ui-funkcja | collectOwnStatusCodes | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor collect-own-status-codes |
+| ui-funkcja | aggregateBranchStatus | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor aggregate-branch-status |
+| ui-funkcja | summarizeStatusCodes | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor summarize-status-codes |
+| ui-funkcja | buildAggregatedStatusMap | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor build-aggregated-status-map |
+| ui-sekcja | AggregatedStatusBadge (plakietka statusu gałęzi) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor aggregated-status-badge |
+| ui-stan | aggregatedStatusByNodeId | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor wbs-branch-status-map |
 
 ### Moduł Logistyka — Baza materiałów (`apps/frontend/src/components/shared/MaterialDatabaseTab.jsx`)
 
@@ -1457,6 +1493,12 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-dto | LeafActualInput.scope | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actual-input-scope |
 | back-stala | OPEN_LEAF_TYPES (typy widoczne dla każdej roli) | apps/backend/src/common/leaf-types.util.ts | @anchor open-leaf-types |
 | back-funkcja | isOpenLeafType | apps/backend/src/common/leaf-types.util.ts | @anchor is-open-leaf-type |
+| back-stala | LEGACY_REQ_TYPE_MAP (backend) | apps/backend/src/common/leaf-types.util.ts | @anchor legacy-req-type-map |
+| back-funkcja | normalizeLeafType | apps/backend/src/common/leaf-types.util.ts | @anchor normalize-leaf-type |
+| back-stala | DEFAULT_CATALOG_TYPE | apps/backend/src/common/leaf-types.util.ts | @anchor default-catalog-type |
+| back-funkcja | isCostLeafType | apps/backend/src/common/leaf-types.util.ts | @anchor is-cost-leaf-type |
+| back-funkcja | nodeHasOwnStatus (backend) | apps/backend/src/common/leaf-types.util.ts | @anchor backend-node-has-own-status |
+| back-funkcja | guard zapisu statusu gałęzi | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-node-branch-status-guard |
 | back-funkcja | isManagerRoles | apps/backend/src/common/leaf-types.util.ts | @anchor is-manager-roles |
 | back-funkcja | filtr roli w dzienniku wpisów | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-role-filter |
 | back-funkcja | filtr roli w porównaniu wycena↔zakup | apps/backend/src/orders/orders.service.ts | @anchor comparison-role-filter |

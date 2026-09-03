@@ -1,3 +1,87 @@
+## 2026-09-02 — Statusy etap 4: realizacja dostaje własne osie — zakup i wykonanie
+
+### schema.prisma
+- dodano pole `purchaseStatus` w modelu `WbsNode` — droga TOWARU albo ZLECENIA: TO_ORDER | ORDERED | DELIVERED | ISSUED | INVOICED | CANCELLED. NULL = oś nie dotyczy tego liścia (praca własna) albo pozycja nie weszła jeszcze do realizacji.
+- dodano pole `execStatus` w modelu `WbsNode` — droga ROBOTY: TO_DO | IN_PROGRESS | ON_HOLD | DONE | HANDED_OVER | CANCELLED. Dla materiału i sprzętu czyta się jako MONTAŻ („Zainstalowane" zamiast „Wykonane"); NULL dla noclegu i paliwa.
+- migracja `20260902120000_wbs_realization_statuses` — obie kolumny NULLABLE, BEZ backfillu. Stare stany realizacji zapisane w `status` zostają tam nietknięte; ich przeniesienie to osobna, świadoma decyzja.
+
+### architektura / API
+- `back-endpoint` `PATCH /wbs-nodes/:id` przyjmuje `purchaseStatus` i `execStatus`; `GET /wbs-nodes/unified/:nodeId` je zwraca.
+- `ui-kolumna` `Status zakupu` i `Status wykonania` w zakładce Realizacja — dropdowny widoczne tylko dla typów, których dana oś dotyczy (`hasPurchaseAxis` / `hasExecAxis`); pozostałe pokazują „—". Kolumna `Status oferty` jest tam READ-ONLY: status planu przenosi się z wyceny, ale zmienia się go w Strukturze projektu.
+- `ui-funkcja` `saveAxis` — zapis osi realizacji osobnym PATCH-em, niezależnie od statusu planu. Zmiana w planowaniu nie kasuje już stanu zakupu ani montażu.
+- `ui-modal` `protokol-modal-wybor-statusu` — po zapisaniu odbioru protokół przestawia stan realizacji: praca i usługa dostają `execStatus = DONE` automatycznie, a dla materiału i sprzętu pytamy, czy protokół był odbiorem DOSTAWY (`purchaseStatus = DELIVERED`) czy MONTAŻU (`execStatus = DONE`) — z samego dokumentu tego nie widać.
+
+### słownik
+- dodano `PURCHASE_STATUS_META`, `EXEC_STATUS_META`, `PURCHASE_LEAF_TYPES`, `EXEC_LEAF_TYPES`, `hasPurchaseAxis`, `hasExecAxis`, `usesMontageLabels`, `execStatusLabel`, `isRealizationOpen`, `DEFAULT_PURCHASE_STATUS`, `DEFAULT_EXEC_STATUS` — `wbsConstants.js`
+- dodano `saveAxis`, `purchaseStatusLabel`, `execStatusLabelOf` — `RealizationTab.jsx`
+- dodano `wyborStatusu`, `patchStatusWezla`, `poOdbiorzeUstawStatusy`, `zastosujWyborStatusu` — `ProtokolOdbioruModal.jsx`
+- dodano `WbsNode.purchaseStatus`, `WbsNode.execStatus` — `schema.prisma`
+
+### migracja danych
+- `test/migracja-statusy-realizacja-dryrun.sql` — DRY-RUN (same SELECT): pokazuje, które pozycje niosą stan realizacji w starej kolumnie, co dostaną na osiach, ile kart materiałowych nie ma powiązania z węzłem (ich stan zakupu nie ma dokąd trafić) i które pozycje były „Dodatkowym zamówieniem".
+- `test/migracja-statusy-realizacja.sql` — migracja właściwa w JEDNEJ transakcji: przenosi stany na osie (`COALESCE`, więc nie nadpisuje tego, co ktoś ustawił ręcznie po wdrożeniu), potem czyści starą kolumnę do czterech kodów planu i zamienia `PENDING`/`''` na `NEW`.
+- Stan dev przed migracją: 18 węzłów WBS (11 `IN_STOCK`, 3 `ORDERED`, 2 `EXTRA_ORDER`, 2 `ISSUED`) i 32 karty z powiązaniem; 17 kart BEZ `wbsNodeId` straci stan realizacji, 4 pozycje `EXTRA_ORDER` stracą znacznik domówienia (nowy model go nie ma).
+- `ui-stala` `EXEC_STATUS_META` — dołożony kod `UNFINISHED` („Niedokończone" / „Montaż niedokończony"), żeby stary robociznowy stan miał dokąd trafić przy migracji.
+
+### wytyczne
+- `schema-pole` `WbsNode.purchaseStatus` / `WbsNode.execStatus` — NULL znaczy „oś nie dotyczy tego typu ALBO pozycja nie weszła do realizacji". To inna informacja niż „Do zamówienia" i nie wolno jej backfillować hurtem.
+- Kody osi realizacji MUSZĄ być rozłączne z kodami planu (`PLAN_STATUS_CODES`) — inaczej jeden odczyt nie wie, o którym etapie mówi. Pilnuje tego `test/status-agregacja.test.mjs`.
+- Wersjonowanie: oba nowe pola dopisz do `cloneVersionData` w `versioning.service.ts`, zanim powstanie kolejna wersja wyceny.
+- `HANDED_OVER` („Odebrane") ustawia protokół odbioru, nie użytkownik ręcznie.
+
+## 2026-09-02 — Statusy etap 3: planowanie kończy się na zaakceptowane / odrzucone
+
+### architektura / API
+- `ui-stala` `PLAN_STATUS_META` — jedna lista statusów ETAPU PLANU dla WSZYSTKICH typów liści: Nowe → Zaproponowane → Zaakceptowane / Odrzucone. Wcześniej planowanie pokazywało dwa pełne słowniki realizacyjne: magazynowy nad materiałem i sprzętem („Zamówione", „Na magazynie", „Wydane", „Zainstalowane") i robociznowy nad pracą, usługą, noclegiem i paliwem („Rozpoczęte", „Wstrzymane", „Zakończone", „Nieskończone", „Odwołane"). Oba opisują świat, który zaczyna się PO akceptacji oferty.
+- `ui-funkcja` `planStatusFromAny` — kod planistyczny do POKAZANIA dla pozycji, która w bazie ma kod realizacyjny. Pusty / `PENDING` / `NEW` → Nowe; `PROPOSAL` → Zaproponowane; `REJECTED` → Odrzucone; wszystko pozostałe (`ORDERED`, `IN_STOCK`, `ISSUED`, `INSTALLED`, `STARTED`, `COMPLETED`…) → Zaakceptowane, bo skoro pozycję zamówiono albo ekipa ją zaczęła, klient przyjął ją wcześniej. Wyłącznie ODCZYT — nic z tego nie idzie do bazy.
+- `ui-sekcja` `StatusSelect` (WBSHybridTable) i kolumna „Status oferty" w `WbsMaterialsPanel` — obie listy zawężone do czterech kodów planu. Miejsce ZAPISU bez zmian: materiał i sprzęt piszą do `MaterialRequirement.status`, praca, usługa, nocleg i paliwo do `WbsNode.status`.
+- `ui-funkcja` `getInheritedMaterialStatus` (widok Budżet, eksporty) — materiał przestaje dziedziczyć status z alokacji magazynowych; w planie ma status swojej pozycji, tak samo jak praca.
+- Agregacja gałęzi liczy na kodach planu — plakietka mówi „Nowe 58" zamiast dawnego „Nowe 34, Oczekuje 24" (dwa słowa na jeden stan).
+- Zakładka Realizacja zostaje nietknięta: pełne słowniki magazynowy i robociznowy działają tam bez zmian.
+
+### wytyczne
+- `schema-pole` `WbsNode.status` — nadal JEDNA kolumna na oba etapy. Zapis z planowania nadpisuje kod realizacyjny (pozycja „Zamówiona" przestawiona w planie na „Nowe" traci ślad zamówienia). Rozdział na osobne pole `planStatus` to następny krok — do czasu jego wdrożenia nie zmieniaj statusu w planowaniu pozycji, która jest już w realizacji.
+- Etap planu = decyzja handlowa (czy klient to bierze). Etap realizacji = stan rzeczy i robót. Nowy status dokładaj do właściwego słownika, nigdy do obu.
+
+## 2026-09-02 — Statusy etap 2: jeden słownik typów dla WBS, wymagań i katalogu
+
+### schema.prisma
+- `schema-pole` `Material.type` — komentarz opisuje teraz typy WBS (material | equipment | work | service | lodging | fuel) zamiast starego enuma DEVICE | MATERIAL | CABLE | SOFTWARE | SERVICE. Kolumna bez zmian typu — zmienia się to, co do niej wolno zapisać.
+- `schema-pole` `MaterialRequirement.type` — jw. Dane były już przemigrowane (material 1334, equipment 508, service 160, work 22 na dev); rozjeżdżał się wyłącznie kod, który nadal stemplował nowe wpisy kodem `DEVICE`.
+
+### architektura / API
+- `back-funkcja` `normalizeLeafType` — jedno wejście sprowadzające dowolny typ (stary enum, typ WBS, dowolna wielkość liter z importu) do kanonicznego typu liścia. Odpowiednik `wbsTypeFromAny` z frontu; jedyne celowe rozejście to `group` (typ węzła drzewa, nie pozycji kosztowej).
+- `back-stala` `DEFAULT_CATALOG_TYPE` = `equipment` — typ nadawany produktowi katalogu i pozycji wyciągniętej przez AI, gdy typu nie da się rozpoznać. Dokładnie to znaczyło dawne `DEVICE`.
+- `back-serwis` `MaterialRequirementsService` / `MaterialsService` — pięć miejsc zapisujących `'DEVICE'` (parser kart katalogowych, import z oferty, tworzenie produktu z propozycji, dwie whitelisty walidacyjne) zapisuje teraz typ kanoniczny. Prompt AI prosi o `material|equipment|service|work` zamiast starego enuma.
+- Migracja danych katalogu: `test/migracja-typy-katalogu.sql` (DEVICE→equipment, MATERIAL→material, CABLE→material, SOFTWARE→service). Wykonana na dev — 88 wierszy; na produkcji URUCHAMIAĆ ŚWIADOMIE, po backupie.
+
+### słownik
+- dodano `LEGACY_REQ_TYPE_MAP` (backend), `normalizeLeafType`, `DEFAULT_CATALOG_TYPE` — `apps/backend/src/common/leaf-types.util.ts`
+
+### wytyczne
+- `schema-pole` `Material.type` / `MaterialRequirement.type` / `WbsNode.type` — jeden słownik dla wszystkich trzech. Każde wejście z zewnątrz (import, AI, formularz) przepuszczaj przez `normalizeLeafType`; nigdy nie zapisuj kodu ze starego enuma.
+- Nowy typ liścia dopisuje się w DWÓCH miejscach naraz: `ALL_LEAF_TYPES` (backend) i `TYPE_OPTIONS` (front). Zgodności pilnuje `test/typy-lustro.test.mjs`.
+
+## 2026-09-02 — Statusy etap 1: gałąź nie ma własnego statusu (wylicza go z pozycji)
+
+### architektura / API
+- `back-endpoint` `PATCH /wbs-nodes/:id` — odrzuca (400) zapis pola `status` na węźle, który własnego statusu nie ma: przedmiot projektu (`parentId = null`) i gałąź grupująca z dziećmi. Pozycja kosztowa z dziećmi (np. „Avigilon + licencje") status ZACHOWUJE — kosztowo jest liściem, tak samo jak w `leafNodesOf()`.
+- `ui-sekcja` `AggregatedStatusBadge` — w drzewie WBS gałąź pokazuje plakietkę READ-ONLY z wartością wyliczoną z pozycji poddrzewa (jeden wspólny kod → ten kod, więcej niż jeden → „Mieszany", brak pozycji → „Brak"); tooltip niesie rozbicie („Nowe 12, Zamówione 8"). Dropdown statusu zostaje wyłącznie na pozycjach.
+- `ui-funkcja` `buildAggregatedStatusMap` — te same wyliczone statusy dla danych PŁASKICH (widok Budżet, eksporty Excel/PDF). Bez tego tabela pokazywałaby status wyliczony, a plik obok — starą wartość z bazy.
+- Dane NIE są migrowane: statusy zapisane wcześniej na gałęziach zostają w bazie, przestają być tylko pokazywane i zapisywane. Czyszczenie wchodzi dopiero z etapem rozdziału `planStatus` / `realizationStatus`.
+
+### słownik
+- dodano `nodeHasOwnStatus`, `collectOwnStatusCodes`, `aggregateBranchStatus`, `summarizeStatusCodes`, `buildAggregatedStatusMap` — `apps/frontend/src/components/shared/wbs/wbsConstants.js`
+- dodano `AggregatedStatusBadge` — `apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx`
+- dodano `aggregatedStatusByNodeId` — `apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx`
+- dodano `isCostLeafType`, `nodeHasOwnStatus` (backend) — `apps/backend/src/common/leaf-types.util.ts`
+- dodano guard zapisu statusu gałęzi — `apps/backend/src/wbs-nodes/wbs-nodes.service.ts`
+
+### wytyczne
+- `schema-pole` `WbsNode.status` — na gałęzi grupującej i na przedmiocie projektu jest polem MARTWYM: nie czytaj go i nie zapisuj, wartość liczy się z pozycji poddrzewa.
+- `ui-funkcja` `nodeHasOwnStatus` — jedyne miejsce decydujące, kto ma własny status; backendowy odpowiednik (`backend-node-has-own-status`) musi mówić to samo, inaczej front chowa dropdown, a API dalej przyjmuje zapis.
+- Agregacja zatrzymuje się na pierwszym węźle z własnym statusem — podpozycje pozycji kosztowej nie wchodzą do sumy gałęzi wyżej.
+
 ## 2026-09-01 — Po ujednoliceniu materiałów eksport startuje od nowa (świeże dane)
 
 ### architektura / API

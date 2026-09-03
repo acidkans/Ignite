@@ -160,6 +160,12 @@ export class VersioningService {
                     name: wn.name,
                     type: wn.type,
                     status: wn.status,
+                    // Osie realizacji jadą z klonem, tak samo jak status planu: nowa wersja
+                    // wyceny nie unieważnia tego, co już zamówiono ani co ekipa zdążyła
+                    // zamontować. Pominięcie tych dwóch pól kasowałoby stan realizacji przy
+                    // każdym wersjonowaniu — dokładnie tak, jak kiedyś gubiły się kwoty.
+                    purchaseStatus: (wn as any).purchaseStatus ?? null,
+                    execStatus: (wn as any).execStatus ?? null,
                     owner: wn.owner,
                     resources: wn.resources,
                     cost: wn.cost,

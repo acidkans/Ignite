@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as mammoth from 'mammoth';
 import { randomUUID } from 'crypto';
+import { normalizeLeafType, DEFAULT_CATALOG_TYPE } from '../common/leaf-types.util';
 const PDFParser = require('pdf2json');
 const pdfParse = require('pdf-parse');
 
@@ -604,7 +605,7 @@ export class MaterialRequirementsService {
                 })
                 : await this.prisma.material.create({
                     data: {
-                        manufacturer: mfr, model: mdl, productName: pn, type: 'DEVICE',
+                        manufacturer: mfr, model: mdl, productName: pn, type: DEFAULT_CATALOG_TYPE,
                         ...(seller ? { seller } : {}),
                         ...(productUrl ? { productUrl } : {}),
                         ...(dataSheetUrl ? { dataSheetUrl, dataSheetName: dataSheetName ?? null } : {}),
@@ -1586,7 +1587,7 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
                         manufacturer: normalizeManufacturer(proposal.manufacturer),
                         model: proposal.model ?? null,
                         productName: proposal.productName,
-                        type: 'DEVICE',
+                        type: DEFAULT_CATALOG_TYPE,
                         // Cena NIE schodzi do katalogu — patrz `mat-req-catalog-price-guard`.
                         // Cena propozycji jest ceną jednej oferty (ten dostawca, ta ilość, ta data),
                         // a `Material.priceNetto` to cena produktu dla całej firmy. Nowy wpis katalogu
@@ -1915,7 +1916,7 @@ Zwróć WYŁĄCZNIE tablicę JSON (bez markdown, bez komentarzy):
     "productName": "pełna nazwa handlowa produktu",
     "manufacturer": "producent lub null",
     "model": "symbol/model katalogowy lub null",
-    "type": "DEVICE|MATERIAL|CABLE|SOFTWARE|SERVICE"
+    "type": "material|equipment|service|work"
   }
 ]
 
@@ -1931,7 +1932,7 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
                 productName: String(item.productName || '').slice(0, 300),
                 manufacturer: item.manufacturer ? normalizeManufacturer(String(item.manufacturer).slice(0, 200)) : null,
                 model: item.model ? String(item.model).slice(0, 200) : null,
-                type: ['DEVICE', 'MATERIAL', 'CABLE', 'SOFTWARE', 'SERVICE'].includes(item.type) ? item.type : 'DEVICE',
+                type: normalizeLeafType(item.type) || DEFAULT_CATALOG_TYPE,
             })).filter(i => i.productName.length > 0);
             // Uzupełnij brakującego producenta najczęściej występującym w tej karcie
             const mfrCounts: Record<string, number> = {};
@@ -1952,7 +1953,7 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
 
         const dataSheetUrl = doc.storagePath;
         const dataSheetName = doc.name;
-        const type_valid = (t: string) => ['DEVICE', 'MATERIAL', 'CABLE', 'SOFTWARE', 'SERVICE'].includes(t) ? t : 'DEVICE';
+        const type_valid = (t: string) => normalizeLeafType(t) || DEFAULT_CATALOG_TYPE;
 
         const results: any[] = [];
         for (const item of items) {
@@ -2025,7 +2026,7 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
             const mat = existing
                 ? existing
                 : await this.prisma.material.create({
-                    data: { manufacturer: mfr, model: mdl, productName: pn, type: 'DEVICE' },
+                    data: { manufacturer: mfr, model: mdl, productName: pn, type: DEFAULT_CATALOG_TYPE },
                 });
             materialId = mat.id;
         }
