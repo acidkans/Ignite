@@ -146,15 +146,16 @@ eq('lista planu nie zawiera kodów realizacyjnych',
     PLAN_STATUS_CODES.filter(c => ZAKAZANE.includes(c)), []);
 
 // ── Osie REALIZACJI: zakup i wykonanie ───────────────────────────────────────
-// Która oś dotyczy którego typu liścia. Materiał i sprzęt mają obie (kupione ≠ zamontowane),
-// praca własna tylko wykonanie, nocleg i paliwo tylko zakup.
+// Która oś dotyczy którego typu liścia. OBIE ma tylko to, co się kupuje ORAZ montuje —
+// materiał i sprzęt. Reszta ma najwyżej jedną, a nocleg i paliwo nie mają żadnej: to czysty
+// koszt, który rozlicza się wpisami realizacji, a nie przestawianiem statusów.
 for (const [typ, zakup, wykonanie] of [
     ['material',  true,  true],
     ['equipment', true,  true],
     ['work',      false, true],   // dnia pracy własnej ekipy nie da się zamówić
-    ['service',   true,  true],   // podwykonawcę się zleca i osobno odbiera
-    ['lodging',   true,  false],  // nocleg się kupuje, nie wykonuje
-    ['fuel',      true,  false],
+    ['service',   false, true],   // „dostarczona" i „wykonana" to dla usługi ten sam akt
+    ['lodging',   false, false],  // nocleg się ponosi — ani się go nie śledzi, ani wykonuje
+    ['fuel',      false, false],
     ['group',     false, false],  // gałąź nie jest pozycją kosztową
     ['',          false, false],
 ]) {

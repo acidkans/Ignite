@@ -1,3 +1,22 @@
+## 2026-09-03 — Oś zakupu tylko dla materiału i sprzętu
+
+### architektura / API
+- `ui-stala` `PURCHASE_LEAF_TYPES` zawężone z `material, equipment, service, lodging, fuel` do `material, equipment`. Nad każdą pozycją „Paliwo" wisiało „Do zamówienia", czego nikt nigdy nie przestawiał — bo w tankowaniu nie ma czego zamawiać. Oś zakupu opisuje DROGĘ TOWARU (zamówione → dostarczone → wydane → zafakturowane), a ta istnieje tylko tam, gdzie „kupione" jest innym stanem niż „zużyte".
+- `usługa` zostaje z samą osią WYKONANIA: „dostarczona" i „wykonana" to dla niej ten sam akt, więc dwie osie mówiłyby to samo dwa razy. Fakt zlecenia podwykonawcy widnieje w dostawcy i dokumencie na wpisie realizacji.
+- `nocleg` i `paliwo` nie mają odtąd ŻADNEJ osi realizacji — obie kolumny statusowe pokazują „—". To czysty koszt: rozliczają się wpisami realizacji (ilość, kwota, faktura) i to jest cała ich historia.
+- `ui-funkcja` `axisGateOf` — bramka „Czeka na dostawę" pyta teraz wprost `hasPurchaseAxis` zamiast `usesMontageLabels`. Po zawężeniu obie listy pokrywają się co do typu, ale predykat opisuje właściwy powód: montaż czeka na zakup wyłącznie tam, gdzie w ogóle jest co kupować.
+
+### migracja danych
+- BEZ migracji, świadomie. Na produkcji 6 usług ma zapisany `purchaseStatus`, a 1 pozycja „Paliwo" zapisany `execStatus` — wartości ZOSTAJĄ w bazie, przestają być tylko pokazywane. Kasowanie ich hurtem usunęłoby ślad po tym, co ktoś kiedyś ustawił, a odzyskać się tego nie da; jeśli mają zniknąć, to osobną, świadomą decyzją.
+
+### testy
+- `test/status-agregacja.test.mjs` — tabela osi przepisana pod nowy podział (usługa traci zakup, nocleg i paliwo tracą obie osie).
+- `test/status-etap5.test.mjs` — zmienione oczekiwania dla usługi i paliwa, dołożone przypadki „nocleg/usługa nie mają osi zakupu". Gałąź „Montaż" (praca + paliwo) pokazuje na osi zakupu „Brak" zamiast dawnego „Dostarczone" z paliwa.
+- `test/sprawdz-eksport-statusy.py` — sprawdza „—" dla KAŻDEGO typu bez danej osi (praca, usługa, nocleg, paliwo) i pilnuje, żeby materiał i sprzęt miały obie osie wypełnione treścią.
+
+### wytyczne
+- `ui-stala` `PURCHASE_LEAF_TYPES` / `EXEC_LEAF_TYPES` — o przynależności do osi decyduje to, czy oś ma nad danym typem CO OPISYWAĆ, a nie czy pozycja ma dostawcę i fakturę. Nocleg się kupuje i fakturuje, a mimo to osi zakupu nie ma: nie przechodzi przez żaden stan pośredni, więc kolumna stałaby na wartości startowej przez całe życie pozycji.
+
 ## 2026-09-03 — Statusy etap 5: realizacja wynika z faktów, nie z klikania
 
 ### architektura / API
@@ -8,7 +27,7 @@
 - `ui-wiersz` `RealizationGroupRow` — zakładka Realizacja przestała być płaską listą: pozycje jadą pod zwijanymi nagłówkami gałęzi, a nagłówek niesie wyliczone statusy trzech osi plus sumy kosztów gałęzi. Kolejność grup bierze się z kolejności SORTOWANIA wierszy, więc sortowanie po dowolnej kolumnie nadal rządzi widokiem.
 - `ui-funkcja` `axisGateOf` — ŁAŃCUCH ETAPÓW `plan → zakup → montaż`. Dopóki oferta nie jest „Zaakceptowana", obie osie realizacji stoją za plakietką „Czeka na akceptację" (pozycja odrzucona: „Oferta odrzucona"); po akceptacji montaż materiału i sprzętu czeka jeszcze na „Czeka na dostawę", dopóki zakup nie dojdzie do „Dostawa częściowa" albo dalej. Wcześniej świeżo dopisana pozycja pokazywała „Nowe / Do zamówienia / Do montażu" — trzy kolumny mówiły o trzech różnych światach i żadna nie zdradzała, że dwie z nich są jeszcze puste. Podpięta została istniejąca od etapu 4, ale nigdzie nieużywana stała `isRealizationOpen`.
 - `ui-sekcja` `AxisGateBadge` — zablokowana oś pokazuje plakietkę z klepsydrą ZAMIAST dropdowna, nie obok niego: skoro etap czeka, nie ma czego wybierać, a wyszarzony select czytałoby się jak brak uprawnień. Klepsydra odróżnia „czeka na poprzedni etap" od łańcucha w `BranchAxisBadge` („wyliczone z pozycji poddrzewa") — oba są nieedytowalne, ale z innego powodu.
-- Bramka NIE dotyczy usługi na osi wykonania, mimo że usługa ma obie osie (jest w `PURCHASE_LEAF_TYPES`): dla niej „dostarczona" i „wykonana" to ten sam akt, więc oś zakupu ruszyłaby dopiero z wpisu, który jest zarazem wykonaniem — bramka zapętliłaby pozycję na starcie. Czeka wyłącznie to, co się MONTUJE (`usesMontageLabels`: materiał i sprzęt).
+- Bramka NIE dotyczy usługi na osi wykonania: dla niej „dostarczona" i „wykonana" to ten sam akt. (Wpis z 2026-09-03 „Oś zakupu tylko dla materiału i sprzętu" poszedł dalej i zabrał usłudze oś zakupu w ogóle.) Czeka wyłącznie to, co się MONTUJE — materiał i sprzęt.
 - Oś za bramką nie wchodzi do sumy gałęzi ani nie dostaje podpowiedzi z wpisów — łańcuch etapów jest ważniejszy niż fakt z dziennika. W eksporcie Excel w kolumnie statusu staje etykieta oczekiwania, tak samo jak na ekranie.
 - `ui-funkcja` `handedOverFromProtocol` — „Odebrane" (`HANDED_OVER`) WYLICZANE z rejestru protokołów (`GET /acceptance-protocols/:nodeId/status`), nie zapisywane do bazy. Warunek: protokół domknął pozycję (`pelny`) I pozycja jest już `DONE` — odbiór nie może wyprzedzić wykonania. Wycofanie protokołu samo cofa etykietę.
 - `ui-funkcja` `execStatusLabelOf` — przyjmuje wpis rejestru odbiorów, żeby wyszukiwarka, filtr kolumny i sortowanie czytały dokładnie to, co widać w komórce.

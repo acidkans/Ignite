@@ -489,11 +489,25 @@ export const EXEC_STATUS_META = {
   CANCELLED:   { label: 'Odwołane',     montaz: 'Montaż odwołany', color: 'text-red-400' },
 };
 
-// @anchor purchase-leaf-types — liście, które się KUPUJE. Praca własna nie ma tej osi.
-export const PURCHASE_LEAF_TYPES = ['material', 'equipment', 'service', 'lodging', 'fuel'];
+// @anchor purchase-leaf-types — liście, które mają DROGĘ TOWARU: zamawia się je, przyjeżdżają,
+// wydaje się je z magazynu i fakturuje. Wyłącznie materiał i sprzęt — bo tylko tam „kupione"
+// jest innym stanem niż „zużyte" i po drodze jest co śledzić.
+//
+// Usługa, nocleg i paliwo TEŻ się kupuje i fakturuje, a mimo to osi zakupu nie mają. Powód
+// jest taki, że nad nimi ta oś nie opisywałaby niczego, czego nie widać gdzie indziej:
+//   usługa            — „dostarczona" i „wykonana" to ten sam akt, więc dwie osie mówiłyby
+//                       to samo dwa razy; zostaje oś WYKONANIA, a fakt zlecenia podwykonawcy
+//                       widnieje w dostawcy i dokumencie na wpisie realizacji;
+//   nocleg i paliwo   — czysty koszt: nie ma cyklu „zamówione → dostarczone", nikt tego nie
+//                       montuje. Rozliczają się wpisami realizacji (ilość, kwota, faktura)
+//                       i to jest cała ich historia — obie kolumny statusowe zostają puste.
+// Wcześniej cała piątka była na tej osi i nad każdą pozycją „Paliwo" wisiało „Do zamówienia",
+// czego nikt nigdy nie przestawiał, bo nie ma czego zamawiać w tankowaniu.
+export const PURCHASE_LEAF_TYPES = ['material', 'equipment'];
 
 // @anchor exec-leaf-types — liście, przy których ktoś fizycznie coś ROBI: montuje materiał
-// i sprzęt albo wykonuje pracę i usługę. Nocleg i paliwo są nabywane i na tym się kończy.
+// i sprzęt albo wykonuje pracę i usługę. Nocleg i paliwo się ponosi, a nie wykonuje — one
+// jako jedyne nie mają ŻADNEJ osi realizacji (patrz `purchase-leaf-types`).
 export const EXEC_LEAF_TYPES = ['material', 'equipment', 'work', 'service'];
 
 // @anchor has-purchase-axis
@@ -590,10 +604,9 @@ export const AXIS_STATUS_ORDER = {
 //    dokładnie ten rozjazd, który trzeba naprawić. Bramka ma nie pozwolić ZACZĄĆ etapu poza
 //    kolejnością, a nie przepisywać historii.
 //
-// 2. Bramka „czeka na dostawę" dotyczy tylko materiału i sprzętu (`usesMontageLabels`) — tam
-//    kupno i montaż to dwa różne zdarzenia. USŁUGA ma obie osie (jest w `PURCHASE_LEAF_TYPES`),
-//    ale „dostarczona" i „wykonana" to dla niej ten sam akt: bramka zapętliłaby ją na starcie,
-//    bo oś zakupu ruszy dopiero z wpisu, który jest zarazem wykonaniem.
+// 2. Bramka „czeka na dostawę" dotyczy wyłącznie liści, które mają OBIE osie — czyli materiału
+//    i sprzętu (`hasPurchaseAxis`). Tylko tam kupno i montaż to dwa różne zdarzenia, więc jedno
+//    może czekać na drugie. Praca i usługa mają samą oś wykonania i nie mają na co czekać.
 export const axisGateOf = (node, axis) => {
   if (axis !== 'purchase' && axis !== 'exec') return null;
   if (axis === 'purchase' && !hasPurchaseAxis(node?.type)) return null;
@@ -614,7 +627,7 @@ export const axisGateOf = (node, axis) => {
          + 'dopiero po akceptacji („Zaakceptowane") — status planu zmienia się w Strukturze projektu.',
   };
 
-  if (axis === 'exec' && usesMontageLabels(node?.type)) {
+  if (axis === 'exec' && hasPurchaseAxis(node?.type)) {
     const zakup = node?.purchaseStatus || DEFAULT_PURCHASE_STATUS;
     if (zakup === 'CANCELLED') return {
       label: 'Zakup anulowany',
