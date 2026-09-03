@@ -586,9 +586,11 @@ export default function ProtokolOdbioruModal({
     };
 
     // @anchor protokol-po-odbiorze-statusy — podpisany protokół przestawia stan realizacji:
-    //   praca i usługa           → wykonanie DONE („Wykonane") i od razu HANDED_OVER? NIE —
-    //                              zostawiamy DONE, bo „Odebrane" to osobny krok, który
-    //                              użytkownik potwierdza świadomie w Realizacji;
+    //   praca i usługa           → wykonanie DONE („Wykonane"), i tylko DONE. „Odebrane"
+    //                              (HANDED_OVER) NIE jest tu zapisywane: od etapu 5 wylicza je
+    //                              przy odczycie `handedOverFromProtocol` z rejestru odbiorów,
+    //                              więc wycofanie protokołu samo cofa etykietę, a zapisany kod
+    //                              zostałby na pozycji po skasowanym dokumencie;
     //   materiał i sprzęt        → pytamy, bo protokół bywa odbiorem dostawy ALBO montażu.
     const poOdbiorzeUstawStatusy = async () => {
         const materialy = wybrane.filter((r) => ['material', 'equipment'].includes(String(r.node.type || '').toLowerCase()));
