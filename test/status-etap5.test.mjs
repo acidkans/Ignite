@@ -99,14 +99,16 @@ eq('pozycja odrzucona nie dostaje żadnej podpowiedzi',
 eq('praca własna nie dostaje podpowiedzi zakupu',
     suggestAxisStatus({ type: 'work', status: 'CONFIRMED' }, { qty: 4, plan: 10, entriesCount: 1 }),
     { execStatus: 'IN_PROGRESS' });
-eq('paliwo nie dostaje podpowiedzi wykonania',
-    suggestAxisStatus({ type: 'fuel', status: 'CONFIRMED' }, { qty: 4, plan: 10, entriesCount: 1 }),
-    { purchaseStatus: 'PARTIALLY_DELIVERED' });
-// Usługa ma OBIE osie i celowo NIE ma bramki „czeka na dostawę": dla niej dostarczenie
-// i wykonanie to ten sam akt, więc bramka zapętliłaby ją na starcie.
-eq('usługa dostaje obie podpowiedzi naraz',
+// Usługa ma SAMĄ oś wykonania: „dostarczona" i „wykonana" to dla niej ten sam akt, więc
+// druga oś mówiłaby to samo drugi raz.
+eq('usługa dostaje wyłącznie podpowiedź wykonania',
     suggestAxisStatus({ type: 'service', status: 'CONFIRMED' }, { qty: 4, plan: 10, entriesCount: 1 }),
-    { purchaseStatus: 'PARTIALLY_DELIVERED', execStatus: 'IN_PROGRESS' });
+    { execStatus: 'IN_PROGRESS' });
+// Paliwo i nocleg nie mają ŻADNEJ osi — czysty koszt, rozliczany wpisami realizacji.
+eq('paliwo nie dostaje żadnej podpowiedzi',
+    suggestAxisStatus({ type: 'fuel', status: 'CONFIRMED' }, { qty: 4, plan: 10, entriesCount: 1 }), {});
+eq('nocleg nie dostaje żadnej podpowiedzi',
+    suggestAxisStatus({ type: 'lodging', status: 'CONFIRMED' }, { qty: 4, plan: 10, entriesCount: 1 }), {});
 
 // ── Pozycja rozliczona ręcznie ───────────────────────────────────────────────
 eq('pozycja rozliczona nie dostaje podpowiedzi',
@@ -135,15 +137,20 @@ eq('dostawa częściowa otwiera montaż',
 eq('anulowany zakup zamyka montaż z własnym komunikatem',
     brama({ type: 'material', status: 'CONFIRMED', purchaseStatus: 'CANCELLED' }, 'exec'), 'Zakup anulowany');
 
-// Bramka „czeka na dostawę" dotyczy tylko tego, co się MONTUJE.
+// Bramka „czeka na dostawę" dotyczy wyłącznie liści, które mają OBIE osie — tylko tam jedna
+// może czekać na drugą.
 eq('praca nie czeka na dostawę (nie ma czego kupować)',
     brama({ type: 'work', status: 'CONFIRMED' }, 'exec'), null);
-eq('usługa nie czeka na dostawę — dostarczenie i wykonanie to ten sam akt',
+eq('usługa nie czeka na dostawę — ma samą oś wykonania',
     brama({ type: 'service', status: 'CONFIRMED' }, 'exec'), null);
 eq('paliwo nie ma osi wykonania, więc nie ma czego bramkować',
     brama({ type: 'fuel', status: 'CONFIRMED' }, 'exec'), null);
 eq('praca nie ma osi zakupu, więc nie ma czego bramkować',
     brama({ type: 'work', status: 'NEW' }, 'purchase'), null);
+eq('usługa nie ma osi zakupu, więc nie ma czego bramkować',
+    brama({ type: 'service', status: 'NEW' }, 'purchase'), null);
+eq('paliwo nie ma osi zakupu, więc nie ma czego bramkować',
+    brama({ type: 'fuel', status: 'NEW' }, 'purchase'), null);
 
 // ── Etap, który już ruszył, NIE wraca za bramkę ─────────────────────────────
 // Na produkcji siedzą pozycje „Nowe" z zapisanym `ORDERED` po migracji. Schowanie ich za
@@ -212,13 +219,15 @@ const tree = (() => {
 const branch = (id, axis) => aggregateBranchStatus(tree.byId.get(id), id === 'root' ? 0 : 1, axis);
 
 // Liść bez danej osi WYPADA z sumy zamiast wchodzić do niej jako wartość startowa.
-eq('Montaż / zakup — liczy się tylko paliwo (praca zakupu nie ma)',
-    [branch('montaz', 'purchase').code, branch('montaz', 'purchase').count], ['DELIVERED', 1]);
+// Pod „Montażem" wiszą tylko praca i paliwo — żadne z nich nie ma osi zakupu, więc gałąź
+// na tej osi nie opisuje niczego i mówi „Brak", zamiast udawać „Do zamówienia".
+eq('Montaż / zakup — ani jednej pozycji z osią zakupu',
+    [branch('montaz', 'purchase').code, branch('montaz', 'purchase').count], ['', 0]);
 eq('Montaż / wykonanie — liczy się tylko praca (paliwo wykonania nie ma)',
     [branch('montaz', 'exec').code, branch('montaz', 'exec').count], ['IN_PROGRESS', 1]);
 
-eq('Kamery / zakup — dwie kamery zamówione + dostarczone paliwo = mieszany',
-    [branch('kamery', 'purchase').code, branch('kamery', 'purchase').count], ['MIXED', 3]);
+eq('Kamery / zakup — same kamery, obie zamówione',
+    [branch('kamery', 'purchase').code, branch('kamery', 'purchase').count], ['ORDERED', 2]);
 eq('Kamery / wykonanie — dwie kamery „do montażu" + praca „w toku" = mieszany',
     [branch('kamery', 'exec').code, branch('kamery', 'exec').count], ['MIXED', 3]);
 eq('Kamery / plan — wszystkie zaakceptowane',
@@ -230,10 +239,10 @@ eq('gałąź nazywa oś wykonania neutralnie, nie montażowo',
 
 // Pozycja kosztowa z dziećmi liczy się JAK LIŚĆ — jej podpozycja nie wchodzi do gałęzi wyżej.
 eq('korzeń / zakup — Avigilon wchodzi sam, licencja pod nim nie',
-    branch('root', 'purchase').count, 4);
-eq('korzeń / zakup — trzy różne kody (zamówione ×2, dostarczone, zafakturowane)',
+    branch('root', 'purchase').count, 3);
+eq('korzeń / zakup — dwa różne kody (zamówione ×2, zafakturowane)',
     branch('root', 'purchase').breakdown.map(b => `${b.code}:${b.count}`).sort(),
-    ['DELIVERED:1', 'INVOICED:1', 'ORDERED:2']);
+    ['INVOICED:1', 'ORDERED:2']);
 
 // ── Wariant płaski musi zgadzać się z drzewiastym na KAŻDEJ osi ──────────────
 for (const axis of ['plan', 'purchase', 'exec']) {
@@ -251,7 +260,9 @@ eq('liść bez zapisanej osi zakupu czyta wartość startową',
 eq('liść bez zapisanej osi wykonania czyta wartość startową',
     axisStatusCodeOf({ type: 'material', status: 'CONFIRMED', purchaseStatus: 'DELIVERED' }, 'exec'), 'TO_DO');
 eq('praca nie ma osi zakupu', axisStatusCodeOf({ type: 'work', status: 'CONFIRMED' }, 'purchase'), null);
+eq('usługa nie ma osi zakupu', axisStatusCodeOf({ type: 'service', status: 'CONFIRMED' }, 'purchase'), null);
 eq('nocleg nie ma osi wykonania', axisStatusCodeOf({ type: 'lodging', status: 'CONFIRMED' }, 'exec'), null);
+eq('nocleg nie ma osi zakupu', axisStatusCodeOf({ type: 'lodging', status: 'CONFIRMED' }, 'purchase'), null);
 
 console.log(failed === 0 ? '\nWszystkie testy przeszły.' : `\n${failed} test(ów) nie przeszło.`);
 process.exit(failed === 0 ? 0 : 1);

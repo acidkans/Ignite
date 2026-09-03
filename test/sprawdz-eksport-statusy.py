@@ -93,13 +93,28 @@ sprawdz('każdy wiersz ma status wykonania', puste, [])
 puste_z = [n for n in range(2, ostatni) if not r[n].get('Q', {}).get('v')]
 sprawdz('każdy wiersz ma status zakupu', puste_z, [])
 
-# Praca nie ma osi zakupu — w tych wierszach ma stać „—", a nie pusto ani „Do zamówienia".
-prace = [n for n in range(2, ostatni) if r[n].get('C', {}).get('v') == 'Praca']
-zle = [n for n in prace if r[n].get('Q', {}).get('v') != '—']
-sprawdz('praca ma „—" w kolumnie zakupu', zle, [])
-paliwo = [n for n in range(2, ostatni) if r[n].get('C', {}).get('v') == 'Paliwo']
-zle2 = [n for n in paliwo if r[n].get('R', {}).get('v') != '—']
-sprawdz('paliwo ma „—" w kolumnie wykonania', zle2, [])
+# Oś, której dany typ liścia NIE MA, musi nieść „—" — a nie pusto ani wartość startową.
+# Oś zakupu ma wyłącznie to, co się kupuje ORAZ montuje: materiał i sprzęt. Oś wykonania —
+# wszystko poza noclegiem i paliwem, które są czystym kosztem i nie mają żadnej osi.
+BEZ_ZAKUPU = ['Praca', 'Usługa', 'Nocleg', 'Paliwo']
+BEZ_WYKONANIA = ['Nocleg', 'Paliwo']
+
+
+def typy(nazwy):
+    return [n for n in range(2, ostatni) if r[n].get('C', {}).get('v') in nazwy]
+
+
+for nazwa in BEZ_ZAKUPU:
+    zle = [n for n in typy([nazwa]) if r[n].get('Q', {}).get('v') != '—']
+    sprawdz(f'„{nazwa}" ma „—" w kolumnie zakupu', zle, [])
+for nazwa in BEZ_WYKONANIA:
+    zle = [n for n in typy([nazwa]) if r[n].get('R', {}).get('v') != '—']
+    sprawdz(f'„{nazwa}" ma „—" w kolumnie wykonania', zle, [])
+
+# Materiał i sprzęt MUSZĄ mieć obie osie wypełnione treścią — status albo etykietę bramki.
+braki = [n for n in typy(['Materiał', 'Sprzęt'])
+         if r[n].get('Q', {}).get('v') in ('', '—') or r[n].get('R', {}).get('v') in ('', '—')]
+sprawdz('materiał i sprzęt mają obie osie wypełnione', braki, [])
 
 # Arkusz „Podsumowanie" liczy rozliczone po kolumnie S, nie po starej P.
 ps = wiersze('Podsumowanie')
