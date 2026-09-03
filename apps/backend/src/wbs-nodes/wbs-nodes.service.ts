@@ -1,7 +1,7 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
-import { isClosedLeafType, isManagerRoles } from '../common/leaf-types.util';
+import { isClosedLeafType, isManagerRoles, nodeHasOwnStatus } from '../common/leaf-types.util';
 import { resolveVersionId } from '../common/version.util';
 import { assertOfferEditable, pickOfferChanges, OfferLockUser } from '../common/offer-lock.util';
 import { ExtraOrderNotifierService, EXTRA_ORDER_STATUS } from '../notifications/extra-order-notifier.service';
@@ -459,6 +459,10 @@ export class WbsNodesService {
                 name: node.name,
                 type: node.type,
                 status: node.status,
+                // Osie realizacji — NULL, dopóki nikt pozycji nie ruszył (patrz migracja
+                // 20260902120000_wbs_realization_statuses).
+                purchaseStatus: node.purchaseStatus,
+                execStatus: node.execStatus,
                 owner: node.owner,
                 path: pathMap[node.id] || node.name,
                 depth: depthMap[node.id] ?? 0,
@@ -531,7 +535,10 @@ export class WbsNodesService {
      */
     async updateNode(id: string, data: any, user?: OfferLockUser) {
         const allowed: Record<string, any> = {};
-        for (const key of ['name', 'type', 'status', 'owner', 'resources', 'cost', 'parentId', 'sortOrder', 'comment', 'strategy', 'unit', 'unitPrice']) {
+        // `purchaseStatus` i `execStatus` to osie REALIZACJI — osobne kolumny, żeby zmiana
+        // statusu w planowaniu nie kasowała stanu zakupu ani montażu (tak działo się, dopóki
+        // wszystkie trzy etapy jechały jednym polem `status`).
+        for (const key of ['name', 'type', 'status', 'purchaseStatus', 'execStatus', 'owner', 'resources', 'cost', 'parentId', 'sortOrder', 'comment', 'strategy', 'unit', 'unitPrice']) {
             if (data[key] !== undefined) allowed[key] = data[key];
         }
         if (data.ganttStart !== undefined) {
@@ -606,9 +613,26 @@ export class WbsNodesService {
         // w „Dodatkowe zamówienie", nie o każdym zapisie pozycji, która ten status już ma.
         // Druga droga zapisu tego samego statusu (karta materiałowa) woła to samo — próg
         // „raz na zamówienie" w `ExtraOrderNotifierService` łapie oba wywołania.
-        const statusBefore = allowed.status !== undefined
-            ? (await this.prisma.wbsNode.findUnique({ where: { id }, select: { status: true } }))?.status ?? null
-            : null;
+        //
+        // @anchor wbs-node-branch-status-guard — gałąź grupująca i przedmiot projektu statusu
+        // NIE mają: ich stan liczy się z pozycji poddrzewa (`aggregateBranchStatus` na froncie).
+        // Front tam nie pokazuje dropdowna, ale zapis musi odrzucić także stara zakładka
+        // i skrypt — inaczej w bazie znów osiądzie wartość, której nikt nie widzi, a która
+        // wychodzi w eksporcie.
+        let statusBefore: string | null = null;
+        if (allowed.status !== undefined) {
+            const before = await this.prisma.wbsNode.findUnique({
+                where: { id },
+                select: { status: true, parentId: true, type: true, _count: { select: { children: true } } },
+            });
+            if (!before) throw new NotFoundException(`WbsNode ${id} not found`);
+            if (!nodeHasOwnStatus(before, before._count.children)) {
+                throw new BadRequestException(
+                    'Gałąź nie ma własnego statusu — status wylicza się z pozycji, które pod nią wiszą.',
+                );
+            }
+            statusBefore = before.status ?? null;
+        }
 
         let updated;
         try {

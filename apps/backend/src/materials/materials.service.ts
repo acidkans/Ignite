@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { normalizeManufacturer } from '../common/normalize.util';
 import * as fs from 'fs';
 import * as path from 'path';
+import { normalizeLeafType, DEFAULT_CATALOG_TYPE } from '../common/leaf-types.util';
 
 @Injectable()
 // @anchor materials-service
@@ -98,7 +99,7 @@ export class MaterialsService {
                 manufacturer,
                 model,
                 productName: dto.productName ?? null,
-                type: dto.type ?? 'DEVICE',
+                type: normalizeLeafType(dto.type) || DEFAULT_CATALOG_TYPE,
                 priceNetto: dto.priceNetto ?? undefined,
                 seller: dto.seller ?? undefined,
                 productUrl: dto.productUrl ?? undefined,
@@ -249,7 +250,7 @@ export class MaterialsService {
 
         const dataSheetUrl = doc.storagePath;
         const dataSheetName = doc.name;
-        const validType = (t: string) => ['DEVICE', 'MATERIAL', 'CABLE', 'SOFTWARE', 'SERVICE'].includes(t) ? t : 'DEVICE';
+        const validType = (t: string) => normalizeLeafType(t) || DEFAULT_CATALOG_TYPE;
 
         const results: any[] = [];
         for (const item of items) {

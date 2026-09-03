@@ -8,7 +8,7 @@ import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import GanttSection from './GanttSection';
-import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, usesWorkStatuses, statusLabelForType, resolveStatusCode } from './wbsConstants';
+import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
@@ -5699,38 +5699,25 @@ ${ganttSectionHtml}
             };
         };
 
+        // @anchor wbs-branch-status-map — statusy gałęzi liczone RAZ na całej liście węzłów.
+        // Gałąź grupująca i przedmiot projektu własnego statusu nie mają: pokazują sumę stanów
+        // pozycji, które pod nimi wiszą — ta sama reguła co plakietka w drzewie WBS.
+        const aggregatedStatusByNodeId = buildAggregatedStatusMap(wbsData);
+
+        // @anchor wbs-plan-status-of — status pozycji na ETAPIE PLANU: Nowe / Zaproponowane /
+        // Zaakceptowane / Odrzucone. Jedna lista dla każdego typu liścia, ta sama co dropdown
+        // w drzewie WBS (`StatusSelect`) — widok Budżet i eksporty muszą mówić dokładnie to,
+        // co tabela obok.
+        //
+        // Dziedziczenie statusu z alokacji materiałowych ZNIKA na tym etapie: alokacje niosą
+        // kody magazynowe („Na magazynie", „Wydane", „Zainstalowane"), które opisują realizację,
+        // a nie decyzję ofertową. Materiał w planie ma status swojej pozycji, tak jak praca.
         const getInheritedMaterialStatus = (item) => {
-            const normalizedType = String(item.type || '').toLowerCase();
-            if (!['material', 'equipment'].includes(normalizedType)) {
-                // Liść niematerialny nie dziedziczy statusu z alokacji — słownik ma własny,
-                // a obcy kod z czasów wspólnej listy `resolveStatusCode` sprowadza do „Nowe".
-                const code = resolveStatusCode(item.type, item.status);
-                return { code, label: getStatusLabel(code, item.status, item.type) };
-            }
-            const lookupKey = makeMaterialLookupKey(getSubjectInfo(item).name, item.name);
-            const lookupStatuses = Array.from(new Set((materialMetaByLookupKey[lookupKey]?.statuses || [])
-                .map((s) => normalizeStatusCode(s))
-                .filter(Boolean)));
-            const statuses = lookupStatuses.length ? lookupStatuses : Array.from(new Set((item.materials || [])
-                .map(m => m.status)
-                .filter(Boolean)
-                .map((s) => normalizeStatusCode(s))
-                .filter(Boolean)));
-
-            if (statuses.length === 0) {
-                const fallbackCode = normalizeStatusCode(item.status);
-                return { code: fallbackCode, label: getStatusLabel(fallbackCode, item.status) };
-            }
-
-            if (statuses.length === 1) {
-                const code = statuses[0];
-                return { code, label: getStatusLabel(code) };
-            }
-
-            return {
-                code: 'MIXED',
-                label: statuses.map((code) => getStatusLabel(code)).join(', '),
-            };
+            // Gałąź — status wyliczony z pozycji poddrzewa, nigdy własny.
+            const aggregated = aggregatedStatusByNodeId.get(item.id);
+            if (aggregated) return { code: aggregated.code, label: aggregated.label };
+            const code = planStatusFromAny(item.status);
+            return { code, label: PLAN_STATUS_META[code].label };
         };
 
         if (view === VIEWS.BUDGET) {

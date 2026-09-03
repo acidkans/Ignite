@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType } from './wbsConstants';
+import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny } from './wbsConstants';
 import AutoResizeTextarea from './AutoResizeTextarea';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
@@ -405,36 +405,70 @@ const structStatusMetaFor = (type) => (usesWorkStatuses(type) ? WORK_STRUCT_STAT
 // `test/status-dropdowns.html` renderował PRAWDZIWY select, a nie jego kopię — kopia
 // przeszłaby test także wtedy, gdyby lista statusów w komponencie się rozjechała.
 export { STRUCT_STATUS_META, WORK_STRUCT_STATUS_META };
-// `type` decyduje, KTÓRY słownik statusów widzi użytkownik. Bez niego select spada na
-// materiałowy — tak samo jak przed rozdzieleniem list — więc każde wywołanie musi go podać.
+// @anchor plan-struct-status-meta — plakietkowy wygląd czterech statusów PLANU. Etykiety
+// biorę z `PLAN_STATUS_META`, nie przepisuję: piąta kopia listy statusów była dokładnie tym,
+// co poprzednio rozjechało widoki.
+const PLAN_STRUCT_STATUS_META = {
+    NEW:       { label: PLAN_STATUS_META.NEW.label,       style: 'bg-slate-500/20 text-slate-300 border-slate-500/30' },
+    PROPOSAL:  { label: PLAN_STATUS_META.PROPOSAL.label,  style: 'bg-blue-500/20 text-blue-300 border-blue-500/30' },
+    CONFIRMED: { label: PLAN_STATUS_META.CONFIRMED.label, style: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+    REJECTED:  { label: PLAN_STATUS_META.REJECTED.label,  style: 'bg-red-500/20 text-red-300 border-red-500/30' },
+};
+
+// Ta tabela to ETAP PLANU, więc lista statusów jest JEDNA dla wszystkich typów liści:
+// Nowe → Zaproponowane → Zaakceptowane / Odrzucone. „Rozpoczęte" nad pracą i „Zainstalowane"
+// nad materiałem opisywały świat, który zaczyna się PO akceptacji — w planie nie miały czego
+// opisywać, a mimo to dało się je tu ustawić. Pełne słowniki (magazynowy i robociznowy)
+// zostają w zakładce Realizacja, gdzie mają sens.
+//
+// `type` przyjmujemy dalej, bo wołający go podaje, a na etapie planu po prostu nie zmienia
+// listy — i nie ma go „porządkować" z wywołań: wraca, gdy dojdzie osobne pole statusu realizacji.
 export function StatusSelect({ value, onChange, onKeyDown, type = '', ...rest }) {
-    const map = structStatusMetaFor(type);
-    // Kod spoza słownika tego typu (pozycja sprzed rozdzielenia list ma na pracy `PENDING`)
-    // pokazuje się jako „Nowe"; dopiero ręczna zmiana utrwala kod z nowego słownika.
-    const code = usesWorkStatuses(type) ? resolveStatusCode(type, value) : (value || '');
-    const meta = map[code] || map[''] || map.NEW;
+    // Pozycja z kodem realizacyjnym w bazie (`ORDERED`, `IN_STOCK`, `STARTED`…) pokazuje się
+    // jako „Zaakceptowane" — skoro ją zamówiono albo ekipa ją zaczęła, klient przyjął ją wcześniej.
+    const code = planStatusFromAny(value);
+    const meta = PLAN_STRUCT_STATUS_META[code];
     return (
         <select
             value={code}
             onChange={e => onChange(e.target.value)}
-            className={`text-[14px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 cursor-pointer focus:outline-none focus:ring-0 transition-colors ${meta.style}`}
+            // `w-full min-w-0` — tabela ma `table-layout: fixed`, więc komórka trzyma 128 px,
+            // ale natywny select rozpychał się do najdłuższej opcji i WYCHODZIŁ na kolumnę
+            // Właściciel, wyglądając jak drugi dropdown w tamtej kolumnie.
+            className={`w-full min-w-0 text-[14px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 cursor-pointer focus:outline-none focus:ring-0 transition-colors ${meta.style}`}
             onClick={e => e.stopPropagation()}
             onKeyDown={onKeyDown}
             {...rest}
         >
-            {Object.entries(map)
-                .filter(([c]) => c !== 'MIXED')
-                .map(([c, { label }]) => (
+            {Object.entries(PLAN_STRUCT_STATUS_META).map(([c, { label }]) => (
                 <option key={c} value={c} className="bg-gray-900 text-white">{label}</option>
             ))}
         </select>
     );
 }
 
-function InheritedStatusBadge({ status }) {
-    const meta = STRUCT_STATUS_META[status];
-    if (!meta) return <span className="text-[14px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 text-gray-500 border-gray-600/30 flex items-center gap-1 w-max"><Link size={8}/> {status}</span>;
-    return <span title="Status dziedziczony z zapotrzebowania" className={`text-[14px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 flex items-center gap-1 w-max cursor-default ${meta.style}`}><Link size={8}/> {meta.label}</span>;
+// @anchor aggregated-status-badge — status gałęzi: wartość WYLICZONA z pozycji poddrzewa,
+// nigdy zapisana w bazie i nigdy edytowalna. Dropdown w tym miejscu wprowadzał w błąd —
+// ręcznie ustawiony status gałęzi rozjeżdżał się z pozycjami pod nią przy pierwszej zmianie
+// liścia i nikt tego nie widział, bo obie wartości wyglądały tak samo.
+// Ikona łańcucha (`Link`) odróżnia plakietkę wyliczoną od plakietki-selecta na pozycji.
+function AggregatedStatusBadge({ node, depth }) {
+    const agg = aggregateBranchStatus(node, depth);
+    // Gałąź sumuje statusy PLANU, więc plakietka bierze wygląd z tej samej listy co dropdown
+    // pozycji; `MIXED` i pusta gałąź spadają na słownik strukturalny („Mieszany" / „Brak").
+    const meta = PLAN_STRUCT_STATUS_META[agg.code] || STRUCT_STATUS_META[agg.code] || STRUCT_STATUS_META[''];
+    const title = agg.count === 0
+        ? 'Gałąź bez pozycji — brak statusu do wyliczenia'
+        : `Status wyliczony z ${agg.count} ${agg.count === 1 ? 'pozycji' : 'pozycji'}: `
+          + agg.breakdown.map(b => `${b.label} ${b.count}`).join(', ');
+    return (
+        <span
+            title={title}
+            className={`text-[14px] px-2 py-0.5 rounded-lg border font-medium bg-black/40 flex items-center gap-1 max-w-full cursor-default ${meta.style}`}
+        >
+            <Link size={8}/> {agg.label}
+        </span>
+    );
 }
 
 // Node types: 'project' (root), 'product' (przedmiot projektu), 'material'|'work'|'service' (typy pracy)
@@ -992,7 +1026,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [qaModalNode, setQaModalNode] = useState(null); // { id, name } — węzeł z otwartym modalem Q&A
     // @anchor qa-branch-node
     const [qaBranchNode, setQaBranchNode] = useState(null); // { id } — węzeł top-level z otwartym read-only podglądem Q&A całej gałęzi
-    const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, narzut: 90, cena_ofert: 110, status: 128, wlasciciel: 128, komentarz: 200, strategia: 220, qa: 140, zalaczniki: 44 });
+    const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, narzut: 90, cena_ofert: 110, status: 152, wlasciciel: 128, komentarz: 200, strategia: 220, qa: 140, zalaczniki: 44 });
     const resizeDrag = useRef(null);
     // @anchor grid-nav-table-ref
     // Kontener tabeli — zawęża zapytania nawigacji klawiaturowej (grid-nav) do tego drzewa,
@@ -1017,7 +1051,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // @anchor fetch-mat-seq — numer ostatniego fetcha listy wymagań; starsza odpowiedź (kolejny bump
     // materialRefreshKey wyprzedzony przez wolniejsze pierwsze żądanie) nie może nadpisać nowszej mapy.
     const fetchMatSeq = useRef(0);
-    // materialStatuses kept for InheritedStatusBadge display only (no longer syncs to wbsTree)
+    // materialStatuses kept for display only (no longer syncs to wbsTree)
     useEffect(() => {
         if (!processNodeId) return;
         const fetchMat = async () => {
@@ -2042,8 +2076,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 )}
 
                 {/* Status */}
-                <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                <td className="px-3 py-2.5 overflow-hidden" onClick={e => e.stopPropagation()}>
                     {(() => {
+                        // Gałąź grupująca i przedmiot projektu (depth 0) statusu nie mają —
+                        // plakietka liczy go z pozycji poddrzewa. Pozycja kosztowa z dziećmi
+                        // zachowuje własny dropdown (patrz `nodeHasOwnStatus`).
+                        if (!nodeHasOwnStatus(node, depth)) {
+                            return <AggregatedStatusBadge node={node} depth={depth} />;
+                        }
                         // @anchor wbs-status-req-link — wymaganie do zsynchronizowania statusem:
                         // tag `req:<id>` jest połączeniem właściwym, ale 15 pozycji na produkcji
                         // trzyma się karty wyłącznie przez `MaterialRequirement.wbsNodeId` (stare
@@ -2122,13 +2162,22 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
 
                 {/* Strategia — edytowalna na węzłach-elementach (liście / pośrednie), read-only na top-level.
                     Top-level (depth===0) pokazuje złożenie ze składowych: linia `nazwa: strategia` na każdy
-                    wypełniony potomek. Złożenie jest utrwalane na polu strategy top-level (czytają eksporty). */}
-                <td className="px-3 py-2.5 min-w-[180px]" onClick={e => e.stopPropagation()}>
+                    wypełniony potomek. Złożenie jest utrwalane na polu strategy top-level (czytają eksporty).
+
+                    @anchor wbs-strategy-cell-scroll — złożenie MUSI mieć własny scroll. Bez niego wiersz
+                    gałęzi rósł do wysokości sumy wszystkich strategii poddrzewa (na AMP_5G: 5859 px) i
+                    rozwinięcie gałęzi wyglądało jak zepsuty przycisk — dzieci renderowały się poprawnie,
+                    tylko sześć tysięcy pikseli niżej, poza ekranem. Wysokość wiersza ma zależeć od liczby
+                    kolumn, nie od tego, ile ktoś napisał w strategii. */}
+                <td className="px-3 py-2.5 min-w-[180px] align-top" onClick={e => e.stopPropagation()}>
                     {depth === 0 ? (() => {
                         const entries = collectBranchStrategyEntries(node);
                         if (entries.length) {
                             return (
-                                <div className={`text-base leading-snug text-gray-300 select-text ${d.fieldClass}`}>
+                                <div
+                                    title="Strategia całej gałęzi — przewiń, aby zobaczyć resztę"
+                                    className={`max-h-24 overflow-y-auto pr-1 text-base leading-snug text-gray-300 select-text ${d.fieldClass}`}
+                                >
                                     {entries.map(e => (
                                         <div key={e.id} className="mb-1.5 last:mb-0">
                                             <span className="font-bold text-gray-200">{e.name}</span>
@@ -2139,7 +2188,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             );
                         }
                         return (node.strategy || '')
-                            ? <div className={`whitespace-pre-wrap text-base leading-snug text-gray-300 select-text ${d.fieldClass}`}>{node.strategy}</div>
+                            ? <div className={`max-h-24 overflow-y-auto pr-1 whitespace-pre-wrap text-base leading-snug text-gray-300 select-text ${d.fieldClass}`}>{node.strategy}</div>
                             : <span className="text-gray-700 text-base select-none">—</span>;
                     })() : (
                         <AutoResizeTextarea

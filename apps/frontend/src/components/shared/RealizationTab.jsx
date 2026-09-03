@@ -8,7 +8,9 @@ import SupplierPicker from './SupplierPicker';
 import { RequirementImageBox } from './wbs/WbsMaterialsPanel';
 import AutoResizeTextarea from './wbs/AutoResizeTextarea';
 import ProtokolOdbioruModal from './wbs/ProtokolOdbioruModal';
-import { sanitizeQtyInput, parsePriceInput, DRAWER, STRUCTURE_STATUS_META, statusMetaForType, statusOptionsForType, statusLabelForType, resolveStatusCode, usesWorkStatuses } from './wbs/wbsConstants';
+import { sanitizeQtyInput, parsePriceInput, DRAWER, STRUCTURE_STATUS_META, statusMetaForType, statusOptionsForType, statusLabelForType, resolveStatusCode, usesWorkStatuses,
+    PLAN_STATUS_META, planStatusFromAny, PURCHASE_STATUS_META, EXEC_STATUS_META, execStatusLabel,
+    hasPurchaseAxis, hasExecAxis, DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS } from './wbs/wbsConstants';
 import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath,
     leafNodesOf, buildCardMap, wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf,
@@ -48,7 +50,11 @@ export const COL_DEFS = [
     // `PATCH /wbs-nodes/:id`, a dla liścia z kartą materiałową dodatkowo na kartę, żeby kolumna
     // „Status oferty" w panelu Materiały nie została ze starą wartością.
     // Miejsce w kolejności jak w panelu Materiały — przed „Komentarzem", po kolumnach kwotowych.
-    { key: 'status',        label: 'Status',              defaultW: 148 },
+    { key: 'status',        label: 'Status oferty',       defaultW: 130 },
+    // @anchor realization-purchase-col — `WbsNode.purchaseStatus`, droga towaru/zlecenia.
+    { key: 'purchaseStatus', label: 'Status zakupu',      defaultW: 150 },
+    // @anchor realization-exec-col — `WbsNode.execStatus`, droga roboty (dla materiału: montaż).
+    { key: 'execStatus',    label: 'Status wykonania',    defaultW: 150 },
     // @anchor realization-comment-col — `WbsNode.comment`, to samo pole co kolumna „Komentarz"
     // w `WBSHybridTable` i w panelu Materiały. Synchronizacja obustronna przez `wbs-comment-changed`.
     { key: 'comment',       label: 'Komentarz',           defaultW: 200 },
@@ -60,12 +66,15 @@ export const COL_DEFS = [
 // obsługuje komórkę, filtr kolumny i sortowanie, więc żadne z nich nie rozjedzie się
 // z pozostałymi. Słownik zależy od typu: praca, usługa, nocleg i paliwo mają własny.
 // Pusty status daje pusty ciąg — wołający decyduje, czy pokazać „—", czy nic nie dopasować.
-export const statusLabel = (node) => {
-    if (usesWorkStatuses(node?.type)) return statusLabelForType(node.type, node?.status);
-    const code = node?.status || '';
-    if (!code) return '';
-    return STRUCTURE_STATUS_META[code]?.label || code;
-};
+export const statusLabel = (node) => PLAN_STATUS_META[planStatusFromAny(node?.status)].label;
+
+// @anchor realization-axis-labels — etykiety osi realizacji dla szukajki i sortowania.
+// Muszą czytać dokładnie to, co komórka: inaczej wpisanie „zamówione" nie znajduje pozycji,
+// którą widać na ekranie.
+export const purchaseStatusLabel = (node) =>
+    hasPurchaseAxis(node?.type) ? (PURCHASE_STATUS_META[node?.purchaseStatus || DEFAULT_PURCHASE_STATUS]?.label || '') : '';
+export const execStatusLabelOf = (node) =>
+    hasExecAxis(node?.type) ? execStatusLabel(node?.type, node?.execStatus || DEFAULT_EXEC_STATUS) : '';
 
 // @anchor realization-forecast-min-share — próg wiarygodności prognozy wydatków: dopóki
 // wykonanie rodzaju kosztów nie osiągnie tego udziału w jego wycenie, prognoza zostaje na
@@ -177,7 +186,7 @@ const growsWithText = (k) => k !== 'entryDate' && !NUMERIC_ENTRY_FIELDS.has(k);
 // @anchor realization-row — jeden liść WBS: plan z wyceny obok realizacji z wpisów.
 // Wiersz jest tylko odczytem — wszystko, co się wpisuje, siedzi w wierszach potomnych,
 // więc klik w tabelę nie może przypadkiem zmienić wyceny.
-export function RealizationRow({ node, card, realization, isExpanded, onToggle, onAddClick, onSaveComment, onSaveStatus, readOnly }) {
+export function RealizationRow({ node, card, realization, isExpanded, onToggle, onAddClick, onSaveComment, onSaveStatus, onSaveAxis, readOnly }) {
     const meta = TYPE_META[node.type] || TYPE_META.material;
     const TypeIcon = meta.icon;
     const r = realization;
@@ -355,40 +364,58 @@ export function RealizationRow({ node, card, realization, isExpanded, onToggle, 
                 )}
             </td>
 
-            {/* Status pozycji — `WbsNode.status`, wspólny z kolumną „Status" w WBSHybridTable.
-                Słownik zależy od typu liścia: praca, usługa, nocleg i paliwo dostają listę
-                „Nowe → Rozpoczęte → Wstrzymane → Zakończone / Nieskończone / Odwołane",
-                reszta zostaje na materiałowej drodze przez zakup i magazyn. */}
-            <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+            {/* Status z PLANU — przeniesiony z wyceny i tu READ-ONLY. Realizacja nie decyduje,
+                czy klient pozycję przyjął; decyduje o tym, co się z nią dalej dzieje. Zmiana
+                statusu planu została w Strukturze projektu i w panelu Materiały, żeby ten sam
+                dropdown w dwóch etapach nie kasował sobie nawzajem stanów. */}
+            <td className="px-3 py-2.5 overflow-hidden" onClick={e => e.stopPropagation()}>
                 {(() => {
-                    const statusMap = statusMetaForType(node.type);
-                    const worky = usesWorkStatuses(node.type);
-                    // Kod materiałowy zapisany na liściu pracy sprzed rozdzielenia list
-                    // pokazuje się jako „Nowe"; bazy nie ruszamy, dopiero wybór go utrwala.
-                    const code = worky ? resolveStatusCode(node.type, node.status) : (node.status || '');
+                    const code = planStatusFromAny(node.status);
                     return (
-                <select
-                    value={code}
-                    onChange={e => onSaveStatus(node, e.target.value)}
-                    disabled={readOnly}
-                    title="Status pozycji — to samo pole co w Strukturze projektu"
-                    className={`w-full bg-black/40 border border-white/10 rounded px-1.5 py-0.5 text-sm font-medium outline-none transition-colors ${readOnly ? 'cursor-default' : 'cursor-pointer hover:bg-white/5 focus:border-teal-500/50'} ${statusMap[code]?.color || 'text-gray-400'}`}
-                >
-                    {/* Status spoza słownika (dane sprzed ujednolicenia kodów) zostaje na liście
-                        jako własna pozycja — bez tego `<select>` pokazałby pierwszą opcję i wyglądał,
-                        jakby pozycja miała status, którego nie ma w bazie. Liści niematerialnych
-                        to nie dotyczy: tam obcy kod jest już rozwiązany na „Nowe". */}
-                    {!worky && !statusMap[node.status || ''] && node.status && (
-                        <option value={node.status} className="bg-gray-900 text-white">{node.status}</option>
-                    )}
-                    {statusOptionsForType(node.type).map(c => (
-                        <option key={c} value={c} className="bg-gray-900 text-white">
-                            {statusMap[c].label}
-                        </option>
-                    ))}
-                </select>
+                        <span
+                            title="Status z planowania — zmieniasz go w Strukturze projektu"
+                            className={`inline-flex items-center max-w-full px-2 py-0.5 rounded border border-white/10 bg-black/40 text-sm font-medium cursor-default ${PLAN_STATUS_META[code].color}`}
+                        >
+                            {PLAN_STATUS_META[code].label}
+                        </span>
                     );
                 })()}
+            </td>
+
+            {/* ZAKUP — droga towaru albo zlecenia (`WbsNode.purchaseStatus`). Praca własna tej
+                osi nie ma: nie da się zamówić dnia pracy własnej ekipy. */}
+            <td className="px-3 py-2.5 overflow-hidden" onClick={e => e.stopPropagation()}>
+                {hasPurchaseAxis(node.type) ? (
+                    <select
+                        value={node.purchaseStatus || DEFAULT_PURCHASE_STATUS}
+                        onChange={e => onSaveAxis(node, 'purchaseStatus', e.target.value)}
+                        disabled={readOnly}
+                        title="Status zakupu"
+                        className={`w-full min-w-0 bg-black/40 border border-white/10 rounded px-1.5 py-0.5 text-sm font-medium outline-none transition-colors ${readOnly ? 'cursor-default' : 'cursor-pointer hover:bg-white/5 focus:border-teal-500/50'} ${PURCHASE_STATUS_META[node.purchaseStatus || DEFAULT_PURCHASE_STATUS]?.color || 'text-gray-400'}`}
+                    >
+                        {Object.entries(PURCHASE_STATUS_META).map(([c, m]) => (
+                            <option key={c} value={c} className="bg-gray-900 text-white">{m.label}</option>
+                        ))}
+                    </select>
+                ) : <span className="text-sm text-gray-700">—</span>}
+            </td>
+
+            {/* WYKONANIE — droga roboty (`WbsNode.execStatus`). Materiał i sprzęt czytają tę oś
+                jako MONTAŻ („Zainstalowane" zamiast „Wykonane"); nocleg i paliwo jej nie mają. */}
+            <td className="px-3 py-2.5 overflow-hidden" onClick={e => e.stopPropagation()}>
+                {hasExecAxis(node.type) ? (
+                    <select
+                        value={node.execStatus || DEFAULT_EXEC_STATUS}
+                        onChange={e => onSaveAxis(node, 'execStatus', e.target.value)}
+                        disabled={readOnly}
+                        title="Status wykonania"
+                        className={`w-full min-w-0 bg-black/40 border border-white/10 rounded px-1.5 py-0.5 text-sm font-medium outline-none transition-colors ${readOnly ? 'cursor-default' : 'cursor-pointer hover:bg-white/5 focus:border-teal-500/50'} ${EXEC_STATUS_META[node.execStatus || DEFAULT_EXEC_STATUS]?.color || 'text-gray-400'}`}
+                    >
+                        {Object.keys(EXEC_STATUS_META).map(c => (
+                            <option key={c} value={c} className="bg-gray-900 text-white">{execStatusLabel(node.type, c)}</option>
+                        ))}
+                    </select>
+                ) : <span className="text-sm text-gray-700">—</span>}
             </td>
 
             {/* Komentarz pozycji — `WbsNode.comment`, wspólny z WBSHybridTable i panelem Materiały */}
@@ -997,6 +1024,28 @@ export default function RealizationTab({
         }
     }, [cards]);
 
+    // @anchor realization-save-axis — zapis osi REALIZACJI (`purchaseStatus` / `execStatus`).
+    // Osobno od `saveStatus`, bo to inne kolumny i inny etap: status planu jedzie dodatkowo
+    // na kartę materiałową (panel Materiały czyta go w kolumnie „Status oferty"), a osie
+    // realizacji żyją wyłącznie na węźle WBS i nikt poza realizacją ich nie pokazuje.
+    const saveAxis = useCallback(async (node, pole, wartosc) => {
+        const previous = node[pole] ?? null;
+        if (wartosc === previous) return;
+        setWbsNodes(prev => prev.map(n => n.id === node.id ? { ...n, [pole]: wartosc } : n));
+        try {
+            const res = await fetch(`${API_URL}/wbs-nodes/${node.id}`, {
+                method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ [pole]: wartosc }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch (e) {
+            console.error('[RealizationTab] saveAxis error:', e);
+            setWbsNodes(prev => prev.map(n => n.id === node.id ? { ...n, [pole]: previous } : n));
+            alert(pole === 'purchaseStatus'
+                ? 'Nie udało się zapisać statusu zakupu'
+                : 'Nie udało się zapisać statusu wykonania');
+        }
+    }, []);
+
     // @anchor realization-append-entry-comment — komentarz nowego wpisu dopisuje się do komentarza
     // POZYCJI jako osobna linia „zakup: …" / „wykonanie: …". Dzięki temu ta sama treść jest widoczna
     // wszędzie, gdzie żyje `WbsNode.comment` — w WBS, w panelu Materiały i na markerze schematu —
@@ -1153,6 +1202,8 @@ export default function RealizationTab({
                 (card?.model || '').toLowerCase().includes(q) ||
                 (card?.technicalSpec || '').toLowerCase().includes(q) ||
                 statusLabel(node).toLowerCase().includes(q) ||
+                purchaseStatusLabel(node).toLowerCase().includes(q) ||
+                execStatusLabelOf(node).toLowerCase().includes(q) ||
                 (node.comment || '').toLowerCase().includes(q) ||
                 realization.entries.some(e =>
                     (e.docNumber || '').toLowerCase().includes(q) ||
@@ -1188,6 +1239,8 @@ export default function RealizationTab({
                 if (key === 'purchasePrice') return String(realization.avg ?? purchaseUnitOf(card) ?? '').includes(q);
                 if (key === 'total')         return `${Math.round(planValueOf(node, card) * 100) / 100} ${realization.value}`.includes(q);
                 if (key === 'status')        return statusLabel(node).toLowerCase().includes(q);
+                if (key === 'purchaseStatus') return purchaseStatusLabel(node).toLowerCase().includes(q);
+                if (key === 'execStatus')     return execStatusLabelOf(node).toLowerCase().includes(q);
                 if (key === 'comment')       return (node.comment || '').toLowerCase().includes(q);
                 if (key === 'actions')       return String(realization.entries.length).includes(q);
                 return true;
@@ -1212,6 +1265,8 @@ export default function RealizationTab({
             // Koszt całkowity sortuje po odchyleniu — to jest pytanie, które się tej kolumnie zadaje.
             else if (k === 'total')        cmp = (a.realization.value - planValueOf(a.node, a.card)) - (b.realization.value - planValueOf(b.node, b.card));
             else if (k === 'status')       cmp = statusLabel(a.node).localeCompare(statusLabel(b.node), 'pl');
+            else if (k === 'purchaseStatus') cmp = purchaseStatusLabel(a.node).localeCompare(purchaseStatusLabel(b.node), 'pl');
+            else if (k === 'execStatus')     cmp = execStatusLabelOf(a.node).localeCompare(execStatusLabelOf(b.node), 'pl');
             else if (k === 'comment')      cmp = (a.node.comment || '').localeCompare(b.node.comment || '', 'pl');
             else if (k === 'actions')      cmp = a.realization.entries.length - b.realization.entries.length;
             return sortConfig.direction === 'asc' ? cmp : -cmp;
@@ -1917,6 +1972,7 @@ export default function RealizationTab({
                                             readOnly={readOnly}
                                             onSaveComment={saveComment}
                                             onSaveStatus={saveStatus}
+                                            onSaveAxis={saveAxis}
                                             onToggle={() => {
                                                 setExpandedId(isExpanded ? null : node.id);
                                                 if (isExpanded) { setFormNodeId(null); setFormSeed(null); }

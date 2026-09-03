@@ -731,7 +731,12 @@ model Material {
   /// @anchor material-product-name
   productName    String?
   /// @anchor material-type
-  type           String   // DEVICE | MATERIAL | CABLE | SOFTWARE | SERVICE
+  /// Typ produktu katalogowego — TA SAMA lista co `WbsNode.type`:
+  /// material | equipment | work | service | lodging | fuel.
+  /// Stary enum (DEVICE / MATERIAL / CABLE / SOFTWARE) wciąż siedzi w części wierszy;
+  /// czyta go `normalizeLeafType()` z `common/leaf-types.util.ts`. Nowe wpisy dostają
+  /// wyłącznie typ kanoniczny — patrz `DEFAULT_CATALOG_TYPE`.
+  type           String
   /// @anchor material-data-sheet-url
   dataSheetUrl   String?  // legacy: relatywna nazwa pliku (fallback gdy brak FK)
   /// @anchor material-data-sheet-name
@@ -811,7 +816,10 @@ model MaterialRequirement {
   material     Material? @relation(fields: [materialId], references: [id], onDelete: SetNull)
 
   /// @anchor mat-req-type
-  type           String // DEVICE | MATERIAL | CABLE | SOFTWARE | SERVICE
+  /// Typ wymagania — TA SAMA lista co `WbsNode.type`: material | equipment | work | service
+  /// | lodging | fuel. Dane przemigrowane; stary enum (DEVICE / CABLE / SOFTWARE) już tu nie
+  /// występuje, a wejście z importu i AI normalizuje `normalizeLeafType()`.
+  type           String
   /// @anchor mat-req-quantity
   quantity       Float
   /// @anchor mat-req-unit
@@ -1164,7 +1172,21 @@ model WbsNode {
   /// @anchor wbs-node-type
   type      String   @default("") // work | material | equipment | service | ""
   /// @anchor wbs-node-status
+  /// Status ETAPU PLANU (decyzja ofertowa): NEW | PROPOSAL | CONFIRMED | REJECTED.
+  /// Historycznie trzymał też stany realizacji — te przeniosły się do `purchaseStatus`
+  /// i `execStatus`, a odczyt starych kodów normalizuje `planStatusFromAny` na froncie.
   status    String   @default("")
+  /// @anchor wbs-node-purchase-status
+  /// Droga TOWARU albo ZLECENIA: TO_ORDER | ORDERED | DELIVERED | ISSUED | INVOICED | CANCELLED.
+  /// NULL = oś nie dotyczy tego liścia (praca własna nie ma czego zamawiać) albo pozycja
+  /// nie weszła jeszcze do realizacji. Otwiera się, gdy plan wchodzi na CONFIRMED.
+  purchaseStatus String?
+  /// @anchor wbs-node-exec-status
+  /// Droga ROBOTY: TO_DO | IN_PROGRESS | ON_HOLD | DONE | HANDED_OVER | CANCELLED.
+  /// Dla materiału i sprzętu to MONTAŻ (etykieta „Zainstalowane" zamiast „Wykonane"),
+  /// dla pracy i usługi — wykonanie. NULL dla noclegu i paliwa: nie ma tam czego wykonywać.
+  /// `HANDED_OVER` ustawia protokół odbioru, nie użytkownik.
+  execStatus     String?
   /// @anchor wbs-node-owner
   owner     String   @default("")
   /// @anchor wbs-node-resources

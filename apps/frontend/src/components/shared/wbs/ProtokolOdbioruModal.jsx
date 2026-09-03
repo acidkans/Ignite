@@ -143,6 +143,12 @@ export default function ProtokolOdbioruModal({
     // pełnej kwocie domknięcie wynika z samej kwoty i tej mapy nie dotyka.
     const [domknieciaCzesciowe, setDomknieciaCzesciowe] = useState({});
     const [zapisanoOdbior, setZapisanoOdbior] = useState(false);
+    // @anchor protokol-wybor-statusu — pozycje materiałowe czekające na decyzję, jak protokół
+    // ma je przestawić: podpisany odbiór bywa i odbiorem samej DOSTAWY, i odbiorem MONTAŻU,
+    // a z dokumentu tego nie widać. Praca i usługa decyzji nie wymagają — protokół odbioru
+    // robót znaczy dla nich dokładnie jedno: wykonane.
+    const [wyborStatusu, setWyborStatusu] = useState(null); // null | { pozycje: [{id, name}] }
+    const [zapisStatusow, setZapisStatusow] = useState('');
     // @anchor protokol-wystawione — wystawione protokoły zamówienia. Pokazujemy je w modalu,
     // bo bez tej listy pomyłkowy odbiór wyszarzałby pozycję bez żadnej drogi odwrotu.
     const [wystawione, setWystawione] = useState([]);
@@ -566,6 +572,56 @@ export default function ProtokolOdbioruModal({
 
     const zapamietaj = () => PAMIETANE.forEach((k) => pamiec.zapisz(k, pola[k]));
 
+    // @anchor protokol-patch-status — jeden zapis osi realizacji na węźle WBS.
+    // Protokół pracuje na `wbsRootId` (korzeń klonu), ale status siedzi na ŻYWYM wierszu,
+    // więc zapisujemy po `node.id` — tym samym, po którym edytuje go zakładka Realizacja.
+    const patchStatusWezla = async (nodeId, dane) => {
+        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+        const res = await fetch(`${API_URL}/wbs-nodes/${nodeId}`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(dane),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    };
+
+    // @anchor protokol-po-odbiorze-statusy — podpisany protokół przestawia stan realizacji:
+    //   praca i usługa           → wykonanie DONE („Wykonane") i od razu HANDED_OVER? NIE —
+    //                              zostawiamy DONE, bo „Odebrane" to osobny krok, który
+    //                              użytkownik potwierdza świadomie w Realizacji;
+    //   materiał i sprzęt        → pytamy, bo protokół bywa odbiorem dostawy ALBO montażu.
+    const poOdbiorzeUstawStatusy = async () => {
+        const materialy = wybrane.filter((r) => ['material', 'equipment'].includes(String(r.node.type || '').toLowerCase()));
+        const roboty = wybrane.filter((r) => ['work', 'service'].includes(String(r.node.type || '').toLowerCase()));
+        try {
+            await Promise.all(roboty.map((r) => patchStatusWezla(r.node.id, { execStatus: 'DONE' })));
+            if (roboty.length) setZapisStatusow(`Oznaczono jako wykonane: ${roboty.length}`);
+        } catch {
+            setStatusBlad('Odbiór zapisany, ale nie udało się oznaczyć prac jako wykonanych — zrób to w zakładce Realizacja.');
+        }
+        if (materialy.length) {
+            setWyborStatusu({ pozycje: materialy.map((r) => ({ id: r.node.id, name: r.node.name })) });
+        }
+    };
+
+    // @anchor protokol-zastosuj-wybor — decyzja z modalu leci na WSZYSTKIE pozycje materiałowe
+    // tego protokołu. Rozbicie na decyzję per pozycja byłoby wierniejsze, ale protokół prawie
+    // zawsze odbiera jeden rodzaj zdarzenia naraz — a lista pozycji bywa kilkudziesięciopozycyjna.
+    const zastosujWyborStatusu = async (wariant) => {
+        const pozycje = wyborStatusu?.pozycje || [];
+        setWyborStatusu(null);
+        if (!pozycje.length) return;
+        const dane = wariant === 'zainstalowane' ? { execStatus: 'DONE' } : { purchaseStatus: 'DELIVERED' };
+        try {
+            await Promise.all(pozycje.map((p) => patchStatusWezla(p.id, dane)));
+            setZapisStatusow(wariant === 'zainstalowane'
+                ? `Oznaczono jako zainstalowane: ${pozycje.length}`
+                : `Oznaczono jako dostarczone: ${pozycje.length}`);
+        } catch {
+            setStatusBlad('Odbiór zapisany, ale nie udało się przestawić statusów pozycji — zrób to w zakładce Realizacja.');
+        }
+    };
+
     // @anchor protokol-po-eksporcie — odbiór trafia do rejestru DOPIERO gdy dokument
     // opuści aplikację (pobranie, mail albo OneDrive). Podgląd niczego nie odbiera, bo
     // wtedy każde zerknięcie na wydruk zamykałoby pozycje.
@@ -589,6 +645,7 @@ export default function ProtokolOdbioruModal({
             });
             setZapisanoOdbior(true);
             await odswiezRejestr();
+            await poOdbiorzeUstawStatusy();
         } catch (e) {
             // Plik już wyszedł — blokowanie eksportu nie ma sensu, ale użytkownik MUSI
             // wiedzieć, że kolejny protokół nie będzie znał tego odbioru.
@@ -640,6 +697,50 @@ export default function ProtokolOdbioruModal({
 
     return (
         <>
+            {/* @anchor protokol-modal-wybor-statusu — po zapisaniu odbioru pytamy, czym ten
+                protokół był dla pozycji materiałowych: odbiorem DOSTAWY czy odbiorem MONTAŻU.
+                Dwa różne stany na dwóch różnych osiach, a z samego dokumentu nie da się tego
+                wyczytać. Własny modal, nie `window.confirm` — tam nie da się nazwać przycisków,
+                a „OK / Anuluj" nad taką decyzją nic nie znaczy. */}
+            {wyborStatusu && (
+                <div className="fixed inset-0 z-[140] bg-[#05070bdd] backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0b0f17] shadow-2xl p-5 flex flex-col gap-4">
+                        <div>
+                            <h4 className="text-sm font-bold uppercase tracking-[0.14em] text-white">Status pozycji materiałowych</h4>
+                            <p className="text-xs text-gray-400 mt-2 leading-relaxed">
+                                Protokół objął {wyborStatusu.pozycje.length} {wyborStatusu.pozycje.length === 1 ? 'pozycję' : 'pozycji'} typu
+                                materiał / sprzęt. Czy ten odbiór dotyczy samej dostawy, czy zamontowanego sprzętu?
+                            </p>
+                        </div>
+                        <div className="max-h-32 overflow-y-auto custom-scrollbar text-xs text-gray-500 leading-relaxed border-l-2 border-white/10 pl-3">
+                            {wyborStatusu.pozycje.map((p) => <div key={p.id} className="truncate">{p.name}</div>)}
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <button
+                                onClick={() => zastosujWyborStatusu('zainstalowane')}
+                                className="w-full px-4 py-2.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-sm font-semibold hover:bg-emerald-500/25 transition-colors text-left"
+                            >
+                                Zainstalowane
+                                <span className="block text-[11px] font-normal text-emerald-300/70 mt-0.5">sprzęt zamontowany na obiekcie — oś wykonania</span>
+                            </button>
+                            <button
+                                onClick={() => zastosujWyborStatusu('dostarczone')}
+                                className="w-full px-4 py-2.5 rounded-lg bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 text-sm font-semibold hover:bg-cyan-500/25 transition-colors text-left"
+                            >
+                                Dostarczone
+                                <span className="block text-[11px] font-normal text-cyan-300/70 mt-0.5">towar dojechał, montaż jeszcze przed nami — oś zakupu</span>
+                            </button>
+                            <button
+                                onClick={() => setWyborStatusu(null)}
+                                className="w-full px-4 py-2 rounded-lg border border-white/10 text-gray-400 text-sm hover:text-white hover:bg-white/5 transition-colors"
+                            >
+                                Nie zmieniaj statusów
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="fixed inset-0 z-[130] bg-[#05070bcc] backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
                 <div className="w-full max-w-3xl max-h-[92vh] flex flex-col rounded-2xl border border-white/10 bg-[#0b0f17] shadow-2xl" onClick={(e) => e.stopPropagation()}>
 
@@ -1135,6 +1236,14 @@ export default function ProtokolOdbioruModal({
                         {statusBlad && (
                             <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
                                 {statusBlad}
+                            </p>
+                        )}
+
+                        {/* Potwierdzenie, że protokół przestawił stan realizacji — bez tego zmiana
+                            dzieje się po cichu i widać ją dopiero po wejściu w zakładkę Realizacja. */}
+                        {zapisStatusow && (
+                            <p className="text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+                                {zapisStatusow}
                             </p>
                         )}
 
