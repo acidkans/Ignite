@@ -212,7 +212,7 @@ export function StatusHint({ label, color, title, onAccept, disabled }) {
             type="button"
             onClick={onAccept}
             title={title}
-            className={`mt-1 w-full inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-dashed border-white/20 bg-white/[0.03] text-[11px] font-medium hover:bg-white/10 hover:border-white/40 transition-colors ${color || 'text-gray-300'}`}
+            className={`mt-1 flex w-full items-center gap-1 px-1.5 py-0.5 rounded border border-dashed border-white/20 bg-white/[0.03] text-[11px] font-medium hover:bg-white/10 hover:border-white/40 transition-colors ${color || 'text-gray-300'}`}
         >
             <Sparkles size={9} className="flex-shrink-0" />
             <span className="truncate">→ {label}</span>
@@ -229,7 +229,7 @@ export function AxisGateBadge({ gate }) {
     return (
         <span
             title={gate.title}
-            className="inline-flex items-center gap-1 max-w-full px-1.5 py-0.5 rounded border border-dashed border-white/15 bg-black/30 text-sm font-medium text-gray-500 cursor-default"
+            className="flex w-full items-center gap-1 px-1.5 py-0.5 rounded border border-dashed border-white/15 bg-black/30 text-sm font-medium text-gray-500 cursor-default"
         >
             <Hourglass size={9} className="flex-shrink-0" />
             <span className="truncate">{gate.label}</span>
@@ -250,7 +250,7 @@ export function BranchAxisBadge({ agg, axis, opis }) {
     return (
         <span
             title={title}
-            className={`inline-flex items-center gap-1 max-w-full px-1.5 py-0.5 rounded border border-white/10 bg-black/40 text-sm font-medium cursor-default ${color}`}
+            className={`flex w-full items-center gap-1 px-1.5 py-0.5 rounded border border-white/10 bg-black/40 text-sm font-medium cursor-default ${color}`}
         >
             <Link size={9} className="flex-shrink-0" />
             <span className="truncate">{agg.label}</span>
@@ -469,9 +469,9 @@ export function RealizationRow({ node, card, realization, odbior, isExpanded, on
                     return (
                         <span
                             title="Status z planowania — zmieniasz go w Strukturze projektu"
-                            className={`inline-flex items-center max-w-full px-2 py-0.5 rounded border border-white/10 bg-black/40 text-sm font-medium cursor-default ${PLAN_STATUS_META[code].color}`}
+                            className={`flex w-full items-center px-1.5 py-0.5 rounded border border-white/10 bg-black/40 text-sm font-medium cursor-default ${PLAN_STATUS_META[code].color}`}
                         >
-                            {PLAN_STATUS_META[code].label}
+                            <span className="truncate">{PLAN_STATUS_META[code].label}</span>
                         </span>
                     );
                 })()}
@@ -530,7 +530,7 @@ export function RealizationRow({ node, card, realization, odbior, isExpanded, on
                     <span
                         title={`Odebrane protokołem: ${(odbior?.protokoly || []).map(x => x.numer).join(', ') || '—'}. `
                             + 'Wyliczone z rejestru odbiorów — wycofanie protokołu cofa tę wartość.'}
-                        className={`mt-1 w-full inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-white/10 bg-black/40 text-[11px] font-medium cursor-default ${EXEC_STATUS_META.HANDED_OVER.color}`}
+                        className={`mt-1 flex w-full items-center gap-1 px-1.5 py-0.5 rounded border border-white/10 bg-black/40 text-[11px] font-medium cursor-default ${EXEC_STATUS_META.HANDED_OVER.color}`}
                     >
                         <Link size={9} className="flex-shrink-0" />
                         <span className="truncate">{execStatusLabel(node.type, 'HANDED_OVER')}</span>
