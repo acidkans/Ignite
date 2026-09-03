@@ -1,3 +1,25 @@
+## 2026-09-03 — właściciel tylko na pozycjach, domyślny logistyk dla materiału i sprzętu
+
+### architektura / API
+- `WbsNode.owner` przypisywany WYŁĄCZNIE do pozycji (typ kosztowy albo węzeł bez dzieci) — gałąź porządkowa i przedmiot projektu pokazują wartość zapisaną wcześniej, ale bez edycji. Reguła lustrzana do statusu (`nodeHasOwnStatus`), egzekwowana po obu stronach: front nie pokazuje `<select>`, `updateNode` pomija pole w zapisie.
+- pozycja typu `material` / `equipment` dostaje domyślnego właściciela — logistyka zamówienia. Domyślny logistyk NIE jest osobnym polem w bazie: czytamy go z `OrderRequirements.clientContacts`, z pierwszego kontaktu, którego wolnotekstowa `role` pasuje do `/logisty/i`.
+- domyślna wartość wstawiana w trzech miejscach, żeby objąć wszystkie drogi powstania pozycji zakupowej: `createNode` (przeciągnięcie wymagania, generowanie z listy materiałowej), `updateNode` (zmiana typu z zewnątrz) i zmiana typu w tabeli WBS.
+- kolumna „Osoba odpowiedzialna" w WBS podpowiada teraz także kontakty zamówienia — `UnifiedWbsPanel` przekazuje je do `WBSHybridTable` propsem `projectContacts`, który wcześniej istniał w sygnaturze, ale nikt go nie podawał (zawsze `[]`).
+
+### słownik
+- dodano `node-can-have-owner` — czy węzeł może mieć własną osobę odpowiedzialną, `wbsConstants.js`
+- dodano `logistician-role-re`, `contact-owner-label`, `default-logistician-owner` — rozpoznanie logistyka i składanie etykiety właściciela, `wbsConstants.js`
+- dodano `project-contacts` — stan kontaktów zamówienia w `UnifiedWbsPanel.jsx`
+- dodano `purchase-leaf-types-backend`, `is-purchase-leaf-type` — lustro osi zakupu w `leaf-types.util.ts`
+- dodano `logistician-role-re-backend`, `contact-owner-label-backend`, `default-logistician-owner-backend` — nowy plik `default-logistician.util.ts`
+- dodano `default-owner-for-purchase`, `wbs-node-owner-leaf-guard`, `wbs-node-owner-default-logistician` — `wbs-nodes.service.ts`
+
+### wytyczne
+- `schema-pole` `WbsNode.owner` — trzyma ETYKIETĘ osoby, nie klucz obcy. Etykietę składa WYŁĄCZNIE `contactOwnerLabel` (front) / `contactOwnerLabel` (backend, `default-logistician.util.ts`); inny format po którejkolwiek stronie i `<select>` dostaje wartość spoza opcji, więc pokazuje puste pole nad nazwiskiem zapisanym w bazie.
+- `back-funkcja` `defaultOwnerForPurchase` — zapis właściciela na gałęzi POMIJAMY (log + `delete`), nie rzucamy błędem: przez `updateNode` idą PATCH-e innych pól i odrzucenie żądania zablokowałoby np. przemianowanie gałęzi ze starym właścicielem w formularzu.
+- domyślny logistyk nadpisuje TYLKO puste pole — zmiana typu nie ma zdejmować nazwiska wpisanego ręcznie.
+- domyślnego logistyka NIE bierzemy z reguły `ExtraOrderNotifierService.logisticiansForOrder` (użytkownicy z rolą LOGISTYK mający dostęp do węzła): zwraca wszystkich pasujących, więc wybór jednego byłby losowy. Właścicielem ma być osoba WPISANA do zamówienia.
+
 ## 2026-09-03 — Oś zakupu tylko dla materiału i sprzętu
 
 ### architektura / API
@@ -7,7 +29,12 @@
 - `ui-funkcja` `axisGateOf` — bramka „Czeka na dostawę" pyta teraz wprost `hasPurchaseAxis` zamiast `usesMontageLabels`. Po zawężeniu obie listy pokrywają się co do typu, ale predykat opisuje właściwy powód: montaż czeka na zakup wyłącznie tam, gdzie w ogóle jest co kupować.
 
 ### migracja danych
-- BEZ migracji, świadomie. Na produkcji 6 usług ma zapisany `purchaseStatus`, a 1 pozycja „Paliwo" zapisany `execStatus` — wartości ZOSTAJĄ w bazie, przestają być tylko pokazywane. Kasowanie ich hurtem usunęłoby ślad po tym, co ktoś kiedyś ustawił, a odzyskać się tego nie da; jeśli mają zniknąć, to osobną, świadomą decyzją.
+- Sama zmiana idzie BEZ migracji: wartości na typach, które straciły oś, ZOSTAJĄ w bazie i przestają być tylko pokazywane. Sprzątanie jest osobną, świadomą decyzją — poniższe skrypty ją przygotowują, ale nic się nie uruchamia samo.
+- `test/czyszczenie-osi-zakupu-dryrun.sql` — SAME SELECT-y. Dzieli wiersze na trzy grupy zamiast pokazywać jedną liczbę: **A** oś wykonania niesie już ten sam stan (kasowanie niczego nie gubi), **B** oś wykonania pusta, więc zakup jest JEDYNYM zapisem realizacji, **C** oś wykonania na typie, który jej nie ma. Kubełki są rozłączne i ich suma musi się zgadzać z kontrolą końcową.
+- `test/czyszczenie-osi-zakupu.sql` — jedna transakcja, trzy kroki w NIEODWRACALNEJ kolejności: najpierw przeniesienie stanu usług i prac z osi zakupu na oś wykonania (`ISSUED`/`INVOICED`/`DELIVERED` → `DONE`, `PARTIALLY_DELIVERED` → `IN_PROGRESS`, `CANCELLED` → `CANCELLED`), potem dopiero kasowanie. Odwrócenie kroków zgubiłoby wszystko, co krok pierwszy miał uratować.
+- `test/czyszczenie-osi-zakupu-rollback.sql` — przywraca DOKŁADNY stan sprzed migracji, wpisany po ID (7 wierszy zrzuconych z produkcji 2026-09-03). Reguła by tego nie odtworzyła: po migracji nie ma już w bazie śladu po skasowanym `ORDERED`.
+- Stan produkcji z dry-runu: 2 wiersze w grupie A, 1 do przeniesienia (`Mulczerowanie`, `ISSUED` → `DONE`), 3 usługi z `ORDERED` do skasowania bez przeniesienia, 1 paliwo z `execStatus = DONE`. Razem 7.
+- `ORDERED` na usłudze PRZEPADA — oś wykonania nie ma kodu „Zlecone" (decyzja z tego samego dnia: sama oś wykonania wystarczy). Trzy usługi na produkcji stracą informację, że podwykonawca dostał zlecenie. Zostaje ona wyłącznie w dostawcy i numerze dokumentu na wpisie realizacji, o ile ktoś je tam wpisał — na tych trzech pozycjach nie ma ani jednego wpisu.
 
 ### testy
 - `test/status-agregacja.test.mjs` — tabela osi przepisana pod nowy podział (usługa traci zakup, nocleg i paliwo tracą obie osie).
@@ -15,6 +42,7 @@
 - `test/sprawdz-eksport-statusy.py` — sprawdza „—" dla KAŻDEGO typu bez danej osi (praca, usługa, nocleg, paliwo) i pilnuje, żeby materiał i sprzęt miały obie osie wypełnione treścią.
 
 ### wytyczne
+- Skrypt migracyjny, który KASUJE kolumnę, musi najpierw sprawdzić, czy ta kolumna nie jest jedynym zapisem czegoś. Tu połowa wierszy miała pustą oś wykonania i sam zakup — zwykłe `SET kolumna = NULL` cofnęłoby te pozycje do stanu „nikt ich nie tknął". Dry-run ma dzielić wiersze na grupy wg tego, co się z nimi stanie, a nie pokazywać jedną sumę.
 - `ui-stala` `PURCHASE_LEAF_TYPES` / `EXEC_LEAF_TYPES` — o przynależności do osi decyduje to, czy oś ma nad danym typem CO OPISYWAĆ, a nie czy pozycja ma dostawcę i fakturę. Nocleg się kupuje i fakturuje, a mimo to osi zakupu nie ma: nie przechodzi przez żaden stan pośredni, więc kolumna stałaby na wartości startowej przez całe życie pozycji.
 
 ## 2026-09-03 — Statusy etap 5: realizacja wynika z faktów, nie z klikania

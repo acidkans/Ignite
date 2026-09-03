@@ -14,7 +14,7 @@ import { sanitizeQtyInput, parsePriceInput, DRAWER, STRUCTURE_STATUS_META, statu
     PLAN_STATUS_META, planStatusFromAny, PURCHASE_STATUS_META, EXEC_STATUS_META, execStatusLabel,
     hasPurchaseAxis, hasExecAxis, DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS,
     suggestAxisStatus, handedOverFromProtocol, summarizeStatusCodes, axisStatusCodeOf, axisGateOf,
-    AXIS_STATUS_META } from './wbs/wbsConstants';
+    AXIS_STATUS_META, AXIS_STATUS_ORDER } from './wbs/wbsConstants';
 import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath,
     leafNodesOf, buildCardMap, wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf,
@@ -1250,15 +1250,32 @@ export default function RealizationTab({
     const saveAxis = useCallback(async (node, pole, wartosc) => {
         const previous = node[pole] ?? null;
         if (wartosc === previous) return;
-        setWbsNodes(prev => prev.map(n => n.id === node.id ? { ...n, [pole]: wartosc } : n));
+
+        // COFNIĘCIE ZAKUPU CofA TEŻ WYKONANIE. Bramka `axisGateOf` trzyma montaż za „Czeka na
+        // dostawę", dopóki oś wykonania stoi na NULL — ale otwiera się na zawsze, gdy tylko
+        // ktoś ją raz ustawi. Bez tego cofnięcie zakupu z „Dostarczone" na „Zamówione"
+        // zostawiało obok „Montaż w toku": towar wraca do dostawcy, a kolumna dalej twierdzi,
+        // że go montujemy. Zerujemy oś wykonania do NULL (a nie do `TO_DO`), bo bramka ma
+        // wrócić na swoje miejsce i sama powiedzieć, na co pozycja czeka.
+        const cofaWykonanie = pole === 'purchaseStatus'
+            && hasPurchaseAxis(node?.type) && hasExecAxis(node?.type)
+            && (node?.execStatus ?? null) !== null
+            && (wartosc === 'CANCELLED'
+                || (AXIS_STATUS_ORDER.purchase[wartosc] ?? 0) < AXIS_STATUS_ORDER.purchase.PARTIALLY_DELIVERED);
+        const previousExec = node?.execStatus ?? null;
+        const patch = cofaWykonanie ? { [pole]: wartosc, execStatus: null } : { [pole]: wartosc };
+
+        setWbsNodes(prev => prev.map(n => n.id === node.id ? { ...n, ...patch } : n));
         try {
             const res = await fetch(`${API_URL}/wbs-nodes/${node.id}`, {
-                method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ [pole]: wartosc }),
+                method: 'PATCH', headers: authHeaders(), body: JSON.stringify(patch),
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
         } catch (e) {
             console.error('[RealizationTab] saveAxis error:', e);
-            setWbsNodes(prev => prev.map(n => n.id === node.id ? { ...n, [pole]: previous } : n));
+            setWbsNodes(prev => prev.map(n => n.id === node.id
+                ? { ...n, [pole]: previous, ...(cofaWykonanie ? { execStatus: previousExec } : {}) }
+                : n));
             alert(pole === 'purchaseStatus'
                 ? 'Nie udało się zapisać statusu zakupu'
                 : 'Nie udało się zapisać statusu wykonania');

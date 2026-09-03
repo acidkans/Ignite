@@ -577,6 +577,11 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | getInheritedMaterialStatus (status planu pozycji) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor wbs-plan-status-of |
 | ui-kolumna | komórka Strategia gałęzi (scroll) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-strategy-cell-scroll |
 | ui-funkcja | nodeHasOwnStatus | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor node-has-own-status |
+| ui-funkcja | nodeCanHaveOwner | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor node-can-have-owner |
+| ui-stala | LOGISTICIAN_ROLE_RE | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor logistician-role-re |
+| ui-funkcja | contactOwnerLabel | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor contact-owner-label |
+| ui-funkcja | defaultLogisticianOwner | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor default-logistician-owner |
+| ui-stan | projectContacts (kontakty zamówienia w WBS) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor project-contacts |
 | ui-funkcja | collectOwnStatusCodes | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor collect-own-status-codes |
 | ui-funkcja | aggregateBranchStatus | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor aggregate-branch-status |
 | ui-funkcja | summarizeStatusCodes | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor summarize-status-codes |
@@ -1505,6 +1510,14 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | isCostLeafType | apps/backend/src/common/leaf-types.util.ts | @anchor is-cost-leaf-type |
 | back-funkcja | nodeHasOwnStatus (backend) | apps/backend/src/common/leaf-types.util.ts | @anchor backend-node-has-own-status |
 | back-funkcja | guard zapisu statusu gałęzi | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-node-branch-status-guard |
+| back-stala | PURCHASE_LEAF_TYPES (backend) | apps/backend/src/common/leaf-types.util.ts | @anchor purchase-leaf-types-backend |
+| back-funkcja | isPurchaseLeafType | apps/backend/src/common/leaf-types.util.ts | @anchor is-purchase-leaf-type |
+| back-stala | LOGISTICIAN_ROLE_RE (backend) | apps/backend/src/common/default-logistician.util.ts | @anchor logistician-role-re-backend |
+| back-funkcja | contactOwnerLabel (backend) | apps/backend/src/common/default-logistician.util.ts | @anchor contact-owner-label-backend |
+| back-funkcja | defaultLogisticianOwner (backend) | apps/backend/src/common/default-logistician.util.ts | @anchor default-logistician-owner-backend |
+| back-funkcja | defaultOwnerForPurchase | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor default-owner-for-purchase |
+| back-funkcja | guard zapisu właściciela na gałęzi | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-node-owner-leaf-guard |
+| back-funkcja | domyślny logistyk na pozycji zakupowej | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-node-owner-default-logistician |
 | back-funkcja | isManagerRoles | apps/backend/src/common/leaf-types.util.ts | @anchor is-manager-roles |
 | back-funkcja | filtr roli w dzienniku wpisów | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-role-filter |
 | back-funkcja | filtr roli w porównaniu wycena↔zakup | apps/backend/src/orders/orders.service.ts | @anchor comparison-role-filter |
