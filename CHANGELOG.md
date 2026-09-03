@@ -1,3 +1,17 @@
+## 2026-09-03 — „Odebrane" wprost w dropdownie osi wykonania
+
+### architektura / API
+- `ui-dropdown` select osi wykonania w zakładce Realizacja pokazuje `HANDED_OVER` WPROST (`ui-stan` `execSelectCode`), zamiast wieszać pod sobą osobną plakietkę „Odebrane". Wartość dalej NIE idzie do bazy — liczy ją `handedOverFromProtocol` z rejestru protokolów odbioru, więc wycofanie dokumentu samo cofa pozycję do `DONE`. Numery protokołów przeniosły się z plakietki do tooltipa selecta.
+- komórka mówi teraz to samo, co wyszukiwarka, sortowanie i eksport (`execStatusLabelOf` / `execCodeOf`), które od początku składały „Odebrane" do jednego kodu — select był jedynym miejscem pokazującym surowy `WbsNode.execStatus`.
+- plakietka na wierszu GAŁĘZI (`BranchAxisBadge`) zostaje bez zmian — tam „Odebrane" to agregat z pozycji poniżej, a nie stan jednej pozycji.
+
+### słownik
+- usunięto `realization-handed-over-badge` — plakietka „Odebrane" zniknęła razem z kodem
+- dodano `realization-exec-select-code` — `ui-stan` `execSelectCode`, kod pokazywany w selekcie osi wykonania, `apps/frontend/src/components/shared/RealizationTab.jsx`
+
+### wytyczne
+- `ui-dropdown` oś wykonania — stan WYLICZONY z dokumentu pokazuj W kontrolce, nie obok niej. Warunek `execStatus === 'DONE'` w `handedOverFromProtocol` sprawia, że wybór innej wartości sam zdejmuje „Odebrane", więc select nie odbija wyboru użytkownika mimo że wartość jest wyliczana, a nie zapisywana.
+
 ## 2026-09-03 — akceptacja całej wyceny kciukiem, baseline jako kopia bez pozycji odrzuconych
 
 ### architektura / API

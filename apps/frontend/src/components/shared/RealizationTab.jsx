@@ -301,6 +301,10 @@ export function RealizationRow({ node, card, realization, odbior, isExpanded, on
     const purchaseGate = axisGateOf(node, 'purchase');
     const execGate = axisGateOf(node, 'exec');
     const handedOver = !execGate && handedOverFromProtocol(node, odbior);
+    // @anchor realization-exec-select-code — kod POKAZYWANY w selekcie osi wykonania:
+    // zapisany `execStatus` albo wyliczone z protokołu „Odebrane". Ta sama zasada co
+    // w `execCodeOf`, tylko dla samej kontrolki.
+    const execSelectCode = handedOver ? 'HANDED_OVER' : (node.execStatus || DEFAULT_EXEC_STATUS);
     const hintTitle = `Podpowiedź z ${r.entries.length} ${r.entries.length === 1 ? 'wpisu' : 'wpisów'} realizacji `
         + `(${fmtQty(r.qty)} z ${fmtQty(r.plan)} ${node.unit || 'szt'}). Kliknij, aby ustawić — nic się nie zapisze, dopóki nie klikniesz.`;
 
@@ -508,33 +512,29 @@ export function RealizationRow({ node, card, realization, odbior, isExpanded, on
             {/* WYKONANIE — droga roboty (`WbsNode.execStatus`). Materiał i sprzęt czytają tę oś
                 jako MONTAŻ („Zainstalowane" zamiast „Wykonane"); nocleg i paliwo jej nie mają. */}
             <td className="px-3 py-2.5 overflow-hidden" onClick={e => e.stopPropagation()}>
+                {/* „Odebrane" wchodzi WPROST do selecta (`execSelectCode`),
+                    zamiast wisieć pod nim osobną plakietką. Wartość dalej nie jest zapisana
+                    w bazie: `handedOver` liczy się z rejestru protokołów, więc wycofanie
+                    dokumentu samo cofa pozycję do `DONE`. Wybranie w selekcie czegokolwiek innego
+                    zdejmuje warunek `execStatus === 'DONE'`, więc pole nie wraca do „Odebrane"
+                    wbrew użytkownikowi. Ten sam kod, co w `execCodeOf` — komórka, wyszukiwarka,
+                    sortowanie i eksport mówią jedno. */}
                 {!hasExecAxis(node.type) ? <span className="text-sm text-gray-700">—</span>
                 : execGate ? <AxisGateBadge gate={execGate} /> : (
                     <select
-                        value={node.execStatus || DEFAULT_EXEC_STATUS}
+                        value={execSelectCode}
                         onChange={e => onSaveAxis(node, 'execStatus', e.target.value)}
                         disabled={readOnly}
-                        title="Status wykonania"
-                        className={`w-full min-w-0 bg-black/40 border border-white/10 rounded px-1.5 py-0.5 text-sm font-medium outline-none transition-colors ${readOnly ? 'cursor-default' : 'cursor-pointer hover:bg-white/5 focus:border-teal-500/50'} ${EXEC_STATUS_META[node.execStatus || DEFAULT_EXEC_STATUS]?.color || 'text-gray-400'}`}
+                        title={handedOver
+                            ? `Odebrane protokołem: ${(odbior?.protokoly || []).map(x => x.numer).join(', ') || '—'}. `
+                              + 'Wyliczone z rejestru odbiorów — wycofanie protokołu cofa tę wartość.'
+                            : 'Status wykonania'}
+                        className={`w-full min-w-0 bg-black/40 border border-white/10 rounded px-1.5 py-0.5 text-sm font-medium outline-none transition-colors ${readOnly ? 'cursor-default' : 'cursor-pointer hover:bg-white/5 focus:border-teal-500/50'} ${EXEC_STATUS_META[execSelectCode]?.color || 'text-gray-400'}`}
                     >
                         {Object.keys(EXEC_STATUS_META).map(c => (
                             <option key={c} value={c} className="bg-gray-900 text-white">{execStatusLabel(node.type, c)}</option>
                         ))}
                     </select>
-                )}
-                {/* @anchor realization-handed-over-badge — „Odebrane" WYLICZONE z protokołu,
-                    a nie wybrane w selekcie: stan bierze się z podpisanego dokumentu, więc
-                    wycofanie protokołu sam go cofa. Select zostaje na `DONE` i pozostaje
-                    edytowalny — plakietka opisuje fakt, nie blokuje pozycji. */}
-                {handedOver && (
-                    <span
-                        title={`Odebrane protokołem: ${(odbior?.protokoly || []).map(x => x.numer).join(', ') || '—'}. `
-                            + 'Wyliczone z rejestru odbiorów — wycofanie protokołu cofa tę wartość.'}
-                        className={`mt-1 flex w-full items-center gap-1 px-1.5 py-0.5 rounded border border-white/10 bg-black/40 text-[11px] font-medium cursor-default ${EXEC_STATUS_META.HANDED_OVER.color}`}
-                    >
-                        <Link size={9} className="flex-shrink-0" />
-                        <span className="truncate">{execStatusLabel(node.type, 'HANDED_OVER')}</span>
-                    </span>
                 )}
                 {hints.execStatus && !handedOver && (
                     <StatusHint
