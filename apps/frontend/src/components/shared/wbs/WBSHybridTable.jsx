@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny } from './wbsConstants';
+import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, contactOwnerLabel, defaultLogisticianOwner } from './wbsConstants';
 import AutoResizeTextarea from './AutoResizeTextarea';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
@@ -1876,6 +1876,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     handleField(node.id, 'unitCost', 0);
                                     handleField(node.id, 'margin', 0);
                                     onApplyLeafDefaults?.(node.id, { unit: unitToApply, unitCost: 0, margin: 0 });
+                                    // Materiał i sprzęt kupuje LOGISTYK — pozycja zakupowa startuje na
+                                    // nim, a nie pusta. Bierzemy logistyka z kontaktów zamówienia
+                                    // (`default-logistician-owner`); nadpisujemy WYŁĄCZNIE puste pole,
+                                    // żeby zmiana typu nie zdejmowała nazwiska wpisanego ręcznie.
+                                    if (!String(node.owner || '').trim()) {
+                                        const logistyk = defaultLogisticianOwner(projectContacts);
+                                        if (logistyk) { handleField(node.id, 'owner', logistyk); onNodeFieldSave?.(node.id, 'owner', logistyk); }
+                                    }
                                 } else if (newType) {
                                     // Praca/usługa/nocleg/paliwo — wartości domyślne z modalu przy KAŻDEJ zmianie typu
                                     // (nowe i istniejące pozycje), od razu w tabeli, edytowalne później.
@@ -2111,9 +2119,15 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     })()}
                 </td>
 
-                {/* Właściciel */}
+                {/* Właściciel — tylko POZYCJE (patrz `node-can-have-owner`). Gałąź porządkowa
+                    i przedmiot projektu pokazują wartość zapisaną wcześniej, ale bez edycji:
+                    odpowiedzialność siedzi na pozycji, nie na nagłówku. */}
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                    {(users.length > 0 || projectContacts.length > 0) ? (
+                    {!nodeCanHaveOwner(node, depth, hasChildren) ? (
+                        <span className="text-base text-gray-600" title="Osobę odpowiedzialną przypisuje się do pozycji, nie do gałęzi">
+                            {node.owner || '—'}
+                        </span>
+                    ) : (users.length > 0 || projectContacts.length > 0) ? (
                         <select
                             value={node.owner || ''}
                             onChange={e => { handleField(node.id, 'owner', e.target.value); onNodeFieldSave?.(node.id, 'owner', e.target.value); }}
@@ -2130,11 +2144,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             })}
                             {projectContacts.length > 0 && users.length > 0 && <option disabled className="bg-gray-900">──────────</option>}
                             {projectContacts.length > 0 && projectContacts.map(c => {
-                                const fullName = [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email;
-                                const label = c.company ? `${c.company} - ${fullName}` : fullName;
+                                const fullName = [c.firstName, c.lastName].filter(Boolean).join(' ') || c.name || c.email;
+                                const label = contactOwnerLabel(c);
+                                if (!label) return null;
                                 const alreadyInUsers = users.some(u => ([u.firstName, u.lastName].filter(Boolean).join(' ') || u.email) === fullName);
                                 if (alreadyInUsers) return null;
-                                return <option key={c.id} value={label} className="bg-gray-900">{label}</option>;
+                                return <option key={c.id} value={label} className="bg-gray-900">{c.role ? `${label} (${c.role})` : label}</option>;
                             })}
                         </select>
                     ) : (

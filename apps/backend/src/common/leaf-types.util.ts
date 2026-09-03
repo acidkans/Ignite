@@ -9,6 +9,16 @@ export const OPEN_LEAF_TYPES = ['material', 'equipment'];
 // „Material" z importu, a filtr uprawnień nie może się o to potykać.
 export const isOpenLeafType = (type: unknown) => OPEN_LEAF_TYPES.includes(String(type || '').toLowerCase());
 
+// @anchor purchase-leaf-types-backend — typy liści, które się KUPUJE: tylko materiał i sprzęt.
+// Lustro `PURCHASE_LEAF_TYPES` z `wbsConstants.js` (tam pełne uzasadnienie, dlaczego usługa,
+// nocleg i paliwo na tej osi nie stoją). Świadomie NIE aliasujemy do `OPEN_LEAF_TYPES`, choć
+// dziś oba mają tę samą treść: tamto mówi „kto to widzi", to mówi „czy to się zamawia" —
+// przy zmianie jednej reguły druga nie ma jechać za nią po cichu.
+export const PURCHASE_LEAF_TYPES = ['material', 'equipment'];
+
+// @anchor is-purchase-leaf-type
+export const isPurchaseLeafType = (type: unknown) => PURCHASE_LEAF_TYPES.includes(String(type || '').toLowerCase().trim());
+
 // @anchor all-leaf-types — komplet kosztowych typów liści; lustro `LEAF_TYPES`
 // z `realizationShared.js`. Służy wyłącznie do wyliczenia `CLOSED_LEAF_TYPES` —
 // dopisanie typu TUTAJ, a nie do `OPEN_LEAF_TYPES`, domyka go dla nie-managera.

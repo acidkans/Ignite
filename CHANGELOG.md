@@ -1,3 +1,25 @@
+## 2026-09-03 — właściciel tylko na pozycjach, domyślny logistyk dla materiału i sprzętu
+
+### architektura / API
+- `WbsNode.owner` przypisywany WYŁĄCZNIE do pozycji (typ kosztowy albo węzeł bez dzieci) — gałąź porządkowa i przedmiot projektu pokazują wartość zapisaną wcześniej, ale bez edycji. Reguła lustrzana do statusu (`nodeHasOwnStatus`), egzekwowana po obu stronach: front nie pokazuje `<select>`, `updateNode` pomija pole w zapisie.
+- pozycja typu `material` / `equipment` dostaje domyślnego właściciela — logistyka zamówienia. Domyślny logistyk NIE jest osobnym polem w bazie: czytamy go z `OrderRequirements.clientContacts`, z pierwszego kontaktu, którego wolnotekstowa `role` pasuje do `/logisty/i`.
+- domyślna wartość wstawiana w trzech miejscach, żeby objąć wszystkie drogi powstania pozycji zakupowej: `createNode` (przeciągnięcie wymagania, generowanie z listy materiałowej), `updateNode` (zmiana typu z zewnątrz) i zmiana typu w tabeli WBS.
+- kolumna „Osoba odpowiedzialna" w WBS podpowiada teraz także kontakty zamówienia — `UnifiedWbsPanel` przekazuje je do `WBSHybridTable` propsem `projectContacts`, który wcześniej istniał w sygnaturze, ale nikt go nie podawał (zawsze `[]`).
+
+### słownik
+- dodano `node-can-have-owner` — czy węzeł może mieć własną osobę odpowiedzialną, `wbsConstants.js`
+- dodano `logistician-role-re`, `contact-owner-label`, `default-logistician-owner` — rozpoznanie logistyka i składanie etykiety właściciela, `wbsConstants.js`
+- dodano `project-contacts` — stan kontaktów zamówienia w `UnifiedWbsPanel.jsx`
+- dodano `purchase-leaf-types-backend`, `is-purchase-leaf-type` — lustro osi zakupu w `leaf-types.util.ts`
+- dodano `logistician-role-re-backend`, `contact-owner-label-backend`, `default-logistician-owner-backend` — nowy plik `default-logistician.util.ts`
+- dodano `default-owner-for-purchase`, `wbs-node-owner-leaf-guard`, `wbs-node-owner-default-logistician` — `wbs-nodes.service.ts`
+
+### wytyczne
+- `schema-pole` `WbsNode.owner` — trzyma ETYKIETĘ osoby, nie klucz obcy. Etykietę składa WYŁĄCZNIE `contactOwnerLabel` (front) / `contactOwnerLabel` (backend, `default-logistician.util.ts`); inny format po którejkolwiek stronie i `<select>` dostaje wartość spoza opcji, więc pokazuje puste pole nad nazwiskiem zapisanym w bazie.
+- `back-funkcja` `defaultOwnerForPurchase` — zapis właściciela na gałęzi POMIJAMY (log + `delete`), nie rzucamy błędem: przez `updateNode` idą PATCH-e innych pól i odrzucenie żądania zablokowałoby np. przemianowanie gałęzi ze starym właścicielem w formularzu.
+- domyślny logistyk nadpisuje TYLKO puste pole — zmiana typu nie ma zdejmować nazwiska wpisanego ręcznie.
+- domyślnego logistyka NIE bierzemy z reguły `ExtraOrderNotifierService.logisticiansForOrder` (użytkownicy z rolą LOGISTYK mający dostęp do węzła): zwraca wszystkich pasujących, więc wybór jednego byłby losowy. Właścicielem ma być osoba WPISANA do zamówienia.
+
 ## 2026-09-03 — Oś zakupu tylko dla materiału i sprzętu
 
 ### architektura / API

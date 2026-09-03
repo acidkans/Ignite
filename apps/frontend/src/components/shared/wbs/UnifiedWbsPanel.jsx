@@ -271,6 +271,12 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const [nodeTeamIds, setNodeTeamIds] = useState([]);
     const [nodeContactUsers, setNodeContactUsers] = useState([]);
     const [logistykUsers, setLogistykUsers] = useState([]);
+    // @anchor project-contacts — kontakty zamówienia (`OrderRequirements.clientContacts`)
+    // znormalizowane do kształtu użytkownika. Zasilają listę wyboru w kolumnie „Osoba
+    // odpowiedzialna" i są ŹRÓDŁEM domyślnego logistyka dla materiału i sprzętu — bez nich
+    // `defaultLogisticianOwner` nie miałby czego znaleźć, a etykieta wstawiona przez backend
+    // wypadłaby poza opcje `<select>` i pokazała puste pole.
+    const [projectContacts, setProjectContacts] = useState([]);
     const [materialCostsByNode, setMaterialCostsByNode] = useState({});
     const [materialMetaByLookupKey, setMaterialMetaByLookupKey] = useState({});
     const [requirementsQtyByNode, setRequirementsQtyByNode] = useState({});
@@ -920,6 +926,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         offerDateLoadedRef.current = false;
         fetchStrategyGenRef.current += 1;
         setOfferText('');
+        // Kontakty należą do ZAMÓWIENIA — przy przejściu na inne nie wolno ich przenieść,
+        // inaczej lista wyboru właściciela podpowiadałaby ludzi z poprzedniego zlecenia.
+        setProjectContacts([]);
     }, [nodeId, versionId]);
 
     const fetchStrategy = useCallback(async () => {
@@ -933,6 +942,25 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 if (data && !offerLoadedRef.current) {
                     setOfferText(data.offerText || '');
                     offerLoadedRef.current = true;
+                }
+                if (data) {
+                    let kontakty = [];
+                    try {
+                        const raw = typeof data.clientContacts === 'string'
+                            ? JSON.parse(data.clientContacts || '[]')
+                            : (data.clientContacts || []);
+                        kontakty = (Array.isArray(raw) ? raw : []).map((c, i) => ({
+                            id: c?.id || `kontakt-${i}`,
+                            firstName: String(c?.name || '').trim(),
+                            lastName: '',
+                            name: String(c?.name || '').trim(),
+                            company: c?.company || '',
+                            email: c?.email || '',
+                            phone: c?.phone || '',
+                            role: c?.role || '',
+                        })).filter((c) => c.name || c.email);
+                    } catch { kontakty = []; }
+                    setProjectContacts(kontakty);
                 }
                 if (data && !offerDateLoadedRef.current) {
                     const d = data.createdAt
@@ -6272,6 +6300,7 @@ ${ganttSectionHtml}
                                 versionId={versionId}
                                 onSave={handleSaveHybridWBS}
                                 users={assignedUsers}
+                                projectContacts={projectContacts}
                                 onRequirementDrop={isManagerOrAdmin ? handleRequirementAssignToWbs : null}
                                 isManager={isManagerOrAdmin}
                                 offerLocked={offerLocked}

@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
-import { isClosedLeafType, isManagerRoles, nodeHasOwnStatus } from '../common/leaf-types.util';
+import { isClosedLeafType, isManagerRoles, nodeHasOwnStatus, isPurchaseLeafType } from '../common/leaf-types.util';
+import { defaultLogisticianOwner } from '../common/default-logistician.util';
 import { resolveVersionId } from '../common/version.util';
 import { assertOfferEditable, pickOfferChanges, OfferLockUser } from '../common/offer-lock.util';
 import { ExtraOrderNotifierService, EXTRA_ORDER_STATUS } from '../notifications/extra-order-notifier.service';
@@ -501,6 +502,29 @@ export class WbsNodesService {
         }
     }
 
+    // @anchor default-owner-for-purchase — etykieta domyślnego właściciela pozycji zakupowej.
+    // Kontakty siedzą na węźle `type='order'`, a pozycje WBS bywają podwieszone pod obiekt,
+    // więc wspinamy się po drzewie tak samo jak `resolveOrderNodeId` w powiadomieniach —
+    // pierwszy napotkany rekord `OrderRequirements` wygrywa.
+    private async defaultOwnerForPurchase(processNodeId: string): Promise<string> {
+        let currentId: string | null = processNodeId;
+        for (let i = 0; i < 10 && currentId; i++) {
+            const req = await this.prisma.orderRequirements.findFirst({
+                where: { nodeId: currentId, clientContacts: { not: null } },
+                select: { clientContacts: true },
+                orderBy: { updatedAt: 'desc' },
+            });
+            const label = defaultLogisticianOwner(req?.clientContacts);
+            if (label) return label;
+            const node = await this.prisma.processNode.findUnique({
+                where: { id: currentId },
+                select: { parentId: true },
+            });
+            currentId = node?.parentId || null;
+        }
+        return '';
+    }
+
     /**
      * Tworzy nowy węzeł WBS.
      */
@@ -515,6 +539,13 @@ export class WbsNodesService {
         });
         const sortOrder = siblings.length > 0 ? siblings[0].sortOrder + 1 : 0;
 
+        // Materiał i sprzęt kupuje logistyk — pozycja rodzi się na nim, nie pusta. Robimy to
+        // TUTAJ, a nie tylko na froncie, żeby objąć wszystkie drogi powstania pozycji zakupowej
+        // (przeciągnięcie wymagania, generowanie z listy materiałowej), nie samą zmianę typu w tabeli.
+        const owner = isPurchaseLeafType(data.type)
+            ? await this.defaultOwnerForPurchase(data.nodeId)
+            : '';
+
         return this.prisma.wbsNode.create({
             data: {
                 nodeId: data.nodeId,
@@ -522,6 +553,7 @@ export class WbsNodesService {
                 parentId: data.parentId || null,
                 name: data.name,
                 type: data.type || '',
+                ...(owner ? { owner } : {}),
                 sortOrder,
                 tags: data.tags?.length ? JSON.stringify(data.tags) : undefined,
             },
@@ -632,6 +664,40 @@ export class WbsNodesService {
                 );
             }
             statusBefore = before.status ?? null;
+        }
+
+        // @anchor wbs-node-owner-leaf-guard — osobę odpowiedzialną przypisuje się WYŁĄCZNIE
+        // do pozycji. Reguła i uzasadnienie: `node-can-have-owner` w `wbsConstants.js`.
+        // Zapis na gałęzi POMIJAMY zamiast rzucać błędem: przez tę samą ścieżkę idą PATCH-e
+        // innych pól, a odrzucenie całego żądania zablokowałoby np. przemianowanie gałęzi,
+        // której stary właściciel wciąż siedzi w formularzu. Wartości zapisane wcześniej
+        // zostają w bazie i dalej czyta je protokół odbioru (`buildBranchOwners`).
+        //
+        // @anchor wbs-node-owner-default-logistician — wejście typu na materiał albo sprzęt
+        // stawia domyślnego logistyka zamówienia, gdy właściciela nie ma. Tylko na PUSTE pole:
+        // zmiana typu nie ma zdejmować nazwiska wpisanego ręcznie.
+        if (allowed.owner !== undefined || allowed.type !== undefined) {
+            const before = await this.prisma.wbsNode.findUnique({
+                where: { id },
+                select: { nodeId: true, owner: true, parentId: true, type: true, _count: { select: { children: true } } },
+            });
+            if (!before) throw new NotFoundException(`WbsNode ${id} not found`);
+
+            const typeAfter = allowed.type !== undefined ? allowed.type : before.type;
+            const canHaveOwner = nodeHasOwnStatus({ parentId: before.parentId, type: typeAfter }, before._count.children);
+
+            if (allowed.owner !== undefined && !canHaveOwner) {
+                this.logger.warn(`[WbsNode ${id}] pominięto zapis właściciela — węzeł nie jest pozycją`);
+                delete allowed.owner;
+            }
+
+            const ownerAfter = allowed.owner !== undefined ? allowed.owner : before.owner;
+            if (canHaveOwner
+                && isPurchaseLeafType(typeAfter)
+                && !String(ownerAfter || '').trim()) {
+                const logistyk = await this.defaultOwnerForPurchase(before.nodeId);
+                if (logistyk) allowed.owner = logistyk;
+            }
         }
 
         let updated;

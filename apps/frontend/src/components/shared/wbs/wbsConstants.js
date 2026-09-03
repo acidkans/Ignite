@@ -560,6 +560,47 @@ export const nodeHasOwnStatus = (node, depth = 1, hasChildren = null) => {
   return !kids;
 };
 
+// ── Osoba odpowiedzialna (`WbsNode.owner`) ────────────────────────────────────
+// Właściciela przypisuje się WYŁĄCZNIE do pozycji, nigdy do gałęzi porządkowej ani do
+// przedmiotu projektu. Reguła jest ta sama co przy statusie (`nodeHasOwnStatus`) i z tego
+// samego powodu: gałąź nie wykonuje niczego sama — robią to pozycje pod nią, a nazwisko
+// na nagłówku podszywało się pod odpowiedzialność, której nikt nie brał. Stare wartości na
+// gałęziach ZOSTAJĄ w bazie i dalej czyta je protokół odbioru (`buildBranchOwners`) — tu
+// odcinamy tylko możliwość zapisania nowych.
+
+// @anchor node-can-have-owner — czy węzeł może mieć WŁASNĄ osobę odpowiedzialną.
+// Sygnatura i semantyka jak `nodeHasOwnStatus`: `depth` 0 = przedmiot projektu, `hasChildren`
+// podaje się tylko dla danych PŁASKICH (Budżet, eksporty).
+export const nodeCanHaveOwner = (node, depth = 1, hasChildren = null) =>
+  nodeHasOwnStatus(node, depth, hasChildren);
+
+// @anchor logistician-role-re — rozpoznanie logistyka po polu `role` kontaktu zamówienia.
+// Pole jest WOLNYM tekstem („Logistyk", „logistyka AMP", „Logistyk Airtel"), więc dopasowujemy
+// rdzeń słowa bez końcówki, bez wielkości liter. Lustro `LOGISTICIAN_ROLE_RE`
+// z `default-logistician.util.ts` — rozjazd znaczyłby, że front podpowiada innego logistyka,
+// niż backend wstawia domyślnie.
+export const LOGISTICIAN_ROLE_RE = /logisty/i;
+
+// @anchor contact-owner-label — etykieta osoby w kolumnie „Osoba odpowiedzialna".
+// `WbsNode.owner` trzyma ETYKIETĘ, nie klucz obcy, więc TA funkcja jest jedynym miejscem, gdzie
+// się ona składa: gdyby domyślny logistyk składał ją inaczej niż lista wyboru, `<select>` dostałby
+// wartość spoza opcji i pokazał puste pole nad zapisanym w bazie nazwiskiem.
+export const contactOwnerLabel = (c) => {
+  const name = [c?.firstName, c?.lastName].filter(Boolean).join(' ').trim() || String(c?.name || '').trim() || String(c?.email || '').trim();
+  if (!name) return '';
+  const company = String(c?.company || '').trim();
+  return company ? `${company} - ${name}` : name;
+};
+
+// @anchor default-logistician-owner — domyślna osoba odpowiedzialna za materiał i sprzęt.
+// Bierzemy PIERWSZY kontakt zamówienia z rolą logistyka: to on prowadzi zakupy, więc pozycja
+// zakupowa startuje na nim, a nie pusta. Brak takiego kontaktu = pusto (żadnego zgadywania
+// z listy użytkowników — właściciel ma być osobą wpisaną do zamówienia, nie kimkolwiek z rolą).
+export const defaultLogisticianOwner = (contacts) => {
+  const hit = (contacts || []).find((c) => LOGISTICIAN_ROLE_RE.test(String(c?.role || '')));
+  return hit ? contactOwnerLabel(hit) : '';
+};
+
 // ── Trzy osie, jedna agregacja ────────────────────────────────────────────────
 // Gałąź opisuje ten sam zbiór pozycji na każdej z trzech osi, więc sumowanie jest jedno,
 // a różni je wyłącznie to, KTÓRY kod bierzemy z liścia i JAKIM słownikiem go nazywamy.
