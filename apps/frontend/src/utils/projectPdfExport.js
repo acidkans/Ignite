@@ -3,7 +3,7 @@
 // Includes: Informacje o projekcie + Strategia + WBS + Materiały. NO budget.
 
 import { API_URL } from '../config';
-import { TYPE_LABELS as WBS_TYPE_LABELS, wbsTypeFromAny, MATERIAL_STATUS_LABELS } from '../components/shared/wbs/wbsConstants';
+import { TYPE_LABELS as WBS_TYPE_LABELS, wbsTypeFromAny, MATERIAL_STATUS_LABELS, stripRejectedNodes } from '../components/shared/wbs/wbsConstants';
 
 const flattenWbsItems = (items) => {
     const result = [];
@@ -241,7 +241,10 @@ export async function buildProjectPdfArtifact({ nodeId, versionId, projectName, 
         </div>`;
 
     // === Section: Budżet ===
-    const budgetItems = wbsNodes.filter((n) => n.parentId != null);
+    // Sekcja WBS wyżej pokazuje CAŁĄ strukturę (także pozycje odrzucone — to historia
+    // oferty), ale budżet liczy wyłącznie zakres, który klient kupuje.
+    const budgetNodes = stripRejectedNodes(wbsNodes);
+    const budgetItems = budgetNodes.filter((n) => n.parentId != null);
     const budgetTotalCost = budgetItems.reduce((s, n) => s + (parseFloat(n.totalCost) || 0), 0);
     const budgetTotalPrice = budgetItems.reduce((s, n) => s + (parseFloat(n.totalPrice) || 0), 0);
     const budgetHtml = `
@@ -250,7 +253,7 @@ export async function buildProjectPdfArtifact({ nodeId, versionId, projectName, 
             ${wbsNodes.length ? `
             <table class="budget-table">
                 <thead><tr><th>Nazwa</th><th>Koszt jedn.</th><th>Ilość</th><th>Jedn.</th><th>Marża%</th><th>Koszt całk.</th><th>Suma netto</th></tr></thead>
-                <tbody>${buildBudgetRows(wbsNodes, null, 0)}</tbody>
+                <tbody>${buildBudgetRows(budgetNodes, null, 0)}</tbody>
                 <tfoot><tr style="background:#1a1a2e;color:#fff;font-weight:bold">
                     <td colspan="5" style="text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;padding:6px 8px">Razem:</td>
                     <td class="num" style="color:#fff">${fmtN(budgetTotalCost)} PLN</td>

@@ -3,6 +3,7 @@ import { normalizeManufacturer } from '../common/normalize.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveVersionId } from '../common/version.util';
 import { assertOfferEditable, OfferLockUser } from '../common/offer-lock.util';
+import { rejectedNodeIds } from '../common/plan-status.util';
 import { VectorService } from '../ai/vector.service';
 import { ProcessTreeService } from '../process-tree/process-tree.service';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
@@ -1753,12 +1754,21 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
         const reqs = await this.prisma.materialRequirement.findMany({
             where: { nodeId, versionId: versionId ?? null },
             select: {
-                quantity: true, budgetedPriceNetto: true,
+                wbsNodeId: true, quantity: true, budgetedPriceNetto: true,
                 proposals: { select: { isOffer: true, isPurchase: true, priceNetto: true, purchasePriceNetto: true } },
             },
         });
+        // Karta wisząca na pozycji ODRZUCONEJ wypada z sum — kafle „Rzeczywiste" mają liczyć
+        // ten sam zakres co tabela Budżet i eksporty (`stripRejectedNodes` na froncie).
+        // Karta bez `wbsNodeId` zostaje: nie ma po czym stwierdzić, że jest poza zakresem.
+        const versionNodes = await this.prisma.wbsNode.findMany({
+            where: { nodeId, versionId: versionId ?? null },
+            select: { id: true, parentId: true, status: true },
+        });
+        const rejectedIds = rejectedNodeIds(versionNodes);
         let sumWycena = 0, sumZakup = 0, purchaseDelta = 0, purchasedCount = 0;
         for (const r of reqs) {
+            if (r.wbsNodeId && rejectedIds.has(r.wbsNodeId)) continue;
             const qty = r.quantity ?? 0;
             const offer = r.proposals.find(p => p.isOffer);
             const purchase = r.proposals.find(p => p.isPurchase);

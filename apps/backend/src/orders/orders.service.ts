@@ -4,6 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditAction } from '../audit/audit.types';
 import { resolveVersionId } from '../common/version.util';
 import { isManagerRoles, isOpenLeafType } from '../common/leaf-types.util';
+import { isRejectedPlan, planStatusFromAny, rejectedNodeIds } from '../common/plan-status.util';
+import { VersioningService } from '../ai/versioning.service';
 
 // @anchor orders-service
 // Akceptacja wersji zamówienia (baseline) + etapy zamówienia (Faza 4).
@@ -16,6 +18,7 @@ export class OrdersService {
     constructor(
         private prisma: PrismaService,
         private cls: ClsService,
+        private versioning: VersioningService,
     ) { }
 
     // @anchor orders-get-acceptance — stan akceptacji węzła (badge BASELINE, etap).
@@ -39,17 +42,33 @@ export class OrdersService {
     // z oferty (Σ unitCost×quantity po całym drzewie WBS wersji, formuła IDENTYCZNA z
     // BudgetTable.calcDerived — akceptacja blokuje CAŁY projekt, nie tylko wycenione materiały)
     // + osobno licznik wycenionych wymagań materiałowych (pricedCount, informacyjnie).
+    //
+    // Pozycje ODRZUCONE (`planStatusFromAny` = REJECTED) wypadają z sumy i wracają osobno
+    // (`rejectedCount`, `rejectedSum`): modal ma pokazać kwotę TEGO, co wchodzi do baseline,
+    // a nie całej wersji. Dawniej trzeba było skopiować snapshot i wykasować z niego odrzucone
+    // liście, żeby kciuk zamroził właściwy zakres — statusy załatwiają to bez kasowania.
     async acceptPreview(nodeId: string, versionId: string) {
         const version = await this.prisma.projectVersion.findUnique({ where: { id: versionId } });
         if (!version || version.nodeId !== nodeId) throw new BadRequestException('Wersja nie należy do tego węzła');
 
-        const wbsLeaves = await this.prisma.wbsNode.findMany({
-            where: { nodeId, versionId, type: { not: 'group' } },
-            select: { unitCost: true, quantity: true },
+        // Czytamy WSZYSTKIE węzły wersji, także gałęzie grupujące: bez nich `rejectedNodeIds`
+        // nie doszłoby po łańcuchu do poddrzewa odrzuconej pozycji.
+        const allNodes = await this.prisma.wbsNode.findMany({
+            where: { nodeId, versionId },
+            select: { id: true, parentId: true, type: true, status: true, unitCost: true, quantity: true },
         });
-        const budgetSum = wbsLeaves.reduce(
-            (s, n) => s + Math.max(0, n.unitCost ?? 0) * Math.max(0, n.quantity ?? 0), 0,
-        );
+        const rejectedIds = rejectedNodeIds(allNodes);
+        const wbsLeaves = allNodes.filter((n) => String(n.type || '').toLowerCase() !== 'group');
+        const value = (n: { unitCost: number | null; quantity: number | null }) =>
+            Math.max(0, n.unitCost ?? 0) * Math.max(0, n.quantity ?? 0);
+        const rejectedLeaves = wbsLeaves.filter((n) => rejectedIds.has(n.id));
+        const budgetSum = wbsLeaves.filter((n) => !rejectedIds.has(n.id)).reduce((s, n) => s + value(n), 0);
+        const rejectedSum = Math.round(rejectedLeaves.reduce((s, n) => s + value(n), 0) * 100) / 100;
+        // Ile pozycji kciuk przestawi na „Zaakceptowane" — ten sam zakres wierszy co masowy
+        // zapis w `accept` (pozycje wersji poza korzeniem i poza gałęzią porządkową).
+        const toConfirmCount = wbsLeaves.filter(
+            (n) => n.parentId != null && planStatusFromAny(n.status) !== 'CONFIRMED' && !rejectedIds.has(n.id),
+        ).length;
 
         const reqs = await this.prisma.materialRequirement.findMany({
             where: { nodeId, versionId },
@@ -68,13 +87,34 @@ export class OrdersService {
             requirementsCount: reqs.length,
             pricedCount,
             budgetSum: Math.round(budgetSum * 100) / 100,
+            rejectedCount: rejectedLeaves.length,
+            rejectedSum,
+            toConfirmCount,
+            // Nazwa kopii, którą kciuk zamrozi — modal ma powiedzieć wprost, co powstanie,
+            // zanim manager kliknie. Liczona tą samą funkcją, która jej potem użyje.
+            snapshotLabel: await this.snapshotLabelFor(nodeId, version.label),
             lockedQuickQuotes,
         };
     }
 
     // @anchor orders-accept — kciuk managera: JEDNA transakcja — pointer
     // acceptedVersionId + acceptedAt/By + orderStage=ZAAKCEPTOWANE + wskazana
-    // QuickQuote→BASELINE + wpis AuditLog. Kciuk NIE zmienia wersji aktywnej.
+    // QuickQuote→BASELINE + masowe domknięcie statusów planu + wpis AuditLog.
+    // Kciuk NIE zmienia wersji aktywnej.
+    //
+    // Kciuk = AKCEPTACJA CAŁEJ WYCENY: każda pozycja wersji, której klient nie odrzucił,
+    // przechodzi na `CONFIRMED`. Bez tego zaakceptowana oferta zostawiała pozycje na „Nowe"
+    // i „Zaproponowane", a `axisGateOf` trzymał obie osie realizacji za bramką „Czeka na
+    // akceptację" — trzeba było przeklikać status pozycja po pozycji.
+    //
+    // BASELINE TO KOPIA, nie akceptowana wersja: kciuk zamraża `„<etykieta wersji> zaakceptowany"`
+    // — pełny klon, z którego WYKASOWANE są pozycje odrzucone razem z poddrzewami. Zamrożony
+    // snapshot ma zawierać wyłącznie to, co klient kupił, i to bez polegania na filtrze
+    // przy odczycie: eksport, porównanie i każde następne narzędzie czytające baseline widzą
+    // czysty zakres. Ręczne kopiowanie wersji i kasowanie z niej odrzuconych gałęzi przed
+    // kciukiem — dotychczasowa procedura — robi się teraz samo, w tej samej transakcji.
+    // Wersja akceptowana ZOSTAJE nietknięta (razem z odrzuconymi pozycjami): to historia
+    // tego, co poszło do klienta.
     async accept(nodeId: string, versionId: string, quickQuoteId: string | null | undefined, userEmail?: string) {
         const node = await this.prisma.processNode.findUnique({
             where: { id: nodeId },
@@ -93,12 +133,52 @@ export class OrdersService {
             if (qq.status !== 'LOCKED') throw new BadRequestException(`Wycena ma status ${qq.status} — na BASELINE można wskazać tylko LOCKED`);
         }
 
+        // Wersja AKTYWNA — czytamy poza transakcją, bo to zwykły odczyt wskaźnika. Baseline
+        // bywa inną wersją niż aktywna (ACTIVE ≠ BASELINE), a realizację prowadzi się na
+        // wierszach ŻYWYCH: to ICH status otwiera osie zakupu i wykonania, więc domknięcie
+        // decyzji musi dosięgnąć obu stron.
+        const liveVersionId = await resolveVersionId(this.prisma, nodeId);
+
+        const snapshotLabel = await this.snapshotLabelFor(nodeId, version.label);
+
         const userId = this.cls.get('user.id') ?? null;
+        // Timeout podniesiony ponad domyślne 5 s Prisma: w jednej transakcji siedzi pełny klon
+        // wersji (WBS, karty materiałowe, propozycje, wymagania zamówienia) plus przycięcie
+        // i statusy. Rozbicie na dwie transakcje zostawiałoby przy błędzie albo kopię bez
+        // wskaźnika baseline, albo wskaźnik na niedokończoną kopię.
         return this.prisma.$transaction(async (tx) => {
+            // 1. Zamrożona KOPIA akceptowanej wersji — nieaktywna, więc praca dalej idzie
+            //    na wersji, która była aktywna przed kciukiem.
+            const snapshot = await this.versioning.createFrozenCopy(tx, nodeId, versionId, snapshotLabel);
+
+            // 2. Przycięcie kopii: kasujemy pozycje ODRZUCONE. Kasujemy tylko korzenie —
+            //    `WbsNode.parent` ma `onDelete: Cascade`, więc podpozycje i karty materiałowe
+            //    (`MaterialRequirement.wbsNode`, też Cascade) lecą razem z rodzicem. To jest
+            //    moment, w którym snapshot przestaje zawierać cokolwiek odrzuconego.
+            const snapshotRows = await tx.wbsNode.findMany({
+                where: { nodeId, versionId: snapshot.id },
+                select: { id: true, parentId: true, type: true, status: true },
+            });
+            const removedIds = rejectedNodeIds(snapshotRows);
+            const rejectedRoots = snapshotRows.filter((r) => isRejectedPlan(r.status)).map((r) => r.id);
+            if (rejectedRoots.length) {
+                await tx.wbsNode.deleteMany({ where: { id: { in: rejectedRoots } } });
+            }
+
+            // 3. Wszystko, co w kopii zostało, jest z definicji zaakceptowane.
+            const snapshotPositionIds = snapshotRows
+                .filter((r) => !removedIds.has(r.id) && r.parentId != null && String(r.type || '').toLowerCase() !== 'group')
+                .map((r) => r.id);
+            if (snapshotPositionIds.length) {
+                await tx.wbsNode.updateMany({
+                    where: { id: { in: snapshotPositionIds } }, data: { status: 'CONFIRMED' },
+                });
+            }
+
             const updated = await tx.processNode.update({
                 where: { id: nodeId },
                 data: {
-                    acceptedVersionId: versionId,
+                    acceptedVersionId: snapshot.id,
                     acceptedAt: new Date(),
                     acceptedBy: userEmail ?? null,
                     orderStage: 'ZAAKCEPTOWANE',
@@ -108,18 +188,101 @@ export class OrdersService {
             if (quickQuoteId) {
                 await tx.quickQuote.update({ where: { id: quickQuoteId }, data: { status: 'BASELINE' } });
             }
+
+            // Zakres wierszy IDENTYCZNY z `onlyPositions` w `comparison` i z licznikiem
+            // w `acceptPreview`: pozycja to węzeł kosztowy poza korzeniem i poza gałęzią
+            // porządkową. Gałąź statusu nie ma — jej plakietkę wylicza się z pozycji pod nią.
+            const positionSelect = { id: true, parentId: true, type: true, status: true, sourceWbsNodeId: true } as const;
+            const flipped: { id: string; from: string }[] = [];
+            // Pozycja = ten sam filtr co `onlyPositions` w `comparison` i licznik w `acceptPreview`;
+            // odrzucone (razem z poddrzewami) odpadają — kciuk ich nie dotyka.
+            const positionsOf = <T extends { id: string; parentId: string | null; type: string | null; status: string | null }>(rows: T[]) => {
+                const rejected = rejectedNodeIds(rows);
+                return rows.filter((r) => r.parentId != null
+                    && String(r.type || '').toLowerCase() !== 'group'
+                    && !rejected.has(r.id));
+            };
+            const needsConfirm = (row: { status: string | null }) => planStatusFromAny(row.status) !== 'CONFIRMED';
+
+            const baselineAll = await tx.wbsNode.findMany({ where: { nodeId, versionId }, select: positionSelect });
+            const baselinePositions = positionsOf(baselineAll);
+            for (const p of baselinePositions.filter(needsConfirm)) {
+                flipped.push({ id: p.id, from: planStatusFromAny(p.status) });
+            }
+
+            // Parowanie z wersją żywą po korzeniu klonu (`sourceWbsNodeId ?? id`) — tak samo
+            // jak w `comparison`. Pozycja dopisana do wersji żywej PO snapshocie zostaje bez
+            // zmian: akceptacja starszego snapshotu nie obejmuje zakresu, którego on nie zna.
+            if (liveVersionId !== versionId) {
+                const roots = new Set(baselinePositions.map((p) => p.sourceWbsNodeId ?? p.id));
+                const liveAll = await tx.wbsNode.findMany({
+                    where: { nodeId, versionId: liveVersionId }, select: positionSelect,
+                });
+                for (const l of positionsOf(liveAll)) {
+                    if (!roots.has(l.sourceWbsNodeId ?? l.id) || !needsConfirm(l)) continue;
+                    flipped.push({ id: l.id, from: planStatusFromAny(l.status) });
+                }
+            }
+
+            if (flipped.length) {
+                await tx.wbsNode.updateMany({
+                    where: { id: { in: flipped.map((f) => f.id) } },
+                    data: { status: 'CONFIRMED' },
+                });
+            }
+
             await tx.auditLog.create({
                 data: {
                     action: AuditAction.ACCEPT,
                     entity: 'ProcessNode',
                     entityId: nodeId,
-                    diff: { versionId, versionLabel: version.label, quickQuoteId: quickQuoteId ?? null },
+                    diff: {
+                        // `versionId` to wersja AKCEPTOWANA (ta, którą wskazał manager),
+                        // `snapshotVersionId` to zamrożona kopia, na którą patrzy baseline.
+                        // Cofnięcie akceptacji szuka po `versionId`, więc kolejność pól nie
+                        // jest kosmetyczna — patrz `statusesToRestore`.
+                        versionId, versionLabel: version.label, quickQuoteId: quickQuoteId ?? null,
+                        snapshotVersionId: snapshot.id, snapshotLabel,
+                        removedRejected: removedIds.size,
+                        // Zapisujemy LISTĘ przestawionych pozycji z ich poprzednim statusem, nie
+                        // sam licznik: cofnięcie akceptacji przywraca dokładnie te wiersze i te
+                        // wartości. Reguła („wszystko na NEW") zrównałaby „Nowe" z „Zaproponowane"
+                        // i skasowała wiedzę o tym, co poszło do klienta.
+                        confirmed: flipped,
+                    },
                     userId,
                 },
             });
-            this.logger.log(`Zaakceptowano wersję ${version.label} (${versionId}) dla węzła ${nodeId} przez ${userEmail}`);
-            return updated;
-        });
+            this.logger.log(
+                `Zaakceptowano wersję ${version.label} (${versionId}) dla węzła ${nodeId} przez ${userEmail}`
+                + ` — snapshot „${snapshotLabel}" (${snapshot.id}), wycięto ${removedIds.size} odrzuconych,`
+                + ` ${flipped.length} pozycji na CONFIRMED`,
+            );
+            return {
+                ...updated,
+                confirmedCount: flipped.length,
+                snapshotLabel,
+                removedRejected: removedIds.size,
+            };
+        }, { timeout: 120_000, maxWait: 20_000 });
+    }
+
+    // @anchor orders-snapshot-label — etykieta zamrożonej kopii: etykieta akceptowanej wersji
+    // + „ zaakceptowany". Kolizję rozbijamy licznikiem, a nie nadpisaniem: po cofnięciu
+    // akceptacji poprzednia kopia ZOSTAJE w liście wersji (jest zapisem tego, co raz już
+    // zaakceptowano), więc druga akceptacja tej samej wersji musi dostać własną nazwę.
+    private async snapshotLabelFor(nodeId: string, sourceLabel: string) {
+        const base = `${String(sourceLabel || 'wersja').trim()} zaakceptowany`;
+        const taken = new Set(
+            (await this.prisma.projectVersion.findMany({ where: { nodeId }, select: { label: true } }))
+                .map((v) => v.label),
+        );
+        if (!taken.has(base)) return base;
+        for (let i = 2; i < 100; i++) {
+            const candidate = `${base} (${i})`;
+            if (!taken.has(candidate)) return candidate;
+        }
+        return `${base} (${Date.now()})`;
     }
 
     // @anchor orders-comparison — serce F5: parowanie LIŚCI WBS zaakceptowanej wersji
@@ -152,7 +315,7 @@ export class OrdersService {
 
         const liveVersionId = await resolveVersionId(this.prisma, nodeId);
         const leafSelect = {
-            id: true, parentId: true, name: true, type: true, unit: true,
+            id: true, parentId: true, name: true, type: true, unit: true, status: true,
             quantity: true, unitCost: true, sortOrder: true,
             sourceWbsNodeId: true, realizationClosed: true,
         };
@@ -187,8 +350,15 @@ export class OrdersService {
         // Świadomie NIE „węzeł bez dzieci": w tym drzewie węzeł z dzieckiem bywa
         // osobną pozycją z własną ceną (kamera z doczepioną licencją), a filtr po
         // bezdzietności gubił jej zakup.
-        const onlyPositions = (rows: typeof baselineAll) =>
-            rows.filter((r) => r.parentId != null && String(r.type || '').toLowerCase() !== 'group');
+        // Pozycja ODRZUCONA nie jest zakresem po ŻADNEJ ze stron: w baseline nie ma jej czego
+        // rozliczać, a w wersji żywej nie jest „zakresem+" — nikt jej nie zamawiał. Filtr stoi
+        // w jednym miejscu, więc wypada naraz z wierszy, z sum KPI i z mianownika pokrycia.
+        const onlyPositions = (rows: typeof baselineAll) => {
+            const rejected = rejectedNodeIds(rows);
+            return rows.filter((r) => r.parentId != null
+                && String(r.type || '').toLowerCase() !== 'group'
+                && !rejected.has(r.id));
+        };
         const baselineLeaves = onlyPositions(baselineAll);
         const liveLeaves = onlyPositions(liveAll);
 
@@ -437,6 +607,11 @@ export class OrdersService {
     // @anchor orders-revoke-accept — cofnięcie akceptacji: osobna głośna akcja
     // z obowiązkowym powodem (AuditLog), powrót orderStage=WYCENA,
     // BASELINE wycen węzła wraca do LOCKED. NIE jest to drugi klik w kciuk.
+    //
+    // Cofnięcie zdejmuje też masowe `CONFIRMED` z kciuka — tak samo jak cofnięcie zakupu
+    // cofa oś wykonania: etap, który się nie wydarzył, nie może zostawiać po sobie otwartych
+    // bramek realizacji. Zdejmujemy WYŁĄCZNIE to, co zapisał ten konkretny kciuk
+    // (`AuditLog.diff.confirmed`), i tylko tam, gdzie nikt tego potem nie ruszył.
     async revokeAccept(nodeId: string, reason: string, userEmail?: string) {
         if (!reason?.trim()) throw new BadRequestException('Powód cofnięcia akceptacji jest wymagany');
         const node = await this.prisma.processNode.findUnique({
@@ -445,6 +620,8 @@ export class OrdersService {
         });
         if (!node) throw new NotFoundException('Węzeł nie znaleziony');
         if (!node.acceptedVersionId) throw new BadRequestException('Zamówienie nie ma zaakceptowanej wersji');
+
+        const restore = await this.statusesToRestore(nodeId, node.acceptedVersionId);
 
         const userId = this.cls.get('user.id') ?? null;
         return this.prisma.$transaction(async (tx) => {
@@ -462,6 +639,11 @@ export class OrdersService {
                 where: { nodeId, status: 'BASELINE' },
                 data: { status: 'LOCKED' },
             });
+            // Przywracamy poprzedni status grupami (`NEW`, `PROPOSAL`) — dwa zapytania zamiast
+            // jednego na pozycję.
+            for (const [status, ids] of restore.byStatus) {
+                await tx.wbsNode.updateMany({ where: { id: { in: ids } }, data: { status } });
+            }
             await tx.auditLog.create({
                 data: {
                     action: AuditAction.REVOKE_ACCEPT,
@@ -472,12 +654,65 @@ export class OrdersService {
                         previousVersionId: node.acceptedVersionId,
                         previousAcceptedBy: node.acceptedBy,
                         previousAcceptedAt: node.acceptedAt,
+                        revertedCount: restore.revertedCount,
+                        keptCount: restore.keptCount,
                     },
                     userId,
                 },
             });
-            this.logger.log(`Cofnięto akceptację węzła ${nodeId} przez ${userEmail}; powód: ${reason.trim()}`);
-            return updated;
+            this.logger.log(
+                `Cofnięto akceptację węzła ${nodeId} przez ${userEmail}; powód: ${reason.trim()}`
+                + ` — cofnięto ${restore.revertedCount} statusów, zostawiono ${restore.keptCount}`,
+            );
+            return { ...updated, revertedCount: restore.revertedCount, keptCount: restore.keptCount };
         });
+    }
+
+    // @anchor orders-statuses-to-restore — które pozycje cofnąć ze stanu `CONFIRMED` zapisanego
+    // przez kciuk. Źródłem prawdy jest wpis `ACCEPT` w AuditLog tej właśnie wersji: bez niego
+    // (akceptacja sprzed wdrożenia masowego domknięcia) nie ma czego cofać i nie zgadujemy.
+    //
+    // Pozycji NIE ruszamy, gdy:
+    //   - ktoś zmienił jej status po akceptacji (dziś nie jest `CONFIRMED`) — nowsza decyzja
+    //     człowieka jest ważniejsza niż odtworzenie stanu sprzed kciuka,
+    //   - ruszyła już realizacja (`purchaseStatus` albo `execStatus`) — to FAKTY (zamówione,
+    //     dostarczone, zaczęte), a cofnięcie planu zatrzasnęłoby nad nimi bramkę `axisGateOf`
+    //     i schowało oś, na której coś się realnie wydarzyło.
+    private async statusesToRestore(nodeId: string, acceptedVersionId: string) {
+        const empty = { byStatus: [] as [string, string[]][], revertedCount: 0, keptCount: 0 };
+        const entry = await this.prisma.auditLog.findFirst({
+            where: { action: AuditAction.ACCEPT, entity: 'ProcessNode', entityId: nodeId },
+            orderBy: { createdAt: 'desc' },
+            select: { diff: true },
+        });
+        const diff = (entry?.diff ?? null) as
+            { versionId?: string; snapshotVersionId?: string; confirmed?: { id: string; from: string }[] } | null;
+        // Wpis pasuje do TEJ akceptacji, gdy wskaźnik `acceptedVersionId` pokazuje na jej
+        // zamrożoną kopię (`snapshotVersionId`). Fallback na `versionId` obsługuje akceptacje
+        // sprzed wdrożenia kopii — tam baseline wskazywał wprost na akceptowaną wersję.
+        const matches = diff?.snapshotVersionId
+            ? diff.snapshotVersionId === acceptedVersionId
+            : diff?.versionId === acceptedVersionId;
+        if (!diff || !matches || !Array.isArray(diff.confirmed) || !diff.confirmed.length) {
+            return empty;
+        }
+
+        const fromById = new Map(diff.confirmed.map((c) => [c.id, c.from]));
+        const rows = await this.prisma.wbsNode.findMany({
+            where: { id: { in: [...fromById.keys()] } },
+            select: { id: true, status: true, purchaseStatus: true, execStatus: true },
+        });
+        const byStatus = new Map<string, string[]>();
+        let kept = 0;
+        for (const r of rows) {
+            const from = fromById.get(r.id);
+            const touched = planStatusFromAny(r.status) !== 'CONFIRMED' || r.purchaseStatus || r.execStatus;
+            if (!from || touched) { kept += 1; continue; }
+            if (!byStatus.has(from)) byStatus.set(from, []);
+            byStatus.get(from)!.push(r.id);
+        }
+        const reverted = [...byStatus.values()].reduce((s, ids) => s + ids.length, 0);
+        // Pozycje skasowane po akceptacji już nie istnieją — nie są ani cofnięte, ani zostawione.
+        return { byStatus: [...byStatus.entries()], revertedCount: reverted, keptCount: kept };
     }
 }

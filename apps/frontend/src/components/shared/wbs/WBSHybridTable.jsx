@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, contactOwnerLabel, defaultLogisticianOwner } from './wbsConstants';
+import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, contactOwnerLabel, defaultLogisticianOwner, isRejectedPlanNode } from './wbsConstants';
 import AutoResizeTextarea from './AutoResizeTextarea';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
@@ -616,6 +616,10 @@ const insertNode = (nodes, targetId, node, position) => {
 // nigdy własną cenę, nawet jeśli ma niezerowe unitCost/margin (spójne z buildRows(VIEWS.BUDGET),
 // offerRevenueTotal i backendowym zerowaniem pól cenowych dla type=group).
 const sumChildrenCost = node => {
+    // Pozycja odrzucona wypada z sumy RAZEM z poddrzewem — gałąź ma pokazywać wartość
+    // zakresu, który klient kupuje. Ta sama reguła co `stripRejectedNodes` w Budżecie
+    // i w eksportach; rozjazd znaczyłby, że suma nad gałęzią kłóci się z tabelą Budżet.
+    if (isRejectedPlanNode(node)) return 0;
     const kids = node.children || [];
     if (node.type === 'group') return kids.reduce((a, c) => a + sumChildrenCost(c), 0);
     const own = (parseFloat(node.unitCost) || 0) * (parseFloat(node.quantity) || 0);
@@ -628,6 +632,7 @@ const sumChildrenCost = node => {
 // Formuła identyczna z BudgetTable.calcDerived: brak narzutu → 0, potem opcjonalny rabat.
 // Węzeł grupujący (type=group) jest czystym agregatorem — patrz sumChildrenCost.
 const sumChildrenOfferPrice = node => {
+    if (isRejectedPlanNode(node)) return 0;
     const kids = node.children || [];
     if (node.type === 'group') return kids.reduce((a, c) => a + sumChildrenOfferPrice(c), 0);
     const cost = (parseFloat(node.unitCost) || 0) * (parseFloat(node.quantity) || 0);

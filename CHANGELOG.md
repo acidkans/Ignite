@@ -1,3 +1,42 @@
+## 2026-09-03 — akceptacja całej wyceny kciukiem, baseline jako kopia bez pozycji odrzuconych
+
+### architektura / API
+- **kciuk zamraża KOPIĘ, nie akceptowaną wersję.** `POST /orders/:nodeId/accept` tworzy nową `ProjectVersion` o etykiecie `„<etykieta akceptowanej wersji> zaakceptowany"`, klonuje do niej pełny freeze danych (`VersioningService.createFrozenCopy`), KASUJE z kopii pozycje odrzucone razem z poddrzewami i dopiero na nią ustawia `ProcessNode.acceptedVersionId`. Zamrożony snapshot zawiera wyłącznie to, co klient kupił — bez polegania na filtrze przy odczycie. Ręczne kopiowanie wersji i wycinanie z niej odrzuconych gałęzi przed kciukiem robi się teraz samo, w jednej transakcji.
+- kopia jest NIEAKTYWNA — praca dalej idzie na wersji, która była aktywna przed kciukiem (ACTIVE ≠ BASELINE). `createVersion` aktywuje nową wersję i dlatego NIE nadaje się do tego zadania; `createFrozenCopy` bierze `tx` z zewnątrz, więc kopia i wskaźnik baseline powstają albo razem, albo wcale.
+- akceptowana wersja zostaje NIETKNIĘTA razem z pozycjami odrzuconymi — to historia tego, co poszło do klienta.
+- przycięcie kopii kasuje wyłącznie KORZENIE odrzuconych pozycji: `WbsNode.parent` i `MaterialRequirement.wbsNode` mają `onDelete: Cascade`, więc podpozycje i karty materiałowe lecą razem z rodzicem.
+- `ProjectVersion` ma `@@unique([nodeId, label])`, więc etykieta kopii rozbija kolizję licznikiem (`… zaakceptowany (2)`) — po cofnięciu akceptacji poprzednia kopia ZOSTAJE w liście wersji.
+- `acceptPreview` zwraca `snapshotLabel` — modal mówi wprost, jaka kopia powstanie.
+- cofnięcie akceptacji dopasowuje wpis `ACCEPT` po `diff.snapshotVersionId` (fallback na `diff.versionId` dla akceptacji sprzed wdrożenia kopii). Kopia po cofnięciu ZOSTAJE — jest zapisem tego, co raz zaakceptowano.
+- kciuk managera (`POST /orders/:nodeId/accept`) domyka DECYZJE PLANU: każda pozycja akceptowanej wersji, której klient nie odrzucił, przechodzi na `CONFIRMED`. Dotąd akceptacja ustawiała sam wskaźnik `ProcessNode.acceptedVersionId`, więc pozycje zostawały na „Nowe"/„Zaproponowane", a `axisGateOf` trzymał obie osie realizacji za bramką „Czeka na akceptację" — status trzeba było przeklikać pozycja po pozycji.
+- masowy zapis obejmuje też wersję AKTYWNĄ, gdy różni się od akceptowanej (ACTIVE ≠ BASELINE): realizację prowadzi się na wierszach żywych, więc to ICH status otwiera osie. Parowanie po korzeniu klonu (`sourceWbsNodeId ?? id`), tak samo jak w `comparison`. Pozycja dopisana do wersji żywej PO snapshocie zostaje bez zmian.
+- pozycje ODRZUCONE wypadają z zakresu baseline: z sumy w modalu akceptacji (`acceptPreview`) i z porównania wycena↔zakup (`comparison` — wierszy, sum KPI i mianownika pokrycia). Zostają w wersji jako historia. Dotąd jedyną drogą do baseline bez odrzuconych było skopiowanie snapshotu, ręczne wykasowanie odrzuconych liści i gałęzi i dopiero akceptacja tej kopii — czyli akceptowało się INNĄ wersję niż ta wysłana do klienta, a odrzucone znikały bez śladu.
+- `acceptPreview` zwraca dodatkowo `rejectedCount`, `rejectedSum` i `toConfirmCount`; modal pokazuje, ile pozycji i za jaką kwotę zostaje poza baseline oraz ile statusów przestawi kciuk.
+- odrzucona pozycja nie jest „zakresem+" w porównaniu: filtr `isRejectedPlan` stoi w `onlyPositions`, więc działa na OBU stronach naraz — baseline i wersji żywej.
+- cofnięcie akceptacji (`POST /orders/:nodeId/revoke-accept`) zdejmuje masowe `CONFIRMED` — tak samo jak cofnięcie zakupu cofa oś wykonania. Cofa WYŁĄCZNIE pozycje zapisane przez ten kciuk (lista `{id, from}` w `AuditLog.diff.confirmed`) i tylko te, których nikt potem nie ruszył: pozycja ze zmienionym statusem albo z ruszoną realizacją (`purchaseStatus` / `execStatus`) zostaje nietknięta.
+- nowy `apps/backend/src/common/plan-status.util.ts` — serwerowe lustro `planStatusFromAny` z `wbsConstants.js` razem ze słownikami etykiet (import z arkusza zapisuje do `WbsNode.status` polską nazwę, nie kod).
+
+### zakres pieniędzy — pozycje odrzucone poza budżetem
+- `ui-funkcja` `stripRejectedNodes` (`wbsConstants.js`) — jedno źródło zakresu dla PIENIĘDZY. Pozycja odrzucona wypada z tabeli Budżet, z kafli KOSZT/PRZYCHÓD/ZYSK/MARŻA, ze stopki „Wartość zafiltrowana", z walidacji wyceny przed eksportem i z eksportów oferty oraz budżetu. W drzewie WBS (Struktura projektu) ZOSTAJE — tam jest historia oferty i dropdown, którym cofa się decyzję.
+- `ui-stan` `budgetScopeData` (`UnifiedWbsPanel.jsx`) — `wbsData` bez odrzuconych; czytają z niego `buildRows(VIEWS.BUDGET)`, `offerRevenueTotal`, `workDaysMemo`, tabele w Założeniach, `buildWbsTreeDump`, `handleExportBudgetExcel` i `handleExportOfertaWbsExcel`. Drzewo WBS dalej czyta `wbsData`.
+- `ui-funkcja` `sumChildrenCost` / `sumChildrenOfferPrice` (`WBSHybridTable.jsx`) — sumy gałęzi zwracają 0 dla pozycji odrzuconej, więc wartość nad gałęzią zgadza się z tabelą Budżet.
+- `back-funkcja` `MaterialRequirementsService.budgetSums` — karty materiałowe wiszące na pozycjach odrzuconych wypadają z `sumWycena`, `sumZakup` i `purchaseDelta` (kafle „Rzeczywiste").
+- `BudgetModesPanel` (tryby baseline) i sekcja Budżet w `projectPdfExport.js` liczą ten sam zawężony zakres.
+- odrzucenie pozycji zabiera ze sobą CAŁE poddrzewo (`rejectedNodeIds` na backendzie, `stripRejectedNodes` na froncie): „drabinka kablowa" z 7 podpozycjami to jedna decyzja klienta, nie osiem. Na danych dev odrzucenie samej drabinki zdejmuje z budżetu 12 451,30 zł zamiast 1 002,40 zł.
+
+### testy
+- `test/plan-status-lustro.test.mjs` — front (`planStatusFromAny`) i backend MUSZĄ dawać ten sam kod dla każdego wejścia: kodu planu, starego kodu realizacyjnego, etykiety z importu, pustki. Test wyciąga słowniki WPROST z pliku backendu, więc pilnuje źródła, nie kopii. Wyłapał dwa rozjazdy w pierwszej wersji lustra („Zaproponowane" i kod małymi literami).
+
+### wytyczne
+- `back-funkcja` `planStatusFromAny` — ZAKRES BASELINE zależy od tej funkcji, więc obie strony muszą czytać status identycznie. Rozjazd znaczy, że pozycja przekreślona na ekranie jako odrzucona siedzi w kwocie akceptacji. Każda zmiana reguły idzie równolegle na froncie i w `plan-status.util.ts`, a `test/plan-status-lustro.test.mjs` musi przejść.
+- `schema-pole` `WbsNode.status` — dopasowanie BEZ wielkości liter dotyczy wyłącznie ETYKIET („odrzucone" z importu). Kody porównujemy dosłownie: `rejected` małymi literami NIE jest `REJECTED` po żadnej ze stron. Nie „naprawiać" tego jednostronnie.
+- pozycji odrzuconej nie kasujemy z wersji, żeby zawęzić baseline — od tego są statusy. Kasowanie gubi historię tego, co klient dostał w ofercie i odrzucił.
+- `ui-funkcja` `stripRejectedNodes` / `back-funkcja` `rejectedNodeIds` — każdy NOWY licznik pieniędzy (kafel, stopka, eksport, suma gałęzi) ma iść przez jedną z tych dwóch funkcji. Wynik jest domknięty na przodkach, więc kod chodzący po łańcuchu rodziców nie musi się bronić przed dziurą w drzewie.
+- pozycja odrzucona ZOSTAJE widoczna w drzewie WBS. Znika wyłącznie tam, gdzie liczą się pieniądze — inaczej nie dałoby się cofnąć decyzji klienta.
+- `back-funkcja` `OrdersService.accept` — kopia, przycięcie, statusy i wskaźnik baseline MUSZĄ zostać w jednej transakcji (`timeout: 120 s`, bo klon całej wersji nie mieści się w domyślnych 5 s Prisma). Rozbicie na dwie zostawiłoby przy błędzie albo kopię-śmiecia bez wskaźnika, albo wskaźnik na niedokończoną kopię.
+- zamrożonej kopii NIE edytujemy — to zapis stanu z chwili akceptacji. Zmiany zakresu po akceptacji idą na wersji aktywnej i widać je jako odchylenia w porównaniu wycena↔zakup.
+- `back-funkcja` `OrdersService.accept` — masowy zapis statusów zostawia `REJECTED` nietknięte. Gdyby kiedyś obejmował wszystko, akceptacja skasowałaby decyzję klienta jednym kliknięciem.
+
 ## 2026-09-03 — właściciel tylko na pozycjach, domyślny logistyk dla materiału i sprzętu
 
 ### architektura / API

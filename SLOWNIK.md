@@ -573,6 +573,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | PLAN_STATUS_CODES | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor plan-status-codes |
 | ui-funkcja | planStatusFromAny | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor plan-status-from-any |
 | ui-funkcja | planStatusLabel | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor plan-status-label |
+| ui-funkcja | isRejectedPlanNode | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor is-rejected-plan-node |
+| ui-funkcja | stripRejectedNodes (zakres pieniędzy) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor strip-rejected-nodes |
+| ui-stan | budgetScopeData | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor budget-scope-data |
 | ui-stala | PLAN_STRUCT_STATUS_META | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor plan-struct-status-meta |
 | ui-funkcja | getInheritedMaterialStatus (status planu pozycji) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor wbs-plan-status-of |
 | ui-kolumna | komórka Strategia gałęzi (scroll) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-strategy-cell-scroll |
@@ -1407,6 +1410,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | OrdersService.acceptPreview | apps/backend/src/orders/orders.service.ts | @anchor orders-accept-preview |
 | back-funkcja | OrdersService.accept | apps/backend/src/orders/orders.service.ts | @anchor orders-accept |
 | back-funkcja | OrdersService.revokeAccept | apps/backend/src/orders/orders.service.ts | @anchor orders-revoke-accept |
+| back-funkcja | OrdersService.statusesToRestore | apps/backend/src/orders/orders.service.ts | @anchor orders-statuses-to-restore |
+| back-funkcja | OrdersService.snapshotLabelFor | apps/backend/src/orders/orders.service.ts | @anchor orders-snapshot-label |
+| back-funkcja | VersioningService.createFrozenCopy | apps/backend/src/ai/versioning.service.ts | @anchor create-frozen-copy |
 | back-controller | OrdersController | apps/backend/src/orders/orders.controller.ts | @anchor orders-controller |
 | back-endpoint | GET /orders/:nodeId/acceptance | apps/backend/src/orders/orders.controller.ts | @anchor orders-acceptance-endpoint |
 | back-endpoint | GET /orders/:nodeId/accept-preview | apps/backend/src/orders/orders.controller.ts | @anchor orders-accept-preview-endpoint |
@@ -1518,6 +1524,13 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | defaultOwnerForPurchase | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor default-owner-for-purchase |
 | back-funkcja | guard zapisu właściciela na gałęzi | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-node-owner-leaf-guard |
 | back-funkcja | domyślny logistyk na pozycji zakupowej | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-node-owner-default-logistician |
+| back-stala | PLAN_STATUS_CODES (backend) | apps/backend/src/common/plan-status.util.ts | @anchor plan-status-codes-backend |
+| back-stala | MATERIAL_STATUS_LABELS (backend) | apps/backend/src/common/plan-status.util.ts | @anchor material-status-labels-backend |
+| back-stala | WORK_STATUS_LABELS (backend) | apps/backend/src/common/plan-status.util.ts | @anchor work-status-labels-backend |
+| back-funkcja | normalizeStatusCode (backend) | apps/backend/src/common/plan-status.util.ts | @anchor normalize-status-code-backend |
+| back-funkcja | planStatusFromAny (backend) | apps/backend/src/common/plan-status.util.ts | @anchor plan-status-from-any-backend |
+| back-funkcja | isRejectedPlan (zakres baseline) | apps/backend/src/common/plan-status.util.ts | @anchor is-rejected-plan |
+| back-funkcja | rejectedNodeIds (odrzucone + poddrzewa) | apps/backend/src/common/plan-status.util.ts | @anchor rejected-node-ids |
 | back-funkcja | isManagerRoles | apps/backend/src/common/leaf-types.util.ts | @anchor is-manager-roles |
 | back-funkcja | filtr roli w dzienniku wpisów | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-role-filter |
 | back-funkcja | filtr roli w porównaniu wycena↔zakup | apps/backend/src/orders/orders.service.ts | @anchor comparison-role-filter |

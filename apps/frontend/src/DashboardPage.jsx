@@ -1148,6 +1148,17 @@ export default function DashboardPage() {
                                         <div className="text-[9px] text-gray-500 uppercase tracking-wider">wycenionych</div>
                                     </div>
                                 </div>
+                                {/* Odrzucone POKAZUJEMY, choć nie wchodzą do sumy: bez tej linijki
+                                    kwota w kafelku różniłaby się od kwoty w tabeli budżetu i wyglądałaby
+                                    na błąd, zamiast na świadome zawężenie zakresu. */}
+                                {acceptModal.preview.rejectedCount > 0 && (
+                                    <p className="text-[10px] text-red-300/80 leading-relaxed">
+                                        Poza baseline zostaje {acceptModal.preview.rejectedCount} odrzuconych pozycji
+                                        na {acceptModal.preview.rejectedSum.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł —
+                                        nie wejdą do zamrożonej kopii (razem z podpozycjami, jeśli je mają). W akceptowanej wersji
+                                        zostają jako historia oferty.
+                                    </p>
+                                )}
                                 {acceptModal.preview.lockedQuickQuotes.length > 0 && (
                                     <div>
                                         <label className="text-[10px] text-gray-500 uppercase tracking-wider">Zamrożona wycena → BASELINE (opcjonalnie)</label>
@@ -1164,8 +1175,17 @@ export default function DashboardPage() {
                                     </div>
                                 )}
                                 <p className="text-[10px] text-gray-500 leading-relaxed">
-                                    Skutki: wersja zostaje zamrożonym baseline do porównań (pointer, wersja aktywna BEZ zmian),
-                                    etap zamówienia → ZAAKCEPTOWANE, edycja cen budżetowych tylko dla managera (ślad w AuditLog).
+                                    Skutki: powstaje zamrożona kopia
+                                    {acceptModal.preview.snapshotLabel
+                                        ? <> „<span className="text-teal-300">{acceptModal.preview.snapshotLabel}</span>"</>
+                                        : ' wersji'} — baseline do porównań wskazuje na NIĄ, wersja aktywna BEZ zmian.
+                                    Kopia zawiera wyłącznie pozycje zaakceptowane; odrzucone są z niej wycięte, ale zostają
+                                    w wersji „{acceptModal.versionLabel}". Etap zamówienia → ZAAKCEPTOWANE, edycja cen
+                                    budżetowych tylko dla managera (ślad w AuditLog).
+                                    {acceptModal.preview.toConfirmCount > 0 && (
+                                        <> Status planu {acceptModal.preview.toConfirmCount} pozycji przechodzi na „Zaakceptowane" —
+                                        otwiera to osie zakupu i wykonania w Realizacji.</>
+                                    )}
                                 </p>
                             </>
                         )}

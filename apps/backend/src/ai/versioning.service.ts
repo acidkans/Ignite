@@ -73,6 +73,31 @@ export class VersioningService {
         });
     }
 
+    // @anchor create-frozen-copy — KOPIA wersji do zamrożenia, robiona w transakcji wołającego.
+    // Osobna od `createVersion` z dwóch powodów, i oba są istotne:
+    //   1. nowa wersja jest NIEAKTYWNA — kciuk managera nie przestawia wersji, na której trwa
+    //      praca (ACTIVE ≠ BASELINE); `createVersion` aktywuje nową i wygasza pozostałe,
+    //   2. bierze `tx` z zewnątrz, więc akceptacja (kopia + przycięcie + statusy + pointer)
+    //      zostaje JEDNĄ transakcją — kopia bez wskaźnika baseline byłaby śmieciem w liście
+    //      wersji, a wskaźnik bez kopii wskazywałby w próżnię.
+    // Kopia jest pełnym freeze'em źródła — przycięcie odrzuconych robi wołający.
+    async createFrozenCopy(
+        tx: Prisma.TransactionClient,
+        nodeId: string,
+        sourceVersionId: string,
+        label: string,
+    ) {
+        const source = await tx.projectVersion.findUnique({
+            where: { id: sourceVersionId }, select: { notes: true },
+        });
+        const copy = await tx.projectVersion.create({
+            data: { nodeId, label, isActive: false, notes: source?.notes ?? null },
+        });
+        await this.cloneVersionData(tx, nodeId, sourceVersionId, copy.id);
+        this.logger.log(`Zamrożona kopia wersji ${sourceVersionId} → ${copy.id} („${label}") dla węzła ${nodeId}`);
+        return copy;
+    }
+
     // @anchor clone-version-data
     // Klonuje pełny "freeze" danych (subtaski, WBS, budżet, materiały, wymagania,
     // order requirements) ze źródła (sourceVId; null = baseline) do wersji docelowej

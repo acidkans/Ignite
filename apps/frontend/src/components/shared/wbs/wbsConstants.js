@@ -447,6 +447,36 @@ export const planStatusFromAny = (status) => {
 // @anchor plan-status-label
 export const planStatusLabel = (status) => PLAN_STATUS_META[planStatusFromAny(status)].label;
 
+// @anchor is-rejected-plan-node — pozycja, której klient NIE kupi. Odpowiednik serwerowego
+// `isRejectedPlan` z `plan-status.util.ts`.
+export const isRejectedPlanNode = (node) => planStatusFromAny(node?.status) === 'REJECTED';
+
+// @anchor strip-rejected-nodes — płaska lista węzłów WBS bez pozycji odrzuconych i BEZ ich
+// poddrzew. Jedyne źródło zakresu dla PIENIĘDZY: tabela Budżet, kafle koszt/przychód/zysk,
+// sumy gałęzi i eksporty oferty oraz budżetu liczą to, co klient kupuje — a nie to, co
+// odrzucił. W drzewie WBS (Struktura projektu) pozycja odrzucona ZOSTAJE: tam jest historia
+// oferty i dropdown, którym można decyzję cofnąć.
+//
+// Kasujemy CAŁE poddrzewo odrzuconej pozycji: „kamera z doczepioną licencją" to jedna
+// decyzja klienta, a nie dwie. Dzięki temu wynik jest domknięty na przodkach — żaden
+// pozostały węzeł nie traci rodzica, więc kod chodzący po łańcuchu (ścieżki w eksportach,
+// nazwa przedmiotu projektu) nie musi się bronić przed dziurą w drzewie.
+export const stripRejectedNodes = (nodes) => {
+  const list = Array.isArray(nodes) ? nodes : [];
+  const rejected = new Set(list.filter(isRejectedPlanNode).map(n => n.id));
+  if (!rejected.size) return list;
+  const byId = new Map(list.map(n => [n.id, n]));
+  const dropped = (node) => {
+    let cur = node, guard = 0;
+    while (cur && guard++ < 100) {
+      if (rejected.has(cur.id)) return true;
+      cur = cur.parentId ? byId.get(cur.parentId) : null;
+    }
+    return false;
+  };
+  return list.filter(n => !dropped(n));
+};
+
 // ── Statusy ETAPU REALIZACJI ─────────────────────────────────────────────────
 // Realizacja ma DWIE niezależne osie, bo pozycja przechodzi przez dwa różne światy:
 //   ZAKUP     — droga towaru albo zlecenia: zamawiamy, przyjeżdża, wydajemy, fakturujemy

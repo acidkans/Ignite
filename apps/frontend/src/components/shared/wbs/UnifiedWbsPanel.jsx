@@ -8,7 +8,7 @@ import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import GanttSection from './GanttSection';
-import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny } from './wbsConstants';
+import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
@@ -136,6 +136,12 @@ function BranchStrategyField({ name, value, onSave }) {
 
 export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsDataLoad, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible, oneDriveFolderName = null, initialSection = null, onInitialSectionApplied }) {
     const [wbsData, setWbsData] = useState([]);
+    // @anchor budget-scope-data — `wbsData` BEZ pozycji odrzuconych (i bez ich poddrzew).
+    // Czyta z niego WSZYSTKO, co liczy pieniądze: tabela Budżet, kafle koszt/przychód/zysk,
+    // walidacja wyceny przed eksportem, eksporty oferty i budżetu, tabele w Założeniach.
+    // Drzewo WBS w Strukturze projektu zostaje na `wbsData` — tam pozycja odrzucona ma być
+    // widoczna razem z dropdownem, którym cofa się decyzję.
+    const budgetScopeData = useMemo(() => stripRejectedNodes(wbsData), [wbsData]);
     const wbsDataRef = useRef(wbsData);
 
     // @anchor budget-acceptance — stan akceptacji zamówienia (F7): segmented control
@@ -1617,7 +1623,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             const parts = text.split(/(\{tabela wbs[123]?\})/gi);
             return parts.map(part => {
                 const m = part.match(/^\{tabela wbs([123]?)\}$/i);
-                if (m) return buildWbsHtmlTable(wbsData, parseInt(m[1]) || 2, { includeZeroPriced: exportNoPricesRef.current });
+                if (m) return buildWbsHtmlTable(budgetScopeData, parseInt(m[1]) || 2, { includeZeroPriced: exportNoPricesRef.current });
                 return renderStrategyHtml(part);
             }).join('');
         })();
@@ -1630,7 +1636,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         const schematHtml = show('oferta') ? await (async () => {
             try {
                 const { html: sectionHtml } = await buildSchematSectionHtml({
-                    nodeId, wbsData, orderName, token: sessionStorage.getItem('token'),
+                    nodeId, budgetScopeData, orderName, token: sessionStorage.getItem('token'),
                     sectionTitle: 'Schemat', pageBreakBefore: true,
                 });
                 return sectionHtml;
@@ -1647,7 +1653,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             return TYPE_LABELS[wbsTypeFromAny(code)] || code || '—';
         };
         const materialsHtml = (show('materials') || show('oferta')) ? (() => {
-            const wbsNodeIdSet = new Set((wbsData || []).map(n => n.id));
+            const wbsNodeIdSet = new Set((budgetScopeData || []).map(n => n.id));
             const reqs = allRequirements.filter(r => {
                 if (!r.id) return false;
                 if (r.wbsNodeId && wbsNodeIdSet.has(String(r.wbsNodeId))) return true;
@@ -1657,7 +1663,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 } catch { return false; }
             });
             if (!reqs.length) return '';
-            const wbsNodeById = new Map((wbsData || []).map(n => [n.id, n]));
+            const wbsNodeById = new Map((budgetScopeData || []).map(n => [n.id, n]));
             const effectiveQty = (r) => {
                 // Suma ilości z aktualnych węzłów WBS (ignorujemy stare wartości w allokacjach)
                 try {
@@ -2148,7 +2154,7 @@ ${ganttSectionHtml}
     // Dzięki temu suma „Razem" w Drzewie WBS zgadza się z Podsumowaniem.
     const buildWbsTreeDump = () => {
         const byParent = {};
-        for (const n of wbsData) {
+        for (const n of budgetScopeData) {
             const key = n.parentId || '__root__';
             (byParent[key] = byParent[key] || []).push(n);
         }
@@ -3335,7 +3341,7 @@ ${ganttSectionHtml}
             }
             // Najbliższy przodek (lub sam węzeł) mający pasek na Gantcie.
             const nodeByIdCF = {};
-            for (const n of wbsData) nodeByIdCF[n.id] = n;
+            for (const n of budgetScopeData) nodeByIdCF[n.id] = n;
             const resolveTaskEnd = (id) => {
                 let cur = id, guard = 0;
                 while (cur && guard++ < 50) {
@@ -3627,13 +3633,13 @@ ${ganttSectionHtml}
                 if (req.wbsNodeId) reqByNode[req.wbsNodeId] = req;
                 try { const alloc = JSON.parse(req.wbsNodeAllocations || '{}'); for (const nid of Object.keys(alloc)) { if (nid && !reqByNode[nid]) reqByNode[nid] = req; } } catch {}
             }
-            for (const node of wbsData) {
+            for (const node of budgetScopeData) {
                 if (reqByNode[node.id]) continue;
                 const reqTag = (node.tags || []).find(t => typeof t === 'string' && t.startsWith('req:'));
                 if (reqTag) { const req = allRequirements.find(r => r.id === reqTag.slice(4)); if (req) reqByNode[node.id] = req; }
             }
 
-            const matNodesBudget = wbsData.filter(n => n.type === 'material' || n.type === 'equipment');
+            const matNodesBudget = budgetScopeData.filter(n => n.type === 'material' || n.type === 'equipment');
             const orderAgg = new Map();
             for (const node of matNodesBudget) {
                 const card = reqByNode[node.id] || null;
@@ -3755,7 +3761,7 @@ ${ganttSectionHtml}
 
     // @anchor handle-export-oferta-wbs-excel
     const handleExportOfertaWbsExcel = async () => {
-        if (!wbsData.length) { alert('Brak danych WBS do eksportu.'); return; }
+        if (!budgetScopeData.length) { alert('Brak danych WBS do eksportu.'); return; }
 
         const safeProjectName = String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'projekt';
         const workbook = new ExcelJS.Workbook();
@@ -3784,11 +3790,11 @@ ${ganttSectionHtml}
             for (let c = 1; c <= colCount; c++) row.getCell(c).border = border;
         };
 
-        const localById = new Map(wbsData.map(n => [n.id, n]));
+        const localById = new Map(budgetScopeData.map(n => [n.id, n]));
         // Kolejność gałęzi w eksporcie = kolejność w panelu WBS (DFS od korzenia po sortOrder).
         const wbsOrderIndex = (() => {
             const byParent = new Map();
-            for (const it of wbsData) {
+            for (const it of budgetScopeData) {
                 const pid = it.parentId || '__root__';
                 if (!byParent.has(pid)) byParent.set(pid, []);
                 byParent.get(pid).push(it);
@@ -4053,7 +4059,7 @@ ${ganttSectionHtml}
         const offerFull = offerBody.trim() ? `# Oferta\n\n${offerBody}` : '';
         buildMarkdownSheet('Oferta', offerFull, 'Brak treści oferty.', { skipBlankRows: true });
         // ── Sheet "Strategia": strategie per gałąź (globalna strategia projektu usunięta) ──
-        const branchStrategyMd = (wbsData || [])
+        const branchStrategyMd = (budgetScopeData || [])
             .filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0 && String(n.strategy || '').trim())
             .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
             .map(n => `## ${n.name || '(bez nazwy)'}\n\n${String(n.strategy).trim()}`)
@@ -4072,7 +4078,7 @@ ${ganttSectionHtml}
             applyBorder(hdr, 2, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
 
             const byType = new Map();
-            for (const item of wbsData) {
+            for (const item of budgetScopeData) {
                 if (!item.parentId) continue;
                 const price = localPriceOf(item);
                 // Tryb „bez cen": pozycje bez wyceny zostają — inaczej z oferty wypadłyby
@@ -4118,7 +4124,7 @@ ${ganttSectionHtml}
             applyBorder(hdr, 4, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
 
             const groups = new Map();
-            for (const item of wbsData) {
+            for (const item of budgetScopeData) {
                 if (!item.parentId) continue;
                 const price = localPriceOf(item);
                 // Tryb „bez cen": pozycje bez wyceny zostają — inaczej z oferty wypadłyby
@@ -4163,7 +4169,7 @@ ${ganttSectionHtml}
             applyBorder(hdr, 4, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
 
             const level1 = new Map();
-            for (const item of wbsData) {
+            for (const item of budgetScopeData) {
                 if (!item.parentId) continue;
                 const price = localPriceOf(item);
                 // Tryb „bez cen": pozycje bez wyceny zostają — inaczej z oferty wypadłyby
@@ -4212,7 +4218,7 @@ ${ganttSectionHtml}
             applyBorder(hdr, 8, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
 
             const level1 = new Map();
-            for (const item of wbsData) {
+            for (const item of budgetScopeData) {
                 if (!item.parentId) continue;
                 const price = localPriceOf(item);
                 // Tryb „bez cen": pozycje bez wyceny zostają — inaczej z oferty wypadłyby
@@ -4283,7 +4289,7 @@ ${ganttSectionHtml}
             applyBorder(hdr, 3, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
 
             const childrenByParent = new Map();
-            for (const it of wbsData) {
+            for (const it of budgetScopeData) {
                 if (!it.parentId) continue;
                 if (!childrenByParent.has(it.parentId)) childrenByParent.set(it.parentId, []);
                 childrenByParent.get(it.parentId).push(it);
@@ -4297,7 +4303,7 @@ ${ganttSectionHtml}
                 }
                 return sum;
             };
-            const groupNodes = wbsData
+            const groupNodes = budgetScopeData
                 .filter(n => n.type === 'group')
                 .sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id));
             for (const g of groupNodes) {
@@ -4312,7 +4318,7 @@ ${ganttSectionHtml}
             // Razem: identyczny flat-sum co w zakładce Oferta-podział na Typy —
             // iteruje wbsData wprost, bez traversalu drzewa, żeby węzły-sieroty
             // i węzły poza gałęziami grupującymi były liczone tak samo w obu miejscach.
-            const total = wbsData.reduce((s, item) => (!item.parentId ? s : s + localPriceOf(item)), 0);
+            const total = budgetScopeData.reduce((s, item) => (!item.parentId ? s : s + localPriceOf(item)), 0);
             const sumRow = sheet.addRow(['Razem', '', total]);
             sumRow.font = { bold: true };
             sumRow.fill = sumFill;
@@ -4361,7 +4367,7 @@ ${ganttSectionHtml}
                     }
                 } catch {}
             }
-            for (const node of wbsData) {
+            for (const node of budgetScopeData) {
                 if (reqByNodeId[node.id]) continue;
                 const reqTag = (node.tags || []).find(t => typeof t === 'string' && t.startsWith('req:'));
                 if (!reqTag) continue;
@@ -4369,7 +4375,7 @@ ${ganttSectionHtml}
                 if (req) reqByNodeId[node.id] = req;
             }
 
-            const matNodes = wbsData.filter(n => n.type === 'material' || n.type === 'equipment');
+            const matNodes = budgetScopeData.filter(n => n.type === 'material' || n.type === 'equipment');
             // Kolejność = kolejność w drzewie WBS (DFS po sortOrder), spójnie z arkuszami WBS1-3.
             matNodes.sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id));
 
@@ -4620,7 +4626,7 @@ ${ganttSectionHtml}
 
             // DFS — identyczna kolejność jak w exportQaFormPdf
             const qaByPar = new Map();
-            for (const n of wbsData) {
+            for (const n of budgetScopeData) {
                 const pid = n.parentId || null;
                 if (!qaByPar.has(pid)) qaByPar.set(pid, []);
                 qaByPar.get(pid).push(n);
@@ -4630,7 +4636,7 @@ ${ganttSectionHtml}
             const walkQ = (pid) => { for (const n of (qaByPar.get(pid) || [])) { qaWalk.push(n); walkQ(n.id); } };
             walkQ(null);
 
-            const qaById = new Map(wbsData.map(n => [String(n.id), n]));
+            const qaById = new Map(budgetScopeData.map(n => [String(n.id), n]));
             const getWbsPath = (node) => {
                 const segs = []; let cur = node;
                 while (cur) { segs.unshift(cur.name || ''); cur = cur.parentId ? qaById.get(String(cur.parentId)) : null; }
@@ -5750,7 +5756,7 @@ ${ganttSectionHtml}
 
         if (view === VIEWS.BUDGET) {
             const wbsByParent = new Map();
-            for (const item of wbsData) {
+            for (const item of budgetScopeData) {
                 const pid = item.parentId || '__root__';
                 if (!wbsByParent.has(pid)) wbsByParent.set(pid, []);
                 wbsByParent.get(pid).push(item);
@@ -5768,7 +5774,7 @@ ${ganttSectionHtml}
             };
             traverseWbs('__root__');
 
-            return [...wbsData]
+            return [...budgetScopeData]
                 .filter(item => item.parentId != null && item.type !== 'group')
                 .sort((a, b) => (wbsOrderMap.get(a.id) ?? 0) - (wbsOrderMap.get(b.id) ?? 0))
                 .map(item => {
@@ -5914,8 +5920,8 @@ ${ganttSectionHtml}
     );
 
     const wbsTablesByDepth = useMemo(() => {
-        if (!wbsData.length) return {};
-        const byId = new Map(wbsData.map(n => [n.id, n]));
+        if (!budgetScopeData.length) return {};
+        const byId = new Map(budgetScopeData.map(n => [n.id, n]));
         // Formuła IDENTYCZNA z localPriceOf / offerRevenueTotal / buildWbsHtmlTable:
         // gałąź grupująca (type='group') ⇒ 0 (wartość to suma dzieci), brak narzutu ⇒ 0
         // (nie koszt). Wcześniej fallback do totalPrice zawyżał sumy w zakładce Założenia.
@@ -5942,7 +5948,7 @@ ${ganttSectionHtml}
         };
         const buildTable = (depth) => {
             const grouped = new Map();
-            for (const item of wbsData) {
+            for (const item of budgetScopeData) {
                 if (!item.parentId) continue;
                 const price = offerPriceOf(item);
                 if (price <= 0) continue;
@@ -5974,7 +5980,7 @@ ${ganttSectionHtml}
     const wbsBranchTable = wbsTablesByDepth[2] || '';
 
     const offerRevenueTotal = useMemo(() => {
-        return wbsData.reduce((sum, item) => {
+        return budgetScopeData.reduce((sum, item) => {
             if (!item.parentId) return sum;
             // Gałęzie grupujące pomijamy — ich wartość to suma dzieci, spójnie
             // z buildRows(VIEWS.BUDGET) i eksportami oferty/budżetu.
@@ -5991,7 +5997,7 @@ ${ganttSectionHtml}
     }, [wbsData]);
 
     const workDaysMemo = useMemo(() => {
-        return wbsData.reduce((sum, item) => {
+        return budgetScopeData.reduce((sum, item) => {
             if (!item.parentId) return sum;
             const t = String(item.type || '').toLowerCase();
             const isWork = t === 'work' || t === 'praca' || String(item.budgetType || '').toUpperCase() === 'WORK';
