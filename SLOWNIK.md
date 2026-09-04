@@ -1644,7 +1644,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | execCodeOf (kod osi wykonania do pokazania) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-exec-code-of |
 | ui-przycisk | StatusHint (podpowiedź statusu do zatwierdzenia) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-status-hint |
 | ui-stan | hints (podpowiedzi osi dla wiersza) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-hints |
-| ui-sekcja | plakietka „Odebrane" wyliczona z protokołu | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-handed-over-badge |
+| ui-stan | execSelectCode (kod pokazywany w selekcie osi wykonania) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-exec-select-code |
 | ui-sekcja | BranchAxisBadge (plakietka osi na gałęzi) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-branch-badge |
 | ui-sekcja | AxisGateBadge (plakietka etapu za bramką) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-gate-badge |
 | ui-stan | purchaseGate / execGate (bramki wiersza) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-gates |
