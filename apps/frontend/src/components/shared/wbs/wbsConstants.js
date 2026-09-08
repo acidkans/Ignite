@@ -236,8 +236,13 @@ export const STRUCTURE_COMMON_CELL_CLASS = 'text-sm leading-6';
 //
 // `cap` domyka szufladę od spodu: pełna listwa w kolorze akcentu, nie cienka krawędź.
 // Krawędź 1–2 px ginęła między wierszami tabeli i nie było widać, gdzie grupa się kończy.
+// KIERUNEK KONTRASTU: szuflada jest CIEMNIEJSZA od wierszy wokół, nie jaśniejsza. Jaśniejsza
+// płaszczyzna (`#182236`) na ciemnym tle tabeli ledwie się odcinała — rozwinięcie wyglądało
+// jak wiersz z lekko innym odcieniem. Ciemna „studnia" cofa rozwiniętą pozycję pod poziom
+// listy, więc widać ją nawet kątem oka, a akcent (kręgosłup + listwa) zostaje jedynym
+// jasnym elementem szuflady i dlatego prowadzi wzrok.
 export const DRAWER = {
-  surface: 'bg-[#182236]',
+  surface: 'bg-[#05080f]',
   hoverRow: 'hover:bg-white/[0.03]',
   spine: 'border-l-[3px]',
   head: 'flex items-baseline gap-2 px-4 pt-2',

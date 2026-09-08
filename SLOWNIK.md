@@ -382,7 +382,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | ProductProposal.isOffer | apps/backend/prisma/schema.prisma | @anchor product-proposal-is-offer |
 | schema-pole | ProductProposal.isPurchase | apps/backend/prisma/schema.prisma | @anchor product-proposal-is-purchase |
 | schema-pole | ProductProposal.purchasePriceNetto | apps/backend/prisma/schema.prisma | @anchor product-proposal-purchase-price-netto |
-| ui-dropdown | FilterDropdown | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-filter-dropdown |
+| ui-dropdown | FilterDropdown (wielowybór kolumny słownikowej — Budżet i Realizacja) | apps/frontend/src/components/shared/wbs/FilterDropdown.jsx | @anchor filter-dropdown |
 | ui-tabela | WBSHybridTable | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-table |
 | ui-stala | kolor kręgosłupa szuflady gałęzi | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-branch-spine |
 | ui-stala | CSS szuflady rozwiniętej gałęzi | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-drawer-css |
@@ -1650,7 +1650,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | purchaseGate / execGate (bramki wiersza) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-gates |
 | ui-wiersz | RealizationGroupRow (wiersz gałęzi) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-group-row |
 | ui-stan | groups (pozycje pod nagłówkami gałęzi) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-groups |
-| ui-stan | collapsedGroups (zwinięte gałęzie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-collapsed-groups |
+| ui-stan | openGroupKey (otwarta gałąź — jedna na raz) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-open-group |
+| ui-hook | otwarta gałąź zsynchronizowana z filtrem | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-open-group-sync |
 | ui-stan | nodeById (węzeł WBS po id) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-node-by-id |
 | ui-stan | odbiorByRoot (rejestr odbiorów zamówienia) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-odbior-status |
 | ui-funkcja | fetchOdbior (odczyt rejestru odbiorów) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-fetch-odbior |
@@ -1669,6 +1670,12 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | growsWithText (pole tekstowe wpisu rośnie z treścią) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-growing-fields |
 | ui-kolumna | dostawcy pozycji — lista, nie skrót „+N" | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-suppliers |
 | ui-wiersz | listwa domykająca szufladę rozwiniętej pozycji | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-drawer-cap |
+| ui-wiersz | listwa domykająca szufladę gałęzi | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-group-cap |
+| ui-stala | DROPDOWN_FILTER_COLS / TEXT_FILTER_COLS (rodzaj filtra kolumny) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-filter-cols |
+| ui-funkcja | hasColFilter (czy filtr kolumny cokolwiek zawęża) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-has-col-filter |
+| ui-stan | filterOptions (wartości do wielowyboru) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-filter-options |
+| ui-funkcja | zastosowanie filtrów kolumnowych (wielowybór OR, frazy po `;`) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-col-filter-apply |
+| ui-kolumna | zawijanie nagłówków tabeli realizacji | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-header-wrap |
 | ui-kolumna | koszt całkowity wyceny — pomarańcz strony wyceny | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-total-plan-color |
 | ui-panel | RealizationExpandPanel (wymagania techniczne + podgląd + dziennik) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-expand-panel |
 | ui-stan | visibleTypes (filtr typów po roli) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-visible-types |

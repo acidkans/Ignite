@@ -1,3 +1,46 @@
+## 2026-09-07 — Ciemna szuflada, zawijane nagłówki i wielowybór filtrów w Realizacji
+
+### architektura / API
+- **szuflada jest CIEMNIEJSZA od wierszy wokół, nie jaśniejsza** (`expand-drawer`): `DRAWER.surface` z `#182236` na `#05080f`. Jasna płaszczyzna na ciemnym tle tabeli ledwie się odcinała — rozwinięcie czytało się jak wiersz z lekko innym odcieniem. Ciemna „studnia" cofa rozwiniętą pozycję pod poziom listy, a akcent (kręgosłup + listwa domykająca) zostaje jedynym jasnym elementem szuflady i dlatego prowadzi wzrok. Zmiana obejmuje WSZYSTKIE TRZY tabele liści (Materiały, WBS, Realizacja) — `DRAWER` jest jednym źródłem wyglądu szuflady i rozjazd między widokami byłby regresem, nie oszczędnością.
+- `ui-kolumna` `realization-header-wrap` — nagłówki tabeli realizacji ZAWIJAJĄ się na kolejne wiersze zamiast urywać wielokropkiem. Przy domyślnych szerokościach „Koszt jedn. wyce…" i „Koszt jedn. zaku…" wyglądały identycznie i nie dało się poznać, która kolumna jest która. `align-bottom` na `<th>` trzyma wszystkie napisy przy dolnej krawędzi, więc wiersz nagłówka nie faluje przy różnej liczbie linii.
+- **filtr kolumny SŁOWNIKOWEJ to wielowybór z polami wyboru** (OR wewnątrz kolumny, AND między kolumnami) — ten sam mechanizm co w tabeli Budżet. Objęte kolumny: `Przedmiot projektu` (gałąź), `Dostawca`, `Status oferty`, `Status zakupu`, `Status wykonania`. Kolumny wolnotekstowe (`Nazwa`, `Produkt / zakres`, `Dokument`, `Komentarz`) przyjmują kilka fraz rozdzielonych `;`, też na OR. Kolumny liczbowe zostają przy dopasowaniu podciągu.
+- wielowybór dopasowuje WARTOŚĆ, nie podciąg: „Zamówione" nie łapie się na „Nie zamówione", a gałąź „Kamery" na „Kamery zewnętrzne" — dotąd filtr statusu był polem tekstowym i takie fałszywe trafienia były jedyną dostępną drogą.
+- `ui-dropdown` `FilterDropdown` wyprowadzony z `BudgetTable.jsx` do własnego pliku `wbs/FilterDropdown.jsx` i współdzielony przez Budżet i Realizację. Prop `accent` niesie stronę widoku (`blue` = wycena, `teal` = zakup/realizacja) — ta sama semantyka koloru co w `DRAWER.accent`.
+- `ui-stan` `filterOptions` liczy listę wyborów z CAŁEJ tabeli, nie z wierszy po filtrze: gdyby liczyła z wyniku, po zaznaczeniu jednego statusu reszta zniknęłaby z listy i nie dałoby się dobrać drugiego.
+- arkusz „Podsumowanie" w eksporcie Excel wypisuje wielowybór jako listę przez „lub" — ma powiedzieć, CO było zaznaczone, a nie że filtr w ogóle istniał.
+
+### słownik
+- zmieniono `budget-filter-dropdown` → `filter-dropdown` — komponent przeniesiony do `apps/frontend/src/components/shared/wbs/FilterDropdown.jsx`
+- dodano `realization-filter-cols` — `ui-stala` `DROPDOWN_FILTER_COLS` / `TEXT_FILTER_COLS`, rodzaj filtra kolumny, `RealizationTab.jsx`
+- dodano `realization-has-col-filter` — `ui-funkcja` `hasColFilter`, czy filtr kolumny cokolwiek zawęża, `RealizationTab.jsx`
+- dodano `realization-filter-options` — `ui-stan` `filterOptions`, wartości do wielowyboru, `RealizationTab.jsx`
+- dodano `realization-col-filter-apply` — `ui-funkcja` zastosowania filtrów kolumnowych, `RealizationTab.jsx`
+- dodano `realization-header-wrap` — `ui-kolumna` zawijanie nagłówków tabeli realizacji, `RealizationTab.jsx`
+
+### wytyczne
+- `ui-sekcja` szuflada — kierunek kontrastu jest CIEMNY: rozwinięcie schodzi pod poziom listy, nie wychodzi nad nią. Jasnym elementem szuflady zostaje wyłącznie akcent (kręgosłup, listwa). Nowe rozwinięcia w innych tabelach mają iść tą samą drogą.
+- `ui-funkcja` `hasColFilter` — pusta tablica wielowyboru jest w JS PRAWDZIWA. Każde miejsce sprawdzające „czy filtr aktywny" ma iść przez tę funkcję; gołe `if (val)` uznaje odznaczony dropdown za filtr i zostawia pustą tabelę.
+- `ui-dropdown` filtr kolumny — kolumna o SKOŃCZONYM zbiorze wartości dostaje wielowybór, kolumna o otwartym zbiorze pole tekstowe. Wpisywanie statusu z klawiatury zawsze skończy się fałszywym trafieniem albo literówką.
+
+## 2026-09-07 — Szuflada gałęzi w Realizacji, jedna otwarta na raz
+
+### architektura / API
+- gałąź w zakładce Realizacja rozwija się jak SZUFLADA — dokładnie ta sama forma co przy rozwiniętej pozycji (`expand-drawer`): nagłówek gałęzi dostaje płaszczyznę `DRAWER.surface` i górną krawędź w kolorze akcentu, wszystkie jej pozycje (razem z wpisami, panelem i formularzem) jadą na wspólnym kręgosłupie przy lewej krawędzi, a całość domyka pełna listwa `DRAWER.cap`. Ten sam zabieg co `wbs-drawer-css` w drzewie WBS, tyle że w turkusie strony realizacji.
+- otwarta jest NAJWYŻEJ JEDNA gałąź: `ui-stan` `openGroupKey` trzyma klucz otwartej zamiast zbioru zwiniętych (`collapsedGroups`), więc „jedna szuflada na raz" jest STANEM, a nie regułą pilnowaną przy każdym kliknięciu. Widok otwiera się z gałęziami zamkniętymi — nagłówek niesie liczbę pozycji, sumy wyceny i zakupu oraz plakietki trzech osi, więc sama lista gałęzi jest podsumowaniem zamówienia.
+- `ui-hook` `realization-open-group-sync` pilnuje, żeby otwarta gałąź istniała w tym, co zostawił filtr; gdy po zawężeniu zostaje JEDNA gałąź, otwiera się sama — inaczej wyszukiwarka zawężająca do jednej gałęzi pokazywałaby sam nagłówek. Zależnością jest PODPIS zestawu gałęzi, nie tablica `groups`: ta przelicza się przy każdej edycji wiersza i zamykałaby gałąź w trakcie pisania.
+- listwa domykająca pozycję (`realization-drawer-cap`) nie rysuje się na OSTATNIEJ pozycji gałęzi — tam domknięcie robi już listwa gałęzi, a dwie stykające się czytałyby się jak jedna gruba na 8 px zamiast jak dwa domknięcia.
+- kręgosłup na wierszu pozycji jest teraz bezwarunkowy: wiersz renderuje się wyłącznie wewnątrz otwartej gałęzi, więc należy do jej szuflady niezależnie od tego, czy sam jest rozwinięty.
+
+### słownik
+- usunięto `realization-collapsed-groups` — zbiór zwiniętych gałęzi zniknął razem z kodem
+- dodano `realization-open-group` — `ui-stan` `openGroupKey`, klucz otwartej gałęzi, `apps/frontend/src/components/shared/RealizationTab.jsx`
+- dodano `realization-open-group-sync` — `ui-hook` dopasowujący otwartą gałąź do wyniku filtra, `apps/frontend/src/components/shared/RealizationTab.jsx`
+- dodano `realization-group-cap` — `ui-wiersz` listwa domykająca szufladę gałęzi, `apps/frontend/src/components/shared/RealizationTab.jsx`
+
+### wytyczne
+- `ui-sekcja` szuflada — rozwinięcie na KAŻDYM poziomie tabeli (gałąź, pozycja) ma tę samą formę: płaszczyzna + kręgosłup + listwa domykająca. Poziom rozróżnia ZASIĘG, nie wygląd.
+- `ui-stan` akordeon — stan otwarcia trzymaj jako KLUCZ otwartego elementu, nie jako zbiór zamkniętych. Zbiór wymaga pilnowania niezmiennika „najwyżej jeden" przy każdym zapisie i rozjeżdża się, gdy element znika z widoku po filtrze.
+
 ## 2026-09-03 — „Odebrane" wprost w dropdownie osi wykonania
 
 ### architektura / API

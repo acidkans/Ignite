@@ -2,6 +2,7 @@ import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } fr
 import { Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, TYPE_OPTIONS, TYPE_LABELS, UNIT_OPTIONS, parseLocaleNumber, sanitizeQtyInput, evalQtyFormula } from './wbsConstants';
 import { offerLockInputProps } from '../OfferLockGuard';
+import FilterDropdown from './FilterDropdown';
 
 const TH_BASE = 'text-left px-3 py-2.5 text-[17px] font-bold uppercase tracking-widest text-white whitespace-normal break-words select-none relative align-bottom';
 const TD = 'px-2 py-1.5 align-top break-words';
@@ -58,46 +59,6 @@ function AutoTextarea({ defaultValue, onBlur, onFocus, onKeyDown, className, dat
             className={className}
             style={{ overflow: 'hidden', minHeight: '1.4em' }}
         />
-    );
-}
-
-// @anchor budget-filter-dropdown
-function FilterDropdown({ options, selected, onChange, labelFor }) {
-    const [open, setOpen] = useState(false);
-    const ref = useRef(null);
-    useEffect(() => {
-        if (!open) return;
-        const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-        document.addEventListener('mousedown', h);
-        return () => document.removeEventListener('mousedown', h);
-    }, [open]);
-    const toggle = (val) => onChange(selected.includes(val) ? selected.filter(v => v !== val) : [...selected, val]);
-    const summary = selected.length === 0 ? 'filtruj...' : `${selected.length} zazn.`;
-    return (
-        <div ref={ref} className="relative">
-            <button
-                type="button"
-                onClick={() => setOpen(o => !o)}
-                className={`${FILTER} text-left flex items-center justify-between ${selected.length ? 'text-white' : 'text-gray-700'}`}
-            >
-                <span className="truncate">{summary}</span>
-                <span className="ml-1 text-gray-500 shrink-0">▾</span>
-            </button>
-            {open && (
-                <div className="absolute left-0 top-full mt-1 z-30 min-w-full max-h-56 overflow-auto bg-[#0b0f17] border border-white/15 rounded shadow-xl py-1">
-                    {selected.length > 0 && (
-                        <button type="button" onClick={() => onChange([])} className="w-full text-left px-2 py-1 text-[11px] text-red-300/70 hover:bg-white/5">wyczyść</button>
-                    )}
-                    {options.length === 0 && <div className="px-2 py-1 text-[11px] text-gray-600">brak wartości</div>}
-                    {options.map(opt => (
-                        <label key={opt} className="flex items-center gap-2 px-2 py-1 text-xs text-white hover:bg-white/5 cursor-pointer">
-                            <input type="checkbox" checked={selected.includes(opt)} onChange={() => toggle(opt)} className="accent-blue-500" />
-                            <span className="truncate">{labelFor ? labelFor(opt) : opt}</span>
-                        </label>
-                    ))}
-                </div>
-            )}
-        </div>
     );
 }
 
