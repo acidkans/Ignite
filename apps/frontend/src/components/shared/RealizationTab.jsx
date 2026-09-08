@@ -8,6 +8,7 @@ import { API_URL } from '../../config';
 import SupplierPicker from './SupplierPicker';
 import { RequirementImageBox } from './wbs/WbsMaterialsPanel';
 import AutoResizeTextarea from './wbs/AutoResizeTextarea';
+import FilterDropdown from './wbs/FilterDropdown';
 import ProtokolOdbioruModal from './wbs/ProtokolOdbioruModal';
 import { fetchStatusOdbioru } from '../../utils/protokolOdbioruExport';
 import { sanitizeQtyInput, parsePriceInput, DRAWER, STRUCTURE_STATUS_META, statusMetaForType, statusOptionsForType, statusLabelForType, resolveStatusCode, usesWorkStatuses,
@@ -64,6 +65,19 @@ export const COL_DEFS = [
     { key: 'comment',       label: 'Komentarz',           defaultW: 200 },
     { key: 'actions',       label: 'Wpisy',               defaultW: 70,  align: 'right' },
 ];
+
+// @anchor realization-filter-cols — trzy rodzaje filtra kolumny, ten sam podział co w tabeli
+// Budżet (`BudgetTable`). Kolumna SŁOWNIKOWA (skończony zbiór wartości: gałąź, dostawca, trzy
+// osie statusu) dostaje wielowybór z polami wyboru — warunek OR wewnątrz kolumny, AND między
+// kolumnami. Kolumna WOLNOTEKSTOWA przyjmuje kilka fraz rozdzielonych `;` (też OR). Reszta —
+// kolumny liczbowe — zostaje przy dopasowaniu podciągu, bo zbiór ich wartości jest ciągły.
+export const DROPDOWN_FILTER_COLS = new Set(['parent', 'supplier', 'status', 'purchaseStatus', 'execStatus']);
+export const TEXT_FILTER_COLS = new Set(['name', 'product', 'doc', 'comment']);
+
+// @anchor realization-has-col-filter — czy filtr kolumny COKOLWIEK zawęża. Pusta tablica
+// wielowyboru jest w JS prawdziwa, więc gołe `if (val)` uznawałoby odznaczony dropdown
+// za aktywny filtr i tabela zostawałaby pusta.
+export const hasColFilter = (v) => (Array.isArray(v) ? v.length > 0 : String(v ?? '').trim() !== '');
 
 // @anchor realization-status-label — etykieta statusu liścia z jednego źródła
 // (`statusLabelForType` w wbsConstants, wspólnego z WBS i panelem Materiały). Jedna funkcja
@@ -332,9 +346,11 @@ export function RealizationRow({ node, card, realization, odbior, isExpanded, on
             {/* @anchor realization-add-button — rozwijanie i dopisywanie po LEWEJ, przy
                 pozycji: sam „+" wystarczy, bo etykieta i tak powtarzałaby się w każdym wierszu.
                 Tooltip niesie, czy to zakup czy wykonanie. */}
-            {/* Kręgosłup rozwiniętej pozycji biegnie przez wiersz i szufladę pod nim — tak samo
-                jak w panelu Materiały, tyle że w turkusie strony realizacji. */}
-            <td className={`px-1.5 py-2.5 whitespace-nowrap ${isExpanded ? `${DRAWER.spine} ${DRAWER.accent.real.spine}` : ''}`}>
+            {/* Kręgosłup biegnie przez CAŁĄ otwartą gałąź — nagłówek, wszystkie jej pozycje
+                i szuflady pod nimi — tak samo jak w drzewie WBS (`wbs-drawer`), tyle że
+                w turkusie strony realizacji. Wiersz pozycji renderuje się wyłącznie wewnątrz
+                otwartej gałęzi, więc kręgosłup jest tu bezwarunkowy. */}
+            <td className={`px-1.5 py-2.5 whitespace-nowrap ${DRAWER.spine} ${DRAWER.accent.real.spine}`}>
                 <button onClick={onToggle} title="Rozwiń wpisy i szczegóły pozycji"
                     className={`transition-colors align-middle ${isExpanded ? 'text-teal-300 hover:text-teal-200' : 'text-gray-600 hover:text-gray-300'}`}>
                     {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -579,13 +595,18 @@ export function RealizationRow({ node, card, realization, odbior, isExpanded, on
 // w stopce tabeli (`realization-totals`): po zawężeniu filtrem nagłówek ma mówić o tym,
 // na co się właśnie patrzy. Rozjazd między plakietką a wierszami pod nią czytałoby się
 // jak błąd danych, a nie jak inny zakres.
-export function RealizationGroupRow({ group, collapsed, onToggle }) {
+export function RealizationGroupRow({ group, open, onToggle }) {
     return (
-        <tr className="border-y border-white/10 bg-white/[0.04]">
-            <td className="px-1.5 py-2">
-                <button onClick={onToggle} title={collapsed ? 'Rozwiń gałąź' : 'Zwiń gałąź'}
-                    className="transition-colors align-middle text-gray-400 hover:text-teal-300">
-                    {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+        // Otwarta gałąź jest NAGŁÓWKIEM SZUFLADY — ta sama płaszczyzna (`DRAWER.surface`),
+        // ten sam kręgosłup przy lewej krawędzi i ta sama listwa domykająca co przy rozwiniętej
+        // pozycji, tyle że obejmuje całą gałąź. Zamknięta zostaje zwykłym paskiem nagłówka.
+        <tr className={open
+            ? `${DRAWER.surface} border-t border-teal-500/60`
+            : 'border-y border-white/10 bg-white/[0.04] hover:bg-white/[0.06] transition-colors'}>
+            <td className={`px-1.5 py-2 ${open ? `${DRAWER.spine} ${DRAWER.accent.real.spine}` : ''}`}>
+                <button onClick={onToggle} title={open ? 'Zwiń gałąź' : 'Rozwiń gałąź'}
+                    className={`transition-colors align-middle ${open ? 'text-teal-300 hover:text-teal-200' : 'text-gray-400 hover:text-teal-300'}`}>
+                    {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </button>
             </td>
             {COL_DEFS.map(c => {
@@ -1104,15 +1125,13 @@ export default function RealizationTab({
     // (`handedOverFromProtocol`). Odczyt pomocniczy: brak odpowiedzi zostawia pustą mapę,
     // czyli tabelę bez plakietek odbioru — a nie pustą tabelę.
     const [odbiorByRoot, setOdbiorByRoot] = useState({});
-    // @anchor realization-collapsed-groups — zwinięte gałęzie, po id węzła nadrzędnego.
-    // Zwijanie jest FOLDEM widoku, nie filtrem: stopka nadal sumuje pozycje z gałęzi zwiniętej,
-    // bo one wciąż należą do tego, co pokazuje filtr.
-    const [collapsedGroups, setCollapsedGroups] = useState(() => new Set());
-    const toggleGroup = useCallback((key) => setCollapsedGroups(prev => {
-        const next = new Set(prev);
-        if (next.has(key)) next.delete(key); else next.add(key);
-        return next;
-    }), []);
+    // @anchor realization-open-group — OTWARTA gałąź, po id węzła nadrzędnego. Naraz otwarta
+    // jest najwyżej jedna: trzymamy klucz otwartej, a nie zbiór zwiniętych, więc „jedna
+    // szuflada na raz" jest STANEM, a nie regułą pilnowaną przy każdym kliknięciu.
+    // Rozwijanie jest FOLDEM widoku, nie filtrem: stopka nadal sumuje pozycje z gałęzi
+    // zamkniętej, bo one wciąż należą do tego, co pokazuje filtr.
+    const [openGroupKey, setOpenGroupKey] = useState(null);
+    const toggleGroup = useCallback((key) => setOpenGroupKey(prev => (prev === key ? null : key)), []);
 
     const [sortConfig, setSortConfig] = useState({ key: 'parent', direction: 'asc' });
     const [colFilters, setColFilters] = useState({});
@@ -1419,6 +1438,29 @@ export default function RealizationTab({
         return u != null ? u * (Number(node.quantity) || 0) : 0;
     };
 
+    // @anchor realization-filter-options — wartości do wielowyboru, liczone z CAŁEJ tabeli,
+    // nie z wierszy po filtrze. Lista wyborów nie może się kurczyć w trakcie zaznaczania:
+    // gdyby liczyła się z wyniku, po zaznaczeniu „Zamówione" zniknęłyby z listy wszystkie
+    // pozostałe statusy i nie dałoby się dobrać drugiego.
+    const filterOptions = useMemo(() => {
+        const parent = new Set(), supplier = new Set(), status = new Set(), purchase = new Set(), exec = new Set();
+        for (const node of leaves) {
+            const p = getParentPath(node.path); if (p) parent.add(p);
+            const st = statusLabel(node); if (st) status.add(st);
+            const ps = purchaseStatusLabel(node); if (ps) purchase.add(ps);
+            const es = execStatusLabelOf(node, odbiorByRoot[wbsRootOf(node)]); if (es) exec.add(es);
+            for (const e of actualsByRoot[wbsRootOf(node)] || []) if (e.supplier?.name) supplier.add(e.supplier.name);
+        }
+        const posortowane = (s) => [...s].sort((a, b) => a.localeCompare(b, 'pl'));
+        return {
+            parent: posortowane(parent),
+            supplier: posortowane(supplier),
+            status: posortowane(status),
+            purchaseStatus: posortowane(purchase),
+            execStatus: posortowane(exec),
+        };
+    }, [leaves, actualsByRoot, odbiorByRoot]);
+
     // @anchor realization-rows — liście z policzoną realizacją, przefiltrowane wyszukiwarką
     // nagłówka strony (`searchQuery`) i filtrami kolumn, na końcu posortowane. Wyszukiwarka
     // sięga tam, gdzie realnie się szuka: nazwa, ścieżka, typ, produkt, dostawca i numer
@@ -1457,10 +1499,27 @@ export default function RealizationTab({
             );
         }
 
+        // @anchor realization-col-filter-apply — wielowybór kolumny słownikowej dopasowuje
+        // WARTOŚĆ, nie podciąg: „Zamówione" nie może łapać się na „Nie zamówione", a wybór
+        // gałęzi „Kamery" na „Kamery zewnętrzne". Kolumna wolnotekstowa dzieli wpis na frazy
+        // po `;` i sprawdza je na OR — tak samo jak filtry tekstowe w tabeli Budżet.
         for (const [key, val] of Object.entries(colFilters)) {
-            if (!val) continue;
-            const q = val.toLowerCase();
-            list = list.filter(({ node, card, realization }) => {
+            if (!hasColFilter(val)) continue;
+
+            if (Array.isArray(val)) {
+                const wanted = new Set(val);
+                list = list.filter(({ node, realization }) => {
+                    if (key === 'parent')         return wanted.has(getParentPath(node.path));
+                    if (key === 'supplier')       return realization.entries.some(e => wanted.has(e.supplier?.name || ''));
+                    if (key === 'status')         return wanted.has(statusLabel(node));
+                    if (key === 'purchaseStatus') return wanted.has(purchaseStatusLabel(node));
+                    if (key === 'execStatus')     return wanted.has(execStatusLabelOf(node, odbiorByRoot[wbsRootOf(node)]));
+                    return true;
+                });
+                continue;
+            }
+
+            const matchOne = ({ node, card, realization }, q) => {
                 if (key === 'parent')        return matchTokens(getParentPath(node.path), q);
                 // Producent wpisu stoi w tej kolumnie razem z nazwą pozycji, więc filtr musi
                 // trafiać w oba — patrz `realization-entry-line-manufacturer`.
@@ -1484,7 +1543,14 @@ export default function RealizationTab({
                 if (key === 'comment')       return (node.comment || '').toLowerCase().includes(q);
                 if (key === 'actions')       return String(realization.entries.length).includes(q);
                 return true;
-            });
+            };
+
+            const q = String(val).toLowerCase();
+            const terms = TEXT_FILTER_COLS.has(key)
+                ? q.split(';').map(t => t.trim()).filter(Boolean)
+                : [q];
+            if (terms.length === 0) continue;
+            list = list.filter(row => terms.some(t => matchOne(row, t)));
         }
 
         list.sort((a, b) => {
@@ -1558,6 +1624,21 @@ export default function RealizationTab({
             };
         });
     }, [rows, nodeById, odbiorByRoot]);
+
+    // @anchor realization-open-group-sync — otwarta gałąź musi istnieć w tym, na co się patrzy.
+    // Po zawężeniu filtru klucz sprzed filtrowania wskazywałby na gałąź, której już nie ma,
+    // i widok zostawałby bez ani jednej otwartej szuflady. Gdy po filtrze zostaje JEDNA gałąź,
+    // otwiera się sama — nie ma między czym wybierać, a wyszukiwarka pokazywałaby sam nagłówek.
+    // Zależność to PODPIS zestawu gałęzi, nie sama tablica: `groups` przelicza się przy każdej
+    // edycji wiersza, a otwarcia nie wolno wtedy ruszać (użytkownik mógł gałąź świadomie zamknąć).
+    const groupKeysSig = groups.map(g => g.key).join('|');
+    useEffect(() => {
+        setOpenGroupKey(prev => {
+            if (prev && groups.some(g => g.key === prev)) return prev;
+            return groups.length === 1 ? groups[0].key : null;
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [groupKeysSig]);
 
     // @anchor realization-totals — sumy z WIDOCZNYCH wierszy, nie z całego zamówienia:
     // po zawężeniu filtrem stopka ma mówić o tym, na co się właśnie patrzy.
@@ -1842,7 +1923,10 @@ export default function RealizationTab({
                 { header: '', key: 'f', width: 18 },
             ];
             const naglowek = (t) => { const r = ps.addRow({ a: t }); r.font = { bold: true }; return r; };
-            const filtry = Object.entries(colFilters).filter(([, v]) => v).map(([k, v]) => `${COL_DEFS.find(c => c.key === k)?.label || k}: ${v}`);
+            // Wielowybór wpisuje się do arkusza jako lista przez „lub" — arkusz ma powiedzieć,
+            // CO było zaznaczone, a nie że filtr w ogóle istniał.
+            const filtry = Object.entries(colFilters).filter(([, v]) => hasColFilter(v))
+                .map(([k, v]) => `${COL_DEFS.find(c => c.key === k)?.label || k}: ${Array.isArray(v) ? v.join(' lub ') : v}`);
 
             // Excel NIE dopasowuje wysokości wiersza, w którym jest scalona komórka — trzeba ją
             // policzyć samemu, inaczej dłuższy tekst urywa się w połowie zdania. Nominalna
@@ -2196,12 +2280,17 @@ export default function RealizationTab({
                             <tr className="border-b border-white/10 bg-gray-950">
                                 <th className="bg-gray-950" />
                                 {COL_DEFS.map(c => (
-                                    <th key={c.key} className={`px-3 py-2 ${c.align === 'right' ? 'text-right' : 'text-left'} bg-gray-950 select-none relative`}>
+                                    // @anchor realization-header-wrap — nagłówek ZAWIJA się na kolejne wiersze
+                                    // zamiast urywać nazwę wielokropkiem. Kolumny są wąskie i zmieniane suwakiem,
+                                    // więc „Koszt jedn. wyce…" i „Koszt jedn. zaku…" wyglądały identycznie i nie
+                                    // dało się poznać, która jest która. `align-bottom` trzyma wszystkie napisy
+                                    // przy dolnej krawędzi, więc wiersz nagłówka nie faluje.
+                                    <th key={c.key} className={`px-3 py-2 align-bottom ${c.align === 'right' ? 'text-right' : 'text-left'} bg-gray-950 select-none relative`}>
                                         <button
                                             onClick={() => toggleSort(c.key)}
-                                            className={`inline-flex items-center gap-1 text-base font-bold uppercase tracking-widest text-white hover:text-gray-200 transition-colors w-full ${c.align === 'right' ? 'justify-end' : ''}`}
+                                            className="flex items-start gap-1 w-full text-base font-bold uppercase tracking-widest text-white hover:text-gray-200 transition-colors"
                                         >
-                                            <span className="truncate">{c.label}</span>
+                                            <span className={`min-w-0 flex-1 whitespace-normal break-words ${c.align === 'right' ? 'text-right' : 'text-left'}`}>{c.label}</span>
                                             <span className={sortConfig.key === c.key ? 'text-teal-400 flex-shrink-0' : 'text-gray-600 flex-shrink-0'}>
                                                 {sortConfig.key === c.key ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⬍'}
                                             </span>
@@ -2217,12 +2306,21 @@ export default function RealizationTab({
                                 <th className="bg-gray-950" />
                                 {COL_DEFS.map(c => (
                                     <th key={c.key} className="px-2 py-1 bg-gray-950">
-                                        <input
-                                            value={colFilters[c.key] || ''}
-                                            onChange={e => setColFilters(p => ({ ...p, [c.key]: e.target.value }))}
-                                            placeholder="filtruj..."
-                                            className="w-full bg-black/30 border border-white/10 rounded px-2 py-0.5 text-[10px] text-white placeholder-gray-700 outline-none focus:border-teal-500/40"
-                                        />
+                                        {DROPDOWN_FILTER_COLS.has(c.key) ? (
+                                            <FilterDropdown
+                                                accent="teal"
+                                                options={filterOptions[c.key] || []}
+                                                selected={Array.isArray(colFilters[c.key]) ? colFilters[c.key] : []}
+                                                onChange={vals => setColFilters(p => ({ ...p, [c.key]: vals }))}
+                                            />
+                                        ) : (
+                                            <input
+                                                value={typeof colFilters[c.key] === 'string' ? colFilters[c.key] : ''}
+                                                onChange={e => setColFilters(p => ({ ...p, [c.key]: e.target.value }))}
+                                                placeholder={TEXT_FILTER_COLS.has(c.key) ? 'szukaj; lub; wiele' : 'filtruj...'}
+                                                className="w-full bg-black/30 border border-white/10 rounded px-2 py-0.5 text-[10px] text-white placeholder-gray-700 outline-none focus:border-teal-500/40"
+                                            />
+                                        )}
                                     </th>
                                 ))}
                             </tr>
@@ -2238,7 +2336,7 @@ export default function RealizationTab({
                                             <AlertCircle size={28} className="text-gray-600" />
                                             <p className="text-sm">Brak pozycji pasujących do filtra.</p>
                                             <div className="flex items-center gap-2">
-                                                {Object.values(colFilters).some(Boolean) && (
+                                                {Object.values(colFilters).some(hasColFilter) && (
                                                     <button
                                                         onClick={() => setColFilters({})}
                                                         className="px-2.5 py-1 rounded border border-teal-500/25 bg-teal-500/10 text-teal-300 text-[10px] font-bold uppercase tracking-wider hover:bg-teal-500/20 transition-colors">
@@ -2255,15 +2353,18 @@ export default function RealizationTab({
                                     </td>
                                 </tr>
                             )}
-                            {groups.map(group => (
+                            {groups.map(group => {
+                              const groupOpen = openGroupKey === group.key;
+                              return (
                               <React.Fragment key={`grp-${group.key}`}>
                                 <RealizationGroupRow
                                     group={group}
-                                    collapsed={collapsedGroups.has(group.key)}
+                                    open={groupOpen}
                                     onToggle={() => toggleGroup(group.key)}
                                 />
-                                {!collapsedGroups.has(group.key) && group.rows.map(({ node, card, realization }) => {
+                                {groupOpen && group.rows.map(({ node, card, realization }, rowIdx) => {
                                 const isExpanded = expandedId === node.id;
+                                const isLastInGroup = rowIdx === group.rows.length - 1;
                                 const hasCard = TYPE_META[node.type]?.hasCard !== false;
                                 const remaining = Math.round((realization.plan - realization.qty) * 1000) / 1000;
                                 return (
@@ -2331,8 +2432,11 @@ export default function RealizationTab({
                                         {/* @anchor realization-drawer-cap — domknięcie szuflady: listwa tej samej
                                             grubości co kręgosłup, zawsze ostatnia w fragmencie, więc nie zależy od
                                             tego, które kawałki (panel, wpisy, formularz) akurat się pokazały.
-                                            Ten sam zabieg co `materials-group-cap` w panelu Materiały. */}
-                                        {isExpanded && (
+                                            Ten sam zabieg co `materials-group-cap` w panelu Materiały.
+                                            Na OSTATNIEJ pozycji gałęzi listwę rysuje już domknięcie gałęzi
+                                            (`realization-group-cap`) — dwie stykające się listwy czytałyby się
+                                            jak jedna gruba na 8 px, a nie jak dwa domknięcia. */}
+                                        {isExpanded && !isLastInGroup && (
                                             <tr aria-hidden="true">
                                                 <td colSpan={COL_DEFS.length + 1} className={`${DRAWER.cap} ${DRAWER.accent.real.cap}`} />
                                             </tr>
@@ -2340,8 +2444,17 @@ export default function RealizationTab({
                                     </React.Fragment>
                                 );
                             })}
+                                {/* @anchor realization-group-cap — domknięcie szuflady GAŁĘZI. Ta sama listwa
+                                    co pod rozwiniętą pozycją: widać, gdzie otwarta gałąź się kończy, i nie da
+                                    się jej pomylić z nagłówkiem następnej. */}
+                                {groupOpen && (
+                                    <tr aria-hidden="true">
+                                        <td colSpan={COL_DEFS.length + 1} className={`${DRAWER.cap} ${DRAWER.accent.real.cap}`} />
+                                    </tr>
+                                )}
                               </React.Fragment>
-                            ))}
+                              );
+                            })}
                         </tbody>
                         {/* @anchor realization-totals-row — podsumowanie kosztów całkowitych wyceny
                             i zakupów dla wszystkich widocznych wierszy; przyklejone do dołu, żeby
