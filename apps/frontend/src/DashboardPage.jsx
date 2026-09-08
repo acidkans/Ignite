@@ -7,6 +7,7 @@ import NodeInfoTab from './components/shared/NodeInfoTab';
 import SchematTab from './components/shared/SchematTab';
 import LogistykaMaterialListsTab from './components/shared/LogistykaMaterialListsTab';
 import RealizationTab from './components/shared/RealizationTab';
+import RealizationNewTab from './components/shared/RealizationNewTab';
 import MaterialDatabaseTab from './components/shared/MaterialDatabaseTab';
 import OffersTab from './components/shared/OffersTab';
 import UnifiedWbsPanel from './components/shared/wbs/UnifiedWbsPanel';
@@ -60,9 +61,16 @@ function decodeToken() {
         const token = sessionStorage.getItem('token');
         if (!token) return {};
         const p = JSON.parse(atob(token.split('.')[1]));
-        return { userId: p.sub, roles: p.roles || [] };
+        return { userId: p.sub, roles: p.roles || [], email: p.email || '' };
     } catch { return {}; }
 }
+
+// @anchor realization-new-preview-emails — zakładka „Realizacja_new" to prototyp nowego układu
+// realizacji wpuszczony do aplikacji na żywych danych. Widzi go WYŁĄCZNIE ten adres, dopóki
+// układ nie zostanie porównany z dzisiejszą zakładką i przyjęty. Gate po e-mailu, nie po roli:
+// to nie jest uprawnienie, tylko podgląd jednej osoby — rola ADMIN ma go nie otwierać nikomu
+// innemu.
+const REALIZATION_NEW_PREVIEW_EMAILS = ['andrzej@gigatel.app'];
 
 export default function DashboardPage() {
     const context = useOutletContext();
@@ -76,7 +84,8 @@ export default function DashboardPage() {
     const contextPendingSectionRef = context?.pendingSectionRef;
     const refreshTree = context?.refreshTree;
 
-    const { userId: currentUserId, roles: currentRoles = [] } = useMemo(() => decodeToken() || {}, []); // eslint-disable-line react-hooks/exhaustive-deps
+    const { userId: currentUserId, roles: currentRoles = [], email: currentEmail = '' } = useMemo(() => decodeToken() || {}, []); // eslint-disable-line react-hooks/exhaustive-deps
+    const canSeeRealizationNew = REALIZATION_NEW_PREVIEW_EMAILS.includes(String(currentEmail).toLowerCase());
     const isWorker = currentRoles.includes('USER') && !currentRoles.some(r => ['ADMIN', 'MANAGER', 'LOGISTYK'].includes(r));
     const isLogistyk = currentRoles.includes('LOGISTYK');
     const isManagerOrAdmin = currentRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
@@ -91,7 +100,7 @@ export default function DashboardPage() {
         _setActiveTab(tab);
     };
     const [tabOrder, setTabOrder] = useState(() => {
-        const ALL_TABS = ['files', 'financialFiles', 'unified', 'realization', 'schematics', 'materialDatabase'];
+        const ALL_TABS = ['files', 'financialFiles', 'unified', 'realization', 'realizationNew', 'schematics', 'materialDatabase'];
         try {
             const saved = JSON.parse(localStorage.getItem('tabOrder') || 'null');
             if (!saved) return ALL_TABS;
@@ -529,12 +538,35 @@ export default function DashboardPage() {
     };
 
     const currentVersion = versions.find(v => v.id === selectedVersionId);
+
+    // @anchor realization-baseline-version — wersja, z której Realizacja czyta KOSZTY JEDNOSTKOWE
+    // i ILOŚCI planu. To NIE jest `selectedVersionId`: realizacja rozlicza się wobec zakresu
+    // ZAAKCEPTOWANEGO przez klienta, więc przeglądanie starych snapszotów w nagłówku nie może
+    // zmieniać liczb, wobec których liczone są zakupy. Kolejność:
+    //   1) baseline (`ProcessNode.acceptedVersionId`) — zaakceptowana oferta,
+    //   2) aktywny snapszot (`ProjectVersion.isActive`) — gdy zamówienie nie ma jeszcze baselinu.
+    // Wpisy realizacji (`LeafActual`) wiszą po `wbsRootId`, czyli poza wersją, więc zmiana
+    // źródła planu nie rusza ani jednego zakupu.
+    const realizationVersion = useMemo(() => {
+        const baseline = versions.find(v => v.id === acceptance?.acceptedVersionId);
+        if (baseline) return { ...baseline, source: 'baseline' };
+        const active = versions.find(v => v.isActive);
+        return active ? { ...active, source: 'active' } : null;
+    }, [versions, acceptance?.acceptedVersionId]);
+    const realizationVersionId = realizationVersion?.id ?? null;
+    const realizationPlanLabel = realizationVersion
+        ? (realizationVersion.source === 'baseline'
+            ? `Plan z baselinu: ${realizationVersion.label || 'zaakceptowana wersja'}`
+            : `Brak baselinu — plan z aktywnego snapszotu: ${realizationVersion.label || 'aktywna wersja'}`)
+        : '';
     // @anchor is-inactive-snapshot — czy oglądany snapszot NIE jest aktywny (blokada edycji z ostrzeżeniem)
     const isInactiveSnapshot = !!currentVersion && currentVersion.isActive === false;
     // @anchor dashboard-content-ref — kontener treści zakładek, do capture-guardu edycji snapszota
     const contentRef = useRef(null);
 
-    const showSearch = activeTab !== 'requirements';
+    // „Realizacja_new" nie konsumuje jeszcze `searchQuery` — wyszukiwarka i filtry kolumn są
+    // otwartą częścią projektu tego układu. Pole, które nic nie robi, kłamałoby, więc go tu nie ma.
+    const showSearch = activeTab !== 'requirements' && activeTab !== 'realizationNew';
     const searchPlaceholder = activeTab === 'unified'
         ? 'Szukaj w strukturze, budżecie, materiałach…'
         : activeTab === 'materialDatabase'
@@ -954,6 +986,11 @@ export default function DashboardPage() {
                         realization: baselineAccepted
                             ? { label: 'Realizacja', color: 'orange', activeColor: 'text-orange-400', idleColor: 'text-orange-400/60 hover:text-orange-300', bar: 'bg-orange-500', shadow: '249,115,22', cond: isOrder && !isWorker }
                             : { label: 'Realizacja', color: 'teal',   activeColor: 'text-teal-400',   bar: 'bg-teal-500',   shadow: '20,184,166', cond: isOrder && !isWorker },
+                        // @anchor tab-realization-new — prototyp nowego układu Realizacji (trzy panele,
+                        // 13 kolumn, szuflada zakupów) na żywych danych, WYŁĄCZNIE do odczytu. Stoi obok
+                        // dzisiejszej zakładki, żeby dało się porównać oba układy na tym samym zamówieniu.
+                        // Widoczny tylko dla `REALIZATION_NEW_PREVIEW_EMAILS`.
+                        realizationNew:  { label: 'Realizacja_new',   color: 'fuchsia', activeColor: 'text-fuchsia-400', idleColor: 'text-fuchsia-400/50 hover:text-fuchsia-300', bar: 'bg-fuchsia-500', shadow: '217,70,239', cond: isOrder && canSeeRealizationNew },
                         schematics:      { label: 'Schemat',          color: 'orange', activeColor: 'text-orange-400', bar: 'bg-orange-500', shadow: '249,115,22',  cond: isOrder },
                         materialDatabase:{ label: 'Baza Materiałów',  color: 'purple', activeColor: 'text-purple-400', bar: 'bg-purple-500', shadow: '168,85,247',  cond: isOrder },
                     };
@@ -1056,12 +1093,27 @@ export default function DashboardPage() {
                         {activeTab === 'realization' && isOrder && (
                             <div className="absolute inset-0 overflow-hidden">
                                 <RealizationTab
-                                    key={`realization-${activeAreaId}-${selectedVersionId}`}
+                                    key={`realization-${activeAreaId}-${realizationVersionId}`}
                                     nodeId={activeAreaId}
-                                    versionId={selectedVersionId}
+                                    versionId={realizationVersionId}
+                                    planLabel={realizationPlanLabel}
                                     searchQuery={searchQuery}
                                     userRoles={currentRoles}
                                     orderName={activeNode?.name || ''}
+                                    accepted={baselineAccepted}
+                                    oneDriveFolderName={activeNode?.oneDriveFolderName || null}
+                                />
+                            </div>
+                        )}
+                        {activeTab === 'realizationNew' && isOrder && canSeeRealizationNew && (
+                            <div className="absolute inset-0 overflow-hidden">
+                                <RealizationNewTab
+                                    key={`realizationNew-${activeAreaId}-${realizationVersionId}`}
+                                    nodeId={activeAreaId}
+                                    versionId={realizationVersionId}
+                                    planLabel={realizationPlanLabel}
+                                    orderName={activeNode?.name || ''}
+                                    userRoles={currentRoles}
                                     accepted={baselineAccepted}
                                     oneDriveFolderName={activeNode?.oneDriveFolderName || null}
                                 />
@@ -1239,8 +1291,11 @@ export default function DashboardPage() {
         )}
 
         {/* Guard edycji nieaktywnego snapszota — capture-guard pól + modal potwierdzenia */}
+        {/* Zakładki realizacji NIE czytają wybranego snapszotu, tylko baseline (patrz
+            `realization-baseline-version`), więc wybranie starej wersji w nagłówku nie ma
+            czego na nich blokować — dane pod spodem i tak są z baselinu. */}
         <SnapshotEditGuard
-            inactive={isInactiveSnapshot}
+            inactive={isInactiveSnapshot && activeTab !== 'realization' && activeTab !== 'realizationNew'}
             versionLabel={currentVersion?.label}
             containerRef={contentRef}
         />

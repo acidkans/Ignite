@@ -1595,7 +1595,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | getParentPath | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-get-parent-path |
 | ui-funkcja | leafNodesOf (liście kosztowe po typie) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-leaf-nodes-of |
 | ui-funkcja | buildCardMap (dopasowanie liść↔wymaganie) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-resolve-card |
-| ui-funkcja | planUnitOf (koszt jedn. z wyceny) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-plan-unit-of |
+| ui-funkcja | planUnitOf (koszt jedn. planu — unitCost przed kartą) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-plan-unit-of |
 
 #### Zakładka (`apps/frontend/src/components/shared/RealizationTab.jsx`)
 
@@ -1607,7 +1607,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | COL_DEFS (kolumny tabeli realizacji) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-col-defs |
 | ui-kolumna | Koszt całkowity (wycena / zakup / Δ) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-total-col |
 | ui-kolumna | Produkt / zakres | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-product-col |
-| ui-funkcja | exportExcel (widok + podsumowanie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-excel |
+| ui-funkcja | eksportRealizacjiXlsx (widok + podsumowanie, wspólny dla obu zakładek) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-excel |
+| ui-funkcja | exportExcel (stan „eksportuję…" i komunikat o błędzie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-excel-call |
 | ui-funkcja | arkusz „Zakupy" w eksporcie Excel (wpisy zakupu + wymaganie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchases |
 | ui-kolumna | Cena ofertowa vs cena zakupu (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchase-vs-offer |
 | ui-kolumna | trzy osie statusu w arkuszu „Realizacja" | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-status-cols |
@@ -1621,8 +1622,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-kolumna | Komentarz (WbsNode.comment) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-comment-col |
 | ui-stan | commentVal (bufor komentarza wiersza) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-comment |
 | ui-funkcja | saveComment (PATCH + rozgłoszenie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-save-comment |
-| ui-funkcja | focusNextInRow (Enter → następne okno) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-enter-next-field |
-| ui-funkcja | selectAllOnFocus (focus zaznacza całą treść pola) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-select-all-on-focus |
+| ui-funkcja | focusNextInRow (Enter → następne okno) | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor realization-enter-next-field |
+| ui-funkcja | selectAllOnFocus (focus zaznacza całą treść pola) | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor realization-select-all-on-focus |
 | ui-funkcja | setClosed (znacznik „rozliczone" na pozycji) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-set-closed |
 | ui-funkcja | deleteActual — ostatni wpis zdejmuje „rozliczone" | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-reopen-on-empty |
 | ui-funkcja | reguła kolumny „Δ ilość" (test) | test/test-realization-close-delete.mjs | @anchor realization-delta-qty-rule |
@@ -1664,10 +1665,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | brakujace (puste pola wymagane przy zapisie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-missing |
 | ui-funkcja | waliduj (cena, producent, model / zakres) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-validate |
 | ui-stala | BRAK_ETYKIETY (nazwy pól w komunikacie „Uzupełnij lub popraw: …") | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-missing-labels |
-| ui-stala | NUMERIC_ENTRY_FIELDS (pola wpisu niosące liczbę: qty, unitCost) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-numeric-fields |
-| ui-funkcja | resolveEntryNumber (działanie „=4,3*220" → 946 przed zapisem) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-formula |
-| ui-stala | FORMULA_HINT (dymek „można wpisać działanie") | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-formula-hint |
-| ui-funkcja | growsWithText (pole tekstowe wpisu rośnie z treścią) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-growing-fields |
+| ui-stala | NUMERIC_ENTRY_FIELDS (pola wpisu niosące liczbę: qty, unitCost) | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor realization-entry-numeric-fields |
+| ui-funkcja | resolveEntryNumber (działanie „=4,3*220" → 946 przed zapisem) | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor realization-entry-formula |
+| ui-stala | FORMULA_HINT (dymek „można wpisać działanie") | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor realization-formula-hint |
+| ui-funkcja | growsWithText (pole tekstowe wpisu rośnie z treścią) | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor realization-entry-growing-fields |
 | ui-kolumna | dostawcy pozycji — lista, nie skrót „+N" | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-suppliers |
 | ui-wiersz | listwa domykająca szufladę rozwiniętej pozycji | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-drawer-cap |
 | ui-wiersz | listwa domykająca szufladę gałęzi | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-group-cap |
@@ -1684,9 +1685,56 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | fetchActuals | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-fetch-actuals |
 | ui-funkcja | refreshCard | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-refresh-card |
 | ui-stan | rows (liście + realizacja po filtrach) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-rows |
-| ui-stan | totals (sumy widocznych wierszy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-totals |
-| ui-stan | analiza (odchylenia i prognoza per rodzaj kosztów) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-analysis |
+| ui-funkcja | liczTotals (sumy widocznych wierszy — nagłówek i eksport) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-totals |
+| ui-funkcja | liczAnalize (odchylenia i prognoza per rodzaj kosztów) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-analysis |
 | ui-stala | PROG_MIN_UDZIAL (próg wiarygodności prognozy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-forecast-min-share |
+
+#### Zakładka „Realizacja_new" (`apps/frontend/src/components/shared/RealizationNewTab.jsx`)
+
+Prototyp nowego układu Realizacji (trzy panele) na żywych danych, wyłącznie do odczytu.
+Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
+
+| Tag | Nazwa | Ścieżka | Anchor |
+|-----|-------|---------|--------|
+| ui-funkcja | cardOwnedByNode (czy karta należy do liścia) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-card-tag-owned |
+| ui-zakladka | RealizationNewTab | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-tab |
+| ui-stala | realizationVersionId (baseline → aktywny snapszot) | apps/frontend/src/DashboardPage.jsx | @anchor realization-baseline-version |
+| ui-propsy | planLabel (podpis źródła planu w nagłówku) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-plan-label |
+| ui-zakladka | zakładka „Realizacja_new" w TAB_META | apps/frontend/src/DashboardPage.jsx | @anchor tab-realization-new |
+| ui-stala | REALIZATION_NEW_PREVIEW_EMAILS (gate po e-mailu) | apps/frontend/src/DashboardPage.jsx | @anchor realization-new-preview-emails |
+| ui-stala | SYNTHETIC_ROOT (syntetyczny korzeń drzewa gałęzi) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-synthetic-root |
+| ui-stala | REALIZATION_NEW_COLS (13 kolumn tabeli pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-cols |
+| ui-stala | STAGE_META (cztery etapy osi realizacji, rampa porządkowa) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-stages |
+| ui-funkcja | planValueOf (wartość pozycji po stronie wyceny) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-plan-value |
+| ui-funkcja | buildBranchIndex (branchId — najbliższa gałąź w górę) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-branch-index |
+| ui-funkcja | axisStageOf (stan pozycji na osi) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-axis-stage |
+| ui-funkcja | axisDisplay (etykieta osi: bramka albo status) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-axis-display |
+| ui-funkcja | rowOf (komplet liczb jednej pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-row-of |
+| ui-panel | BranchTree (panel 1 — gałęzie zamówienia) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-branch-tree |
+| ui-tabela | PositionsTable (panel 2 — pozycje i zakupy) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-positions-table |
+| ui-funkcja | Cell (komórka wiersza pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-cell |
+| ui-sekcja | PurchaseDrawer (szuflada zakupów, kolumny LeafActual) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-purchase-drawer |
+| ui-panel | LeafCard (panel 3 — karta pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-leaf-card |
+| ui-sekcja | Analiza (kafle, mierniki, rozbicie na zakresy) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-analiza |
+| ui-stala | ZAMKNIECIE_CUTS (przekroje osi wykonania „to już za nami") | apps/frontend/src/components/shared/wbs/realizationBilans.js | @anchor realization-zamkniete-cuts |
+| ui-funkcja | wRealizacjiTest (pozycje, przy których praca trwa) | apps/frontend/src/components/shared/wbs/realizationBilans.js | @anchor realization-w-realizacji |
+| ui-funkcja | liczBilansWykonania (podział zamówienia wg statusu wykonania) | apps/frontend/src/components/shared/wbs/realizationBilans.js | @anchor realization-bilans-wykonania |
+| ui-tabela | BilansZamkniete (bilans kwotowy pozycji domkniętych) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-bilans-zamkniete |
+| ui-funkcja | fetchActuals (przeładowanie samych wpisów po zapisie) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-fetch-actuals |
+| ui-funkcja | saveComment (WbsNode.comment + wbs-comment-changed) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-save-comment |
+| ui-funkcja | saveAxis (osie realizacji, cofnięcie zakupu cofa wykonanie) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-save-axis |
+| ui-funkcja | addActual (nowy wpis LeafActual) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-add-actual |
+| ui-funkcja | setClosed (znacznik „rozliczone" na pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-set-closed |
+| ui-dropdown | AxisSelect (oś realizacji jako select, bramka jako plakietka) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-axis-select |
+| ui-input | CommentCell (komentarz pozycji edytowalny w miejscu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-comment-cell |
+| ui-funkcja | entryField (jedno pole wpisu LeafActual) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-field |
+| ui-stan | exportRows (wiersze widoczne — dla eksportu i protokołu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-export-rows |
+| ui-stala | FIELD_FONT / ENTRY_INPUT_LG (pola zakładki o 4px większe) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-field-font |
+| ui-stala | NEW_DROPDOWN_FILTER_COLS / NEW_TEXT_FILTER_COLS + filterValuesOf, filterTextOf | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-col-filters |
+| ui-wiersz | wiersz filtrów w nagłówku tabeli pozycji | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-filter-row |
+| ui-wiersz | EntryRow (zapisany wpis, edycja w miejscu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-row |
+| ui-formularz | EntryForm (nowy wpis jako ostatni wiersz szuflady) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-form |
+| ui-stala | ENTRY_INPUT (wygląd pola wpisu, wspólny dla obu zakładek) | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor entry-input-class |
 
 ### Moduł tryby Budżetu — baseline / wykonanie / porównanie (Faza 7)
 

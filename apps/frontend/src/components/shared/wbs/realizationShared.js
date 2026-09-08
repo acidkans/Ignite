@@ -102,10 +102,26 @@ export function flattenReq(r) {
     };
 }
 
+// @anchor realization-card-tag-owned — czy karta wskazana tagiem `req:<id>` NALEŻY do tego
+// liścia. Tag bywa nieaktualny: kopiowanie pozycji i automatyczne zakładanie kart
+// (`auto-requirement`) zostawiają na węźle wskaźnik do karty INNEGO węzła o tej samej nazwie.
+// Karta jest „własna", gdy nie jest przypisana do żadnego węzła, albo gdy wskazuje na ten
+// (bezpośrednio lub przez `sourceWbsNodeId`, bo w wersji liść ma sklonowane ID).
+const cardOwnedByNode = (req, node) =>
+    !!req && (!req.wbsNodeId || req.wbsNodeId === node.id || req.wbsNodeId === node.sourceWbsNodeId);
+
 // @anchor realization-resolve-card — dopasowanie liść↔wymaganie materiałowe. Ta sama
 // kolejność co w `WbsMaterialsPanel.fetchCards` i `MaterialReqExpandPanel`: 1) tag `req:<id>`,
 // 2) `wbsNodeId`, 3) fallback po nazwie (węzły snapshot mają sklonowane ID). Bez wspólnej
 // kolejności dwa widoki pokazywały różne materiały dla tego samego liścia.
+//
+// Tag `req:` ustępuje karcie, która JAWNIE należy do tego liścia (`wbsNodeId === node.id`).
+// Powód jest z danych: w zamówieniu „CMC- Serwerownia ZDC1-K9_2026" 12 z 18 liści z takim
+// tagiem wskazywało kartę innego węzła. Na jedenastu ceny akurat się zgadzały i nic nie było
+// widać, ale liść „Bypass" brał przez tag cenę 2,00 zł zamiast własnych 8000,00 zł i cała
+// zakładka Realizacja pokazywała wycenę o 7998,00 zł niższą niż Budżet — dwa ekrany, dwie
+// liczby, żadnego ostrzeżenia. Gdy NIC nie przypisuje się do liścia wprost, tag nadal wygrywa:
+// dla snapszotów bywa jedynym wiązaniem, jakie zostało.
 export function buildCardMap(nodes, reqs) {
     const reqById = Object.fromEntries((reqs || []).map(r => [r.id, r]));
     const reqByWbsNodeId = {};
@@ -118,9 +134,12 @@ export function buildCardMap(nodes, reqs) {
     for (const node of nodes || []) {
         if (!TYPE_META[node.type]?.hasCard) continue;
         const reqTag = (node.tags || []).find(t => typeof t === 'string' && t.startsWith('req:'));
+        const tagged = reqTag ? reqById[reqTag.slice(4)] : null;
+        const own = reqByWbsNodeId[node.id] || reqByWbsNodeId[node.sourceWbsNodeId] || null;
         const req =
-            (reqTag && reqById[reqTag.slice(4)]) ||
-            reqByWbsNodeId[node.id] ||
+            (cardOwnedByNode(tagged, node) ? tagged : null) ||
+            own ||
+            tagged ||
             reqByName[String(node.name || '').trim().toLowerCase()] ||
             null;
         if (req) map[node.id] = flattenReq(req);
@@ -157,9 +176,27 @@ export const fmtQty = (v) => {
 export const fmtZl = (v) => v == null ? '—' : Number(v).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const fmtDate = (d) => { try { return new Date(d).toISOString().slice(0, 10); } catch { return ''; } };
 
-// @anchor realization-plan-unit-of — koszt jedn. z wyceny: materiał i sprzęt biorą go z karty
-// (`budgetedPriceNetto`), praca i usługa wprost z liścia (`WbsNode.unitCost`), bo karty nie mają.
-export const planUnitOf = (node, card) => card?.priceNetto ?? node?.unitCost ?? null;
+// @anchor realization-plan-unit-of — koszt jedn. PLANU, czyli ta sama liczba, którą pokazuje
+// Budżet i którą dostał klient w ofercie. Źródłem jest `WbsNode.unitCost`; karta materiałowa
+// (`budgetedPriceNetto`) wchodzi wyłącznie jako zapchajdziura, gdy węzeł nie ma własnej ceny.
+//
+// Kolejność była kiedyś odwrotna (karta przed węzłem) i to CICHO rozjeżdżało dwa ekrany: karta
+// i węzeł są edytowalne osobno, więc Budżet pokazywał 8000 zł, a Realizacja 13000 zł za tę samą
+// pozycję. Sprawdzone na pełnym zrzucie produkcji (1248 liści, 36 zamówień): 5 zamówień miało
+// taki rozjazd na łącznie 72 922,40 zł, najgorszy przypadek to „Głośniki" z kartą wycenioną na
+// 0 zł przy węźle 4836 zł/szt — plan pokazywał 0 zamiast 38 688 zł, bo `??` nie przepuszcza zera.
+// W drugą stronę ryzyka nie ma: z 174 liści z `unitCost = 0` ANI JEDEN nie ma karty z ceną,
+// więc odwrócenie kolejności nie gubi żadnej wartości.
+export const planUnitOf = (node, card) => node?.unitCost ?? card?.priceNetto ?? null;
+
+// @anchor realization-plan-value — wartość pozycji po stronie WYCENY: koszt jedn. planu razy
+// ilość z wyceny. Mieszkała w obu zakładkach realizacji osobno; odkąd eksport Excel liczy ją
+// dla obu, musi być jedna — inaczej ten sam arkusz pokazywałby inną kwotę zależnie od tego,
+// z której tabeli go wywołano.
+export const planValueOf = (node, card) => {
+    const u = planUnitOf(node, card);
+    return u != null ? u * (Number(node?.quantity) || 0) : 0;
+};
 
 // @anchor realization-of — suma wpisów realizacji liścia wobec planu z wyceny.
 // `avg` to średnia ważona (każdy wpis ma własny koszt jedn.), `state` steruje kolorem:
