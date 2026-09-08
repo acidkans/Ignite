@@ -10,6 +10,7 @@ import { RequirementImageBox } from './wbs/WbsMaterialsPanel';
 import AutoResizeTextarea from './wbs/AutoResizeTextarea';
 import FilterDropdown from './wbs/FilterDropdown';
 import ProtokolOdbioruModal from './wbs/ProtokolOdbioruModal';
+import { liczBilansWykonania, NIEROZPOCZETE_LABEL } from './wbs/realizationBilans';
 import { fetchStatusOdbioru } from '../../utils/protokolOdbioruExport';
 import { sanitizeQtyInput, parsePriceInput, DRAWER, STRUCTURE_STATUS_META, statusMetaForType, statusOptionsForType, statusLabelForType, resolveStatusCode, usesWorkStatuses,
     PLAN_STATUS_META, planStatusFromAny, PURCHASE_STATUS_META, EXEC_STATUS_META, execStatusLabel,
@@ -17,9 +18,13 @@ import { sanitizeQtyInput, parsePriceInput, DRAWER, STRUCTURE_STATUS_META, statu
     suggestAxisStatus, handedOverFromProtocol, summarizeStatusCodes, axisStatusCodeOf, axisGateOf,
     AXIS_STATUS_META, AXIS_STATUS_ORDER } from './wbs/wbsConstants';
 import {
+    ENTRY_INPUT, FORMULA_HINT, NUMERIC_ENTRY_FIELDS, growsWithText, resolveEntryNumber,
+    selectAllOnFocus, focusNextInRow,
+} from './wbs/entryFields';
+import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath,
     leafNodesOf, buildCardMap, wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf,
-    planUnitOf, fmtQty, fmtZl, fmtDate,
+    planUnitOf, planValueOf, fmtQty, fmtZl, fmtDate,
 } from './wbs/realizationShared';
 
 // ─── Kolumny ──────────────────────────────────────────────────────────────────
@@ -136,8 +141,6 @@ const newEntryLabel = (type) => (type === 'work' || type === 'service' ? 'Nowe w
 // wiersza, więc przycisk kończy czynność, zamiast zapowiadać następną.
 const ADD_ENTRY_LABEL = 'Zapisz zakup';
 
-const ENTRY_INPUT = 'w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-sm text-white outline-none focus:border-teal-500/50 placeholder-gray-700';
-
 // @anchor realization-field-label — nagłówek nad polem formularza nowego wpisu. Nagłówki
 // tabeli są przyklejone u góry, a formularz otwiera się w środku długiej listy — bez podpisu
 // przy samym polu nie widać, co się właśnie wypełnia. Tylko w formularzu: nad zapisanymi
@@ -150,68 +153,6 @@ const lab = (t) => <span className="block text-[9px] font-bold uppercase trackin
 const BRAK_ETYKIETY = {
     qty: 'ilość', unitCost: 'koszt jedn.', manufacturer: 'producent', model: 'model', scope: 'zakres',
 };
-
-// @anchor realization-enter-next-field — Enter przechodzi do KOLEJNEGO okna w wierszu zakupu,
-// zamiast kończyć edycję. Wiersz wypełnia się od lewej do prawej jednym ciągiem, bez sięgania
-// po mysz ani Tab (Tab wychodzi poza wiersz, na przyciski i nagłówki tabeli).
-// Kolejność bierzemy z DOM-u, więc idzie dokładnie za kolejnością kolumn — nie ma osobnej
-// listy do utrzymania przy dodawaniu kolumny. Pola pickera dostawcy są poza tą listą
-// (nie mają `data-entry-field`), bo jego lista rozwija się własną obsługą klawiatury.
-// Na ostatnim polu Enter oddaje sterowanie wołającemu: formularz zapisuje wpis, wiersz
-// istniejącego wpisu robi blur, czyli commit pola.
-function focusNextInRow(e, onLast) {
-    const row = e.currentTarget.closest('tr');
-    const fields = row ? [...row.querySelectorAll('[data-entry-field]:not([disabled])')] : [];
-    const i = fields.indexOf(e.currentTarget);
-    if (i >= 0 && i < fields.length - 1) {
-        const next = fields[i + 1];
-        next.focus();
-        next.select?.();
-        return;
-    }
-    onLast?.();
-}
-
-// @anchor realization-select-all-on-focus — wejście w pole zaznacza CAŁĄ jego treść, tak samo
-// myszą jak Enterem z pola obok. Wpisy realizacji poprawia się przez nadpisanie („było 3, jest 5"),
-// a nie dopisanie znaku w środku — bez tego klik stawiał kursor w miejscu trafienia i trzeba było
-// najpierw ręcznie kasować starą wartość. `requestAnimationFrame`, bo klik myszą po `focus`
-// ustawia własne zaznaczenie (kursor pod kursorem myszy) i skasowałby `select()` zrobiony od razu.
-const selectAllOnFocus = (e) => {
-    const el = e.currentTarget;
-    requestAnimationFrame(() => el.select?.());
-};
-
-// @anchor realization-entry-numeric-fields — pola wpisu niosące LICZBĘ, a nie tekst: tylko one
-// liczą działania i tylko one przechodzą przez `sanitizeQtyInput`. Jedna lista dla wiersza
-// zapisanego wpisu i dla formularza nowego, żeby oba traktowały „=" tak samo.
-const NUMERIC_ENTRY_FIELDS = new Set(['qty', 'unitCost']);
-
-// @anchor realization-entry-formula — pole liczbowe wpisu przyjmuje DZIAŁANIE: „=4,3*220"
-// zapisuje się jako 946. Liczy je `parsePriceInput`, czyli ta sama droga co w Budżecie
-// i w panelu Materiały — ten sam wpis znaczy w całej aplikacji to samo.
-// Zwracamy TEKST, bo dalej idzie tą samą trasą co zwykły wpis (porównanie ze stanem
-// poprzednim, JSON do backendu). `null` = działanie jest niedokończone („=4,3*") i wołający
-// ma wtedy NIE zapisywać: serwer czyta liczby `parseFloat`em, więc zapisałby ciche 0 zł.
-function resolveEntryNumber(raw) {
-    const s = String(raw ?? '');
-    if (!s.trimStart().startsWith('=')) return s;
-    const n = parsePriceInput(s);
-    return n === null ? null : String(n);
-}
-
-// @anchor realization-formula-hint — podpowiedź w dymku pola liczbowego. Bez niej nikt nie
-// zgadnie, że pole liczy działania: kolumna jest wąska, a podpowiedź w placeholderze
-// zasłaniałaby to, co się właśnie wpisuje.
-const FORMULA_HINT = 'Można wpisać działanie, np. =4,3*220 — zapisze się wynik';
-
-// @anchor realization-entry-growing-fields — pole TEKSTOWE wpisu rośnie razem z treścią
-// (`AutoResizeTextarea`), więc cały komentarz, producent, model, EAN, numer dokumentu i zakres
-// są widoczne naraz. Kolumny są wąskie, a jednolinijkowy `input` chowa nadmiar za krawędzią:
-// treść trzeba było przewijać kursorem wewnątrz pola, żeby przeczytać, co się samemu wpisało.
-// Jednolinijkowe zostają wyłącznie pola o z góry znanej długości — data i liczby (ilość,
-// koszt jedn.): tam nie ma czego pokazywać, a złamanie liczby na dwie linie psuje kolumnę.
-const growsWithText = (k) => k !== 'entryDate' && !NUMERIC_ENTRY_FIELDS.has(k);
 
 // @anchor realization-status-hint — PODPOWIEDŹ statusu realizacji: wynik faktów z dziennika
 // wpisów, postawiony obok selecta jako osobny, klikalny znacznik. Świadomie nie jest
@@ -1072,6 +1013,543 @@ export function RealizationExpandPanel({ node, card, realization, token, readOnl
 
 // ─── Zakładka ─────────────────────────────────────────────────────────────────
 
+// @anchor realization-totals — sumy widocznych wierszy. Poziom modułu, bo liczy je i nagłówek
+// tabeli, i arkusz „Podsumowanie" w eksporcie — dwie kopie tej arytmetyki rozjechałyby się.
+export function liczTotals(rows) {
+        let plan = 0, real = 0, done = 0, entries = 0;
+        for (const { node, card, realization } of rows) {
+            plan += planValueOf(node, card);
+            real += realization.value;
+            entries += realization.entries.length;
+            if (realization.state === 'full' || realization.state === 'over' || realization.state === 'closed') done += 1;
+        }
+        return {
+            plan: Math.round(plan * 100) / 100,
+            real: Math.round(real * 100) / 100,
+            delta: Math.round((real - plan) * 100) / 100,
+            done, entries,
+            count: rows.length,
+        };
+}
+
+// @anchor realization-analysis — materiał do narracyjnej analizy w arkuszu „Podsumowanie".
+export function liczAnalize(rows) {
+        let planR = 0, realR = 0, ruszone = 0, taniej = 0, drozej = 0, wPunkt = 0, oszczednosc = 0, przekroczenie = 0;
+        const wgTypu = new Map();
+        for (const { node, card, realization } of rows) {
+            const p = planValueOf(node, card);
+            const t = TYPE_META[node.type]?.label || node.type || '—';
+            if (!wgTypu.has(t)) wgTypu.set(t, { typ: t, planCaly: 0, planRuszone: 0, realRuszone: 0 });
+            const g = wgTypu.get(t);
+            g.planCaly += p;
+            if (!(realization.qty > 0 || node.realizationClosed)) continue;
+            const d = Math.round((realization.value - p) * 100) / 100;
+            planR += p; realR += realization.value; ruszone += 1;
+            g.planRuszone += p; g.realRuszone += realization.value;
+            if (d < 0) { taniej += 1; oszczednosc -= d; }
+            else if (d > 0) { drozej += 1; przekroczenie += d; }
+            else wPunkt += 1;
+        }
+        const z2 = v => Math.round(v * 100) / 100;
+        // Prognoza liczona OSOBNO dla każdego rodzaju kosztów: rabat wynegocjowany na materiale
+        // nie ma prawa obniżać prognozy robocizny, bo to zupełnie inny rynek.
+        //
+        // Odchylenie bierzemy pod uwagę dopiero, gdy rodzaj ma za sobą realne wydatki — co
+        // najmniej `PROG_MIN_UDZIAL` swojego budżetu. Niżej próbka nic nie znaczy i potrafi wywrócić
+        // prognozę: praca wyceniona na 67 311 zł z jednym wpisem na 100 zł dawała prognozę
+        // 3 365 zł, czyli 64 tys. „oszczędności" wyczarowane z jednej pozycji. Rodzaj poniżej
+        // progu (w tym taki bez żadnych wydatków) wchodzi po 100% wyceny — brak danych nie jest
+        // powodem, żeby obiecywać oszczędność.
+        let prognoza = 0;
+        for (const g of wgTypu.values()) {
+            g.pelna = !(g.planCaly > 0 && g.planRuszone > 0 && g.realRuszone / g.planCaly >= PROG_MIN_UDZIAL);
+            g.wsp = g.pelna ? 1 : g.realRuszone / g.planRuszone;
+            prognoza += g.planCaly * g.wsp;
+        }
+        return {
+            ruszone, taniej, drozej, wPunkt,
+            planRuszone: z2(planR), realRuszone: z2(realR), deltaRuszone: z2(realR - planR),
+            oszczednosc: z2(oszczednosc), przekroczenie: z2(przekroczenie),
+            prognoza: z2(prognoza),
+            typy: [...wgTypu.values()].map(g => ({ ...g, planCaly: z2(g.planCaly), planRuszone: z2(g.planRuszone), realRuszone: z2(g.realRuszone) })),
+        };
+}
+
+// Eksport stoi na POZIOMIE MODUŁU, a nie w ciele komponentu, bo woła go także zakładka
+// „Realizacja_new" — jeden eksport dla obu widoków, żeby arkusz nie zaczął się rozjeżdżać
+// zależnie od tego, z której tabeli został wywołany. Wszystko, co wcześniej brał z domknięcia,
+// wchodzi teraz parametrami; `rows` mają ten sam kształt w obu zakładkach: { node, card, realization }.
+    // @anchor realization-export-excel — eksport DOKŁADNIE tego, co widać na ekranie: wiersze po
+    // wyszukiwarce, filtrach kolumn i sortowaniu, zawężone rolą (praca, usługa, nocleg i paliwo
+    // wchodzą wyłącznie u managera — `visibleTypes`). Arkusz „Zakupy" rozbija to samo na
+    // pojedyncze wpisy zakupu z wymaganiem, do którego są przypisane. Arkusz „Podsumowanie" niesie globalne
+    // porównanie wyceny z realizacją, licznik rozliczonych pozycji i rozbicie po typie liścia.
+    // Kolumny o prostej relacji arytmetycznej są ŻYWYMI formułami (zasada eksportów Excel):
+    // wartość wyceny = ilość × koszt jedn., Δ = zakup − wycena, sumy przez SUM/SUMIF/COUNTIF —
+    // po zmianie liczby w arkuszu wszystko przelicza się samo.
+export async function eksportRealizacjiXlsx({
+    rows, visibleTypes, odbiorByRoot = {}, orderName = '', searchQuery = '', colFilters = {},
+    etykietyKolumn = null, accepted = false,
+}) {
+    const totals = liczTotals(rows);
+    const analiza = liczAnalize(rows);
+    const etykietaKolumny = (k) => (etykietyKolumn?.[k]) || COL_DEFS.find(c => c.key === k)?.label || k;
+    const wb = new ExcelJS.Workbook();
+    // Kolejność zakładek bierze się z kolejności `addWorksheet`, więc oba arkusze zakładamy
+    // tutaj, a wypełniamy niżej: „Podsumowanie" ma otwierać plik (najpierw wnioski, potem
+    // dane), ale liczy się z gotowej tabeli. Formuły `Realizacja!…` adresują po nazwie,
+    // więc kolejność arkuszy im nie przeszkadza.
+    const ps = wb.addWorksheet('Podsumowanie');
+    const ws = wb.addWorksheet('Realizacja');
+    const zk = wb.addWorksheet('Zakupy');
+    // Waluta w postaci, którą Excel rozpoznaje jako PLN, a nie jako format niestandardowy.
+    const FMT_PLN = '#,##0.00\\ [$zł-415]';
+    ws.columns = [
+        { header: 'Przedmiot projektu', key: 'parent', width: 32 },
+        { header: 'Nazwa', key: 'name', width: 38 },
+        { header: 'Typ', key: 'typ', width: 12 },
+        { header: 'Produkt / zakres', key: 'product', width: 28 },
+        { header: 'Dostawca', key: 'supplier', width: 24 },
+        { header: 'Dokument', key: 'doc', width: 16 },
+        { header: 'Ilość wyceny', key: 'qtyPlan', width: 12 },
+        { header: 'Jedn.', key: 'unit', width: 8 },
+        { header: 'Zakup / wykonanie', key: 'qtyReal', width: 16 },
+        { header: 'Δ ilość', key: 'dQty', width: 10 },
+        { header: 'Koszt jedn. wyceny', key: 'pricePlan', width: 16 },
+        // „Zakup" tylko tam, gdzie faktycznie się kupuje. Arkusz obejmuje wszystkie typy
+        // liści, a pracy i usługi się nie kupuje — kolumny zbiorcze mówią „realizacja".
+        { header: 'Koszt jedn. realizacji', key: 'pricePurchase', width: 18 },
+        { header: 'Koszt całk. wyceny', key: 'valuePlan', width: 18 },
+        { header: 'Koszt całk. realizacji', key: 'valueReal', width: 20 },
+        { header: 'Δ wartość', key: 'delta', width: 14 },
+        // @anchor realization-export-status-cols — trzy osie statusu w tej samej
+        // kolejności co na ekranie. Oś, której dany typ liścia NIE MA (praca nie ma
+        // zakupu, paliwo nie ma wykonania), dostaje „—", a nie pustą komórkę: puste
+        // znaczyłoby „nikt jeszcze nie ustawił", a to zupełnie inna informacja.
+        // Oś wykonania niesie stan WYLICZONY (`execStatusLabelOf` z rejestrem odbiorów),
+        // więc pozycja odebrana protokołem wychodzi w Excelu jako „Odebrane" — tak samo
+        // jak w tabeli, mimo że w bazie stoi na „Wykonane".
+        { header: 'Status oferty', key: 'statusPlan', width: 16 },
+        { header: 'Status zakupu', key: 'statusPurchase', width: 18 },
+        { header: 'Status wykonania', key: 'statusExec', width: 20 },
+        { header: 'Rozliczone', key: 'closed', width: 11 },
+        { header: 'Wpisy', key: 'entries', width: 8 },
+        { header: 'Komentarz', key: 'comment', width: 40 },
+    ];
+    ws.getRow(1).font = { bold: true };
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+    ws.autoFilter = 'A1:U1';
+
+    rows.forEach(({ node, card, realization: r }, i) => {
+        const n = i + 2;
+        const planUnit = planUnitOf(node, card);
+        const purchaseUnit = r.avg ?? purchaseUnitOf(card);
+        const planValue = planUnit != null ? planUnit * (Number(node.quantity) || 0) : null;
+        const hasReal = r.qty > 0 || node.realizationClosed;
+        const scopes = [...new Set(r.entries.map(e => e.scope).filter(Boolean))];
+        const product = [card?.manufacturer, card?.model].filter(Boolean).join(' ') || scopes.join('; ');
+        ws.addRow({
+            parent: getParentPath(node.path),
+            name: node.name || '',
+            typ: TYPE_META[node.type]?.label || node.type || '',
+            product,
+            supplier: [...new Set(r.entries.map(e => e.supplier?.name).filter(Boolean))].join(', '),
+            doc: [...new Set(r.entries.map(e => e.docNumber).filter(Boolean))].join(', '),
+            qtyPlan: Number(node.quantity) || 0,
+            unit: node.unit || 'szt',
+            qtyReal: r.qty,
+            dQty: { formula: `I${n}-G${n}`, result: Math.round((r.qty - r.plan) * 1000) / 1000 },
+            pricePlan: planUnit,
+            pricePurchase: purchaseUnit,
+            valuePlan: planUnit != null ? { formula: `G${n}*K${n}`, result: planValue ?? 0 } : null,
+            // Zakup to SUMA wpisów o różnych cenach, nie iloczyn — zostaje wartością.
+            valueReal: hasReal ? r.value : null,
+            delta: planValue != null && hasReal ? { formula: `N${n}-M${n}`, result: Math.round((r.value - planValue) * 100) / 100 } : null,
+            statusPlan: statusLabel(node),
+            statusPurchase: purchaseStatusLabel(node) || '—',
+            statusExec: execStatusLabelOf(node, odbiorByRoot[wbsRootOf(node)]) || '—',
+            closed: node.realizationClosed ? 'tak' : 'nie',
+            entries: r.entries.length,
+            comment: node.comment || '',
+        });
+    });
+
+    const last = rows.length + 1;
+    const sum = ws.addRow({
+        parent: 'Razem',
+        valuePlan: { formula: `SUM(M2:M${last})`, result: totals.plan },
+        valueReal: { formula: `SUM(N2:N${last})`, result: totals.real },
+        delta: { formula: `SUM(O2:O${last})`, result: totals.delta },
+        entries: { formula: `SUM(T2:T${last})`, result: totals.entries },
+    });
+    sum.font = { bold: true };
+    // Kwoty jako waluta PLN, ilości bez formatu (ogólne) — jednostka siedzi w osobnej
+    // kolumnie „Jedn.", więc doklejanie separatorów do liczby sztuk tylko myli.
+    ['pricePlan', 'pricePurchase', 'valuePlan', 'valueReal', 'delta'].forEach(k => { ws.getColumn(k).numFmt = FMT_PLN; });
+
+    // ─ Zakupy ────────────────────────────────────────────────────────
+    // @anchor realization-export-purchases — arkusz „Zakupy": jeden wiersz na WPIS
+    // realizacji (`LeafActual`), a nie na pozycję, i tylko tam, gdzie się faktycznie
+    // KUPUJE — praca i usługa to wykonanie, nie zakup (ten sam podział co `entryNoun`).
+    // Arkusz „Realizacja" agreguje wpisy do pozycji, więc nie da się z niego wyczytać
+    // pojedynczej dostawy: daty, faktury ani ceny konkretnego egzemplarza.
+    // Pierwsza kolumna niesie WYMAGANIE (`MaterialRequirement.name`), do którego zakup
+    // jest przypisany — po nim rozlicza się dostawy wobec zakresu z dokumentacji.
+    // Liście bez karty produktowej (nocleg, paliwo) wymagania nie mają — zostaje „—".
+    const zakupy = [];
+    for (const { node, card, realization: r } of rows) {
+        if (entryNoun(node.type) !== 'zakup') continue;
+        for (const e of r.entries) zakupy.push({ node, card, e });
+    }
+    zk.columns = [
+        { header: 'Wymaganie', key: 'req', width: 34 },
+        { header: 'Przedmiot projektu', key: 'parent', width: 30 },
+        { header: 'Pozycja', key: 'name', width: 34 },
+        { header: 'Typ', key: 'typ', width: 12 },
+        { header: 'Data zakupu', key: 'date', width: 13 },
+        { header: 'Producent', key: 'manufacturer', width: 20 },
+        { header: 'Model', key: 'model', width: 24 },
+        { header: 'Kod EAN', key: 'ean', width: 16 },
+        { header: 'Dostawca', key: 'supplier', width: 24 },
+        { header: 'Dokument', key: 'doc', width: 16 },
+        { header: 'Ilość', key: 'qty', width: 10 },
+        { header: 'Jedn.', key: 'unit', width: 8 },
+        // @anchor realization-export-purchase-vs-offer — cena ofertowa obok ceny zakupu
+        // i różnica między nimi. Ofertowa jest cechą POZYCJI (`planUnitOf`: karta
+        // produktowa, a dla liści bez karty `WbsNode.unitCost`), więc przy kilku
+        // dostawach powtarza się w każdym wierszu — to ta sama baza porównania.
+        // Δ liczona jako zakup − oferta: plus = kupiliśmy drożej, minus = taniej.
+        // Pozycja bez ceny w wycenie zostawia porównanie puste, zamiast udawać −100%.
+        { header: 'Cena ofertowa', key: 'planUnit', width: 14 },
+        { header: 'Cena zakupu', key: 'unitCost', width: 14 },
+        { header: 'Δ jedn.', key: 'dUnit', width: 12 },
+        { header: 'Δ %', key: 'dPct', width: 10 },
+        { header: 'Wartość zakupu', key: 'value', width: 16 },
+        { header: 'Δ wartość', key: 'dValue', width: 14 },
+        { header: 'Kupujący', key: 'author', width: 22 },
+        { header: 'Komentarz', key: 'comment', width: 40 },
+    ];
+    zk.getRow(1).font = { bold: true };
+    zk.views = [{ state: 'frozen', ySplit: 1 }];
+    zk.autoFilter = 'A1:T1';
+
+    zakupy.forEach(({ node, card, e }, i) => {
+        const n = i + 2;
+        const qty = Number(e.qty) || 0;
+        const unitCost = Number(e.unitCost) || 0;
+        const planUnit = planUnitOf(node, card);
+        zk.addRow({
+            req: card?.name || '—',
+            parent: getParentPath(node.path),
+            name: node.name || '',
+            typ: TYPE_META[node.type]?.label || node.type || '',
+            date: fmtDate(e.entryDate),
+            // Producent i model z WPISU, bo druga dostawa bywa zamiennikiem innej marki;
+            // karta produktowa wchodzi dopiero, gdy wpis ich nie niesie.
+            manufacturer: e.manufacturer || card?.manufacturer || '',
+            model: e.model || card?.model || '',
+            ean: e.ean || '',
+            supplier: e.supplier?.name || '',
+            doc: e.docNumber || '',
+            qty,
+            unit: node.unit || 'szt',
+            planUnit,
+            unitCost,
+            dUnit: planUnit != null ? { formula: `N${n}-M${n}`, result: Math.round((unitCost - planUnit) * 100) / 100 } : null,
+            dPct: planUnit != null ? { formula: `IF(M${n}=0,"",O${n}/M${n})`, result: planUnit ? (unitCost - planUnit) / planUnit : '' } : null,
+            value: { formula: `K${n}*N${n}`, result: Math.round(qty * unitCost * 100) / 100 },
+            dValue: planUnit != null ? { formula: `K${n}*O${n}`, result: Math.round(qty * (unitCost - planUnit) * 100) / 100 } : null,
+            author: [e.author?.firstName, e.author?.lastName].filter(Boolean).join(' ') || e.author?.email || '',
+            comment: e.comment || '',
+        });
+    });
+
+    if (zakupy.length) {
+        const lastZ = zakupy.length + 1;
+        const sumQty = Math.round(zakupy.reduce((s, x) => s + (Number(x.e.qty) || 0), 0) * 1000) / 1000;
+        const sumVal = Math.round(zakupy.reduce((s, x) => s + (Number(x.e.qty) || 0) * (Number(x.e.unitCost) || 0), 0) * 100) / 100;
+        // Δ sumujemy tylko po wierszach, które mają cenę ofertową — pozycja bez wyceny
+        // nie jest „zakupem za darmo ponad plan", tylko brakiem podstawy do porównania.
+        const sumDVal = Math.round(zakupy.reduce((s, { node, card, e }) => {
+            const pu = planUnitOf(node, card);
+            return pu == null ? s : s + (Number(e.qty) || 0) * ((Number(e.unitCost) || 0) - pu);
+        }, 0) * 100) / 100;
+        const sumZ = zk.addRow({
+            req: 'Razem',
+            qty: { formula: `SUM(K2:K${lastZ})`, result: sumQty },
+            value: { formula: `SUM(Q2:Q${lastZ})`, result: sumVal },
+            dValue: { formula: `SUM(R2:R${lastZ})`, result: sumDVal },
+        });
+        sumZ.font = { bold: true };
+    } else {
+        zk.addRow({ req: 'Brak wpisów zakupu w tym widoku' }).font = { italic: true };
+    }
+    ['planUnit', 'unitCost', 'dUnit', 'value', 'dValue'].forEach(k => { zk.getColumn(k).numFmt = FMT_PLN; });
+    zk.getColumn('dPct').numFmt = '0.0%';
+
+    // ─ Podsumowanie ──────────────────────────────────────────────────
+    ps.columns = [
+        { header: '', key: 'a', width: 44 },
+        { header: '', key: 'b', width: 18 },
+        { header: '', key: 'c', width: 18 },
+        { header: '', key: 'd', width: 14 },
+        { header: '', key: 'e', width: 18 },
+        { header: '', key: 'f', width: 18 },
+        { header: '', key: 'g', width: 14 },
+    ];
+    const naglowek = (t) => { const r = ps.addRow({ a: t }); r.font = { bold: true }; return r; };
+    // Wielowybór wpisuje się do arkusza jako lista przez „lub" — arkusz ma powiedzieć,
+    // CO było zaznaczone, a nie że filtr w ogóle istniał.
+    const filtry = Object.entries(colFilters).filter(([, v]) => hasColFilter(v))
+        .map(([k, v]) => `${etykietaKolumny(k)}: ${Array.isArray(v) ? v.join(' lub ') : v}`);
+
+    // Excel NIE dopasowuje wysokości wiersza, w którym jest scalona komórka — trzeba ją
+    // policzyć samemu, inaczej dłuższy tekst urywa się w połowie zdania. Nominalna
+    // szerokość scalenia (suma `width` kolumn) to górna granica: łamanie idzie po
+    // słowach, więc realnie w wierszu mieści się ok. 83% znaków. Stąd zapas.
+    const ZNAKI_A_F = 105;  // scalenie A:F ma 130 jednostek szerokości
+    const ZNAKI_B_F = 68;   // scalenie B:F ma 86 jednostek
+    const wysokosc = (tekst, znaki) => Math.max(1, Math.ceil(String(tekst).length / znaki)) * 15 + 4;
+    // Wiersz „etykieta + długa wartość": wartość rozlana na B:F, żeby lista rodzajów
+    // kosztów albo zestaw filtrów nie ginął na szerokości samej kolumny B.
+    const wierszOpisowy = (label, tekst) => {
+        const r = ps.addRow({ a: label, b: tekst });
+        ps.mergeCells(`B${r.number}:F${r.number}`);
+        r.getCell('b').alignment = { wrapText: true, vertical: 'top' };
+        r.height = wysokosc(tekst, ZNAKI_B_F);
+        return r;
+    };
+
+    naglowek('Realizacja — podsumowanie');
+    wierszOpisowy('Zamówienie', orderName || '—');
+    ps.addRow({ a: 'Data eksportu', b: new Date().toISOString().slice(0, 10) });
+    // Zakres wprost w arkuszu — bez tego nie da się później odpowiedzieć, czy plik nie ma
+    // kosztów własnych, bo ich nie było, czy bo rola ich nie widziała. Przy zawężeniu
+    // wymieniamy rodzaje kosztów po nazwie, żeby czytelnik nie musiał zgadywać, czego brak.
+    const rodzaje = visibleTypes.map(t => TYPE_META[t]?.label || t);
+    wierszOpisowy('Zakres eksportu', visibleTypes.length === LEAF_TYPES.length
+        ? 'cały zakres zamówienia'
+        : `część zakresu — rodzaje kosztów: ${rodzaje.join(', ')}`);
+    ps.addRow({ a: 'Baseline', b: accepted ? 'zaakceptowany' : 'plan z bieżącej wersji' });
+    if (searchQuery.trim()) wierszOpisowy('Szukana fraza', searchQuery.trim());
+    if (filtry.length) wierszOpisowy('Filtry kolumn', filtry.join(' · '));
+    ps.addRow({});
+
+    naglowek('Porównanie globalne');
+    ps.addRow({ a: 'Koszt całkowity wyceny', b: { formula: `Realizacja!M${last + 1}`, result: totals.plan } });
+    ps.addRow({ a: 'Wartość zakupów / realizacji zadań', b: { formula: `Realizacja!N${last + 1}`, result: totals.real } });
+    const wRow = ps.rowCount - 1;
+    // Obie pozycje liczone „w plus": ile budżetu ZOSTAŁO (wycena − realizacja) i jaka jego
+    // część JEST już wydana (realizacja ÷ wycena). Odwrotnie niż kolumna „Δ wartość"
+    // w arkuszu Realizacja, która zostaje znakowanym odchyleniem.
+    ps.addRow({ a: 'Wartość niezrealizowanego budżetu ofertowego', b: { formula: `B${wRow}-B${wRow + 1}`, result: Math.round((totals.plan - totals.real) * 100) / 100 } });
+    ps.addRow({ a: 'Procentowa realizacja budżetu', b: { formula: `IF(B${wRow}=0,"",B${wRow + 1}/B${wRow})`, result: totals.plan ? totals.real / totals.plan : '' } });
+    ps.getCell(`B${ps.rowCount}`).numFmt = '0.0%';
+    // wRow = „Koszt całkowity wyceny"; kolejne dwa wiersze to realizacja i Δ wartość.
+    for (let r = wRow; r <= wRow + 2; r++) ps.getCell(`B${r}`).numFmt = FMT_PLN;
+    ps.addRow({});
+
+    // ─ Prognoza wydatków ─────────────────────────────────────────────
+    // Osobny wiersz na każdy rodzaj kosztów: współczynnik wyliczony z pozycji już
+    // ruszonych tego rodzaju, przeniesiony na cały jego plan. Rodzaj bez wydatków
+    // idzie po 100% wyceny. Na końcu suma — prognoza całego budżetu.
+    if (analiza.ruszone) {
+        naglowek('Prognoza wydatków');
+        const glowka = ps.addRow({ a: 'Rodzaj kosztów', b: 'Wycena', c: 'Wykonanie', d: '% wykonania', e: 'Prognoza', f: 'Δ do oferty' });
+        glowka.font = { bold: true };
+        const odRow = ps.rowCount + 1;
+        const typy = analiza.typy.filter(g => g.planCaly > 0);
+        for (const g of typy) {
+            const n = ps.rowCount + 1;
+            const prog = Math.round(g.planCaly * g.wsp * 100) / 100;
+            ps.addRow({
+                a: g.typ,
+                b: g.planCaly,
+                c: g.realRuszone,
+                // Udział wykonania w wycenie rodzaju — to ta liczba decyduje, czy prognoza
+                // idzie z odchylenia, czy zostaje na 100% (próg `PROG_MIN_UDZIAL`).
+                d: { formula: `IF(B${n}=0,"",C${n}/B${n})`, result: g.planCaly ? g.realRuszone / g.planCaly : '' },
+                e: prog,
+                f: { formula: `B${n}-E${n}`, result: Math.round((g.planCaly - prog) * 100) / 100 },
+            });
+        }
+        const doRow = ps.rowCount;
+        const suma = ps.addRow({
+            a: 'Razem',
+            b: { formula: `SUM(B${odRow}:B${doRow})`, result: totals.plan },
+            c: { formula: `SUM(C${odRow}:C${doRow})`, result: totals.real },
+            d: { formula: `IF(B${ps.rowCount + 1}=0,"",C${ps.rowCount + 1}/B${ps.rowCount + 1})`, result: totals.plan ? totals.real / totals.plan : '' },
+            e: { formula: `SUM(E${odRow}:E${doRow})`, result: analiza.prognoza },
+            f: { formula: `SUM(F${odRow}:F${doRow})`, result: Math.round((totals.plan - analiza.prognoza) * 100) / 100 },
+        });
+        suma.font = { bold: true };
+        for (let r = odRow; r <= suma.number; r++) {
+            for (const k of ['B', 'C', 'E', 'F']) ps.getCell(`${k}${r}`).numFmt = FMT_PLN;
+            ps.getCell(`D${r}`).numFmt = '0.0%';
+        }
+
+        // Rodzaje trzymane na 100% — bez tego wiersz z wykonaniem 100 zł przy wycenie
+        // 67 tys. i prognozą równą wycenie wygląda na błąd rachunku, a nie na decyzję.
+        const trzymane = typy.filter(g => g.pelna && g.realRuszone > 0).map(g => g.typ);
+        if (trzymane.length) {
+            const r = ps.addRow({ a: `Wykonanie poniżej ${Math.round(PROG_MIN_UDZIAL * 100)}% budżetu rodzaju — prognoza trzymana na 100% wyceny: ${trzymane.join(', ')}.` });
+            ps.mergeCells(`A${r.number}:F${r.number}`);
+            r.getCell('a').alignment = { wrapText: true, vertical: 'top' };
+            r.height = wysokosc(r.getCell('a').value, ZNAKI_A_F);
+        }
+        ps.addRow({});
+    }
+
+    // ─ Analiza ───────────────────────────────────────────────────────
+    // Zdania budowane z liczb, nie z szablonu „wstaw wartość" — każdy wariant (jesteśmy
+    // do przodu / przekraczamy / nic nie ruszyło) ma własne sformułowanie, bo inaczej
+    // przy zerowej realizacji wychodzą komunikaty bez sensu. Kwoty zawsze dodatnie,
+    // kierunek niesie słowo.
+    const zl = v => `${fmtZl(v)} zł`;
+    const pct = (a, b) => `${(a / b * 100).toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+    // Liczebnik w mianowniku (1 pozycja / 2 pozycje / 5 pozycji). Po przyimku „z" polski
+    // wymaga dopełniacza niezależnie od liczby, więc tam wpisujemy „pozycji" na sztywno.
+    const poz = n => n === 1 ? 'pozycja' : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) ? 'pozycje' : 'pozycji';
+    const A = analiza;
+    const zdania = [];
+
+    if (!totals.plan) {
+        zdania.push(`Pozycje w tym widoku nie mają kwot w wycenie, a na zakupy i wykonanie zadań poszło dotąd ${zl(totals.real)} — nie ma do czego porównać realizacji.`);
+    } else if (totals.real > totals.plan) {
+        zdania.push(`Wycena zamówienia to ${zl(totals.plan)}, a na zakupy i wykonanie zadań poszło dotąd ${zl(totals.real)} — budżet ofertowy jest wyczerpany i przekroczony o ${zl(totals.real - totals.plan)}, co daje ${pct(totals.real, totals.plan)} wyceny.`);
+    } else {
+        zdania.push(`Wycena zamówienia to ${zl(totals.plan)}, a na zakupy i wykonanie zadań poszło dotąd ${zl(totals.real)} — zrealizowano ${pct(totals.real, totals.plan)} budżetu ofertowego, do wykorzystania zostaje ${zl(totals.plan - totals.real)}.`);
+    }
+
+    if (!A.ruszone) {
+        zdania.push(`Żadna z ${totals.count} pozycji w widoku nie ma jeszcze wpisu zakupu ani wykonania, więc nie da się jeszcze powiedzieć, czy kupujemy taniej, czy drożej niż zakładała wycena.`);
+    } else {
+        const udzial = totals.plan ? `, czyli ${pct(A.planRuszone, totals.plan)} całego budżetu` : '';
+        zdania.push(`Realizacja ruszyła na ${A.ruszone} z ${totals.count} pozycji (${pct(A.ruszone, totals.count)}); w wycenie odpowiadały one za ${zl(A.planRuszone)}${udzial}.`);
+
+        if (!A.planRuszone) {
+            zdania.push(`Ruszone pozycje nie miały w wycenie żadnej kwoty, więc całe ${zl(A.realRuszone)} to koszt ponad plan.`);
+        } else if (A.deltaRuszone < 0) {
+            zdania.push(`Na tych pozycjach wydano ${zl(A.realRuszone)} przy planie ${zl(A.planRuszone)} — jesteśmy do przodu o ${zl(-A.deltaRuszone)}, czyli kupujemy ${pct(-A.deltaRuszone, A.planRuszone)} poniżej wyceny.`);
+        } else if (A.deltaRuszone > 0) {
+            zdania.push(`Na tych pozycjach wydano ${zl(A.realRuszone)} przy planie ${zl(A.planRuszone)} — wydajemy o ${zl(A.deltaRuszone)} więcej, niż zakładano, czyli ${pct(A.deltaRuszone, A.planRuszone)} powyżej wyceny.`);
+        } else {
+            zdania.push(`Na tych pozycjach wydano dokładnie tyle, ile zakładała wycena — ${zl(A.realRuszone)}.`);
+        }
+
+        // Wyliczenie bez orzeczenia — przy zmiennej liczbie pozycji każda forma czasownika
+        // („wypadła / wypadły / wypadło") byłaby błędna dla dwóch pozostałych przypadków.
+        zdania.push(`Poniżej wyceny: ${A.taniej} ${poz(A.taniej)} na łączną oszczędność ${zl(A.oszczednosc)}. Powyżej wyceny: ${A.drozej} ${poz(A.drozej)} na łączne przekroczenie ${zl(A.przekroczenie)}${A.wPunkt ? `. Dokładnie w planie: ${A.wPunkt} ${poz(A.wPunkt)}` : ''}.`);
+
+        if (A.planRuszone > 0 && totals.plan) {
+            if (A.planRuszone / totals.plan < 0.2) {
+                zdania.push(`Próba jest jednak mała: ruszone pozycje to dopiero ${pct(A.planRuszone, totals.plan)} wartości wyceny, więc prognozę traktuj orientacyjnie — o rzeczywistym wyniku zamówienia zdecydują pozycje jeszcze nietknięte.`);
+            }
+        }
+    }
+
+    naglowek('Analiza');
+    for (const z of zdania) {
+        const r = ps.addRow({ a: z });
+        ps.mergeCells(`A${r.number}:F${r.number}`);
+        r.getCell('a').alignment = { wrapText: true, vertical: 'top' };
+        r.height = wysokosc(z, ZNAKI_A_F);
+    }
+    ps.addRow({});
+
+    naglowek('Pokrycie');
+    ps.addRow({ a: 'Pozycje w widoku', b: totals.count });
+    ps.addRow({ a: 'Rozliczone / wykonane', b: totals.done });
+    ps.addRow({ a: 'Udział rozliczonych', b: { formula: `IF(B${ps.rowCount - 1}=0,"",B${ps.rowCount}/B${ps.rowCount - 1})`, result: totals.count ? totals.done / totals.count : '' } });
+    ps.getCell(`B${ps.rowCount}`).numFmt = '0.0%';
+    ps.addRow({ a: 'Wpisy realizacji', b: totals.entries });
+    ps.addRow({});
+
+    // Rozbicie po typie — SUMIF/COUNTIF po arkuszu „Realizacja", więc po ręcznej
+    // korekcie liczby w tabeli podsumowanie idzie za nią.
+    const naglowekTypow = ps.addRow({ a: 'Typ pozycji', b: 'Pozycje', c: 'Rozliczone', d: 'Wycena', e: 'Realizacja', f: 'Δ' });
+    naglowekTypow.font = { bold: true };
+    const rozbicieOd = ps.rowCount + 1;
+    const typy = [...new Set(rows.map(({ node }) => TYPE_META[node.type]?.label || node.type || '—'))];
+    for (const t of typy) {
+        const mine = rows.filter(({ node }) => (TYPE_META[node.type]?.label || node.type || '—') === t);
+        const planT = Math.round(mine.reduce((s, x) => s + planValueOf(x.node, x.card), 0) * 100) / 100;
+        const realT = Math.round(mine.reduce((s, x) => s + x.realization.value, 0) * 100) / 100;
+        const n = ps.rowCount + 1;
+        ps.addRow({
+            a: t,
+            b: { formula: `COUNTIF(Realizacja!$C$2:$C$${last},$A${n})`, result: mine.length },
+            c: { formula: `COUNTIFS(Realizacja!$C$2:$C$${last},$A${n},Realizacja!$S$2:$S$${last},"tak")`, result: mine.filter(x => x.node.realizationClosed).length },
+            d: { formula: `SUMIF(Realizacja!$C$2:$C$${last},$A${n},Realizacja!$M$2:$M$${last})`, result: planT },
+            e: { formula: `SUMIF(Realizacja!$C$2:$C$${last},$A${n},Realizacja!$N$2:$N$${last})`, result: realT },
+            f: { formula: `E${n}-D${n}`, result: Math.round((realT - planT) * 100) / 100 },
+        });
+    }
+    // Format per komórka, nie per kolumna: kolumna D niesie też „% wykonania" w tabeli
+    // prognozy, a `getColumn().numFmt` zamieniłby ten procent na złotówki.
+    for (let r = rozbicieOd; r <= ps.rowCount; r++) {
+        for (const k of ['D', 'E', 'F']) ps.getCell(`${k}${r}`).numFmt = FMT_PLN;
+    }
+
+    // ── Stan wykonania — ten sam podział, który widać pod analizą w zakładce ──────────
+    // Trzy części dzielą zamówienie bez reszty, więc arkusz da się sprawdzić w pionie:
+    // domknięte + w realizacji + nierozpoczęte = razem. Δ, pokrycie i udział są FORMUŁAMI —
+    // po ręcznej poprawce kwoty w arkuszu przeliczają się same (zasada eksportów Excel).
+    // Dwa puste wiersze przed sekcją: jeden nie odcinał jej wzrokowo od rozbicia po typach.
+    ps.addRow({});
+    naglowek('STAN WYKONANIA — PODZIAŁ ZAMÓWIENIA');
+    const bilans = liczBilansWykonania(rows);
+    const glowkaB = ps.addRow({
+        a: 'Przekrój', b: 'Pozycje', c: 'Wycena', d: 'Zakup', e: 'Δ', f: 'Pokrycie wyceny', g: 'Udział wyceny',
+    });
+    glowkaB.font = { bold: true };
+    const bilansOd = ps.rowCount + 1;
+    const wierszBilansu = (label, x, pogrubiony = false) => {
+        const nr = ps.rowCount + 1;
+        const r = ps.addRow({
+            a: label,
+            b: x.pozycji,
+            c: x.plan,
+            d: x.real,
+            e: { formula: `D${nr}-C${nr}`, result: Math.round((x.real - x.plan) * 100) / 100 },
+            f: { formula: `IF(C${nr}=0,"",D${nr}/C${nr})`, result: x.plan ? x.real / x.plan : '' },
+            g: { formula: `IF($C$${bilansOd + 5}=0,"",C${nr}/$C$${bilansOd + 5})`, result: bilans.calosc.plan ? x.plan / bilans.calosc.plan : '' },
+        });
+        if (pogrubiony) r.font = { bold: true };
+        return r;
+    };
+    for (const p of bilans.przekroje) wierszBilansu(p.label, p);
+    wierszBilansu('Domknięte łącznie', bilans.lacznie, true);
+    wierszBilansu('W realizacji (w toku, wstrzymane, niedokończone)', bilans.wRealizacji);
+    wierszBilansu(NIEROZPOCZETE_LABEL, bilans.nierozpoczete);
+    wierszBilansu('Razem zamówienie', bilans.calosc, true);
+    for (let r = bilansOd; r <= ps.rowCount; r++) {
+        for (const k of ['C', 'D', 'E']) ps.getCell(`${k}${r}`).numFmt = FMT_PLN;
+        for (const k of ['F', 'G']) ps.getCell(`${k}${r}`).numFmt = '0.0%';
+    }
+    for (const opis of [
+        'Podział liczy się WYŁĄCZNIE ze statusu wykonania pozycji. Kwoty to wycena i zakup całych pozycji —',
+        'status wykonania dotyczy pozycji razem z materiałem, który do niej wszedł.',
+        'W wierszu „' + NIEROZPOCZETE_LABEL + '" stoi kwota zakupu, bo materiał bywa już kupiony i zapłacony,',
+        'tylko jeszcze niezamontowany. Odwołane, czekające na akceptację oferty lub na dostawę, a także nocleg',
+        'i paliwo (nie mają osi wykonania) siedzą w tym samym wierszu.',
+    ]) {
+        const r = ps.addRow({ a: opis });
+        ps.mergeCells(`A${r.number}:G${r.number}`);
+        r.getCell('a').font = { italic: true, size: 9, color: { argb: 'FF666666' } };
+    }
+    ps.addRow({});
+    ps.addRow({});
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${(orderName || 'zamowienie').replace(/[^\w\d-]+/g, '_')}_analiza finansowa realizacji projektu.xlsx`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
 // @anchor realization-tab — zakładka „Realizacja": płaska tabela WSZYSTKICH liści kosztowych
 // zamówienia z porównaniem zakupu do wyceny. W odróżnieniu od panelu Materiały nie zakłada
 // ani nie edytuje kart produktowych — służy wyłącznie rozliczaniu tego, co się wydarzyło.
@@ -1081,6 +1559,11 @@ export default function RealizationTab({
     searchQuery = '',
     userRoles = [],
     orderName = '',
+    // @anchor realization-plan-label — skąd pochodzi PLAN (koszty jedn. i ilości): baseline
+    // albo — gdy zamówienie go nie ma — aktywny snapszot. Wyliczane w `DashboardPage`
+    // (`realization-baseline-version`), pokazywane w nagłówku, bo przełącznik wersji w belce
+    // górnej celowo NIE zmienia tych liczb i bez podpisu wyglądałoby to na zepsuty przełącznik.
+    planLabel = '',
     accepted = false,
     refreshKey = 0,
     oneDriveFolderName = null,
@@ -1433,11 +1916,6 @@ export default function RealizationTab({
         return map;
     }, [actuals]);
 
-    const planValueOf = (node, card) => {
-        const u = planUnitOf(node, card);
-        return u != null ? u * (Number(node.quantity) || 0) : 0;
-    };
-
     // @anchor realization-filter-options — wartości do wielowyboru, liczone z CAŁEJ tabeli,
     // nie z wierszy po filtrze. Lista wyborów nie może się kurczyć w trakcie zaznaczania:
     // gdyby liczyła się z wyniku, po zaznaczeniu „Zamówione" zniknęłyby z listy wszystkie
@@ -1642,487 +2120,19 @@ export default function RealizationTab({
 
     // @anchor realization-totals — sumy z WIDOCZNYCH wierszy, nie z całego zamówienia:
     // po zawężeniu filtrem stopka ma mówić o tym, na co się właśnie patrzy.
-    const totals = useMemo(() => {
-        let plan = 0, real = 0, done = 0, entries = 0;
-        for (const { node, card, realization } of rows) {
-            plan += planValueOf(node, card);
-            real += realization.value;
-            entries += realization.entries.length;
-            if (realization.state === 'full' || realization.state === 'over' || realization.state === 'closed') done += 1;
-        }
-        return {
-            plan: Math.round(plan * 100) / 100,
-            real: Math.round(real * 100) / 100,
-            delta: Math.round((real - plan) * 100) / 100,
-            done, entries,
-            count: rows.length,
-        };
-    }, [rows]);
+    const totals = useMemo(() => liczTotals(rows), [rows]);
 
-    // @anchor realization-analysis — materiał do narracyjnej analizy w arkuszu „Podsumowanie".
-    // Kluczowe rozróżnienie: globalne „Δ" miesza pozycje ruszone z nietkniętymi, więc przy 2%
-    // zaawansowania ZAWSZE pokaże ogromny niedobór — i nie mówi nic o tym, czy kupujemy drogo
-    // czy tanio. Na to pytanie odpowiada wyłącznie podzbiór pozycji, na których coś się
-    // wydarzyło (`ruszone`), i dlatego liczony jest osobno.
-    const analiza = useMemo(() => {
-        let planR = 0, realR = 0, ruszone = 0, taniej = 0, drozej = 0, wPunkt = 0, oszczednosc = 0, przekroczenie = 0;
-        const wgTypu = new Map();
-        for (const { node, card, realization } of rows) {
-            const p = planValueOf(node, card);
-            const t = TYPE_META[node.type]?.label || node.type || '—';
-            if (!wgTypu.has(t)) wgTypu.set(t, { typ: t, planCaly: 0, planRuszone: 0, realRuszone: 0 });
-            const g = wgTypu.get(t);
-            g.planCaly += p;
-            if (!(realization.qty > 0 || node.realizationClosed)) continue;
-            const d = Math.round((realization.value - p) * 100) / 100;
-            planR += p; realR += realization.value; ruszone += 1;
-            g.planRuszone += p; g.realRuszone += realization.value;
-            if (d < 0) { taniej += 1; oszczednosc -= d; }
-            else if (d > 0) { drozej += 1; przekroczenie += d; }
-            else wPunkt += 1;
-        }
-        const z2 = v => Math.round(v * 100) / 100;
-        // Prognoza liczona OSOBNO dla każdego rodzaju kosztów: rabat wynegocjowany na materiale
-        // nie ma prawa obniżać prognozy robocizny, bo to zupełnie inny rynek.
-        //
-        // Odchylenie bierzemy pod uwagę dopiero, gdy rodzaj ma za sobą realne wydatki — co
-        // najmniej `PROG_MIN_UDZIAL` swojego budżetu. Niżej próbka nic nie znaczy i potrafi wywrócić
-        // prognozę: praca wyceniona na 67 311 zł z jednym wpisem na 100 zł dawała prognozę
-        // 3 365 zł, czyli 64 tys. „oszczędności" wyczarowane z jednej pozycji. Rodzaj poniżej
-        // progu (w tym taki bez żadnych wydatków) wchodzi po 100% wyceny — brak danych nie jest
-        // powodem, żeby obiecywać oszczędność.
-        let prognoza = 0;
-        for (const g of wgTypu.values()) {
-            g.pelna = !(g.planCaly > 0 && g.planRuszone > 0 && g.realRuszone / g.planCaly >= PROG_MIN_UDZIAL);
-            g.wsp = g.pelna ? 1 : g.realRuszone / g.planRuszone;
-            prognoza += g.planCaly * g.wsp;
-        }
-        return {
-            ruszone, taniej, drozej, wPunkt,
-            planRuszone: z2(planR), realRuszone: z2(realR), deltaRuszone: z2(realR - planR),
-            oszczednosc: z2(oszczednosc), przekroczenie: z2(przekroczenie),
-            prognoza: z2(prognoza),
-            typy: [...wgTypu.values()].map(g => ({ ...g, planCaly: z2(g.planCaly), planRuszone: z2(g.planRuszone), realRuszone: z2(g.realRuszone) })),
-        };
-    }, [rows]);
+    const analiza = useMemo(() => liczAnalize(rows), [rows]);
 
     // ─ Eksport Excel ─────────────────────────────────────────────────────────
 
-    // @anchor realization-export-excel — eksport DOKŁADNIE tego, co widać na ekranie: wiersze po
-    // wyszukiwarce, filtrach kolumn i sortowaniu, zawężone rolą (praca, usługa, nocleg i paliwo
-    // wchodzą wyłącznie u managera — `visibleTypes`). Arkusz „Zakupy" rozbija to samo na
-    // pojedyncze wpisy zakupu z wymaganiem, do którego są przypisane. Arkusz „Podsumowanie" niesie globalne
-    // porównanie wyceny z realizacją, licznik rozliczonych pozycji i rozbicie po typie liścia.
-    // Kolumny o prostej relacji arytmetycznej są ŻYWYMI formułami (zasada eksportów Excel):
-    // wartość wyceny = ilość × koszt jedn., Δ = zakup − wycena, sumy przez SUM/SUMIF/COUNTIF —
-    // po zmianie liczby w arkuszu wszystko przelicza się samo.
+    // @anchor realization-export-excel-call — stan „eksportuję…" i komunikat o błędzie zostają
+    // przy komponencie; samo budowanie arkusza robi `eksportRealizacjiXlsx` na poziomie modułu.
     const exportExcel = async () => {
         if (exporting || rows.length === 0) return;
         setExporting(true);
         try {
-            const wb = new ExcelJS.Workbook();
-            // Kolejność zakładek bierze się z kolejności `addWorksheet`, więc oba arkusze zakładamy
-            // tutaj, a wypełniamy niżej: „Podsumowanie" ma otwierać plik (najpierw wnioski, potem
-            // dane), ale liczy się z gotowej tabeli. Formuły `Realizacja!…` adresują po nazwie,
-            // więc kolejność arkuszy im nie przeszkadza.
-            const ps = wb.addWorksheet('Podsumowanie');
-            const ws = wb.addWorksheet('Realizacja');
-            const zk = wb.addWorksheet('Zakupy');
-            // Waluta w postaci, którą Excel rozpoznaje jako PLN, a nie jako format niestandardowy.
-            const FMT_PLN = '#,##0.00\\ [$zł-415]';
-            ws.columns = [
-                { header: 'Przedmiot projektu', key: 'parent', width: 32 },
-                { header: 'Nazwa', key: 'name', width: 38 },
-                { header: 'Typ', key: 'typ', width: 12 },
-                { header: 'Produkt / zakres', key: 'product', width: 28 },
-                { header: 'Dostawca', key: 'supplier', width: 24 },
-                { header: 'Dokument', key: 'doc', width: 16 },
-                { header: 'Ilość wyceny', key: 'qtyPlan', width: 12 },
-                { header: 'Jedn.', key: 'unit', width: 8 },
-                { header: 'Zakup / wykonanie', key: 'qtyReal', width: 16 },
-                { header: 'Δ ilość', key: 'dQty', width: 10 },
-                { header: 'Koszt jedn. wyceny', key: 'pricePlan', width: 16 },
-                // „Zakup" tylko tam, gdzie faktycznie się kupuje. Arkusz obejmuje wszystkie typy
-                // liści, a pracy i usługi się nie kupuje — kolumny zbiorcze mówią „realizacja".
-                { header: 'Koszt jedn. realizacji', key: 'pricePurchase', width: 18 },
-                { header: 'Koszt całk. wyceny', key: 'valuePlan', width: 18 },
-                { header: 'Koszt całk. realizacji', key: 'valueReal', width: 20 },
-                { header: 'Δ wartość', key: 'delta', width: 14 },
-                // @anchor realization-export-status-cols — trzy osie statusu w tej samej
-                // kolejności co na ekranie. Oś, której dany typ liścia NIE MA (praca nie ma
-                // zakupu, paliwo nie ma wykonania), dostaje „—", a nie pustą komórkę: puste
-                // znaczyłoby „nikt jeszcze nie ustawił", a to zupełnie inna informacja.
-                // Oś wykonania niesie stan WYLICZONY (`execStatusLabelOf` z rejestrem odbiorów),
-                // więc pozycja odebrana protokołem wychodzi w Excelu jako „Odebrane" — tak samo
-                // jak w tabeli, mimo że w bazie stoi na „Wykonane".
-                { header: 'Status oferty', key: 'statusPlan', width: 16 },
-                { header: 'Status zakupu', key: 'statusPurchase', width: 18 },
-                { header: 'Status wykonania', key: 'statusExec', width: 20 },
-                { header: 'Rozliczone', key: 'closed', width: 11 },
-                { header: 'Wpisy', key: 'entries', width: 8 },
-                { header: 'Komentarz', key: 'comment', width: 40 },
-            ];
-            ws.getRow(1).font = { bold: true };
-            ws.views = [{ state: 'frozen', ySplit: 1 }];
-            ws.autoFilter = 'A1:U1';
-
-            rows.forEach(({ node, card, realization: r }, i) => {
-                const n = i + 2;
-                const planUnit = planUnitOf(node, card);
-                const purchaseUnit = r.avg ?? purchaseUnitOf(card);
-                const planValue = planUnit != null ? planUnit * (Number(node.quantity) || 0) : null;
-                const hasReal = r.qty > 0 || node.realizationClosed;
-                const scopes = [...new Set(r.entries.map(e => e.scope).filter(Boolean))];
-                const product = [card?.manufacturer, card?.model].filter(Boolean).join(' ') || scopes.join('; ');
-                ws.addRow({
-                    parent: getParentPath(node.path),
-                    name: node.name || '',
-                    typ: TYPE_META[node.type]?.label || node.type || '',
-                    product,
-                    supplier: [...new Set(r.entries.map(e => e.supplier?.name).filter(Boolean))].join(', '),
-                    doc: [...new Set(r.entries.map(e => e.docNumber).filter(Boolean))].join(', '),
-                    qtyPlan: Number(node.quantity) || 0,
-                    unit: node.unit || 'szt',
-                    qtyReal: r.qty,
-                    dQty: { formula: `I${n}-G${n}`, result: Math.round((r.qty - r.plan) * 1000) / 1000 },
-                    pricePlan: planUnit,
-                    pricePurchase: purchaseUnit,
-                    valuePlan: planUnit != null ? { formula: `G${n}*K${n}`, result: planValue ?? 0 } : null,
-                    // Zakup to SUMA wpisów o różnych cenach, nie iloczyn — zostaje wartością.
-                    valueReal: hasReal ? r.value : null,
-                    delta: planValue != null && hasReal ? { formula: `N${n}-M${n}`, result: Math.round((r.value - planValue) * 100) / 100 } : null,
-                    statusPlan: statusLabel(node),
-                    statusPurchase: purchaseStatusLabel(node) || '—',
-                    statusExec: execStatusLabelOf(node, odbiorByRoot[wbsRootOf(node)]) || '—',
-                    closed: node.realizationClosed ? 'tak' : 'nie',
-                    entries: r.entries.length,
-                    comment: node.comment || '',
-                });
-            });
-
-            const last = rows.length + 1;
-            const sum = ws.addRow({
-                parent: 'Razem',
-                valuePlan: { formula: `SUM(M2:M${last})`, result: totals.plan },
-                valueReal: { formula: `SUM(N2:N${last})`, result: totals.real },
-                delta: { formula: `SUM(O2:O${last})`, result: totals.delta },
-                entries: { formula: `SUM(T2:T${last})`, result: totals.entries },
-            });
-            sum.font = { bold: true };
-            // Kwoty jako waluta PLN, ilości bez formatu (ogólne) — jednostka siedzi w osobnej
-            // kolumnie „Jedn.", więc doklejanie separatorów do liczby sztuk tylko myli.
-            ['pricePlan', 'pricePurchase', 'valuePlan', 'valueReal', 'delta'].forEach(k => { ws.getColumn(k).numFmt = FMT_PLN; });
-
-            // ─ Zakupy ────────────────────────────────────────────────────────
-            // @anchor realization-export-purchases — arkusz „Zakupy": jeden wiersz na WPIS
-            // realizacji (`LeafActual`), a nie na pozycję, i tylko tam, gdzie się faktycznie
-            // KUPUJE — praca i usługa to wykonanie, nie zakup (ten sam podział co `entryNoun`).
-            // Arkusz „Realizacja" agreguje wpisy do pozycji, więc nie da się z niego wyczytać
-            // pojedynczej dostawy: daty, faktury ani ceny konkretnego egzemplarza.
-            // Pierwsza kolumna niesie WYMAGANIE (`MaterialRequirement.name`), do którego zakup
-            // jest przypisany — po nim rozlicza się dostawy wobec zakresu z dokumentacji.
-            // Liście bez karty produktowej (nocleg, paliwo) wymagania nie mają — zostaje „—".
-            const zakupy = [];
-            for (const { node, card, realization: r } of rows) {
-                if (entryNoun(node.type) !== 'zakup') continue;
-                for (const e of r.entries) zakupy.push({ node, card, e });
-            }
-            zk.columns = [
-                { header: 'Wymaganie', key: 'req', width: 34 },
-                { header: 'Przedmiot projektu', key: 'parent', width: 30 },
-                { header: 'Pozycja', key: 'name', width: 34 },
-                { header: 'Typ', key: 'typ', width: 12 },
-                { header: 'Data zakupu', key: 'date', width: 13 },
-                { header: 'Producent', key: 'manufacturer', width: 20 },
-                { header: 'Model', key: 'model', width: 24 },
-                { header: 'Kod EAN', key: 'ean', width: 16 },
-                { header: 'Dostawca', key: 'supplier', width: 24 },
-                { header: 'Dokument', key: 'doc', width: 16 },
-                { header: 'Ilość', key: 'qty', width: 10 },
-                { header: 'Jedn.', key: 'unit', width: 8 },
-                // @anchor realization-export-purchase-vs-offer — cena ofertowa obok ceny zakupu
-                // i różnica między nimi. Ofertowa jest cechą POZYCJI (`planUnitOf`: karta
-                // produktowa, a dla liści bez karty `WbsNode.unitCost`), więc przy kilku
-                // dostawach powtarza się w każdym wierszu — to ta sama baza porównania.
-                // Δ liczona jako zakup − oferta: plus = kupiliśmy drożej, minus = taniej.
-                // Pozycja bez ceny w wycenie zostawia porównanie puste, zamiast udawać −100%.
-                { header: 'Cena ofertowa', key: 'planUnit', width: 14 },
-                { header: 'Cena zakupu', key: 'unitCost', width: 14 },
-                { header: 'Δ jedn.', key: 'dUnit', width: 12 },
-                { header: 'Δ %', key: 'dPct', width: 10 },
-                { header: 'Wartość zakupu', key: 'value', width: 16 },
-                { header: 'Δ wartość', key: 'dValue', width: 14 },
-                { header: 'Kupujący', key: 'author', width: 22 },
-                { header: 'Komentarz', key: 'comment', width: 40 },
-            ];
-            zk.getRow(1).font = { bold: true };
-            zk.views = [{ state: 'frozen', ySplit: 1 }];
-            zk.autoFilter = 'A1:T1';
-
-            zakupy.forEach(({ node, card, e }, i) => {
-                const n = i + 2;
-                const qty = Number(e.qty) || 0;
-                const unitCost = Number(e.unitCost) || 0;
-                const planUnit = planUnitOf(node, card);
-                zk.addRow({
-                    req: card?.name || '—',
-                    parent: getParentPath(node.path),
-                    name: node.name || '',
-                    typ: TYPE_META[node.type]?.label || node.type || '',
-                    date: fmtDate(e.entryDate),
-                    // Producent i model z WPISU, bo druga dostawa bywa zamiennikiem innej marki;
-                    // karta produktowa wchodzi dopiero, gdy wpis ich nie niesie.
-                    manufacturer: e.manufacturer || card?.manufacturer || '',
-                    model: e.model || card?.model || '',
-                    ean: e.ean || '',
-                    supplier: e.supplier?.name || '',
-                    doc: e.docNumber || '',
-                    qty,
-                    unit: node.unit || 'szt',
-                    planUnit,
-                    unitCost,
-                    dUnit: planUnit != null ? { formula: `N${n}-M${n}`, result: Math.round((unitCost - planUnit) * 100) / 100 } : null,
-                    dPct: planUnit != null ? { formula: `IF(M${n}=0,"",O${n}/M${n})`, result: planUnit ? (unitCost - planUnit) / planUnit : '' } : null,
-                    value: { formula: `K${n}*N${n}`, result: Math.round(qty * unitCost * 100) / 100 },
-                    dValue: planUnit != null ? { formula: `K${n}*O${n}`, result: Math.round(qty * (unitCost - planUnit) * 100) / 100 } : null,
-                    author: [e.author?.firstName, e.author?.lastName].filter(Boolean).join(' ') || e.author?.email || '',
-                    comment: e.comment || '',
-                });
-            });
-
-            if (zakupy.length) {
-                const lastZ = zakupy.length + 1;
-                const sumQty = Math.round(zakupy.reduce((s, x) => s + (Number(x.e.qty) || 0), 0) * 1000) / 1000;
-                const sumVal = Math.round(zakupy.reduce((s, x) => s + (Number(x.e.qty) || 0) * (Number(x.e.unitCost) || 0), 0) * 100) / 100;
-                // Δ sumujemy tylko po wierszach, które mają cenę ofertową — pozycja bez wyceny
-                // nie jest „zakupem za darmo ponad plan", tylko brakiem podstawy do porównania.
-                const sumDVal = Math.round(zakupy.reduce((s, { node, card, e }) => {
-                    const pu = planUnitOf(node, card);
-                    return pu == null ? s : s + (Number(e.qty) || 0) * ((Number(e.unitCost) || 0) - pu);
-                }, 0) * 100) / 100;
-                const sumZ = zk.addRow({
-                    req: 'Razem',
-                    qty: { formula: `SUM(K2:K${lastZ})`, result: sumQty },
-                    value: { formula: `SUM(Q2:Q${lastZ})`, result: sumVal },
-                    dValue: { formula: `SUM(R2:R${lastZ})`, result: sumDVal },
-                });
-                sumZ.font = { bold: true };
-            } else {
-                zk.addRow({ req: 'Brak wpisów zakupu w tym widoku' }).font = { italic: true };
-            }
-            ['planUnit', 'unitCost', 'dUnit', 'value', 'dValue'].forEach(k => { zk.getColumn(k).numFmt = FMT_PLN; });
-            zk.getColumn('dPct').numFmt = '0.0%';
-
-            // ─ Podsumowanie ──────────────────────────────────────────────────
-            ps.columns = [
-                { header: '', key: 'a', width: 44 },
-                { header: '', key: 'b', width: 18 },
-                { header: '', key: 'c', width: 18 },
-                { header: '', key: 'd', width: 14 },
-                { header: '', key: 'e', width: 18 },
-                { header: '', key: 'f', width: 18 },
-            ];
-            const naglowek = (t) => { const r = ps.addRow({ a: t }); r.font = { bold: true }; return r; };
-            // Wielowybór wpisuje się do arkusza jako lista przez „lub" — arkusz ma powiedzieć,
-            // CO było zaznaczone, a nie że filtr w ogóle istniał.
-            const filtry = Object.entries(colFilters).filter(([, v]) => hasColFilter(v))
-                .map(([k, v]) => `${COL_DEFS.find(c => c.key === k)?.label || k}: ${Array.isArray(v) ? v.join(' lub ') : v}`);
-
-            // Excel NIE dopasowuje wysokości wiersza, w którym jest scalona komórka — trzeba ją
-            // policzyć samemu, inaczej dłuższy tekst urywa się w połowie zdania. Nominalna
-            // szerokość scalenia (suma `width` kolumn) to górna granica: łamanie idzie po
-            // słowach, więc realnie w wierszu mieści się ok. 83% znaków. Stąd zapas.
-            const ZNAKI_A_F = 105;  // scalenie A:F ma 130 jednostek szerokości
-            const ZNAKI_B_F = 68;   // scalenie B:F ma 86 jednostek
-            const wysokosc = (tekst, znaki) => Math.max(1, Math.ceil(String(tekst).length / znaki)) * 15 + 4;
-            // Wiersz „etykieta + długa wartość": wartość rozlana na B:F, żeby lista rodzajów
-            // kosztów albo zestaw filtrów nie ginął na szerokości samej kolumny B.
-            const wierszOpisowy = (label, tekst) => {
-                const r = ps.addRow({ a: label, b: tekst });
-                ps.mergeCells(`B${r.number}:F${r.number}`);
-                r.getCell('b').alignment = { wrapText: true, vertical: 'top' };
-                r.height = wysokosc(tekst, ZNAKI_B_F);
-                return r;
-            };
-
-            naglowek('Realizacja — podsumowanie');
-            wierszOpisowy('Zamówienie', orderName || '—');
-            ps.addRow({ a: 'Data eksportu', b: new Date().toISOString().slice(0, 10) });
-            // Zakres wprost w arkuszu — bez tego nie da się później odpowiedzieć, czy plik nie ma
-            // kosztów własnych, bo ich nie było, czy bo rola ich nie widziała. Przy zawężeniu
-            // wymieniamy rodzaje kosztów po nazwie, żeby czytelnik nie musiał zgadywać, czego brak.
-            const rodzaje = visibleTypes.map(t => TYPE_META[t]?.label || t);
-            wierszOpisowy('Zakres eksportu', visibleTypes.length === LEAF_TYPES.length
-                ? 'cały zakres zamówienia'
-                : `część zakresu — rodzaje kosztów: ${rodzaje.join(', ')}`);
-            ps.addRow({ a: 'Baseline', b: accepted ? 'zaakceptowany' : 'plan z bieżącej wersji' });
-            if (searchQuery.trim()) wierszOpisowy('Szukana fraza', searchQuery.trim());
-            if (filtry.length) wierszOpisowy('Filtry kolumn', filtry.join(' · '));
-            ps.addRow({});
-
-            naglowek('Porównanie globalne');
-            ps.addRow({ a: 'Koszt całkowity wyceny', b: { formula: `Realizacja!M${last + 1}`, result: totals.plan } });
-            ps.addRow({ a: 'Wartość zakupów / realizacji zadań', b: { formula: `Realizacja!N${last + 1}`, result: totals.real } });
-            const wRow = ps.rowCount - 1;
-            // Obie pozycje liczone „w plus": ile budżetu ZOSTAŁO (wycena − realizacja) i jaka jego
-            // część JEST już wydana (realizacja ÷ wycena). Odwrotnie niż kolumna „Δ wartość"
-            // w arkuszu Realizacja, która zostaje znakowanym odchyleniem.
-            ps.addRow({ a: 'Wartość niezrealizowanego budżetu ofertowego', b: { formula: `B${wRow}-B${wRow + 1}`, result: Math.round((totals.plan - totals.real) * 100) / 100 } });
-            ps.addRow({ a: 'Procentowa realizacja budżetu', b: { formula: `IF(B${wRow}=0,"",B${wRow + 1}/B${wRow})`, result: totals.plan ? totals.real / totals.plan : '' } });
-            ps.getCell(`B${ps.rowCount}`).numFmt = '0.0%';
-            // wRow = „Koszt całkowity wyceny"; kolejne dwa wiersze to realizacja i Δ wartość.
-            for (let r = wRow; r <= wRow + 2; r++) ps.getCell(`B${r}`).numFmt = FMT_PLN;
-            ps.addRow({});
-
-            // ─ Prognoza wydatków ─────────────────────────────────────────────
-            // Osobny wiersz na każdy rodzaj kosztów: współczynnik wyliczony z pozycji już
-            // ruszonych tego rodzaju, przeniesiony na cały jego plan. Rodzaj bez wydatków
-            // idzie po 100% wyceny. Na końcu suma — prognoza całego budżetu.
-            if (analiza.ruszone) {
-                naglowek('Prognoza wydatków');
-                const glowka = ps.addRow({ a: 'Rodzaj kosztów', b: 'Wycena', c: 'Wykonanie', d: '% wykonania', e: 'Prognoza', f: 'Δ do oferty' });
-                glowka.font = { bold: true };
-                const odRow = ps.rowCount + 1;
-                const typy = analiza.typy.filter(g => g.planCaly > 0);
-                for (const g of typy) {
-                    const n = ps.rowCount + 1;
-                    const prog = Math.round(g.planCaly * g.wsp * 100) / 100;
-                    ps.addRow({
-                        a: g.typ,
-                        b: g.planCaly,
-                        c: g.realRuszone,
-                        // Udział wykonania w wycenie rodzaju — to ta liczba decyduje, czy prognoza
-                        // idzie z odchylenia, czy zostaje na 100% (próg `PROG_MIN_UDZIAL`).
-                        d: { formula: `IF(B${n}=0,"",C${n}/B${n})`, result: g.planCaly ? g.realRuszone / g.planCaly : '' },
-                        e: prog,
-                        f: { formula: `B${n}-E${n}`, result: Math.round((g.planCaly - prog) * 100) / 100 },
-                    });
-                }
-                const doRow = ps.rowCount;
-                const suma = ps.addRow({
-                    a: 'Razem',
-                    b: { formula: `SUM(B${odRow}:B${doRow})`, result: totals.plan },
-                    c: { formula: `SUM(C${odRow}:C${doRow})`, result: totals.real },
-                    d: { formula: `IF(B${ps.rowCount + 1}=0,"",C${ps.rowCount + 1}/B${ps.rowCount + 1})`, result: totals.plan ? totals.real / totals.plan : '' },
-                    e: { formula: `SUM(E${odRow}:E${doRow})`, result: analiza.prognoza },
-                    f: { formula: `SUM(F${odRow}:F${doRow})`, result: Math.round((totals.plan - analiza.prognoza) * 100) / 100 },
-                });
-                suma.font = { bold: true };
-                for (let r = odRow; r <= suma.number; r++) {
-                    for (const k of ['B', 'C', 'E', 'F']) ps.getCell(`${k}${r}`).numFmt = FMT_PLN;
-                    ps.getCell(`D${r}`).numFmt = '0.0%';
-                }
-
-                // Rodzaje trzymane na 100% — bez tego wiersz z wykonaniem 100 zł przy wycenie
-                // 67 tys. i prognozą równą wycenie wygląda na błąd rachunku, a nie na decyzję.
-                const trzymane = typy.filter(g => g.pelna && g.realRuszone > 0).map(g => g.typ);
-                if (trzymane.length) {
-                    const r = ps.addRow({ a: `Wykonanie poniżej ${Math.round(PROG_MIN_UDZIAL * 100)}% budżetu rodzaju — prognoza trzymana na 100% wyceny: ${trzymane.join(', ')}.` });
-                    ps.mergeCells(`A${r.number}:F${r.number}`);
-                    r.getCell('a').alignment = { wrapText: true, vertical: 'top' };
-                    r.height = wysokosc(r.getCell('a').value, ZNAKI_A_F);
-                }
-                ps.addRow({});
-            }
-
-            // ─ Analiza ───────────────────────────────────────────────────────
-            // Zdania budowane z liczb, nie z szablonu „wstaw wartość" — każdy wariant (jesteśmy
-            // do przodu / przekraczamy / nic nie ruszyło) ma własne sformułowanie, bo inaczej
-            // przy zerowej realizacji wychodzą komunikaty bez sensu. Kwoty zawsze dodatnie,
-            // kierunek niesie słowo.
-            const zl = v => `${fmtZl(v)} zł`;
-            const pct = (a, b) => `${(a / b * 100).toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
-            // Liczebnik w mianowniku (1 pozycja / 2 pozycje / 5 pozycji). Po przyimku „z" polski
-            // wymaga dopełniacza niezależnie od liczby, więc tam wpisujemy „pozycji" na sztywno.
-            const poz = n => n === 1 ? 'pozycja' : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) ? 'pozycje' : 'pozycji';
-            const A = analiza;
-            const zdania = [];
-
-            if (!totals.plan) {
-                zdania.push(`Pozycje w tym widoku nie mają kwot w wycenie, a na zakupy i wykonanie zadań poszło dotąd ${zl(totals.real)} — nie ma do czego porównać realizacji.`);
-            } else if (totals.real > totals.plan) {
-                zdania.push(`Wycena zamówienia to ${zl(totals.plan)}, a na zakupy i wykonanie zadań poszło dotąd ${zl(totals.real)} — budżet ofertowy jest wyczerpany i przekroczony o ${zl(totals.real - totals.plan)}, co daje ${pct(totals.real, totals.plan)} wyceny.`);
-            } else {
-                zdania.push(`Wycena zamówienia to ${zl(totals.plan)}, a na zakupy i wykonanie zadań poszło dotąd ${zl(totals.real)} — zrealizowano ${pct(totals.real, totals.plan)} budżetu ofertowego, do wykorzystania zostaje ${zl(totals.plan - totals.real)}.`);
-            }
-
-            if (!A.ruszone) {
-                zdania.push(`Żadna z ${totals.count} pozycji w widoku nie ma jeszcze wpisu zakupu ani wykonania, więc nie da się jeszcze powiedzieć, czy kupujemy taniej, czy drożej niż zakładała wycena.`);
-            } else {
-                const udzial = totals.plan ? `, czyli ${pct(A.planRuszone, totals.plan)} całego budżetu` : '';
-                zdania.push(`Realizacja ruszyła na ${A.ruszone} z ${totals.count} pozycji (${pct(A.ruszone, totals.count)}); w wycenie odpowiadały one za ${zl(A.planRuszone)}${udzial}.`);
-
-                if (!A.planRuszone) {
-                    zdania.push(`Ruszone pozycje nie miały w wycenie żadnej kwoty, więc całe ${zl(A.realRuszone)} to koszt ponad plan.`);
-                } else if (A.deltaRuszone < 0) {
-                    zdania.push(`Na tych pozycjach wydano ${zl(A.realRuszone)} przy planie ${zl(A.planRuszone)} — jesteśmy do przodu o ${zl(-A.deltaRuszone)}, czyli kupujemy ${pct(-A.deltaRuszone, A.planRuszone)} poniżej wyceny.`);
-                } else if (A.deltaRuszone > 0) {
-                    zdania.push(`Na tych pozycjach wydano ${zl(A.realRuszone)} przy planie ${zl(A.planRuszone)} — wydajemy o ${zl(A.deltaRuszone)} więcej, niż zakładano, czyli ${pct(A.deltaRuszone, A.planRuszone)} powyżej wyceny.`);
-                } else {
-                    zdania.push(`Na tych pozycjach wydano dokładnie tyle, ile zakładała wycena — ${zl(A.realRuszone)}.`);
-                }
-
-                // Wyliczenie bez orzeczenia — przy zmiennej liczbie pozycji każda forma czasownika
-                // („wypadła / wypadły / wypadło") byłaby błędna dla dwóch pozostałych przypadków.
-                zdania.push(`Poniżej wyceny: ${A.taniej} ${poz(A.taniej)} na łączną oszczędność ${zl(A.oszczednosc)}. Powyżej wyceny: ${A.drozej} ${poz(A.drozej)} na łączne przekroczenie ${zl(A.przekroczenie)}${A.wPunkt ? `. Dokładnie w planie: ${A.wPunkt} ${poz(A.wPunkt)}` : ''}.`);
-
-                if (A.planRuszone > 0 && totals.plan) {
-                    if (A.planRuszone / totals.plan < 0.2) {
-                        zdania.push(`Próba jest jednak mała: ruszone pozycje to dopiero ${pct(A.planRuszone, totals.plan)} wartości wyceny, więc prognozę traktuj orientacyjnie — o rzeczywistym wyniku zamówienia zdecydują pozycje jeszcze nietknięte.`);
-                    }
-                }
-            }
-
-            naglowek('Analiza');
-            for (const z of zdania) {
-                const r = ps.addRow({ a: z });
-                ps.mergeCells(`A${r.number}:F${r.number}`);
-                r.getCell('a').alignment = { wrapText: true, vertical: 'top' };
-                r.height = wysokosc(z, ZNAKI_A_F);
-            }
-            ps.addRow({});
-
-            naglowek('Pokrycie');
-            ps.addRow({ a: 'Pozycje w widoku', b: totals.count });
-            ps.addRow({ a: 'Rozliczone / wykonane', b: totals.done });
-            ps.addRow({ a: 'Udział rozliczonych', b: { formula: `IF(B${ps.rowCount - 1}=0,"",B${ps.rowCount}/B${ps.rowCount - 1})`, result: totals.count ? totals.done / totals.count : '' } });
-            ps.getCell(`B${ps.rowCount}`).numFmt = '0.0%';
-            ps.addRow({ a: 'Wpisy realizacji', b: totals.entries });
-            ps.addRow({});
-
-            // Rozbicie po typie — SUMIF/COUNTIF po arkuszu „Realizacja", więc po ręcznej
-            // korekcie liczby w tabeli podsumowanie idzie za nią.
-            const naglowekTypow = ps.addRow({ a: 'Typ pozycji', b: 'Pozycje', c: 'Rozliczone', d: 'Wycena', e: 'Realizacja', f: 'Δ' });
-            naglowekTypow.font = { bold: true };
-            const rozbicieOd = ps.rowCount + 1;
-            const typy = [...new Set(rows.map(({ node }) => TYPE_META[node.type]?.label || node.type || '—'))];
-            for (const t of typy) {
-                const mine = rows.filter(({ node }) => (TYPE_META[node.type]?.label || node.type || '—') === t);
-                const planT = Math.round(mine.reduce((s, x) => s + planValueOf(x.node, x.card), 0) * 100) / 100;
-                const realT = Math.round(mine.reduce((s, x) => s + x.realization.value, 0) * 100) / 100;
-                const n = ps.rowCount + 1;
-                ps.addRow({
-                    a: t,
-                    b: { formula: `COUNTIF(Realizacja!$C$2:$C$${last},$A${n})`, result: mine.length },
-                    c: { formula: `COUNTIFS(Realizacja!$C$2:$C$${last},$A${n},Realizacja!$S$2:$S$${last},"tak")`, result: mine.filter(x => x.node.realizationClosed).length },
-                    d: { formula: `SUMIF(Realizacja!$C$2:$C$${last},$A${n},Realizacja!$M$2:$M$${last})`, result: planT },
-                    e: { formula: `SUMIF(Realizacja!$C$2:$C$${last},$A${n},Realizacja!$N$2:$N$${last})`, result: realT },
-                    f: { formula: `E${n}-D${n}`, result: Math.round((realT - planT) * 100) / 100 },
-                });
-            }
-            // Format per komórka, nie per kolumna: kolumna D niesie też „% wykonania" w tabeli
-            // prognozy, a `getColumn().numFmt` zamieniłby ten procent na złotówki.
-            for (let r = rozbicieOd; r <= ps.rowCount; r++) {
-                for (const k of ['D', 'E', 'F']) ps.getCell(`${k}${r}`).numFmt = FMT_PLN;
-            }
-
-            const buf = await wb.xlsx.writeBuffer();
-            const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `${(orderName || 'zamowienie').replace(/[^\w\d-]+/g, '_')}_analiza finansowa realizacji projektu.xlsx`;
-            a.click();
-            URL.revokeObjectURL(a.href);
+            await eksportRealizacjiXlsx({ rows, visibleTypes, odbiorByRoot, orderName, searchQuery, colFilters, accepted });
         } catch (e) {
             console.error('[RealizationTab] eksport Excel:', e);
             alert('Nie udało się wygenerować pliku Excel');
@@ -2220,6 +2230,13 @@ export default function RealizationTab({
                 <ShoppingCart size={14} className="text-teal-400 flex-shrink-0" />
                 <span className="text-sm font-bold text-white">Tabela realizacji</span>
                 {orderName && <span className="text-xs text-gray-500 truncate">· {orderName}</span>}
+                {planLabel && (
+                    <span
+                        title="Realizacja rozlicza się wobec zakresu zaakceptowanego przez klienta, więc przełącznik wersji w belce górnej nie zmienia kosztów jedn. ani ilości planu."
+                        className="px-2 py-0.5 rounded border border-emerald-500/25 bg-emerald-500/10 text-emerald-300 text-[10px] font-bold uppercase tracking-wider flex-shrink-0">
+                        {planLabel}
+                    </span>
+                )}
                 {/* Eksport przy nagłówku, nie przy prawej krawędzi — to działanie na całej tabeli,
                     a nie znacznik stanu jak plakietki roli i baselinu po prawej. */}
                 <button

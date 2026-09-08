@@ -1,3 +1,114 @@
+## 2026-09-08 — Bilans stanu wykonania także w arkuszu „Podsumowanie"
+
+### architektura / API
+- `ui-funkcja` `realization-bilans-wykonania` — nowy moduł `wbs/realizationBilans.js`: `liczBilansWykonania(rows)` liczy podział zamówienia wg statusu wykonania (przekroje `realization-zamkniete-cuts`, „W realizacji" `realization-w-realizacji`, reszta przez odejmowanie). Woła go i tabela pod analizą w „Realizacja_new", i eksport Excel — jeden podział, żeby arkusz nie pokazywał czegoś innego niż ekran, z którego powstał. Wcześniej reguły siedziały w ciele `RealizationNewTab`.
+- `ui-funkcja` `realization-export-excel` — arkusz **„Podsumowanie" dostał sekcję „STAN WYKONANIA — PODZIAŁ ZAMÓWIENIA"** pod dotychczasową treścią: wiersz na każdy przekrój plus „Domknięte łącznie", „W realizacji", „Prace nierozpoczęte / materiały niezainstalowane" i „Razem zamówienie". Δ, pokrycie wyceny i udział wyceny są **formułami** (`D-C`, `D/C`, `C/$C$razem`), więc ręczna poprawka kwoty w arkuszu przelicza je sama. Doszła kolumna `g` w arkuszu podsumowania.
+- Nierozpoczęte liczą się przez ODEJMOWANIE (całość − domknięte − w realizacji), nie własnym testem: nowy stan osi wpadnie tam sam, zamiast wypaść z bilansu i cicho rozjechać sumę.
+- `test/test-eksport-realizacji.cjs` — test czyta teraz wygenerowany plik z powrotem i sprawdza, że domknięte + w realizacji + nierozpoczęte równa się „Razem zamówienie".
+
+### słownik
+- przeniesiono `realization-zamkniete-cuts`, `realization-w-realizacji` z `RealizationNewTab.jsx` do `wbs/realizationBilans.js`
+- dodano `realization-bilans-wykonania`
+
+## 2026-09-08 — Eksport Excel i protokół odbioru wspólne dla obu zakładek realizacji
+
+### architektura / API
+- `ui-funkcja` `realization-export-excel` — **eksport Excel wyjęty z ciała `RealizationTab` na poziom modułu** jako `eksportRealizacjiXlsx({ rows, visibleTypes, odbiorByRoot, orderName, searchQuery, colFilters, etykietyKolumn, accepted })`. Woła go teraz także zakładka „Realizacja_new" — jeden arkusz dla obu widoków, zamiast dwóch plików o tej samej nazwie i różnej zawartości. W komponencie został cienki `realization-export-excel-call` ze stanem „eksportuję…" i komunikatem o błędzie.
+- `ui-funkcja` `realization-totals` i `realization-analysis` — `liczTotals(rows)` i `liczAnalize(rows)` też na poziomie modułu: liczy je i nagłówek tabeli, i arkusz „Podsumowanie".
+- `ui-funkcja` `realization-plan-value` — `planValueOf` przeniesione do `wbs/realizationShared.js`; wcześniej istniało osobno w obu zakładkach, a po wyjęciu eksportu z komponentu zostałoby bez wartości.
+- `ui-zakladka` `RealizationNewTab` — przyciski **Excel** i **Protokół** obok plakietki baselinu, plus licznik „w eksporcie: N z M pozycji". Oba działają na `realization-new-export-rows`, czyli dokładnie na tym, co widać po wyborze gałęzi, filtrach kolumn i przełączniku „Tylko niedomknięte". Modal protokołu jest ten sam co w „Realizacji"; zakładka dostała propsy `accepted` i `oneDriveFolderName` z `DashboardPage`.
+- `test/test-eksport-realizacji.cjs` — nowy test dymny: buduje zakładkę esbuildem, podstawia zaślepki DOM i **wykonuje cały eksport** na sztucznych danych. Złapał dwa identyfikatory, które po przeniesieniu zostały bez wartości (`planValueOf`, `accepted`) — parser takich błędów nie widzi.
+
+### wytyczne
+- `ui-funkcja` `eksportRealizacjiXlsx` — arkusz opisuje ZAWARTOŚĆ tabeli, nie zakładkę. Nowy widok z wierszami `{ node, card, realization }` ma go wołać, a nie kopiować; różnice widoku (nazwy kolumn w filtrach) przekazuje się przez `etykietyKolumn`.
+
+### słownik
+- zmieniono `realization-totals`, `realization-analysis`, `realization-export-excel` — z komponentu na poziom modułu
+- dodano `realization-export-excel-call`, `realization-new-export-rows`
+- przeniesiono `planValueOf` do `wbs/realizationShared.js` jako `realization-plan-value` (był `realization-new-plan-value`)
+
+## 2026-09-08 — Realizacja_new: filtry kolumn w tabeli pozycji
+
+### architektura / API
+- `ui-wiersz` `realization-new-filter-row` — drugi wiersz nagłówka tabeli środkowej z filtrem na każdą kolumnę. Podział jak w „Realizacji" (`realization-col-filter-apply`): `ui-stala` `realization-new-col-filters` — kolumny słownikowe (typ, oferent, status oferty, status zakupu, status wykonania) dostają wielowybór `FilterDropdown` dopasowujący WARTOŚĆ, nie podciąg; nazwa i komentarz dzielą wpis na frazy po `;` na OR; kolumny liczbowe filtrują podciągiem.
+- Opcje filtrów liczą się z pozycji wybranej gałęzi PRZED filtrowaniem — inaczej po zaznaczeniu jednego statusu reszta znikałaby z listy i nie dałoby się dobrać drugiego. Filtry składają się z wyborem gałęzi w lewym panelu i z przełącznikiem „Tylko niedomknięte"; pusty wynik pokazuje komunikat z przyciskiem czyszczenia, a wiersz filtrów zostaje na ekranie.
+- Czcionka tabeli pozycji podniesiona z 14px na 22px (nagłówki 14px, drobne opisy 18px, szuflada zakupów 20px), szerokości kolumn przeskalowane o ok. 40%, żeby nazwy nie łamały się na kilka linii.
+
+### słownik
+- dodano `realization-new-col-filters`, `realization-new-filter-row` — `RealizationNewTab.jsx`
+
+## 2026-09-08 — Realizacja_new: zapis osi, komentarza i wpisów zakupowych
+
+### architektura / API
+- **Zakładka „Realizacja_new" przestaje być tylko do odczytu.** Zapisuje: `ui-dropdown` `realization-new-axis-select` — osie `WbsNode.purchaseStatus` i `execStatus`; `ui-input` `realization-new-comment-cell` — `WbsNode.comment` (blur, tylko gdy treść się zmieniła, z rozgłoszeniem `wbs-comment-changed`); `ui-wiersz` `realization-new-entry-row` i `ui-formularz` `realization-new-entry-form` — wpisy `LeafActual` (dodanie, poprawka w miejscu, usunięcie); `ui-funkcja` `realization-new-set-closed` — znacznik `realizationClosed` przyciskiem na karcie pozycji.
+- Bez nowych endpointów — te same, co w `RealizationTab`: `PATCH /wbs-nodes/:id`, `POST | PATCH | DELETE /leaf-actuals`, `PATCH /leaf-actuals/close/:id`.
+- `ui-funkcja` `realization-new-save-axis` — przeniesiona 1:1 reguła **„cofnięcie zakupu cofa też wykonanie"** (`realization-save-axis`): powrót `purchaseStatus` przed `PARTIALLY_DELIVERED` albo na `CANCELLED` zeruje `execStatus` do NULL, żeby bramka etapu wróciła na swoje miejsce. Tak samo przeniesione: usunięcie ostatniego wpisu zdejmuje `realizationClosed`, a komentarz nowego wpisu dopisuje się do komentarza pozycji osobną linią „zakup: …".
+- **Status PLANU (`WbsNode.status`) zostaje read-only** — decyduje o nim Struktura projektu, tak samo jak w starej zakładce. Poza zapisem zostają też filtry, sortowanie, eksport Excel i protokół odbioru.
+- Prawo zapisu ma `ADMIN`, `MANAGER`, `LOGISTYK` (ta sama trójka co w `RealizationTab`); analiza kwotowa nad tabelą nadal tylko dla `ADMIN` i `MANAGER`.
+- `back-funkcja` — nowy moduł `apps/frontend/src/components/shared/wbs/entryFields.js`: `ENTRY_INPUT`, `FORMULA_HINT`, `NUMERIC_ENTRY_FIELDS`, `growsWithText`, `resolveEntryNumber`, `selectAllOnFocus`, `focusNextInRow` **wyjęte z ciała `RealizationTab`** i współdzielone przez obie zakładki. Bez tego działanie „=4,3*220", Enter do następnego pola i zaznaczanie treści przy wejściu istniałyby w dwóch kopiach i rozjechały się przy pierwszej poprawce.
+
+### wytyczne
+- `ui-zakladka` `RealizationNewTab` — **poprzednia wytyczna „widok tylko do odczytu" jest nieaktualna**: zakładka zapisuje. Dopóki obie zakładki żyją obok siebie, każda zmiana reguły zapisu (kolejność osi, bramki, dopisywanie komentarza wpisu) musi trafić do OBU — mutacje siedzą w ciele obu komponentów. Docelowo mają zejść do wspólnego hooka, tak jak zeszły pola wpisu do `entryFields.js`.
+- `ui-funkcja` `resolveEntryNumber` — reguła „=" należy do `wbs/entryFields.js`, nie do widoku. Nowy widok z wpisami realizacji importuje ją stamtąd, nie kopiuje.
+
+### słownik
+- dodano 10 anchorów zapisu w `RealizationNewTab.jsx` (`realization-new-fetch-actuals`, `-save-comment`, `-save-axis`, `-add-actual`, `-set-closed`, `-axis-select`, `-comment-cell`, `-entry-field`, `-entry-row`, `-entry-form`)
+- dodano `entry-input-class` — `wbs/entryFields.js`
+- zmieniono ścieżkę 6 anchorów przeniesionych z `RealizationTab.jsx` do `wbs/entryFields.js`
+
+## 2026-09-08 — Realizacja_new: bilans domkniętych pozycji i kolejność kolumn w tabeli zakresów
+
+### architektura / API
+- `ui-tabela` `realization-new-bilans-zamkniete` — nowa sekcja analizy: **bilans kwotowy pozycji, które są już za nami**, liczony wyłącznie z osi wykonania: wykonane / zainstalowane (`execStatus = DONE`) i odebrane (`HANDED_OVER`), plus wiersze „Domknięte łącznie", „W realizacji" i „Prace nierozpoczęte / materiały niezainstalowane". Statusy w drodze (do wykonania, w toku, wstrzymane) oraz zamknięcia bez wykonania (`UNFINISHED`, `CANCELLED`) siedzą w wierszu „Do wykonania". Dotąd analiza pokazywała tylko UDZIAŁ POZYCJI na pasku osi, bez kwot.
+- `ui-stala` `realization-new-zamkniete-cuts` — definicje przekrojów. `DONE` i `HANDED_OVER` wykluczają się wzajemnie (to jedno pole), więc suma wierszy jest sumą pozycji. Osobno stoi **fakt z dziennika** — pozycje z co najmniej jednym wpisem `LeafActual`; przecina się ze statusami i celowo NIE wchodzi do „Domknięte łącznie", bo faktura bez przestawionego statusu nie znaczy, że robota jest za nami.
+- Nowy kafel „Wykonane / zakupione / zamknięte" w górnym rzędzie analizy: wycena domkniętych pozycji, licznik z ilu, zakup i procent wyceny zamówienia.
+- `ui-tabela` — w tabeli „Realizacja zakresów głównych" zmieniona kolejność kolumn: nazwa zakresu (zwężona do 170 px, pełna w tooltipie) → pokrycie kwotowe → oś zakupu → oś wykonania → poz. → wycena → zakup → Δ → dni wyk./plan. Paski wizualne stoją teraz przy nazwach, liczby zebrane po prawej.
+
+### wytyczne
+- `ui-tabela` `BilansZamkniete` — kwoty w tym bilansie to **wycena i zakup CAŁEJ pozycji**, nie wartość samej robocizny. `WbsNode.execStatus` wisi na pozycji razem z materiałem, który do niej wszedł, i rozdzielenie tego wymagałoby osobnego pola w schemacie.
+
+### słownik
+- dodano `realization-new-zamkniete-cuts` — cztery przekroje pozycji domkniętych, `RealizationNewTab.jsx`
+- dodano `realization-new-bilans-zamkniete` — tabela bilansu domkniętych pozycji, `RealizationNewTab.jsx`
+
+## 2026-09-08 — Zakładka „Realizacja_new" — ścieżka odczytu nowego układu Realizacji
+
+### architektura / API
+- `ui-zakladka` `tab-realization-new` — nowa zakładka **„Realizacja_new"** obok dzisiejszej „Realizacji", **wyłącznie do odczytu**. Przenosi do aplikacji układ z makiety `test/prototypy-realizacja/5-split-zakupy.html`: trzy panele (lewo GDZIE — drzewo gałęzi, środek ILE I ZA CO — 13 kolumn z szufladą zakupów, prawo CO DOKŁADNIE — karta pozycji) plus analiza zamówienia nad nimi. Stoi obok starej zakładki celowo — dopiero porównanie obu na tym samym zamówieniu rozstrzyga, czy układ wchodzi na stałe.
+- `ui-stala` `realization-new-preview-emails` — zakładkę widzi wyłącznie `andrzej@gigatel.app`. Gate po **e-mailu z tokenu**, nie po roli: to podgląd jednej osoby, a nie uprawnienie — ADMIN ma go nie otwierać nikomu innemu. Wymagało dołożenia `email` do tego, co `decodeToken()` zwraca z JWT (payload już je niósł, front go nie czytał).
+- `ui-funkcja` `realization-new-branch-index` — **`branchId` liczony na froncie**: najbliższa gałąź w górę drzewa. W prawdziwych danych liść bywa podwieszony pod innym liściem („licencja ACC7 - ENT" pod kamerą Avigilon, która sama jest pozycją kosztową z zakupami), więc grupowanie po `parentId` wsadzało go pod nieistniejącą gałąź i gubiło razem z jego zakupami. Pola nie ma w bazie — jeśli układ wejdzie na stałe, warto je policzyć w `getUnifiedTree`, a nie w każdym widoku osobno.
+- Gałęzie najwyższego poziomu mają `parentId = NULL`, więc drzewo nie ma jednego wierzchołka — lewy panel dokłada syntetyczny korzeń `__root__` (`realization-new-synthetic-root`). Nie jest nigdzie zapisywany.
+- Zakładka nie konsumuje `searchQuery`, więc pole wyszukiwania w nagłówku jest na niej **ukryte** — filtry i szukajka to otwarta część projektu tego układu, a pole, które nic nie robi, kłamałoby.
+- Zestaw kolumn przycięty z 16 do 13 wobec `realization-col-defs`. Wypadły: „Przedmiot projektu" (duplikat wyboru z lewego panelu), „Produkt / zakres" (powtarzał „Nazwę" w 77 z 80 pozycji), „Dokument" (0 z 8 wpisów ma numer — został w szufladzie, bo faktura opisuje pojedynczy zakup), „Wpisy" (licznik powtarzał strzałkę i nagłówek panelu). Doszła „Typ" jako osobna kolumna.
+- Bez własnych reguł liczenia: `planUnitOf`, `purchaseUnitOf`, `realizationOf`, `buildCardMap` i `axisGateOf` pochodzą z `realizationShared.js` i `wbsConstants.js`, tych samych, z których liczy „Realizacja" i panel Materiały. Zweryfikowane na `CMC- Serwerownia ZDC1-K9_2026`: obie zakładki pokazują **409 429,68 zł wyceny i 19 427,00 zł zakupów** na 80 pozycjach.
+
+- `ui-funkcja` `realization-resolve-card` — **tag `req:<id>` ustępuje karcie, która jawnie należy do liścia** (`wbsNodeId === node.id` albo `=== node.sourceWbsNodeId`). Nowy helper `realization-card-tag-owned` rozstrzyga „czyja to karta". Gdy nic nie przypisuje się do liścia wprost, tag nadal wygrywa — dla snapszotów bywa jedynym wiązaniem, jakie zostało; kolejność po zmianie: karta z tagu (jeśli własna) → karta po `wbsNodeId` → karta z tagu (obca) → dopasowanie po nazwie. Zasięg dopasowania bez zmian: na `CMC- Serwerownia ZDC1-K9_2026` przed i po zmianie 37 liści ma kartę, 0 zgubionych, 12 wskazuje teraz własną zamiast obcej.
+- **Rozjazd wyceny Realizacja ↔ Budżet naprawiony.** Liść „Bypass" miał tag `req:` do karty INNEGO węzła (cena 2,00 zł) mimo własnej karty z poprawnymi 8000,00 zł, więc Realizacja pokazywała wycenę zamówienia o 7998,00 zł niższą niż Budżet (409 429,68 zł zamiast 417 427,68 zł). Po poprawce obie zakładki i Budżet pokazują **417 427,68 zł**. Dotyczyło to obu zakładek realizacji i panelu Materiały, bo `buildCardMap` jest wspólne.
+
+- `ui-stala` `realization-baseline-version` — **Realizacja czyta koszty jedn. i ilości z BASELINU, nie z wersji wybranej w belce górnej.** Kolejność: `ProcessNode.acceptedVersionId` (zaakceptowana oferta) → aktywny snapszot (`ProjectVersion.isActive`) gdy zamówienie nie ma jeszcze baselinu. Dotąd obie zakładki dostawały `selectedVersionId`, więc obejrzenie starego snapszotu w nagłówku podmieniało liczby, wobec których rozliczane są zakupy — a realizacja rozlicza się wobec zakresu przyjętego przez klienta, nie wobec tego, co ktoś akurat ogląda. Wpisy `LeafActual` wiszą po `wbsRootId`, czyli poza wersją, więc zmiana źródła planu nie rusza ani jednego zakupu.
+- `ui-propsy` `realization-plan-label` — nagłówek obu zakładek realizacji niesie plakietkę „Plan z baselinu: <wersja>" albo „Brak baselinu — plan z aktywnego snapszotu: <wersja>". Bez niej przełącznik wersji, który nie zmienia liczb, wygląda na zepsuty. Plakietkę widzi każda rola, także ta bez dostępu do analizy kwotowej.
+- `SnapshotEditGuard` nie blokuje już zakładek realizacji przy wybranym nieaktywnym snapszocie — pokazują baseline, więc nie ma tam czego chronić. Dla pozostałych zakładek zachowanie bez zmian.
+- Stan na dziś: baseline **nigdzie nie różni się** od aktywnej wersji (dev 2 zamówienia z baselinem i 33 bez, produkcja 2 i 34), więc wdrożenie nie przesuwa żadnej dzisiejszej liczby — porządkuje zachowanie na przyszłość i odcina przełącznik wersji od realizacji.
+
+- `ui-funkcja` `realization-plan-unit-of` — **odwrócona kolejność źródeł kosztu jedn. planu: `WbsNode.unitCost` przed kartą** (`MaterialRequirement.budgetedPriceNetto`). Karta wchodzi już tylko wtedy, gdy węzeł nie ma własnej ceny. Powód: karta i węzeł są edytowalne osobno, więc Budżet i Realizacja cicho rozjeżdżały się na tej samej pozycji. Zweryfikowane na pełnym zrzucie produkcji przeniesionym na dev (36 zamówień, 33 z pozycjami kosztowymi, 1248 liści): przed zmianą **5 zamówień** miało rozjazd na łącznie **72 922,40 zł**, po zmianie **0 zamówień i 0,00 zł**.
+- Sama poprawka `buildCardMap` NIE wystarczyła — zamknęła tylko część przypadków (76 836,17 zł → 72 922,40 zł). Reszta to liście, których WŁASNA karta ma inną cenę niż węzeł: „Szafa Rack - zabudowa kioskowa" 8000 vs 13000 zł/szt (+30 000 zł), „szafka BTS 32U" 1100 vs 3000 (+3800), „Patchcord" 50 vs 15 (−35). Najgorszy jest „Głośniki" z kartą wycenioną na **0 zł** przy węźle 4836 zł/szt — `??` nie przepuszcza zera, więc plan pokazywał 0 zamiast 38 688 zł.
+- Odwrócenie jest bezpieczne w drugą stronę: z **174 liści z `unitCost = 0` ani jeden** nie ma karty z ceną, więc nic nie ginie. Poprawka `buildCardMap` zostaje mimo to — obca karta nadal fałszowałaby specyfikację techniczną, propozycje, zdjęcie i cenę zakupu (`purchaseUnitOf`).
+
+### słownik
+- dodano sekcję `#### Zakładka „Realizacja_new"` — 17 anchorów komponentu `RealizationNewTab` oraz gate i wpis TAB_META w `DashboardPage.jsx`
+
+### wytyczne
+- `ui-zakladka` `RealizationNewTab` — widok jest **tylko do odczytu** i taki ma zostać, dopóki układ nie zostanie przyjęty. Edycja statusów, wpisów, filtry, sortowanie, eksport Excel i protokół odbioru zostają w `RealizationTab`; dublowanie zapisu w dwóch zakładkach rozjechałoby oba widoki.
+- `ui-stala` `REALIZATION_NEW_PREVIEW_EMAILS` — lista podglądu, nie uprawnienie. Rozszerzać wyłącznie na wyraźną prośbę, nie „przy okazji" nadawania ról.
+- `ui-funkcja` `planUnitOf` — **plan czyta `WbsNode.unitCost`, nie kartę**. Budżet liczy z węzła i to jego liczbę widzi klient; każde inne źródło rozjeżdża ekrany bez ostrzeżenia. Karta materiałowa opisuje PRODUKT (specyfikacja, propozycje, cena zakupu), nie cenę ofertową pozycji.
+- **USUNIĘTY (produkcja i dev, 2026-09-08):** wpis `68073ca7-5ec6-4270-8f1e-41e8e6e92b4f`, 100 szt × 4,19 zł = 419,00 zł, dostawca SONEPAR, bez autora i bez numeru dokumentu. Kopia wiersza jako `INSERT` leży poza repo w scratchpadzie sesji (`wpis-419-backup.sql`) obok pełnego zrzutu produkcji z 14:44. Po usunięciu: CMC ma 53 wpisy na 204 983,16 zł, ZERO sierot poza baselinem, a pozycji „złączki uziemienia" zostają 2 zakupy na 335,20 zł (80 szt wobec planu 100). Liczba widoczna w zakładce NIE zmieniła się — usunięte zostały wyłącznie dane, których interfejs i tak nie pokazywał.
+- **jeden wpis realizacji na produkcji siedział na innej kopii pozycji niż baseline.** Pozycja „złączki uziemienia do korytek" istnieje w 7 egzemplarzach (żywe drzewo + 6 wersji) i zakupy rozeszły się na dwa z nich: 100 szt = 419,00 zł na kopii z żywego drzewa (niewidoczne w Realizacji) oraz 50 szt = 209,50 zł i 30 szt = 125,70 zł na kopii z baselinu (widoczne). Dwa pierwsze wpisy powstały W TEJ SAMEJ SEKUNDZIE (2026-08-16 14:45:31), z tą samą datą i ceną, komentarze „Przeniesione z propozycji zakupu" i „Według Piotra wystarczy 50 sztuk" — to wygląda na jednorazowy import, który zapisał ten sam zakup dwa razy, i późniejszą korektę ilości na jednej kopii. Czyli prawdopodobnie DUPLIKAT, a Realizacja pokazuje właściwą wersję. Do rozstrzygnięcia biznesowo, nie kodem.
+- **Wersjonowanie WBS działa poprawnie — sprawdzone eksperymentem, nie rozumowaniem.** Na produkcji `sourceWbsNodeId` jest NULL na wszystkich 2607 sklonowanych węzłach, co wyglądało na zepsuty łańcuch wersji, ale ma dwie niegroźne przyczyny: 6 wersji CMC powstało PRZED migracją `20260813150000_leaf_actuals`, która dodała tę kolumnę (baseline „zakres ostateczny" = 2026-08-04), a jedyne dwie wersje utworzone później mają zero węzłów w żywym drzewie — ich WBS powstał od razu wewnątrz wersji i nigdy nie był klonowany, więc NULL jest tam poprawny (węzeł jest własnym korzeniem). Od dodania kolumny NIE ODBYŁO SIĘ ani jedno klonowanie, więc mechanizm był po prostu nieużywany. Test na kopii produkcji: utworzenie wersji z baselinu CMC dało 112/112 węzłów z wypełnionym `sourceWbsNodeId` i **wszystkie 53 wpisy realizacji (204 983,16 zł) pozostały widoczne**. Wersja testowa usunięta, aktywna przywrócona.
+- `ui-zakladka` Realizacja i Realizacja_new — **źródłem planu jest baseline, nigdy `selectedVersionId`**. Każdy nowy widok rozliczeniowy ma brać wersję z `realizationVersionId`, a nie z przełącznika w belce górnej.
+- `ui-funkcja` `buildCardMap` — **tag `req:` na węźle NIE JEST wiarygodny sam z siebie**. Kopiowanie pozycji i `auto-requirement` zostawiają wskaźniki do kart innych węzłów o tej samej nazwie: na dev 12 z 18 rozwiązywalnych tagów wskazywało obcą kartę, na produkcji 248 liści. Każde nowe dopasowanie liść↔karta ma najpierw pytać, czy karta należy do tego węzła.
+- **wycena w Realizacji musi zgadzać się z Budżetem** — Budżet liczy `SUM(WbsNode.unitCost × quantity)` i to jest liczba, którą widzi klient. Każdy widok, który dla strony planu sięga po `MaterialRequirement.budgetedPriceNetto`, musi trafiać na kartę TEGO liścia; rozjazd między ekranami nie ma gdzie się ujawnić i potrafi stać miesiącami.
+- `schema-pole` `WbsNode.branchId` — **nie istnieje**. Każdy widok grupujący liście po gałęzi musi policzyć go sam (`buildBranchIndex`); `parentId` do tego nie wystarcza.
+
 ## 2026-09-07 — Ciemna szuflada, zawijane nagłówki i wielowybór filtrów w Realizacji
 
 ### architektura / API
