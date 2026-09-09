@@ -8,7 +8,7 @@ import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import GanttSection from './GanttSection';
-import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes } from './wbsConstants';
+import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, PRICED_LEAF_TYPES, orderDefaultsFrom, leafDefaultsMissing, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
@@ -308,6 +308,13 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // Aktywne wartości domyślne liści dla BIEŻĄCEGO zamówienia (nodeId). Nowe zamówienie → baza wyzerowana.
     const [leafDefaults, setLeafDefaults] = useState(() => mergeLeafDefaults({}));
     const [leafDefaultsDraft, setLeafDefaultsDraft] = useState(() => mergeLeafDefaults({}));
+    // @anchor leaf-defaults-forced
+    // Modal otwarty PRZYMUSOWO przy pierwszym wejściu w drzewo zamówienia (brak wpisu
+    // w bazie). Bez X, bez Anuluj i bez zamknięcia tłem — dopóki stawki i odległość nie są
+    // uzupełnione, każda nowa pozycja rodzi się z zerem i zero wędruje do oferty jako cena.
+    const [leafDefaultsForced, setLeafDefaultsForced] = useState(false);
+    // @anchor leaf-defaults-draft-missing
+    const leafDefaultsDraftMissing = useMemo(() => leafDefaultsMissing(leafDefaultsDraft), [leafDefaultsDraft]);
 
     // ── WBS Hybrid Tree state ──
     const [wbsTree, setWbsTree] = useState({ items: [] });
@@ -5018,13 +5025,26 @@ ${ganttSectionHtml}
             try {
                 const res = await fetch(`${API_URL}/wbs-leaf-defaults/${nodeId}`, { headers: authHeaders() });
                 const stored = res.ok ? await res.json().catch(() => ({})) : {};
-                if (!cancelled) setLeafDefaults(mergeLeafDefaults(stored));
+                if (cancelled) return;
+                const merged = mergeLeafDefaults(stored);
+                setLeafDefaults(merged);
+                // Pusta odpowiedź = nikt jeszcze nie zapisał domyślnych dla tego zamówienia,
+                // czyli to pierwsze wejście w jego drzewo — wymuszamy uzupełnienie. Sprawdzamy
+                // surowe `stored`, nie `merged`: po scaleniu każdy komplet wygląda tak samo.
+                // Poza zasięgiem: kto nie ustawia cen (nie manager) i zamówienie po akceptacji
+                // baseline — tam stawki są już zamrożone i modal nie miałby co zmienić.
+                const neverSaved = !stored || typeof stored !== 'object' || Object.keys(stored).length === 0;
+                if (neverSaved && isManagerOrAdmin && !offerLocked) {
+                    setLeafDefaultsDraft(merged);
+                    setLeafDefaultsForced(true);
+                    setLeafDefaultsOpen(true);
+                }
             } catch {
                 if (!cancelled) setLeafDefaults(mergeLeafDefaults({}));
             }
         })();
         return () => { cancelled = true; };
-    }, [nodeId, authHeaders]);
+    }, [nodeId, authHeaders, isManagerOrAdmin, offerLocked]);
 
     // @anchor save-leaf-defaults-to-server
     // Zapisuje wartości domyślne liści dla bieżącego zamówienia (upsert po nodeId).
@@ -6843,7 +6863,7 @@ ${ganttSectionHtml}
             )}
 
             {leafDefaultsOpen && (
-                <div className="fixed inset-0 z-[125] bg-[#05070bcc] backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setLeafDefaultsOpen(false)}>
+                <div className="fixed inset-0 z-[125] bg-[#05070bcc] backdrop-blur-sm flex items-center justify-center p-4" onClick={() => { if (!leafDefaultsForced) setLeafDefaultsOpen(false); }}>
                     <div className="w-full max-w-3xl max-h-[90vh] overflow-hidden rounded-2xl border border-white/10 bg-[#0b0f17] shadow-2xl" onClick={(e) => e.stopPropagation()}>
                         <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
                             <div className="flex items-center gap-2.5">
@@ -6853,10 +6873,20 @@ ${ganttSectionHtml}
                                     <p className="text-[10px] text-gray-500 uppercase tracking-widest">Osobne dla tego zamówienia — nowa pozycja danego typu przyjmie te wartości, zmienisz je potem w tabeli</p>
                                 </div>
                             </div>
-                            <button onClick={() => setLeafDefaultsOpen(false)} className="p-2 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 transition-all" aria-label="Zamknij">
-                                <X size={14} />
-                            </button>
+                            {!leafDefaultsForced && (
+                                <button onClick={() => setLeafDefaultsOpen(false)} className="p-2 rounded-lg border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 transition-all" aria-label="Zamknij">
+                                    <X size={14} />
+                                </button>
+                            )}
                         </div>
+
+                        {leafDefaultsForced && (
+                            <div className="px-5 py-3 bg-amber-500/10 border-b border-amber-500/20 text-[11px] text-amber-200 leading-relaxed">
+                                <span className="font-bold uppercase tracking-widest">Pierwsze wejście w drzewo tego zamówienia.</span>{' '}
+                                Uzupełnij stawki i odległość do klienta — bez nich każda nowa pozycja rodzi się z zerem,
+                                a zero w ofercie wygląda jak cena. Zmienisz je później tym samym przyciskiem.
+                            </div>
+                        )}
 
                         <div className="p-5 overflow-auto max-h-[calc(90vh-140px)] custom-scrollbar">
                             <div className="rounded-xl border border-white/10 overflow-hidden">
@@ -6868,7 +6898,7 @@ ${ganttSectionHtml}
                                 </div>
                                 <div className="divide-y divide-white/5">
                                     {/* Materiał i sprzęt wyceniane indywidualnie (wymagania materiałowe) — poza modalem domyślnych */}
-                                    {LEAF_TYPE_OPTIONS.filter((t) => t !== 'material' && t !== 'equipment').map((t) => {
+                                    {PRICED_LEAF_TYPES.map((t) => {
                                         const row = leafDefaultsDraft[t] || ZERO_LEAF_DEFAULTS[t] || {};
                                         const setField = (field, value) => setLeafDefaultsDraft((prev) => ({ ...prev, [t]: { ...(prev[t] || ZERO_LEAF_DEFAULTS[t] || {}), [field]: value } }));
                                         return (
@@ -6900,22 +6930,57 @@ ${ganttSectionHtml}
                                     })}
                                 </div>
                             </div>
+
+                            {/* @anchor leaf-defaults-distance-row
+                                Odległość do klienta — ustawienie CAŁEGO zamówienia, nie typu liścia,
+                                dlatego stoi osobno pod tabelą, a nie jako kolumna obok jednostki.
+                                Trzymamy drogę w JEDNĄ stronę: przejazd na budowę i z powrotem to
+                                2 × ta liczba, a nocleg czy delegacja liczą się z tej samej podstawy. */}
+                            <div className="mt-4 rounded-xl border border-white/10 overflow-hidden">
+                                <div className="px-4 py-2.5 bg-white/5 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Dojazd</div>
+                                <div className="grid grid-cols-[1.4fr,1.2fr,1.9fr] gap-3 px-4 py-2.5 items-center">
+                                    <div className="text-sm text-white font-medium">Odległość do klienta</div>
+                                    <div className="relative">
+                                        <input
+                                            type="number" step="1" min="0"
+                                            value={orderDefaultsFrom(leafDefaultsDraft).distanceKm ?? ''}
+                                            placeholder="—"
+                                            onFocus={(e) => e.target.select()}
+                                            onChange={(e) => setLeafDefaultsDraft((prev) => ({
+                                                ...prev,
+                                                order: { ...orderDefaultsFrom(prev), distanceKm: e.target.value === '' ? null : Number(e.target.value) },
+                                            }))}
+                                            className="w-full rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 pr-9 text-sm text-white focus:outline-none focus:border-sky-500"
+                                        />
+                                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-widest text-gray-500 pointer-events-none">km</span>
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 leading-relaxed">W jedną stronę. Podstawa wyliczenia kilometrów na pozycji Paliwo — przejazd tam i z powrotem to dwa razy tyle.</div>
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="px-5 py-3 border-t border-white/10 flex items-center justify-between">
+                        <div className="px-5 py-3 border-t border-white/10 flex items-center justify-between gap-4">
                             <button
-                                onClick={() => setLeafDefaultsDraft(structuredClone(ZERO_LEAF_DEFAULTS))}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-white/10 text-gray-300 hover:bg-white/10 transition-all text-xs"
+                                onClick={() => setLeafDefaultsDraft(mergeLeafDefaults({}))}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-white/10 text-gray-300 hover:bg-white/10 transition-all text-xs flex-shrink-0"
                             >
                                 <RotateCcw size={12} /> Wyzeruj
                             </button>
-                            <div className="flex items-center gap-2">
-                                <button onClick={() => setLeafDefaultsOpen(false)} className="px-4 py-2 rounded-lg border border-white/10 text-gray-300 hover:bg-white/10 transition-all text-sm">
-                                    Anuluj
-                                </button>
+                            {leafDefaultsForced && leafDefaultsDraftMissing.length > 0 && (
+                                <div className="text-[10px] text-amber-300/90 leading-tight min-w-0">
+                                    Do uzupełnienia: {leafDefaultsDraftMissing.join(', ')}
+                                </div>
+                            )}
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                                {!leafDefaultsForced && (
+                                    <button onClick={() => setLeafDefaultsOpen(false)} className="px-4 py-2 rounded-lg border border-white/10 text-gray-300 hover:bg-white/10 transition-all text-sm">
+                                        Anuluj
+                                    </button>
+                                )}
                                 <button
-                                    onClick={() => { saveLeafDefaultsToServer(leafDefaultsDraft); setLeafDefaultsOpen(false); }}
-                                    className="px-4 py-2 rounded-lg border border-sky-500/30 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25 transition-all text-sm font-medium"
+                                    disabled={leafDefaultsForced && leafDefaultsDraftMissing.length > 0}
+                                    onClick={() => { saveLeafDefaultsToServer(leafDefaultsDraft); setLeafDefaultsForced(false); setLeafDefaultsOpen(false); }}
+                                    className="px-4 py-2 rounded-lg border border-sky-500/30 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25 transition-all text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-sky-500/15"
                                 >
                                     Zapisz domyślne
                                 </button>

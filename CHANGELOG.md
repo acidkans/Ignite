@@ -1,3 +1,76 @@
+## 2026-09-09 — Limit rozmiaru załącznika, 413 osobno od osierocenia, upload na dysk zamiast do RAM (v2026.09.09.1035)
+
+### architektura / API
+- `ui-stala` `max-attachment-bytes` — nowy twardy limit rozmiaru pojedynczego załącznika (90 MiB) w `apps/frontend/src/config.js`, sprawdzany w `uploadFile` PRZED zapisem draftu do IndexedDB. Powód: `erp.gigatel.org` stoi za proxy Cloudflare, które na planach Free i Pro odrzuca żądania powyżej 100 MB własnym 413 — na krawędzi, więc backend takiego uploadu w ogóle nie widzi. Zmierzone na produkcji: 95 MB dochodzi, 105 MB wraca jako 413 po 0,48 s. Film z telefonu (150–200 MB) wpadał w to po cichu.
+- `ui-funkcja` `mark-outbox-blocked` — nowy stan wpisu kolejki `blocked` + `blockedReason`, rozłączny z `orphaned`. `getAllPending` pomija oba, ale z innych powodów: `orphaned` = nie wiadomo, do którego markera przypiąć (naprawialne ręcznie), `blocked` = plik nie do przepchnięcia (naprawialne tylko zmniejszeniem pliku).
+- `syncOutbox` — 413 rozpoznawane jako odrzucenie TRWAŁE i obsługiwane PRZED progiem `MAX_RETRIES`, więc nie trafia już do `markOrphaned`. Wcześniej plik za duży dobijał do szóstej próby i lądował w koszu „osierocone", podsuwając użytkownikowi panel ręcznego przypisania, który nie miał prawa niczego naprawić. Dołożony też pre-flight na rozmiar draftu — plik ponad limit nie jest w ogóle wysyłany, zamiast wypychać kilkadziesiąt MB przez transmisję komórkową co 60 s po to samo 413.
+- `ui-sekcja` `sync-warning-banner` — trzecia sekcja banera dla plików odrzuconych na stałe: nazwa pliku, powód i przycisk „Usuń" (dwustopniowy) zamiast „Ponów", który byłby tu obietnicą bez pokrycia.
+- `back-stala` `schematics-upload-options` — `FileInterceptor` w `SchematicsController` (oba endpointy: `POST /schematics/upload` i `POST /schematics/markers/:markerId/attachments`) przechodzi z domyślnego multer memoryStorage na `diskStorage`. Wcześniej cały plik lądował w RAM procesu, a serwis przepisywał go przez `file.buffer`; przy 90 MB wideo i `mem_limit: 1g` (dzielonym z Chromium od eksportu PDF) kilka równoległych wysyłek kończyło się OOM-em. `SchematicsService` czyta teraz `file.filename` / `file.path`, `ensureUploadDir` i `uuidv4` przestały być potrzebne i zostały usunięte.
+- Serwerowy limit zwraca 413, nie 500 — sprawdzone na dev: `FileInterceptor` z `@nestjs/platform-express` sam mapuje multerowy `LIMIT_FILE_SIZE` na `PayloadTooLargeException`, więc własne mapowanie w `AllExceptionsFilter` okazało się zbędne i nie zostało dodane.
+
+### słownik
+- dodano `max-attachment-bytes`, `format-bytes`, `mark-outbox-blocked`, `get-blocked-attachments`, `sync-warning-blocked`, `sync-warning-drop-blocked`, `marker-upload-error`, `upload-error-el`, `schematics-upload-dir`, `max-upload-bytes`, `schematics-upload-options`
+
+### wytyczne
+- `ui-stala` `max-attachment-bytes` i `back-stala` `max-upload-bytes` — muszą pozostać zgodne. Front blokuje plik przed dodaniem do kolejki, backend jest drugą linią obrony (stare klienty z cache'owanym SW, wysyłki spoza aplikacji). Prawdziwy sufit narzuca Cloudflare, nie nasz kod — podniesienie limitu bez zmiany planu lub przejścia na wysyłkę porcjami nic nie da.
+- `ui-funkcja` `mark-outbox-blocked` — nie mieszać z `mark-outbox-orphaned`. Do `orphaned` trafia wyłącznie załącznik bez rozwiązywalnego markera; wszystko, co odbija się od limitu rozmiaru, idzie do `blocked`. Wrzucanie jednego w drugie daje użytkownikowi lekarstwo, które nie działa.
+- upload plików w nowych endpointach — zawsze `diskStorage`, nigdy domyślny memoryStorage. Pozostałe moduły (`documents`, `material-requirements`, `onedrive`, `mail`) nadal trzymają pliki w pamięci i czekają na tę samą zmianę.
+
+## 2026-09-09 — Szuflada obrysowuje najgłębszą otwartą gałąź, nie top-level (v2026.09.09.1034)
+
+### architektura / API
+- `ui-funkcja` `has-open-branch-below` — nowy predykat: czy w pod-drzewie gałęzi stoi jeszcze jakaś otwarta gałąź z dziećmi. Warunek nagłówka szuflady w `WBSHybridTable` to teraz `hasChildren && isOpen(rowId) && !hasOpenBranchBelow(node)`, wcześniej sam `hasChildren && isOpen(rowId)`.
+- Skutek: rozwinięcie podgałęzi obrysowuje właśnie ją i jej liście. Wcześniej kręgosłup brała gałąź top-level i szuflada obejmowała też całe rodzeństwo, które z rozwinięciem nie miało nic wspólnego. Gałęzie wyżej, otwarte tylko po to, żeby tę pokazać, zostają zwykłymi wierszami.
+
+### słownik
+- dodano `has-open-branch-below`
+
+### wytyczne
+- `ui-stala` `wbs-drawer-css` — na jednej ścieżce rysuje się DOKŁADNIE JEDNA szuflada, na gałęzi najgłębszej z otwartych. Wszystkie kręgosłupy idą w tym samym miejscu (x=0 wiersza), więc dwa naraz i tak byłyby nie do odróżnienia. Jednoznaczność „najgłębszej” gwarantuje akordeon w `toggle`, który zamyka rodzeństwo na każdym poziomie.
+
+## 2026-09-09 — Szuflada w Planowaniu jak w Realizacja_new: jedna karta zamiast kręgosłupa (v2026.09.09.1033)
+
+### architektura / API
+- `ui-stala` `drawer-card` — `DRAWER` dostaje wariant „JEDNA KARTA” obok istniejącego `spine`: `card`, `cardHead`, `cardTitle`, `cardCell` plus per akcent `card` / `cell` / `title` / `edge` / `fill`. Wcześniej ten wygląd był wpisany na sztywno w JSX `realization-new-purchase-drawer`; teraz jest jednym źródłem dla obu widoków, więc nie rozjadą się przy następnej zmianie. `edge` i `fill` to surowe kolory, nie klasy — idą do custom properties w CSS.
+- `ui-stala` `wbs-leaf-open-css` — rozwinięty liść materiałowy w `WBSHybridTable` i jego szuflada czytają się jako jedna karta: wiersz dostaje górną i boczne krawędzie w akcencie oferty, jaśniejsze tło i traci dolną, a komórka szuflady domyka ramkę. Ramka przez CSS na komórkach, nie klasą na każdym `<td>` — komórek w wierszu WBS jest 15.
+- `MaterialReqExpandPanel` — karta produktu w wariancie `card` (zaokrąglenie, ciemniejsze tło, obwódka akcentu) z pełnowymiarowym nagłówkiem „Karta produktu” zamiast mikro-etykiety 10 px.
+- `realization-new-purchase-drawer` — przepisany na wspólne stałe; klasy wynikowe identyczne, wygląd Realizacja_new bez zmian.
+
+### słownik
+- dodano `drawer-card`, `wbs-leaf-open-css`
+
+### wytyczne
+- `ui-stala` `DRAWER` — dwa warianty mają różne zastosowania: `spine` (kręgosłup) dla list, gdzie rozwinięć bywa kilka naraz, `card` dla rozwinięcia pojedynczego, które ma czytać się jako osobny obiekt. Akcent zostaje kontekstowy: `offer` (niebieski) w wycenie, `real` (seledynowy) w realizacji.
+
+## 2026-09-09 — Odległość do klienta w domyślnych wartościach, wymuszone przy pierwszym wejściu w drzewo (v2026.09.09.1032)
+
+### architektura / API
+- `ui-stala` `zero-order-defaults` — `leafDefaults` dostaje sekcję `order` (na razie `distanceKm`) obok sekcji per typ liścia. Odległość dotyczy CAŁEGO zamówienia, nie typu pozycji. `null` = jeszcze nie podano, `0` = świadome „klient na miejscu” — rozróżnienie potrzebne, bo wymuszony modal żądałby inaczej kłamstwa przy robocie bez dojazdu. Bez migracji: `wbs_leaf_defaults.data` to swobodny JSON.
+- `ui-funkcja` `merge-leaf-defaults` — scala teraz również sekcję `order`, więc stare wpisy (zapisane zanim odległość istniała) dostają pełny kształt przy odczycie.
+- `ui-funkcja` `leaf-defaults-missing` — lista braków w domyślnych zamówienia (odległość + koszt jedn. każdego wycenianego typu). Steruje blokadą zapisu w wymuszonym modalu.
+- `ui-stan` `leaf-defaults-forced` — przy pierwszym wejściu w drzewo zamówienia (brak wiersza w `wbs_leaf_defaults`) modal „Domyślne wartości” otwiera się sam i nie da się go zamknąć: bez X, bez Anuluj, kliknięcie tła nic nie robi, „Zapisz domyślne” nieaktywne dopóki czegoś brakuje. Poza zasięgiem: kto nie ustawia cen (nie MANAGER/ADMIN) i zamówienie po akceptacji baseline (`offerLocked`).
+- `ui-input` `leaf-defaults-distance-row` — nowa sekcja „Dojazd” w modalu, pod tabelą typów: odległość w JEDNĄ stronę, w km.
+- `ui-stala` `priced-leaf-types` — wyciągnięty filtr „typy, którym cenę ustawia się z góry” (bez materiału i sprzętu), wcześniej wpisany na sztywno w JSX modalu; używa go też walidator.
+
+### słownik
+- dodano `priced-leaf-types`, `zero-order-defaults`, `order-defaults-from`, `leaf-defaults-missing`, `leaf-defaults-forced`, `leaf-defaults-draft-missing`, `leaf-defaults-distance-row`
+
+### wytyczne
+- `ui-stala` `ZERO_ORDER_DEFAULTS.distanceKm` — odległość trzymamy w JEDNĄ stronę. Przejazd tam i z powrotem to `2 × distanceKm`; mnożnik należy do wyliczenia, nie do przechowywanej wartości.
+
+## 2026-09-09 — Paliwo raz na główną gałąź, a nie pod każdą pracę (v2026.09.09.1031)
+
+### architektura / API
+- `ui-funkcja` `ensure-fuel-leaf` — zmiana reguły auto-dodawania liścia **Paliwo**: dotąd każdy liść z typem `praca` dostawał własne dziecko „Paliwo”, więc gałąź z kilkunastoma pracami miała kilkanaście identycznych pozycji. Teraz paliwo dokładane jest **raz na gałąź top-level** (bezpośrednie dziecko korzenia), przy pierwszej pracy w tej gałęzi. Funkcja przyjmuje id liścia (wcześniej id rodzica) i sama znajduje swój korzeń.
+- `ui-funkcja` `subtree-has-fuel` — nowy helper: sprawdza obecność paliwa w CAŁYM poddrzewie gałęzi, nie tylko wśród jej dzieci. Dzięki temu starsze zlecenia (paliwo dolepione pod liśćmi pracy przez poprzednią regułę) nie dostają drugiej pozycji na górze gałęzi.
+- Bez zmian: `back-serwis` `process-tree.service.ts` nadal tworzy jeden liść „Paliwo” w gałęzi „Koszty ogólne” dla każdego nowego zlecenia.
+
+### słownik
+- dodano `subtree-has-fuel` — czy w poddrzewie stoi liść typ=paliwo, `WBSHybridTable.jsx`
+
+### wytyczne
+- `ui-funkcja` `ensureFuelLeaf` — paliwo to koszt przejazdu na budowę: jedna pozycja na gałąź top-level, nigdy per liść pracy.
+
 ## 2026-09-08 — Bilans stanu wykonania także w arkuszu „Podsumowanie"
 
 ### architektura / API

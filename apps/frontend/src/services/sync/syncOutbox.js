@@ -1,5 +1,5 @@
-import { API_URL } from '../../config';
-import { getAllPending, removeById, markOrphaned, bumpRetry, MAX_RETRIES } from '../repos/outboxRepo';
+import { API_URL, MAX_ATTACHMENT_BYTES, formatBytes } from '../../config';
+import { getAllPending, removeById, markOrphaned, markBlocked, bumpRetry, MAX_RETRIES } from '../repos/outboxRepo';
 import { db, rememberMarkerId, resolveMarkerId } from '../db';
 
 let syncing = false;
@@ -29,7 +29,18 @@ export async function syncOutbox(token) {
                 // odróżnić „czeka na zasięg" od „leci w kółko i nigdy nie przejdzie",
                 // a użytkownik nie ma jak się dowiedzieć, że zdjęcia nie idą.
                 const retries = await bumpRetry(item.id, err.message);
-                if (item.type === 'ADD_ATTACHMENT' && retries >= MAX_RETRIES) {
+                // Odrzucenie trwałe (413 — plik ponad limit proxy) rozpoznajemy PRZED
+                // progiem MAX_RETRIES. Wcześniej taki plik dobijał do szóstej próby i
+                // lądował w koszu "osierocone", czyli tam, gdzie trafiają załączniki bez
+                // znajomego markera — a marker był poprawny. Użytkownik dostawał panel
+                // ręcznego przypisania, który nie miał szans niczego naprawić.
+                if (item.type === 'ADD_ATTACHMENT' && err.permanent) {
+                    await markBlocked(item.id, err.permanent);
+                    window.dispatchEvent(new CustomEvent('attachment-blocked', {
+                        detail: { markerId: item.payload?.markerId, fileName: item.payload?.fileName, reason: err.permanent },
+                    }));
+                    console.warn('[Outbox] Załącznik odrzucony trwale —', item.payload?.fileName, '—', err.permanent);
+                } else if (item.type === 'ADD_ATTACHMENT' && retries >= MAX_RETRIES) {
                     await markOrphaned(item.id);
                     window.dispatchEvent(new CustomEvent('attachment-orphaned', {
                         detail: { markerId: item.payload?.markerId, reason: 'max-retries' },
@@ -137,6 +148,20 @@ async function processItem(item, token) {
             await db.outbox.update(item.id, { payload: { ...item.payload, markerId: targetMarkerId } });
         }
 
+        // Rozmiar sprawdzamy PRZED wysyłką, nie po. Plik ponad limit i tak wróci
+        // z 413, ale zanim to zrobi, telefon zdąży wypchnąć kilkadziesiąt MB przez
+        // transmisję komórkową — i tak co 60 s. Dotyczy to zwłaszcza plików
+        // zakolejkowanych ZANIM limit trafił do panelu ([[max-attachment-bytes]]).
+        if (draft.arrayBuffer.byteLength > MAX_ATTACHMENT_BYTES) {
+            const reason = `Plik ma ${formatBytes(draft.arrayBuffer.byteLength)} — limit to ${formatBytes(MAX_ATTACHMENT_BYTES)}`;
+            await markBlocked(item.id, reason);
+            window.dispatchEvent(new CustomEvent('attachment-blocked', {
+                detail: { markerId: targetMarkerId, fileName, reason },
+            }));
+            console.warn('[Outbox] Załącznik za duży, pomijam wysyłkę —', fileName, '—', reason);
+            return KEEP;
+        }
+
         const blob = new Blob([draft.arrayBuffer], { type: fileType });
         const formData = new FormData();
         formData.append('file', new File([blob], fileName, { type: fileType }));
@@ -145,7 +170,16 @@ async function processItem(item, token) {
             headers: { Authorization: `Bearer ${token}` },
             body: formData,
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+            const err = new Error(`HTTP ${res.status}`);
+            // 413 nie jest awarią przejściową. Zwraca je proxy Cloudflare (limit
+            // 100 MB na żądanie), więc żądanie nawet nie dociera do backendu i
+            // kolejna próba zmieni wyłącznie licznik.
+            if (res.status === 413) {
+                err.permanent = `Plik przekracza limit ${formatBytes(MAX_ATTACHMENT_BYTES)} — serwer go odrzucił (413)`;
+            }
+            throw err;
+        }
         await db.attachmentDrafts.where('outboxId').equals(outboxId).delete();
         // Odśwież schematy w IDB i powiadom SchematicViewer
         const schUrl = subtaskId

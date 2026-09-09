@@ -249,9 +249,37 @@ export const DRAWER = {
   label: 'text-[10px] font-bold uppercase tracking-widest',
   name: 'text-[10px] text-gray-500 truncate',
   cap: 'p-0 h-1',
+  // @anchor drawer-card
+  // Wariant „JEDNA KARTA” — ten z Realizacja_new. Rozwinięty wiersz i jego szuflada tworzą
+  // wspólny prostokąt obwiedziony akcentem: wiersz dostaje górną i boczne krawędzie oraz
+  // jaśniejsze tło (`fill`/`edge`), traci dolną i łączy się z komórką szuflady (`cardCell`),
+  // a w środku stoi zaokrąglona karta na ciemniejszym tle (`card`) z pełnowymiarowym
+  // nagłówkiem (`cardHead` + `cardTitle`) zamiast mikro-etykiety 10 px.
+  // Dlaczego obok wariantu `spine`, a nie zamiast: kręgosłup jest dla list, gdzie rozwinięć
+  // bywa kilka naraz — ramka wokół każdego zaszumiłaby tabelę. Karta jest dla rozwinięcia
+  // pojedynczego, które ma czytać się jako osobny obiekt, nie jako dalszy ciąg listy.
+  // `edge` i `fill` to surowe kolory (nie klasy Tailwind), bo idą do custom properties w CSS
+  // ramek wiersza — komórek rozwiniętego wiersza jest kilkanaście i klasą nie da się ich
+  // obramować bez dotykania każdej z osobna.
+  card: 'rounded-md border',
+  cardHead: 'flex items-center gap-3 px-3 py-1.5',
+  cardTitle: 'font-bold uppercase tracking-widest',
+  cardCell: 'border-x border-b px-2 pb-2',
   accent: {
-    offer: { spine: 'border-l-blue-500', label: 'text-blue-300/80', cap: 'bg-blue-500/70' },
-    real: { spine: 'border-l-teal-500', label: 'text-teal-300/80', cap: 'bg-teal-500/70' },
+    offer: {
+      spine: 'border-l-blue-500', label: 'text-blue-300/80', cap: 'bg-blue-500/70',
+      card: 'border-blue-300/45 bg-[#050d18] shadow-[0_0_0_1px_rgba(147,197,253,0.08)]',
+      cell: 'border-blue-300/45 bg-[#0c1420]',
+      title: 'text-blue-300',
+      edge: 'rgba(147,197,253,0.45)', fill: '#0c1420',
+    },
+    real: {
+      spine: 'border-l-teal-500', label: 'text-teal-300/80', cap: 'bg-teal-500/70',
+      card: 'border-teal-300/45 bg-[#061418] shadow-[0_0_0_1px_rgba(94,234,212,0.08)]',
+      cell: 'border-teal-300/45 bg-[#0c1c21]',
+      title: 'text-teal-300',
+      edge: 'rgba(94,234,212,0.45)', fill: '#0c1c21',
+    },
   },
 };
 
@@ -909,16 +937,56 @@ export const ZERO_LEAF_DEFAULTS = {
   fuel:      { unit: 'kilometry', unitCost: 0, margin: 0, quantity: 0 },
 };
 
+// @anchor priced-leaf-types
+// Typy liści, którym cenę ustawia się z góry w modalu „Domyślne wartości”. Materiał i sprzęt
+// wypadają: ich koszt przychodzi z wymagań materiałowych, nie ze stawki na zamówienie.
+export const PRICED_LEAF_TYPES = LEAF_TYPE_OPTIONS.filter(t => t !== 'material' && t !== 'equipment');
+
+// @anchor zero-order-defaults
+// Ustawienia domyślne dotyczące CAŁEGO zamówienia, nie pojedynczego typu liścia.
+// `distanceKm` — odległość do klienta w JEDNĄ stronę; podstawa wyliczenia kilometrów
+// na pozycji Paliwo (przejazd tam i z powrotem = 2 × distanceKm).
+// `null` = jeszcze nie podano; 0 to świadome „klient na miejscu”, więc wartość zerowa
+// nie może znaczyć „brak” — inaczej wymuszony modal żądałby kłamstwa przy robocie bez dojazdu.
+export const ZERO_ORDER_DEFAULTS = { distanceKm: null };
+
 // @anchor merge-leaf-defaults
 // Scala wartości domyślne pobrane z backendu (per zamówienie) z bazą wyzerowaną.
-// Brak/uszkodzony wpis → sama baza (wyzerowana). Wynik zawsze ma komplet typów liści.
+// Brak/uszkodzony wpis → sama baza (wyzerowana). Wynik zawsze ma komplet typów liści
+// ORAZ sekcję `order` z ustawieniami całego zamówienia (odległość do klienta).
 export function mergeLeafDefaults(stored) {
   const src = stored && typeof stored === 'object' ? stored : {};
   const merged = {};
   for (const t of LEAF_TYPE_OPTIONS) {
     merged[t] = { ...ZERO_LEAF_DEFAULTS[t], ...(src[t] || {}) };
   }
+  merged.order = { ...ZERO_ORDER_DEFAULTS, ...(src.order || {}) };
   return merged;
+}
+
+// @anchor order-defaults-from
+// Sekcja `order` z przekazanego kompletu — zawsze pełny kształt, także dla starych wpisów
+// zapisanych zanim odległość istniała.
+export function orderDefaultsFrom(defaults) {
+  const src = defaults && typeof defaults === 'object' ? defaults.order : null;
+  return { ...ZERO_ORDER_DEFAULTS, ...(src && typeof src === 'object' ? src : {}) };
+}
+
+// @anchor leaf-defaults-missing
+// Czego brakuje w wartościach domyślnych zamówienia — lista etykiet po polsku, pusta = komplet.
+// Używane do zablokowania modalu wymuszanego przy pierwszym wejściu w drzewo: bez stawek
+// i bez odległości każda nowa pozycja rodzi się z zerem, a zero w ofercie wygląda jak cena.
+export function leafDefaultsMissing(defaults) {
+  const d = mergeLeafDefaults(defaults);
+  const missing = [];
+  const km = d.order.distanceKm;
+  if (km === null || km === undefined || km === '' || !Number.isFinite(Number(km)) || Number(km) < 0) {
+    missing.push('Odległość do klienta');
+  }
+  for (const t of PRICED_LEAF_TYPES) {
+    if (!(Number(d[t]?.unitCost) > 0)) missing.push(`Koszt jedn. — ${TYPE_LABELS[t] || t}`);
+  }
+  return missing;
 }
 
 // @anchor get-leaf-default-from

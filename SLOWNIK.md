@@ -232,6 +232,17 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | resetRetries | apps/frontend/src/services/repos/outboxRepo.js | @anchor reset-outbox-retries |
 | ui-sekcja | SyncWarningBanner | apps/frontend/src/components/shared/SyncWarningBanner.jsx | @anchor sync-warning-banner |
 | ui-funkcja | retryNow | apps/frontend/src/components/shared/SyncWarningBanner.jsx | @anchor sync-warning-retry-now |
+| ui-stala | MAX_ATTACHMENT_BYTES | apps/frontend/src/config.js | @anchor max-attachment-bytes |
+| ui-funkcja | formatBytes | apps/frontend/src/config.js | @anchor format-bytes |
+| ui-funkcja | markBlocked | apps/frontend/src/services/repos/outboxRepo.js | @anchor mark-outbox-blocked |
+| ui-funkcja | getBlockedAttachments | apps/frontend/src/services/repos/outboxRepo.js | @anchor get-blocked-attachments |
+| ui-stan | blocked | apps/frontend/src/components/shared/SyncWarningBanner.jsx | @anchor sync-warning-blocked |
+| ui-funkcja | dropBlocked | apps/frontend/src/components/shared/SyncWarningBanner.jsx | @anchor sync-warning-drop-blocked |
+| ui-stan | uploadError | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor marker-upload-error |
+| ui-sekcja | UploadErrorEl | apps/frontend/src/components/shared/MarkerDetailsPanel.jsx | @anchor upload-error-el |
+| back-stala | UPLOAD_DIR | apps/backend/src/schematics/upload.storage.ts | @anchor schematics-upload-dir |
+| back-stala | MAX_UPLOAD_BYTES | apps/backend/src/schematics/upload.storage.ts | @anchor max-upload-bytes |
+| back-stala | schematicsUploadOptions | apps/backend/src/schematics/upload.storage.ts | @anchor schematics-upload-options |
 
 ### Moduł QaTreeView (wspólny widok Q&A drzewa)
 
@@ -386,6 +397,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-tabela | WBSHybridTable | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-table |
 | ui-stala | kolor kręgosłupa szuflady gałęzi | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-branch-spine |
 | ui-stala | CSS szuflady rozwiniętej gałęzi | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-drawer-css |
+| ui-stala | CSS ramki rozwiniętego liścia materiałowego | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-leaf-open-css |
+| ui-funkcja | hasOpenBranchBelow | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor has-open-branch-below |
 | ui-funkcja | sumChildrenCost | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor sum-children-cost |
 | ui-funkcja | sumChildrenOfferPrice | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor sum-children-offer-price |
 | ui-kolumna | wbs-offer-price-cell | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-offer-price-cell |
@@ -393,6 +406,14 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | findDepth | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor find-depth |
 | ui-funkcja | buildFuelLeaf | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor build-fuel-leaf |
 | ui-funkcja | ensureFuelLeaf | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor ensure-fuel-leaf |
+| ui-funkcja | subtreeHasFuel | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor subtree-has-fuel |
+| ui-stala | PRICED_LEAF_TYPES | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor priced-leaf-types |
+| ui-stala | ZERO_ORDER_DEFAULTS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor zero-order-defaults |
+| ui-funkcja | orderDefaultsFrom | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor order-defaults-from |
+| ui-funkcja | leafDefaultsMissing | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor leaf-defaults-missing |
+| ui-stan | leafDefaultsForced | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor leaf-defaults-forced |
+| ui-stan | leafDefaultsDraftMissing | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor leaf-defaults-draft-missing |
+| ui-input | leaf-defaults-distance-row | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor leaf-defaults-distance-row |
 | ui-input | wbs-unit-cost-input | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-unit-price-input |
 | ui-stan | matReqByWbsId | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-req-by-wbs-id |
 | ui-stan | matReqByName | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-req-by-name |
@@ -517,6 +538,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | MATERIAL_STATUS_LABEL_TO_CODE | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor material-status-label-to-code |
 | ui-stala | STRUCTURE_COMMON_CELL_CLASS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor structure-common-cell-class |
 | ui-stala | DRAWER (wygląd szuflady rozwiniętego wiersza) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor expand-drawer |
+| ui-stala | DRAWER wariant „jedna karta” (card / cardHead / cardTitle / cardCell) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor drawer-card |
 | ui-funkcja | defaultUnitForType | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor default-unit-for-type |
 | ui-funkcja | sanitizeQtyInput | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor sanitize-qty-input |
 | ui-funkcja | evalQtyFormula | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor eval-qty-formula |

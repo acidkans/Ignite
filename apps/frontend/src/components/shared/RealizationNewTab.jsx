@@ -32,7 +32,7 @@ import { liczBilansWykonania, NIEROZPOCZETE_LABEL } from './wbs/realizationBilan
 import {
     PLAN_STATUS_META, planStatusFromAny, PURCHASE_STATUS_META, EXEC_STATUS_META, execStatusLabel,
     hasPurchaseAxis, hasExecAxis, DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS, axisGateOf,
-    AXIS_STATUS_ORDER, sanitizeQtyInput, parsePriceInput,
+    AXIS_STATUS_ORDER, sanitizeQtyInput, parsePriceInput, DRAWER,
 } from './wbs/wbsConstants';
 import {
     TYPE_META, LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath, leafNodesOf, buildCardMap,
@@ -944,7 +944,7 @@ function PositionsTable({
                     // Rozwinięta pozycja i jej szuflada tworzą JEDNĄ kartę: wiersz dostaje seledynową
                     // krawędź górną i boczne, traci dolną (łączy się z szufladą), a tło jest jaśniejsze
                     // niż wiersze zwinięte — inaczej nie było widać, do której pozycji należy szuflada.
-                    const tdOpen = open ? 'border-t border-teal-300/45 bg-[#0c1c21]' : 'border-b border-white/[.05]';
+                    const tdOpen = open ? `border-t ${DRAWER.accent.real.cell}` : 'border-b border-white/[.05]';
                     return (
                         <React.Fragment key={node.id}>
                             <tr onClick={() => onSelect(node.id)}
@@ -966,7 +966,7 @@ function PositionsTable({
                             {open && (
                                 <tr>
                                     <td colSpan={REALIZATION_NEW_COLS.length + 1}
-                                        className="border-x border-b border-teal-300/45 bg-[#0c1c21] px-2 pb-2">
+                                        className={`${DRAWER.cardCell} ${DRAWER.accent.real.cell}`}>
                                         <PurchaseDrawer node={node} card={card} r={r} planValue={planValue}
                                             readOnly={readOnly}
                                             onAdd={draft => onAddActual(node, draft)}
@@ -1148,8 +1148,8 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, o
     const pctOf = (c) => `${((c[2] || 0) / SUMA_COLS * 100).toFixed(3)}%`;
 
     const head = (
-        <div className="flex items-center gap-3 px-3 py-1.5">
-            <span className="text-[20px] font-bold uppercase tracking-widest text-teal-300">
+        <div className={DRAWER.cardHead}>
+            <span className={`${DRAWER.cardTitle} ${DRAWER.accent.real.title} text-[20px]`}>
                 {withCard ? 'Zakupy zrealizowane' : 'Wykonanie zrealizowane'}
             </span>
             {!readOnly && (
@@ -1189,7 +1189,7 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, o
     // Szuflada CELOWO bez `overflow-hidden`: przycinał rozwiniętą listę `SupplierPicker`
     // na swojej dolnej krawędzi. Zaokrąglenie zostaje — róg tabeli wystaje o pół piksela.
     return (
-        <div className="rounded-md border border-teal-300/45 bg-[#061418] shadow-[0_0_0_1px_rgba(94,234,212,0.08)]"
+        <div className={`${DRAWER.card} ${DRAWER.accent.real.card}`}
             onClick={e => e.stopPropagation()}>
             {head}
             {!r.entries.length && pusta()}
