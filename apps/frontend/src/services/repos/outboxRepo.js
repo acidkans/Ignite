@@ -41,7 +41,7 @@ export async function bumpRetry(id, message) {
 // @anchor get-stuck-attachments
 export async function getStuckAttachments() {
     const items = await db.outbox.where('type').equals('ADD_ATTACHMENT').toArray();
-    return items.filter(i => !i.orphaned && (i.retries || 0) >= WARN_AFTER_RETRIES);
+    return items.filter(i => !i.orphaned && !i.blocked && (i.retries || 0) >= WARN_AFTER_RETRIES);
 }
 
 // Zeruje licznik prób — użytkownik świadomie ponawia, więc ostrzeżenie ma zniknąć
@@ -50,16 +50,42 @@ export async function getStuckAttachments() {
 export async function resetRetries() {
     const items = await db.outbox.where('type').equals('ADD_ATTACHMENT').toArray();
     for (const i of items) {
-        if (!i.orphaned && (i.retries || 0) > 0) await db.outbox.update(i.id, { retries: 0 });
+        if (!i.orphaned && !i.blocked && (i.retries || 0) > 0) await db.outbox.update(i.id, { retries: 0 });
     }
 }
 
 // Wpisy `orphaned` są pomijane — to załączniki wskazujące na temp_ id markera,
 // którego nie da się już rozwiązać. Retry ich nie naprawi (serwer zwraca 500 na
 // FK), więc czekają na ręczne przypisanie w panelu znacznika.
+//
+// Wpisy `blocked` też pomijamy, ale z zupełnie innego powodu: plik jest za duży
+// i ŻADNA liczba prób tego nie zmieni (patrz [[mark-outbox-blocked]]). Trzymanie
+// ich w pętli oznaczało wysyłanie kilkudziesięciu megabajtów co 60 s po to, żeby
+// za każdym razem dostać to samo 413.
 export async function getAllPending() {
     const all = await db.outbox.orderBy('createdAt').toArray();
-    return all.filter(i => !i.orphaned);
+    return all.filter(i => !i.orphaned && !i.blocked);
+}
+
+// Oznacza wpis jako trwale zablokowany — wysyłka nie ma prawa się udać, więc
+// zdejmujemy go z pętli OD RAZU, bez czekania na MAX_RETRIES.
+//
+// Dlaczego osobno od `orphaned`: `orphaned` znaczy "nie wiem, do którego markera
+// to przypiąć" i da się naprawić ręcznym przypisaniem. `blocked` znaczy "marker
+// jest w porządku, to plik jest nie do przepchnięcia" — ręczne przypisanie nic tu
+// nie da, trzeba zmniejszyć plik. Wrzucanie 413 do worka "osierocone" (tak było
+// wcześniej, przez próg MAX_RETRIES) podsuwało użytkownikowi lekarstwo, które nie
+// miało prawa zadziałać.
+// @anchor mark-outbox-blocked
+export async function markBlocked(id, reason) {
+    return db.outbox.update(id, { blocked: true, blockedReason: String(reason || '').slice(0, 200) });
+}
+
+// Załączniki odrzucone na stałe — do pokazania w banerze synchronizacji.
+// @anchor get-blocked-attachments
+export async function getBlockedAttachments() {
+    const items = await db.outbox.where('type').equals('ADD_ATTACHMENT').toArray();
+    return items.filter(i => i.blocked);
 }
 
 // Osierocone załączniki — pliki zakolejkowane pod martwym temp_ id markera.

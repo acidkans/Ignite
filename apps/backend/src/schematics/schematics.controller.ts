@@ -3,13 +3,14 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { SchematicsService } from './schematics.service';
 import { Response } from 'express';
 import * as path from 'path';
+import { schematicsUploadOptions } from './upload.storage';
 
 @Controller('schematics')
 export class SchematicsController {
   constructor(private readonly schematicsService: SchematicsService) {}
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', schematicsUploadOptions))
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
     @Body('nodeId') nodeId: string,
@@ -75,7 +76,7 @@ export class SchematicsController {
 
   // --- Attachments ---
   @Post('markers/:markerId/attachments')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', schematicsUploadOptions))
   async uploadAttachment(
       @Param('markerId') markerId: string,
       @UploadedFile() file: Express.Multer.File,

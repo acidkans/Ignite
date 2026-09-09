@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { X, MapPin, Mic, Camera, FilePlus, Trash2, Save, ChevronDown, ChevronRight, ChevronLeft, Download, Image as ImageIcon, CheckSquare, Square, Layers, Plus, Check, Video, Play, HelpCircle } from 'lucide-react';
-import { API_URL } from '../../config';
+import { X, MapPin, Mic, Camera, FilePlus, Trash2, Save, ChevronDown, ChevronRight, ChevronLeft, Download, Image as ImageIcon, CheckSquare, Square, Layers, Plus, Check, Video, Play, HelpCircle, FileX } from 'lucide-react';
+import { API_URL, MAX_ATTACHMENT_BYTES, formatBytes } from '../../config';
 import { useNetwork } from '../../hooks/useNetwork';
 import { enqueue, updateTempMarkerPayload, getOrphanedAttachments, reassignOrphanedAttachment } from '../../services/repos/outboxRepo';
 import { syncOutbox } from '../../services/sync/syncOutbox';
@@ -82,6 +82,11 @@ function flattenWbsNodes(nodes, prefix = '', depth = 0, parentId = null) {
 export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId, subtaskId, versionId, isNew = false }) {
     const { isOnline } = useNetwork();
     const [uploading, setUploading] = useState(false);
+    // Komunikat o pliku odrzuconym lokalnie (za duży). Świadomie NIE alert():
+    // natywne okno na mobile w PWA bywa tłumione, a użytkownik w terenie musi
+    // zobaczyć konkretną liczbę megabajtów, a nie samo "nie udało się".
+    // @anchor marker-upload-error
+    const [uploadError, setUploadError] = useState(null);
     // Załączniki czekające w outboxie na sync (przetrwają reload — czytane z IndexedDB)
     // @anchor pending-drafts
     const [pendingDrafts, setPendingDrafts] = useState([]);
@@ -516,6 +521,19 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
     // w trakcie wysyłania nigdy nie gubi pliku. Przy dostępnej sieci sync
     // odpalamy natychmiast — nie czekamy na cykliczny interwał.
     const uploadFile = async (file) => {
+        // Limit sprawdzamy PRZED zapisem do IndexedDB. Plik ponad limit proxy nie
+        // ma jak przejść ([[max-attachment-bytes]]), więc nie ma po co zajmować nim
+        // pamięci telefonu ani udawać w UI, że "czeka na wysyłkę" — dokładnie tak
+        // zniknął film z 09.09.2026: leżał w kolejce jako oczekujący, a odbijał się
+        // od Cloudflare przy każdej próbie.
+        if (file.size > MAX_ATTACHMENT_BYTES) {
+            setUploadError(
+                `"${file.name}" ma ${formatBytes(file.size)}, a limit to ${formatBytes(MAX_ATTACHMENT_BYTES)}. ` +
+                'Serwer odrzuci taki plik, więc nie dodaję go do kolejki. Skróć nagranie albo zmniejsz jakość i spróbuj ponownie.'
+            );
+            return;
+        }
+        setUploadError(null);
         setUploading(true);
         try {
             await saveAttachmentDraft(file);
@@ -1048,6 +1066,23 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         </>
     );
 
+    // ─── Komunikat: plik odrzucony lokalnie (za duży) ──────────────────────────
+    // @anchor upload-error-el
+    const UploadErrorEl = uploadError ? (
+        <div className="flex items-start gap-2 p-3 bg-orange-500/10 border border-orange-500/30 rounded-xl">
+            <FileX size={14} className="text-orange-400 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+                <div className="text-[11px] text-orange-200 leading-relaxed">{uploadError}</div>
+                <button
+                    onClick={() => setUploadError(null)}
+                    className="mt-2 text-[10px] font-black uppercase tracking-wider text-orange-400 active:scale-95 transition-transform"
+                >
+                    Rozumiem
+                </button>
+            </div>
+        </div>
+    ) : null;
+
     // ─── MOBILE — kafelki + expand ─────────────────────────────────────────────
     if (isMobile) {
         const isExpanded = expandedSection !== null;
@@ -1218,6 +1253,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                                 {/* Dodaj plik */}
                                 {expandedSection === 'add' && (
                                     <div className="space-y-4">
+                                        {UploadErrorEl}
                                         {uploading && (
                                             <div className="flex items-center gap-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl animate-pulse">
                                                 <div className="w-2 h-2 bg-blue-500 rounded-full" />
@@ -1523,6 +1559,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
                             {/* Dodaj plik */}
                             {expandedSection === 'add' && (
                                 <div className="space-y-4">
+                                    {UploadErrorEl}
                                     {uploading && (
                                         <div className="flex items-center gap-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl animate-pulse">
                                             <div className="w-2 h-2 bg-blue-500 rounded-full" />

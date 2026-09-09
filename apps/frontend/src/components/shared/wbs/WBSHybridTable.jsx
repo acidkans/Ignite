@@ -335,12 +335,15 @@ function MaterialReqExpandPanel({ node, req, processNodeId, versionId, onSaved, 
     }, [node.id, headers, onNodeFieldLocal, onNodeFieldSave]);
 
     return (
-        // Szuflada rozwiniętego liścia — ten sam wygląd co w panelu Materiały (`DRAWER`):
-        // płaszczyzna karty, niebieski kręgosłup przy krawędzi i nagłówek 10 px. `ml-8` zostaje,
-        // bo drzewo WBS jest wcięte i szuflada musi trzymać się swojego liścia.
-        <div className={`${DRAWER.spine} ${DRAWER.accent.offer.spine} ml-8`}>
-            <div className={`${DRAWER.head} pb-1`}>
-                <span className={`${DRAWER.label} ${DRAWER.accent.offer.label}`}>karta produktu</span>
+        // Szuflada rozwiniętego liścia w wariancie KARTY (`DRAWER.card`) — ten sam zabieg co
+        // w Realizacja_new: zaokrąglony prostokąt na ciemniejszym tle, obwiedziony akcentem,
+        // z pełnowymiarowym nagłówkiem zamiast mikro-etykiety 10 px. Wcześniej był kręgosłup
+        // przy lewej krawędzi i rozwinięcie ciągnęło się jako dalszy ciąg listy, choć karta
+        // produktu jest osobnym obiektem, nie kolejnym wierszem drzewa.
+        // Bez `overflow-hidden` świadomie: przycinałby rozwinięte listy w karcie produktu.
+        <div className={`${DRAWER.card} ${DRAWER.accent.offer.card}`}>
+            <div className={DRAWER.cardHead}>
+                <span className={`${DRAWER.cardTitle} ${DRAWER.accent.offer.title} text-base`}>Karta produktu</span>
                 <span className={DRAWER.name}>{node.name}</span>
                 <button
                     onClick={handleDelete}
@@ -548,6 +551,13 @@ const findDepth = (nodes, id, depth = 0) => {
 const subtreeContains = (node, id) =>
     node.id === id || (node.children || []).some(c => subtreeContains(c, id));
 
+// @anchor subtree-has-fuel
+// Czy gdziekolwiek w poddrzewie stoi już liść typ=paliwo. Szukamy w CAŁYM poddrzewie,
+// a nie tylko wśród dzieci, bo starsze zlecenia mają paliwo dołożone pod liśćmi pracy
+// (tak działała poprzednia reguła) i nie chcemy im dokładać drugiego na górnym poziomie.
+const subtreeHasFuel = node =>
+    node?.type === 'fuel' || (node?.children || []).some(subtreeHasFuel);
+
 const extractNode = (nodes, id) => {
     let found = null;
     const clean = arr => arr.reduce((acc, n) => {
@@ -686,11 +696,12 @@ function getBranchStyle(rootIndex, depth) {
 }
 // CSS wstrzyknięte raz — hover i kolory przez custom properties na <tr>
 // @anchor wbs-drawer-css — szuflada rozwiniętej gałęzi: ten sam pomysł co rozwinięty wiersz
-// w panelu Materiały. Gałąź, którą otwarto, jest nagłówkiem szuflady (jaśniejsze tło + górna
-// krawędź), całe jej pod-drzewo — gałęzie i liście — dostaje wspólny kręgosłup przy lewej
-// krawędzi, a domyka je listwa na dole. Zagnieżdżone otwarte gałęzie zostają przy kręgosłupie
-// tej najbardziej zewnętrznej: wszystkie rysują się w tym samym miejscu (x=0 wiersza), więc
-// własny kolor każdej z nich tylko migałby przy zwijaniu.
+// w panelu Materiały. Gałąź będąca nagłówkiem szuflady dostaje jaśniejsze tło i górną
+// krawędź, całe jej pod-drzewo — gałęzie i liście — wspólny kręgosłup przy lewej krawędzi,
+// a domyka je listwa na dole.
+// Nagłówkiem jest gałąź NAJGŁĘBSZA z otwartych na ścieżce, nie najwyższa (patrz
+// `has-open-branch-below`) — wszystkie kręgosłupy rysują się w tym samym miejscu (x=0
+// wiersza), więc dwa naraz i tak byłyby nie do odróżnienia.
 const WBS_BRANCH_CSS = `.wbs-br{background-color:var(--wbs-bg);border-left:var(--wbs-bw) solid var(--wbs-bc);transition:background-color .12s}.wbs-br:hover{background-color:var(--wbs-bgh)}.wbs-br .wbs-name{color:var(--wbs-nc)}.wbs-br .wbs-field{color:var(--wbs-fc)}`
     + `.wbs-br.wbs-drawer,.wbs-drawer-row{border-left:3px solid var(--wbs-spine)}`
     + `.wbs-br.wbs-drawer-head{background-color:var(--wbs-bgh);border-top:1px solid var(--wbs-spine)}`
@@ -698,7 +709,17 @@ const WBS_BRANCH_CSS = `.wbs-br{background-color:var(--wbs-bg);border-left:var(-
     // wierszem — ta ginęła między wierszami tabeli i nie było widać, gdzie gałąź się kończy.
     // Ta sama grubość i ten sam zabieg co `materials-group-cap` / `realization-drawer-cap`.
     + `.wbs-drawer-end{border-left:3px solid var(--wbs-spine)}`
-    + `.wbs-drawer-end td{height:4px;padding:0;background-color:var(--wbs-spine)}`;
+    + `.wbs-drawer-end td{height:4px;padding:0;background-color:var(--wbs-spine)}`
+    // @anchor wbs-leaf-open-css — rozwinięty liść materiałowy i jego szuflada czytają się jako
+    // JEDNA karta, tak samo jak w Realizacja_new: wiersz dostaje górną i boczne krawędzie
+    // w kolorze akcentu, jaśniejsze tło i TRACI dolną — przez to zlewa się z komórką szuflady
+    // pod sobą. Ramka idzie przez CSS na komórkach, a nie klasą na każdym `<td>`, bo komórek
+    // w wierszu WBS jest kilkanaście i każda ma własny zestaw klas.
+    // `tr.wbs-leaf-open` (0,1,1) bije tailwindowe `.border-b` (0,1,0) z klasy wiersza.
+    + `tr.wbs-leaf-open{border-bottom-width:0}`
+    + `.wbs-leaf-open>td{background-color:var(--wbs-drawer-fill);border-top:1px solid var(--wbs-drawer-edge);border-bottom:0}`
+    + `.wbs-leaf-open>td:first-child{border-left:1px solid var(--wbs-drawer-edge)}`
+    + `.wbs-leaf-open>td:last-child{border-right:1px solid var(--wbs-drawer-edge)}`;
 
 // ── Tag chips ─────────────────────────────────────────────────────────────────
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1300,16 +1321,23 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     };
 
     // @anchor ensure-fuel-leaf
-    // Każda gałąź typ=praca dostaje automatycznie liść Paliwo z domyślnymi
-    // wartościami. Pomija gdy liść Paliwo już istnieje.
-    const ensureFuelLeaf = (parentId) => {
+    // Paliwo dokładamy RAZ na główną gałąź (top-level), a nie pod każdy liść typ=praca.
+    // Wcześniej gałąź z kilkunastoma pracami dostawała kilkanaście identycznych pozycji
+    // „Paliwo”, choć przejazd na budowę jest jeden — oferta puchnęła i nikt tego nie sprzątał.
+    // Wołane po ustawieniu typu=praca: szukamy gałęzi top-level, w której siedzi ten liść,
+    // i dokładamy paliwo jako jej bezpośrednie dziecko, o ile w całym jej poddrzewie
+    // jeszcze go nie ma.
+    const ensureFuelLeaf = (nodeId) => {
+        const root = (items || []).find(r => subtreeContains(r, nodeId));
+        if (!root || subtreeHasFuel(root)) return;
+        const fuel = buildFuelLeaf({ comment: 'utworzony automatycznie' });
         setWbsTree(t => {
-            const parent = findNode(t.items || [], parentId);
-            if (!parent || (parent.children || []).some(c => c.type === 'fuel')) return t;
-            const fuel = buildFuelLeaf({ comment: 'utworzony automatycznie' });
-            return { ...t, items: addChildTo(t.items || [], parentId, fuel) };
+            const roots = t.items || [];
+            const target = roots.find(r => r.id === root.id);
+            if (!target || subtreeHasFuel(target)) return t;
+            return { ...t, items: addChildTo(roots, root.id, fuel) };
         });
-        open(`node_${parentId}`);
+        open(`node_${root.id}`);
         setTimeout(() => onSave?.(), 0);
     };
 
@@ -1659,6 +1687,16 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // ── Recursive renderer ────────────────────────────────────────────────────
     // `spine` — kolor kręgosłupa szuflady odziedziczony po najbardziej zewnętrznej otwartej
     // gałęzi. null = ten wiersz nie siedzi w żadnej szufladzie.
+    // @anchor has-open-branch-below
+    // Czy w pod-drzewie tej gałęzi stoi jeszcze jakaś otwarta gałąź (z dziećmi).
+    // Szuflada należy do gałęzi NAJGŁĘBSZEJ z otwartych: rozwinięcie podgałęzi ma obrysować
+    // właśnie ją i jej liście, a nie całą gałąź top-level razem z rodzeństwem, które z tym
+    // rozwinięciem nie ma nic wspólnego. Akordeon (`toggle`) zamyka rodzeństwo na każdym
+    // poziomie, więc na jednej ścieżce otwarta gałąź jest jedna i „najgłębsza” jest jednoznaczna.
+    const hasOpenBranchBelow = (node) =>
+        (node.children || []).some(c =>
+            ((c.children || []).length > 0 && isOpen(`node_${c.id}`)) || hasOpenBranchBelow(c));
+
     const renderNode = (node, depth, wbsPath, parentId = null, rootIndex = 0, spine = null) => {
         if (searchVisibleIds && !searchVisibleIds.has(node.id)) {
             (node.children || []).forEach((child, ci) => renderNode(child, depth + 1, `${wbsPath}.${ci + 1}`, node.id, rootIndex, spine));
@@ -1668,8 +1706,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         navRowOrder.push(node.id);
         const bs = getBranchStyle(rootIndex, depth);
         const hasChildren = (node.children || []).length > 0;
-        // Szuflada zaczyna się na gałęzi, którą otwarto, i obejmuje całe jej pod-drzewo.
-        const isDrawerHead = hasChildren && isOpen(rowId);
+        // Szuflada zaczyna się na NAJGŁĘBSZEJ otwartej gałęzi i obejmuje całe jej pod-drzewo.
+        // Gałęzie wyżej, które są otwarte tylko po to, żeby tę pokazać, zostają zwykłymi wierszami.
+        const isDrawerHead = hasChildren && isOpen(rowId) && !hasOpenBranchBelow(node);
         const drawerSpine = spine || (isDrawerHead ? bs.spine : null);
         const drawerClass = drawerSpine ? `wbs-drawer ${isDrawerHead ? 'wbs-drawer-head' : ''}` : '';
         const d = {
@@ -1677,6 +1716,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             nameClass: `${DEPTH_SIZE[Math.min(depth, MAX_DEPTH)]} wbs-name`,
             fieldClass: 'wbs-field',
         };
+        // Rozwinięty liść materiałowy — wiersz staje się górną połową karty z szufladą pod nim.
+        const leafOpen = (node.type === 'material' || node.type === 'equipment') && expandedMaterialIds.has(node.id);
         const isDragging = dragId === node.id;
         const overPos = dragOver?.nodeId === node.id ? dragOver.position : null;
         const isEditingTags = editingTagsFor === node.id;
@@ -1695,8 +1736,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 onDragOver={e => onDragOver(e, node.id, depth)}
                 onDragLeave={onDragLeave}
                 onDrop={e => onDrop(e, node.id)}
-                style={d.trStyle}
-                className={`border-b border-white/5 cursor-pointer group/node transition-opacity wbs-br ${drawerClass} ${isDragging ? 'opacity-25' : ''} ${dropBorder} ${reqDropHighlight} ${selectedNodeId === node.id ? 'outline outline-1 outline-blue-500/40 !bg-blue-500/5' : ''}`}
+                style={leafOpen
+                    ? { ...d.trStyle, '--wbs-drawer-edge': DRAWER.accent.offer.edge, '--wbs-drawer-fill': DRAWER.accent.offer.fill }
+                    : d.trStyle}
+                className={`border-b border-white/5 cursor-pointer group/node transition-opacity wbs-br ${drawerClass} ${leafOpen ? 'wbs-leaf-open' : ''} ${isDragging ? 'opacity-25' : ''} ${dropBorder} ${reqDropHighlight} ${selectedNodeId === node.id ? 'outline outline-1 outline-blue-500/40 !bg-blue-500/5' : ''}`}
                 onClick={e => { setSelectedNodeId(node.id); hasChildren && toggle(rowId, e); }}
             >
                 {/* WBS ID — uchwyt drag (mysz) / pełnokomórkowy przycisk rozwijania (dotyk).
@@ -2270,7 +2313,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     className={drawerSpine ? 'wbs-drawer-row' : ''}
                     style={drawerSpine ? { '--wbs-spine': drawerSpine } : undefined}
                 >
-                    <td colSpan={TOTAL_COLS} className={`p-0 ${DRAWER.surface}`}>
+                    <td colSpan={TOTAL_COLS} className={`${DRAWER.cardCell} ${DRAWER.accent.offer.cell}`}>
                         <MaterialReqExpandPanel
                             node={node}
                             req={(() => {

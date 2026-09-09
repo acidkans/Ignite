@@ -1,7 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { VectorService } from '../ai/vector.service';
-import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Response } from 'express';
@@ -16,12 +15,6 @@ export class SchematicsService {
 
     private readonly UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 
-    private ensureUploadDir() {
-        if (!fs.existsSync(this.UPLOAD_DIR)) {
-            fs.mkdirSync(this.UPLOAD_DIR, { recursive: true });
-        }
-    }
-
     private getFileType(mimeType: string): string {
         if (mimeType.startsWith('image/')) return 'IMAGE';
         if (mimeType.startsWith('audio/')) return 'AUDIO';
@@ -30,13 +23,9 @@ export class SchematicsService {
     }
 
     async uploadSchematic(file: Express.Multer.File, nodeId: string, subtaskId?: string) {
-        this.ensureUploadDir();
-
-        const fileExtension = path.extname(file.originalname);
-        const fileName = `${uuidv4()}${fileExtension}`;
-        const filePath = path.join(this.UPLOAD_DIR, fileName);
-
-        fs.writeFileSync(filePath, file.buffer);
+        // Plik jest już na dysku — zapisał go strumieniowo multer (diskStorage,
+        // patrz upload.storage.ts). Nie przepisujemy go przez pamięć procesu.
+        const fileName = file.filename;
 
         const schematic = await this.prisma.schematicDocument.create({
             data: {
@@ -252,19 +241,13 @@ export class SchematicsService {
 
     // --- Attachments ---
     async uploadMarkerAttachment(markerId: string, file: Express.Multer.File) {
-        this.ensureUploadDir();
-
-        const fileExtension = path.extname(file.originalname);
-        const fileName = `${uuidv4()}${fileExtension}`;
-        const filePath = path.join(this.UPLOAD_DIR, fileName);
-
-        fs.writeFileSync(filePath, file.buffer);
-
+        // Jak wyżej: multer zapisał plik strumieniowo na dysk pod wygenerowaną
+        // nazwą, więc tutaj zostaje wyłącznie wpis w bazie.
         try {
             const attachment = await this.prisma.markerAttachment.create({
                 data: {
                     markerId,
-                    fileUrl: fileName,
+                    fileUrl: file.filename,
                     fileType: this.getFileType(file.mimetype),
                     fileName: Buffer.from(file.originalname, 'latin1').toString('utf8'),
                 }
@@ -272,7 +255,7 @@ export class SchematicsService {
             return attachment;
         } catch (dbError) {
             // Rollback: usuń plik z dysku jeśli zapis do DB się nie powiódł
-            try { fs.unlinkSync(filePath); } catch (_) {}
+            try { fs.unlinkSync(file.path); } catch (_) {}
             throw dbError;
         }
     }
