@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../../config';
 import {
     Upload, X, MapPin, Map as MapIcon, Image as ImageIcon, Mic, Trash2,
-    Minus, Type, ZoomIn, ZoomOut, Maximize, Minimize2, Hand, Camera, Save, List, Network
+    Minus, Type, ZoomIn, ZoomOut, Maximize, Minimize2, Hand, Camera, Save, List, Network,
+    ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import MarkerDetailsPanel from './MarkerDetailsPanel';
@@ -52,6 +53,8 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
     const pinchRef = useRef({ dist: null, scale: 1.0 });
 
     const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+    // @anchor schemat-is-landscape
+    const [isLandscape, setIsLandscape] = useState(window.innerWidth > window.innerHeight);
     const [showTable, setShowTable] = useState(false);
     const [hoveredMarkerId, setHoveredMarkerId] = useState(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
@@ -72,8 +75,10 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
     useEffect(() => {
         const handleResize = () => {
             setIsMobile(window.innerWidth < 1024);
+            setIsLandscape(window.innerWidth > window.innerHeight);
         };
         window.addEventListener('resize', handleResize);
+        window.addEventListener('orientationchange', handleResize);
 
         const observer = new ResizeObserver((entries) => {
             if (entries[0]?.contentRect) {
@@ -86,6 +91,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
         return () => {
             observer.disconnect();
             window.removeEventListener('resize', handleResize);
+            window.removeEventListener('orientationchange', handleResize);
         };
     }, []);
 
@@ -437,78 +443,152 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
 
     const isImageFile = (fileName) => /\.(jpg|jpeg|png|webp)$/i.test(fileName || '');
 
+    // Przewijanie listy plikow schematu: -1 = poprzedni, +1 = nastepny.
+    // @anchor schemat-go-to-adjacent
+    const goToAdjacentSchematic = (dir) => {
+        if (schematics.length < 2) return;
+        const idx = schematics.findIndex(s => s.id === selectedSchematic?.id);
+        const next = schematics[(idx < 0 ? 0 : idx) + dir];
+        if (!next) return;
+        setSelectedSchematic(next);
+        setPageNumber(1);
+    };
+
+    const schematicIndex = schematics.findIndex(s => s.id === selectedSchematic?.id);
+
     return (
         <div className={`flex flex-col bg-[#020617] relative h-full min-h-0 ${isFullscreen ? 'fixed inset-0 z-[200]' : ''}`}>
             {/* Toolbar */}
             <div ref={toolbarRef} className={`border-b border-white/5 bg-slate-900/50 backdrop-blur-2xl z-40 flex-shrink-0 ${isFullscreen ? 'hidden' : ''} ${isMobile ? 'order-1 px-2 py-1.5' : 'p-4 flex flex-row gap-3 items-center justify-between'}`}>
 
-                {/* Mobile: jeden wiersz (flex-wrap) — w poziomie wszystko obok siebie, w pionie zawija; nazwa gałęzi + X w pasku */}
-                {isMobile ? (
-                    <div className="flex flex-wrap items-center gap-1.5 w-full">
-                        {/* Nazwa gałęzi (gdy podana z MobileOrdersTree) — w jednym wierszu z resztą */}
-                        {nodeName && (
-                            <div className="flex items-center gap-1.5 shrink-0 min-w-0 max-w-[45%]">
-                                <Network size={15} className="text-teal-400 shrink-0" />
-                                <span className="font-black text-xs text-white truncate">{nodeName}</span>
-                            </div>
-                        )}
-                        {/* Wybór pliku */}
+                {/* Mobile: pion = dwa wiersze (nazwa+plik / narzedzia+przewijanie), poziom = jeden wiersz */}
+                {isMobile ? (() => {
+                    const nameEl = nodeName && (
+                        <div className={`flex items-center gap-1.5 shrink-0 min-w-0 ${isLandscape ? 'max-w-[130px]' : 'max-w-[38%]'}`}>
+                            <Network size={15} className="text-teal-400 shrink-0" />
+                            <span className="font-black text-xs text-white truncate">{nodeName}</span>
+                        </div>
+                    );
+
+                    const selectEl = (
                         <select
                             value={selectedSchematic?.id || ''}
                             onChange={(e) => { const sch = schematics.find(s => s.id === e.target.value); setSelectedSchematic(sch); setPageNumber(1); }}
-                            className="flex-1 min-w-[150px] bg-black/40 border border-white/10 rounded-xl px-2 py-1.5 text-xs text-gray-200 focus:outline-none"
+                            className="flex-1 min-w-[110px] bg-black/40 border border-white/10 rounded-xl px-2 py-1.5 text-xs text-gray-200 focus:outline-none"
                         >
                             {schematics.map(s => <option key={s.id} value={s.id}>{s.fileName}</option>)}
                             {schematics.length === 0 && <option value="">Brak</option>}
                         </select>
+                    );
 
-                        {/* Upload */}
+                    const uploadEl = (
                         <label className="p-2 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-xl cursor-pointer active:scale-95 shrink-0">
                             <Upload size={14}/>
                             <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleUpload} className="hidden" disabled={uploading}/>
                         </label>
+                    );
 
-                        {selectedSchematic && (<>
-                            {/* Narzędzia */}
-                            <div className="flex items-center bg-black/40 p-0.5 rounded-xl border border-white/10 shrink-0">
-                                <button onClick={() => setActiveTool('MOVE')} className={`p-2 rounded-lg ${activeTool === 'MOVE' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}><Hand size={15}/></button>
-                                <button onClick={() => setActiveTool('POINT')} className={`p-2 rounded-lg ${activeTool === 'POINT' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}><MapPin size={15}/></button>
-                                <button onClick={() => setActiveTool('LINE')} className={`p-2 rounded-lg ${activeTool === 'LINE' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}><Minus size={15}/></button>
-                            </div>
-
-                            {/* Dodaj */}
+                    // Przewijanie plikow schematu (poprzedni / nastepny)
+                    // @anchor schemat-file-nav-buttons
+                    const fileNavEl = schematics.length > 1 && (
+                        <div className="flex items-center bg-black/40 p-0.5 rounded-xl border border-white/10 shrink-0">
                             <button
-                                onClick={() => setIsAddingMarker(!isAddingMarker)}
-                                className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border shrink-0 active:scale-95 ${isAddingMarker ? 'bg-orange-500 text-white border-orange-400' : 'bg-blue-600 text-white border-blue-400'}`}
+                                onClick={() => goToAdjacentSchematic(-1)}
+                                disabled={schematicIndex <= 0}
+                                title="Poprzedni plik"
+                                className="p-2 rounded-lg text-gray-300 disabled:opacity-30 active:scale-95"
                             >
-                                {isAddingMarker ? '✕' : 'DODAJ'}
+                                <ChevronLeft size={15}/>
                             </button>
+                            <span className="text-[9px] text-gray-500 font-black px-0.5 tabular-nums">
+                                {schematicIndex < 0 ? 1 : schematicIndex + 1}/{schematics.length}
+                            </span>
+                            <button
+                                onClick={() => goToAdjacentSchematic(1)}
+                                disabled={schematicIndex < 0 || schematicIndex >= schematics.length - 1}
+                                title="Nastepny plik"
+                                className="p-2 rounded-lg text-gray-300 disabled:opacity-30 active:scale-95"
+                            >
+                                <ChevronRight size={15}/>
+                            </button>
+                        </div>
+                    );
 
-                            {/* Nawigacja stron (tylko PDF) */}
-                            {!isImageFile(selectedSchematic.fileUrl) && (
-                                <div className="flex items-center bg-black/40 px-1.5 py-1 rounded-xl border border-white/10 shrink-0 gap-0.5">
-                                    <button disabled={pageNumber <= 1} onClick={() => setPageNumber(p => p - 1)} className="p-1 text-gray-400 disabled:opacity-30"><Minus size={12}/></button>
-                                    <span className="text-[9px] text-gray-400 font-black w-8 text-center">{pageNumber}/{numPages}</span>
-                                    <button disabled={pageNumber >= numPages} onClick={() => setPageNumber(p => p + 1)} className="p-1 text-gray-400 disabled:opacity-30"><X size={12} className="rotate-45"/></button>
+                    const toolsEl = selectedSchematic && (
+                        <div className="flex items-center bg-black/40 p-0.5 rounded-xl border border-white/10 shrink-0">
+                            <button onClick={() => setActiveTool('MOVE')} className={`p-2 rounded-lg ${activeTool === 'MOVE' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}><Hand size={15}/></button>
+                            <button onClick={() => setActiveTool('POINT')} className={`p-2 rounded-lg ${activeTool === 'POINT' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}><MapPin size={15}/></button>
+                            <button onClick={() => setActiveTool('LINE')} className={`p-2 rounded-lg ${activeTool === 'LINE' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}><Minus size={15}/></button>
+                        </div>
+                    );
+
+                    const addEl = selectedSchematic && (
+                        <button
+                            onClick={() => setIsAddingMarker(!isAddingMarker)}
+                            className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border shrink-0 active:scale-95 ${isAddingMarker ? 'bg-orange-500 text-white border-orange-400' : 'bg-blue-600 text-white border-blue-400'}`}
+                        >
+                            {isAddingMarker ? '\u2715' : 'DODAJ'}
+                        </button>
+                    );
+
+                    const pageNavEl = selectedSchematic && !isImageFile(selectedSchematic.fileUrl) && (
+                        <div className="flex items-center bg-black/40 px-1.5 py-1 rounded-xl border border-white/10 shrink-0 gap-0.5">
+                            <button disabled={pageNumber <= 1} onClick={() => setPageNumber(p => p - 1)} className="p-1 text-gray-400 disabled:opacity-30"><Minus size={12}/></button>
+                            <span className="text-[9px] text-gray-400 font-black w-8 text-center">{pageNumber}/{numPages}</span>
+                            <button disabled={pageNumber >= numPages} onClick={() => setPageNumber(p => p + 1)} className="p-1 text-gray-400 disabled:opacity-30"><X size={12} className="rotate-45"/></button>
+                        </div>
+                    );
+
+                    const tableEl = selectedSchematic?.markers?.length > 0 && (
+                        <button onClick={() => setShowTable(s => !s)} className={`p-2 rounded-xl border text-[10px] font-black shrink-0 ${showTable ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'bg-black/40 text-gray-400 border-white/10'}`}>
+                            <List size={14}/>
+                        </button>
+                    );
+
+                    const closeEl = onClose && (
+                        <button onClick={onClose} className="p-2 bg-white/10 rounded-xl text-white active:scale-90 transition-all shrink-0 ml-auto">
+                            <X size={16} />
+                        </button>
+                    );
+
+                    // Poziom: wszystko w jednym wierszu naglowka
+                    if (isLandscape) {
+                        return (
+                            <div className="flex flex-wrap items-center gap-1.5 w-full">
+                                {nameEl}
+                                {selectEl}
+                                {fileNavEl}
+                                {uploadEl}
+                                {toolsEl}
+                                {addEl}
+                                {pageNavEl}
+                                {tableEl}
+                                {closeEl}
+                            </div>
+                        );
+                    }
+
+                    // Pion: wiersz 1 = nazwa + wybor pliku, wiersz 2 = znaczniki + przewijanie plikow
+                    return (
+                        <div className="flex flex-col gap-1.5 w-full">
+                            <div className="flex items-center gap-1.5 w-full">
+                                {nameEl}
+                                {selectEl}
+                                {uploadEl}
+                                {closeEl}
+                            </div>
+                            {selectedSchematic && (
+                                <div className="flex flex-wrap items-center gap-1.5 w-full">
+                                    {toolsEl}
+                                    {addEl}
+                                    {fileNavEl}
+                                    {pageNavEl}
+                                    {tableEl}
                                 </div>
                             )}
-
-                            {/* Tabela znaczników */}
-                            {selectedSchematic.markers?.length > 0 && (
-                                <button onClick={() => setShowTable(s => !s)} className={`p-2 rounded-xl border text-[10px] font-black shrink-0 ${showTable ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'bg-black/40 text-gray-400 border-white/10'}`}>
-                                    <List size={14}/>
-                                </button>
-                            )}
-                        </>)}
-
-                        {/* Zamknij (gdy podane onClose z MobileOrdersTree) — wypycha na prawy koniec wiersza */}
-                        {onClose && (
-                            <button onClick={onClose} className="p-2 bg-white/10 rounded-xl text-white active:scale-90 transition-all shrink-0 ml-auto">
-                                <X size={16} />
-                            </button>
-                        )}
-                    </div>
-                ) : (
+                        </div>
+                    );
+                })() : (
                     /* Desktop: oryginalny layout */
                     <>
                         <div className="flex items-center gap-3">
