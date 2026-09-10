@@ -2129,7 +2129,7 @@ export default function RealizationTab({
                             <col style={{ width: 58 }} />
                             {COL_DEFS.map(c => <col key={c.key} style={{ width: colWidths[c.key] }} />)}
                         </colgroup>
-                        <thead className="sticky top-0 z-20">
+                        <thead className="sticky top-0 z-30">
                             <tr className="border-b border-white/10 bg-gray-950">
                                 <th className="bg-gray-950" />
                                 {COL_DEFS.map(c => (

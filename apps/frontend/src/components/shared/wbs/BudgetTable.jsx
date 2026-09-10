@@ -8,6 +8,9 @@ const TH_BASE = 'text-left px-3 py-2.5 text-[17px] font-bold uppercase tracking-
 const TD = 'px-2 py-1.5 align-top break-words';
 // Stopka „Wartość zafiltrowana" — sticky trzyma się KOMÓREK, nie <tfoot>/<tr>: przy
 // `border-collapse: collapse` Chrome ignoruje position:sticky na sekcji i wierszu tabeli.
+// z-10 MUSI zostać niższe niż z-20 na <thead>: przy krótkiej liście stopka stoi tuż pod
+// nagłówkiem i przykryłaby rozwiniętą listę `FilterDropdown` (dropdown żyje w kontekście
+// nakładania <thead>, więc jego własne z-30 liczy się tylko wewnątrz nagłówka).
 const FOOT_TD = 'px-2 py-2 align-middle break-words sticky bottom-0 z-10 bg-[#0b0f17] border-t-2 border-white/20';
 const INPUT = 'bg-transparent text-white text-sm w-full outline-none focus:bg-white/5 rounded px-1 py-0.5 min-w-0';
 const TEXTAREA = 'bg-transparent text-white text-sm w-full outline-none focus:bg-white/5 rounded px-1 py-0.5 min-w-0 resize-none leading-snug whitespace-pre-wrap break-words overflow-hidden';
@@ -536,7 +539,7 @@ export default function BudgetTable({
                         {COLS.map(c => <col key={c.key} style={{ width: colWidths[c.key] }} />)}
                         <col style={{ width: 36 }} />
                     </colgroup>
-                    <thead className="sticky top-0 z-10 bg-[#0b0f17]">
+                    <thead className="sticky top-0 z-20 bg-[#0b0f17]">
                         <tr className="border-b border-white/15">
                             <th className={`${TH_BASE} text-center`}>#</th>
                             {COLS.map(c => (
