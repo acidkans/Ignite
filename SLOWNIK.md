@@ -1741,6 +1741,7 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-funkcja | wRealizacjiTest (pozycje, przy których praca trwa) | apps/frontend/src/components/shared/wbs/realizationBilans.js | @anchor realization-w-realizacji |
 | ui-funkcja | liczBilansWykonania (podział zamówienia wg statusu wykonania) | apps/frontend/src/components/shared/wbs/realizationBilans.js | @anchor realization-bilans-wykonania |
 | ui-tabela | BilansZamkniete (bilans kwotowy pozycji domkniętych) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-bilans-zamkniete |
+| ui-stala | deltaZamkniete (koszty rzeczywiste − koszty oferty na pozycjach wykonanych i odebranych) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-delta-zamkniete |
 | ui-funkcja | fetchActuals (przeładowanie samych wpisów po zapisie) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-fetch-actuals |
 | ui-funkcja | saveComment (WbsNode.comment + wbs-comment-changed) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-save-comment |
 | ui-funkcja | saveAxis (osie realizacji, cofnięcie zakupu cofa wykonanie) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-save-axis |

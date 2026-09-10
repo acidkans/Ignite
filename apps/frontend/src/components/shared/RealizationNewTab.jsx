@@ -333,11 +333,16 @@ const Meter = ({ label, done, plan, left, right }) => {
     );
 };
 
-const Tile = ({ label, value, color, note }) => (
+// Kolor kwoty niesie ZNACZENIE i jest ten sam w całej zakładce: pomarańcz = strona OFERTY
+// (to, co wyceniliśmy klientowi), czerwień = strona WYDATKÓW (to, co realnie poszło na
+// zakupy i wykonanie). Kafel, który pokazuje obie strony naraz, stawia je jedna pod drugą
+// w tych właśnie kolorach — `children` mieści drugą kwotę i deltę.
+const Tile = ({ label, value, color, note, children }) => (
     <div className="min-w-[190px] flex-1 rounded-md border border-white/[.07] bg-[#0a1120] px-3.5 py-2.5">
         <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500">{label}</div>
         <div className={`mt-1 text-[length:var(--rn-xl)] font-bold leading-tight tabular-nums ${color || 'text-gray-200'}`}>{value}</div>
-        <div className="mt-0.5 text-xs text-gray-500">{note}</div>
+        {note && <div className="mt-0.5 text-xs text-gray-500">{note}</div>}
+        {children}
     </div>
 );
 
@@ -1769,6 +1774,11 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec, kpiOpen
     const leftDays = round2(c.dniPlan - c.dniWyk);
     const dTotal = round2(c.real - c.plan);
     const z = c.zamkniete;
+    // @anchor realization-new-delta-zamkniete — wynik na robocie, która jest już za nami:
+    // koszty rzeczywiste minus koszty oferty na pozycjach wykonanych i odebranych. Ujemna
+    // znaczy, że zeszliśmy poniżej wyceny — i tylko na tych pozycjach da się to policzyć
+    // uczciwie, bo reszta zamówienia nie ma jeszcze kompletu wpisów.
+    const deltaZamkniete = round2(z.lacznie.real - z.lacznie.plan);
 
     return (
         <>
@@ -1801,11 +1811,24 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec, kpiOpen
                         <Tile label="Zakupy zrealizowane" value={`${fmtZl(c.real)} zł`} color="text-red-400" note={`${c.wpisow} wpisów na ${c.zRealizacja} pozycjach`} />
                         <Tile label="Pozostaje do wydania" value={`${fmtZl(leftMoney)} zł`} note={`${fmtPct(pct(leftMoney, c.plan))} wyceny`} />
                         <Tile label="Dni niezrealizowane" value={fmtQty(leftDays)} color="text-amber-400" note={`z ${fmtQty(c.dniPlan)} zaplanowanych`} />
+                        {/* Kafel pokazuje OBIE strony tej samej roboty: ile była warta w ofercie
+                            i ile realnie kosztowała. Bez drugiej kwoty „mamy za sobą 159 tys."
+                            czytało się jak wydatek, a to jest wycena. Delta jest zielona, gdy
+                            zeszliśmy poniżej oferty, i czerwona, gdy ją przebiliśmy. */}
                         <Tile
-                            label="Wykonane / zakupione / zamknięte"
-                            value={`${fmtZl(z.lacznie.plan)} zł`}
-                            color="text-emerald-400"
-                            note={`${z.lacznie.pozycji} z ${c.pozycji} pozycji · zakup ${fmtZl(z.lacznie.real)} zł · ${fmtPct(pct(z.lacznie.plan, c.plan))} wyceny`} />
+                            label="Wykonane / odebrane"
+                            value={<>{fmtZl(z.lacznie.plan)} zł <span className="text-xs font-medium text-gray-500">— koszty oferty</span></>}
+                            color="text-orange-400"
+                            note={`${z.lacznie.pozycji} z ${c.pozycji} pozycji · ${fmtPct(pct(z.lacznie.plan, c.plan))} wyceny zamówienia`}>
+                            <div className="mt-1 text-[length:var(--rn-lg)] font-bold leading-tight tabular-nums text-red-400">
+                                {fmtZl(z.lacznie.real)} zł <span className="text-xs font-medium text-gray-500">— koszty rzeczywiste</span>
+                            </div>
+                            <div
+                                className={`mt-1.5 border-t border-white/[.07] pt-1.5 text-xs font-bold tabular-nums ${deltaZamkniete > 0 ? 'text-red-400' : 'text-emerald-400'}`}
+                                title="Δ = koszty rzeczywiste − koszty oferty na pozycjach wykonanych i odebranych">
+                                Δ {deltaZamkniete > 0 ? '+' : ''}{fmtZl(deltaZamkniete)} zł ({deltaZamkniete > 0 ? '+' : ''}{fmtPct(pct(deltaZamkniete, z.lacznie.plan))}) <span className="font-medium text-gray-500">— {deltaZamkniete > 0 ? 'wydaliśmy więcej niż planowaliśmy' : 'wydaliśmy mniej niż planowaliśmy'}</span>
+                            </div>
+                        </Tile>
                     </div>
 
                     <div className="flex flex-wrap gap-4">
@@ -1845,7 +1868,7 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec, kpiOpen
                                         sumy i wypycha kolumny poza panel. Udziały trzymają proporcje i skalują
                                         się w dół razem z szerokością okna. */}
                                     <th style={{ width: '26%' }} className="border-b border-white/[.14] px-2 py-1 text-left">Zakres główny</th>
-                                    <th style={{ width: '14%' }} className="border-b border-white/[.14] px-2 py-1 text-left">Pokrycie kwotowe</th>
+                                    <th style={{ width: '14%' }} className="border-b border-white/[.14] px-2 py-1 text-left">Wydatki % do budżetu</th>
                                     <th style={{ width: '14%' }} className="border-b border-white/[.14] px-2 py-1 text-left">Zakup materiałów</th>
                                     <th style={{ width: '14%' }} className="border-b border-white/[.14] px-2 py-1 text-left">Stopień wykonania prac</th>
                                     <th style={{ width: '11.5%' }} className="border-b border-white/[.14] px-2 py-1 text-right">Wycena</th>
@@ -1919,14 +1942,14 @@ function BilansZamkniete({ c }) {
                 (zaczęte, ale niedokończone) i co <b className="text-gray-400">czeka na wykonanie</b> — w tym materiał już kupiony,
                 ale jeszcze niezamontowany. Razem dają całe zamówienie.
                 <br />Kwoty to wycena i zakup CAŁYCH pozycji — status wykonania dotyczy pozycji razem z materiałem, który do niej wszedł.
-                „Pokrycie kwotowe" mówi, ile z wyceny danego wiersza już wydano; „Udział wyceny" — jaką część zamówienia ten wiersz stanowi.
+                „Wydatki % do budżetu" mówią, ile z wyceny danego wiersza już wydano; „Udział wyceny" — jaką część zamówienia ten wiersz stanowi.
             </div>
             <div className="overflow-x-auto">
                 <table className="w-full table-fixed border-separate border-spacing-0 text-[length:var(--rn-2xl)]">
                     <thead>
                         <tr className="text-[length:var(--rn-lg)] uppercase tracking-wider text-gray-500">
                             <Th w="w-[28%]">Przekrój</Th>
-                            <Th w="w-[15%]">Pokrycie kwotowe</Th>
+                            <Th w="w-[15%]">Wydatki % do budżetu</Th>
                             <Th w="w-[6%]" right>Poz.</Th>
                             <Th w="w-[13%]" right>Wycena</Th>
                             <Th w="w-[13%]" right>Zakup</Th>
