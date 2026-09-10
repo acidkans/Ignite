@@ -15,9 +15,10 @@
 // samymi endpointami co `RealizationTab` i z tą samą regułą „cofnięcie zakupu cofa wykonanie".
 // Poza zapisem zostają: status PLANU (decyduje o nim Struktura projektu, nie realizacja),
 // filtry, sortowanie, eksport Excel i protokół odbioru.
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import { ChevronRight, Loader2, Plus, Trash2, FileSpreadsheet, FileText } from 'lucide-react';
 import { API_URL } from '../../config';
+import { useDevice } from '../../hooks/useDevice';
 import SupplierPicker from './SupplierPicker';
 import AutoResizeTextarea from './wbs/AutoResizeTextarea';
 import FilterDropdown from './wbs/FilterDropdown';
@@ -58,31 +59,52 @@ export const SYNTHETIC_ROOT = '__root__';
 //   „Wpisy"              — licznik powtarzał strzałkę rozwijania i nagłówek panelu.
 // Doszła „Typ": pod nazwą dokładał każdemu wierszowi trzecią linię, jako kolumna daje się
 // przebiec wzrokiem w pionie.
+// `prio` — kolejność ustępowania przy wąskiej tabeli (patrz `realization-new-col-prio`).
+// 1 = zdanie o pozycji, którego nie da się skrócić: co, ile w planie, ile kupione/zrobione,
+//     za ile i na czym stoi zakup;
+// 2 = kontekst kwotowy i wykonawczy — typ, oferent, ceny jednostkowe, oś wykonania;
+// 3 = to, co i tak stoi w karcie pozycji po prawej — delta, status oferty, komentarz.
 export const REALIZATION_NEW_COLS = [
-    { key: 'name',           label: 'Nazwa',              w: 480 },
-    { key: 'type',           label: 'Typ',                w: 150 },
+    { key: 'name',           label: 'Nazwa',              w: 480, prio: 1 },
+    { key: 'type',           label: 'Typ',                w: 150, prio: 2 },
     // „Oferent", nie „Dostawca": `LeafActual.supplierId` niesie tego, KTO DAŁ CENĘ. Dostawcą
     // stanie się dopiero wtedy, gdy przy wpisie pojawi się faktura albo WZ.
-    { key: 'supplier',       label: 'Oferent',            w: 300 },
-    { key: 'qty',            label: 'Ilość wyceny',       w: 185, right: true },
-    { key: 'realization',    label: 'Zakup / wykonanie',  w: 255, right: true },
-    { key: 'deltaQty',       label: 'Δ ilość',            w: 155, right: true },
-    { key: 'price',          label: 'Koszt jedn. wyceny', w: 210, right: true },
-    { key: 'purchasePrice',  label: 'Koszt jedn. zakupu', w: 230, right: true },
-    { key: 'total',          label: 'Koszt całkowity',    w: 275, right: true },
-    { key: 'status',         label: 'Status oferty',      w: 230 },
-    { key: 'purchaseStatus', label: 'Status zakupu',      w: 255 },
-    { key: 'execStatus',     label: 'Status wykonania',   w: 265 },
-    { key: 'comment',        label: 'Komentarz',          w: 340 },
+    { key: 'supplier',       label: 'Oferent',            w: 300, prio: 2 },
+    { key: 'qty',            label: 'Ilość wyceny',       w: 185, prio: 1, right: true },
+    { key: 'realization',    label: 'Zakup / wykonanie',  w: 255, prio: 1, right: true },
+    { key: 'deltaQty',       label: 'Δ ilość',            w: 155, prio: 3, right: true },
+    { key: 'price',          label: 'Koszt jedn. wyceny', w: 210, prio: 2, right: true },
+    { key: 'purchasePrice',  label: 'Koszt jedn. zakupu', w: 230, prio: 2, right: true },
+    { key: 'total',          label: 'Koszt całkowity',    w: 275, prio: 1, right: true },
+    { key: 'status',         label: 'Status oferty',      w: 230, prio: 3 },
+    { key: 'purchaseStatus', label: 'Status zakupu',      w: 255, prio: 1 },
+    { key: 'execStatus',     label: 'Status wykonania',   w: 265, prio: 2 },
+    { key: 'comment',        label: 'Komentarz',          w: 340, prio: 3 },
 ];
+
+// @anchor realization-new-col-prio — ile kolumn mieści się w TEJ szerokości tabeli.
+// Skalowanie czcionki (`realization-fluid-scale`) samo nie wystarcza: 13 kolumn na 540px
+// daje ~40px na kolumnę i nagłówki wchodzą jeden na drugi niezależnie od rozmiaru pisma.
+// Progi są w pikselach, bo mierzą to samo co problem — ile miejsca przypada na kolumnę.
+// Mierzymy szerokość TABELI, nie okna: to samo okno daje inną szerokość przy karcie
+// zadokowanej i schowanej (`realization-new-card-mode`).
+export const COL_PRIO_LIMIT = (width) => (width <= 0 ? 3 : width < 900 ? 1 : width < 1300 ? 2 : 3);
+
+// Kolumna z NAŁOŻONYM filtrem nie znika nigdy — inaczej filtr dalej by zawężał tabelę,
+// a nie dałoby się go ani zobaczyć, ani cofnąć.
+export function visibleCols(width, filters = {}) {
+    const limit = COL_PRIO_LIMIT(width);
+    return REALIZATION_NEW_COLS.filter(c => (c.prio || 1) <= limit || hasColFilter(filters[c.key]));
+}
 
 // Szerokości kolumn są PROPORCJAMI: `table-fixed` z pikselami rozciągałby tabelę do ich sumy
 // (CSS 2.1 §17.5.2.1 — używana szerokość tabeli to max(zadana, suma kolumn)) i wracałby poziomy
 // suwak mimo `w-full`. Przeliczone na procent skalują się razem z szerokością panelu.
-export const COL_PCT = (() => {
-    const suma = REALIZATION_NEW_COLS.reduce((a, c) => a + (c.w || 0), 0);
-    return Object.fromEntries(REALIZATION_NEW_COLS.map(c => [c.key, `${(c.w / suma * 100).toFixed(3)}%`]));
-})();
+// Liczone z WIDOCZNEGO podzbioru, więc po ukryciu kolumn udziały nadal sumują się do 100%.
+export const colPctOf = (cols) => {
+    const suma = cols.reduce((a, c) => a + (c.w || 0), 0) || 1;
+    return Object.fromEntries(cols.map(c => [c.key, `${(c.w / suma * 100).toFixed(3)}%`]));
+};
 
 // @anchor realization-new-col-filters — filtry w nagłówku tabeli pozycji. Podział ten sam
 // co w „Realizacji" (`realization-col-filter-apply`): kolumna SŁOWNIKOWA (skończony zbiór
@@ -190,6 +212,14 @@ export const STAGE_META = [
 ];
 const STAGE_DONE = { purchase: ['DELIVERED', 'ISSUED', 'INVOICED'], exec: ['DONE', 'HANDED_OVER'] };
 
+// Grosze zbierane z kilkudziesięciu pozycji potrafią dać w sumie 1 gr różnicy wobec kolumny
+// „Wycena" w tym samym wierszu — zaokrąglamy raz, na gotowym rozkładzie.
+const zaokraglijRozklad = (d) => ({
+    ...d,
+    kwota: round2(d.kwota),
+    ...Object.fromEntries(STAGE_META.map(s => [s.key, round2(d[s.key])])),
+});
+
 // @anchor realization-new-axis-stage — stan jednej pozycji na jednej osi.
 export function axisStageOf(node, axis) {
     const applies = axis === 'purchase' ? hasPurchaseAxis(node?.type) : hasExecAxis(node?.type);
@@ -226,16 +256,20 @@ const isTimeUnit = (n) => /^dni|^dzie/i.test(String(n?.unit || '').trim());
 // nie stanęło „nowy wykonanie".
 const entryNoun = (type) => (type === 'work' || type === 'service' ? 'wykonanie' : 'zakup');
 
-// @anchor realization-new-field-font — pola tej zakładki są o 8px większe niż w „Realizacji".
+// @anchor realization-new-field-font — pola tej zakładki są większe niż w „Realizacji".
 // Podmieniamy klasę rozmiaru wprost, zamiast dokładać drugą obok `text-sm` z `ENTRY_INPUT`:
 // dwie klasy rozmiaru rozstrzygałaby kolejność w arkuszu Tailwinda, a nie zapis w kodzie.
-const FIELD_FONT = 'text-[22px]';
+// Stały rozmiar (22px) zastąpił token `--rn-xl` z `realization-fluid-scale` w `index.css` —
+// 22px zostaje na ≥3440px, na mniejszych ekranach schodzi proporcjonalnie do 13px.
+const FIELD_FONT = 'text-[length:var(--rn-xl)]';
 // Jedna wysokość dla WSZYSTKICH kontrolek wiersza wpisu. `input`, rosnąca `textarea` i trigger
 // `SupplierPicker` liczą wysokość trzema różnymi drogami (line-height, scrollHeight, padding
 // klasy rozmiaru), więc bez wymuszenia każda wychodziła inna i wiersz falował. Picker nie
 // przyjmuje wysokości propsem, więc sięgamy do jego triggera wariantem arbitralnym.
-const FIELD_H = 42;
-const PICKER_BOX = '[&>div>button]:h-[42px]';
+// Wysokość jedzie na tym samym pokrętle co czcionka — inaczej na 13px tekście zostałaby
+// czterdziestopikselowa ramka z tekstem pływającym w środku.
+const FIELD_H = 'var(--rn-field-h)';
+const PICKER_BOX = '[&>div>button]:h-[var(--rn-field-h)]';
 const ENTRY_INPUT_LG = ENTRY_INPUT.replace('text-sm', FIELD_FONT);
 const addEntryLabel = (type) => (type === 'work' || type === 'service' ? 'Dodaj wykonanie' : 'Dodaj zakup');
 
@@ -249,15 +283,19 @@ const Badge = ({ label, color, italic, title, size = 'text-sm' }) => label
     ? <span title={title} className={`inline-block ${size} font-semibold ${color} ${italic ? 'italic opacity-85' : ''}`}>{label}</span>
     : null;
 
-// Pasek udziału pozycji w etapach osi. Legenda jest obowiązkowa — cztery odcienie same
-// z siebie nie znaczą nic.
+// Pasek udziału KWOT wyceny w etapach osi. Legenda jest obowiązkowa — cztery odcienie same
+// z siebie nie znaczą nic. Segment = udział złotówek w danym stanie, nie liczba pozycji;
+// tooltip podaje jedno i drugie, bo „30% kwoty na 2 pozycjach" znaczy co innego niż
+// „30% kwoty na 20 pozycjach".
 const StageBar = ({ dist, title }) => {
-    if (!dist.dotyczy) return <span className="text-[20px] italic text-gray-600">oś nie dotyczy</span>;
-    const opis = STAGE_META.filter(s => dist[s.key]).map(s => `${s.label}: ${dist[s.key]}`).join(' · ');
+    if (!dist.dotyczy) return <span className="text-[length:var(--rn-lg)] italic text-gray-600">oś nie dotyczy</span>;
+    if (!dist.kwota) return <span className="text-[length:var(--rn-lg)] italic text-gray-600" title={`${title} — ${dist.dotyczy} pozycji, wszystkie z zerową wyceną`}>brak kwot</span>;
+    const opis = STAGE_META.filter(s => dist[s.key]).map(s =>
+        `${s.label}: ${fmtZl(dist[s.key])} zł (${fmtPct(pct(dist[s.key], dist.kwota))}, ${dist.n?.[s.key] ?? 0} poz.)`).join(' · ');
     return (
-        <div className="flex h-2 w-full overflow-hidden rounded-sm bg-white/5" title={`${title} — ${opis} (z ${dist.dotyczy} pozycji)`}>
+        <div className="flex h-2 w-full overflow-hidden rounded-sm bg-white/5" title={`${title} — ${opis} · razem ${fmtZl(dist.kwota)} zł na ${dist.dotyczy} pozycjach`}>
             {STAGE_META.filter(s => dist[s.key]).map(s => (
-                <i key={s.key} style={{ width: `${dist[s.key] / dist.dotyczy * 100}%`, background: s.color }} />
+                <i key={s.key} style={{ width: `${pct(dist[s.key], dist.kwota)}%`, background: s.color }} />
             ))}
         </div>
     );
@@ -273,7 +311,7 @@ const CoverageBar = ({ real, plan }) => {
                 title={`${fmtPct(p)} wyceny${over ? ' — PONAD PLAN' : ''}`}>
                 <i className="block h-full rounded-sm" style={{ width: `${Math.min(100, p)}%`, background: over ? '#d03b3b' : '#2dd4bf' }} />
             </div>
-            <span className={`w-20 text-right text-[20px] ${over ? 'text-[#d03b3b]' : 'text-gray-500'}`}>{p > 0 ? fmtPct(p) : '—'}</span>
+            <span className={`w-20 text-right text-[length:var(--rn-lg)] ${over ? 'text-[#d03b3b]' : 'text-gray-500'}`}>{p > 0 ? fmtPct(p) : '—'}</span>
         </div>
     );
 };
@@ -298,10 +336,20 @@ const Meter = ({ label, done, plan, left, right }) => {
 const Tile = ({ label, value, color, note }) => (
     <div className="min-w-[190px] flex-1 rounded-md border border-white/[.07] bg-[#0a1120] px-3.5 py-2.5">
         <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500">{label}</div>
-        <div className={`mt-1 text-[22px] font-bold leading-tight tabular-nums ${color || 'text-gray-200'}`}>{value}</div>
+        <div className={`mt-1 text-[length:var(--rn-xl)] font-bold leading-tight tabular-nums ${color || 'text-gray-200'}`}>{value}</div>
         <div className="mt-0.5 text-xs text-gray-500">{note}</div>
     </div>
 );
+
+// @anchor realization-new-card-mode — karta pozycji ma trzy zachowania, nie dwa.
+// Zadokowana trzecia kolumna ma sens dopiero wtedy, gdy po jej odjęciu środkowa tabela wciąż
+// mieści komplet kolumn — na 3440px tak, na 1500px zabierała tabeli ostatnie 440px i to ona
+// była powodem zlepionych nagłówków. Poniżej progu karta otwiera się jako SZUFLADA nad
+// tabelą (`position: absolute`), więc tabela nie traci ani piksela, a karta jest pełnej
+// szerokości. Wybór użytkownika (pokazana / schowana) przebija automat i zostaje w
+// `localStorage` — automat decyduje tylko przy pierwszym wejściu na danej przeglądarce.
+const KARTA_KEY = 'realizacja-new:karta';
+const KARTA_DOK_MIN = 2200;
 
 // ─── Komponent ────────────────────────────────────────────────────────────────
 
@@ -331,6 +379,20 @@ export default function RealizationNewTab({
     const [protokolOtwarty, setProtokolOtwarty] = useState(false);
     const [branchTableOpen, setBranchTableOpen] = useState(false);
     const [execTableOpen, setExecTableOpen] = useState(false);
+    // @anchor realization-new-kpi-open — kafle i mierniki startują ZWINIĘTE, tak samo jak dwie
+    // tabele analityczne pod nimi. Rozwinięte zabierały ~180px u góry przy każdym wejściu
+    // w zakładkę, a na mniejszym ekranie tabela pozycji zaczynała się poniżej krawędzi okna.
+    const [kpiOpen, setKpiOpen] = useState(false);
+    const { width: deviceWidth } = useDevice();
+    const [kartaWidoczna, setKartaWidoczna] = useState(() => {
+        const zapis = localStorage.getItem(KARTA_KEY);
+        if (zapis === '1') return true;
+        if (zapis === '0') return false;
+        return window.innerWidth >= KARTA_DOK_MIN;
+    });
+    // Kolumny schowane przez `realization-new-col-prio` — nazwy idą do podpisu w nagłówku
+    // panelu, żeby zniknięcie „Komentarza" nie wyglądało na utratę danych.
+    const [ukryteKolumny, setUkryteKolumny] = useState([]);
 
     // ─ Pobieranie danych — te same trzy endpointy co `RealizationTab` ────────
     const fetchAll = useCallback(async () => {
@@ -639,8 +701,18 @@ export default function RealizationNewTab({
             // rachunki nie mogły rozejść się na tej samej pozycji.
             const wiersze = leaves.map(n => ({ node: n, card: cardOf(n), realization: realizationOf(n, actualsOf(n)) }));
             let plan = 0, real = 0, wpisow = 0, zRealizacja = 0, dniPlan = 0, dniWyk = 0;
-            const dist = { purchase: { zrobione: 0, wtoku: 0, otwarte: 0, czeka: 0, dotyczy: 0 },
-                           exec:     { zrobione: 0, wtoku: 0, otwarte: 0, czeka: 0, dotyczy: 0 } };
+            // @anchor realization-new-stage-dist — rozkład osi liczony w KWOTACH wyceny, nie
+            // w sztukach pozycji. Sztuki zrównywały pozycję za 100 zł z pozycją za 100 000 zł,
+            // więc pasek „w połowie zrobione" nie mówił nic o pieniądzach. Liczniki `n` zostają
+            // obok kwot: bez nich nie da się odróżnić „oś nie dotyczy tego zakresu" od „dotyczy,
+            // ale wszystkie jego pozycje mają zerową wycenę", a ostrzeżenie o nieuzupełnionym
+            // statusie wykonania musi mówić o POZYCJACH, bo to ich nikt nie odnotował.
+            const pustyRozklad = () => ({
+                zrobione: 0, wtoku: 0, otwarte: 0, czeka: 0,
+                kwota: 0, dotyczy: 0,
+                n: { zrobione: 0, wtoku: 0, otwarte: 0, czeka: 0 },
+            });
+            const dist = { purchase: pustyRozklad(), exec: pustyRozklad() };
             for (const { node: n, card, realization: r } of wiersze) {
                 plan += planValueOf(n, card);
                 real += r.value;
@@ -648,14 +720,19 @@ export default function RealizationNewTab({
                 if (r.entries.length) zRealizacja++;
                 if (isTimeUnit(n)) { dniPlan += r.plan; dniWyk += r.qty; }
                 for (const axis of ['purchase', 'exec']) {
-                    const s = axisStageOf(n, axis);
-                    if (s) { dist[axis][s]++; dist[axis].dotyczy++; }
+                    const stan = axisStageOf(n, axis);
+                    if (!stan) continue;
+                    const kwota = planValueOf(n, card);
+                    dist[axis][stan] += kwota;
+                    dist[axis].kwota += kwota;
+                    dist[axis].n[stan]++;
+                    dist[axis].dotyczy++;
                 }
             }
             return {
                 plan: round2(plan), real: round2(real), wpisow, zRealizacja, pozycji: leaves.length,
                 dniPlan: round2(dniPlan), dniWyk: round2(dniWyk),
-                osZakupu: dist.purchase, osWykonania: dist.exec,
+                osZakupu: zaokraglijRozklad(dist.purchase), osWykonania: zaokraglijRozklad(dist.exec),
                 zamkniete: liczBilansWykonania(wiersze),
             };
         };
@@ -677,6 +754,29 @@ export default function RealizationNewTab({
     // Zwinięcie analityki przywraca panele w stanie, w jakim były (wybór gałęzi, rozwinięcia).
     const analitykaOtwarta = branchTableOpen || execTableOpen;
 
+    // Karta jest DOKOWANA tylko na szerokim ekranie; niżej ta sama karta wyjeżdża jako
+    // szuflada — patrz `realization-new-card-mode`. `useDevice` odświeża `width` na resize,
+    // więc przeciągnięcie okna przełącza tryb bez przeładowania widoku.
+    const kartaDokowana = deviceWidth >= KARTA_DOK_MIN;
+    const przelaczKarte = useCallback(() => setKartaWidoczna(v => {
+        try { localStorage.setItem(KARTA_KEY, v ? '0' : '1'); } catch { /* tryb prywatny */ }
+        return !v;
+    }), []);
+    // Esc zamyka WYŁĄCZNIE szufladę: zadokowana karta jest częścią układu, a nie warstwą
+    // nad nim, więc nie ma czego „odwoływać". Przy otwartym protokole Esc należy do modala.
+    useEffect(() => {
+        if (!kartaWidoczna || kartaDokowana || protokolOtwarty) return;
+        const onKey = (e) => { if (e.key === 'Escape') przelaczKarte(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [kartaWidoczna, kartaDokowana, protokolOtwarty, przelaczKarte]);
+    // Referencja stabilna, bo `PositionsTable` woła ją z `useEffect`: nowa funkcja przy każdym
+    // renderze rodzica odpalałaby efekt w kółko. Porównanie etykiet ucina zbędne renderowanie.
+    const zglosUkryteKolumny = useCallback((widoczne) => {
+        const brakujace = REALIZATION_NEW_COLS.filter(c => !widoczne.includes(c)).map(c => c.label);
+        setUkryteKolumny(prev => (prev.join('|') === brakujace.join('|') ? prev : brakujace));
+    }, []);
+
     if (loading) {
         return (
             <div className="flex h-full items-center justify-center gap-2 text-sm text-gray-500">
@@ -688,7 +788,10 @@ export default function RealizationNewTab({
     const selectedNode = idx.leaves.find(n => n.id === selectedLeaf) || null;
 
     return (
-        <div className="flex h-full flex-col bg-[#030712] text-gray-200">
+        // `rn-fluid` niesie skalę typografii (`index.css`, @anchor realization-fluid-scale) —
+        // musi siedzieć na korzeniu zakładki, bo tokeny dziedziczą wszystkie trzy panele,
+        // szuflada zakupów i modal protokołu.
+        <div className="rn-fluid flex h-full flex-col bg-[#030712] text-gray-200">
             {/* ── Analiza zamówienia — ten sam warunek roli co LogistykaMaterialListsTab:70 ── */}
             <div className={`border-b border-white/[.07] px-4 py-3 ${
                 analitykaOtwarta ? 'min-h-0 flex-1 overflow-auto' : 'shrink-0'}`}>
@@ -728,7 +831,8 @@ export default function RealizationNewTab({
                     ? <Analiza
                         a={analysis} orderName={orderName}
                         open={branchTableOpen} onToggle={() => setBranchTableOpen(v => !v)}
-                        execOpen={execTableOpen} onToggleExec={() => setExecTableOpen(v => !v)} />
+                        execOpen={execTableOpen} onToggleExec={() => setExecTableOpen(v => !v)}
+                        kpiOpen={kpiOpen} onToggleKpi={() => setKpiOpen(v => !v)} />
                     : (
                         <div className="rounded-md border border-white/[.07] bg-[#0a1120] px-3.5 py-2.5 text-xs text-gray-400">
                             <b className="text-gray-300">Analiza zamówienia — widok dla roli MANAGER i ADMIN.</b><br />
@@ -738,9 +842,16 @@ export default function RealizationNewTab({
                     )}
             </div>
 
-            <div className={`min-h-0 flex-1 ${analitykaOtwarta ? 'hidden' : 'flex'}`}>
+            {/* `relative` jest kotwicą szuflady karty pozycji (`realization-new-card-mode`) —
+                szuflada kładzie się na tym rzędzie, a nie na całej zakładce, więc nie zasłania
+                belki eksportu ani analizy. */}
+            <div className={`relative min-h-0 flex-1 ${analitykaOtwarta ? 'hidden' : 'flex'}`}>
                 {/* ── Panel 1 — gałęzie zamówienia ─────────────────────────────── */}
-                <div className="flex w-[520px] shrink-0 flex-col border-r border-white/[.07]">
+                {/* Szerokości paneli bocznych są PROPORCJĄ okna, nie stałą: 520/440px to
+                    wartości dobrane na 3440px, a na 1500px zabierały środkowej tabeli tyle,
+                    że na 13 kolumn zostawało ~540px. Górna granica clamp trzyma dotychczasowy
+                    wygląd na dużym ekranie, dolna nie pozwala zwinąć drzewa poniżej czytelności. */}
+                <div className="flex w-[clamp(240px,20vw,520px)] shrink-0 flex-col border-r border-white/[.07]">
                     <PanelHeader
                         title="Gałęzie zamówienia"
                         meta={`${idx.branches.length - 1} gałęzi · ${idx.leaves.length} pozycji`}
@@ -774,6 +885,15 @@ export default function RealizationNewTab({
                                     {onlyOpen ? 'Pokaż wszystkie' : 'Tylko niedomknięte'}
                                 </MiniBtn>
                                 {filtryAktywne && <MiniBtn onClick={() => setColFilters({})}>Wyczyść filtry</MiniBtn>}
+                                {ukryteKolumny.length > 0 && (
+                                    <span title={`Za wąski panel na komplet kolumn — schowane: ${ukryteKolumny.join(', ')}. Wszystkie te dane są w karcie pozycji i w eksporcie do Excela.`}
+                                        className="cursor-help self-center text-[10px] uppercase tracking-wider text-amber-300/70">
+                                        {ukryteKolumny.length} kol. ukryte
+                                    </span>
+                                )}
+                                <MiniBtn muted={!kartaWidoczna} onClick={przelaczKarte}>
+                                    {kartaWidoczna ? 'Ukryj kartę' : 'Karta pozycji'}
+                                </MiniBtn>
                             </>
                         }
                     />
@@ -788,23 +908,43 @@ export default function RealizationNewTab({
                             onClearFilters={() => setColFilters({})}
                             onSaveAxis={saveAxis} onSaveComment={saveComment}
                             onAddActual={addActual} onUpdateActual={updateActual} onDeleteActual={deleteActual}
+                            onColsChange={zglosUkryteKolumny}
                         />
                     </div>
                 </div>
 
-                {/* ── Panel 3 — karta pozycji ──────────────────────────────────── */}
-                <div className="flex w-[440px] shrink-0 flex-col border-l border-white/[.07]">
-                    <PanelHeader
-                        title="Karta pozycji"
-                        meta={selectedNode ? `${actualsOf(selectedNode).length} zakupów w tabeli` : ''}
-                    />
-                    <div className="min-h-0 flex-1 overflow-auto p-3">
-                        {selectedNode
-                            ? <LeafCard node={selectedNode} {...rowOf(selectedNode)}
-                                readOnly={readOnly} onToggleClosed={() => toggleClosed(selectedNode)} />
-                            : <div className="pt-10 text-center text-sm text-gray-600">Wybierz pozycję w tabeli,<br />żeby zobaczyć jej kartę.</div>}
+                {/* ── Panel 3 — karta pozycji: kolumna, szuflada albo szyna ────── */}
+                {kartaWidoczna ? (
+                    <div className={kartaDokowana
+                        ? 'flex w-[clamp(300px,19vw,440px)] shrink-0 flex-col border-l border-white/[.07]'
+                        : 'animate-slide-in-right absolute inset-y-0 right-0 z-30 flex w-[min(440px,90vw)] flex-col border-l border-white/[.07] bg-[#0a1120] shadow-2xl'}>
+                        <PanelHeader
+                            title="Karta pozycji"
+                            meta={selectedNode ? `${actualsOf(selectedNode).length} zakupów w tabeli` : ''}
+                            actions={<MiniBtn muted onClick={przelaczKarte}>
+                                {kartaDokowana ? 'Ukryj' : 'Zamknij (Esc)'}
+                            </MiniBtn>}
+                        />
+                        <div className="min-h-0 flex-1 overflow-auto p-3">
+                            {selectedNode
+                                ? <LeafCard node={selectedNode} {...rowOf(selectedNode)}
+                                    readOnly={readOnly} onToggleClosed={() => toggleClosed(selectedNode)} />
+                                : <div className="pt-10 text-center text-sm text-gray-600">Wybierz pozycję w tabeli,<br />żeby zobaczyć jej kartę.</div>}
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    /* Szyna zostaje w miejscu karty, żeby po jej schowaniu było widać, że
+                       panel istnieje i gdzie go szukać. Sam przycisk w nagłówku tabeli byłby
+                       jedynym śladem, a ten ginie wśród filtrów i rozwijania zakupów. */
+                    <button onClick={przelaczKarte} title="Pokaż kartę wybranej pozycji"
+                        className="flex w-6 shrink-0 items-center justify-center gap-2 border-l border-white/[.07] bg-[#0a1120] transition-colors hover:bg-white/[.04]">
+                        <span style={{ writingMode: 'vertical-rl' }}
+                            className="whitespace-nowrap text-[10px] font-bold uppercase tracking-widest text-teal-300/70">
+                            Karta pozycji
+                        </span>
+                        {selectedNode && <span title="Pozycja wybrana w tabeli" className="size-1.5 rounded-full bg-teal-300/80" />}
+                    </button>
+                )}
             </div>
 
             <ProtokolOdbioruModal
@@ -853,17 +993,21 @@ function BranchTree({ idx, rootId, level, selected, onSelect, cardOf, actualsOf,
 
     return (
         <>
-            <div onClick={() => onSelect(rootId)}
+            {/* Tytuł siedzi na CAŁYM wierszu, nie na samej nazwie: przy wąskim panelu nazwa
+                ścina się do „i…" i zajmuje kilkanaście pikseli, więc dymek podpięty pod nią
+                był nie do trafienia myszą. Kolumny liczbowe mają własne podpisy, więc i one
+                niosą nazwę gałęzi — inaczej najechanie na kwotę gubiło kontekst wiersza. */}
+            <div onClick={() => onSelect(rootId)} title={node.name}
                 className={`flex cursor-pointer items-center gap-1.5 border-b border-white/[.04] px-2 py-1 text-xs hover:bg-white/[.03] ${
                     selected === rootId ? 'bg-teal-500/10' : ''} ${level <= 1 ? 'font-semibold text-gray-200' : 'text-gray-400'} ${
                     level === 1 ? 'border-t border-white/[.07]' : ''}`}>
                 <span style={{ width: level * 13 }} className="shrink-0" />
                 <ChevronRight size={11} className={`shrink-0 text-gray-600 ${children.length ? 'rotate-90' : 'invisible'}`} />
-                <span className="min-w-0 flex-1 truncate" title={node.name}>{node.name}</span>
-                {waiting && <span title="Są pozycje bez pełnego pokrycia zakupami" className="size-1.5 shrink-0 rounded-full bg-amber-400" />}
-                <span className="w-9 shrink-0 text-right text-gray-500 tabular-nums">{leaves.length}</span>
-                <span className="w-24 shrink-0 text-right text-orange-400 tabular-nums" title="Wycena gałęzi">{fmtZl(plan)}</span>
-                <span className="w-24 shrink-0 text-right text-red-400 tabular-nums" title="Zakupy zrealizowane">{fmtZl(real)}</span>
+                <span className="min-w-0 flex-1 truncate">{node.name}</span>
+                {waiting && <span title={`${node.name} — są pozycje bez pełnego pokrycia zakupami`} className="size-1.5 shrink-0 rounded-full bg-amber-400" />}
+                <span className="w-9 shrink-0 text-right text-gray-500 tabular-nums" title={`${node.name} — ${leaves.length} pozycji kosztowych`}>{leaves.length}</span>
+                <span className="w-24 shrink-0 text-right text-orange-400 tabular-nums" title={`${node.name} — wycena gałęzi`}>{fmtZl(plan)}</span>
+                <span className="w-24 shrink-0 text-right text-red-400 tabular-nums" title={`${node.name} — zakupy zrealizowane`}>{fmtZl(real)}</span>
             </div>
             {children.map(c => (
                 <BranchTree key={c.id} idx={idx} rootId={c.id} level={level + 1}
@@ -880,8 +1024,35 @@ function BranchTree({ idx, rootId, level, selected, onSelect, cardOf, actualsOf,
 function PositionsTable({
     leaves, rowOf, actualsOf, expanded, onToggleExpanded, selected, onSelect,
     readOnly, filters = {}, filterOptions = {}, onFilterChange, onClearFilters,
-    onSaveAxis, onSaveComment, onAddActual, onUpdateActual, onDeleteActual,
+    onSaveAxis, onSaveComment, onAddActual, onUpdateActual, onDeleteActual, onColsChange,
 }) {
+    // Tabela ma `w-full`, więc jej własna szerokość JEST szerokością panelu — mierzymy ją
+    // zamiast okna, bo ta sama szerokość okna daje inny panel przy karcie zadokowanej i
+    // schowanej. Ukrycie kolumny nie zmienia szerokości tabeli, więc pomiar się nie zapętla.
+    // DWA źródła pomiaru, bo żadne samo nie wystarcza:
+    //   • odczyt `offsetWidth` po KAŻDYM renderze — łapie zmiany układu bez zdarzenia okna
+    //     (schowanie karty) i działa też w karcie nieaktywnej, gdzie przeglądarka wstrzymuje
+    //     `ResizeObserver` razem z całym rysowaniem;
+    //   • `ResizeObserver` — łapie zmiany, po których nic się nie przerenderowuje (przeciąganie
+    //     krawędzi okna, wysunięcie panelu bocznego aplikacji).
+    const tableRef = useRef(null);
+    const [tableW, setTableW] = useState(0);
+    useLayoutEffect(() => {
+        const el = tableRef.current;
+        if (el && el.offsetWidth !== tableW) setTableW(el.offsetWidth);
+    });
+    useEffect(() => {
+        const el = tableRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(([e]) => setTableW(Math.round(e.contentRect.width)));
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
+    const cols = useMemo(() => visibleCols(tableW, filters), [tableW, filters]);
+    const colPct = useMemo(() => colPctOf(cols), [cols]);
+    // Nagłówek panelu (rodzic) podpisuje, ILE kolumn zniknęło i jakich — stąd raport w górę.
+    useEffect(() => { onColsChange?.(cols); }, [cols, onColsChange]);
+
     let sumPlan = 0, sumReal = 0;
     const rows = leaves.map(node => {
         const data = rowOf(node);
@@ -891,12 +1062,12 @@ function PositionsTable({
     });
 
     return (
-        <table className="w-full table-fixed border-separate border-spacing-0 text-[22px]">
+        <table ref={tableRef} className="w-full table-fixed border-separate border-spacing-0 text-[length:var(--rn-xl)]">
             <thead className="sticky top-0 z-10">
                 <tr>
                     <th className="w-6 border-b border-white/[.14] bg-[#0a1120]" />
-                    {REALIZATION_NEW_COLS.map(c => (
-                        <th key={c.key} style={{ width: COL_PCT[c.key] }}
+                    {cols.map(c => (
+                        <th key={c.key} style={{ width: colPct[c.key] }}
                             className={`border-b border-white/[.14] bg-[#0a1120] px-2 py-1.5 text-sm font-bold uppercase tracking-wider text-gray-500 ${
                                 c.right ? 'text-right' : 'text-left'}`}>{c.label}</th>
                     ))}
@@ -906,7 +1077,7 @@ function PositionsTable({
                     wyniku — filtr da się cofnąć bez przeładowania widoku. */}
                 <tr>
                     <th className="border-b border-white/[.07] bg-[#0a1120]" />
-                    {REALIZATION_NEW_COLS.map(c => (
+                    {cols.map(c => (
                         <th key={c.key} className="border-b border-white/[.07] bg-[#0a1120] px-1.5 py-1">
                             {NEW_DROPDOWN_FILTER_COLS.has(c.key) ? (
                                 <FilterDropdown
@@ -930,7 +1101,7 @@ function PositionsTable({
             <tbody>
                 {rows.length === 0 && (
                     <tr>
-                        <td colSpan={REALIZATION_NEW_COLS.length + 1} className="px-4 py-12 text-center">
+                        <td colSpan={cols.length + 1} className="px-4 py-12 text-center">
                             <div className="text-sm text-gray-500">Brak pozycji pasujących do filtra.</div>
                             <button onClick={onClearFilters}
                                 className="mt-2 rounded border border-teal-500/25 bg-teal-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-teal-300 hover:bg-teal-500/20">
@@ -954,10 +1125,10 @@ function PositionsTable({
                                         onClick={(e) => { e.stopPropagation(); onToggleExpanded(node.id); }}
                                         className={`cursor-pointer transition-transform hover:text-teal-300 ${open ? 'rotate-90 text-teal-300' : 'text-gray-500'}`} />
                                 </td>
-                                {REALIZATION_NEW_COLS.map((c, i) => (
+                                {cols.map((c, i) => (
                                     <td key={c.key}
                                         className={`px-2 py-1.5 ${tdOpen} ${c.right ? 'text-right tabular-nums' : ''} ${
-                                            open && i === REALIZATION_NEW_COLS.length - 1 ? 'border-r border-r-teal-300/45' : ''}`}>
+                                            open && i === cols.length - 1 ? 'border-r border-r-teal-300/45' : ''}`}>
                                         <Cell colKey={c.key} node={node} card={card} r={r} planValue={planValue} deltaQty={deltaQty}
                                             readOnly={readOnly} onSaveAxis={onSaveAxis} onSaveComment={onSaveComment} />
                                     </td>
@@ -965,7 +1136,7 @@ function PositionsTable({
                             </tr>
                             {open && (
                                 <tr>
-                                    <td colSpan={REALIZATION_NEW_COLS.length + 1}
+                                    <td colSpan={cols.length + 1}
                                         className={`${DRAWER.cardCell} ${DRAWER.accent.real.cell}`}>
                                         <PurchaseDrawer node={node} card={card} r={r} planValue={planValue}
                                             readOnly={readOnly}
@@ -981,9 +1152,9 @@ function PositionsTable({
             <tfoot className="sticky bottom-0">
                 <tr>
                     <td className="border-t border-white/[.14] bg-[#0a1120]" />
-                    {REALIZATION_NEW_COLS.map(c => (
+                    {cols.map(c => (
                         <td key={c.key} className={`border-t border-white/[.14] bg-[#0a1120] px-2 py-1.5 ${c.right ? 'text-right tabular-nums' : ''}`}>
-                            {c.key === 'name' && <span className="text-[18px] font-semibold text-gray-400">Razem widoczne</span>}
+                            {c.key === 'name' && <span className="text-[length:var(--rn-md)] font-semibold text-gray-400">Razem widoczne</span>}
                             {c.key === 'total' && (
                                 <>
                                     <div className="font-semibold text-orange-400">{fmtZl(sumPlan)}</div>
@@ -1009,13 +1180,13 @@ function Cell({ colKey, node, card, r, planValue, deltaQty, readOnly, onSaveAxis
         case 'name':
             return <div className="line-clamp-3 leading-snug" title={getParentPath(node.path)}>{node.name}</div>;
         case 'type':
-            return <span className={`text-[18px] font-semibold uppercase tracking-wide ${t?.color || 'text-gray-400'}`}>{t?.label || node.type}</span>;
+            return <span className={`text-[length:var(--rn-md)] font-semibold uppercase tracking-wide ${t?.color || 'text-gray-400'}`}>{t?.label || node.type}</span>;
         case 'supplier': {
             const names = [...new Set(r.entries.map(e => e.supplier?.name).filter(Boolean))];
-            return <span className="text-[18px] text-gray-400">{names.length ? names.join(', ') : '—'}</span>;
+            return <span className="text-[length:var(--rn-md)] text-gray-400">{names.length ? names.join(', ') : '—'}</span>;
         }
         case 'qty':
-            return <>{fmtQty(node.quantity)} <span className="text-[18px] text-gray-500">{node.unit}</span></>;
+            return <>{fmtQty(node.quantity)} <span className="text-[length:var(--rn-md)] text-gray-500">{node.unit}</span></>;
         case 'realization':
             return (
                 <>
@@ -1040,8 +1211,8 @@ function Cell({ colKey, node, card, r, planValue, deltaQty, readOnly, onSaveAxis
             return (
                 <>
                     {fmtZl(unit)}
-                    {r.avg != null && r.mixedPrices && <span className="ml-1 text-[18px] text-gray-500" title="Średnia ważona z wpisów realizacji">śr.</span>}
-                    {r.avg == null && <span className="ml-1 text-[18px] text-gray-500" title="Cena z propozycji isPurchase — brak wpisów">ofert.</span>}
+                    {r.avg != null && r.mixedPrices && <span className="ml-1 text-[length:var(--rn-md)] text-gray-500" title="Średnia ważona z wpisów realizacji">śr.</span>}
+                    {r.avg == null && <span className="ml-1 text-[length:var(--rn-md)] text-gray-500" title="Cena z propozycji isPurchase — brak wpisów">ofert.</span>}
                 </>
             );
         }
@@ -1113,7 +1284,7 @@ function CommentCell({ node, readOnly, onSave }) {
             onChange={e => setVal(e.target.value)}
             onClick={e => e.stopPropagation()}
             onBlur={() => { if ((node.comment || '') !== val) onSave(node.id, val); }}
-            className={`w-full border-none bg-transparent text-[20px] leading-snug text-gray-400 outline-none placeholder-gray-700 ${readOnly ? 'cursor-default' : ''}`}
+            className={`w-full border-none bg-transparent text-[length:var(--rn-lg)] leading-snug text-gray-400 outline-none placeholder-gray-700 ${readOnly ? 'cursor-default' : ''}`}
         />
     );
 }
@@ -1149,13 +1320,13 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, o
 
     const head = (
         <div className={DRAWER.cardHead}>
-            <span className={`${DRAWER.cardTitle} ${DRAWER.accent.real.title} text-[20px]`}>
+            <span className={`${DRAWER.cardTitle} ${DRAWER.accent.real.title} text-[length:var(--rn-lg)]`}>
                 {withCard ? 'Zakupy zrealizowane' : 'Wykonanie zrealizowane'}
             </span>
             {!readOnly && (
                 <button
                     onClick={(e) => { e.stopPropagation(); setAdding(v => !v); }}
-                    className={`flex shrink-0 items-center gap-1.5 rounded border px-3 py-1 text-[22px] transition-colors ${
+                    className={`flex shrink-0 items-center gap-1.5 rounded border px-3 py-1 text-[length:var(--rn-xl)] transition-colors ${
                         adding ? 'border-white/[.14] text-gray-400 hover:text-gray-200'
                                : 'border-teal-500/30 text-teal-300 hover:bg-teal-500/10'}`}>
                     <Plus size={22} className={adding ? 'rotate-45 transition-transform' : 'transition-transform'} />
@@ -1171,7 +1342,7 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, o
         const pr = card?.proposals?.find(x => x.isPurchase) || null;
         const agreed = purchaseUnitOf(card);
         return (
-            <div className="px-3 pb-2.5 text-[24px] text-gray-400">
+            <div className="px-3 pb-2.5 text-[length:var(--rn-2xl)] text-gray-400">
                 Nic jeszcze nie dojechało. Pozycja wyceniona na <b className="text-gray-200">{fmtZl(planValue)} zł</b>.
                 {pr && agreed != null && (
                     <>
@@ -1194,7 +1365,7 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, o
             {head}
             {!r.entries.length && pusta()}
             {(r.entries.length > 0 || adding) && (
-                <table className="w-full table-fixed border-separate border-spacing-0 text-[20px]">
+                <table className="w-full table-fixed border-separate border-spacing-0 text-[length:var(--rn-lg)]">
                     <thead>
                         <tr>
                             {COLS.map(c => (
@@ -1589,7 +1760,10 @@ const AxisBadge = ({ node, axis }) => {
 
 // @anchor realization-new-analiza — kafle, mierniki i rozbicie na zakresy główne.
 // Widok wyłącznie dla ADMIN i MANAGER — ten sam idiom co `LogistykaMaterialListsTab:70`.
-function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec }) {
+// Wszystkie TRZY bloki analityczne (kafle+mierniki, zakresy główne, bilans domkniętych) chowają
+// się za przyciskiem w jednym rzędzie. Kafle wisiały wcześniej na stałe u góry zakładki i na
+// każdym ekranie poniżej 1440px spychały tabelę pozycji pod krawędź okna.
+function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec, kpiOpen, onToggleKpi }) {
     const c = a.calosc;
     const leftMoney = round2(c.plan - c.real);
     const leftDays = round2(c.dniPlan - c.dniWyk);
@@ -1598,30 +1772,17 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec }) {
 
     return (
         <>
-            <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-teal-300">
-                Analiza zamówienia{orderName ? ` — ${orderName}` : ''}
-            </div>
-            <div className="mb-3 flex flex-wrap gap-2.5">
-                <Tile label="Wycena zamówienia" value={`${fmtZl(c.plan)} zł`} color="text-orange-400" note={`${c.pozycji} pozycji kosztowych`} />
-                <Tile label="Zakupy zrealizowane" value={`${fmtZl(c.real)} zł`} color="text-red-400" note={`${c.wpisow} wpisów na ${c.zRealizacja} pozycjach`} />
-                <Tile label="Pozostaje do wydania" value={`${fmtZl(leftMoney)} zł`} note={`${fmtPct(pct(leftMoney, c.plan))} wyceny`} />
-                <Tile label="Dni niezrealizowane" value={fmtQty(leftDays)} color="text-amber-400" note={`z ${fmtQty(c.dniPlan)} zaplanowanych`} />
-                <Tile
-                    label="Wykonane / zakupione / zamknięte"
-                    value={`${fmtZl(z.lacznie.plan)} zł`}
-                    color="text-emerald-400"
-                    note={`${z.lacznie.pozycji} z ${c.pozycji} pozycji · zakup ${fmtZl(z.lacznie.real)} zł · ${fmtPct(pct(z.lacznie.plan, c.plan))} wyceny`} />
-            </div>
-
-            <div className="mb-3 flex flex-wrap gap-4">
-                <Meter label="Pokrycie wyceny zakupami" done={c.real} plan={c.plan} left={`${fmtZl(c.real)} zł`} right={`${fmtZl(c.plan)} zł`} />
-                <Meter label="Dni wykonane" done={c.dniWyk} plan={c.dniPlan} left={`${fmtQty(c.dniWyk)} dni wykonanych`} right={`${fmtQty(c.dniPlan)} dni w planie`} />
-                <Meter label="Pozycje ruszone" done={c.zRealizacja} plan={c.pozycji} left={`${c.zRealizacja} pozycji z zakupami`} right={`${c.pozycji} pozycji`} />
-            </div>
-
             <div className="flex flex-wrap gap-2">
+                {/* Etykieta zwiniętego przycisku niesie dwie liczby, po które najczęściej sięga się
+                    do kafli — wycenę i pokrycie zakupami. Bez nich zwinięta analiza kazałaby
+                    otwierać blok tylko po to, żeby zobaczyć, czy warto go otwierać. */}
+                <button onClick={onToggleKpi} className="rounded border border-white/[.14] px-2 py-0.5 text-[11px] text-gray-400 hover:text-gray-200">
+                    {kpiOpen
+                        ? 'Ukryj analizę zamówienia'
+                        : `Analiza zamówienia — ${fmtZl(c.plan)} zł wyceny · ${fmtPct(pct(c.real, c.plan))} pokrycia zakupami`}
+                </button>
                 <button onClick={onToggle} className="rounded border border-white/[.14] px-2 py-0.5 text-[11px] text-gray-400 hover:text-gray-200">
-                    {open ? 'Ukryj realizację zakresów' : `Realizacja ${a.galezie.length} zakresów głównych — plan wobec wykonania`}
+                    {open ? 'Ukryj realizację zakresów' : `Realizacja ${a.galezie.length} zakresów głównych (${c.pozycji} pozycji) — plan wobec wykonania`}
                 </button>
                 <button onClick={onToggleExec} className="rounded border border-white/[.14] px-2 py-0.5 text-[11px] text-gray-400 hover:text-gray-200">
                     {execOpen
@@ -1629,6 +1790,31 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec }) {
                         : `Bilans domkniętych pozycji — ${z.lacznie.pozycji} poz. na ${fmtZl(z.lacznie.plan)} zł`}
                 </button>
             </div>
+
+            {kpiOpen && (
+                <div className="mt-2.5">
+                    <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-teal-300">
+                        Analiza zamówienia{orderName ? ` — ${orderName}` : ''}
+                    </div>
+                    <div className="mb-3 flex flex-wrap gap-2.5">
+                        <Tile label="Wycena zamówienia" value={`${fmtZl(c.plan)} zł`} color="text-orange-400" note={`${c.pozycji} pozycji kosztowych`} />
+                        <Tile label="Zakupy zrealizowane" value={`${fmtZl(c.real)} zł`} color="text-red-400" note={`${c.wpisow} wpisów na ${c.zRealizacja} pozycjach`} />
+                        <Tile label="Pozostaje do wydania" value={`${fmtZl(leftMoney)} zł`} note={`${fmtPct(pct(leftMoney, c.plan))} wyceny`} />
+                        <Tile label="Dni niezrealizowane" value={fmtQty(leftDays)} color="text-amber-400" note={`z ${fmtQty(c.dniPlan)} zaplanowanych`} />
+                        <Tile
+                            label="Wykonane / zakupione / zamknięte"
+                            value={`${fmtZl(z.lacznie.plan)} zł`}
+                            color="text-emerald-400"
+                            note={`${z.lacznie.pozycji} z ${c.pozycji} pozycji · zakup ${fmtZl(z.lacznie.real)} zł · ${fmtPct(pct(z.lacznie.plan, c.plan))} wyceny`} />
+                    </div>
+
+                    <div className="flex flex-wrap gap-4">
+                        <Meter label="Pokrycie wyceny zakupami" done={c.real} plan={c.plan} left={`${fmtZl(c.real)} zł`} right={`${fmtZl(c.plan)} zł`} />
+                        <Meter label="Dni wykonane" done={c.dniWyk} plan={c.dniPlan} left={`${fmtQty(c.dniWyk)} dni wykonanych`} right={`${fmtQty(c.dniPlan)} dni w planie`} />
+                        <Meter label="Pozycje ruszone" done={c.zRealizacja} plan={c.pozycji} left={`${c.zRealizacja} pozycji z zakupami`} right={`${c.pozycji} pozycji`} />
+                    </div>
+                </div>
+            )}
 
             {open && (
                 <div className="mt-2.5">
@@ -1638,10 +1824,12 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec }) {
                                 <i className="size-2.5 rounded-sm" style={{ background: s.color }} />{s.label}
                             </span>
                         ))}
-                        <span>— pasek pokazuje, ile POZYCJI jest w każdym stanie, a nie kwoty</span>
+                        <span>— pasek pokazuje, jaka CZĘŚĆ KWOTY wyceny stoi w każdym stanie, a nie ile pozycji</span>
                     </div>
 
-                    {!c.osWykonania.zrobione && !c.osWykonania.wtoku && (
+                    {/* Ostrzeżenie liczy POZYCJE, nie kwoty: chodzi o to, że nikt nie odnotował
+                        statusu, a nie o to, ile te pozycje są warte. */}
+                    {!c.osWykonania.n.zrobione && !c.osWykonania.n.wtoku && (
                         <div className="mb-2 rounded-md border border-amber-500/30 bg-amber-500/[.07] px-3 py-2 text-xs text-amber-200/90">
                             <b>Status wykonania nie jest w tym zamówieniu ustawiony na żadnej z {c.pozycji} pozycji.</b>{' '}
                             Dlatego „zrobione" wychodzi zero — nie dlatego, że nic nie zrobiono, tylko dlatego, że nikt tego
@@ -1650,20 +1838,19 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec }) {
                     )}
 
                     <div className="overflow-x-auto">
-                        <table className="w-full table-fixed border-separate border-spacing-0 text-[24px]">
+                        <table className="w-full table-fixed border-separate border-spacing-0 text-[length:var(--rn-2xl)]">
                             <thead>
-                                <tr className="text-[20px] uppercase tracking-wider text-gray-500">
+                                <tr className="text-[length:var(--rn-lg)] uppercase tracking-wider text-gray-500">
                                     {/* Procenty, nie piksele: `table-fixed` z pikselami rozciąga tabelę do ich
                                         sumy i wypycha kolumny poza panel. Udziały trzymają proporcje i skalują
                                         się w dół razem z szerokością okna. */}
-                                    <th style={{ width: '24%' }} className="border-b border-white/[.14] px-2 py-1 text-left">Zakres główny</th>
-                                    <th style={{ width: '13%' }} className="border-b border-white/[.14] px-2 py-1 text-left">Pokrycie kwotowe</th>
-                                    <th style={{ width: '12%' }} className="border-b border-white/[.14] px-2 py-1 text-left">Oś zakupu</th>
-                                    <th style={{ width: '12%' }} className="border-b border-white/[.14] px-2 py-1 text-left">Oś wykonania</th>
-                                    <th style={{ width: '6%' }} className="border-b border-white/[.14] px-2 py-1 text-right">Poz.</th>
+                                    <th style={{ width: '26%' }} className="border-b border-white/[.14] px-2 py-1 text-left">Zakres główny</th>
+                                    <th style={{ width: '14%' }} className="border-b border-white/[.14] px-2 py-1 text-left">Pokrycie kwotowe</th>
+                                    <th style={{ width: '14%' }} className="border-b border-white/[.14] px-2 py-1 text-left">Zakup materiałów</th>
+                                    <th style={{ width: '14%' }} className="border-b border-white/[.14] px-2 py-1 text-left">Stopień wykonania prac</th>
                                     <th style={{ width: '11.5%' }} className="border-b border-white/[.14] px-2 py-1 text-right">Wycena</th>
                                     <th style={{ width: '11.5%' }} className="border-b border-white/[.14] px-2 py-1 text-right">Zakup</th>
-                                    <th style={{ width: '10%' }} className="border-b border-white/[.14] px-2 py-1 text-right">Δ</th>
+                                    <th style={{ width: '9%' }} className="border-b border-white/[.14] px-2 py-1 text-right">Δ</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1673,9 +1860,8 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec }) {
                                         <tr key={g.id}>
                                             <td className="truncate border-b border-white/[.05] px-2 py-1" title={g.nazwa}>{g.nazwa}</td>
                                             <td className="border-b border-white/[.05] px-2 py-1"><CoverageBar real={g.real} plan={g.plan} /></td>
-                                            <td className="border-b border-white/[.05] px-2 py-1"><StageBar dist={g.osZakupu} title={`Oś zakupu w zakresie „${g.nazwa}"`} /></td>
-                                            <td className="border-b border-white/[.05] px-2 py-1"><StageBar dist={g.osWykonania} title={`Oś wykonania w zakresie „${g.nazwa}"`} /></td>
-                                            <td className="border-b border-white/[.05] px-2 py-1 text-right tabular-nums">{g.pozycji}</td>
+                                            <td className="border-b border-white/[.05] px-2 py-1"><StageBar dist={g.osZakupu} title={`Zakup materiałów w zakresie „${g.nazwa}" — udział kwot wyceny`} /></td>
+                                            <td className="border-b border-white/[.05] px-2 py-1"><StageBar dist={g.osWykonania} title={`Stopień wykonania prac w zakresie „${g.nazwa}" — udział kwot wyceny`} /></td>
                                             <td className="border-b border-white/[.05] px-2 py-1 text-right tabular-nums text-orange-400">{fmtZl(g.plan)}</td>
                                             <td className="border-b border-white/[.05] px-2 py-1 text-right tabular-nums text-red-400">
                                                 {g.real ? fmtZl(g.real) : <span className="text-gray-600">—</span>}</td>
@@ -1691,9 +1877,8 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec }) {
                                 <tr className="font-semibold">
                                     <td className="border-t border-white/[.14] px-2 py-1">Razem</td>
                                     <td className="border-t border-white/[.14] px-2 py-1"><CoverageBar real={c.real} plan={c.plan} /></td>
-                                    <td className="border-t border-white/[.14] px-2 py-1"><StageBar dist={c.osZakupu} title="Oś zakupu — całe zamówienie" /></td>
-                                    <td className="border-t border-white/[.14] px-2 py-1"><StageBar dist={c.osWykonania} title="Oś wykonania — całe zamówienie" /></td>
-                                    <td className="border-t border-white/[.14] px-2 py-1 text-right tabular-nums">{c.pozycji}</td>
+                                    <td className="border-t border-white/[.14] px-2 py-1"><StageBar dist={c.osZakupu} title="Zakup materiałów — całe zamówienie, udział kwot wyceny" /></td>
+                                    <td className="border-t border-white/[.14] px-2 py-1"><StageBar dist={c.osWykonania} title="Stopień wykonania prac — całe zamówienie, udział kwot wyceny" /></td>
                                     <td className="border-t border-white/[.14] px-2 py-1 text-right tabular-nums text-orange-400">{fmtZl(c.plan)}</td>
                                     <td className="border-t border-white/[.14] px-2 py-1 text-right tabular-nums text-red-400">{fmtZl(c.real)}</td>
                                     <td className={`border-t border-white/[.14] px-2 py-1 text-right tabular-nums ${dTotal <= 0 ? 'text-emerald-300' : 'text-[#d03b3b]'}`}>
@@ -1737,9 +1922,9 @@ function BilansZamkniete({ c }) {
                 „Pokrycie kwotowe" mówi, ile z wyceny danego wiersza już wydano; „Udział wyceny" — jaką część zamówienia ten wiersz stanowi.
             </div>
             <div className="overflow-x-auto">
-                <table className="w-full table-fixed border-separate border-spacing-0 text-[24px]">
+                <table className="w-full table-fixed border-separate border-spacing-0 text-[length:var(--rn-2xl)]">
                     <thead>
-                        <tr className="text-[20px] uppercase tracking-wider text-gray-500">
+                        <tr className="text-[length:var(--rn-lg)] uppercase tracking-wider text-gray-500">
                             <Th w="w-[28%]">Przekrój</Th>
                             <Th w="w-[15%]">Pokrycie kwotowe</Th>
                             <Th w="w-[6%]" right>Poz.</Th>

@@ -584,6 +584,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | DEFAULT_PURCHASE_STATUS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor default-purchase-status |
 | ui-stala | DEFAULT_EXEC_STATUS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor default-exec-status |
 | ui-kolumna | Status zakupu (Realizacja) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-purchase-col |
+| ui-wiersz | płaska lista pozycji bez nagłówków gałęzi | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-flat-rows |
 | ui-kolumna | Status wykonania (Realizacja) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-exec-col |
 | ui-funkcja | saveAxis | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-save-axis |
 | ui-funkcja | purchaseStatusLabel / execStatusLabelOf | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-axis-labels |
@@ -1667,18 +1668,11 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | entryNoun / newEntryLabel / ADD_ENTRY_LABEL (zakup vs wykonanie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-noun |
 | ui-wiersz | RealizationRow | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row |
 | ui-przycisk | „+" dopisania wpisu (lewa strona wiersza) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-add-button |
-| ui-funkcja | execCodeOf (kod osi wykonania do pokazania) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-exec-code-of |
 | ui-przycisk | StatusHint (podpowiedź statusu do zatwierdzenia) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-status-hint |
 | ui-stan | hints (podpowiedzi osi dla wiersza) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-hints |
 | ui-stan | execSelectCode (kod pokazywany w selekcie osi wykonania) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-exec-select-code |
-| ui-sekcja | BranchAxisBadge (plakietka osi na gałęzi) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-branch-badge |
 | ui-sekcja | AxisGateBadge (plakietka etapu za bramką) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-gate-badge |
 | ui-stan | purchaseGate / execGate (bramki wiersza) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-gates |
-| ui-wiersz | RealizationGroupRow (wiersz gałęzi) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-group-row |
-| ui-stan | groups (pozycje pod nagłówkami gałęzi) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-groups |
-| ui-stan | openGroupKey (otwarta gałąź — jedna na raz) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-open-group |
-| ui-hook | otwarta gałąź zsynchronizowana z filtrem | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-open-group-sync |
-| ui-stan | nodeById (węzeł WBS po id) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-node-by-id |
 | ui-stan | odbiorByRoot (rejestr odbiorów zamówienia) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-odbior-status |
 | ui-funkcja | fetchOdbior (odczyt rejestru odbiorów) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-fetch-odbior |
 | ui-wiersz | osadzenie wierszy wpisów w tabeli realizacji | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-tab-entry-rows |
@@ -1695,8 +1689,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | FORMULA_HINT (dymek „można wpisać działanie") | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor realization-formula-hint |
 | ui-funkcja | growsWithText (pole tekstowe wpisu rośnie z treścią) | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor realization-entry-growing-fields |
 | ui-kolumna | dostawcy pozycji — lista, nie skrót „+N" | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-row-suppliers |
-| ui-wiersz | listwa domykająca szufladę rozwiniętej pozycji | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-drawer-cap |
-| ui-wiersz | listwa domykająca szufladę gałęzi | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-group-cap |
+| ui-wiersz | dolna krawędź karty rozwiniętej pozycji | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-drawer-cap |
+| ui-stala | CARD_VARS (kolory krawędzi karty rozwinięcia) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-card-drawer |
+| ui-stala | .rt-card-open / .rt-card-side / .rt-card-end (krawędzie karty rozwinięcia) | apps/frontend/src/index.css | @anchor realization-card-drawer-css |
 | ui-stala | DROPDOWN_FILTER_COLS / TEXT_FILTER_COLS (rodzaj filtra kolumny) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-filter-cols |
 | ui-funkcja | hasColFilter (czy filtr kolumny cokolwiek zawęża) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-has-col-filter |
 | ui-stan | filterOptions (wartości do wielowyboru) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-filter-options |
@@ -1733,6 +1728,7 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-funkcja | planValueOf (wartość pozycji po stronie wyceny) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-plan-value |
 | ui-funkcja | buildBranchIndex (branchId — najbliższa gałąź w górę) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-branch-index |
 | ui-funkcja | axisStageOf (stan pozycji na osi) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-axis-stage |
+| ui-stala | rozkład osi w kwotach wyceny (pustyRozklad / zaokraglijRozklad) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-stage-dist |
 | ui-funkcja | axisDisplay (etykieta osi: bramka albo status) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-axis-display |
 | ui-funkcja | rowOf (komplet liczb jednej pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-row-of |
 | ui-panel | BranchTree (panel 1 — gałęzie zamówienia) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-branch-tree |
@@ -1754,7 +1750,11 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-input | CommentCell (komentarz pozycji edytowalny w miejscu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-comment-cell |
 | ui-funkcja | entryField (jedno pole wpisu LeafActual) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-field |
 | ui-stan | exportRows (wiersze widoczne — dla eksportu i protokołu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-export-rows |
-| ui-stala | FIELD_FONT / ENTRY_INPUT_LG (pola zakładki o 4px większe) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-field-font |
+| ui-stan | kpiOpen (kafle i mierniki analizy — zwinięte za przyciskiem) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-kpi-open |
+| ui-panel | KARTA_KEY / KARTA_DOK_MIN + kartaWidoczna (karta pozycji: kolumna, szuflada, szyna) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-card-mode |
+| ui-stala | COL_PRIO_LIMIT / visibleCols / colPctOf (ukrywanie kolumn wg szerokości tabeli) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-col-prio |
+| ui-stala | FIELD_FONT / ENTRY_INPUT_LG / FIELD_H (pola zakładki na tokenach skali) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-field-font |
+| ui-stala | .rn-fluid (płynna skala typografii Realizacja_new: --rn-base, --rn-2xl…--rn-md, --rn-field-h) | apps/frontend/src/index.css | @anchor realization-fluid-scale |
 | ui-stala | NEW_DROPDOWN_FILTER_COLS / NEW_TEXT_FILTER_COLS + filterValuesOf, filterTextOf | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-col-filters |
 | ui-wiersz | wiersz filtrów w nagłówku tabeli pozycji | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-filter-row |
 | ui-wiersz | EntryRow (zapisany wpis, edycja w miejscu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-row |

@@ -1,3 +1,24 @@
+## 2026-09-10 — Realizacja i Realizacja_new na mniejszych ekranach: płynna typografia, karta pozycji jako szuflada, priorytet kolumn, płaska lista pozycji (v2026.09.10.1600)
+
+### architektura / API
+- `ui-stala` `realization-fluid-scale` — nowa skala typografii w `apps/frontend/src/index.css` (klasa `.rn-fluid` na korzeniu Realizacja_new). Rozmiary 18–24 px były dobrane pod monitor 3440×1440; jedno pokrętło `--rn-base` interpoluje teraz 13 px @≤1440 → 22 px @≥3440, a `--rn-2xl`…`--rn-md` i `--rn-field-h` są jego proporcją. Mikro-etykiety 10/11 px celowo nie skalują się w dół.
+- `ui-panel` `realization-new-card-mode` — karta pozycji ma trzy zachowania zamiast jednego: ≥2200 px zadokowana kolumna, poniżej szuflada `position:absolute` nad tabelą (tabela nie traci szerokości), zamknięta zostawia szynę 24 px z pionowym podpisem. Wybór użytkownika ląduje w `localStorage` (`realizacja-new:karta`) i przebija automat. Esc zamyka wyłącznie szufladę.
+- `ui-stala` `realization-new-col-prio` — kolumny tabeli pozycji dostały `prio` 1–3 i znikają wg ZMIERZONEJ szerokości tabeli (<900 px → prio 1, <1300 px → prio 2). Kolumna z aktywnym filtrem nie znika nigdy; nagłówek panelu podpisuje, ile kolumn schowano. Szerokość mierzona dwoma źródłami — `useLayoutEffect` po każdym renderze i `ResizeObserver` — bo samo RO nie odpala w karcie nieaktywnej.
+- `ui-stan` `realization-new-kpi-open` — kafle i mierniki analizy zwinięte za przyciskiem, w jednym rzędzie z dwiema tabelami analitycznymi.
+- `ui-stala` `realization-new-stage-dist` — paski „Zakup materiałów" i „Stopień wykonania prac" (dawniej „Oś zakupu" / „Oś wykonania") dzielą się udziałem KWOT wyceny w każdym statusie, nie liczbą pozycji. Liczniki `n` zostają obok kwot dla tooltipa i ostrzeżenia o nieuzupełnionym statusie wykonania. Kolumna „Poz." usunięta — licznik wrócił do etykiety przycisku.
+- `ui-wiersz` `realization-flat-rows` — zakładka „Realizacja" renderuje płaską listę pozycji kosztowych bez nagłówków gałęzi. Nagłówki brały się z `parentId`, a rodzicem liścia jest w prawdziwych danych węzeł typu `group` (21 z 87 w zamówieniu CMC) — treść wymagania, nie zakres prac. Usunięte razem z nimi: `RealizationGroupRow`, `BranchAxisBadge`, `execCodeOf`, memo `groups`, stan `openGroupKey` z synchronizacją i `nodeById`.
+- `ui-stala` `realization-card-drawer` + `realization-card-drawer-css` — rozwinięcie pozycji w „Realizacji" przeszło z wariantu z kręgosłupem na wariant KARTY, jeden do jednego z Realizacja_new: wspólny prostokąt obwiedziony turkusem wokół wiersza, panelu, wpisów i formularza, w środku zaokrąglona karta `DRAWER.card`.
+
+### słownik
+- dodano `realization-fluid-scale`, `realization-new-kpi-open`, `realization-new-card-mode`, `realization-new-col-prio`, `realization-new-stage-dist`, `realization-flat-rows`, `realization-card-drawer`, `realization-card-drawer-css`
+- usunięto `realization-group-row`, `realization-branch-badge`, `realization-groups`, `realization-open-group`, `realization-open-group-sync`, `realization-group-cap`, `realization-node-by-id`, `realization-exec-code-of`
+- zmieniono `realization-new-field-font` (rozmiar z tokena, nie 22 px), `realization-drawer-cap` (dolna krawędź karty zamiast listwy)
+
+### wytyczne
+- `ui-stala` `realization-new-col-prio` — szerokość do decyzji o kolumnach mierzyć na ELEMENCIE tabeli, nie na oknie: to samo okno daje inny panel przy karcie zadokowanej i schowanej. Sam `ResizeObserver` nie wystarcza — w karcie przeglądarki, która nie jest na wierzchu, callbacki RO nie przychodzą razem z całym rysowaniem; potrzebny odczyt `offsetWidth` po renderze.
+- `ui-stala` `realization-fluid-scale` — nowe rozmiary w Realizacja_new dokładać jako tokeny `--rn-*`, nie jako `text-[Npx]`. Wartość zaszyta w klasie zostaje przy 3440 px i wraca do rozjeżdżonego układu na laptopie.
+- węzły typu `group` — to TREŚĆ WYMAGANIA, nie poziom kosztowy. Nie używać ich jako poziomu grupowania w widokach realizacji; koszt niosą dopiero ich dzieci (`material`/`work`/`service`/`equipment`/`fuel`).
+
 ## 2026-09-09 — Limit rozmiaru załącznika, 413 osobno od osierocenia, upload na dysk zamiast do RAM (v2026.09.09.1035)
 
 ### architektura / API

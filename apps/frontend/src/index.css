@@ -173,3 +173,48 @@ input[type=number] {
   width: 16px;
 }
 .ignite-dp-field .react-datepicker__close-icon:hover::after { background: rgba(248,113,113,0.35); color: #fff; }
+/* Płynna skala typografii zakładki „Realizacja_new".
+   @anchor realization-fluid-scale
+   Rozmiary w tej zakładce były dobrane pod monitor 3440×1440 (18–24px). Na 1500px
+   ten sam układ się rozjeżdżał, bo trzy panele dzielą tę samą szerokość co tam.
+   Jedno pokrętło `--rn-base` interpoluje 13px @≤1440 → 22px @≥3440
+   (13 + (100vw − 1440px) × 9/2000), reszta tokenów jest jego proporcją, więc
+   wzajemne relacje rozmiarów zostają takie, jak zaprojektowane na dużym ekranie.
+   Mikro-etykiety (`text-[10px]`/`text-[11px]`) celowo NIE skalują się w dół —
+   poniżej 10px przestają być czytelne, a układu nie psują. */
+.rn-fluid {
+  --rn-base:    clamp(13px, 0.45vw + 6.52px, 22px);
+  --rn-2xl:     calc(var(--rn-base) * 1.09);          /* było 24px */
+  --rn-xl:      var(--rn-base);                       /* było 22px */
+  --rn-lg:      calc(var(--rn-base) * 0.91);          /* było 20px */
+  --rn-md:      calc(var(--rn-base) * 0.82);          /* było 18px */
+  /* Wysokość kontrolek wiersza wpisu — patrz `FIELD_H` w RealizationNewTab.jsx.
+     Dolny próg 28px, żeby input i picker zostały klikalne na małym ekranie. */
+  --rn-field-h: max(28px, calc(var(--rn-base) * 1.9)); /* było 42px */
+}
+
+/* Rozwinięcie pozycji w zakładce „Realizacja" jako JEDNA karta.
+   @anchor realization-card-drawer-css
+   Ten sam zabieg co `wbs-leaf-open` w drzewie WBS i co wariant `drawer-card` w
+   Realizacja_new: wiersz pozycji dostaje górną i boczne krawędzie w kolorze akcentu,
+   jaśniejsze tło i TRACI dolną, więc zlewa się z szufladą pod sobą; wiersze szuflady
+   (panel, wpisy, formularz) niosą tylko boczne krawędzie, a domknięcie dokłada dolną.
+   Krawędzie idą CSS-em po komórkach, a nie klasą na każdym `<td>` — wiersz pozycji ma
+   ich siedemnaście, każda z własnym zestawem klas.
+   `tr.rt-card-open` (0,1,1) bije tailwindowe `.border-b` (0,1,0) z klasy wiersza. */
+tr.rt-card-open { border-bottom-width: 0; }
+.rt-card-open > td,
+.rt-card-side > td,
+.rt-card-end  > td { background-color: var(--rt-fill); }
+.rt-card-open > td { border-top: 1px solid var(--rt-edge); border-bottom: 0; }
+.rt-card-open > td:first-child,
+.rt-card-side > td:first-child { border-left: 1px solid var(--rt-edge); }
+.rt-card-open > td:last-child,
+.rt-card-side > td:last-child { border-right: 1px solid var(--rt-edge); }
+.rt-card-end > td {
+  height: 6px;
+  padding: 0;
+  border-left: 1px solid var(--rt-edge);
+  border-right: 1px solid var(--rt-edge);
+  border-bottom: 1px solid var(--rt-edge);
+}

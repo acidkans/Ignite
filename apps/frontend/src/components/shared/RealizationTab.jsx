@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
 import {
     ChevronRight, ChevronDown, Plus, Trash2, AlertCircle, CornerDownLeft, ShoppingCart, X, FileSpreadsheet, FileText,
-    Link, Sparkles, Hourglass,
+    Sparkles, Hourglass,
 } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { API_URL } from '../../config';
@@ -15,8 +15,8 @@ import { fetchStatusOdbioru } from '../../utils/protokolOdbioruExport';
 import { sanitizeQtyInput, parsePriceInput, DRAWER, STRUCTURE_STATUS_META, statusMetaForType, statusOptionsForType, statusLabelForType, resolveStatusCode, usesWorkStatuses,
     PLAN_STATUS_META, planStatusFromAny, PURCHASE_STATUS_META, EXEC_STATUS_META, execStatusLabel,
     hasPurchaseAxis, hasExecAxis, DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS,
-    suggestAxisStatus, handedOverFromProtocol, summarizeStatusCodes, axisStatusCodeOf, axisGateOf,
-    AXIS_STATUS_META, AXIS_STATUS_ORDER } from './wbs/wbsConstants';
+    suggestAxisStatus, handedOverFromProtocol, axisGateOf,
+    AXIS_STATUS_ORDER } from './wbs/wbsConstants';
 import {
     ENTRY_INPUT, FORMULA_HINT, NUMERIC_ENTRY_FIELDS, growsWithText, resolveEntryNumber,
     selectAllOnFocus, focusNextInRow,
@@ -111,14 +111,6 @@ export const execStatusLabelOf = (node, odbior = null) => {
     return execStatusLabel(node?.type, code);
 };
 
-// @anchor realization-exec-code-of — kod osi wykonania DO POKAZANIA: zapisany `execStatus`
-// albo wyliczone z protokołu „Odebrane". Jedno źródło dla komórki, dla plakietki gałęzi
-// i dla eksportu, żeby żadne z nich nie mówiło czegoś innego niż pozostałe.
-export const execCodeOf = (node, odbior = null) =>
-    axisGateOf(node, 'exec') ? null
-        : handedOverFromProtocol(node, odbior) ? 'HANDED_OVER'
-        : axisStatusCodeOf(node, 'exec');
-
 // @anchor realization-forecast-min-share — próg wiarygodności prognozy wydatków: dopóki
 // wykonanie rodzaju kosztów nie osiągnie tego udziału w jego wycenie, prognoza zostaje na
 // 100% wyceny zamiast iść za odchyleniem. Przy paru wpisach odchylenie nie opisuje rynku,
@@ -178,8 +170,8 @@ export function StatusHint({ label, color, title, onAccept, disabled }) {
 // @anchor realization-gate-badge — plakietka etapu, który jeszcze nie ruszył (`axisGateOf`).
 // Zamiast dropdowna, nie obok niego: skoro oś czeka na poprzedni etap, nie ma czego wybierać,
 // a wyszarzony select czytałoby się jak brak uprawnień. Klepsydra odróżnia „czeka na coś"
-// od „wyliczone z pozycji poddrzewa" (łańcuch w `BranchAxisBadge`) — oba są nieedytowalne,
-// ale z zupełnie innego powodu, i tooltip każdej mówi, co ją odblokuje.
+// od „wyliczone z pozycji poddrzewa" (łańcuch w `AggregatedStatusBadge` w drzewie WBS) — oba
+// są nieedytowalne, ale z zupełnie innego powodu, i tooltip każdej mówi, co ją odblokuje.
 export function AxisGateBadge({ gate }) {
     return (
         <span
@@ -192,26 +184,12 @@ export function AxisGateBadge({ gate }) {
     );
 }
 
-// @anchor realization-branch-badge — plakietka statusu GAŁĘZI: wartość wyliczona z pozycji,
-// nigdy zapisana i nigdy edytowalna. Ta sama ikona łańcucha co w `AggregatedStatusBadge`
-// w drzewie WBS, żeby „wyliczone" wyglądało w obu widokach tak samo.
-export function BranchAxisBadge({ agg, axis, opis }) {
-    const meta = (AXIS_STATUS_META[axis] || {})[agg.code];
-    const color = meta?.color || 'text-gray-500';
-    const title = agg.count === 0
-        ? 'Brak pozycji z tą osią w tej gałęzi'
-        : `${opis} — wyliczone z ${agg.count} widocznych pozycji: `
-          + agg.breakdown.map(b => `${b.label} ${b.count}`).join(', ');
-    return (
-        <span
-            title={title}
-            className={`flex w-full items-center gap-1 px-1.5 py-0.5 rounded border border-white/10 bg-black/40 text-sm font-medium cursor-default ${color}`}
-        >
-            <Link size={9} className="flex-shrink-0" />
-            <span className="truncate">{agg.label}</span>
-        </span>
-    );
-}
+// @anchor realization-card-drawer — rozwinięcie pozycji w wariancie KARTY (`drawer-card`),
+// jeden do jednego z Realizacja_new: rozwinięty wiersz, panel szczegółów, wpisy i formularz
+// tworzą wspólny prostokąt obwiedziony turkusem, zamiast kręgosłupa przy lewej krawędzi.
+// Kolory idą z `DRAWER.accent.real` do custom properties, bo krawędzie rysuje CSS po
+// komórkach (`realization-card-drawer-css` w `index.css`), a nie klasa na każdym `<td>`.
+const CARD_VARS = { '--rt-edge': DRAWER.accent.real.edge, '--rt-fill': DRAWER.accent.real.fill };
 
 // ─── Wiersz pozycji ───────────────────────────────────────────────────────────
 
@@ -258,7 +236,7 @@ export function RealizationRow({ node, card, realization, odbior, isExpanded, on
     const handedOver = !execGate && handedOverFromProtocol(node, odbior);
     // @anchor realization-exec-select-code — kod POKAZYWANY w selekcie osi wykonania:
     // zapisany `execStatus` albo wyliczone z protokołu „Odebrane". Ta sama zasada co
-    // w `execCodeOf`, tylko dla samej kontrolki.
+    // w `execStatusLabelOf`, tylko kodem zamiast etykietą.
     const execSelectCode = handedOver ? 'HANDED_OVER' : (node.execStatus || DEFAULT_EXEC_STATUS);
     const hintTitle = `Podpowiedź z ${r.entries.length} ${r.entries.length === 1 ? 'wpisu' : 'wpisów'} realizacji `
         + `(${fmtQty(r.qty)} z ${fmtQty(r.plan)} ${node.unit || 'szt'}). Kliknij, aby ustawić — nic się nie zapisze, dopóki nie klikniesz.`;
@@ -283,15 +261,14 @@ export function RealizationRow({ node, card, realization, odbior, isExpanded, on
     const scopes = [...new Set(r.entries.map(e => e.scope).filter(Boolean))];
 
     return (
-        <tr className={`transition-colors ${isExpanded ? DRAWER.surface : 'border-b border-white/[0.03] hover:bg-white/[0.02]'}`}>
+        <tr className={`transition-colors ${isExpanded ? 'rt-card-open' : 'border-b border-white/[0.03] hover:bg-white/[0.02]'}`}
+            style={isExpanded ? CARD_VARS : undefined}>
             {/* @anchor realization-add-button — rozwijanie i dopisywanie po LEWEJ, przy
                 pozycji: sam „+" wystarczy, bo etykieta i tak powtarzałaby się w każdym wierszu.
                 Tooltip niesie, czy to zakup czy wykonanie. */}
-            {/* Kręgosłup biegnie przez CAŁĄ otwartą gałąź — nagłówek, wszystkie jej pozycje
-                i szuflady pod nimi — tak samo jak w drzewie WBS (`wbs-drawer`), tyle że
-                w turkusie strony realizacji. Wiersz pozycji renderuje się wyłącznie wewnątrz
-                otwartej gałęzi, więc kręgosłup jest tu bezwarunkowy. */}
-            <td className={`px-1.5 py-2.5 whitespace-nowrap ${DRAWER.spine} ${DRAWER.accent.real.spine}`}>
+            {/* Rozwinięty wiersz jest GÓRNĄ krawędzią karty (`realization-card-drawer`) —
+                obramowanie rysuje CSS po komórkach, więc tutaj zostaje samo wypełnienie. */}
+            <td className="whitespace-nowrap px-1.5 py-2.5">
                 <button onClick={onToggle} title="Rozwiń wpisy i szczegóły pozycji"
                     className={`transition-colors align-middle ${isExpanded ? 'text-teal-300 hover:text-teal-200' : 'text-gray-600 hover:text-gray-300'}`}>
                     {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -474,7 +451,7 @@ export function RealizationRow({ node, card, realization, odbior, isExpanded, on
                     w bazie: `handedOver` liczy się z rejestru protokołów, więc wycofanie
                     dokumentu samo cofa pozycję do `DONE`. Wybranie w selekcie czegokolwiek innego
                     zdejmuje warunek `execStatus === 'DONE'`, więc pole nie wraca do „Odebrane"
-                    wbrew użytkownikowi. Ten sam kod, co w `execCodeOf` — komórka, wyszukiwarka,
+                    wbrew użytkownikowi. Ta sama zasada, co w `execStatusLabelOf` — komórka, wyszukiwarka,
                     sortowanie i eksport mówią jedno. */}
                 {!hasExecAxis(node.type) ? <span className="text-sm text-gray-700">—</span>
                 : execGate ? <AxisGateBadge gate={execGate} /> : (
@@ -524,77 +501,6 @@ export function RealizationRow({ node, card, realization, odbior, isExpanded, on
                     {r.entries.length || '—'}
                 </span>
             </td>
-        </tr>
-    );
-}
-
-// @anchor realization-group-row — wiersz GAŁĘZI: nagłówek grupy pozycji, które pod nią wiszą.
-// Gałąź własnego statusu nie ma na żadnej z trzech osi (`nodeHasOwnStatus`), więc wszystkie
-// trzy komórki niosą wartość WYLICZONĄ i nieedytowalną.
-//
-// Sumujemy pozycje WIDOCZNE w tej grupie, nie całe poddrzewo z bazy — ta sama zasada, co
-// w stopce tabeli (`realization-totals`): po zawężeniu filtrem nagłówek ma mówić o tym,
-// na co się właśnie patrzy. Rozjazd między plakietką a wierszami pod nią czytałoby się
-// jak błąd danych, a nie jak inny zakres.
-export function RealizationGroupRow({ group, open, onToggle }) {
-    return (
-        // Otwarta gałąź jest NAGŁÓWKIEM SZUFLADY — ta sama płaszczyzna (`DRAWER.surface`),
-        // ten sam kręgosłup przy lewej krawędzi i ta sama listwa domykająca co przy rozwiniętej
-        // pozycji, tyle że obejmuje całą gałąź. Zamknięta zostaje zwykłym paskiem nagłówka.
-        <tr className={open
-            ? `${DRAWER.surface} border-t border-teal-500/60`
-            : 'border-y border-white/10 bg-white/[0.04] hover:bg-white/[0.06] transition-colors'}>
-            <td className={`px-1.5 py-2 ${open ? `${DRAWER.spine} ${DRAWER.accent.real.spine}` : ''}`}>
-                <button onClick={onToggle} title={open ? 'Zwiń gałąź' : 'Rozwiń gałąź'}
-                    className={`transition-colors align-middle ${open ? 'text-teal-300 hover:text-teal-200' : 'text-gray-400 hover:text-teal-300'}`}>
-                    {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                </button>
-            </td>
-            {COL_DEFS.map(c => {
-                const base = 'px-3 py-2';
-                if (c.key === 'parent') return (
-                    <td key={c.key} className={base}>
-                        <button onClick={onToggle} className="text-sm font-bold text-white break-words text-left hover:text-teal-200 transition-colors" title={group.path}>
-                            {group.label}
-                        </button>
-                    </td>
-                );
-                if (c.key === 'name') return (
-                    <td key={c.key} className={base}>
-                        <span className="text-xs text-gray-400">
-                            {group.rows.length} {group.rows.length === 1 ? 'pozycja' : 'pozycji'}
-                        </span>
-                    </td>
-                );
-                if (c.key === 'total') return (
-                    <td key={c.key} className={`${base} text-right font-mono text-sm whitespace-nowrap`}>
-                        {/* Ten sam podział kolorów co w wierszach — patrz `realization-total-plan-color`. */}
-                        <div className="text-orange-400/80" title="Suma kosztów całkowitych z wyceny w tej gałęzi">{fmtZl(group.plan)} zł</div>
-                        <div className="text-red-400/80" title="Suma kosztów całkowitych zakupu w tej gałęzi">{fmtZl(group.real)} zł</div>
-                    </td>
-                );
-                if (c.key === 'status') return (
-                    <td key={c.key} className={`${base} overflow-hidden`}>
-                        <BranchAxisBadge agg={group.axes.plan} axis="plan" opis="Status oferty gałęzi" />
-                    </td>
-                );
-                if (c.key === 'purchaseStatus') return (
-                    <td key={c.key} className={`${base} overflow-hidden`}>
-                        <BranchAxisBadge agg={group.axes.purchase} axis="purchase" opis="Status zakupu gałęzi" />
-                    </td>
-                );
-                if (c.key === 'execStatus') return (
-                    <td key={c.key} className={`${base} overflow-hidden`}>
-                        <BranchAxisBadge agg={group.axes.exec} axis="exec" opis="Status wykonania gałęzi" />
-                    </td>
-                );
-                if (c.key === 'actions') return (
-                    <td key={c.key} className={`${base} text-right`}>
-                        <span className="text-xs text-gray-500 font-mono">{group.entries || '—'}</span>
-                    </td>
-                );
-                return <td key={c.key} className={base} />;
-            })}
         </tr>
     );
 }
@@ -656,10 +562,10 @@ export function RealizationEntryLine({ entry, cols, hasCard, readOnly, onSave, o
     const wartosc = (parsePriceInput(get('qty')) || 0) * (parsePriceInput(get('unitCost')) || 0);
 
     return (
-        <tr className={`group/entry ${DRAWER.surface} ${DRAWER.hoverRow} border-b border-white/[0.03]`}>
-            {/* Wąska kolumna niesie znacznik „to jest wpis, nie pozycja". Kręgosłup ten sam
-                co w wierszu pozycji i w panelu wyżej — wpis jest częścią tej samej szuflady. */}
-            <td className={`px-1.5 py-1.5 text-center ${DRAWER.spine} ${DRAWER.accent.real.spine} text-gray-700 font-mono text-sm`}>·</td>
+        <tr className={`group/entry rt-card-side ${DRAWER.hoverRow} border-b border-white/[0.03]`} style={CARD_VARS}>
+            {/* Wąska kolumna niesie znacznik „to jest wpis, nie pozycja". Boczne krawędzie
+                karty rysuje CSS — wpis jest częścią tego samego prostokąta co pozycja. */}
+            <td className="px-1.5 py-1.5 text-center font-mono text-sm text-gray-700">·</td>
             {cols.map(c => {
                 if (c.key === 'parent') return <td key={c.key} className="px-2 py-1.5">{field('entryDate', 'font-mono', { label: 'Data zdarzenia' })}</td>;
                 // Komentarz wpisu stoi pod kolumną „Komentarz" tabeli głównej, nie pod „Nazwą" —
@@ -835,8 +741,8 @@ export function RealizationEntryForm({ node, cols, hasCard, defaultQty, seedProd
         // Formularz siedzi na tej samej płaszczyźnie co reszta szuflady — od zapisanych wpisów
         // odróżnia go turkusowy „+" w kolumnie rozwijania, etykiety nad polami i podkreślenie
         // pod wierszem. Własne tło robiło z niego piąty odcień w jednym rozwinięciu.
-        <tr className={`${DRAWER.surface} border-b border-teal-500/20`}>
-            <td className={`px-1.5 py-2 text-center ${DRAWER.spine} ${DRAWER.accent.real.spine}`}>
+        <tr className="rt-card-side border-b border-teal-500/20" style={CARD_VARS}>
+            <td className="px-1.5 py-2 text-center">
                 <Plus size={14} className="inline text-teal-400" />
             </td>
             {cols.map(c => {
@@ -953,13 +859,14 @@ export function RealizationExpandPanel({ node, card, realization, token, readOnl
     const remaining = Math.round((realization.plan - realization.qty) * 1000) / 1000;
 
     return (
-        // Ta sama szuflada co w panelu Materiały (`DRAWER`) — płaszczyzna karty, kręgosłup przy
-        // lewej krawędzi, nagłówek 10 px z nazwą pozycji. Akcent turkusowy, nie niebieski:
-        // niebieski trzymamy dla strony wyceny, turkus dla zakupu i realizacji.
-        <div className={`${DRAWER.surface} ${DRAWER.spine} ${DRAWER.accent.real.spine}`}>
-            <div className={DRAWER.head}>
-                <span className={`${DRAWER.label} ${DRAWER.accent.real.label}`}>realizacja pozycji</span>
-                <span className={DRAWER.name}>{node.name}</span>
+        // Wariant KARTY (`DRAWER.card`) — ten sam, co szuflada zakupów w Realizacja_new:
+        // zaokrąglony prostokąt na ciemniejszym tle, wewnątrz obwiedzionego turkusem
+        // rozwinięcia, z pełnowymiarowym nagłówkiem zamiast mikro-etykiety 10 px.
+        // Akcent turkusowy, nie niebieski: niebieski trzymamy dla strony wyceny.
+        <div className={`${DRAWER.card} ${DRAWER.accent.real.card}`}>
+            <div className={DRAWER.cardHead}>
+                <span className={`${DRAWER.cardTitle} ${DRAWER.accent.real.title} text-sm`}>Realizacja pozycji</span>
+                <span className="truncate text-xs text-gray-500">{node.name}</span>
             </div>
             {hasCard && card && (
                 <div className="px-4 py-3 flex items-start gap-3">
@@ -1608,14 +1515,6 @@ export default function RealizationTab({
     // (`handedOverFromProtocol`). Odczyt pomocniczy: brak odpowiedzi zostawia pustą mapę,
     // czyli tabelę bez plakietek odbioru — a nie pustą tabelę.
     const [odbiorByRoot, setOdbiorByRoot] = useState({});
-    // @anchor realization-open-group — OTWARTA gałąź, po id węzła nadrzędnego. Naraz otwarta
-    // jest najwyżej jedna: trzymamy klucz otwartej, a nie zbiór zwiniętych, więc „jedna
-    // szuflada na raz" jest STANEM, a nie regułą pilnowaną przy każdym kliknięciu.
-    // Rozwijanie jest FOLDEM widoku, nie filtrem: stopka nadal sumuje pozycje z gałęzi
-    // zamkniętej, bo one wciąż należą do tego, co pokazuje filtr.
-    const [openGroupKey, setOpenGroupKey] = useState(null);
-    const toggleGroup = useCallback((key) => setOpenGroupKey(prev => (prev === key ? null : key)), []);
-
     const [sortConfig, setSortConfig] = useState({ key: 'parent', direction: 'asc' });
     const [colFilters, setColFilters] = useState({});
     const [colWidths, setColWidths] = useState(() => Object.fromEntries(COL_DEFS.map(c => [c.key, c.defaultW])));
@@ -1903,10 +1802,6 @@ export default function RealizationTab({
 
     const leaves = useMemo(() => leafNodesOf(wbsNodes, visibleTypes), [wbsNodes, visibleTypes]);
 
-    // @anchor realization-node-by-id — węzeł po id; nagłówek grupy potrzebuje NAZWY gałęzi,
-    // a liść niesie tylko własną ścieżkę.
-    const nodeById = useMemo(() => new Map(wbsNodes.map(n => [n.id, n])), [wbsNodes]);
-
     const actualsByRoot = useMemo(() => {
         const map = {};
         for (const a of actuals) {
@@ -2058,65 +1953,6 @@ export default function RealizationTab({
 
         return list;
     }, [leaves, cards, actualsByRoot, odbiorByRoot, searchQuery, colFilters, sortConfig]);
-
-    // @anchor realization-groups — widoczne pozycje pod nagłówkami GAŁĘZI, po węźle nadrzędnym.
-    // Kolejność grup bierze się z KOLEJNOŚCI SORTOWANIA wierszy (pierwsze wystąpienie gałęzi),
-    // więc sortowanie po dowolnej kolumnie nadal rządzi widokiem, a grupy jadą za nim zamiast
-    // narzucać własny porządek. Nagłówek liczy statusy trzech osi z pozycji w swojej grupie —
-    // patrz `realization-group-row`.
-    const groups = useMemo(() => {
-        const map = new Map();
-        for (const row of rows) {
-            const key = row.node.parentId || '__root__';
-            if (!map.has(key)) {
-                const parent = nodeById.get(key) || null;
-                map.set(key, {
-                    key,
-                    label: parent?.name || getParentPath(row.node.path),
-                    path: parent?.path || getParentPath(row.node.path),
-                    rows: [],
-                });
-            }
-            map.get(key).rows.push(row);
-        }
-        return [...map.values()].map(g => {
-            const codes = axis => g.rows
-                .map(({ node }) => (axis === 'exec' ? execCodeOf(node, odbiorByRoot[wbsRootOf(node)]) : axisStatusCodeOf(node, axis)))
-                .filter(Boolean);
-            let plan = 0, real = 0, entries = 0;
-            for (const { node, card, realization } of g.rows) {
-                plan += planValueOf(node, card);
-                real += realization.value;
-                entries += realization.entries.length;
-            }
-            return {
-                ...g,
-                plan: Math.round(plan * 100) / 100,
-                real: Math.round(real * 100) / 100,
-                entries,
-                axes: {
-                    plan:     summarizeStatusCodes(codes('plan'), 'plan'),
-                    purchase: summarizeStatusCodes(codes('purchase'), 'purchase'),
-                    exec:     summarizeStatusCodes(codes('exec'), 'exec'),
-                },
-            };
-        });
-    }, [rows, nodeById, odbiorByRoot]);
-
-    // @anchor realization-open-group-sync — otwarta gałąź musi istnieć w tym, na co się patrzy.
-    // Po zawężeniu filtru klucz sprzed filtrowania wskazywałby na gałąź, której już nie ma,
-    // i widok zostawałby bez ani jednej otwartej szuflady. Gdy po filtrze zostaje JEDNA gałąź,
-    // otwiera się sama — nie ma między czym wybierać, a wyszukiwarka pokazywałaby sam nagłówek.
-    // Zależność to PODPIS zestawu gałęzi, nie sama tablica: `groups` przelicza się przy każdej
-    // edycji wiersza, a otwarcia nie wolno wtedy ruszać (użytkownik mógł gałąź świadomie zamknąć).
-    const groupKeysSig = groups.map(g => g.key).join('|');
-    useEffect(() => {
-        setOpenGroupKey(prev => {
-            if (prev && groups.some(g => g.key === prev)) return prev;
-            return groups.length === 1 ? groups[0].key : null;
-        });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [groupKeysSig]);
 
     // @anchor realization-totals — sumy z WIDOCZNYCH wierszy, nie z całego zamówienia:
     // po zawężeniu filtrem stopka ma mówić o tym, na co się właśnie patrzy.
@@ -2370,18 +2206,18 @@ export default function RealizationTab({
                                     </td>
                                 </tr>
                             )}
-                            {groups.map(group => {
-                              const groupOpen = openGroupKey === group.key;
-                              return (
-                              <React.Fragment key={`grp-${group.key}`}>
-                                <RealizationGroupRow
-                                    group={group}
-                                    open={groupOpen}
-                                    onToggle={() => toggleGroup(group.key)}
-                                />
-                                {groupOpen && group.rows.map(({ node, card, realization }, rowIdx) => {
+                            {/* @anchor realization-flat-rows — PŁASKA lista pozycji kosztowych, bez
+                                nagłówków gałęzi. Nagłówki brały się z `parentId`, a w prawdziwym
+                                zamówieniu rodzicem liścia jest węzeł typu `group` — treść wymagania
+                                („Wykonanie dokumentacji powykonawczej uwzględniającej między innymi:"),
+                                nie zakres prac. Taki nagłówek zajmował pięć linii, powtarzał to samo,
+                                co kolumna „Przedmiot projektu" w każdym wierszu pod nim, i chował
+                                pozycje za dodatkowym kliknięciem. Zostaje więc sam poziom, który niesie
+                                koszt i do którego dopisuje się zakup albo wykonanie.
+                                Domyślne sortowanie po „Przedmiocie projektu" trzyma pozycje jednego
+                                wymagania obok siebie, więc lista dalej czyta się grupami. */}
+                            {rows.map(({ node, card, realization }) => {
                                 const isExpanded = expandedId === node.id;
-                                const isLastInGroup = rowIdx === group.rows.length - 1;
                                 const hasCard = TYPE_META[node.type]?.hasCard !== false;
                                 const remaining = Math.round((realization.plan - realization.qty) * 1000) / 1000;
                                 return (
@@ -2403,8 +2239,8 @@ export default function RealizationTab({
                                             onAddClick={() => openEntryForm(node, card)}
                                         />
                                         {isExpanded && (
-                                            <tr>
-                                                <td colSpan={COL_DEFS.length + 1} className="p-0">
+                                            <tr className="rt-card-side" style={CARD_VARS}>
+                                                <td colSpan={COL_DEFS.length + 1} className="px-2 py-2">
                                                     <RealizationExpandPanel
                                                         node={node}
                                                         card={card}
@@ -2453,24 +2289,17 @@ export default function RealizationTab({
                                             Na OSTATNIEJ pozycji gałęzi listwę rysuje już domknięcie gałęzi
                                             (`realization-group-cap`) — dwie stykające się listwy czytałyby się
                                             jak jedna gruba na 8 px, a nie jak dwa domknięcia. */}
-                                        {isExpanded && !isLastInGroup && (
-                                            <tr aria-hidden="true">
-                                                <td colSpan={COL_DEFS.length + 1} className={`${DRAWER.cap} ${DRAWER.accent.real.cap}`} />
+                                        {/* @anchor realization-drawer-cap — DOLNA krawędź karty rozwinięcia.
+                                            Nie gruba listwa w kolorze akcentu jak przy wariancie z kręgosłupem,
+                                            tylko domknięcie prostokąta tą samą kreską, co jego boki — inaczej
+                                            karta kończyłaby się czymś grubszym, niż zaczyna. */}
+                                        {isExpanded && (
+                                            <tr aria-hidden="true" className="rt-card-end" style={CARD_VARS}>
+                                                <td colSpan={COL_DEFS.length + 1} />
                                             </tr>
                                         )}
                                     </React.Fragment>
                                 );
-                            })}
-                                {/* @anchor realization-group-cap — domknięcie szuflady GAŁĘZI. Ta sama listwa
-                                    co pod rozwiniętą pozycją: widać, gdzie otwarta gałąź się kończy, i nie da
-                                    się jej pomylić z nagłówkiem następnej. */}
-                                {groupOpen && (
-                                    <tr aria-hidden="true">
-                                        <td colSpan={COL_DEFS.length + 1} className={`${DRAWER.cap} ${DRAWER.accent.real.cap}`} />
-                                    </tr>
-                                )}
-                              </React.Fragment>
-                              );
                             })}
                         </tbody>
                         {/* @anchor realization-totals-row — podsumowanie kosztów całkowitych wyceny
