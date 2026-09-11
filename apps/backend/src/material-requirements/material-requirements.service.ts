@@ -241,6 +241,10 @@ export class MaterialRequirementsService {
             where,
             include: {
                 proposals: { include: { supplier: true } },
+                // Oferent POZYCJI (`MaterialRequirement.supplierId`) razem z nazwą: karta pozycji
+                // w Realizacja_new pokazuje go jako tekst, a samo `supplierId` kazałoby jej
+                // dociągać rejestr dostawców tylko po to, żeby zamienić UUID na nazwę.
+                supplier: { select: { id: true, name: true } },
                 assignedSubtask: { select: { id: true, name: true } },
                 material: { select: { id: true, productName: true, manufacturer: true, model: true, dataSheetUrl: true, dataSheetName: true, complianceUrl: true, imageUrl: true, priceNetto: true, productUrl: true, seller: true } },
             },
@@ -369,6 +373,7 @@ export class MaterialRequirementsService {
             where: { id },
             include: {
                 proposals: { include: { supplier: true } },
+                supplier: { select: { id: true, name: true } },
                 assignedSubtask: { select: { id: true, name: true } },
                 material: { select: { id: true, productName: true, manufacturer: true, model: true, dataSheetUrl: true, dataSheetName: true, complianceUrl: true, complianceName: true, imageUrl: true, priceNetto: true, productUrl: true, seller: true } },
             },

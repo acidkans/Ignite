@@ -1326,7 +1326,13 @@ function ImageLightbox({ src, title, onClose }) {
 // ze schowka (ukryty input przechwytuje `paste`, bo `document` nie dostaje zdarzenia bez focusu).
 // Obrazek trzymany jest na wymaganiu (`MaterialRequirement.imageUrl`), więc działa też zanim
 // pozycja ma produkt katalogowy; odczyt spada na obrazek z katalogu, gdy własnego nie ma.
-export function RequirementImageBox({ card, token, onRefresh, className = '' }) {
+// @anchor requirement-image-box-size — rozmiar kafla podaje wołający. Domyślny (176x86 px)
+// zostaje z zakładki Realizacja; karta pozycji w Realizacja_new jest kolumną szerokosci
+// 300-440 px i bierze kafel pelnej szerokosci, bo zdjecie produktu jest tam pierwsza rzecza,
+// po ktorej poznaje sie pozycje.
+// @anchor requirement-image-box-read-only — kafel wylacznie do ogladania: bez wyboru pliku,
+// bez Ctrl+V i bez kosza. Lupka zostaje, bo powiekszenie nie zmienia danych.
+export function RequirementImageBox({ card, token, onRefresh, className = '', boxClass = 'w-44 h-[86px]', readOnly = false }) {
     const [localUrl, setLocalUrl] = useState(null);
     const [fetchedUrl, setFetchedUrl] = useState(null);
     const [imageKey, setImageKey] = useState(0);
@@ -1397,10 +1403,10 @@ export function RequirementImageBox({ card, token, onRefresh, className = '' }) 
     }, [uploadBlob]);
 
     useEffect(() => {
-        if (!imageHover) return;
+        if (!imageHover || readOnly) return;
         document.addEventListener('paste', handlePaste, true);
         return () => document.removeEventListener('paste', handlePaste, true);
-    }, [imageHover, handlePaste]);
+    }, [imageHover, readOnly, handlePaste]);
 
     const handleFileSelect = useCallback(async (e) => {
         const file = e.target.files?.[0];
@@ -1427,11 +1433,11 @@ export function RequirementImageBox({ card, token, onRefresh, className = '' }) 
         <div
             onMouseEnter={() => setImageHover(true)}
             onMouseLeave={() => setImageHover(false)}
-            onClick={() => fileInputRef.current?.click()}
-            title="Kliknij aby wybrać plik | Najedź i Ctrl+V aby wkleić ze schowka"
-            className={`group relative w-44 h-[86px] flex-shrink-0 rounded border border-white/10 bg-black/30 cursor-pointer hover:border-blue-500/40 hover:bg-blue-500/5 transition-colors ${className}`}
+            onClick={() => !readOnly && fileInputRef.current?.click()}
+            title={readOnly ? 'Podgląd produktu' : 'Kliknij aby wybrać plik | Najedź i Ctrl+V aby wkleić ze schowka'}
+            className={`group relative ${boxClass} flex-shrink-0 rounded border border-white/10 bg-black/30 transition-colors ${readOnly ? 'cursor-default' : 'cursor-pointer hover:border-blue-500/40 hover:bg-blue-500/5'} ${className}`}
         >
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} style={{ display: 'none' }} />
+            {!readOnly && <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} style={{ display: 'none' }} />}
             {src ? (
                 <>
                     <img src={src} alt="podgląd produktu" className="absolute inset-0 w-full h-full object-contain p-1.5" />
@@ -1442,12 +1448,14 @@ export function RequirementImageBox({ card, token, onRefresh, className = '' }) 
                     >
                         <Maximize2 size={11} />
                     </button>
-                    <button
-                        onClick={removeImage} title="Usuń obrazek"
-                        className="absolute top-0.5 right-0.5 p-1 rounded bg-black/70 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                        <Trash2 size={11} />
-                    </button>
+                    {!readOnly && (
+                        <button
+                            onClick={removeImage} title="Usuń obrazek"
+                            className="absolute top-0.5 right-0.5 p-1 rounded bg-black/70 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                            <Trash2 size={11} />
+                        </button>
+                    )}
                     {lightboxOpen && (
                         <ImageLightbox
                             src={src}
@@ -1460,7 +1468,7 @@ export function RequirementImageBox({ card, token, onRefresh, className = '' }) 
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-gray-600 pointer-events-none">
                     <Search size={16} />
                     <span className="text-[10px] text-center px-2 leading-tight">
-                        {uploading ? 'Wysyłam…' : <>Kliknij aby wybrać<br />lub Ctrl+V</>}
+                        {readOnly ? 'Brak zdjęcia' : uploading ? 'Wysyłam…' : <>Kliknij aby wybrać<br />lub Ctrl+V</>}
                     </span>
                 </div>
             )}

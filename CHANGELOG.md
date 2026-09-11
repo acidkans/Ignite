@@ -1,3 +1,45 @@
+## 2026-09-11 — realizacja_new: naglowki sekcji i sekcja „Zakupy" w karcie pozycji
+
+### architektura / API
+- karta pozycji dostala trzecia sekcje — wpisy `LeafActual` tej pozycji (data, dokument, oferent,
+  ilosc x koszt jedn., wartosc, zakres/komentarz), tylko do odczytu. Edycja i dopisywanie zostaja
+  w szufladzie pod wierszem, gdzie mieszcza sie wszystkie kolumny naraz.
+
+### slownik
+- dodano `realization-new-section-title` — naglowek sekcji karty pozycji, RealizationNewTab.jsx
+- dodano `realization-new-purchase-line` — wpis LeafActual w sekcji „Zakupy", RealizationNewTab.jsx
+- dodano `realization-new-card-purchases` — sekcja „Zakupy" / „Wykonanie" karty, RealizationNewTab.jsx
+
+### wytyczne
+- `ui-funkcja` `SectionTitle` — kazdy blok karty pozycji zaczyna sie naglowkiem sekcji (14 px,
+  turkus, kreskowana podstawa); 10-pikselowa szara etykieta zostaje WYLACZNIE dla podpisu
+  pojedynczego pola, inaczej nie widac, gdzie konczy sie jedna sekcja, a zaczyna druga.
+- `ui-sekcja` `realization-new-card-purchases` — nazwa sekcji idzie za typem liscia, tak samo jak
+  naglowek szuflady: material i sprzet sie KUPUJE („Zakupy"), prace i usluge WYKONUJE („Wykonanie").
+
+## 2026-09-11 — realizacja_new: karta pozycji z kompletem pol karty produktu
+
+### architektura / API
+- `back-serwis` `MaterialRequirementsService.findAllByNode` i `findOne` — dorzucony `include.supplier
+  { id, name }`. Karta pozycji w Realizacja_new pokazuje oferenta POZYCJI jako tekst; samo
+  `supplierId` kazaloby jej dociagac caly rejestr dostawcow tylko po to, zeby zamienic UUID na nazwe.
+
+### slownik
+- dodano `realization-new-card-field` — wiersz „etykieta : wartosc" karty pozycji, RealizationNewTab.jsx
+- dodano `realization-new-card-link` — adres produktu / propozycji bez protokolu, RealizationNewTab.jsx
+- dodano `realization-new-proposal-line` — propozycja produktu w karcie pozycji, RealizationNewTab.jsx
+- dodano `realization-new-fetch-cards` — przeladowanie samych kart produktowych, RealizationNewTab.jsx
+- dodano `requirement-image-box-size` — prop `boxClass` kafla zdjecia, WbsMaterialsPanel.jsx
+- dodano `requirement-image-box-read-only` — prop `readOnly` kafla zdjecia, WbsMaterialsPanel.jsx
+
+### wytyczne
+- `ui-panel` `LeafCard` — pola karty produktu sa w realizacji WYLACZNIE do odczytu; wycene ustawia
+  sie w Strukturze projektu. Jedyny wyjatek to zdjecie pozycji: nie zmienia wyceny, a bez niego nie
+  widac, co ma przyjsc.
+- `ui-propsy` `RequirementImageBox.boxClass` — rozmiar kafla podaje wolajacy zamiast nadpisywac
+  `w-44 h-[86px]` wlasna klasa; dwie klasy szerokosci w jednym `className` rozstrzyga kolejnosc
+  regul w arkuszu Tailwinda, nie kolejnosc w stringu.
+
 ## 2026-09-11 — Realizacja_new: osoba odpowiedzialna, podświetlenie gałęzi wybranej pozycji, zakładka dla wszystkich ról (v2026.09.11.1400)
 
 ### architektura / API

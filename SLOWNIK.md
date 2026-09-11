@@ -1738,6 +1738,12 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-funkcja | Cell (komórka wiersza pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-cell |
 | ui-sekcja | PurchaseDrawer (szuflada zakupów, kolumny LeafActual) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-purchase-drawer |
 | ui-panel | LeafCard (panel 3 — karta pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-leaf-card |
+| ui-funkcja | CardField (wiersz „etykieta : wartość" karty pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-card-field |
+| ui-funkcja | CardLink (adres produktu / propozycji bez protokołu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-card-link |
+| ui-karta | ProposalLine (propozycja produktu w karcie pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-proposal-line |
+| ui-karta | PurchaseLine (wpis LeafActual w sekcji „Zakupy" karty pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-purchase-line |
+| ui-funkcja | SectionTitle (nagłówek sekcji karty pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-section-title |
+| ui-sekcja | sekcja „Zakupy" / „Wykonanie" w karcie pozycji | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-card-purchases |
 | ui-sekcja | Analiza (kafle, mierniki, rozbicie na zakresy) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-analiza |
 | ui-stala | ZAMKNIECIE_CUTS (przekroje osi wykonania „to już za nami") | apps/frontend/src/components/shared/wbs/realizationBilans.js | @anchor realization-zamkniete-cuts |
 | ui-funkcja | wRealizacjiTest (pozycje, przy których praca trwa) | apps/frontend/src/components/shared/wbs/realizationBilans.js | @anchor realization-w-realizacji |
@@ -1745,6 +1751,7 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-tabela | BilansZamkniete (bilans kwotowy pozycji domkniętych) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-bilans-zamkniete |
 | ui-stala | deltaZamkniete (koszty rzeczywiste − koszty oferty na pozycjach wykonanych i odebranych) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-delta-zamkniete |
 | ui-funkcja | fetchActuals (przeładowanie samych wpisów po zapisie) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-fetch-actuals |
+| ui-funkcja | fetchCards (przeładowanie samych kart produktowych) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-fetch-cards |
 | ui-funkcja | saveComment (WbsNode.comment + wbs-comment-changed) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-save-comment |
 | ui-funkcja | saveAxis (osie realizacji, cofnięcie zakupu cofa wykonanie) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-save-axis |
 | ui-funkcja | addActual (nowy wpis LeafActual) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-add-actual |
@@ -1827,6 +1834,8 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | back-funkcja | deleteImage (pozycja) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-delete-image |
 | back-endpoint | DELETE /material-requirements/:id/image | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-delete-image-endpoint |
 | ui-sekcja | RequirementImageBox | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor requirement-image-box |
+| ui-propsy | RequirementImageBox.boxClass (rozmiar kafla podaje wołający) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor requirement-image-box-size |
+| ui-propsy | RequirementImageBox.readOnly (kafel tylko do oglądania) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor requirement-image-box-read-only |
 | ui-stan | imageHover (RequirementImageBox) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor requirement-image-hover |
 | ui-ikona | kosz i lupka na kaflu zdjęcia w karcie produktu | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card-image-actions |
 

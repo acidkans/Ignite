@@ -16,13 +16,17 @@
 // Poza zapisem zostają: status PLANU (decyduje o nim Struktura projektu, nie realizacja),
 // filtry, sortowanie, eksport Excel i protokół odbioru.
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
-import { ChevronRight, Loader2, Plus, Trash2, FileSpreadsheet, FileText } from 'lucide-react';
+import { ChevronRight, Loader2, Plus, Trash2, FileSpreadsheet, FileText, ExternalLink } from 'lucide-react';
 import { API_URL } from '../../config';
 import { useDevice } from '../../hooks/useDevice';
 import SupplierPicker from './SupplierPicker';
 import AutoResizeTextarea from './wbs/AutoResizeTextarea';
 import FilterDropdown from './wbs/FilterDropdown';
 import ProtokolOdbioruModal from './wbs/ProtokolOdbioruModal';
+// Kafel podglądu produktu jest TEN SAM, co w zakładce „Realizacja" i w karcie produktu —
+// zdjęcie wisi na `MaterialRequirement.imageUrl`, więc druga implementacja pokazywałaby ten
+// sam plik innym zachowaniem (wklejanie, lightbox, kasowanie).
+import { RequirementImageBox } from './wbs/WbsMaterialsPanel';
 // Eksport Excel i protokół odbioru są WSPÓLNE z zakładką „Realizacja" — ten sam arkusz i ten
 // sam modal, tylko wywołane z innej tabeli. Kopia dałaby dwa pliki o tej samej nazwie
 // i różnej zawartości.
@@ -477,6 +481,22 @@ export default function RealizationNewTab({
             console.error('[RealizationNewTab] fetchActuals error:', e);
         }
     }, [nodeId, token]);
+
+    // @anchor realization-new-fetch-cards — przeładowanie SAMYCH kart produktowych. Woła je
+    // kafel zdjęcia w karcie pozycji po wgraniu obrazka; drzewo WBS i wpisy zostają nietknięte,
+    // więc rozwinięcia, wybór pozycji i pozycja przewijania nie skaczą.
+    const fetchCards = useCallback(async () => {
+        if (!nodeId) return;
+        try {
+            const q = versionId ? `?versionId=${versionId}` : '';
+            const res = await fetch(`${API_URL}/material-requirements/node/${nodeId}${q}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) setCards(buildCardMap(wbsNodes, await res.json()));
+        } catch (e) {
+            console.error('[RealizationNewTab] fetchCards error:', e);
+        }
+    }, [nodeId, versionId, token, wbsNodes]);
 
     // @anchor realization-new-save-comment — `WbsNode.comment` przez `PATCH /wbs-nodes/:id`,
     // plus rozgłoszenie `wbs-comment-changed`: ten sam komentarz czyta WBS, panel Materiały
@@ -997,7 +1017,8 @@ export default function RealizationNewTab({
                         <div className="min-h-0 flex-1 overflow-auto p-3">
                             {selectedNode
                                 ? <LeafCard node={selectedNode} {...rowOf(selectedNode)}
-                                    readOnly={readOnly} onToggleClosed={() => toggleClosed(selectedNode)} />
+                                    readOnly={readOnly} token={token} onRefreshCard={fetchCards}
+                                    onToggleClosed={() => toggleClosed(selectedNode)} />
                                 : <div className="pt-10 text-center text-sm text-gray-600">Wybierz pozycję w tabeli,<br />żeby zobaczyć jej kartę.</div>}
                         </div>
                     </div>
@@ -1720,55 +1741,75 @@ function EntryForm({ node, cols, withCard, defaultQty, onAdd, onClose }) {
     );
 }
 
-// @anchor realization-new-leaf-card — prawy panel: co to dokładnie jest. Specyfikacja
-// techniczna, propozycje `isOffer`/`isPurchase` z Δ na jednostce, trzy osie statusu
-// i podsumowanie kwotowe.
-function LeafCard({ node, card, r, planValue, readOnly, onToggleClosed }) {
+// @anchor realization-new-leaf-card — prawy panel: co to dokładnie jest. Karta pozycji niesie
+// KOMPLET pól karty produktu z panelu Materiały (`product-card`): podgląd produktu, producenta,
+// model, nazwę handlową, oferenta, koszt jedn., dostępność, adres www i wymagania techniczne,
+// a pod nimi wszystkie propozycje z rolami `isOffer`/`isPurchase`, adresem strony i Δ na
+// jednostce; dalej trzy osie statusu i podsumowanie kwotowe.
+//
+// Pola produktu są tu WYŁĄCZNIE DO ODCZYTU — wycenę ustawia się w Strukturze projektu, a
+// realizacja z niej czyta (ta sama zasada, co „Karty produktowej tu nie ma" w `RealizationTab`).
+// Jedyny wyjątek to zdjęcie: wklejenie zrzutu ze sklepu w trakcie zakupów nie zmienia wyceny,
+// a bez niego nie widać, co ma przyjść.
+function LeafCard({ node, card, r, planValue, readOnly, token, onRefreshCard, onToggleClosed }) {
     const t = TYPE_META[node.type];
     const delta = round2(r.value - planValue);
-    const offer = card?.proposals?.find(p => p.isOffer) || null;
-    const purchase = card?.proposals?.find(p => p.isPurchase) || null;
+    const proposals = card?.proposals || [];
+    const offer = proposals.find(p => p.isOffer) || null;
+    const purchase = proposals.find(p => p.isPurchase) || null;
     const purchaseUnit = purchaseUnitOf(card);
     const dUnit = (offer && purchaseUnit != null) ? round2(purchaseUnit - offer.priceNetto) : null;
     const missing = Math.round((r.plan - r.qty) * 1000) / 1000;
 
+    // Pozycja przypięta do pozycji oferty ma koszt jedn. ZE SNAPSHOTU, nie z `budgetedPriceNetto`
+    // — dokładnie jak w karcie produktu (`product-card-offer-lock`). Bez tego ta sama pozycja
+    // pokazywałaby w realizacji inną cenę jednostkową niż w Strukturze projektu.
+    const offerSnap = useMemo(() => {
+        try { return card?.offerPositionSnapshot ? JSON.parse(card.offerPositionSnapshot) : null; } catch { return null; }
+    }, [card?.offerPositionSnapshot]);
+    const unitCost = offerSnap?.priceNetto ?? card?.priceNetto ?? null;
+
     const Block = ({ children }) => <div className="mb-2.5 rounded-md border border-white/[.07] bg-[#0a1120] p-3">{children}</div>;
     const Label = ({ children }) => <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500">{children}</div>;
 
-    const Side = ({ p, title, price, color }) => !p ? null : (
-        <div className="min-w-0 flex-1">
-            <div className={`text-[10px] font-bold uppercase tracking-widest ${color}`}>{title}</div>
-            <div className="mt-0.5 text-base font-semibold tabular-nums">{fmtZl(price)} zł</div>
-            <div className="mt-0.5 truncate text-xs text-gray-500">{[p.manufacturer, p.model].filter(Boolean).join(' ')}</div>
-            <div className="truncate text-xs text-gray-500">{p.seller || '—'}{p.offerNumber ? ` · ${p.offerNumber}` : ''}</div>
-            {p.availability && <div className="truncate text-xs text-gray-500">dostępność: {p.availability}</div>}
-        </div>
-    );
-
     return (
         <div>
+            {/* Blok nagłówkowy (ścieżka, nazwa, typ, jednostka, właściciel) NIE wraca: powtarzał
+                kolumny tabeli pozycji — „Typ", „Osoba odpowiedzialna", „Ilość wyceny" — a nazwę
+                pozycji niesie już nagłówek karty produktu zaraz pod nim. Kartę zaczyna to,
+                czego w tabeli nie ma. */}
             <Block>
-                <div className="text-xs text-gray-500">{getParentPath(node.path)}</div>
-                <h3 className="mt-1 text-sm font-semibold leading-snug text-gray-100">{node.name}</h3>
-                <div className="mt-1">
-                    <span className={`text-xs font-semibold uppercase tracking-wide ${t?.color || 'text-gray-400'}`}>{t?.label || node.type}</span>
-                    <span className="ml-2 text-xs text-gray-500">{node.unit} · właściciel: {node.owner || '—'}</span>
-                </div>
-            </Block>
-
-            <Block>
+                <SectionTitle>Karta produktu</SectionTitle>
                 {card ? (
                     <>
                         <div className="text-sm font-semibold text-gray-200">{card.name}</div>
-                        {card.technicalSpec
-                            ? <div className="mt-1 whitespace-pre-line text-xs leading-relaxed text-gray-400">{card.technicalSpec}</div>
-                            : <div className="mt-1 text-xs italic text-gray-600">Karta bez wymagań technicznych.</div>}
-                        <div className="mt-1.5 text-[10px] text-gray-600">
+                        {/* Kafel zdjęcia pełnej szerokości panelu — w kolumnie 300–440 px podgląd
+                            produktu jest pierwszą rzeczą, po której pozycję się rozpoznaje. */}
+                        <RequirementImageBox
+                            card={card} token={token} onRefresh={onRefreshCard}
+                            readOnly={readOnly} boxClass="w-full h-[132px]" className="mt-2" />
+                        <div className="mt-2 space-y-1">
+                            <CardField label="Producent" value={card.manufacturer} />
+                            <CardField label="Model" value={card.model} valueClass="font-mono" />
+                            <CardField label="Nazwa handlowa" value={card.productName} />
+                            <CardField label="Oferent" value={card.supplier?.name || card.seller} />
+                            <CardField label="Koszt jedn." valueClass="tabular-nums text-orange-300"
+                                value={unitCost != null ? `${fmtZl(unitCost)} zł` : null} />
+                            <CardField label="Dostępność" value={card.availability} />
+                            <CardField label="Adres www" value={card.productUrl ? <CardLink url={card.productUrl} /> : null} />
+                        </div>
+                        {offerSnap?.lp != null && (
+                            <div className="mt-1 truncate text-[10px] text-amber-400/70" title={offerSnap.wbsPath || offerSnap.name}>
+                                koszt jedn. z oferty — poz. {offerSnap.lp} · {offerSnap.name}
+                            </div>
+                        )}
+                        <div className="mt-2 text-[10px] text-gray-600">
                             z karty produktu · cena z wyceny {fmtZl(card.budgetedPriceNetto)} zł
                         </div>
                     </>
                 ) : (
                     <div className="text-xs text-gray-400">
+                        <div className="mb-1 text-sm font-semibold text-gray-200">{node.name}</div>
                         Liść bez karty produktowej — <span className="text-gray-500">
                             {(t?.label || node.type).toLowerCase()} rozlicza się wyłącznie zakupami w szufladzie,
                             a co obejmuje każdy z nich, mówi kolumna „Zakres".</span>
@@ -1776,12 +1817,25 @@ function LeafCard({ node, card, r, planValue, readOnly, onToggleClosed }) {
                 )}
             </Block>
 
-            {(offer || purchase) && (
+            {/* Wymagania techniczne mają WŁASNĄ sekcję, nie dopisek pod polami karty: to jedyne
+                miejsce w realizacji, gdzie stoi treść uzgodniona z klientem, a w środku bloku
+                z producentem i ceną czytało się jak kolejne pole produktu. */}
+            {card && (
                 <Block>
-                    <Label>Propozycje produktu</Label>
-                    <div className="mt-2 flex gap-3.5">
-                        <Side p={offer} title="Wycena · isOffer" price={offer?.priceNetto} color="text-orange-400" />
-                        <Side p={purchase} title="Zakup · isPurchase" price={purchaseUnit} color="text-red-400" />
+                    <SectionTitle>Wymagania techniczne</SectionTitle>
+                    {card.technicalSpec
+                        ? <div className="whitespace-pre-line text-xs leading-relaxed text-gray-400">{card.technicalSpec}</div>
+                        : <div className="text-xs italic text-gray-600">Karta bez wymagań technicznych.</div>}
+                </Block>
+            )}
+
+            {proposals.length > 0 && (
+                <Block>
+                    <SectionTitle right={`${proposals.length} ${proposals.length === 1 ? 'propozycja' : 'szt.'}`}>
+                        Propozycje produktu
+                    </SectionTitle>
+                    <div className="space-y-1.5">
+                        {proposals.map(p => <ProposalLine key={p.id} p={p} />)}
                     </div>
                     {dUnit != null && (
                         <div className="mt-2 text-xs text-gray-400">
@@ -1789,15 +1843,42 @@ function LeafCard({ node, card, r, planValue, readOnly, onToggleClosed }) {
                                 {dUnit > 0 ? '+' : ''}{fmtZl(dUnit)} zł</b>
                         </div>
                     )}
-                    <div className="mt-1 text-[10px] text-gray-600">
-                        {offer && purchase && offer.id === purchase.id
-                            ? 'jedna propozycja w obu rolach → purchasePriceNetto'
-                            : 'dwie osobne propozycje → priceNetto każdej'}
-                    </div>
+                    {/* Podpis mówi, SKĄD bierze się cena zakupu, więc ma sens dopiero gdy obie
+                        role są obsadzone. Przy samej propozycji `isPurchase` twierdził „dwie
+                        osobne propozycje", choć na ekranie stała jedna. */}
+                    {offer && purchase && (
+                        <div className="mt-1 text-[10px] text-gray-600">
+                            {offer.id === purchase.id
+                                ? 'jedna propozycja w obu rolach → purchasePriceNetto'
+                                : 'dwie osobne propozycje → priceNetto każdej'}
+                        </div>
+                    )}
                 </Block>
             )}
 
+            {/* @anchor realization-new-card-purchases — trzecia sekcja karty: wpisy `LeafActual`
+                tej pozycji. Ta sama treść co szuflada zakupów pod wierszem, tylko do odczytu
+                i w jednej kolumnie — kartę czyta się wtedy, gdy szuflada jest zwinięta, a
+                pytanie „co i za ile już dojechało" pada zaraz po „co to właściwie jest".
+                Nazwa sekcji idzie za typem liścia, tak samo jak nagłówek szuflady: materiał
+                i sprzęt się KUPUJE, pracę i usługę WYKONUJE. */}
             <Block>
+                <SectionTitle right={`Σ ${fmtZl(r.value)} zł`}>
+                    {TYPE_META[node.type]?.hasCard ? 'Zakupy' : 'Wykonanie'} ({r.entries.length})
+                </SectionTitle>
+                {r.entries.length === 0 ? (
+                    <div className="text-xs italic text-gray-600">
+                        Nic jeszcze nie dojechało — wpisy dodaje się w szufladzie pod wierszem pozycji.
+                    </div>
+                ) : (
+                    <div className="space-y-1.5">
+                        {r.entries.map(e => <PurchaseLine key={e.id} e={e} node={node} />)}
+                    </div>
+                )}
+            </Block>
+
+            <Block>
+                <SectionTitle>Statusy</SectionTitle>
                 <div className="space-y-1.5">
                     <AxisRow label="Oferta"
                         badge={<Badge label={PLAN_STATUS_META[planStatusFromAny(node.status)]?.label}
@@ -1809,6 +1890,7 @@ function LeafCard({ node, card, r, planValue, readOnly, onToggleClosed }) {
             </Block>
 
             <Block>
+                <SectionTitle>Podsumowanie</SectionTitle>
                 <div className="grid grid-cols-2 gap-3">
                     <div><Label>Wycena</Label><div className="text-sm font-semibold tabular-nums text-orange-400">{fmtZl(planValue)} zł</div></div>
                     <div><Label>Zakup</Label><div className="text-sm font-semibold tabular-nums text-red-400">{fmtZl(r.value)} zł</div></div>
@@ -1827,8 +1909,8 @@ function LeafCard({ node, card, r, planValue, readOnly, onToggleClosed }) {
             </Block>
 
             <Block>
-                <Label>Rozliczenie</Label>
-                <div className="mt-1 text-xs text-gray-400">
+                <SectionTitle>Rozliczenie</SectionTitle>
+                <div className="text-xs text-gray-400">
                     {node.realizationClosed
                         ? 'Pozycja zamknięta mimo niedowykonania — różnica liczy się jako oszczędność.'
                         : missing > 1e-9
@@ -1853,6 +1935,113 @@ function LeafCard({ node, card, r, planValue, readOnly, onToggleClosed }) {
         </div>
     );
 }
+
+// @anchor realization-new-section-title — nagłówek sekcji karty pozycji: 14 px zamiast
+// 10 px etykiety pola i jasny turkus zamiast szarości, na kreskowanej podstawie. Przy sześciu
+// blokach pod rząd mikro-etykieta w kolorze treści nie odróżniała nagłówka sekcji od podpisu
+// pojedynczego pola i cała karta czytała się jak jedna lista bez podziałów.
+// `right` — licznik albo suma sekcji; stoi po prawej, żeby nagłówek zaczynał się od nazwy.
+const SectionTitle = ({ children, right }) => (
+    <div className="mb-2 flex items-baseline gap-2 border-b border-white/[.10] pb-1">
+        <span className="text-[14px] font-bold uppercase tracking-widest text-teal-200">{children}</span>
+        {right && <span className="ml-auto shrink-0 text-[11px] tabular-nums text-gray-500">{right}</span>}
+    </div>
+);
+
+// @anchor realization-new-purchase-line — jeden wpis realizacji (`LeafActual`) w sekcji
+// „Zakupy" karty pozycji. Do ODCZYTU: edycja, dopisywanie i kasowanie wpisów zostają
+// w szufladzie pod wierszem (`realization-new-purchase-drawer`), gdzie jest miejsce na
+// wszystkie kolumny naraz. Tutaj liczy się jedno zdanie: kiedy, od kogo, ile i za ile.
+const PurchaseLine = ({ e, node }) => {
+    const qty = Number(e.qty) || 0;
+    const unit = Number(e.unitCost) || 0;
+    // Producent, model i EAN wchodzą tylko wtedy, gdy pozycja je niesie (materiał i sprzęt);
+    // praca, usługa, nocleg i paliwo mają zamiast nich jedno pole `scope`.
+    const produkt = [e.manufacturer, e.model, e.ean].filter(Boolean).join(' · ');
+    return (
+        <div className="rounded border border-white/[.06] p-2">
+            <div className="flex items-baseline gap-2">
+                <span className="font-mono text-[11px] text-teal-300">{fmtDate(e.entryDate)}</span>
+                {e.docNumber && <span className="truncate font-mono text-[11px] text-gray-500">{e.docNumber}</span>}
+                <span className="ml-auto shrink-0 text-xs font-semibold tabular-nums text-red-300">
+                    {fmtZl(round2(qty * unit))} zł
+                </span>
+            </div>
+            <div className="text-[11px] tabular-nums text-gray-400">
+                {fmtQty(qty)} {node.unit} × {fmtZl(unit)} zł
+            </div>
+            <div className="break-words text-[11px] text-gray-500">{e.supplier?.name || 'oferent nieznany'}</div>
+            {produkt && <div className="break-words text-[11px] text-gray-500">{produkt}</div>}
+            {e.scope && <div className="break-words text-[11px] text-gray-500">{e.scope}</div>}
+            {e.comment && <div className="break-words text-[11px] text-gray-400">{e.comment}</div>}
+        </div>
+    );
+};
+
+// @anchor realization-new-card-field — wiersz „etykieta : wartość" karty pozycji. Etykieta
+// stoi w stałej kolumnie, wartość łamie się w dowolnym miejscu: w panelu szerokości 300 px
+// nazwy handlowe i adresy nie mieszczą się w jednej linii, a ucięcie ich w połowie znaczyłoby,
+// że tej samej rzeczy trzeba i tak szukać w Strukturze projektu.
+const CardField = ({ label, value, valueClass = '' }) => (
+    <div className="flex gap-2">
+        <span className="w-24 shrink-0 text-[10px] font-bold uppercase leading-5 tracking-widest text-gray-500">{label}</span>
+        <span className={`min-w-0 flex-1 break-words text-xs leading-5 text-gray-300 ${valueClass}`}>
+            {value || <span className="text-gray-600">—</span>}
+        </span>
+    </div>
+);
+
+// @anchor realization-new-card-link — adres produktu albo propozycji. Protokół i „www." lecą
+// z WYŚWIETLANEGO tekstu, bo w wąskiej karcie zjadały połowę linii; pełny adres zostaje
+// w dymku i w samym odnośniku. `noopener` — link idzie na stronę sklepu, poza aplikację.
+const CardLink = ({ url }) => (
+    <a href={url} target="_blank" rel="noopener noreferrer" title={url}
+        className="flex min-w-0 items-center gap-1 text-blue-300 transition-colors hover:text-blue-200 hover:underline">
+        <ExternalLink size={10} className="shrink-0" />
+        <span className="truncate">{String(url).replace(/^https?:\/\//, '').replace(/^www\./, '')}</span>
+    </a>
+);
+
+// @anchor realization-new-proposal-line — jedna propozycja produktu w karcie pozycji: role
+// (wycena / zakup / wybrana / odrzucona), tożsamość produktu, oferent, cena, dostępność
+// i ADRES STRONY, z której propozycja pochodzi. Wiersz jest wyłącznie do odczytu — propozycje
+// dodaje się, wybiera i kasuje w karcie produktu (Struktura projektu).
+const ProposalLine = ({ p }) => {
+    // Cena zakupu tej samej propozycji siedzi w `purchasePriceNetto` (obie role naraz),
+    // a osobnej propozycji zakupowej — w jej własnym `priceNetto`; ta sama reguła co
+    // w `purchase-unit-of`. Druga kwota pokazuje się tylko wtedy, gdy różni się od wyceny.
+    const cenaZakupu = !p.isPurchase ? null : (p.isOffer ? (p.purchasePriceNetto ?? p.priceNetto) : p.priceNetto);
+    const Tag = ({ children, klasa }) => (
+        <span className={`rounded border px-1 py-px text-[9px] font-bold uppercase tracking-widest ${klasa}`}>{children}</span>
+    );
+    return (
+        <div className={`rounded border p-2 ${p.isOffer || p.isPurchase
+            ? 'border-white/[.12] bg-white/[.03]'
+            : 'border-white/[.06]'} ${p.isRejected ? 'opacity-60' : ''}`}>
+            <div className="flex flex-wrap items-center gap-1">
+                {p.isOffer && <Tag klasa="border-orange-400/30 text-orange-300">Wycena</Tag>}
+                {p.isPurchase && <Tag klasa="border-red-400/30 text-red-300">Zakup</Tag>}
+                {p.isSelected && <Tag klasa="border-emerald-400/30 text-emerald-300">Wybrana</Tag>}
+                {p.isRejected && <Tag klasa="border-white/10 text-gray-500">Odrzucona</Tag>}
+                <span className="ml-auto text-xs font-semibold tabular-nums text-gray-200">
+                    {p.priceNetto != null ? `${fmtZl(p.priceNetto)} zł` : '—'}
+                </span>
+            </div>
+            <div className="mt-1 break-words text-xs text-gray-300">{p.productName || '—'}</div>
+            <div className="break-words text-[11px] text-gray-500">
+                {[p.manufacturer, p.model].filter(Boolean).join(' ') || '—'}
+            </div>
+            <div className="break-words text-[11px] text-gray-500">
+                {p.supplier?.name || p.seller || 'oferent nieznany'}{p.offerNumber ? ` · ${p.offerNumber}` : ''}
+            </div>
+            {p.availability && <div className="break-words text-[11px] text-gray-500">dostępność: {p.availability}</div>}
+            {cenaZakupu != null && cenaZakupu !== p.priceNetto && (
+                <div className="text-[11px] tabular-nums text-red-300">cena zakupu: {fmtZl(cenaZakupu)} zł</div>
+            )}
+            {p.sourceUrl && <div className="mt-0.5 text-[11px]"><CardLink url={p.sourceUrl} /></div>}
+        </div>
+    );
+};
 
 const AxisRow = ({ label, badge, field }) => (
     <div className="flex items-center gap-2">
