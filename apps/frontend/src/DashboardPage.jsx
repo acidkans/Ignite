@@ -65,13 +65,6 @@ function decodeToken() {
     } catch { return {}; }
 }
 
-// @anchor realization-new-preview-emails — zakładka „Realizacja_new" to prototyp nowego układu
-// realizacji wpuszczony do aplikacji na żywych danych. Widzi go WYŁĄCZNIE ten adres, dopóki
-// układ nie zostanie porównany z dzisiejszą zakładką i przyjęty. Gate po e-mailu, nie po roli:
-// to nie jest uprawnienie, tylko podgląd jednej osoby — rola ADMIN ma go nie otwierać nikomu
-// innemu.
-const REALIZATION_NEW_PREVIEW_EMAILS = ['andrzej@gigatel.app'];
-
 export default function DashboardPage() {
     const context = useOutletContext();
     const activeAreaId = context ? context.activeAreaId : null;
@@ -84,8 +77,7 @@ export default function DashboardPage() {
     const contextPendingSectionRef = context?.pendingSectionRef;
     const refreshTree = context?.refreshTree;
 
-    const { userId: currentUserId, roles: currentRoles = [], email: currentEmail = '' } = useMemo(() => decodeToken() || {}, []); // eslint-disable-line react-hooks/exhaustive-deps
-    const canSeeRealizationNew = REALIZATION_NEW_PREVIEW_EMAILS.includes(String(currentEmail).toLowerCase());
+    const { userId: currentUserId, roles: currentRoles = [] } = useMemo(() => decodeToken() || {}, []); // eslint-disable-line react-hooks/exhaustive-deps
     const isWorker = currentRoles.includes('USER') && !currentRoles.some(r => ['ADMIN', 'MANAGER', 'LOGISTYK'].includes(r));
     const isLogistyk = currentRoles.includes('LOGISTYK');
     const isManagerOrAdmin = currentRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
@@ -986,11 +978,14 @@ export default function DashboardPage() {
                         realization: baselineAccepted
                             ? { label: 'Realizacja', color: 'orange', activeColor: 'text-orange-400', idleColor: 'text-orange-400/60 hover:text-orange-300', bar: 'bg-orange-500', shadow: '249,115,22', cond: isOrder && !isWorker }
                             : { label: 'Realizacja', color: 'teal',   activeColor: 'text-teal-400',   bar: 'bg-teal-500',   shadow: '20,184,166', cond: isOrder && !isWorker },
-                        // @anchor tab-realization-new — prototyp nowego układu Realizacji (trzy panele,
-                        // 13 kolumn, szuflada zakupów) na żywych danych, WYŁĄCZNIE do odczytu. Stoi obok
-                        // dzisiejszej zakładki, żeby dało się porównać oba układy na tym samym zamówieniu.
-                        // Widoczny tylko dla `REALIZATION_NEW_PREVIEW_EMAILS`.
-                        realizationNew:  { label: 'Realizacja_new',   color: 'fuchsia', activeColor: 'text-fuchsia-400', idleColor: 'text-fuchsia-400/50 hover:text-fuchsia-300', bar: 'bg-fuchsia-500', shadow: '217,70,239', cond: isOrder && canSeeRealizationNew },
+                        // @anchor tab-realization-new — nowy układ Realizacji (trzy panele, 14 kolumn,
+                        // szuflada zakupów). Stoi obok dzisiejszej zakładki, żeby dało się porównać oba
+                        // układy na tym samym zamówieniu. Podgląd po e-mailu został zdjęty — zakładkę
+                        // widzi KAŻDY, kto widzi zamówienie, także pracownik (dzisiejsza „Realizacja"
+                        // jest przed nim schowana). Zapis i tak ogranicza rola: `RealizationNewTab`
+                        // wpuszcza do edycji ADMIN/MANAGER/LOGISTYK, a analizę kwotową pokazuje
+                        // wyłącznie ADMIN i MANAGER.
+                        realizationNew:  { label: 'Realizacja_new',   color: 'fuchsia', activeColor: 'text-fuchsia-400', idleColor: 'text-fuchsia-400/50 hover:text-fuchsia-300', bar: 'bg-fuchsia-500', shadow: '217,70,239', cond: isOrder },
                         schematics:      { label: 'Schemat',          color: 'orange', activeColor: 'text-orange-400', bar: 'bg-orange-500', shadow: '249,115,22',  cond: isOrder },
                         materialDatabase:{ label: 'Baza Materiałów',  color: 'purple', activeColor: 'text-purple-400', bar: 'bg-purple-500', shadow: '168,85,247',  cond: isOrder },
                     };
@@ -1105,7 +1100,7 @@ export default function DashboardPage() {
                                 />
                             </div>
                         )}
-                        {activeTab === 'realizationNew' && isOrder && canSeeRealizationNew && (
+                        {activeTab === 'realizationNew' && isOrder && (
                             <div className="absolute inset-0 overflow-hidden">
                                 <RealizationNewTab
                                     key={`realizationNew-${activeAreaId}-${realizationVersionId}`}

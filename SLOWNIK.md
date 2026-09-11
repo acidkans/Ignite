@@ -1720,10 +1720,9 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-zakladka | RealizationNewTab | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-tab |
 | ui-stala | realizationVersionId (baseline → aktywny snapszot) | apps/frontend/src/DashboardPage.jsx | @anchor realization-baseline-version |
 | ui-propsy | planLabel (podpis źródła planu w nagłówku) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-plan-label |
-| ui-zakladka | zakładka „Realizacja_new" w TAB_META | apps/frontend/src/DashboardPage.jsx | @anchor tab-realization-new |
-| ui-stala | REALIZATION_NEW_PREVIEW_EMAILS (gate po e-mailu) | apps/frontend/src/DashboardPage.jsx | @anchor realization-new-preview-emails |
+| ui-zakladka | zakładka „Realizacja_new" w TAB_META (bez gate’a — widzi ją każdy, kto widzi zamówienie) | apps/frontend/src/DashboardPage.jsx | @anchor tab-realization-new |
 | ui-stala | SYNTHETIC_ROOT (syntetyczny korzeń drzewa gałęzi) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-synthetic-root |
-| ui-stala | REALIZATION_NEW_COLS (13 kolumn tabeli pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-cols |
+| ui-stala | REALIZATION_NEW_COLS (14 kolumn tabeli pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-cols |
 | ui-stala | STAGE_META (cztery etapy osi realizacji, rampa porządkowa) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-stages |
 | ui-funkcja | planValueOf (wartość pozycji po stronie wyceny) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-plan-value |
 | ui-funkcja | buildBranchIndex (branchId — najbliższa gałąź w górę) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-branch-index |
@@ -1732,6 +1731,9 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-funkcja | axisDisplay (etykieta osi: bramka albo status) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-axis-display |
 | ui-funkcja | rowOf (komplet liczb jednej pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-row-of |
 | ui-panel | BranchTree (panel 1 — gałęzie zamówienia) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-branch-tree |
+| ui-kolumna | kolumny kwotowe drzewa gałęzi (wycena / zakup — ADMIN, MANAGER, LOGISTYK) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-branch-money |
+| ui-stala | visibleTypes (typy liści wg roli — poza managerem tylko materiał i sprzęt) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-visible-types |
+| ui-stala | canSeeMoney (kto widzi analizę kwotową i kwoty w drzewie — ADMIN, MANAGER, LOGISTYK) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-can-see-money |
 | ui-tabela | PositionsTable (panel 2 — pozycje i zakupy) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-positions-table |
 | ui-funkcja | Cell (komórka wiersza pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-cell |
 | ui-sekcja | PurchaseDrawer (szuflada zakupów, kolumny LeafActual) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-purchase-drawer |
@@ -1758,6 +1760,8 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-stala | .rn-fluid (płynna skala typografii Realizacja_new: --rn-base, --rn-2xl…--rn-md, --rn-field-h) | apps/frontend/src/index.css | @anchor realization-fluid-scale |
 | ui-stala | NEW_DROPDOWN_FILTER_COLS / NEW_TEXT_FILTER_COLS + filterValuesOf, filterTextOf | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-col-filters |
 | ui-wiersz | wiersz filtrów w nagłówku tabeli pozycji | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-filter-row |
+| ui-stala | BRAK_WLASCICIELA (etykieta pozycji bez osoby odpowiedzialnej) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-brak-wlasciciela |
+| ui-stan | leafBranchPath (ścieżka gałęzi wybranej pozycji — podświetlenie lewego panelu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-leaf-branch-path |
 | ui-wiersz | EntryRow (zapisany wpis, edycja w miejscu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-row |
 | ui-formularz | EntryForm (nowy wpis jako ostatni wiersz szuflady) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-form |
 | ui-stala | ENTRY_INPUT (wygląd pola wpisu, wspólny dla obu zakładek) | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor entry-input-class |

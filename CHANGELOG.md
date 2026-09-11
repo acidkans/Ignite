@@ -1,3 +1,22 @@
+## 2026-09-11 — Realizacja_new: osoba odpowiedzialna, podświetlenie gałęzi wybranej pozycji, zakładka dla wszystkich ról (v2026.09.11.1400)
+
+### architektura / API
+- `ui-stala` `realization-new-cols` — czternasta kolumna tabeli pozycji: `Osoba odpowiedzialna` (`schema-pole` `WbsNode.owner`), `prio: 2`, TYLKO DO ODCZYTU. Przypisania dokonuje się dalej w Strukturze projektu (`node-can-have-owner`) — tu odpowiada na pytanie „kogo o to zapytać", które przy zakupach pada najczęściej zaraz po „co i za ile". Kolumna wchodzi do filtrów słownikowych (`NEW_DROPDOWN_FILTER_COLS`); pozycje bez właściciela dostają własną wartość filtra `BRAK_WLASCICIELA` = `(brak)`, bo pusty napis wypadłby z listy opcji i nie dałoby się wyfiltrować pozycji niczyich.
+- `ui-stan` `realization-new-leaf-branch-path` — kliknięcie liścia w środkowej tabeli podświetla w lewym panelu ŚCIEŻKĘ gałęzi: pełny seledyn na gałęzi pozycji, przygaszony na jej przodkach, plus `scrollIntoView({ block: 'nearest' })`. Tabela pokazuje płaską listę całego poddrzewa, a nazwy gałęzi celowo nie ma w żadnej kolumnie, więc po kliknięciu w wiersz nie dało się powiedzieć, skąd on jest. Podświetlenie NIE rusza `selectedBranch` — zmiana wyboru gałęzi przefiltrowałaby tabelę, czyli kliknięcie w wiersz zmieniałoby to, na co się patrzy. Pasek jedzie na `border-left` z obniżonym `padding-left`, więc włączenie podświetlenia nie przesuwa treści wiersza.
+- `ui-zakladka` `tab-realization-new` — zdjęty gate podglądu po e-mailu. Zakładkę widzi KAŻDY, kto widzi zamówienie (`cond: isOrder`), także pracownik — dzisiejsza „Realizacja" jest przed nim schowana. Usunięta razem z gate'em `ui-stala` `REALIZATION_NEW_PREVIEW_EMAILS` i pochodna `canSeeRealizationNew`; `decodeToken()` nie wyciąga już `email`.
+- `ui-stala` `realization-new-visible-types` — typy liści wg roli, jeden do jednego z `realization-visible-types` z zakładki „Realizacja": ADMIN i MANAGER widzą `LEAF_TYPES`, każda inna rola `OPEN_LEAF_TYPES` (materiał + sprzęt). Praca, usługa, nocleg i paliwo to koszty własne firmy. Filtr wchodzi jako trzeci parametr `buildBranchIndex(flatNodes, rootName, visibleTypes)` i zawęża WYNIK (`leaves`), a nie rozpoznawanie gałęzi — `isLeaf` musi dalej widzieć wszystkie typy kosztowe, inaczej odfiltrowana praca zaczęłaby udawać gałąź i materiał podwieszony pod nią zawisłby na węźle spoza drzewa. Odfiltrowane pozycje nie wchodzą ani do drzewa, ani do sum, ani do analizy, ani do eksportu Excel (`visibleTypes` zamiast zaszytego `LEAF_TYPES`).
+- `ui-stala` `realization-new-can-see-money` + `ui-kolumna` `realization-new-branch-money` — jeden warunek roli na całą analizę kwotową: kafle, mierniki, bilanse ORAZ dwie kolumny kwotowe w drzewie gałęzi (`Wycena` / `Zakup`). Widzą je ADMIN, MANAGER i LOGISTYK; pracownik dostaje w miejscu analizy komunikat zastępczy, a drzewo z samą liczbą pozycji. Logistyk widzi kwoty, bo po filtrze typów zostaje mu materiał i sprzęt — dokładnie to, co sam kupuje. Sumy gałęzi liczą się tylko wtedy, gdy jest je komu pokazać.
+
+### słownik
+- dodano `realization-new-brak-wlasciciela`, `realization-new-leaf-branch-path`, `realization-new-branch-money`, `realization-new-visible-types`, `realization-new-can-see-money`
+- usunięto `realization-new-preview-emails`
+- zmieniono `realization-new-cols` (13 → 14 kolumn), `tab-realization-new` (bez gate'a po e-mailu)
+
+### wytyczne
+- `ui-stan` `realization-new-leaf-branch-path` — wybór pozycji w środkowej tabeli nie może zmieniać `selectedBranch`. Lewy panel filtruje tabelę, więc „podświetl gałąź" i „wybierz gałąź" to dwie różne rzeczy; zlanie ich w jedno sprawia, że kliknięcie w wiersz wyrzuca z widoku pozostałe pozycje.
+- `ui-stala` `realization-new-visible-types` — widoczność typów liści w „Realizacji" i „Realizacja_new" musi zostać identyczna. Ta sama osoba nie może zobaczyć robocizny w jednym układzie i nie zobaczyć jej w drugim; rozjazd pozwala policzyć koszt własny z różnicy sum.
+- `ui-stala` `realization-new-can-see-money` — kwoty w drzewie gałęzi i analiza nad tabelą idą ZA JEDNYM warunkiem. Rozjazd znaczyłby, że tę samą kwotę da się odczytać z drzewa, a nie da się z kafla nad nim.
+
 ## 2026-09-10 — Realizacja i Realizacja_new na mniejszych ekranach: płynna typografia, karta pozycji jako szuflada, priorytet kolumn, płaska lista pozycji (v2026.09.10.1600)
 
 ### architektura / API

@@ -3,7 +3,7 @@
 //
 // Czym się różni od `RealizationTab`:
 //   • trzy panele zamiast jednej tabeli — lewo GDZIE (drzewo gałęzi), środek ILE I ZA CO
-//     (13 kolumn + szuflada zakupów), prawo CO DOKŁADNIE (karta pozycji);
+//     (14 kolumn + szuflada zakupów), prawo CO DOKŁADNIE (karta pozycji);
 //   • grupowanie po `branchId` (najbliższa gałąź w górę), a nie po `parentId` — w realnych
 //     danych liść bywa podwieszony pod innym liściem („licencja ACC7" pod kamerą Avigilon)
 //     i grupowanie po rodzicu wsadzało go pod nieistniejącą gałąź;
@@ -36,7 +36,7 @@ import {
     AXIS_STATUS_ORDER, sanitizeQtyInput, parsePriceInput, DRAWER,
 } from './wbs/wbsConstants';
 import {
-    TYPE_META, LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath, leafNodesOf, buildCardMap,
+    TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath, leafNodesOf, buildCardMap,
     wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf, planUnitOf, planValueOf, fmtQty, fmtZl, fmtDate,
 } from './wbs/realizationShared';
 import {
@@ -49,7 +49,7 @@ import {
 // więc dokładamy syntetyczny korzeń. Nie jest zapisywany nigdzie — żyje tylko w widoku.
 export const SYNTHETIC_ROOT = '__root__';
 
-// @anchor realization-new-cols — 13 kolumn tabeli pozycji. Wobec `COL_DEFS` z `RealizationTab`
+// @anchor realization-new-cols — 14 kolumn tabeli pozycji. Wobec `COL_DEFS` z `RealizationTab`
 // wypadły trzy, każda z powodu sprawdzonego na prawdziwym zamówieniu:
 //   „Przedmiot projektu" — gałąź wybiera się w lewym panelu, kolumna powtarzałaby wybór;
 //   „Produkt / zakres"   — powtarzał „Nazwę" w 77 z 80 pozycji (29× identyczna nazwa karty,
@@ -57,8 +57,9 @@ export const SYNTHETIC_ROOT = '__root__';
 //   „Dokument"           — 0 z 8 wpisów ma numer; został w szufladzie, bo faktura opisuje
 //                          pojedynczy zakup, a nie pozycję.
 //   „Wpisy"              — licznik powtarzał strzałkę rozwijania i nagłówek panelu.
-// Doszła „Typ": pod nazwą dokładał każdemu wierszowi trzecią linię, jako kolumna daje się
-// przebiec wzrokiem w pionie.
+// Doszły dwie: „Typ" — pod nazwą dokładał każdemu wierszowi trzecią linię, jako kolumna daje
+// się przebiec wzrokiem w pionie; „Osoba odpowiedzialna" — przy zakupach pierwsze pytanie po
+// „co i za ile" brzmi „kogo o to zapytać".
 // `prio` — kolejność ustępowania przy wąskiej tabeli (patrz `realization-new-col-prio`).
 // 1 = zdanie o pozycji, którego nie da się skrócić: co, ile w planie, ile kupione/zrobione,
 //     za ile i na czym stoi zakup;
@@ -67,6 +68,11 @@ export const SYNTHETIC_ROOT = '__root__';
 export const REALIZATION_NEW_COLS = [
     { key: 'name',           label: 'Nazwa',              w: 480, prio: 1 },
     { key: 'type',           label: 'Typ',                w: 150, prio: 2 },
+    // `WbsNode.owner` — kto odpowiada za pozycję. TYLKO DO ODCZYTU, tak samo jak „Status
+    // oferty": przypisania dokonuje się w Strukturze projektu (`node-can-have-owner`), bo
+    // tam widać cały zakres człowieka naraz. Tu odpowiada na pytanie „kogo o to zapytać",
+    // które przy zakupach pada częściej niż jakiekolwiek inne.
+    { key: 'owner',          label: 'Osoba odpowiedzialna', w: 260, prio: 2 },
     // „Oferent", nie „Dostawca": `LeafActual.supplierId` niesie tego, KTO DAŁ CENĘ. Dostawcą
     // stanie się dopiero wtedy, gdy przy wpisie pojawi się faktura albo WZ.
     { key: 'supplier',       label: 'Oferent',            w: 300, prio: 2 },
@@ -111,9 +117,14 @@ export const colPctOf = (cols) => {
 // wartości) dostaje wielowybór dopasowujący WARTOŚĆ, nie podciąg — „Zamówione" nie może
 // łapać się na „Nie zamówione"; kolumna wolnotekstowa dzieli wpis na frazy po `;` na OR.
 // Kolumny liczbowe zostają przy zwykłym podciągu — szuka się w nich konkretnej kwoty.
-export const NEW_DROPDOWN_FILTER_COLS = new Set(['type', 'supplier', 'status', 'purchaseStatus', 'execStatus']);
+export const NEW_DROPDOWN_FILTER_COLS = new Set(['type', 'owner', 'supplier', 'status', 'purchaseStatus', 'execStatus']);
 export const NEW_TEXT_FILTER_COLS = new Set(['name', 'comment']);
 export const hasColFilter = (v) => (Array.isArray(v) ? v.length > 0 : String(v ?? '').trim() !== '');
+
+// @anchor realization-new-brak-wlasciciela — etykieta pozycji bez osoby odpowiedzialnej.
+// Filtr słownikowy dopasowuje WARTOŚĆ, więc pusty napis wypadłby z listy opcji i nie dałoby
+// się wybrać „pokaż niczyje". To ta sama etykieta, którą pokazuje komórka.
+export const BRAK_WLASCICIELA = '(brak)';
 
 // Wartości słownikowe pozycji — dokładnie te napisy, które widać w komórce. Filtr ma
 // operować na tym, co użytkownik czyta, a nie na kodzie z bazy: `DONE` nad materiałem
@@ -121,6 +132,9 @@ export const hasColFilter = (v) => (Array.isArray(v) ? v.length > 0 : String(v ?
 export function filterValuesOf(node, entries) {
     return {
         type: TYPE_META[node.type]?.label || node.type || '',
+        // Pusta osoba odpowiedzialna dostaje własną wartość, a nie ''. Bez niej nie dałoby się
+        // wyfiltrować pozycji NICZYICH, a to one wymagają działania.
+        owner: String(node.owner || '').trim() || BRAK_WLASCICIELA,
         status: PLAN_STATUS_META[planStatusFromAny(node.status)]?.label || '',
         purchaseStatus: axisDisplay(node, 'purchase')?.label || '',
         execStatus: axisDisplay(node, 'exec')?.label || '',
@@ -133,6 +147,7 @@ export function filterTextOf(key, node, card, r, entries) {
     const v = {
         name: `${node.name || ''} ${getParentPath(node.path) || ''}`,
         type: TYPE_META[node.type]?.label || node.type || '',
+        owner: node.owner || '',
         supplier: entries.map(e => e.supplier?.name || '').join(' '),
         qty: String(node.quantity ?? ''),
         realization: `${r.qty} / ${r.plan}`,
@@ -152,7 +167,11 @@ export function filterTextOf(key, node, card, r, entries) {
 // nie jest kolumną w bazie. Zwraca: mapę węzłów, listę gałęzi (z syntetycznym korzeniem),
 // listę liści kosztowych oraz `branchIdOf` — najbliższą gałąź w górę dla każdego liścia.
 // Bez tego liść podwieszony pod innym liściem wypada z drzewa razem ze swoimi zakupami.
-export function buildBranchIndex(flatNodes, rootName) {
+//
+// `visibleTypes` zawęża WYNIK (`leaves`), a nie rozpoznawanie gałęzi: `isLeaf` musi dalej
+// widzieć WSZYSTKIE typy kosztowe, inaczej odfiltrowana praca zaczęłaby udawać gałąź i materiał
+// pod nią zawisłby na węźle, którego nie ma w drzewie (patrz `realization-new-visible-types`).
+export function buildBranchIndex(flatNodes, rootName, visibleTypes = LEAF_TYPES) {
     const isLeaf = (n) => LEAF_TYPES.includes(n?.type);
     const byId = Object.fromEntries((flatNodes || []).map(n => [n.id, n]));
 
@@ -166,7 +185,7 @@ export function buildBranchIndex(flatNodes, rootName) {
     const branches = [root, ...(flatNodes || []).filter(n => !isLeaf(n)).map(n => ({
         ...n, parentId: n.parentId || SYNTHETIC_ROOT,
     }))];
-    const leaves = leafNodesOf(flatNodes).map(n => ({ ...n, branchId: nearestBranch(n) }));
+    const leaves = leafNodesOf(flatNodes, visibleTypes).map(n => ({ ...n, branchId: nearestBranch(n) }));
 
     const nodeById = Object.fromEntries([...branches, ...leaves].map(n => [n.id, n]));
     const childrenOf = {};
@@ -369,6 +388,23 @@ export default function RealizationNewTab({
     // ale analizy kwotowej (kafle, mierniki, bilanse) i tak nie widzi.
     const canEdit = userRoles.some(r => ['ADMIN', 'MANAGER', 'LOGISTYK'].includes(r));
     const readOnly = !canEdit;
+
+    // @anchor realization-new-visible-types — praca, usługa, nocleg i paliwo to koszty WŁASNE
+    // firmy; poza managerem i adminem nikt ich tu nie ogląda. Reguła i lista są te same, co w
+    // zakładce „Realizacja" (`realization-visible-types`) — ta sama osoba nie może zobaczyć
+    // robocizny w jednym układzie i nie zobaczyć jej w drugim. Filtr działa na etapie budowania
+    // indeksu, więc odfiltrowane pozycje nie wchodzą ani do drzewa gałęzi, ani do sum, ani do
+    // analizy, ani do eksportu — nigdzie, gdzie dałoby się je policzyć z różnicy.
+    const visibleTypes = isManagerOrAdmin ? LEAF_TYPES : OPEN_LEAF_TYPES;
+
+    // @anchor realization-new-can-see-money — kto widzi ANALIZĘ KWOTOWĄ zamówienia: kafle,
+    // mierniki, bilanse i kwoty w drzewie gałęzi. Logistyk je WIDZI: po odfiltrowaniu kosztów
+    // własnych (`realization-new-visible-types`) zostaje mu materiał i sprzęt, czyli dokładnie
+    // to, co sam kupuje i czego ceny negocjuje — a bez sum nie da się prowadzić zakupów wobec
+    // budżetu. Pracownik nie widzi ich dalej: dla niego to rozliczenie cudzych zakupów.
+    // Jeden warunek na wszystkie te miejsca, bo rozjazd znaczyłby, że tę samą kwotę da się
+    // odczytać z drzewa, a nie da się z kafla nad nim.
+    const canSeeMoney = userRoles.some(r => ['ADMIN', 'MANAGER', 'LOGISTYK'].includes(r));
 
     const [loading, setLoading] = useState(true);
     const [wbsNodes, setWbsNodes] = useState([]);
@@ -582,7 +618,7 @@ export default function RealizationNewTab({
     const toggleClosed = useCallback((node) => setClosed(node, !node.realizationClosed), [setClosed]);
 
     // ─ Model widoku ──────────────────────────────────────────────────────────
-    const idx = useMemo(() => buildBranchIndex(wbsNodes, orderName), [wbsNodes, orderName]);
+    const idx = useMemo(() => buildBranchIndex(wbsNodes, orderName, visibleTypes), [wbsNodes, orderName, visibleTypes]);
 
     const actualsByRoot = useMemo(() => {
         const map = {};
@@ -621,15 +657,15 @@ export default function RealizationNewTab({
     // się z wyniku, po zaznaczeniu jednego statusu zniknęłyby z listy pozostałe i nie dałoby
     // się dobrać drugiego.
     const filterOptions = useMemo(() => {
-        const acc = { type: new Set(), supplier: new Set(), status: new Set(), purchaseStatus: new Set(), execStatus: new Set() };
+        const acc = { type: new Set(), owner: new Set(), supplier: new Set(), status: new Set(), purchaseStatus: new Set(), execStatus: new Set() };
         for (const n of idx.leavesOfSubtree(selectedBranch)) {
             const v = filterValuesOf(n, actualsOf(n));
-            for (const k of ['type', 'status', 'purchaseStatus', 'execStatus']) if (v[k]) acc[k].add(v[k]);
+            for (const k of ['type', 'owner', 'status', 'purchaseStatus', 'execStatus']) if (v[k]) acc[k].add(v[k]);
             for (const nazwa of v.supplier) acc.supplier.add(nazwa);
         }
         const pos = (zbior) => [...zbior].sort((a, b) => a.localeCompare(b, 'pl'));
         return {
-            type: pos(acc.type), supplier: pos(acc.supplier), status: pos(acc.status),
+            type: pos(acc.type), owner: pos(acc.owner), supplier: pos(acc.supplier), status: pos(acc.status),
             purchaseStatus: pos(acc.purchaseStatus), execStatus: pos(acc.execStatus),
         };
     }, [idx, selectedBranch, actualsOf]);
@@ -668,6 +704,26 @@ export default function RealizationNewTab({
         return filtryAktywne ? list.filter(matchesFilters) : list;
     }, [idx, selectedBranch, onlyOpen, isUnfinished, filtryAktywne, matchesFilters]);
 
+    // @anchor realization-new-leaf-branch-path — ŚCIEŻKA gałęzi wybranej pozycji: od jej
+    // najbliższej gałęzi w górę aż po korzeń. Tabela pokazuje PŁASKĄ listę całego poddrzewa,
+    // a nazwy gałęzi nie ma w żadnej kolumnie (celowo — patrz `REALIZATION_NEW_COLS`), więc po
+    // kliknięciu w liść nie dało się powiedzieć, skąd on jest. Podświetlenie CELOWO nie rusza
+    // `selectedBranch`: zmiana wyboru gałęzi przefiltrowałaby tabelę i wyrzuciła z niej resztę
+    // pozycji, czyli kliknięcie w wiersz zmieniałoby to, na co się patrzy.
+    const leafBranchPath = useMemo(() => {
+        const leaf = idx.leaves.find(n => n.id === selectedLeaf);
+        if (!leaf) return { branchId: null, path: new Set() };
+        const path = new Set();
+        // Zabezpieczenie przed cyklem: `parentId` przychodzi z bazy, a pętla w drzewie
+        // zawiesiłaby cały widok zamiast pokazać niepełną ścieżkę.
+        let id = leaf.branchId;
+        while (id && !path.has(id)) {
+            path.add(id);
+            id = idx.nodeById[id]?.parentId || null;
+        }
+        return { branchId: leaf.branchId, path };
+    }, [idx, selectedLeaf]);
+
     // @anchor realization-new-export-rows — wiersze dla eksportu i protokołu w kształcie, którego
     // oczekują obie ścieżki: { node, card, realization }. To DOKŁADNIE to, co widać w tabeli —
     // po wyborze gałęzi, filtrach kolumn i przełączniku „Tylko niedomknięte". Odbiera się i
@@ -684,7 +740,7 @@ export default function RealizationNewTab({
         try {
             await eksportRealizacjiXlsx({
                 rows: exportRows,
-                visibleTypes: LEAF_TYPES,
+                visibleTypes,
                 orderName,
                 accepted,
                 colFilters,
@@ -797,7 +853,7 @@ export default function RealizationNewTab({
         // musi siedzieć na korzeniu zakładki, bo tokeny dziedziczą wszystkie trzy panele,
         // szuflada zakupów i modal protokołu.
         <div className="rn-fluid flex h-full flex-col bg-[#030712] text-gray-200">
-            {/* ── Analiza zamówienia — ten sam warunek roli co LogistykaMaterialListsTab:70 ── */}
+            {/* ── Analiza zamówienia — warunek roli: `realization-new-can-see-money` ── */}
             <div className={`border-b border-white/[.07] px-4 py-3 ${
                 analitykaOtwarta ? 'min-h-0 flex-1 overflow-auto' : 'shrink-0'}`}>
                 {/* Źródło planu widzi KAŻDA rola — przełącznik wersji w belce górnej celowo nie
@@ -832,7 +888,11 @@ export default function RealizationNewTab({
                         w eksporcie: <span className="font-mono text-gray-300">{exportRows.length}</span> z {idx.leaves.length} pozycji
                     </span>
                 </div>
-                {isManagerOrAdmin
+                {/* Analiza idzie za tym samym warunkiem co kwoty w drzewie (`realization-new-can-see-money`),
+                    bo liczy się z DOKŁADNIE tych pozycji, które widać w tabeli: logistykowi zostaje po
+                    filtrze `realization-new-visible-types` materiał i sprzęt, czyli jego własne zakupy.
+                    Pracownik nadal dostaje w tym miejscu komunikat zamiast liczb. */}
+                {canSeeMoney
                     ? <Analiza
                         a={analysis} orderName={orderName}
                         open={branchTableOpen} onToggle={() => setBranchTableOpen(v => !v)}
@@ -840,7 +900,7 @@ export default function RealizationNewTab({
                         kpiOpen={kpiOpen} onToggleKpi={() => setKpiOpen(v => !v)} />
                     : (
                         <div className="rounded-md border border-white/[.07] bg-[#0a1120] px-3.5 py-2.5 text-xs text-gray-400">
-                            <b className="text-gray-300">Analiza zamówienia — widok dla roli MANAGER i ADMIN.</b><br />
+                            <b className="text-gray-300">Analiza zamówienia — widok dla ról ADMIN, MANAGER i LOGISTYK.</b><br />
                             Pozycje i zakupy w tabeli poniżej są dostępne, ale sumy wyceny, odchylenia i rozbicie
                             na zakresy zostają ukryte.
                         </div>
@@ -862,17 +922,21 @@ export default function RealizationNewTab({
                         meta={`${idx.branches.length - 1} gałęzi · ${idx.leaves.length} pozycji`}
                     />
                     <div className="min-h-0 flex-1 overflow-auto">
+                        {/* Kwoty gałęzi — ADMIN, MANAGER i LOGISTYK (`realization-new-branch-money`).
+                            Pracownik dostaje drzewo z samą liczbą pozycji. */}
                         <div className="flex items-center gap-2 border-b border-white/[.07] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">
                             <span className="flex-1">Gałąź</span>
                             <span className="w-9 text-right">Poz.</span>
-                            <span className="w-24 text-right text-orange-400">Wycena</span>
-                            <span className="w-24 text-right text-red-400">Zakup</span>
+                            {canSeeMoney && <span className="w-24 text-right text-orange-400">Wycena</span>}
+                            {canSeeMoney && <span className="w-24 text-right text-red-400">Zakup</span>}
                         </div>
                         <BranchTree
                             idx={idx} rootId={SYNTHETIC_ROOT} level={0}
                             selected={selectedBranch}
                             onSelect={(id) => { setSelectedBranch(id); setSelectedLeaf(null); }}
                             cardOf={cardOf} actualsOf={actualsOf} isUnfinished={isUnfinished}
+                            leafBranch={leafBranchPath.branchId} leafPath={leafBranchPath.path}
+                            showMoney={canSeeMoney}
                         />
                     </div>
                 </div>
@@ -987,12 +1051,35 @@ const MiniBtn = ({ children, onClick, muted }) => (
 
 // @anchor realization-new-branch-tree — pełne drzewo gałęzi z dwiema kolumnami kwotowymi.
 // Bursztynowa kropka = w poddrzewie są pozycje bez pełnego pokrycia zakupami.
-function BranchTree({ idx, rootId, level, selected, onSelect, cardOf, actualsOf, isUnfinished }) {
+// @anchor realization-new-branch-money — dwie kolumny kwotowe (wycena / zakup) widzi WYŁĄCZNIE
+// ADMIN i MANAGER, tą samą regułą co analiza zamówienia nad tabelą. Logistyk prowadzi zakupy,
+// więc pisze po osiach i wpisach, ale sum gałęzi nie ogląda — inaczej lewy panel obchodziłby
+// ukrycie analizy, pokazując to samo w rozbiciu na zakresy.
+// Seledynowy pasek przy lewej krawędzi rysuje ŚCIEŻKĘ do gałęzi wybranej w tabeli pozycji
+// (`realization-new-leaf-branch-path`): pełny kolor na samej gałęzi, przygaszony na jej
+// przodkach, więc linia prowadzi wzrok od korzenia w dół. To NIE jest wybór gałęzi — wybór
+// dalej filtruje tabelę i ma własne tło.
+function BranchTree({ idx, rootId, level, selected, onSelect, cardOf, actualsOf, isUnfinished, leafBranch, leafPath, showMoney }) {
+    // Hooki stoją PRZED wyjściem na brakującym węźle — inaczej ten sam komponent raz
+    // wywoływałby `useRef`/`useEffect`, a raz nie, i React zgłosiłby zmianę liczby hooków.
+    const rowRef = useRef(null);
+    const galazLiscia = leafBranch === rootId;
+    // Gałąź wybranej pozycji bywa poza widokiem przewijanego drzewa — samo podświetlenie
+    // niczego by wtedy nie powiedziało. `block: 'nearest'` nie rusza panelu, gdy wiersz już
+    // widać, więc przewijanie nie skacze przy każdym kliknięciu w tabeli.
+    useEffect(() => {
+        if (galazLiscia) rowRef.current?.scrollIntoView({ block: 'nearest' });
+    }, [galazLiscia]);
+
     const node = idx.nodeById[rootId];
     if (!node) return null;
+    const naSciezce = leafPath?.has(rootId);
     const leaves = idx.leavesOfSubtree(rootId);
-    const plan = leaves.reduce((s, n) => s + planValueOf(n, cardOf(n)), 0);
-    const real = leaves.reduce((s, n) => s + realizationOf(n, actualsOf(n)).value, 0);
+    // Sumy liczą się TYLKO wtedy, gdy jest je komu pokazać — przy zamkniętej analizie kwotowej
+    // przebieg po wszystkich liściach każdej gałęzi byłby pracą na wynik, który i tak nie wychodzi
+    // na ekran.
+    const plan = showMoney ? leaves.reduce((s, n) => s + planValueOf(n, cardOf(n)), 0) : 0;
+    const real = showMoney ? leaves.reduce((s, n) => s + realizationOf(n, actualsOf(n)).value, 0) : 0;
     const waiting = leaves.some(isUnfinished);
     const children = idx.childrenOf[rootId] || [];
 
@@ -1002,28 +1089,36 @@ function BranchTree({ idx, rootId, level, selected, onSelect, cardOf, actualsOf,
                 ścina się do „i…" i zajmuje kilkanaście pikseli, więc dymek podpięty pod nią
                 był nie do trafienia myszą. Kolumny liczbowe mają własne podpisy, więc i one
                 niosą nazwę gałęzi — inaczej najechanie na kwotę gubiło kontekst wiersza. */}
-            <div onClick={() => onSelect(rootId)} title={node.name}
-                className={`flex cursor-pointer items-center gap-1.5 border-b border-white/[.04] px-2 py-1 text-xs hover:bg-white/[.03] ${
-                    selected === rootId ? 'bg-teal-500/10' : ''} ${level <= 1 ? 'font-semibold text-gray-200' : 'text-gray-400'} ${
+            {/* Pasek ścieżki jedzie na `border-left`, a nie na osobnym elemencie: lewy padding
+                zszedł o jego grubość, więc włączenie podświetlenia nie przesuwa treści wiersza
+                i drzewo nie drga przy przeskakiwaniu między pozycjami. */}
+            <div ref={rowRef} onClick={() => onSelect(rootId)}
+                title={galazLiscia ? `${node.name} — tu leży pozycja wybrana w tabeli` : node.name}
+                className={`flex cursor-pointer items-center gap-1.5 border-b border-white/[.04] border-l-2 py-1 pl-1.5 pr-2 text-xs hover:bg-white/[.03] ${
+                    galazLiscia ? 'border-l-teal-300 bg-teal-400/[.14]'
+                        : naSciezce ? 'border-l-teal-300/30' : 'border-l-transparent'} ${
+                    !galazLiscia && selected === rootId ? 'bg-teal-500/10' : ''} ${
+                    level <= 1 ? 'font-semibold text-gray-200' : 'text-gray-400'} ${
                     level === 1 ? 'border-t border-white/[.07]' : ''}`}>
                 <span style={{ width: level * 13 }} className="shrink-0" />
                 <ChevronRight size={11} className={`shrink-0 text-gray-600 ${children.length ? 'rotate-90' : 'invisible'}`} />
                 <span className="min-w-0 flex-1 truncate">{node.name}</span>
                 {waiting && <span title={`${node.name} — są pozycje bez pełnego pokrycia zakupami`} className="size-1.5 shrink-0 rounded-full bg-amber-400" />}
                 <span className="w-9 shrink-0 text-right text-gray-500 tabular-nums" title={`${node.name} — ${leaves.length} pozycji kosztowych`}>{leaves.length}</span>
-                <span className="w-24 shrink-0 text-right text-orange-400 tabular-nums" title={`${node.name} — wycena gałęzi`}>{fmtZl(plan)}</span>
-                <span className="w-24 shrink-0 text-right text-red-400 tabular-nums" title={`${node.name} — zakupy zrealizowane`}>{fmtZl(real)}</span>
+                {showMoney && <span className="w-24 shrink-0 text-right text-orange-400 tabular-nums" title={`${node.name} — wycena gałęzi`}>{fmtZl(plan)}</span>}
+                {showMoney && <span className="w-24 shrink-0 text-right text-red-400 tabular-nums" title={`${node.name} — zakupy zrealizowane`}>{fmtZl(real)}</span>}
             </div>
             {children.map(c => (
                 <BranchTree key={c.id} idx={idx} rootId={c.id} level={level + 1}
                     selected={selected} onSelect={onSelect}
-                    cardOf={cardOf} actualsOf={actualsOf} isUnfinished={isUnfinished} />
+                    cardOf={cardOf} actualsOf={actualsOf} isUnfinished={isUnfinished}
+                    leafBranch={leafBranch} leafPath={leafPath} showMoney={showMoney} />
             ))}
         </>
     );
 }
 
-// @anchor realization-new-positions-table — 13 kolumn + szuflada zakupów jako wiersz potomny.
+// @anchor realization-new-positions-table — 14 kolumn + szuflada zakupów jako wiersz potomny.
 // Szuflada, a nie płaska lista zakupów: płaska gubiłaby pozycje bez ani jednego zakupu,
 // a to właśnie one wymagają działania.
 function PositionsTable({
@@ -1186,6 +1281,15 @@ function Cell({ colKey, node, card, r, planValue, deltaQty, readOnly, onSaveAxis
             return <div className="line-clamp-3 leading-snug" title={getParentPath(node.path)}>{node.name}</div>;
         case 'type':
             return <span className={`text-[length:var(--rn-md)] font-semibold uppercase tracking-wide ${t?.color || 'text-gray-400'}`}>{t?.label || node.type}</span>;
+        // Osoba odpowiedzialna jest ETYKIETĄ z listy wyboru („Firma - Imię Nazwisko"), nie
+        // kluczem obcym — pokazujemy ją w całości, a dymek niesie pełną treść, gdy kolumna
+        // przytnie długie nazwisko z firmą.
+        case 'owner': {
+            const kto = String(node.owner || '').trim();
+            return kto
+                ? <span className="line-clamp-2 text-[length:var(--rn-md)] leading-snug text-gray-300" title={kto}>{kto}</span>
+                : <span className="text-[length:var(--rn-md)] text-gray-600" title="Pozycja bez osoby odpowiedzialnej — przypisuje się ją w Strukturze projektu">{BRAK_WLASCICIELA}</span>;
+        }
         case 'supplier': {
             const names = [...new Set(r.entries.map(e => e.supplier?.name).filter(Boolean))];
             return <span className="text-[length:var(--rn-md)] text-gray-400">{names.length ? names.join(', ') : '—'}</span>;
