@@ -126,6 +126,7 @@ const addWorkingDays = (start, dur) => {
 const buildTasksFromTree = (items, projectStart, projectName, overrides, branchWorkOnHolidays) => {
     const tasks = [];
     const taskBranchMap = {};
+    const branchNameMap = {};
     let cursor = new Date(projectStart);
     cursor.setHours(0, 0, 0, 0);
     let rootMaxEnd = new Date(cursor);
@@ -155,6 +156,7 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
 
             const wow = depth === 0 ? (branchWorkOnHolidays[node.id] ?? false) : branchWow;
             const thisBranchId = depth === 0 ? node.id : currentBranchId;
+            if (depth === 0) branchNameMap[node.id] = niceName;
 
             // Czysto grupująca gałąź (nie-zadanie z dziećmi) — bez paska, schodzimy w dzieci.
             if (hasChildren && !isTaskNode) {
@@ -227,7 +229,7 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
     };
 
     walk(items, null, 0, false, null);
-    return { tasks, taskBranchMap };
+    return { tasks, taskBranchMap, branchNameMap };
 };
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
@@ -247,6 +249,10 @@ const GanttTableContext = createContext(null);
 
 const COL_DATE = 95;
 const COL_DAYS = 52;
+// @anchor gantt-col-branch
+// Szerokość kolumny "Gałąź" (przedmiot depth=0) — jak w eksporcie Excel harmonogramu.
+const COL_BRANCH = 150;
+const LIST_W = 500 + COL_BRANCH;
 
 const hdrCell = (label, width, extra = {}) => ({
     width, padding: '0 6px', display: 'flex', alignItems: 'flex-end', paddingBottom: 6,
@@ -365,6 +371,7 @@ const buildExcelTimeline = (tasks, viewMode, branchWorkOnHolidays, taskBranchMap
 const GanttTaskListHeader = ({ headerHeight, rowWidth, fontFamily }) => {
     return (
         <div style={{ display: 'flex', height: headerHeight, fontFamily, borderBottom: '1px solid rgba(255,255,255,0.1)', background: '#0b0f17', boxSizing: 'border-box', width: rowWidth, flexShrink: 0, position: 'sticky', top: 0, zIndex: 10 }}>
+            <div style={hdrCell('Gałąź', COL_BRANCH, { justifyContent: 'flex-start', padding: '0 8px', paddingBottom: 6 })}>Gałąź</div>
             <div style={{ flex: '1 1 0', padding: '0 8px', display: 'flex', alignItems: 'flex-end', paddingBottom: 6, color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 Zadanie
             </div>
@@ -417,7 +424,7 @@ const DateCell = ({ taskId, field, date, disabled }) => {
 };
 
 const GanttTaskListTable = ({ rowHeight, rowWidth, fontFamily, fontSize, tasks, selectedTaskId, setSelectedTask, onExpanderClick }) => {
-    const { branchWorkOnHolidays = {}, taskBranchMap = {} } = useContext(GanttTableContext) || {};
+    const { branchWorkOnHolidays = {}, taskBranchMap = {}, branchNameMap = {} } = useContext(GanttTableContext) || {};
     const totalDays = tasks.reduce((s, t) => s + taskDays(t, branchWorkOnHolidays, taskBranchMap), 0);
     return (
         <div style={{ fontFamily, fontSize, width: rowWidth, flexShrink: 0 }}>
@@ -433,6 +440,9 @@ const GanttTaskListTable = ({ rowHeight, rowWidth, fontFamily, fontSize, tasks, 
                         style={{ display: 'flex', height: rowHeight, alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', background: task.id === selectedTaskId ? 'rgba(255,255,255,0.05)' : 'transparent', cursor: isGroup ? 'pointer' : 'default', boxSizing: 'border-box', width: rowWidth, overflow: 'hidden' }}
                         onClick={() => { setSelectedTask(task.id); if (isGroup) onExpanderClick(task); }}
                     >
+                        <div style={{ width: COL_BRANCH, flexShrink: 0, paddingLeft: 8, paddingRight: 4, color: '#94a3b8', fontSize: 11, wordBreak: 'break-word', lineHeight: 1.35, display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 4, overflow: 'hidden', boxSizing: 'border-box' }}>
+                            {branchNameMap[taskBranchMap[task.id]] || ''}
+                        </div>
                         <div style={{ flex: '1 1 0', paddingLeft: 8, paddingRight: 4, color, fontWeight: 400, wordBreak: 'break-word', lineHeight: 1.35, display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 4, overflow: 'hidden' }}>
                             {task.name}
                         </div>
@@ -450,6 +460,7 @@ const GanttTaskListTable = ({ rowHeight, rowWidth, fontFamily, fontSize, tasks, 
             })}
             {/* Wiersz podsumowania */}
             <div style={{ display: 'flex', height: 32, alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.03)', boxSizing: 'border-box', width: rowWidth }}>
+                <div style={{ width: COL_BRANCH, flexShrink: 0 }} />
                 <div style={{ flex: '1 1 0', paddingLeft: 8, color: '#64748b', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Razem roboczo dni</div>
                 <div style={{ width: COL_DATE }} />
                 <div style={{ width: COL_DATE }} />
@@ -529,7 +540,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         }));
     }, []);
 
-    const { tasks, taskBranchMap } = useMemo(() => {
+    const { tasks, taskBranchMap, branchNameMap } = useMemo(() => {
         const result = buildTasksFromTree(items, new Date(projectStart), projectName, overrides, branchWorkOnHolidays);
         result.tasks.sort((a, b) => a.start - b.start);
         return result;
@@ -769,7 +780,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
             if (!stick) return null;
             stick.innerHTML = '';
             const headerH = Math.min(headerSvg.getBoundingClientRect().height || 60, 90);
-            const taskListW = Math.round(taskListEl.getBoundingClientRect().width || 500);
+            const taskListW = Math.round(taskListEl.getBoundingClientRect().width || LIST_W);
             const inner = document.createElement('div');
             inner.style.cssText = `position:absolute;top:0;left:${taskListW}px;height:${headerH}px;`
                 + `width:calc(100% - ${taskListW}px);overflow:hidden;background:#0b0f17;`;
@@ -1236,7 +1247,7 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
         const savedSvgWidth = innerSvg ? innerSvg.getAttribute('width') : null;
         if (innerSvg) innerSvg.setAttribute('width', String(Math.round(endPixel)));
 
-        const taskListWidth = vc?.children[0]?.offsetWidth || 500;
+        const taskListWidth = vc?.children[0]?.offsetWidth || LIST_W;
         const contentWidth = Math.round(endPixel) + taskListWidth;
 
         // Tylko style Gantta (class *ignite-gantt* lub *_WuQ0f*/_34SS0 itp.) —
@@ -1292,12 +1303,12 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
     useEffect(() => { onExcelDataReady?.(getExcelData); }, [getExcelData, onExcelDataReady]);
 
     const ganttTableCtx = useMemo(
-        () => ({ editCell, setEditCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap }),
-        [editCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap]
+        () => ({ editCell, setEditCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap, branchNameMap }),
+        [editCell, handleTableDateChange, branchWorkOnHolidays, taskBranchMap, branchNameMap]
     );
 
     // Dynamiczna wysokość wiersza — musi być przed early return (Rules of Hooks)
-    const NAME_COL_W = 500 - COL_DATE * 2 - COL_DAYS - 12;
+    const NAME_COL_W = LIST_W - COL_BRANCH - COL_DATE * 2 - COL_DAYS - 12;
     const CHAR_W = 6.8;
     const rowHeight = useMemo(() => {
         const charsPerLine = Math.max(1, Math.floor(NAME_COL_W / CHAR_W));
@@ -1427,7 +1438,7 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
 .ignite-gantt-print .ignite-gantt-hscroll {
   position: sticky;
   bottom: 0;
-  margin-left: 500px;
+  margin-left: ${LIST_W}px;
   height: 14px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -1446,7 +1457,7 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                     tasks={tasks}
                     viewMode={viewMode}
                     locale="pl"
-                    listCellWidth="500px"
+                    listCellWidth={`${LIST_W}px`}
                     columnWidth={viewMode === ViewMode.Day ? 50 : viewMode === ViewMode.Week ? 90 : 220}
                     rowHeight={rowHeight}
                     barCornerRadius={4}
