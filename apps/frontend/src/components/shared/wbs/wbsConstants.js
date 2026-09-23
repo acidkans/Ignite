@@ -655,6 +655,51 @@ export const contactOwnerLabel = (c) => {
   return company ? `${company} - ${name}` : name;
 };
 
+// @anchor user-owner-label — etykieta KONTA użytkownika w liście wyboru osoby odpowiedzialnej.
+// Bliźniak `contactOwnerLabel` dla drugiego źródła listy. Obie funkcje muszą żyć obok siebie,
+// bo `WbsNode.owner` trzyma ETYKIETĘ, nie klucz obcy: wystarczy, że dwa widoki złożą ją inaczej,
+// a `<select>` dostanie wartość spoza opcji i pokaże puste pole nad zapisanym w bazie nazwiskiem.
+export const userOwnerLabel = (u) => {
+  const name = [u?.firstName, u?.lastName].filter(Boolean).join(' ').trim() || String(u?.email || '').trim();
+  if (!name) return '';
+  const company = String(u?.company || '').trim();
+  return company ? `${company} — ${name}` : name;
+};
+
+// @anchor build-owner-options — JEDNA lista wyboru osoby odpowiedzialnej dla wszystkich widoków,
+// które to pole edytują (Struktura projektu, Realizacja_new). Kolejność: konta użytkowników,
+// separator, kontakty zamówienia; kontakt o tym samym imieniu i nazwisku co konto wypada, bo to
+// ta sama osoba wpisana dwa razy.
+//
+// `extras` to wartości JUŻ ZAPISANE na pozycjach tego zamówienia. Bez nich pozycja przypisana
+// komuś, kogo nie ma w żadnej z dwóch list (człowiek zdjęty z zespołu, kontakt usunięty
+// z zamówienia), pokazywała PUSTY select nad niepustą bazą — a pierwsze kliknięcie w takie pole
+// kasowało zapisane nazwisko, nie pytając.
+export const buildOwnerOptions = (users = [], contacts = [], extras = []) => {
+  const opcje = [];
+  const seen = new Set();
+  const push = (value, label) => {
+    const v = String(value || '').trim();
+    if (!v || seen.has(v)) return;
+    seen.add(v);
+    opcje.push({ value: v, label: label || v });
+  };
+  for (const u of users) push(userOwnerLabel(u));
+  const userNames = new Set(users.map(u => [u?.firstName, u?.lastName].filter(Boolean).join(' ').trim() || String(u?.email || '').trim()).filter(Boolean));
+  const kontakty = [];
+  for (const c of contacts) {
+    const label = contactOwnerLabel(c);
+    if (!label) continue;
+    const fullName = [c?.firstName, c?.lastName].filter(Boolean).join(' ').trim() || String(c?.name || '').trim() || String(c?.email || '').trim();
+    if (userNames.has(fullName)) continue;
+    kontakty.push({ value: label, opis: c?.role ? `${label} (${c.role})` : label });
+  }
+  if (opcje.length && kontakty.some(k => !seen.has(k.value))) opcje.push({ separator: true });
+  for (const k of kontakty) push(k.value, k.opis);
+  for (const e of extras) push(e);
+  return opcje;
+};
+
 // @anchor default-logistician-owner — domyślna osoba odpowiedzialna za materiał i sprzęt.
 // Bierzemy PIERWSZY kontakt zamówienia z rolą logistyka: to on prowadzi zakupy, więc pozycja
 // zakupowa startuje na nim, a nie pusta. Brak takiego kontaktu = pusto (żadnego zgadywania

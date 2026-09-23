@@ -138,6 +138,10 @@ export class WbsNodesService {
             }
 
             // Upsert: wstaw nowe lub zaktualizuj istniejące (zachowując pola budżetowe)
+            // @anchor wbs-nodes-save-tree-keeps-strategy — `strategy` istniejącego węzła zmienia
+            // wyłącznie PATCH /wbs-nodes/:id. Drzewo z karty otwartej przed edycją innej osoby
+            // (albo zbudowane bez tego pola, jak import budżetu) nadpisywało nim strategie
+            // i złożenie gałęzi. Nowe węzły (wklejone z kopii) dostają strategię w `create`.
             for (const row of newRows) {
                 const budget = budgetMap.get(row.id);
                 if (budget) {
@@ -154,7 +158,6 @@ export class WbsNodesService {
                             resources: row.resources,
                             cost: row.cost,
                             comment: row.comment,
-                            strategy: row.strategy,
                             tags: row.tags,
                             qa: row.qa,
                             sortOrder: row.sortOrder,
@@ -468,6 +471,10 @@ export class WbsNodesService {
                 path: pathMap[node.id] || node.name,
                 depth: depthMap[node.id] ?? 0,
                 sortOrder: node.sortOrder,
+                // @anchor wbs-unified-created-at — moment dodania pozycji. Realizacja porównuje go
+                // z `ProcessNode.acceptedAt`: pozycja dodana PO akceptacji jest „poza baseline".
+                // Zapis drzewa robi upsert po id, więc data przeżywa kolejne zapisy struktury.
+                createdAt: node.createdAt,
                 // Budget fields
                 budgetType: node.budgetType,
                 unit: node.unit,

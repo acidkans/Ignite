@@ -25,7 +25,19 @@ export interface LeafActualInput {
     ean?: string | null;
     // @anchor leaf-actual-input-scope — zakres wykonania dla liści bez karty produktowej
     scope?: string | null;
+    // @anchor leaf-actual-input-is-surplus — zakup ponad ilość z wyceny (znacznik z karty pozycji)
+    isSurplus?: boolean;
 }
+
+// @anchor leaf-actual-entry-select — kształt wpisu oddawany przez każdy endpoint (lista,
+// dodanie, poprawka): jedna definicja, żeby nowe pole nie trafiło tylko do części odpowiedzi.
+const ENTRY_SELECT = {
+    id: true, wbsRootId: true, entryDate: true, qty: true, unitCost: true,
+    comment: true, docNumber: true, manufacturer: true, model: true, ean: true, scope: true,
+    isSurplus: true, createdAt: true,
+    supplier: { select: { id: true, name: true } },
+    author: { select: { id: true, firstName: true, lastName: true, email: true } },
+} as const;
 
 const num = (v: unknown): number | null => {
     if (v === null || v === undefined || v === '') return null;
@@ -68,31 +80,45 @@ export class LeafActualsService {
     // deweloperskich. Typ liścia bierzemy ze WSZYSTKICH klonów korzenia i wymagamy, żeby
     // każdy był otwarty — przetypowanie pozycji w nowej wersji ma zamykać wpis, nie otwierać.
     async listByOrder(nodeId: string, user?: ActualsUser) {
-        const entries = await this.listAllOfOrder(nodeId);
-        if (this.isManager(user)) return entries;
+        const [entries, leaves] = await Promise.all([
+            this.listAllOfOrder(nodeId),
+            this.prisma.wbsNode.findMany({
+                where: { nodeId },
+                select: { id: true, sourceWbsNodeId: true, type: true, name: true, updatedAt: true },
+            }),
+        ]);
 
-        const leaves = await this.prisma.wbsNode.findMany({
-            where: { nodeId },
-            select: { id: true, sourceWbsNodeId: true, type: true },
-        });
+        // @anchor leaf-actuals-leaf-label — nazwa i typ pozycji na wpisie, wzięte z NAJNOWSZEGO
+        // klonu korzenia. Realizacja buduje wiersze z wersji planu (baseline), więc wpis pozycji
+        // dodanej dopiero w późniejszej wersji nie ma tam wiersza — bez tej etykiety eksport nie
+        // umiałby go nazwać i zakup „poza baseline" znikałby z rozliczenia.
+        const etykieta = new Map<string, { name: string; type: string; t: number }>();
+        for (const l of leaves) {
+            const root = l.sourceWbsNodeId ?? l.id;
+            const t = l.updatedAt?.getTime?.() ?? 0;
+            const prev = etykieta.get(root);
+            if (!prev || t > prev.t) etykieta.set(root, { name: l.name, type: l.type, t });
+        }
+        const zEtykieta = entries.map((e) => ({
+            ...e,
+            leafName: etykieta.get(e.wbsRootId)?.name ?? null,
+            leafType: etykieta.get(e.wbsRootId)?.type ?? null,
+        }));
+        if (this.isManager(user)) return zEtykieta;
+
         const zamkniete = new Set<string>();
         const otwarte = new Set<string>();
         for (const l of leaves) {
             (isOpenLeafType(l.type) ? otwarte : zamkniete).add(l.sourceWbsNodeId ?? l.id);
         }
-        return entries.filter((e) => otwarte.has(e.wbsRootId) && !zamkniete.has(e.wbsRootId));
+        return zEtykieta.filter((e) => otwarte.has(e.wbsRootId) && !zamkniete.has(e.wbsRootId));
     }
 
     private async listAllOfOrder(nodeId: string) {
         return this.prisma.leafActual.findMany({
             where: { nodeId },
             orderBy: [{ entryDate: 'asc' }, { createdAt: 'asc' }],
-            select: {
-                id: true, wbsRootId: true, entryDate: true, qty: true, unitCost: true,
-                comment: true, docNumber: true, manufacturer: true, model: true, ean: true, scope: true, createdAt: true,
-                supplier: { select: { id: true, name: true } },
-                author: { select: { id: true, firstName: true, lastName: true, email: true } },
-            },
+            select: ENTRY_SELECT,
         });
     }
 
@@ -118,14 +144,10 @@ export class LeafActualsService {
                 model: input.model?.trim() || null,
                 ean: input.ean?.trim() || null,
                 scope: input.scope?.trim() || null,
+                isSurplus: !!input.isSurplus,
                 authorId: user?.userId ?? null,
             },
-            select: {
-                id: true, wbsRootId: true, entryDate: true, qty: true, unitCost: true,
-                comment: true, docNumber: true, manufacturer: true, model: true, ean: true, scope: true, createdAt: true,
-                supplier: { select: { id: true, name: true } },
-                author: { select: { id: true, firstName: true, lastName: true, email: true } },
-            },
+            select: ENTRY_SELECT,
         });
 
         await this.prisma.auditLog.create({
@@ -168,13 +190,9 @@ export class LeafActualsService {
                 ...(input.model !== undefined ? { model: input.model?.trim() || null } : {}),
                 ...(input.ean !== undefined ? { ean: input.ean?.trim() || null } : {}),
                 ...(input.scope !== undefined ? { scope: input.scope?.trim() || null } : {}),
+                ...(input.isSurplus !== undefined ? { isSurplus: !!input.isSurplus } : {}),
             },
-            select: {
-                id: true, wbsRootId: true, entryDate: true, qty: true, unitCost: true,
-                comment: true, docNumber: true, manufacturer: true, model: true, ean: true, scope: true, createdAt: true,
-                supplier: { select: { id: true, name: true } },
-                author: { select: { id: true, firstName: true, lastName: true, email: true } },
-            },
+            select: ENTRY_SELECT,
         });
 
         await this.prisma.auditLog.create({
@@ -183,8 +201,8 @@ export class LeafActualsService {
                 entity: 'LeafActual',
                 entityId: id,
                 diff: {
-                    przed: { qty: existing.qty, unitCost: existing.unitCost, comment: existing.comment },
-                    po: { qty: updated.qty, unitCost: updated.unitCost, comment: updated.comment },
+                    przed: { qty: existing.qty, unitCost: existing.unitCost, comment: existing.comment, isSurplus: existing.isSurplus },
+                    po: { qty: updated.qty, unitCost: updated.unitCost, comment: updated.comment, isSurplus: updated.isSurplus },
                 },
                 userId: user?.userId ?? null,
             },

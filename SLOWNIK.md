@@ -446,6 +446,13 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-widok | CalendarView | apps/frontend/src/components/shared/wbs/CalendarView.jsx | @anchor calendar-view |
 | ui-karta | ProductCard | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card |
 | ui-propsy | ProductCard.offerLocked | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card-offer-lock |
+| ui-input | pole „Kod EAN" w karcie produktu | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card-ean |
+| schema-pole | MaterialRequirement.ean (kod EAN pozycji) | apps/backend/prisma/schema.prisma | @anchor mat-req-ean |
+| schema-pole | Material.ean (kod EAN produktu katalogowego) | apps/backend/prisma/schema.prisma | @anchor material-ean |
+| back-funkcja | odczyt EAN — kod pozycji przed katalogowym | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-ean-read |
+| back-funkcja | zapis EAN — pozycja + katalog | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-ean-write |
+| back-funkcja | oferent z auto-wybranej propozycji na kartę | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-pick-supplier-up |
+| ui-funkcja | odmowa backendu zatrzymuje wybór propozycji | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor proposal-select-rejected |
 | ui-karta | ProductCard w rozwinięciu wiersza Materiałów | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-product-card |
 | ui-stala | GROUP_SPINE (kręgosłup rozwiniętej pozycji) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor materials-group-spine |
 | ui-stala | CARD_SURFACE (płaszczyzna karty produktu) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor materials-card-surface |
@@ -610,6 +617,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | nodeCanHaveOwner | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor node-can-have-owner |
 | ui-stala | LOGISTICIAN_ROLE_RE | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor logistician-role-re |
 | ui-funkcja | contactOwnerLabel | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor contact-owner-label |
+| ui-funkcja | userOwnerLabel (etykieta konta w liście osób odpowiedzialnych) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor user-owner-label |
+| ui-funkcja | buildOwnerOptions (wspólna lista wyboru osoby odpowiedzialnej) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor build-owner-options |
 | ui-funkcja | defaultLogisticianOwner | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor default-logistician-owner |
 | ui-stan | projectContacts (kontakty zamówienia w WBS) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor project-contacts |
 | ui-funkcja | collectOwnStatusCodes | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor collect-own-status-codes |
@@ -1515,6 +1524,11 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | LeafActual.model | apps/backend/prisma/schema.prisma | @anchor leaf-actual-model |
 | schema-pole | LeafActual.ean (kod EAN kupionego egzemplarza) | apps/backend/prisma/schema.prisma | @anchor leaf-actual-ean |
 | schema-pole | LeafActual.scope (zakres — liście bez karty) | apps/backend/prisma/schema.prisma | @anchor leaf-actual-scope |
+| schema-pole | LeafActual.isSurplus (zakup nadmiarowy — ponad wycenę) | apps/backend/prisma/schema.prisma | @anchor leaf-actual-is-surplus |
+| back-stala | ENTRY_SELECT (kształt wpisu realizacji w odpowiedziach) | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actual-entry-select |
+| back-dto | LeafActualInput.isSurplus | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actual-input-is-surplus |
+| back-funkcja | leafName / leafType na wpisie (najnowszy klon korzenia) | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-leaf-label |
+| back-dto | createdAt w pozycji drzewa unified | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-unified-created-at |
 | schema-pole | LeafActual.supplierId | apps/backend/prisma/schema.prisma | @anchor leaf-actual-supplier-id |
 | schema-pole | LeafActual.authorId | apps/backend/prisma/schema.prisma | @anchor leaf-actual-author-id |
 | schema-relacja | LeafActual.node | apps/backend/prisma/schema.prisma | @anchor leaf-actual-node |
@@ -1568,6 +1582,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | visibleForCaller (filtr drzewa WBS po roli) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-nodes-visible-for-caller |
 | back-funkcja | stripMoney (zerowanie kwot węzła) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-nodes-strip-money |
 | back-funkcja | ochrona ukrytych liści przy zapisie drzewa | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-nodes-save-tree-hidden-guard |
+| back-funkcja | zapis drzewa nie nadpisuje strategii istniejących węzłów | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-nodes-save-tree-keeps-strategy |
 | back-funkcja | rootOfWbsNode | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-root-of |
 | back-funkcja | listByOrder | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-list |
 | back-funkcja | create (wpis realizacji) | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-create |
@@ -1638,6 +1653,11 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | exportExcel (stan „eksportuję…" i komunikat o błędzie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-excel-call |
 | ui-funkcja | arkusz „Zakupy" w eksporcie Excel (wpisy zakupu + wymaganie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchases |
 | ui-kolumna | Cena ofertowa vs cena zakupu (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchase-vs-offer |
+| ui-stala | CZERWONE_TLO / CZERWONY_TEKST (zakup poza ofertą w Excelu) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-red |
+| ui-kolumna | Rozliczenie (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-settlement-col |
+| ui-kolumna | Wartość oferty przypisana do wpisu (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-offer-value |
+| ui-funkcja | formatowanie warunkowe wierszy poza ofertą (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-red-rows |
+| ui-tabela | arkusz Analiza zakupów (SUMIFS pozycja → rozliczenie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchase-analysis |
 | ui-kolumna | trzy osie statusu w arkuszu „Realizacja" | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-status-cols |
 | ui-input | zakres wpisu (liście bez karty) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-scope |
 | ui-kolumna | Status (WbsNode.status, edytowalny) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-status-col |
@@ -1726,6 +1746,11 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-stala | REALIZATION_NEW_COLS (14 kolumn tabeli pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-cols |
 | ui-stala | STAGE_META (cztery etapy osi realizacji, rampa porządkowa) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-stages |
 | ui-funkcja | planValueOf (wartość pozycji po stronie wyceny) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-plan-value |
+| ui-stala | ROZLICZENIE (w ofercie / poza ofertą) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-settlement |
+| ui-stala | POWOD_POZA_OFERTA (powód „poza ofertą”) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-settlement-reason |
+| ui-funkcja | rozliczenieOf (kategoria rozliczenia wpisu) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-settlement-of |
+| ui-funkcja | markOutOfBaseline (pozycja dodana po akceptacji) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-out-of-baseline |
+| ui-stala | POZA_BASELINE_META (plakietka „Poza ofertą” w Statusie oferty) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-out-of-baseline-meta |
 | ui-funkcja | buildBranchIndex (branchId — najbliższa gałąź w górę) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-branch-index |
 | ui-funkcja | axisStageOf (stan pozycji na osi) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-axis-stage |
 | ui-stala | rozkład osi w kwotach wyceny (pustyRozklad / zaokraglijRozklad) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-stage-dist |
@@ -1753,6 +1778,9 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-stala | deltaZamkniete (koszty rzeczywiste − koszty oferty na pozycjach wykonanych i odebranych) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-delta-zamkniete |
 | ui-funkcja | fetchActuals (przeładowanie samych wpisów po zapisie) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-fetch-actuals |
 | ui-funkcja | fetchCards (przeładowanie samych kart produktowych) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-fetch-cards |
+| ui-funkcja | saveOwner (WbsNode.owner z tabeli pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-save-owner |
+| ui-stan | ownerUsers / ownerContacts (źródła listy osób odpowiedzialnych) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-owner-options |
+| ui-dropdown | OwnerCell (osoba odpowiedzialna edytowalna w tabeli pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-owner-cell |
 | ui-funkcja | saveComment (WbsNode.comment + wbs-comment-changed) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-save-comment |
 | ui-funkcja | saveAxis (osie realizacji, cofnięcie zakupu cofa wykonanie) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-save-axis |
 | ui-funkcja | addActual (nowy wpis LeafActual) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-add-actual |
@@ -1771,6 +1799,11 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-stala | BRAK_WLASCICIELA (etykieta pozycji bez osoby odpowiedzialnej) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-brak-wlasciciela |
 | ui-stan | leafBranchPath (ścieżka gałęzi wybranej pozycji — podświetlenie lewego panelu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-leaf-branch-path |
 | ui-wiersz | EntryRow (zapisany wpis, edycja w miejscu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-row |
+| ui-stan | podział wpisów w ofercie / nadmiarowe w szufladzie | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-surplus-split |
+| ui-przycisk | SurplusToggle (znacznik „nadmiarowy") | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-surplus-toggle |
+| ui-stan | orphanEntries (wpisy poza baseline do eksportu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-orphan-entries |
+| ui-funkcja | DeltaLine (Δ w kolumnie Koszt całkowity) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-delta-line |
+| ui-funkcja | offerStatusMetaOf (status oferty z „Poza baseline”) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-offer-status-meta |
 | ui-formularz | EntryForm (nowy wpis jako ostatni wiersz szuflady) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-form |
 | ui-stala | ENTRY_INPUT (wygląd pola wpisu, wspólny dla obu zakładek) | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor entry-input-class |
 

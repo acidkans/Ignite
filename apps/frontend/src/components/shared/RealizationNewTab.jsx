@@ -37,11 +37,12 @@ import { liczBilansWykonania, NIEROZPOCZETE_LABEL } from './wbs/realizationBilan
 import {
     PLAN_STATUS_META, planStatusFromAny, PURCHASE_STATUS_META, EXEC_STATUS_META, execStatusLabel,
     hasPurchaseAxis, hasExecAxis, DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS, axisGateOf,
-    AXIS_STATUS_ORDER, sanitizeQtyInput, parsePriceInput, DRAWER,
+    AXIS_STATUS_ORDER, sanitizeQtyInput, parsePriceInput, DRAWER, buildOwnerOptions,
 } from './wbs/wbsConstants';
 import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath, leafNodesOf, buildCardMap,
     wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf, planUnitOf, planValueOf, fmtQty, fmtZl, fmtDate,
+    markOutOfBaseline, POZA_BASELINE_META,
 } from './wbs/realizationShared';
 import {
     ENTRY_INPUT, FORMULA_HINT, NUMERIC_ENTRY_FIELDS, growsWithText, resolveEntryNumber,
@@ -72,10 +73,12 @@ export const SYNTHETIC_ROOT = '__root__';
 export const REALIZATION_NEW_COLS = [
     { key: 'name',           label: 'Nazwa',              w: 480, prio: 1 },
     { key: 'type',           label: 'Typ',                w: 150, prio: 2 },
-    // `WbsNode.owner` — kto odpowiada za pozycję. TYLKO DO ODCZYTU, tak samo jak „Status
-    // oferty": przypisania dokonuje się w Strukturze projektu (`node-can-have-owner`), bo
-    // tam widać cały zakres człowieka naraz. Tu odpowiada na pytanie „kogo o to zapytać",
-    // które przy zakupach pada częściej niż jakiekolwiek inne.
+    // `WbsNode.owner` — kto odpowiada za pozycję. EDYTOWALNA w miejscu (`realization-new-owner-cell`):
+    // odpowiada na pytanie „kogo o to zapytać", które przy zakupach pada częściej niż jakiekolwiek
+    // inne, a odpowiedź na nie zmienia się właśnie w trakcie zakupów — odsyłanie po każdą taką
+    // zmianę do Struktury projektu znaczyło porzucenie listy zakupowej w pół drogi.
+    // Lista wyboru jest WSPÓLNA ze Strukturą projektu (`build-owner-options`), bo `WbsNode.owner`
+    // trzyma etykietę, nie klucz obcy.
     { key: 'owner',          label: 'Osoba odpowiedzialna', w: 260, prio: 2 },
     // „Oferent", nie „Dostawca": `LeafActual.supplierId` niesie tego, KTO DAŁ CENĘ. Dostawcą
     // stanie się dopiero wtedy, gdy przy wpisie pojawi się faktura albo WZ.
@@ -133,13 +136,20 @@ export const BRAK_WLASCICIELA = '(brak)';
 // Wartości słownikowe pozycji — dokładnie te napisy, które widać w komórce. Filtr ma
 // operować na tym, co użytkownik czyta, a nie na kodzie z bazy: `DONE` nad materiałem
 // pokazuje się jako „Zainstalowane", a nad pracą jako „Wykonane".
+// @anchor realization-new-offer-status-meta — co pokazuje kolumna „Status oferty": pozycja
+// dodana po akceptacji dostaje „Poza ofertą" zamiast statusu planu. Jedno źródło dla komórki,
+// karty, filtra i wyszukiwarki — inaczej filtr „Poza ofertą" nie znalazłby tego, co widać.
+export const offerStatusMetaOf = (node) => (node?._outOfBaseline
+    ? POZA_BASELINE_META
+    : PLAN_STATUS_META[planStatusFromAny(node?.status)]);
+
 export function filterValuesOf(node, entries) {
     return {
         type: TYPE_META[node.type]?.label || node.type || '',
         // Pusta osoba odpowiedzialna dostaje własną wartość, a nie ''. Bez niej nie dałoby się
         // wyfiltrować pozycji NICZYICH, a to one wymagają działania.
         owner: String(node.owner || '').trim() || BRAK_WLASCICIELA,
-        status: PLAN_STATUS_META[planStatusFromAny(node.status)]?.label || '',
+        status: offerStatusMetaOf(node)?.label || '',
         purchaseStatus: axisDisplay(node, 'purchase')?.label || '',
         execStatus: axisDisplay(node, 'exec')?.label || '',
         supplier: [...new Set(entries.map(e => e.supplier?.name).filter(Boolean))],
@@ -159,7 +169,7 @@ export function filterTextOf(key, node, card, r, entries) {
         price: String(planUnitOf(node, card) ?? ''),
         purchasePrice: String(r.avg ?? purchaseUnitOf(card) ?? ''),
         total: `${Math.round(planValueOf(node, card) * 100) / 100} ${r.value}`,
-        status: PLAN_STATUS_META[planStatusFromAny(node.status)]?.label || '',
+        status: offerStatusMetaOf(node)?.label || '',
         purchaseStatus: axisDisplay(node, 'purchase')?.label || '',
         execStatus: axisDisplay(node, 'exec')?.label || '',
         comment: node.comment || '',
@@ -384,7 +394,7 @@ const KARTA_DOK_MIN = 2200;
 // @anchor realization-new-tab — patrz nagłówek pliku.
 export default function RealizationNewTab({
     nodeId, versionId, orderName = '', userRoles = [], planLabel = '',
-    accepted = false, oneDriveFolderName = null,
+    accepted = false, acceptedAt = null, oneDriveFolderName = null,
 }) {
     const token = sessionStorage.getItem('token');
     const isManagerOrAdmin = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
@@ -439,6 +449,60 @@ export default function RealizationNewTab({
     // panelu, żeby zniknięcie „Komentarza" nie wyglądało na utratę danych.
     const [ukryteKolumny, setUkryteKolumny] = useState([]);
 
+    // @anchor realization-new-owner-options — dwa źródła listy osób, te same co w Strukturze
+    // projektu: konta użytkowników (`/users` — dla nie-managera zwraca wyłącznie jego samego,
+    // bez 403) i kontakty ZAMÓWIENIA (`/order-requirements/:nodeId`). Uprawnienia węzła
+    // (`/process-tree/:id/permissions`) czyta tylko manager; logistykowi wracają stamtąd 403,
+    // więc wynik jest opcjonalny i jego brak nie psuje listy — do wyboru zostają kontakty
+    // zamówienia i osoby już przypisane na pozycjach.
+    const [ownerUsers, setOwnerUsers] = useState([]);
+    const [ownerContacts, setOwnerContacts] = useState([]);
+
+    useEffect(() => {
+        if (!nodeId) { setOwnerUsers([]); setOwnerContacts([]); return; }
+        let anulowane = false;
+        const headers = { Authorization: `Bearer ${token}` };
+        const pobierz = async (url) => {
+            try {
+                const res = await fetch(url, { headers });
+                return res.ok ? await res.json() : null;
+            } catch { return null; }
+        };
+        (async () => {
+            const [users, perms, zamowienie] = await Promise.all([
+                pobierz(`${API_URL}/users`),
+                isManagerOrAdmin ? pobierz(`${API_URL}/process-tree/${nodeId}/permissions`) : Promise.resolve(null),
+                pobierz(`${API_URL}/order-requirements/${nodeId}`),
+            ]);
+            if (anulowane) return;
+            // Konta z uprawnieniami do węzła (kontakty dodane w zakładce Informacje) dochodzą
+            // do listy z `/users`; duplikaty po id odsiewamy tutaj, resztę robi `buildOwnerOptions`.
+            const zWezla = (perms?.permissions || []).filter(p => p.user && !p.teamId).map(p => p.user);
+            const wszyscy = [...(Array.isArray(users) ? users : []), ...zWezla];
+            const widziane = new Set();
+            setOwnerUsers(wszyscy.filter(u => u?.id && !widziane.has(u.id) && widziane.add(u.id)));
+            // `clientContacts` bywa stringiem JSON albo tablicą — ten sam rozbiór co w
+            // `UnifiedWbsPanel.fetchStrategy`, bo obie listy muszą składać te same etykiety.
+            let kontakty = [];
+            try {
+                const raw = typeof zamowienie?.clientContacts === 'string'
+                    ? JSON.parse(zamowienie.clientContacts || '[]')
+                    : (zamowienie?.clientContacts || []);
+                kontakty = (Array.isArray(raw) ? raw : []).map((c, i) => ({
+                    id: c?.id || `kontakt-${i}`,
+                    firstName: String(c?.name || '').trim(),
+                    lastName: '',
+                    name: String(c?.name || '').trim(),
+                    company: c?.company || '',
+                    email: c?.email || '',
+                    role: c?.role || '',
+                })).filter(c => c.name || c.email);
+            } catch { kontakty = []; }
+            setOwnerContacts(kontakty);
+        })();
+        return () => { anulowane = true; };
+    }, [nodeId, token, isManagerOrAdmin]);
+
     // ─ Pobieranie danych — te same trzy endpointy co `RealizationTab` ────────
     const fetchAll = useCallback(async () => {
         if (!nodeId) return;
@@ -452,7 +516,7 @@ export default function RealizationNewTab({
                 fetch(`${API_URL}/leaf-actuals/order/${nodeId}`, { headers }),
             ]);
             const flat = wbsRes.ok ? flattenWbsNodes((await wbsRes.json()).items || []) : [];
-            setWbsNodes(flat);
+            setWbsNodes(markOutOfBaseline(flat, acceptedAt));
             setCards(reqRes.ok ? buildCardMap(flat, await reqRes.json()) : {});
             setActuals(actRes.ok ? await actRes.json() : []);
         } catch (e) {
@@ -460,7 +524,7 @@ export default function RealizationNewTab({
         } finally {
             setLoading(false);
         }
-    }, [nodeId, versionId, token]);
+    }, [nodeId, versionId, token, acceptedAt]);
 
     useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -518,6 +582,25 @@ export default function RealizationNewTab({
         };
         window.addEventListener('wbs-comment-changed', handler);
         return () => window.removeEventListener('wbs-comment-changed', handler);
+    }, []);
+
+    // @anchor realization-new-save-owner — `WbsNode.owner` przez `PATCH /wbs-nodes/:id`. Zapis
+    // optymistyczny z cofnięciem: pole jest listą wyboru, więc nieudany zapis musi wrócić do
+    // poprzedniego nazwiska, a nie zostawić na ekranie osoby, której nie ma w bazie.
+    const saveOwner = useCallback(async (node, owner) => {
+        const previous = node.owner ?? '';
+        if (owner === previous) return;
+        setWbsNodes(prev => prev.map(n => n.id === node.id ? { ...n, owner } : n));
+        try {
+            const res = await fetch(`${API_URL}/wbs-nodes/${node.id}`, {
+                method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ owner }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch (e) {
+            console.error('[RealizationNewTab] saveOwner error:', e);
+            setWbsNodes(prev => prev.map(n => n.id === node.id ? { ...n, owner: previous } : n));
+            alert('Nie udało się zapisać osoby odpowiedzialnej');
+        }
     }, []);
 
     // @anchor realization-new-save-axis — zapis osi realizacji. COFNIĘCIE ZAKUPU COFA TEŻ
@@ -581,6 +664,7 @@ export default function RealizationNewTab({
                 model: draft.model || null,
                 ean: draft.ean || null,
                 scope: draft.scope || null,
+                isSurplus: !!draft.isSurplus,
             }),
         });
         if (!res.ok) {
@@ -657,6 +741,15 @@ export default function RealizationNewTab({
         const r = realizationOf(node, actualsOf(node));
         return { card, r, planValue: planValueOf(node, card), deltaQty: Math.round((r.qty - r.plan) * 1000) / 1000 };
     }, [cardOf, actualsOf]);
+
+    // Osoby JUŻ przypisane na pozycjach tego zamówienia wchodzą do listy jako `extras`
+    // (patrz `build-owner-options`): bez nich pozycja przypisana komuś spoza obu list —
+    // człowiekowi zdjętemu z zespołu, kontaktowi usuniętemu z zamówienia — pokazywałaby
+    // pusty dropdown nad niepustą bazą, a pierwsze kliknięcie skasowałoby nazwisko.
+    const ownerOptions = useMemo(() => {
+        const przypisani = [...new Set(wbsNodes.map(n => String(n.owner || '').trim()).filter(Boolean))];
+        return buildOwnerOptions(ownerUsers, ownerContacts, przypisani);
+    }, [ownerUsers, ownerContacts, wbsNodes]);
 
     const isUnfinished = useCallback((n) => {
         const r = realizationOf(n, actualsOf(n));
@@ -754,12 +847,23 @@ export default function RealizationNewTab({
         realization: realizationOf(node, actualsOf(node)),
     })), [visibleLeaves, cardOf, actualsOf]);
 
+    // @anchor realization-new-orphan-entries — wpisy, których pozycji NIE MA w wersji planu
+    // (pozycja dodana po akceptacji baselinu albo z niego usunięta). Tabela ich nie pokazuje,
+    // bo buduje wiersze z wersji planu, ale eksport musi je rozliczyć jako „poza ofertą" (usunięta z wyceny).
+    // Tylko przy pełnym widoku zamówienia — wpis sieroty nie należy do żadnej gałęzi ani filtra.
+    const orphanEntries = useMemo(() => {
+        if (selectedBranch !== SYNTHETIC_ROOT || onlyOpen || filtryAktywne) return [];
+        const roots = new Set(wbsNodes.map(wbsRootOf));
+        return actuals.filter(e => !roots.has(e.wbsRootId));
+    }, [actuals, wbsNodes, selectedBranch, onlyOpen, filtryAktywne]);
+
     const exportExcel = async () => {
         if (exporting || !exportRows.length) return;
         setExporting(true);
         try {
             await eksportRealizacjiXlsx({
                 rows: exportRows,
+                orphanEntries,
                 visibleTypes,
                 orderName,
                 accepted,
@@ -996,6 +1100,7 @@ export default function RealizationNewTab({
                             onFilterChange={(key, val) => setColFilters(prev => ({ ...prev, [key]: val }))}
                             onClearFilters={() => setColFilters({})}
                             onSaveAxis={saveAxis} onSaveComment={saveComment}
+                            onSaveOwner={saveOwner} ownerOptions={ownerOptions}
                             onAddActual={addActual} onUpdateActual={updateActual} onDeleteActual={deleteActual}
                             onColsChange={zglosUkryteKolumny}
                         />
@@ -1145,7 +1250,7 @@ function BranchTree({ idx, rootId, level, selected, onSelect, cardOf, actualsOf,
 function PositionsTable({
     leaves, rowOf, actualsOf, expanded, onToggleExpanded, selected, onSelect,
     readOnly, filters = {}, filterOptions = {}, onFilterChange, onClearFilters,
-    onSaveAxis, onSaveComment, onAddActual, onUpdateActual, onDeleteActual, onColsChange,
+    onSaveAxis, onSaveComment, onSaveOwner, ownerOptions = [], onAddActual, onUpdateActual, onDeleteActual, onColsChange,
 }) {
     // Tabela ma `w-full`, więc jej własna szerokość JEST szerokością panelu — mierzymy ją
     // zamiast okna, bo ta sama szerokość okna daje inny panel przy karcie zadokowanej i
@@ -1251,7 +1356,8 @@ function PositionsTable({
                                         className={`px-2 py-1.5 ${tdOpen} ${c.right ? 'text-right tabular-nums' : ''} ${
                                             open && i === cols.length - 1 ? 'border-r border-r-teal-300/45' : ''}`}>
                                         <Cell colKey={c.key} node={node} card={card} r={r} planValue={planValue} deltaQty={deltaQty}
-                                            readOnly={readOnly} onSaveAxis={onSaveAxis} onSaveComment={onSaveComment} />
+                                            readOnly={readOnly} onSaveAxis={onSaveAxis} onSaveComment={onSaveComment}
+                                            onSaveOwner={onSaveOwner} ownerOptions={ownerOptions} />
                                     </td>
                                 ))}
                             </tr>
@@ -1280,6 +1386,7 @@ function PositionsTable({
                                 <>
                                     <div className="font-semibold text-orange-400">{fmtZl(sumPlan)}</div>
                                     <div className="font-semibold text-red-400">{fmtZl(sumReal)}</div>
+                                    <DeltaLine value={sumReal - sumPlan} />
                                 </>
                             )}
                         </td>
@@ -1290,8 +1397,21 @@ function PositionsTable({
     );
 }
 
+// @anchor realization-new-delta-line — Δ (zakup − wycena) pod dwiema kwotami kolumny
+// „Koszt całkowity", jak w zakładce „Realizacja": kolor wg znaku, bo niesie kierunek
+// (oszczędność vs przekroczenie), a nie stronę. Pozycja bez zakupów Δ nie dostaje —
+// minus cała wycena czytałby się jak oszczędność.
+function DeltaLine({ value }) {
+    const d = round2(value);
+    return (
+        <div className={`whitespace-nowrap font-bold ${d > 0.005 ? 'text-red-300' : d < -0.005 ? 'text-teal-300' : 'text-gray-500'}`}>
+            Δ {d > 0 ? '+' : ''}{fmtZl(d)}
+        </div>
+    );
+}
+
 // @anchor realization-new-cell — jedna komórka wiersza pozycji.
-function Cell({ colKey, node, card, r, planValue, deltaQty, readOnly, onSaveAxis, onSaveComment }) {
+function Cell({ colKey, node, card, r, planValue, deltaQty, readOnly, onSaveAxis, onSaveComment, onSaveOwner, ownerOptions = [] }) {
     const t = TYPE_META[node.type];
     const state = REAL_STATE[r.state];
 
@@ -1305,12 +1425,8 @@ function Cell({ colKey, node, card, r, planValue, deltaQty, readOnly, onSaveAxis
         // Osoba odpowiedzialna jest ETYKIETĄ z listy wyboru („Firma - Imię Nazwisko"), nie
         // kluczem obcym — pokazujemy ją w całości, a dymek niesie pełną treść, gdy kolumna
         // przytnie długie nazwisko z firmą.
-        case 'owner': {
-            const kto = String(node.owner || '').trim();
-            return kto
-                ? <span className="line-clamp-2 text-[length:var(--rn-md)] leading-snug text-gray-300" title={kto}>{kto}</span>
-                : <span className="text-[length:var(--rn-md)] text-gray-600" title="Pozycja bez osoby odpowiedzialnej — przypisuje się ją w Strukturze projektu">{BRAK_WLASCICIELA}</span>;
-        }
+        case 'owner':
+            return <OwnerCell node={node} readOnly={readOnly} options={ownerOptions} onSave={onSaveOwner} />;
         case 'supplier': {
             const names = [...new Set(r.entries.map(e => e.supplier?.name).filter(Boolean))];
             return <span className="text-[length:var(--rn-md)] text-gray-400">{names.length ? names.join(', ') : '—'}</span>;
@@ -1351,11 +1467,13 @@ function Cell({ colKey, node, card, r, planValue, deltaQty, readOnly, onSaveAxis
                 <>
                     <div className="text-orange-400">{fmtZl(planValue)}</div>
                     <div className="text-red-400">{fmtZl(r.value)}</div>
+                    {(r.qty > 0 || node.realizationClosed) && <DeltaLine value={r.value - planValue} />}
                 </>
             );
         case 'status': {
-            const code = planStatusFromAny(node.status);
-            return <Badge label={PLAN_STATUS_META[code]?.label} color={PLAN_STATUS_META[code]?.color} size={FIELD_FONT} />;
+            const meta = offerStatusMetaOf(node);
+            return <Badge label={meta?.label} color={meta?.color} size={FIELD_FONT}
+                title={node._outOfBaseline ? 'Pozycja dodana po akceptacji oferty — wycena 0, cały koszt to odchylenie' : undefined} />;
         }
         case 'purchaseStatus':
         case 'execStatus':
@@ -1400,6 +1518,40 @@ function AxisSelect({ node, axis, readOnly, onSave }) {
     );
 }
 
+// @anchor realization-new-owner-cell — `WbsNode.owner` jako lista wyboru w tabeli pozycji.
+// Zapis natychmiastowy (to jeden klik, nie pisanie), bez stanu lokalnego: wartość idzie wprost
+// z węzła, a `saveOwner` zmienia ją optymistycznie w tabeli.
+//
+// Dwie rzeczy celowo NIE są tu powtórzone ze Struktury projektu: reguła `nodeCanHaveOwner`
+// (tabela pokazuje wyłącznie pozycje, gałęzi w niej nie ma) i budowanie listy opcji
+// (`build-owner-options` jest wspólne). Pusty wybór zapisuje pusty string, czyli zdejmuje
+// osobę — tak samo jak opcja „—" w Strukturze projektu.
+function OwnerCell({ node, readOnly, options = [], onSave }) {
+    const kto = String(node.owner || '').trim();
+    if (readOnly || !onSave) {
+        return kto
+            ? <span className="line-clamp-2 text-[length:var(--rn-md)] leading-snug text-gray-300" title={kto}>{kto}</span>
+            : <span className="text-[length:var(--rn-md)] text-gray-600" title="Pozycja bez osoby odpowiedzialnej">{BRAK_WLASCICIELA}</span>;
+    }
+    return (
+        <select
+            value={kto}
+            onClick={e => e.stopPropagation()}
+            onChange={e => onSave(node, e.target.value)}
+            title={kto || 'Osoba odpowiedzialna za pozycję'}
+            className={`w-full min-w-0 cursor-pointer rounded border border-white/10 bg-black/40 px-1.5 py-0.5 text-[length:var(--rn-md)] leading-snug outline-none transition-colors hover:bg-white/5 focus:border-teal-500/50 ${
+                kto ? 'text-gray-300' : 'text-gray-600'}`}
+        >
+            <option value="" className="bg-gray-900 text-white">{BRAK_WLASCICIELA}</option>
+            {options.map((o, i) => (
+                o.separator
+                    ? <option key={`sep-${i}`} disabled className="bg-gray-900">──────────</option>
+                    : <option key={o.value} value={o.value} className="bg-gray-900 text-white">{o.label}</option>
+            ))}
+        </select>
+    );
+}
+
 // @anchor realization-new-comment-cell — `WbsNode.comment` edytowalny w miejscu, zapis na blur
 // i tylko gdy treść faktycznie się zmieniła. Stan lokalny, żeby pisanie nie przechodziło przez
 // zapis przy każdym znaku; `useEffect` przyjmuje zmianę, która przyszła z innego widoku.
@@ -1431,17 +1583,25 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, o
     const withCard = TYPE_META[node.type]?.hasCard;
     const [adding, setAdding] = useState(false);
     const delta = round2(r.value - planValue);
+    // @anchor realization-new-surplus-split — podział wpisów na zakupy w ofercie i nadmiarowe
+    // (`LeafActual.isSurplus`). Wycenę pokrywają WYŁĄCZNIE wpisy bez znacznika: ich ilość ponad
+    // plan to sygnał, że któryś zakup trzeba oznaczyć jako nadmiarowy.
+    const nadmiar = r.entries.filter(e => e.isSurplus);
+    const qtyNadmiar = Math.round(nadmiar.reduce((s, e) => s + (Number(e.qty) || 0), 0) * 1000) / 1000;
+    const valNadmiar = round2(nadmiar.reduce((s, e) => s + (Number(e.qty) || 0) * (Number(e.unitCost) || 0), 0));
+    const qtyWOfercie = Math.round((r.qty - qtyNadmiar) * 1000) / 1000;
+    const przekroczenie = Math.round((qtyWOfercie - r.plan) * 1000) / 1000;
     // Domyślna ilość nowego wpisu = ile brakuje do planu. Koszt jedn. zostaje PUSTY świadomie:
     // podpowiedziana cena zapisywała się kwotą, której nikt nie przeczytał, a to rozliczenie.
-    const brakujaco = Math.round(Math.max(0, r.plan - r.qty) * 1000) / 1000;
+    const brakujaco = Math.round(Math.max(0, r.plan - qtyWOfercie) * 1000) / 1000;
 
     const BASE = withCard
         ? [['entryDate', 'Data', 160], ['docNumber', 'Dokument', 150], ['supplier', 'Oferent', 260],
            ['manufacturer', 'Producent', 200], ['model', 'Model', 200], ['ean', 'EAN', 190],
-           ['qty', 'Ilość', 90, 1], ['unitCost', 'Koszt jedn.', 150, 1], ['wartosc', 'Wartość', 130, 1], ['comment', 'Komentarz', 420]]
+           ['qty', 'Ilość', 90, 1], ['unitCost', 'Koszt jedn.', 150, 1], ['wartosc', 'Wartość', 130, 1], ['surplus', 'Rozliczenie', 140], ['comment', 'Komentarz', 420]]
         : [['entryDate', 'Data', 160], ['docNumber', 'Dokument', 150], ['supplier', 'Oferent', 260],
            ['scope', 'Zakres', 320],
-           ['qty', 'Ilość', 90, 1], ['unitCost', 'Koszt jedn.', 150, 1], ['wartosc', 'Wartość', 130, 1], ['comment', 'Komentarz', 420]];
+           ['qty', 'Ilość', 90, 1], ['unitCost', 'Koszt jedn.', 150, 1], ['wartosc', 'Wartość', 130, 1], ['surplus', 'Rozliczenie', 140], ['comment', 'Komentarz', 420]];
     const COLS = readOnly ? BASE : [...BASE, ['akcje', '', 100, 1]];
     // Szerokości szuflady liczone tak samo jak w tabeli pozycji — jako procent sumy, żeby
     // `table-fixed` nie rozepchnął jej do sumy pikseli i nie przywrócił poziomego suwaka.
@@ -1453,6 +1613,18 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, o
             <span className={`${DRAWER.cardTitle} ${DRAWER.accent.real.title} text-[length:var(--rn-lg)]`}>
                 {withCard ? 'Zakupy zrealizowane' : 'Wykonanie zrealizowane'}
             </span>
+            {przekroczenie > 1e-9 && (
+                <span className="rounded border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[length:var(--rn-md)] text-amber-300"
+                    title="Wpisy bez znacznika „nadmiarowy” przekraczają ilość z wyceny">
+                    przekroczono wycenę o {fmtQty(przekroczenie)} {node.unit || 'szt'} — oznacz nadmiarowe
+                </span>
+            )}
+            {qtyNadmiar > 0 && (
+                <span className="rounded border border-red-400/40 bg-red-500/10 px-2 py-0.5 text-[length:var(--rn-md)] text-red-300"
+                    title="Zakupy ponad ilość z wyceny — bez wartości ofertowej, w całości powiększają koszt">
+                    nadmiarowe +{fmtQty(qtyNadmiar)} {node.unit || 'szt'} · +{fmtZl(valNadmiar)} zł
+                </span>
+            )}
             {!readOnly && (
                 <button
                     onClick={(e) => { e.stopPropagation(); setAdding(v => !v); }}
@@ -1512,6 +1684,7 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, o
                         ))}
                         {adding && (
                             <EntryForm node={node} cols={COLS} withCard={withCard} defaultQty={brakujaco || 1}
+                                defaultSurplus={r.plan > 0 && brakujaco === 0}
                                 onAdd={onAdd} onClose={() => setAdding(false)} />
                         )}
                     </tbody>
@@ -1522,7 +1695,7 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, o
                                 <td className="border-t border-teal-300/35 px-2 py-1.5 text-right tabular-nums text-gray-200">{fmtQty(r.qty)}</td>
                                 <td className="border-t border-teal-300/35 px-2 py-1.5 text-right tabular-nums text-gray-500">śr. {fmtZl(r.avg)}</td>
                                 <td className="border-t border-teal-300/35 px-2 py-1.5 text-right font-semibold tabular-nums text-red-400">{fmtZl(r.value)}</td>
-                                <td className="border-t border-teal-300/35 px-2 py-1.5 text-gray-500">
+                                <td colSpan={2} className="border-t border-teal-300/35 px-2 py-1.5 text-gray-500">
                                     wycena {fmtZl(planValue)} zł · <span className={delta <= 0 ? 'text-emerald-300' : 'text-red-300'}>
                                         {delta > 0 ? '+' : ''}{fmtZl(delta)} zł</span>
                                 </td>
@@ -1552,6 +1725,23 @@ function entryField({ k, value, onChange, onBlur, onKeyDown, disabled, extra = '
         return <AutoResizeTextarea {...wspolne} style={{ minHeight: FIELD_H }} className={`${wspolne.className} align-top`} />;
     }
     return <input {...wspolne} style={{ height: FIELD_H }} title={NUMERIC_ENTRY_FIELDS.has(k) ? FORMULA_HINT : undefined} />;
+}
+
+// @anchor realization-new-surplus-toggle — znacznik „nadmiarowy" wpisu (`LeafActual.isSurplus`).
+// Przełącznik, nie checkbox w tle: czerwony stan ma być widoczny z daleka, bo taki wpis
+// w całości powiększa koszt pozycji.
+function SurplusToggle({ on, readOnly = false, onChange }) {
+    if (readOnly) return on ? <span className="text-red-300">nadmiarowy</span> : <span className="text-gray-600">w ofercie</span>;
+    return (
+        <button type="button" onClick={e => { e.stopPropagation(); onChange(!on); }}
+            title={on ? 'Zakup ponad ilość z wyceny — kliknij, aby wrócić do oferty' : 'Oznacz zakup jako nadmiarowy (ponad ilość z wyceny)'}
+            style={{ height: FIELD_H }}
+            className={`inline-flex items-center gap-1.5 rounded border px-2 text-[length:var(--rn-md)] transition-colors ${
+                on ? 'border-red-400/50 bg-red-500/15 text-red-300' : 'border-white/10 text-gray-500 hover:text-gray-300'}`}>
+            <span className={`inline-block h-3 w-3 rounded-sm border ${on ? 'border-red-300 bg-red-400' : 'border-gray-500'}`} />
+            nadmiarowy
+        </button>
+    );
 }
 
 // @anchor realization-new-entry-row — zapisany wpis `LeafActual` jako wiersz szuflady,
@@ -1603,6 +1793,8 @@ function EntryRow({ entry, cols, readOnly, onSave, onDelete }) {
             case 'qty':          return pole('qty', 'text-right font-mono', { label: 'Ilość wpisu', sanitize: true });
             case 'unitCost':     return pole('unitCost', 'text-right font-mono', { label: 'Koszt jednostkowy', sanitize: true });
             case 'wartosc':      return <span className="text-red-400">{fmtZl(wartosc)}</span>;
+            case 'surplus':      return <SurplusToggle on={!!entry.isSurplus} readOnly={readOnly}
+                                     onChange={v => onSave(entry.id, { isSurplus: v })} />;
             case 'comment':      return (
                 <>
                     {pole('comment', '', { placeholder: 'komentarz — co zrobione', label: 'Komentarz wpisu' })}
@@ -1620,7 +1812,7 @@ function EntryRow({ entry, cols, readOnly, onSave, onDelete }) {
     };
 
     return (
-        <tr className="group/entry hover:bg-white/[.02]">
+        <tr className={`group/entry ${entry.isSurplus ? 'bg-red-500/[.07] hover:bg-red-500/[.1]' : 'hover:bg-white/[.02]'}`}>
             {cols.map(c => (
                 <td key={c[0]} className={`border-b border-white/[.04] px-2 py-1 align-top ${c[3] ? 'text-right tabular-nums' : ''}`}>
                     {cellOf(c[0])}
@@ -1634,7 +1826,7 @@ function EntryRow({ entry, cols, readOnly, onSave, onDelete }) {
 // Wymagane pola są te same co w zakładce „Realizacja": ilość, koszt jedn. oraz producent
 // i model (materiał, sprzęt) albo zakres (praca, usługa, nocleg, paliwo) — inaczej jedna
 // tabela wpuszczałaby dane, których druga by nie przyjęła.
-function EntryForm({ node, cols, withCard, defaultQty, onAdd, onClose }) {
+function EntryForm({ node, cols, withCard, defaultQty, defaultSurplus = false, onAdd, onClose }) {
     const dzis = new Date().toISOString().slice(0, 10);
     const [draft, setDraft] = useState(() => ({
         entryDate: dzis,
@@ -1642,6 +1834,8 @@ function EntryForm({ node, cols, withCard, defaultQty, onAdd, onClose }) {
         unitCost: '',
         comment: '', docNumber: '', supplierId: null,
         manufacturer: '', model: '', ean: '', scope: '',
+        // Plan już pokryty zakupami w ofercie — kolejny wpis z definicji idzie ponad wycenę.
+        isSurplus: defaultSurplus,
     }));
     const [brak, setBrak] = useState([]);
     const [zapisuje, setZapisuje] = useState(false);
@@ -1709,6 +1903,7 @@ function EntryForm({ node, cols, withCard, defaultQty, onAdd, onClose }) {
             case 'qty':          return pole('qty', 'text-right font-mono', { label: 'Ilość wpisu', sanitize: true });
             case 'unitCost':     return pole('unitCost', 'text-right font-mono', { label: 'Koszt jednostkowy', sanitize: true });
             case 'wartosc':      return <span className="text-red-400">{fmtZl(wartosc)}</span>;
+            case 'surplus':      return <SurplusToggle on={draft.isSurplus} onChange={v => set('isSurplus', v)} />;
             case 'comment':      return pole('comment', '', { placeholder: 'komentarz — co zrobione', label: 'Komentarz wpisu' });
             case 'akcje':        return (
                 <button onClick={submit} disabled={zapisuje} title="Zapisz wpis realizacji"
@@ -1881,8 +2076,7 @@ function LeafCard({ node, card, r, planValue, readOnly, token, onRefreshCard, on
                 <SectionTitle>Statusy</SectionTitle>
                 <div className="space-y-1.5">
                     <AxisRow label="Oferta"
-                        badge={<Badge label={PLAN_STATUS_META[planStatusFromAny(node.status)]?.label}
-                            color={PLAN_STATUS_META[planStatusFromAny(node.status)]?.color} />}
+                        badge={<Badge label={offerStatusMetaOf(node)?.label} color={offerStatusMetaOf(node)?.color} />}
                         field="kolumna „Status oferty”" />
                     {hasPurchaseAxis(node.type) && <AxisRow label="Zakup" badge={<AxisBadge node={node} axis="purchase" />} field="kolumna „Status zakupu”" />}
                     {hasExecAxis(node.type) && <AxisRow label="Wykonanie" badge={<AxisBadge node={node} axis="exec" />} field="kolumna „Status wykonania”" />}

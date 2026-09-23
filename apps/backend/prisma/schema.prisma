@@ -753,6 +753,11 @@ model Material {
   productUrl     String?
   /// @anchor material-seller
   seller         String?
+  /// @anchor material-ean
+  /// Kod EAN produktu katalogowego — raz wpisany w karcie produktu wraca przy kazdym kolejnym
+  /// uzyciu tej samej pary producent+model. Bez UNIQUE: ten sam kod wpisuje kilku ludzi
+  /// z faktur i etykiet, a kolizja blokowalaby zapis pozycji zamiast poprawiac dane.
+  ean            String?
   /// @anchor material-data-sheet-document-id
   dataSheetDocumentId String?
   /// @anchor material-compliance-document-id
@@ -857,6 +862,14 @@ model MaterialRequirement {
   // Dostępność / czas dostawy (transient — nie w katalogu materials)
   /// @anchor mat-req-availability
   availability String? // dostępność wpisana w ProductCard (czas dostawy / stan)
+
+  /// @anchor mat-req-ean
+  /// Kod EAN produktu TEJ pozycji — ten sam kod, ktory realizacja zapisuje na wpisie zakupu
+  /// (`LeafActual.ean`), tylko podany z gory, w karcie produktu. Trzymany na wymaganiu
+  /// (a nie wylacznie w katalogu), bo dziala zanim pozycja dostanie produkt katalogowy —
+  /// ta sama zasada co `availability`. Kod schodzi tez na `Material.ean`, gdy karta ma
+  /// juz produkt; odczyt woli kod pozycji, katalogowy jest fallbackiem.
+  ean String?
 
   // Oferent produktu pozycji — KTO NAM GO ZAOFERTOWAŁ. Nie przesądza, u kogo kupimy:
   // zakup zapisuje własnego dostawcę na wpisie realizacji (LeafActual.supplierId) i te dwa
@@ -1304,6 +1317,12 @@ model LeafActual {
   /// producent + model: przy robociźnie nie ma czego rozbijać, liczy się „co zrobiono".
   /// Wypełniane wyłącznie dla typów innych niż materiał i sprzęt; wchodzi do wyszukiwarki.
   scope        String?
+  /// @anchor leaf-actual-is-surplus
+  /// Zakup NADMIAROWY — ponad ilość z wyceny, oznaczany ręcznie w karcie pozycji. Nie da się
+  /// tego wyliczyć z dat ani kolejności wpisów: który egzemplarz jest „ponad plan", wie tylko
+  /// kupujący. Wpis nadmiarowy nie ma wartości ofertowej — w eksporcie cały jego koszt idzie
+  /// jako odchylenie, zamiast udawać oszczędność na cenie jednostkowej.
+  isSurplus    Boolean @default(false)
   /// @anchor leaf-actual-supplier-id
   supplierId String?
   /// @anchor leaf-actual-author-id

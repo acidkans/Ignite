@@ -246,7 +246,7 @@ export class MaterialRequirementsService {
                 // dociągać rejestr dostawców tylko po to, żeby zamienić UUID na nazwę.
                 supplier: { select: { id: true, name: true } },
                 assignedSubtask: { select: { id: true, name: true } },
-                material: { select: { id: true, productName: true, manufacturer: true, model: true, dataSheetUrl: true, dataSheetName: true, complianceUrl: true, imageUrl: true, priceNetto: true, productUrl: true, seller: true } },
+                material: { select: { id: true, productName: true, manufacturer: true, model: true, dataSheetUrl: true, dataSheetName: true, complianceUrl: true, imageUrl: true, priceNetto: true, productUrl: true, seller: true, ean: true } },
             },
             orderBy: { createdAt: 'asc' },
         });
@@ -269,6 +269,11 @@ export class MaterialRequirementsService {
             priceNetto: item.budgetedPriceNetto ?? null,
             productUrl: item.material?.productUrl ?? null,
             seller: item.material?.seller ?? null,
+            // @anchor mat-req-ean-read — kod EAN POZYCJI wygrywa nad katalogowym. Odwrotnie niż
+            // producent i model (te opisują produkt z katalogu): EAN bywa podany na pozycji,
+            // zanim jakikolwiek produkt katalogowy zostanie do niej przypięty, i to ten kod
+            // widział człowiek, który go wpisał.
+            ean: item.ean ?? item.material?.ean ?? null,
         }));
     }
 
@@ -375,7 +380,7 @@ export class MaterialRequirementsService {
                 proposals: { include: { supplier: true } },
                 supplier: { select: { id: true, name: true } },
                 assignedSubtask: { select: { id: true, name: true } },
-                material: { select: { id: true, productName: true, manufacturer: true, model: true, dataSheetUrl: true, dataSheetName: true, complianceUrl: true, complianceName: true, imageUrl: true, priceNetto: true, productUrl: true, seller: true } },
+                material: { select: { id: true, productName: true, manufacturer: true, model: true, dataSheetUrl: true, dataSheetName: true, complianceUrl: true, complianceName: true, imageUrl: true, priceNetto: true, productUrl: true, seller: true, ean: true } },
             },
         });
         if (!item) throw new NotFoundException(`MaterialRequirement ${id} not found`);
@@ -394,6 +399,8 @@ export class MaterialRequirementsService {
             priceNetto: item.budgetedPriceNetto ?? null,
             productUrl: item.material?.productUrl ?? null,
             seller: item.material?.seller ?? null,
+            // Ta sama kolejność co w `mat-req-ean-read`: kod pozycji przed katalogowym.
+            ean: item.ean ?? item.material?.ean ?? null,
             availability: item.proposals?.find((p: any) => p.isSelected)?.availability ?? item.availability ?? null,
             stockStatus: null as number | null,
         };
@@ -546,6 +553,9 @@ export class MaterialRequirementsService {
         offerNumber?: string | null; productUrl?: string | null; stockStatus?: number | null;
         dataSheetUrl?: string | null; dataSheetName?: string | null;
         complianceUrl?: string | null; complianceName?: string | null; availability?: string | null;
+        // Kod EAN zapisuje się NA POZYCJI (kolumna `material_requirements.ean`) i dodatkowo
+        // schodzi do katalogu, gdy karta ma już produkt — patrz `mat-req-ean-write`.
+        ean?: string | null;
     }>, user?: { userId?: string; roles?: string[] }) {
         await this.findOne(id);
 
@@ -592,6 +602,12 @@ export class MaterialRequirementsService {
         // Zapisz availability bezpośrednio na wymaganiu (niezależnie od propozycji)
         if (availability !== undefined) data.availability = availability;
         if (priceNetto !== undefined) data.budgetedPriceNetto = priceNetto;
+        // @anchor mat-req-ean-write — EAN leci do kolumny wymagania razem z `rest` (nie jest
+        // z niej wycinany), a poniżej schodzi JESZCZE do katalogu. Dwa zapisy, nie jeden:
+        // pozycja ma mieć kod także bez produktu katalogowego, a katalog ma go zapamiętać,
+        // żeby przy następnym użyciu tej samej pary producent+model nie trzeba go było
+        // przepisywać z etykiety.
+        const eanPatch = (dto as any).ean;
 
         // Krok 7b: gdy manufacturer I model są podane → auto-upsert Material + twórz wybraną propozycję
         if (manufacturer && model) {
@@ -606,6 +622,7 @@ export class MaterialRequirementsService {
                         ...(pn ? { productName: pn } : {}),
                         ...(seller ? { seller } : {}),
                         ...(productUrl ? { productUrl } : {}),
+                        ...(eanPatch ? { ean: eanPatch } : {}),
                         ...(dataSheetUrl ? { dataSheetUrl, dataSheetName: dataSheetName ?? null } : {}),
                     },
                 })
@@ -614,6 +631,7 @@ export class MaterialRequirementsService {
                         manufacturer: mfr, model: mdl, productName: pn, type: DEFAULT_CATALOG_TYPE,
                         ...(seller ? { seller } : {}),
                         ...(productUrl ? { productUrl } : {}),
+                        ...(eanPatch ? { ean: eanPatch } : {}),
                         ...(dataSheetUrl ? { dataSheetUrl, dataSheetName: dataSheetName ?? null } : {}),
                     },
                 });
@@ -634,6 +652,16 @@ export class MaterialRequirementsService {
                     where: { id: existingProp.id },
                     data: { isSelected: true, isManual: true, ...(pn ? { productName: pn } : {}), ...(priceNetto != null ? { priceNetto } : {}) },
                 });
+                // @anchor mat-req-pick-supplier-up — propozycja wybrana TĄ drogą (wpisanie
+                // producenta i modelu w karcie) oddaje karcie swojego oferenta, dokładnie jak
+                // `selectProposal`. Bez tego oferent wpisany przy ręcznej propozycji zostawał
+                // na niej, a pole „Oferent produktu" w karcie pokazywało pustkę — ta sama
+                // propozycja, dwa różne oferenty, zależnie od tego, którym kliknięciem została
+                // wybrana. Oferent podany WPROST w tym samym PATCH-u wygrywa, a propozycja bez
+                // oferenta nie kasuje tego, co karta już ma.
+                if (data.supplierId === undefined && existingProp.supplierId) {
+                    data.supplierId = existingProp.supplierId;
+                }
             } else {
                 // @anchor mat-req-proposal-name-fallback — `ProductProposal.productName` jest w
                 // schemacie WYMAGANE, a naturalna droga wpisywania w ProductCard to producent →
@@ -657,6 +685,10 @@ export class MaterialRequirementsService {
         } else {
             // Brak manufacturer+model — forward pól katalogowych do wybranej propozycji i materiału
             const catalogPatch: any = {};
+            // `ProductProposal` nie ma kolumny `ean` — kod nie schodzi na propozycję, ale musi
+            // otworzyć tę gałąź, żeby trafił do `Material` poniżej. Stąd osobna flaga zamiast
+            // wpisu w `catalogPatch`.
+            const syncEan = eanPatch !== undefined;
             if (productName !== undefined) catalogPatch.productName = productName;
             if (seller     !== undefined) catalogPatch.seller      = seller;
             if (offerNumber!== undefined) catalogPatch.offerNumber = offerNumber;
@@ -666,11 +698,13 @@ export class MaterialRequirementsService {
             if (dataSheetUrl !== undefined) { catalogPatch.dataSheetUrl = dataSheetUrl; catalogPatch.dataSheetName = dataSheetName ?? null; }
             if (complianceUrl !== undefined) { catalogPatch.complianceUrl = complianceUrl; catalogPatch.complianceName = complianceName ?? null; }
 
-            if (Object.keys(catalogPatch).length > 0) {
-                await this.prisma.productProposal.updateMany({
-                    where: { materialRequirementId: id, isSelected: true },
-                    data: catalogPatch,
-                });
+            if (Object.keys(catalogPatch).length > 0 || syncEan) {
+                if (Object.keys(catalogPatch).length > 0) {
+                    await this.prisma.productProposal.updateMany({
+                        where: { materialRequirementId: id, isSelected: true },
+                        data: catalogPatch,
+                    });
+                }
                 // Sync do materiału (pola które materiał ma)
                 const req = await this.prisma.materialRequirement.findUnique({ where: { id }, select: { materialId: true } });
                 if (req?.materialId) {
@@ -678,6 +712,7 @@ export class MaterialRequirementsService {
                     if (productName !== undefined) matPatch.productName = productName;
                     if (seller      !== undefined) matPatch.seller      = seller;
                     if (productUrl  !== undefined) matPatch.productUrl  = productUrl;
+                    if (eanPatch    !== undefined) matPatch.ean         = eanPatch;
                     if (dataSheetUrl !== undefined) { matPatch.dataSheetUrl = dataSheetUrl; matPatch.dataSheetName = dataSheetName ?? null; }
                     if (complianceUrl !== undefined) { matPatch.complianceUrl = complianceUrl; matPatch.complianceName = complianceName ?? null; }
                     if (Object.keys(matPatch).length > 0) {

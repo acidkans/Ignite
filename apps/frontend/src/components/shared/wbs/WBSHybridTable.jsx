@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, contactOwnerLabel, defaultLogisticianOwner, isRejectedPlanNode } from './wbsConstants';
+import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, buildOwnerOptions, defaultLogisticianOwner, isRejectedPlanNode } from './wbsConstants';
 import AutoResizeTextarea from './AutoResizeTextarea';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
@@ -2185,20 +2185,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             onKeyDown={e => handleGridKeyDown(e, node.id, 'wlasciciel')}
                         >
                             <option value="" className="bg-gray-900">—</option>
-                            {users.length > 0 && users.map(u => {
-                                const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email;
-                                const label = u.company ? `${u.company} — ${name}` : name;
-                                return <option key={u.id} value={label} className="bg-gray-900">{label}</option>;
-                            })}
-                            {projectContacts.length > 0 && users.length > 0 && <option disabled className="bg-gray-900">──────────</option>}
-                            {projectContacts.length > 0 && projectContacts.map(c => {
-                                const fullName = [c.firstName, c.lastName].filter(Boolean).join(' ') || c.name || c.email;
-                                const label = contactOwnerLabel(c);
-                                if (!label) return null;
-                                const alreadyInUsers = users.some(u => ([u.firstName, u.lastName].filter(Boolean).join(' ') || u.email) === fullName);
-                                if (alreadyInUsers) return null;
-                                return <option key={c.id} value={label} className="bg-gray-900">{c.role ? `${label} (${c.role})` : label}</option>;
-                            })}
+                            {/* Lista opcji pochodzi z `build-owner-options` — tej samej, z której
+                                korzysta karta pozycji w Realizacji. Dwie kopie tej arytmetyki
+                                znaczyłyby dwie różne etykiety tej samej osoby w bazie. */}
+                            {buildOwnerOptions(users, projectContacts, [node.owner]).map((o, i) => (
+                                o.separator
+                                    ? <option key={`sep-${i}`} disabled className="bg-gray-900">──────────</option>
+                                    : <option key={o.value} value={o.value} className="bg-gray-900">{o.label}</option>
+                            ))}
                         </select>
                     ) : (
                         <input type="text" value={node.owner || ''} onChange={e => handleField(node.id, 'owner', e.target.value)} onBlur={e => onNodeFieldSave?.(node.id, 'owner', e.target.value)}

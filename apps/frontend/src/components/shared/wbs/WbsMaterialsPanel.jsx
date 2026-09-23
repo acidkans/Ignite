@@ -378,7 +378,18 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
         // Wybór propozycji ustawia `isOffer` i przepisuje cenę wyceny — to nośnik wartości
         // ofertowej, więc po akceptacji baseline idzie przez modal OfferLockGuard.
         if (offerLocked && !(await guardOfferEdit())) return;
-        await fetch(`${API_URL}/material-requirements/proposals/${p.id}/select`, { method: 'PATCH', headers });
+        const res = await fetch(`${API_URL}/material-requirements/proposals/${p.id}/select`, { method: 'PATCH', headers });
+        // @anchor proposal-select-rejected — odmowa backendu MUSI zatrzymać optymistyczny zapis.
+        // Wcześniej odpowiedź szła do kosza: przy zamówieniu z zaakceptowanym baseline (403
+        // z `assertOfferEditable`) propozycja dostawała zielony znacznik „wybrana", choć w bazie
+        // nic się nie zmieniło — ani produkt karty, ani cena, ani oferent. Wyglądało to jak błąd
+        // przenoszenia oferenta, a było cichym odrzuceniem całej operacji.
+        if (!res.ok) {
+            const tresc = await res.json().catch(() => null);
+            alert(tresc?.message || 'Nie udało się wybrać produktu.');
+            onRefresh();
+            return;
+        }
         // Optimistic: zaznacz checkmark natychmiast i zaktualizuj cenę w rodzicu
         setProposals(prev => prev.map(x => ({ ...x, isSelected: x.id === p.id })));
         if (p.priceNetto != null) {
@@ -617,6 +628,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
         technicalSpec: card?.technicalSpec || '',
         priceNetto: card?.priceNetto ? String(card.priceNetto) : '',
         productUrl: card?.productUrl || '',
+        ean: card?.ean || '',
     });
     const [comboOpen, setComboOpen] = useState(null);
     const [priceWarn, setPriceWarn] = useState(false);
@@ -702,6 +714,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
             technicalSpec: card?.technicalSpec || '',
             priceNetto: card?.priceNetto ? String(card.priceNetto) : '',
             productUrl: card?.productUrl || '',
+            ean: card?.ean || '',
         });
     // Zresetuj formularz przy zmianie karty (nowe id) LUB gdy materialId się zmieni
     // (kliknięcie "Wybierz" na propozycji — pola producent/model/produktName powinny się zaktualizować).
@@ -961,7 +974,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                             const comboKeys = comboFields.map(([k]) => k);
                                             const nextKey = comboKeys[comboKeys.indexOf(key) + 1];
                                             if (nextKey) comboRefs.current[nextKey]?.focus();
-                                            else comboRefs.current['priceNetto']?.focus();
+                                            else comboRefs.current['ean']?.focus();
                                         }
                                     }}
                                     disabled={readOnly}
@@ -981,6 +994,23 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                             </div>
                         );
                     })}
+                    {/* @anchor product-card-ean — kod EAN produktu w karcie. Ten sam kod, ktory
+                        realizacja zapisuje na wpisie zakupu (`LeafActual.ean`) — do tej pory dalo
+                        sie go podac dopiero PO dostawie, wiec zamawiajacy nie mial gdzie zapisac
+                        kodu produktu, ktory ma byc kupiony. Stoi za modelem, bo z nim razem
+                        identyfikuje produkt; `font-mono`, bo to 13 cyfr do porownania wzrokiem. */}
+                    <div className="flex-1 min-w-[120px]">
+                        <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Kod EAN</label>
+                        <input
+                            ref={el => { comboRefs.current['ean'] = el; }}
+                            value={fields.ean}
+                            onChange={e => setF('ean', e.target.value)}
+                            onBlur={() => patchCard({ ean: fields.ean || null })}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); comboRefs.current['priceNetto']?.focus(); } }}
+                            disabled={readOnly}
+                            className="w-full bg-black/30 border border-white/10 rounded px-2 py-1.5 text-xs font-mono text-white placeholder-gray-600 outline-none focus:border-blue-500/50"
+                            placeholder="np. 5901234123457" />
+                    </div>
                     {/* @anchor product-card-supplier — „Oferent produktu" na POZYCJI, obok jej
                         produktu wiodącego (`MaterialRequirement.supplierId`). Propozycje mają
                         własnego oferenta każda z osobna; to pole odpowiada na pytanie „kto

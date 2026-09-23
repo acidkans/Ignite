@@ -1056,6 +1056,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                         unit: keep('unit', f.unit),
                         owner: keep('owner', f.owner),
                         comment: keep('comment', f.comment),
+                        // Bez strategii drzewo trzymało wartości sprzed edycji innej osoby, a z tego
+                        // drzewa liczone jest złożenie gałęzi (saveLeafStrategy) i idzie zapis drzewa.
+                        strategy: keep('strategy', f.strategy ?? ''),
                         unitCost: keep('unitCost', f.unitCost),
                         unitPrice: keep('unitPrice', f.unitPrice),
                         totalCost: f.totalCost ?? n.totalCost,

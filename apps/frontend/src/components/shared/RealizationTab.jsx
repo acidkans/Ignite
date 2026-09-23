@@ -24,7 +24,7 @@ import {
 import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath,
     leafNodesOf, buildCardMap, wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf,
-    planUnitOf, planValueOf, fmtQty, fmtZl, fmtDate,
+    planUnitOf, planValueOf, fmtQty, fmtZl, fmtDate, ROZLICZENIE, POWOD_POZA_OFERTA, rozliczenieOf, POZA_BASELINE_META,
 } from './wbs/realizationShared';
 
 // ─── Kolumny ──────────────────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ export const hasColFilter = (v) => (Array.isArray(v) ? v.length > 0 : String(v ?
 // obsługuje komórkę, filtr kolumny i sortowanie, więc żadne z nich nie rozjedzie się
 // z pozostałymi. Słownik zależy od typu: praca, usługa, nocleg i paliwo mają własny.
 // Pusty status daje pusty ciąg — wołający decyduje, czy pokazać „—", czy nic nie dopasować.
-export const statusLabel = (node) => PLAN_STATUS_META[planStatusFromAny(node?.status)].label;
+export const statusLabel = (node) => (node?._outOfBaseline ? POZA_BASELINE_META.label : PLAN_STATUS_META[planStatusFromAny(node?.status)].label);
 
 // @anchor realization-axis-labels — etykiety osi realizacji dla szukajki i sortowania.
 // Muszą czytać dokładnie to, co komórka: inaczej wpisanie „zamówione" nie znajduje pozycji,
@@ -982,6 +982,10 @@ export function liczAnalize(rows) {
         };
 }
 
+// @anchor realization-export-red — czerwień zakupu poza ofertą, ta sama co „zła" komórka Excela.
+const CZERWONE_TLO = 'FFFFC7CE';
+const CZERWONY_TEKST = 'FF9C0006';
+
 // Eksport stoi na POZIOMIE MODUŁU, a nie w ciele komponentu, bo woła go także zakładka
 // „Realizacja_new" — jeden eksport dla obu widoków, żeby arkusz nie zaczął się rozjeżdżać
 // zależnie od tego, z której tabeli został wywołany. Wszystko, co wcześniej brał z domknięcia,
@@ -996,7 +1000,7 @@ export function liczAnalize(rows) {
     // po zmianie liczby w arkuszu wszystko przelicza się samo.
 export async function eksportRealizacjiXlsx({
     rows, visibleTypes, odbiorByRoot = {}, orderName = '', searchQuery = '', colFilters = {},
-    etykietyKolumn = null, accepted = false,
+    etykietyKolumn = null, accepted = false, orphanEntries = [],
 }) {
     const totals = liczTotals(rows);
     const analiza = liczAnalize(rows);
@@ -1009,6 +1013,7 @@ export async function eksportRealizacjiXlsx({
     const ps = wb.addWorksheet('Podsumowanie');
     const ws = wb.addWorksheet('Realizacja');
     const zk = wb.addWorksheet('Zakupy');
+    const az = wb.addWorksheet('Analiza zakupów');
     // Waluta w postaci, którą Excel rozpoznaje jako PLN, a nie jako format niestandardowy.
     const FMT_PLN = '#,##0.00\\ [$zł-415]';
     ws.columns = [
@@ -1103,10 +1108,17 @@ export async function eksportRealizacjiXlsx({
     // Pierwsza kolumna niesie WYMAGANIE (`MaterialRequirement.name`), do którego zakup
     // jest przypisany — po nim rozlicza się dostawy wobec zakresu z dokumentacji.
     // Liście bez karty produktowej (nocleg, paliwo) wymagania nie mają — zostaje „—".
+    // Na końcu wpisy pozycji usuniętych z wyceny (`orphanEntries`): nie ma ich w wersji planu,
+    // więc nie mają wiersza w tabeli, ale pieniądze wydano i muszą wejść do rozliczenia.
     const zakupy = [];
     for (const { node, card, realization: r } of rows) {
         if (entryNoun(node.type) !== 'zakup') continue;
-        for (const e of r.entries) zakupy.push({ node, card, e });
+        for (const e of r.entries) zakupy.push({ node, card, e, ...rozliczenieOf(node, card, e) });
+    }
+    for (const e of orphanEntries) {
+        if (entryNoun(e.leafType) !== 'zakup') continue;
+        const node = { name: e.leafName || '(pozycja usunięta z wyceny)', type: e.leafType, path: null, unit: 'szt', sourceWbsNodeId: e.wbsRootId };
+        zakupy.push({ node, card: null, e, rozl: ROZLICZENIE.POZA, powod: POWOD_POZA_OFERTA.USUNIETA });
     }
     zk.columns = [
         { header: 'Wymaganie', key: 'req', width: 34 },
@@ -1121,31 +1133,47 @@ export async function eksportRealizacjiXlsx({
         { header: 'Dokument', key: 'doc', width: 16 },
         { header: 'Ilość', key: 'qty', width: 10 },
         { header: 'Jedn.', key: 'unit', width: 8 },
+        // @anchor realization-export-settlement-col — „Rozliczenie" wpisu (`rozliczenieOf`):
+        // w ofercie / poza ofertą, plus „Powód" dla drugiej. Od niej zależą „Δ jedn.",
+        // „Wartość oferty" i „Δ wartość" (formuły czytają tę komórkę), więc zmiana kategorii
+        // w pliku przelicza wiersz, kolor i arkusz „Analiza zakupów".
+        { header: 'Rozliczenie', key: 'rozl', width: 14 },
+        { header: 'Powód', key: 'powod', width: 20 },
         // @anchor realization-export-purchase-vs-offer — cena ofertowa obok ceny zakupu
         // i różnica między nimi. Ofertowa jest cechą POZYCJI (`planUnitOf`: karta
         // produktowa, a dla liści bez karty `WbsNode.unitCost`), więc przy kilku
         // dostawach powtarza się w każdym wierszu — to ta sama baza porównania.
-        // Δ liczona jako zakup − oferta: plus = kupiliśmy drożej, minus = taniej.
-        // Pozycja bez ceny w wycenie zostawia porównanie puste, zamiast udawać −100%.
+        // Δ liczona jako zakup − oferta: plus = kupiliśmy drożej, minus = taniej. Porównanie
+        // ceny ma sens WYŁĄCZNIE dla zakupu w ofercie — nadmiarowy nie ma czego porównać.
         { header: 'Cena ofertowa', key: 'planUnit', width: 14 },
         { header: 'Cena zakupu', key: 'unitCost', width: 14 },
         { header: 'Δ jedn.', key: 'dUnit', width: 12 },
         { header: 'Δ %', key: 'dPct', width: 10 },
+        // @anchor realization-export-offer-value — wartość oferty PRZYPISANA do wpisu: ilość ×
+        // cena ofertowa dla zakupu w ofercie, 0 dla pozostałych. Dzięki temu Δ wartość zakupu
+        // nadmiarowego to cały jego koszt, a suma Δ zgadza się z „wycena vs zakupy" z karty.
+        { header: 'Wartość oferty', key: 'planValue', width: 16 },
         { header: 'Wartość zakupu', key: 'value', width: 16 },
         { header: 'Δ wartość', key: 'dValue', width: 14 },
         { header: 'Kupujący', key: 'author', width: 22 },
         { header: 'Komentarz', key: 'comment', width: 40 },
+        // Klucz pozycji dla SUMIFS w „Analizie zakupów" — nazwa się powtarza między gałęziami.
+        { header: 'Id pozycji', key: 'rootId', width: 12, hidden: true },
     ];
     zk.getRow(1).font = { bold: true };
     zk.views = [{ state: 'frozen', ySplit: 1 }];
-    zk.autoFilter = 'A1:T1';
+    zk.autoFilter = 'A1:W1';
 
-    zakupy.forEach(({ node, card, e }, i) => {
+    const W_OFERCIE = ROZLICZENIE.OFERTA;
+    zakupy.forEach(({ node, card, e, rozl, powod }, i) => {
         const n = i + 2;
         const qty = Number(e.qty) || 0;
         const unitCost = Number(e.unitCost) || 0;
         const planUnit = planUnitOf(node, card);
-        zk.addRow({
+        const wOfercie = rozl === W_OFERCIE;
+        const pv = wOfercie && planUnit != null ? Math.round(qty * planUnit * 100) / 100 : 0;
+        const val = Math.round(qty * unitCost * 100) / 100;
+        const row = zk.addRow({
             req: card?.name || '—',
             parent: getParentPath(node.path),
             name: node.name || '',
@@ -1160,39 +1188,162 @@ export async function eksportRealizacjiXlsx({
             doc: e.docNumber || '',
             qty,
             unit: node.unit || 'szt',
+            rozl,
+            powod,
             planUnit,
             unitCost,
-            dUnit: planUnit != null ? { formula: `N${n}-M${n}`, result: Math.round((unitCost - planUnit) * 100) / 100 } : null,
-            dPct: planUnit != null ? { formula: `IF(M${n}=0,"",O${n}/M${n})`, result: planUnit ? (unitCost - planUnit) / planUnit : '' } : null,
-            value: { formula: `K${n}*N${n}`, result: Math.round(qty * unitCost * 100) / 100 },
-            dValue: planUnit != null ? { formula: `K${n}*O${n}`, result: Math.round(qty * (unitCost - planUnit) * 100) / 100 } : null,
+            dUnit: { formula: `IF(AND(M${n}="${W_OFERCIE}",O${n}<>""),P${n}-O${n},"")`, result: wOfercie && planUnit != null ? Math.round((unitCost - planUnit) * 100) / 100 : '' },
+            dPct: { formula: `IF(AND(M${n}="${W_OFERCIE}",O${n}<>"",O${n}<>0),Q${n}/O${n},"")`, result: wOfercie && planUnit ? (unitCost - planUnit) / planUnit : '' },
+            planValue: { formula: `IF(M${n}="${W_OFERCIE}",K${n}*O${n},0)`, result: pv },
+            value: { formula: `K${n}*P${n}`, result: val },
+            dValue: { formula: `T${n}-S${n}`, result: Math.round((val - pv) * 100) / 100 },
             author: [e.author?.firstName, e.author?.lastName].filter(Boolean).join(' ') || e.author?.email || '',
             comment: e.comment || '',
+            rootId: wbsRootOf(node),
         });
+        row.getCell('rozl').dataValidation = {
+            type: 'list', allowBlank: false, showErrorMessage: true,
+            formulae: [`"${Object.values(ROZLICZENIE).join(',')}"`],
+        };
     });
 
+    const lastZ = zakupy.length + 1;
+    const razemZ = lastZ + 1;
+    const qtyOf = (x) => Number(x.e.qty) || 0;
+    const agregat = (lista) => ({
+        qty: Math.round(lista.reduce((s, x) => s + qtyOf(x), 0) * 1000) / 1000,
+        pv: Math.round(lista.reduce((s, x) => s + (x.rozl === W_OFERCIE ? qtyOf(x) * (planUnitOf(x.node, x.card) || 0) : 0), 0) * 100) / 100,
+        val: Math.round(lista.reduce((s, x) => s + qtyOf(x) * (Number(x.e.unitCost) || 0), 0) * 100) / 100,
+    });
     if (zakupy.length) {
-        const lastZ = zakupy.length + 1;
-        const sumQty = Math.round(zakupy.reduce((s, x) => s + (Number(x.e.qty) || 0), 0) * 1000) / 1000;
-        const sumVal = Math.round(zakupy.reduce((s, x) => s + (Number(x.e.qty) || 0) * (Number(x.e.unitCost) || 0), 0) * 100) / 100;
-        // Δ sumujemy tylko po wierszach, które mają cenę ofertową — pozycja bez wyceny
-        // nie jest „zakupem za darmo ponad plan", tylko brakiem podstawy do porównania.
-        const sumDVal = Math.round(zakupy.reduce((s, { node, card, e }) => {
-            const pu = planUnitOf(node, card);
-            return pu == null ? s : s + (Number(e.qty) || 0) * ((Number(e.unitCost) || 0) - pu);
-        }, 0) * 100) / 100;
+        const all = agregat(zakupy);
         const sumZ = zk.addRow({
             req: 'Razem',
-            qty: { formula: `SUM(K2:K${lastZ})`, result: sumQty },
-            value: { formula: `SUM(Q2:Q${lastZ})`, result: sumVal },
-            dValue: { formula: `SUM(R2:R${lastZ})`, result: sumDVal },
+            qty: { formula: `SUM(K2:K${lastZ})`, result: all.qty },
+            planValue: { formula: `SUM(S2:S${lastZ})`, result: all.pv },
+            value: { formula: `SUM(T2:T${lastZ})`, result: all.val },
+            dValue: { formula: `SUM(U2:U${lastZ})`, result: Math.round((all.val - all.pv) * 100) / 100 },
         });
         sumZ.font = { bold: true };
+        // Autofiltr tylko na wierszach wpisów — z „Razem" w zakresie filtr pokazywał „(Puste)".
+        zk.autoFilter = `A1:W${lastZ}`;
+        // @anchor realization-export-red-rows — zakup poza ofertą (nadmiarowy, nieofertowany,
+        // dodana po akceptacji, usunięta) na czerwono. Formatowanie WARUNKOWE, a nie stały kolor: przestawienie
+        // „Rozliczenia" w pliku ma od razu przemalować wiersz.
+        zk.addConditionalFormatting({
+            ref: `A2:W${lastZ}`,
+            rules: [{
+                type: 'expression',
+                formulae: [`$M2<>"${W_OFERCIE}"`],
+                style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: CZERWONE_TLO } }, font: { color: { argb: CZERWONY_TEKST } } },
+            }],
+        });
     } else {
         zk.addRow({ req: 'Brak wpisów zakupu w tym widoku' }).font = { italic: true };
     }
-    ['planUnit', 'unitCost', 'dUnit', 'value', 'dValue'].forEach(k => { zk.getColumn(k).numFmt = FMT_PLN; });
+    ['planUnit', 'unitCost', 'dUnit', 'planValue', 'value', 'dValue'].forEach(k => { zk.getColumn(k).numFmt = FMT_PLN; });
     zk.getColumn('dPct').numFmt = '0.0%';
+
+    // ─ Analiza zakupów ───────────────────────────────────────────────
+    // @anchor realization-export-purchase-analysis — tabela „przestawna" z arkusza Zakupy:
+    // pozycja → rozliczenie, sumy przez SUMIFS po ukrytym id pozycji (kolumna X) i kategorii
+    // (kolumna M). Zwykły arkusz z formułami zamiast prawdziwej tabeli przestawnej: ExcelJS
+    // nie umie jej zapisać, a formuły przeliczają się same po zmianie danych w „Zakupach".
+    // Podwiersze kategorii powstają z danych w chwili eksportu; wiersz pozycji sumuje po samym
+    // id, więc zgadza się także po przestawieniu kategorii w pliku.
+    az.columns = [
+        { header: 'Pozycja / rozliczenie', key: 'a', width: 40 },
+        { header: 'Przedmiot projektu', key: 'b', width: 30 },
+        { header: 'Ilość', key: 'c', width: 10 },
+        { header: 'Wartość oferty', key: 'd', width: 16 },
+        { header: 'Wartość zakupu', key: 'e', width: 16 },
+        { header: 'Δ wartość', key: 'f', width: 14 },
+        { header: 'Δ %', key: 'g', width: 10 },
+        { header: 'Id pozycji', key: 'h', width: 12, hidden: true },
+        { header: 'Rozliczenie', key: 'i', width: 14, hidden: true },
+        { header: 'Powód', key: 'j', width: 20, hidden: true },
+    ];
+    az.getRow(1).font = { bold: true };
+    az.views = [{ state: 'frozen', ySplit: 1 }];
+    const ZR = (col) => `Zakupy!$${col}$2:$${col}$${Math.max(lastZ, 2)}`;
+    const pomaluj = (r, styl) => {
+        if (styl === 'grupa') {
+            r.font = { bold: true };
+            r.eachCell({ includeEmpty: true }, c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } }; });
+        }
+        if (styl === 'czerwony') {
+            r.eachCell({ includeEmpty: true }, c => {
+                c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: CZERWONE_TLO } };
+                c.font = { color: { argb: CZERWONY_TEKST } };
+            });
+        }
+    };
+    // Wiersz analizy: C–E z SUMIFS (warunki podane jako tekst formuły), F i G z tego wiersza.
+    const wierszAnalizy = (vals, warunki, agg, styl) => {
+        const n = az.rowCount + 1;
+        const sumifs = (col) => `SUMIFS(${ZR(col)},${warunki(n)})`;
+        const r = az.addRow({
+            ...vals,
+            c: { formula: sumifs('K'), result: agg.qty },
+            d: { formula: sumifs('S'), result: agg.pv },
+            e: { formula: sumifs('T'), result: agg.val },
+            f: { formula: `E${n}-D${n}`, result: Math.round((agg.val - agg.pv) * 100) / 100 },
+            g: { formula: `IF(D${n}=0,"",F${n}/D${n})`, result: agg.pv ? (agg.val - agg.pv) / agg.pv : '' },
+        });
+        pomaluj(r, styl);
+        return r;
+    };
+
+    const kategorie = Object.values(ROZLICZENIE);
+    const poPozycji = new Map();
+    for (const z of zakupy) {
+        const id = wbsRootOf(z.node);
+        if (!poPozycji.has(id)) poPozycji.set(id, []);
+        poPozycji.get(id).push(z);
+    }
+    for (const [id, lista] of poPozycji) {
+        const { node } = lista[0];
+        wierszAnalizy({ a: node.name || '', b: getParentPath(node.path), h: id },
+            n => `${ZR('X')},$H${n}`, agregat(lista), 'grupa');
+        for (const kat of kategorie) {
+            const czesc = lista.filter(x => x.rozl === kat);
+            if (!czesc.length) continue;
+            wierszAnalizy({ a: `    ${kat}`, h: id, i: kat },
+                n => `${ZR('X')},$H${n},${ZR('M')},$I${n}`, agregat(czesc), kat === W_OFERCIE ? null : 'czerwony');
+        }
+    }
+    if (zakupy.length) {
+        const all = agregat(zakupy);
+        const s = az.rowCount + 1;
+        const suma = az.addRow({
+            a: 'Suma końcowa',
+            c: { formula: `Zakupy!K${razemZ}`, result: all.qty },
+            d: { formula: `Zakupy!S${razemZ}`, result: all.pv },
+            e: { formula: `Zakupy!T${razemZ}`, result: all.val },
+            f: { formula: `E${s}-D${s}`, result: Math.round((all.val - all.pv) * 100) / 100 },
+            g: { formula: `IF(D${s}=0,"",F${s}/D${s})`, result: all.pv ? (all.val - all.pv) / all.pv : '' },
+        });
+        suma.font = { bold: true };
+        suma.eachCell({ includeEmpty: true }, c => { c.border = { top: { style: 'medium' } }; });
+        for (const kat of kategorie) {
+            const czesc = zakupy.filter(x => x.rozl === kat);
+            if (!czesc.length) continue;
+            wierszAnalizy({ a: `    w tym ${kat}`, i: kat },
+                n => `${ZR('M')},$I${n}`, agregat(czesc), kat === W_OFERCIE ? null : 'czerwony');
+            // Rozbicie „poza ofertą" na powody — dlaczego koszt poszedł ponad plan.
+            if (kat === W_OFERCIE) continue;
+            for (const powod of Object.values(POWOD_POZA_OFERTA)) {
+                const zPowodu = czesc.filter(x => x.powod === powod);
+                if (!zPowodu.length) continue;
+                wierszAnalizy({ a: `        ${powod}`, i: kat, j: powod },
+                    n => `${ZR('M')},$I${n},${ZR('N')},$J${n}`, agregat(zPowodu), 'czerwony');
+            }
+        }
+    } else {
+        az.addRow({ a: 'Brak wpisów zakupu w tym widoku' }).font = { italic: true };
+    }
+    ['d', 'e', 'f'].forEach(k => { az.getColumn(k).numFmt = FMT_PLN; });
+    az.getColumn('g').numFmt = '0.0%';
 
     // ─ Podsumowanie ──────────────────────────────────────────────────
     ps.columns = [

@@ -187,7 +187,8 @@ export const fmtDate = (d) => { try { return new Date(d).toISOString().slice(0, 
 // 0 zł przy węźle 4836 zł/szt — plan pokazywał 0 zamiast 38 688 zł, bo `??` nie przepuszcza zera.
 // W drugą stronę ryzyka nie ma: z 174 liści z `unitCost = 0` ANI JEDEN nie ma karty z ceną,
 // więc odwrócenie kolejności nie gubi żadnej wartości.
-export const planUnitOf = (node, card) => node?.unitCost ?? card?.priceNetto ?? null;
+// Pozycja „poza baseline" nie ma ceny w ofercie z definicji — plan 0, cały zakup to odchylenie.
+export const planUnitOf = (node, card) => (node?._outOfBaseline ? 0 : (node?.unitCost ?? card?.priceNetto ?? null));
 
 // @anchor realization-plan-value — wartość pozycji po stronie WYCENY: koszt jedn. planu razy
 // ilość z wyceny. Mieszkała w obu zakładkach realizacji osobno; odkąd eksport Excel liczy ją
@@ -197,6 +198,53 @@ export const planValueOf = (node, card) => {
     const u = planUnitOf(node, card);
     return u != null ? u * (Number(node?.quantity) || 0) : 0;
 };
+
+// @anchor realization-settlement — rozliczenie wpisu zakupu wobec wyceny: DWIE wartości, bo
+// po nich się filtruje i sumuje. Tylko „w ofercie" ma wartość ofertową; „poza ofertą" to koszt
+// ponad plan w całości. Dlaczego poza — mówi osobny powód (`POWOD_POZA_OFERTA`), żeby filtr
+// nie rozsypywał się na cztery etykiety tego samego rozstrzygnięcia.
+export const ROZLICZENIE = {
+    OFERTA: 'w ofercie',
+    POZA: 'poza ofertą',
+};
+
+// @anchor realization-settlement-reason — powód „poza ofertą":
+//   nadmiarowy            — ręczny znacznik `LeafActual.isSurplus` (ilość ponad wycenę),
+//   bez ceny w wycenie    — pozycja bez ceny albo bez ilości w wycenie,
+//   dodana po akceptacji  — `_outOfBaseline`,
+//   usunięta z wyceny     — wpis pozycji, której nie ma już w wersji planu.
+export const POWOD_POZA_OFERTA = {
+    NADMIAR: 'nadmiarowy',
+    BEZ_CENY: 'bez ceny w wycenie',
+    PO_AKCEPTACJI: 'dodana po akceptacji',
+    USUNIETA: 'usunięta z wyceny',
+};
+
+// @anchor realization-out-of-baseline — pozycja dodana PO akceptacji oferty: `WbsNode.createdAt`
+// późniejszy niż `ProcessNode.acceptedAt`. Po akceptacji manager dopisuje pozycje do TEJ SAMEJ
+// wersji, która jest baseline'em, więc porównanie wersji niczego nie wykryje — rozstrzyga data.
+// Wyliczane w widoku, nic nie trafia do bazy: cofnięcie i ponowna akceptacja przesuwa granicę
+// i pozycja wraca „do oferty" bez żadnej migracji danych.
+export function markOutOfBaseline(nodes, acceptedAt) {
+    const granica = acceptedAt ? new Date(acceptedAt).getTime() : null;
+    if (!granica) return nodes;
+    return nodes.map(n => (n.createdAt && new Date(n.createdAt).getTime() > granica ? { ...n, _outOfBaseline: true } : n));
+}
+
+// @anchor realization-out-of-baseline-meta — plakietka w kolumnie „Status oferty". Zastępuje
+// status planu, bo o pozycji spoza oferty status „Zaakceptowane" mówiłby nieprawdę.
+export const POZA_BASELINE_META = { label: 'Poza ofertą', color: 'text-red-400' };
+
+// @anchor realization-settlement-of — { rozl, powod } wpisu. Kolejność powodów ma znaczenie:
+// brak ceny w wycenie wygrywa ze znacznikiem, bo „nadmiarowy" zakłada, że JEST jakaś ilość
+// ofertowa, ponad którą się wyszło.
+export function rozliczenieOf(node, card, entry) {
+    const poza = (powod) => ({ rozl: ROZLICZENIE.POZA, powod });
+    if (node?._outOfBaseline) return poza(POWOD_POZA_OFERTA.PO_AKCEPTACJI);
+    if (!planUnitOf(node, card) || !(Number(node?.quantity) > 0)) return poza(POWOD_POZA_OFERTA.BEZ_CENY);
+    if (entry?.isSurplus) return poza(POWOD_POZA_OFERTA.NADMIAR);
+    return { rozl: ROZLICZENIE.OFERTA, powod: '' };
+}
 
 // @anchor realization-of — suma wpisów realizacji liścia wobec planu z wyceny.
 // `avg` to średnia ważona (każdy wpis ma własny koszt jedn.), `state` steruje kolorem:

@@ -1110,6 +1110,7 @@ export default function DashboardPage() {
                                     orderName={activeNode?.name || ''}
                                     userRoles={currentRoles}
                                     accepted={baselineAccepted}
+                                    acceptedAt={realizationVersion?.source === 'baseline' ? (acceptance?.acceptedAt ?? null) : null}
                                     oneDriveFolderName={activeNode?.oneDriveFolderName || null}
                                 />
                             </div>

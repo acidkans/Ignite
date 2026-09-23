@@ -1,3 +1,93 @@
+## 2026-09-23 — realizacja_new: zakupy nadmiarowe, status oferty „Poza ofertą”, kolumna Rozliczenie i arkusz Analiza zakupow w eksporcie, delta w kolumnie Koszt calkowity
+
+### schema.prisma
+- dodano pole `isSurplus Boolean @default(false)` w modelu `LeafActual` — zakup ponad ilosc
+  z wyceny, oznaczany recznie w karcie pozycji; nie ma wartosci ofertowej
+- migracja `20260923120000_leaf_actual_is_surplus` (`ADD COLUMN IF NOT EXISTS`, bez backfillu)
+
+### architektura / API
+- `back-endpoint` `POST /leaf-actuals` i `PATCH /leaf-actuals/:id` — przyjmuja `isSurplus`
+- `back-endpoint` `GET /leaf-actuals/order/:nodeId` — kazdy wpis niesie `isSurplus`, `leafName`
+  i `leafType` (z najnowszego klonu korzenia), zeby eksport nazwal zakup pozycji spoza baseline
+- `back-stala` `ENTRY_SELECT` — jeden ksztalt wpisu dla listy, dodania i poprawki
+- `ui-sekcja` `PurchaseDrawer` — kolumna „Rozliczenie" z przelacznikiem „nadmiarowy", czerwone tlo
+  wpisu nadmiarowego, ostrzezenie „przekroczono wycene o X — oznacz nadmiarowe" i znacznik sumy
+  nadmiarowych; nowy wpis domyslnie nadmiarowy, gdy plan jest juz pokryty
+- eksport Excel, arkusz „Zakupy": nowe kolumny „Rozliczenie" (w ofercie / poza oferta, lista
+  wyboru), „Powod" (nadmiarowy / bez ceny w wycenie / dodana po akceptacji / usunieta z wyceny),
+  „Wartosc oferty" i ukryte „Id pozycji"; autofiltr bez wiersza „Razem";
+  Δ jedn. i Δ % tylko dla zakupu w ofercie, Δ wartosc = wartosc zakupu − wartosc oferty;
+  wiersze poza oferta na czerwono (formatowanie warunkowe)
+- eksport Excel, nowy arkusz „Analiza zakupow" — pozycja → rozliczenie, sumy przez SUMIFS
+  z arkusza „Zakupy", suma koncowa z rozbiciem na w ofercie / poza oferta i powody
+- `back-endpoint` `GET /wbs-nodes/unified/:nodeId` — kazda pozycja niesie `createdAt`
+- `ui-kolumna` „Status oferty" w realizacja_new — pozycja dodana po akceptacji (`WbsNode.createdAt`
+  > `ProcessNode.acceptedAt`) dostaje czerwony status „Poza oferta" (wyliczany, nie zapisywany);
+  jej wycena = 0, filtr kolumny ma te opcje, eksport liczy ja jako „poza oferta"
+- `ui-kolumna` „Koszt calkowity" w realizacja_new — trzecia linia Δ (zakup − wycena) w wierszu
+  i w stopce „Razem widoczne", jak w zakladce Realizacja
+
+### slownik
+- dodano `leaf-actual-is-surplus` — schema.prisma
+- dodano `leaf-actual-entry-select` / `leaf-actual-input-is-surplus` / `leaf-actuals-leaf-label` — leaf-actuals.service.ts
+- dodano `realization-settlement` / `realization-settlement-reason` / `realization-settlement-of` — realizationShared.js
+- dodano `realization-export-red` / `realization-export-settlement-col` / `realization-export-offer-value` / `realization-export-red-rows` / `realization-export-purchase-analysis` — RealizationTab.jsx
+- dodano `wbs-unified-created-at` — wbs-nodes.service.ts
+- dodano `realization-out-of-baseline` / `realization-out-of-baseline-meta` — realizationShared.js
+- dodano `realization-new-offer-status-meta` — RealizationNewTab.jsx
+- dodano `realization-new-surplus-split` / `realization-new-surplus-toggle` / `realization-new-orphan-entries` / `realization-new-delta-line` — RealizationNewTab.jsx
+
+### wytyczne
+- `schema-pole` `LeafActual.isSurplus` — ktory zakup jest nadmiarowy, decyduje czlowiek; nie
+  wyliczac tego z dat ani kolejnosci wpisow. Wpis nadmiarowy nie pokrywa wyceny: ilosc „w ofercie"
+  to suma wpisow BEZ znacznika.
+- `ui-funkcja` `rozliczenieOf` — rozliczenie ma DWIE wartosci (w ofercie / poza oferta), szczegol
+  niesie osobny powod; nie dokladac kolejnych wartosci do „Rozliczenia", tylko do `POWOD_POZA_OFERTA`.
+  Tylko „w ofercie" ma wartosc ofertowa. Brak ceny/ilosci w wycenie wygrywa ze znacznikiem.
+- `ui-funkcja` `markOutOfBaseline` — „poza baseline" rozstrzyga data utworzenia pozycji wobec daty
+  akceptacji, NIE porownanie wersji: po akceptacji manager dopisuje pozycje do tej samej wersji,
+  ktora jest baseline'em. Wymaga, zeby zapis drzewa WBS dalej robil upsert po id (zachowuje `createdAt`).
+
+## 2026-09-11 — kod EAN w karcie produktu, edycja osoby odpowiedzialnej w realizacja_new, oferent z recznej propozycji
+
+### schema.prisma
+- dodano pole `ean` w modelu `MaterialRequirement` — kod EAN TEJ pozycji; dziala zanim pozycja
+  dostanie produkt katalogowy, tak samo jak `availability`
+- dodano pole `ean` w modelu `Material` — pamiec katalogu: raz wpisany kod wraca przy kazdym
+  kolejnym uzyciu tej samej pary producent+model
+- migracja `20260911120000_product_card_ean` (dwa `ADD COLUMN IF NOT EXISTS`, bez backfillu)
+
+### architektura / API
+- `back-serwis` `MaterialRequirementsService.update` — `ean` zapisuje sie na wymaganiu i schodzi
+  do `Material`; odczyt (`findAllByNode`, `findOne`) woli kod pozycji, katalogowy jest fallbackiem
+- `back-serwis` `MaterialRequirementsService.update` — propozycja wybrana przez wpisanie producenta
+  i modelu w karcie oddaje karcie swojego OFERENTA (dotad robil to wylacznie `selectProposal`,
+  wiec oferent recznej propozycji zostawal na niej, a pole „Oferent produktu" swiecilo pustka)
+- `ui-zakladka` `RealizationNewTab` — kolumna „Osoba odpowiedzialna" jest edytowalna w miejscu
+  (`PATCH /wbs-nodes/:id`), z lista wyboru wspolna ze Struktura projektu
+- `ui-funkcja` `selectProposal` — odmowa backendu (403 z `assertOfferEditable`) zatrzymuje
+  optymistyczny zapis zamiast malowac zielony znacznik „wybrana" nad niezmieniona baza
+
+### slownik
+- dodano `product-card-ean` — pole „Kod EAN" w karcie produktu, WbsMaterialsPanel.jsx
+- dodano `mat-req-ean` / `material-ean` — kolumny EAN, schema.prisma
+- dodano `mat-req-ean-read` / `mat-req-ean-write` — odczyt i zapis EAN, material-requirements.service.ts
+- dodano `mat-req-pick-supplier-up` — oferent z auto-wybranej propozycji na karte, material-requirements.service.ts
+- dodano `proposal-select-rejected` — odmowa backendu zatrzymuje wybor propozycji, WbsMaterialsPanel.jsx
+- dodano `user-owner-label` / `build-owner-options` — wspolna lista osob odpowiedzialnych, wbsConstants.js
+- dodano `realization-new-owner-cell` / `realization-new-owner-options` / `realization-new-save-owner` — RealizationNewTab.jsx
+
+### wytyczne
+- `schema-pole` `MaterialRequirement.ean` — kod pozycji ma pierwszenstwo przed `Material.ean`
+  przy odczycie; zapis idzie w OBA miejsca, zeby katalog zapamietal kod na przyszlosc
+- `ui-funkcja` `buildOwnerOptions` — KAZDY widok edytujacy `WbsNode.owner` bierze liste stad.
+  Pole trzyma etykiete, nie klucz obcy, wiec dwie listy skladane osobno znaczylyby dwie rozne
+  etykiety tej samej osoby w bazie. Wartosci juz zapisane na pozycjach wchodza do listy jako
+  `extras` — inaczej select stalby pusty nad niepusta baza i pierwszy klik kasowalby nazwisko.
+- `ui-funkcja` `selectProposal` — kazdy optymistyczny zapis w karcie produktu musi sprawdzic
+  `res.ok`; przy zamowieniu z zaakceptowanym baseline backend odrzuca zmiany wartosci ofertowych,
+  a cichy 403 wyglada jak blad przenoszenia danych.
+
 ## 2026-09-11 — realizacja_new: naglowki sekcji i sekcja „Zakupy" w karcie pozycji
 
 ### architektura / API
