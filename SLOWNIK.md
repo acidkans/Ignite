@@ -2643,6 +2643,12 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-stala | DAK_SPOLKA (spółka DAK-a do DW) | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-dak-spolka |
 | ui-funkcja | domyslnaTresc | apps/frontend/src/components/shared/wbs/ProtokolOdbioruModal.jsx | @anchor protokol-mail-tresc |
 
+### Moduł AI — synchronizacja bazy do Qdrant (czat)
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| back-funkcja | ensureDailyDbSync | apps/backend/src/ai/vector.service.ts | @anchor ensure-daily-db-sync |
+
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)

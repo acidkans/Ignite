@@ -1,5 +1,4 @@
 import { Injectable, OnModuleInit, Logger, Inject, forwardRef } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { QdrantClient } from '@qdrant/js-client-rest';
@@ -644,17 +643,31 @@ export class VectorService implements OnModuleInit {
         return results;
     }
 
+    private lastDbSyncDay: string | null = null;
+    private dbSyncInFlight: Promise<unknown> | null = null;
+
+    /**
+     * Synchronizacja bazy → Qdrant przy pierwszym pytaniu do czatu w danym dniu (zamiast crona —
+     * każdy przebieg to ~400 płatnych wywołań Gemini embedding). Równoległe pytania czekają na ten sam przebieg.
+     */
+    // @anchor ensure-daily-db-sync
+    async ensureDailyDbSync(): Promise<void> {
+        const today = new Date().toISOString().slice(0, 10);
+        if (this.lastDbSyncDay === today) return;
+        if (!this.dbSyncInFlight) {
+            this.dbSyncInFlight = this.syncDatabaseToVector()
+                .then(() => { this.lastDbSyncDay = today; })
+                .catch(e => this.logger.error(`[Sync] Daily sync failed: ${e.message}`))
+                .finally(() => { this.dbSyncInFlight = null; });
+        }
+        await this.dbSyncInFlight;
+    }
+
     /**
      * Synchronizuje dane strukturalne z bazy PostgreSQL do Qdrant
      * Indeksuje: węzły drzewa, stacje (Site), sprzęt (Hardware), użytkowników, zespoły
      */
-    @Cron(CronExpression.EVERY_HOUR, { name: 'sync-db-to-vector' })
     async syncDatabaseToVector(): Promise<{ indexed: number; errors: number }> {
-        const hour = new Date().getHours();
-        if (hour >= 18 || hour < 9) {
-            this.logger.log('[Sync] Skipped — outside working hours (9:00–18:00)');
-            return { indexed: 0, errors: 0 };
-        }
         this.logger.log('[Sync] Starting database → vector sync...');
         const items: Array<{ id: string; text: string; metadata: any }> = [];
 

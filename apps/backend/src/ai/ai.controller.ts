@@ -76,6 +76,9 @@ export class AiController {
 
         console.log(`[AI Chat] Search filter params set.`);
 
+        // 1b. Pierwsze pytanie w danym dniu odświeża dane strukturalne w Qdrant
+        await this.vectorService.ensureDailyDbSync();
+
         // 2. Wyszukiwanie hybrydowe (keyword + vector) - keyword ma priorytet dla exact matches
         const searchResults = await this.vectorService.hybridSearch(body.question, filter, 30);
 
