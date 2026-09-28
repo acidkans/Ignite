@@ -70,7 +70,7 @@ export default function QaTreeView({ nodeId, versionId, onClose }) {
     const [loadError, setLoadError] = useState(false);
     const [fromCache, setFromCache] = useState(false);
     // @anchor qa-tree-filter
-    const [qaFilter, setQaFilter] = useState(() => window.innerWidth < 1024 ? 'unanswered' : 'withQa');
+    const [qaFilter, setQaFilter] = useState('unanswered');
     const [search, setSearch] = useState('');
     // @anchor qa-queued-ids
     const [queuedIds, setQueuedIds] = useState(new Set()); // węzły z zapisem czekającym w outboxie
