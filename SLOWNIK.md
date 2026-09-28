@@ -79,6 +79,46 @@ Używaj nazwy z kolumny **Skrót** — Claude będzie wiedział dokładnie co zm
 
 ---
 
+## KOSZTY — płatne usługi zewnętrzne
+
+Wszystko, za co ERP generuje rachunek. Stan na 2026-09-24 (sprawdzone na produkcji).
+
+### Google Cloud — Gemini API (płatne za użycie, bez opłaty stałej)
+
+Konto rozliczeniowe `016C15-F2AB19-B8D97E` („Moje konto rozliczeniowe 1”), projekt **Default Gemini Project** (`gen-lang-client-0856627276`), Tier 2 · Postpay. Klucz **…hqWU „ERP”** = `GEMINI_API_KEY` na produkcji. Klucz **…5woE „Default Gemini API Key”** — nieużywany przez ERP. Projekt **ERP Gigatel** — koszt 0. Rachunek za 08.2026: 11,41 zł netto.
+
+Modele na produkcji: `AI_MODEL=gemini-2.5-flash`, `EMBEDDING_MODEL=gemini-embedding-001`.
+
+| Skrót | Co płaci | Model | Wyzwalacz | Kod |
+|---|---|---|---|---|
+| AI_SZUKAJ_PRODUKTU | Wyszukiwanie produktów z groundingiem Google Search (tokeny + grounding) | AI_MODEL | Użytkownik: „Szukaj produktów” w wymaganiach materiałowych | `material-requirements.service.ts` → `searchProducts()` → `vector.service.ts` `generateRawGrounded()` |
+| AI_ZGODNOSC | Ocena zgodności propozycji z wymaganiami | AI_MODEL | Użytkownik | `material-requirements.service.ts` → `evaluateCompliance()` → `callAiForJson()` |
+| AI_WYMAGANIA_Z_DOK | Ekstrakcja wymagań materiałowych z dokumentów | AI_MODEL | Użytkownik | `material-requirements.service.ts` → `extractFromDocuments()` |
+| AI_KARTA_KATALOGOWA | Parsowanie karty katalogowej | AI_MODEL | Użytkownik | `material-requirements.service.ts` → `parseDatasheetDocument()` |
+| AI_OFERTA_DOSTAWCY | Parsowanie oferty dostawcy (PDF / Excel) | AI_MODEL | Użytkownik | `material-requirements.service.ts` → `parseOfferDocument()`, `parseExcelOffer()` |
+| AI_CZAT | Czat AI (odpowiedź) + embedding pytania | AI_MODEL + EMBEDDING | Użytkownik: `AIChatSidebar` → `POST /ai/chat` | `ai.controller.ts` → `hybridSearch()` + `askGemini()` |
+| AI_SYNC_CZATU | Embeddingi ~400 rekordów bazy (węzły, sprzęt, podzadania, budżet, wymagania) do Qdrant | EMBEDDING | 1× dziennie przy pierwszym pytaniu do czatu (`ensureDailyDbSync`) lub ręcznie `POST /ai/sync-db` | `vector.service.ts` → `syncDatabaseToVector()` |
+| AI_INDEKS_DOK | Embeddingi chunków wgranego dokumentu | EMBEDDING | Wgranie / reindeks dokumentu; `reindexAll()` przy nowej kolekcji Qdrant | `documents.service.ts` → `processDocument()`, `reindexDocument()` |
+| AI_ESTYMACJA | Estymacja, analiza planu, propozycja WBS | AI_MODEL + EMBEDDING | Użytkownik | `ai.service.ts` → `estimateProject()`, `analyzePlan()`, `proposeWbs()` |
+| AI_AUTO_WBS | Auto-generowanie WBS z OPZ/SWZ | AI_MODEL | Użytkownik: `POST /ai/workflow/auto-generate` | `ai.service.ts` → `runAutoDeployWorkflow()` |
+
+Zasady:
+- Żaden proces w tle nie woła Gemini cyklicznie — do 2026-09-24 robił to cron `sync-db-to-vector` co godzinę (~3600 wywołań/dzień), zastąpiony przez `ensureDailyDbSync`. Nie dodawaj cronów wołających Gemini bez sprawdzenia kosztu.
+- Zmiana `AI_MODEL` dotyczy wszystkich funkcji naraz. `gemini-2.5-flash-lite` jest kilka razy tańszy, ale wyraźnie słabszy w groundingu i ekstrakcji.
+- Kod obsługuje też OpenAI / Groq / HuggingFace (`OPENAI_API_KEY`, `GROQ_API_KEY`, `HUGGING_FACE_API_KEY`), ale na produkcji te klucze NIE są ustawione — koszt 0.
+
+### Hetzner Cloud — serwer produkcyjny (opłata stała miesięczna)
+
+| Skrót | Co | Szczegóły |
+|---|---|---|
+| SERWER_HETZNER | VPS `ServerGigatel` (instance-id 116294569) | 159.69.212.91, Norymberga `nbg1-dc3`, 4 vCPU / 8 GB RAM / dysk ~150 GB (zajęte ~50%). Cenę i typ planu sprawdź w konsoli Hetzner |
+| SERWER_WSPOLDZIELONY | Na tym samym serwerze stoją też inne aplikacje | ERP (`erp-*`), `kpricer-*`, `task-tracker-*`, `dev-tracker`, `airtel_web`, `traefik` — koszt serwera dzielą wszystkie |
+| BACKUP_BAZY | Kopia bazy `erp_db` codziennie o 2:30 (`backup-db.sh`, 30 dziennych + 12 miesięcznych) | Trzymana lokalnie w `/srv/apps/erp/backups` na tym samym dysku — bez kopii poza serwerem, brak płatnego Storage Box / Backup Hetzner |
+
+Bez opłat (self-hosted na serwerze Hetzner): Qdrant (`erp-vector-db`), `erp-parser-service` (parser PDF, bez zewnętrznego AI), PostgreSQL. Bez osobnej opłaty: Microsoft Graph (`MS_*`, w ramach licencji M365), Google Calendar API (konto serwisowe, darmowe — na produkcji jeszcze nieskonfigurowane).
+
+---
+
 ## DANE
 
 | Skrót | Co to |
