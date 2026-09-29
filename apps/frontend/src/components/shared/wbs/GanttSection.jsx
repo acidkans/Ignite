@@ -11,6 +11,10 @@ const DpPortal = ({ children }) => createPortal(<div className="ignite-dp">{chil
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// @anchor is-valid-gantt-date
+// Data nadająca się na oś Gantta — Invalid Date lub rok spoza zakresu (niedokończone wpisywanie) wywala gantt-task-react.
+const isValidGanttDate = (d) => { const x = new Date(d); return !isNaN(x.getTime()) && x.getFullYear() >= 2000 && x.getFullYear() <= 2200; };
+
 const easterDate = (year) => {
     const a = year % 19;
     const b = Math.floor(year / 100);
@@ -214,7 +218,7 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
                 // tylko praca z jednostką dni może aktualizować ilość przez timeline
                 const canUpdateDuration = isWorkType(node.type) && isDayUnit(node.unit);
                 const defaultStart = effectiveWow ? new Date(projectStart) : advanceToWorkingDay(new Date(projectStart));
-                if (ovr?.start && ovr?.end) {
+                if (ovr?.start && ovr?.end && isValidGanttDate(ovr.start) && isValidGanttDate(ovr.end)) {
                     start = new Date(ovr.start);
                     end = new Date(ovr.end);
                     type = 'task';
@@ -451,6 +455,9 @@ const DateCell = ({ taskId, field, date, disabled }) => {
                 <DatePicker
                     selected={dateObj}
                     onChange={(newDate) => {
+                        // Wpisywanie z klawiatury woła onChange co znak — rok „20"/„202" to jeszcze
+                        // niedokończona data; zatwierdzenie jej wywalało Gantta (Invalid Date).
+                        if (newDate && !isValidGanttDate(newDate)) return;
                         if (newDate) {
                             const y = newDate.getFullYear();
                             const m = String(newDate.getMonth() + 1).padStart(2, '0');
@@ -610,6 +617,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         const task = tasks.find(t => t && t.id === taskId);
         if (!task) return;
         const newDate = new Date(dateStr);
+        if (!isValidGanttDate(newDate)) return;
         newDate.setHours(0, 0, 0, 0);
         let newStart = new Date(task.start); newStart.setHours(0, 0, 0, 0);
         let newEnd   = new Date(task.end);   newEnd.setHours(0, 0, 0, 0);
