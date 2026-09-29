@@ -74,11 +74,45 @@ const isPacketType = (t) => {
 const isDayUnit = (u) => { const s = String(u || '').toLowerCase().trim(); return s === 'dni' || s === 'dzień' || s === 'dzien' || s === 'd' || s === ''; };
 const isPacketUnit = (u) => { const s = String(u || '').toLowerCase().trim(); return s === 'pakiet' || s === 'komplet'; };
 
+// Pozostałe jednostki czasu pracy — przeliczane na długość paska zamiast traktowania jak pakiet (1 dzień).
+const isHourUnit = (u) => ['godziny', 'godzina', 'godz', 'godz.', 'h', 'rbh', 'roboczogodziny'].includes(u);
+const isWeekUnit = (u) => ['tygodnie', 'tydzień', 'tydzien', 'tyg', 'tyg.'].includes(u);
+const isMonthUnit = (u) => ['miesiące', 'miesiace', 'miesiąc', 'miesiac', 'mies', 'mies.', 'm-c', 'mc'].includes(u);
+const HOURS_PER_WORKDAY = 8;
+const WORKDAYS_PER_WEEK = 5;
+
+// Czas pracy w miesiącach kalendarzowych (0 gdy jednostka nie jest miesięczna) — koniec paska
+// liczony datą (+N miesięcy), nie stałą liczbą dni roboczych.
+// @anchor node-duration-months
+const nodeDurationMonths = (node) => {
+    if (!isWorkType(node.type)) return 0;
+    const u = String(node.unit || '').toLowerCase().trim();
+    const qty = Number(String(node.quantity ?? '').replace(',', '.')) || 0;
+    return isMonthUnit(u) && qty > 0 ? qty : 0;
+};
+
+// Koniec (wyłączny) okresu N miesięcy od startu; część ułamkowa jako 30-dniowe miesiące.
+// @anchor add-calendar-months
+const addCalendarMonths = (start, months) => {
+    const whole = Math.floor(months);
+    const d = new Date(start);
+    const day = d.getDate();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + whole);
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(Math.min(day, lastDay));
+    const fracDays = Math.round((months - whole) * 30);
+    if (fracDays > 0) d.setDate(d.getDate() + fracDays);
+    return d;
+};
+
 const nodeDurationDays = (node) => {
     const u = String(node.unit || '').toLowerCase().trim();
     const qty = Number(String(node.quantity ?? '').replace(',', '.')) || 0;
-    if (isWorkType(node.type)) {
-        if (isDayUnit(u) && qty > 0) return Math.max(1, Math.round(qty));
+    if (isWorkType(node.type) && qty > 0) {
+        if (isDayUnit(u)) return Math.max(1, Math.round(qty));
+        if (isHourUnit(u)) return Math.max(1, Math.ceil(qty / HOURS_PER_WORKDAY));
+        if (isWeekUnit(u)) return Math.max(1, Math.round(qty * WORKDAYS_PER_WEEK));
     }
     // Packet types (type=pakiet/komplet) or work with packet units → use qty as gantt days, min 1
     if (isPacketType(node.type) || (isWorkType(node.type) && isPacketUnit(u))) {
@@ -174,6 +208,7 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
                     ? branchWorkOnHolidays[node.id]
                     : wow;
                 const dur = nodeDurationDays(node);
+                const durMonths = nodeDurationMonths(node);
                 const ovr = overrides?.[node.id];
                 let start, end, type;
                 // tylko praca z jednostką dni może aktualizować ilość przez timeline
@@ -182,6 +217,20 @@ const buildTasksFromTree = (items, projectStart, projectName, overrides, branchW
                 if (ovr?.start && ovr?.end) {
                     start = new Date(ovr.start);
                     end = new Date(ovr.end);
+                    type = 'task';
+                } else if (durMonths > 0) {
+                    // Miesiąc = dni robocze w danym miesiącu kalendarzowym (bez weekendów i świąt, ~20–21),
+                    // niezależnie od ustawienia pracy w święta gałęzi.
+                    start = defaultStart;
+                    const monthsEnd = addCalendarMonths(start, durMonths);
+                    let workDays = 0;
+                    for (const c = new Date(start); c < monthsEnd; c.setDate(c.getDate() + 1)) {
+                        if (!isNonWorkingDay(c)) workDays++;
+                    }
+                    workDays = Math.max(1, workDays);
+                    end = effectiveWow
+                        ? new Date(start.getTime() + workDays * DAY_MS)
+                        : addWorkingDays(start, workDays);
                     type = 'task';
                 } else if (dur > 0) {
                     start = defaultStart;
