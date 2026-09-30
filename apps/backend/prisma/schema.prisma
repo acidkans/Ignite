@@ -1904,3 +1904,28 @@ model Dependent {
   @@index([userId])
   @@map("dependents")
 }
+
+/// @anchor offer-ai-analysis
+/// Analiza AI „oferta + strategie vs budżet" liczona w tle na serwerze. Wiersz = jedno
+/// uruchomienie: RUNNING → DONE (result + raport PDF w dokumentacji) albo ERROR.
+/// Celowo POZA wersjonowaniem (nie kopiowany w cloneVersionData): to raport z konkretnej
+/// chwili, a `result` odwołuje się do id węzłów WBS tej wersji.
+model OfferAiAnalysis {
+  id          String    @id @default(uuid())
+  nodeId      String
+  versionId   String?
+  /// @anchor offer-ai-analysis-status
+  status      String    @default("RUNNING") // RUNNING | DONE | ERROR
+  /// @anchor offer-ai-analysis-result
+  result      Json?
+  error       String?
+  /// @anchor offer-ai-analysis-document-id
+  /// Raport PDF w dokumentacji projektu (ProcessNode type=document).
+  documentId  String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  finishedAt  DateTime?
+
+  @@index([nodeId, versionId, createdAt])
+  @@map("offer_ai_analyses")
+}

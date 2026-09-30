@@ -1,15 +1,139 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Inject, forwardRef, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { VectorService } from './vector.service';
+import { DocumentsService } from '../documents/documents.service';
+import { PdfService } from '../pdf/pdf.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { PushService } from '../push/push.service';
+import { buildOfferAiReportHtml, offerAiReportFilename } from './offer-ai-report';
 
 @Injectable()
-export class AiService {
+export class AiService implements OnModuleInit {
     private readonly logger = new Logger(AiService.name);
 
     constructor(
         private prisma: PrismaService,
         private vectorService: VectorService,
+        @Inject(forwardRef(() => DocumentsService))
+        private documentsService: DocumentsService,
+        private pdfService: PdfService,
+        private notificationsService: NotificationsService,
+        private pushService: PushService,
     ) { }
+
+    // Zadanie w tle żyje w pamięci procesu — restart serwera je przerywa. Wiersze RUNNING
+    // z poprzedniego procesu oznaczamy jako błąd, inaczej przycisk wisiałby na „w toku".
+    async onModuleInit() {
+        try {
+            const { count } = await this.prisma.offerAiAnalysis.updateMany({
+                where: { status: 'RUNNING' },
+                data: { status: 'ERROR', error: 'Analiza przerwana restartem serwera — uruchom ponownie', finishedAt: new Date() },
+            });
+            if (count) this.logger.warn(`[OfferAiAnalysis] ${count} przerwanych analiz oznaczono jako ERROR`);
+        } catch (e) {
+            this.logger.warn(`[OfferAiAnalysis] porządkowanie po restarcie nieudane: ${e?.message}`);
+        }
+    }
+
+    // @anchor start-offer-budget-check
+    /**
+     * Startuje analizę w tle i od razu zwraca wiersz OfferAiAnalysis (status RUNNING).
+     * Cały przebieg — AI, raport PDF, dokumentacja, powiadomienie — dzieje się na serwerze,
+     * więc użytkownik może zamknąć okno, zmienić projekt albo kartę przeglądarki.
+     * Druga analiza tej samej oferty w trakcie pierwszej nie startuje — zwracamy trwającą.
+     */
+    async startOfferBudgetCheck(body: any, userId: string | null) {
+        const nodeId = String(body?.nodeId || '');
+        if (!nodeId) throw new BadRequestException('Brak nodeId');
+        const versionId = body?.versionId && body.versionId !== 'null' ? String(body.versionId) : null;
+        const running = await this.prisma.offerAiAnalysis.findFirst({
+            where: { nodeId, versionId, status: 'RUNNING' },
+            orderBy: { createdAt: 'desc' },
+        });
+        if (running) return running;
+        const job = await this.prisma.offerAiAnalysis.create({ data: { nodeId, versionId, createdById: userId } });
+        void this.runOfferBudgetJob(job.id, body, userId);
+        return job;
+    }
+
+    // @anchor get-latest-offer-budget-check
+    // `job` = ostatnie uruchomienie (może trwać albo skończyć się błędem), `done` = ostatni
+    // udany wynik — z niego korzysta okno analizy i arkusz „Analiza AI" w eksporcie Excel.
+    async getLatestOfferBudgetCheck(nodeId: string, versionId: string | null) {
+        const vId = versionId && versionId !== 'null' ? versionId : null;
+        const [job, done] = await Promise.all([
+            this.prisma.offerAiAnalysis.findFirst({ where: { nodeId, versionId: vId }, orderBy: { createdAt: 'desc' } }),
+            this.prisma.offerAiAnalysis.findFirst({ where: { nodeId, versionId: vId, status: 'DONE' }, orderBy: { createdAt: 'desc' } }),
+        ]);
+        return { job, done };
+    }
+
+    private async fetchLogoDataUrl(): Promise<string> {
+        const bases = [process.env.FRONTEND_URL, 'http://erp-frontend'].filter(Boolean) as string[];
+        for (const base of bases) {
+            try {
+                const res = await fetch(`${base.replace(/\/$/, '')}/airtel-logo-services.png`, { signal: AbortSignal.timeout(5000) });
+                if (!res.ok) continue;
+                return `data:image/png;base64,${Buffer.from(await res.arrayBuffer()).toString('base64')}`;
+            } catch { /* następny adres */ }
+        }
+        return '';
+    }
+
+    // @anchor run-offer-budget-job
+    private async runOfferBudgetJob(jobId: string, body: any, userId: string | null) {
+        const projectName = String(body?.projectName || '').trim();
+        const nodeId = String(body.nodeId);
+        const notify = async (title: string, text: string) => {
+            if (!userId) return;
+            try {
+                await this.notificationsService.create(userId, 'AI_OFFER_ANALYSIS', title, text, nodeId);
+                // tab/section — klik w push otwiera zamówienie od razu na sekcji Oferta.
+                await this.pushService.sendToUser(userId, title, text, nodeId, { tab: 'unified', section: 'oferta' });
+            } catch (e) {
+                this.logger.warn(`[OfferAiAnalysis] powiadomienie nieudane: ${e?.message}`);
+            }
+        };
+        try {
+            const result: any = await this.checkOfferVsBudget(body);
+            let documentId: string | null = null;
+            let documentError = '';
+            try {
+                const html = buildOfferAiReportHtml(result, projectName, await this.fetchLogoDataUrl());
+                const pdf = await this.pdfService.render(html);
+                const filename = offerAiReportFilename(projectName);
+                // processDocument dekoduje nazwę latin1→utf8 (tak przychodzi z multera) — podajemy ją w tej postaci.
+                const saved: any = await this.documentsService.processDocument({
+                    originalname: Buffer.from(filename, 'utf8').toString('latin1'),
+                    buffer: pdf,
+                    mimetype: 'application/pdf',
+                    size: pdf.length,
+                } as any, nodeId, 'standard');
+                documentId = saved?.nodeId || null;
+                result.documentName = filename;
+            } catch (e) {
+                documentError = e?.message || String(e);
+                this.logger.error(`[OfferAiAnalysis] raport PDF nieudany: ${documentError}`);
+            }
+            await this.prisma.offerAiAnalysis.update({
+                where: { id: jobId },
+                data: { status: 'DONE', result, documentId, error: documentError ? `Raport PDF: ${documentError}` : null, finishedAt: new Date() },
+            });
+            const counts = (result.findings || []).reduce((a: any, f: any) => { a[f.severity] = (a[f.severity] || 0) + 1; return a; }, {});
+            await notify(
+                `Analiza AI oferty gotowa${projectName ? `: ${projectName}` : ''}`,
+                `Błędy: ${counts.error || 0}, ostrzeżenia: ${counts.warning || 0}, do sprawdzenia: ${counts.info || 0}.${documentId ? ' Raport PDF jest w dokumentacji projektu.' : ''}`,
+            );
+        } catch (e) {
+            const message = e?.response?.message || e?.message || String(e);
+            this.logger.error(`[OfferAiAnalysis] analiza nieudana: ${message}`);
+            await this.prisma.offerAiAnalysis.update({
+                where: { id: jobId },
+                data: { status: 'ERROR', error: String(message).slice(0, 2000), finishedAt: new Date() },
+            }).catch(() => {});
+            await notify(`Analiza AI oferty nieudana${projectName ? `: ${projectName}` : ''}`, String(message).slice(0, 300));
+        }
+    }
 
     /**
      * Generuje estymację projektu (WBS + Budżet) na podstawie wymagań.
@@ -222,18 +346,26 @@ KROK 2 — PORÓWNAJ. Szukaj rozbieżności w czterech kategoriach:
 - "niezgodnosc_wartosci": liczby w tekście (ilości, dni, obiekty, km, osoby, parametry, np. moc UPS) nie zgadzają się z ilościami/jednostkami w budżecie.
 - "sprzecznosc": sens zapisu przeczy budżetowi (np. strategia „nie liczymy podnośnika", a podnośnik ma koszt; „dostawa po stronie klienta", a pozycja jest w budżecie).
 
+KROK 3 — PORÓWNAJ POZYCJE BUDŻETU MIĘDZY SOBĄ (kategoria "miedzy_pozycjami"), w obrębie gałęzi i między gałęziami:
+- ilości powiązane: urządzenia vs uchwyty/konstrukcje/porty/licencje; długości kabli vs trasy/rury/koryta; dni pracy vs skala montażu; paliwo/km vs liczba wyjazdów; noclegi i diety vs dni pracy i liczba osób,
+- pozycje towarzyszące: materiał bez pracy montażu, praca bez materiału, urządzenie bez okablowania lub zasilania,
+- duplikaty: ta sama rzecz policzona dwa razy (np. w gałęzi i w kosztach ogólnych),
+- ta sama pozycja w różnych gałęziach z różną jednostką albo nieproporcjonalną ilością,
+- narzut rażąco odbiegający od podobnych pozycji.
+Różnic cen jednostkowych tej samej pozycji NIE zgłaszaj — liczy je osobno program.
+
 Zasady:
 - Zgłaszaj tylko rozbieżności, które da się wskazać konkretnym cytatem lub konkretną pozycją. Nie zgłaszaj ogólnych rad ani stylu tekstu.
 - Pozycje zbiorcze (np. „materiały drobne", „zarządzanie projektem") mogą pokrywać wiele zapisów — nie zgłaszaj braku, jeśli pozycja zbiorcza rozsądnie to obejmuje.
 - Strategia przypisana do gałęzi/pozycji dotyczy tej gałęzi — porównuj ją przede wszystkim z pozycjami tej gałęzi.
 - "branch" = nazwa gałęzi najwyższego poziomu, której dotyczy rozbieżność (pusta, jeśli dotyczy całego projektu).
 - "quote" = dosłowny, krótki (do 200 znaków) fragment oferty lub strategii; pusty dla "brak_w_tekscie".
-- "budgetRefs" = identyfikatory B.. z drzewa WBS; pusta lista, gdy pozycji brak.
+- "budgetRefs" = identyfikatory B.. z drzewa WBS; pusta lista, gdy pozycji brak. Dla "miedzy_pozycjami" podaj wszystkie porównywane pozycje.
 - "severity": "error" (realna strata pieniędzy lub obietnica bez pokrycia), "warning" (prawdopodobna niespójność), "info" (do sprawdzenia).
 - Pisz po polsku, zwięźle.
 
 Zwróć WYŁĄCZNIE JSON bez komentarzy i bez bloków kodu:
-{"projectUnderstanding":"3-5 zdań: czym jest projekt, główne gałęzie i co obejmują","summary":"2-3 zdania oceny zgodności oferty z budżetem","findings":[{"severity":"error|warning|info","category":"brak_w_budzecie|brak_w_tekscie|niezgodnosc_wartosci|sprzecznosc","branch":"...","source":"oferta|strategia|budzet","quote":"...","budgetRefs":["B1"],"description":"na czym polega rozbieżność","suggestion":"co poprawić"}]}
+{"projectUnderstanding":"3-5 zdań: czym jest projekt, główne gałęzie i co obejmują","summary":"2-3 zdania oceny zgodności oferty z budżetem","findings":[{"severity":"error|warning|info","category":"brak_w_budzecie|brak_w_tekscie|niezgodnosc_wartosci|sprzecznosc|miedzy_pozycjami","branch":"...","source":"oferta|strategia|budzet","quote":"...","budgetRefs":["B1"],"description":"na czym polega rozbieżność","suggestion":"co poprawić"}]}
 
 === PRZEDMIOT PROJEKTU ===
 Nazwa: ${projectName || '(brak)'}
@@ -263,7 +395,7 @@ ${strategyLines || '(brak strategii)'}`;
 
         const byRef = new Map(items.map((it: any) => [it.ref, it]));
         const SEVERITIES = ['error', 'warning', 'info'];
-        const CATEGORIES = ['brak_w_budzecie', 'brak_w_tekscie', 'niezgodnosc_wartosci', 'sprzecznosc'];
+        const CATEGORIES = ['brak_w_budzecie', 'brak_w_tekscie', 'niezgodnosc_wartosci', 'sprzecznosc', 'miedzy_pozycjami'];
         const findings = (Array.isArray(parsed?.findings) ? parsed.findings : []).map((f: any) => ({
             severity: SEVERITIES.includes(f?.severity) ? f.severity : 'info',
             category: CATEGORIES.includes(f?.category) ? f.category : 'sprzecznosc',
@@ -277,6 +409,7 @@ ${strategyLines || '(brak strategii)'}`;
                 .filter(Boolean)
                 .map((it: any) => ({ id: it.id, path: it.path, quantity: it.quantity, unit: it.unit, totalCost: it.totalCost, offerPrice: it.offerPrice })),
         })).filter((f: any) => f.description);
+        findings.push(...this.findUnitCostMismatches(items));
         const rank: Record<string, number> = { error: 0, warning: 1, info: 2 };
         findings.sort((a: any, b: any) => rank[a.severity] - rank[b.severity]);
 
@@ -289,6 +422,38 @@ ${strategyLines || '(brak strategii)'}`;
             strategiesChecked: strategies.length,
             findings,
         };
+    }
+
+    // @anchor find-unit-cost-mismatches
+    // Liczone programowo, nie przez AI: ta sama pozycja (nazwa + jednostka) w kilku miejscach
+    // budżetu z różnym kosztem jednostkowym (różnica > 1%). Zerowy koszt pomijamy — to brak
+    // wyceny, który łapie osobno walidacja eksportu.
+    private findUnitCostMismatches(items: any[]) {
+        const norm = (v: string) => String(v || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        const groups = new Map<string, any[]>();
+        for (const it of items) {
+            if (!(it.unitCost > 0) || !norm(it.name)) continue;
+            const key = `${norm(it.name)}||${norm(it.unit)}`;
+            (groups.get(key) || groups.set(key, []).get(key)!).push(it);
+        }
+        const out: any[] = [];
+        for (const list of groups.values()) {
+            if (list.length < 2) continue;
+            const costs = list.map(it => it.unitCost);
+            const min = Math.min(...costs), max = Math.max(...costs);
+            if (max - min <= min * 0.01) continue;
+            out.push({
+                severity: 'warning',
+                category: 'miedzy_pozycjami',
+                branch: '',
+                source: 'budzet',
+                quote: '',
+                description: `Pozycja „${list[0].name}" (${list[0].unit}) występuje ${list.length}× z różnym kosztem jednostkowym: od ${min.toFixed(2)} do ${max.toFixed(2)} PLN.`,
+                suggestion: 'Ujednolicić koszt jednostkowy albo rozróżnić nazwy, jeśli to różne produkty.',
+                budgetItems: list.map(it => ({ id: it.id, path: it.path, quantity: it.quantity, unit: it.unit, totalCost: it.totalCost, offerPrice: it.offerPrice, unitCost: it.unitCost })),
+            });
+        }
+        return out;
     }
 
     async analyzePlan(nodeId: string, versionId: string) {

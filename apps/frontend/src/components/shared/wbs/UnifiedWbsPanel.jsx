@@ -18,7 +18,6 @@ import ExportChoiceModal from '../ExportChoiceModal';
 import WBSHybridTable from './WBSHybridTable';
 import BudgetTable from './BudgetTable';
 import OfferAiCheckModal, { OFFER_AI_SEVERITY, OFFER_AI_CATEGORY } from './OfferAiCheckModal';
-import { saveOfferAiReportToDocs } from '../../../utils/offerAiReport';
 import BudgetModesPanel from './BudgetModesPanel';
 import ComparisonPanel from '../ComparisonPanel';
 import QaTreeView from './QaTreeView';
@@ -392,12 +391,38 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // Analiza AI „oferta + strategie vs budżet": { open, loading, error, result }.
     // Ostatni wynik trzymamy w localStorage per projekt/wersja — trafia też do eksportu
     // „Analiza projektu do Excel" (arkusz „Analiza AI"), również po przeładowaniu strony.
-    const offerAiStorageKey = `offerAiCheck:${nodeId}:${versionId || 'live'}`;
-    const [offerAiCheck, setOfferAiCheck] = useState(null);
-    const offerAiResult = useMemo(() => {
-        if (offerAiCheck?.result) return offerAiCheck.result;
-        try { return JSON.parse(localStorage.getItem(offerAiStorageKey) || 'null'); } catch { return null; }
-    }, [offerAiCheck, offerAiStorageKey]);
+    // Stan z serwera: { job, done } — `job` = ostatnie uruchomienie (RUNNING/DONE/ERROR),
+    // `done` = ostatni udany wynik. Analiza liczy się w tle na serwerze (patrz
+    // `start-offer-budget-check`), panel tylko ją startuje i odpytuje status.
+    const [offerAiState, setOfferAiState] = useState({ job: null, done: null });
+    const [offerAiOpen, setOfferAiOpen] = useState(false);
+    const [offerAiStartError, setOfferAiStartError] = useState(null);
+    const offerAiResult = offerAiState.done?.result || null;
+    const offerAiRunning = offerAiState.job?.status === 'RUNNING';
+
+    // @anchor load-offer-ai-state
+    const loadOfferAiState = useCallback(async () => {
+        if (!nodeId) return;
+        try {
+            const qs = new URLSearchParams({ nodeId, ...(versionId ? { versionId } : {}) });
+            const res = await fetch(`${API_URL}/ai/offer-budget-check/latest?${qs}`, {
+                headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || localStorage.getItem('token')}` },
+            });
+            if (res.ok) setOfferAiState(await res.json());
+        } catch { /* sieć — spróbujemy przy następnym odpytaniu */ }
+    }, [nodeId, versionId]);
+    useEffect(() => { setOfferAiState({ job: null, done: null }); loadOfferAiState(); }, [loadOfferAiState]);
+    // Odpytywanie tylko w trakcie analizy; zakończenie ogłasza też globalny toast.
+    useEffect(() => {
+        if (!offerAiRunning) return;
+        const id = setInterval(loadOfferAiState, 5000);
+        return () => clearInterval(id);
+    }, [offerAiRunning, loadOfferAiState]);
+    useEffect(() => {
+        const onFinished = (e) => { if (!e.detail?.nodeId || String(e.detail.nodeId) === String(nodeId)) loadOfferAiState(); };
+        window.addEventListener('offer-ai-analysis-finished', onFinished);
+        return () => window.removeEventListener('offer-ai-analysis-finished', onFinished);
+    }, [nodeId, loadOfferAiState]);
 
     const safeFileBase = () => String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|\s]+/g, '_') || 'projekt';
     const ganttExportRef = useRef(null);
@@ -2536,8 +2561,10 @@ ${ganttSectionHtml}
     };
 
     // @anchor run-offer-ai-check
+    // Tylko start — serwer liczy analizę, robi raport PDF w dokumentacji i wysyła powiadomienie.
     const runOfferAiCheck = async () => {
-        setOfferAiCheck(prev => ({ ...(prev || {}), open: true, loading: true, error: null }));
+        setOfferAiOpen(true);
+        setOfferAiStartError(null);
         try {
             const res = await fetch(`${API_URL}/ai/offer-budget-check`, {
                 method: 'POST',
@@ -2545,19 +2572,10 @@ ${ganttSectionHtml}
                 body: JSON.stringify(buildOfferAiPayload()),
             });
             const data = await res.json().catch(() => null);
-            if (!res.ok) throw new Error(data?.message || `Błąd analizy (HTTP ${res.status})`);
-            try { localStorage.setItem(offerAiStorageKey, JSON.stringify(data)); } catch { /* brak miejsca — wynik zostaje w stanie */ }
-            setOfferAiCheck({ open: true, loading: false, error: null, result: data, doc: { status: 'saving' } });
-            // Raport PDF do dokumentacji projektu — czytany w panelu bocznym Dokumentacji
-            // równolegle z edycją budżetu. Błąd zapisu nie kasuje wyniku analizy.
-            try {
-                const name = await saveOfferAiReportToDocs({ result: data, nodeId, projectName: orderName || projectName || '' });
-                setOfferAiCheck(prev => ({ ...prev, doc: { status: 'saved', name } }));
-            } catch (docErr) {
-                setOfferAiCheck(prev => ({ ...prev, doc: { status: 'error', error: docErr.message } }));
-            }
+            if (!res.ok) throw new Error(data?.message || `Nie udało się uruchomić analizy (HTTP ${res.status})`);
+            setOfferAiState(prev => ({ ...prev, job: data }));
         } catch (err) {
-            setOfferAiCheck(prev => ({ ...(prev || {}), open: true, loading: false, error: err.message || 'Błąd analizy AI' }));
+            setOfferAiStartError(err.message || 'Nie udało się uruchomić analizy AI');
         }
     };
 
@@ -6535,13 +6553,15 @@ ${ganttSectionHtml}
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    if (offerAiResult) setOfferAiCheck({ open: true, loading: false, error: null, result: offerAiResult });
+                                    if (offerAiRunning || offerAiResult || offerAiState.job) setOfferAiOpen(true);
                                     else runOfferAiCheck();
                                 }}
                                 className="flex items-center gap-1.5 px-3 py-1 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/25 rounded-lg text-violet-200 text-[10px] font-bold uppercase tracking-widest transition-all whitespace-nowrap"
-                                title="Agent AI porównuje tekst oferty i strategie z pozycjami budżetu"
+                                title="Agent AI porównuje tekst oferty i strategie z pozycjami budżetu oraz pozycje budżetu między sobą"
                             >
-                                <Sparkles size={11} /> Analiza AI vs budżet
+                                {offerAiRunning
+                                    ? <><div className="w-3 h-3 border-2 border-violet-300/30 border-t-violet-300 rounded-full animate-spin" /> Analiza w toku…</>
+                                    : <><Sparkles size={11} /> Analiza AI vs budżet</>}
                             </button>
                         </div>
                     ));
@@ -6907,10 +6927,12 @@ ${ganttSectionHtml}
                 </div>
             )}
 
-            {offerAiCheck?.open && (
+            {offerAiOpen && (
                 <OfferAiCheckModal
-                    state={offerAiCheck}
-                    onClose={() => setOfferAiCheck(prev => ({ ...prev, open: false }))}
+                    job={offerAiState.job}
+                    done={offerAiState.done}
+                    startError={offerAiStartError}
+                    onClose={() => setOfferAiOpen(false)}
                     onRun={runOfferAiCheck}
                 />
             )}

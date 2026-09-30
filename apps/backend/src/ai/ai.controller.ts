@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Query, Param, Delete, Patch, Res, BadRequestException, UseInterceptors, UploadedFile, Inject, forwardRef, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query, Param, Delete, Patch, Res, BadRequestException, UseInterceptors, UploadedFile, Inject, forwardRef, UseGuards, Req } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { randomUUID } from 'crypto';
 import { VectorService } from './vector.service';
@@ -223,11 +223,20 @@ export class AiController {
     }
 
     // @anchor offer-budget-check-endpoint
-    // Analiza AI zgodności tekstu oferty i strategii z pozycjami budżetu (ręcznie, z zakładki Oferta).
+    // Start analizy AI oferty i strategii vs budżet — liczona w tle na serwerze; zwraca
+    // wiersz OfferAiAnalysis (RUNNING). Wynik: GET offer-budget-check/latest.
     @UseGuards(JwtAuthGuard)
     @Post('offer-budget-check')
-    async offerBudgetCheck(@Body() body: any) {
-        return this.aiService.checkOfferVsBudget(body);
+    async offerBudgetCheck(@Body() body: any, @Req() req: any) {
+        return this.aiService.startOfferBudgetCheck(body, req.user?.userId || null);
+    }
+
+    // @anchor offer-budget-check-latest-endpoint
+    @UseGuards(JwtAuthGuard)
+    @Get('offer-budget-check/latest')
+    async offerBudgetCheckLatest(@Query('nodeId') nodeId: string, @Query('versionId') versionId?: string) {
+        if (!nodeId) throw new BadRequestException('Brak nodeId');
+        return this.aiService.getLatestOfferBudgetCheck(nodeId, versionId || null);
     }
 
     @Post('apply-estimation/:nodeId/:versionId')

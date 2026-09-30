@@ -9,6 +9,7 @@ import DocumentViewer from '../shared/DocumentViewer';
 import AddNodeModal from '../shared/AddNodeModal';
 import NodePermissionsModal from '../shared/NodePermissionsModal';
 import NotificationBell from '../shared/NotificationBell';
+import OfferAiToast from '../shared/OfferAiToast';
 import { APP_VERSION } from '../../version';
 
 // @anchor find-node-by-id-layout — wyszukuje węzeł w drzewie (dla nazwy folderu OneDrive aktywnego węzła)
@@ -510,6 +511,8 @@ export default function MainLayout({ onLogout }) {
                     </div>
                 </div>
             )}
+            {/* @anchor offer-ai-toast-mount — toast „Analiza AI oferty gotowa” w całej aplikacji */}
+            <OfferAiToast />
             {/* MODALS */}
             {showAddModal && (
                 <AddNodeModal

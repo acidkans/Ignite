@@ -87,6 +87,12 @@ export class DocumentsService {
         if (fileNode) {
             console.log(`[DOCS] Found existing file node: ${fileNode.id}, deleting its old chunks.`);
             try { await this.vectorService.deleteDocumentChunks(fileNode.id); } catch (e) { console.warn(`[DOCS] Vector delete (re-upload) non-fatal: ${e.message}`); }
+            // Stary plik fizyczny — po podmianie nikt go już nie wskazuje (przy każdym re-uploadzie,
+            // np. raporcie Analizy AI nadpisywanym przy każdej analizie, zostawał sierotą w uploads/).
+            const previousStorage = fileNode.storagePath;
+            if (previousStorage && previousStorage !== storageFileName) {
+                try { fs.unlinkSync(path.join(uploadDir, path.basename(previousStorage))); } catch (e) { console.warn(`[DOCS] Usunięcie starego pliku ${previousStorage} nieudane (non-fatal): ${e.message}`); }
+            }
             // Update storage path, mime, size and category in case they changed
             await this.prisma.processNode.update({
                 where: { id: fileNode.id },

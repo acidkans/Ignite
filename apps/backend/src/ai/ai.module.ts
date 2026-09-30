@@ -9,9 +9,12 @@ import { VersioningService } from './versioning.service';
 import { BudgetService } from './budget.service';
 import { DocxService } from './docx.service';
 import { AiService } from './ai.service';
+import { PdfModule } from '../pdf/pdf.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { PushModule } from '../push/push.module';
 
 @Module({
-    imports: [ConfigModule, ProcessTreeModule, PrismaModule, forwardRef(() => DocumentsModule)],
+    imports: [ConfigModule, ProcessTreeModule, PrismaModule, forwardRef(() => DocumentsModule), PdfModule, NotificationsModule, PushModule],
     controllers: [AiController],
     providers: [VectorService, VersioningService, BudgetService, DocxService, AiService],
     exports: [VectorService, VersioningService, BudgetService, DocxService, AiService],

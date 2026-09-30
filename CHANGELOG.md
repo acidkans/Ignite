@@ -1,3 +1,27 @@
+## 2026-09-30 — Analiza AI oferty liczona w tle na serwerze + toast + porównanie pozycji budżetu między sobą
+
+### schema.prisma
+- dodano model `OfferAiAnalysis` (`offer_ai_analyses`) — jedno uruchomienie analizy AI oferty: `status` (RUNNING | DONE | ERROR),
+  `result Json?`, `error`, `documentId` (raport PDF w dokumentacji), `createdById`, `finishedAt`; indeks `(nodeId, versionId, createdAt)`
+- migracja `20260930180000_offer_ai_analysis` (`CREATE TABLE IF NOT EXISTS`)
+
+### architektura / API
+- `back-endpoint` `POST /ai/offer-budget-check` — ZMIANA sygnatury: nie czeka na wynik, zwraca wiersz `OfferAiAnalysis` (RUNNING);
+  trwająca analiza tej samej oferty/wersji nie startuje drugi raz (zwracany jest trwający wiersz)
+- `back-endpoint` `GET /ai/offer-budget-check/latest?nodeId&versionId` — `{ job, done }`: ostatnie uruchomienie i ostatni udany wynik
+- `back-funkcja` `runOfferBudgetJob` — w tle: AI → raport PDF (`PdfService`) → dokumentacja (`DocumentsService.processDocument`) →
+  powiadomienie `AI_OFFER_ANALYSIS` (dzwonek + push z `tab: unified, section: oferta`)
+- `back-funkcja` `findUnitCostMismatches` — programowo: ta sama pozycja (nazwa + jednostka) z różnym kosztem jednostkowym
+- prompt: KROK 3 — porównanie pozycji budżetu między sobą (kategoria `miedzy_pozycjami`)
+- raport PDF budowany na serwerze (`apps/backend/src/ai/offer-ai-report.ts`); usunięto `apps/frontend/src/utils/offerAiReport.js`;
+  nagłówek raportu: „Przygotowano: DD.MM.RRRR, GG:MM” (czas Europe/Warsaw)
+- `back-serwis` `DocumentsService.processDocument` — przy podmianie dokumentu o tej samej nazwie usuwa stary plik z `uploads/`
+- `ui-modal` `OfferAiToast` w `MainLayout` — toast „Analiza AI oferty gotowa" w całej aplikacji (odpytuje `GET /notifications` co 15 s)
+
+### wytyczne
+- `schema-model` `OfferAiAnalysis` — celowo POZA `cloneVersionData`: raport z konkretnej chwili, `result` wskazuje id węzłów tej wersji
+- `back-funkcja` `runOfferBudgetJob` — zadanie żyje w pamięci procesu; restart backendu oznacza wiersze RUNNING jako ERROR (`onModuleInit`)
+
 ## 2026-09-30 — Analiza AI oferta vs budżet, arkusze Strategia / Schematy / Analiza AI w eksporcie budżetu, eksport „same koszty”
 
 ### architektura / API
