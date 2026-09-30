@@ -158,6 +158,19 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
 
     useEffect(() => { fetchFiles(); }, [fetchFiles]);
 
+    // @anchor docs-sidebar-documents-changed
+    // Dokument dodany z innego miejsca aplikacji (np. raport Analizy AI) — odśwież listę
+    // i pokaż nową wersję pliku, jeśli to właśnie on jest otwarty.
+    useEffect(() => {
+        const onChanged = (e) => {
+            if (e.detail?.nodeId && String(e.detail.nodeId) !== String(nodeId)) return;
+            setSelectedFile(null);
+            fetchFiles();
+        };
+        window.addEventListener('documents-changed', onChanged);
+        return () => window.removeEventListener('documents-changed', onChanged);
+    }, [nodeId, fetchFiles]);
+
     // Mierzy szerokość wewnętrznego obszaru scrolla — fit-to-width PDF.
     // Tolerancja ±3px chroni przed feedback-loopem gdy pasek scrolla mryga
     // (renderuje się wertykalny scroll → kurczy szerokość → PDF mniejszy → znika scroll → szerokość rośnie → loop).

@@ -13,10 +13,12 @@ import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
 import { stripPricesFromWorkbook, stripPricesFromHtml, noPricesFilename, noPricesBannerHtml, stripRevenueFromWorkbook, costsOnlyFilename } from '../../../utils/exportWithoutPrices';
-import { buildSchematSectionHtml, SCHEMAT_SECTION_CSS } from '../../../utils/schematPdfExport';
+import { buildSchematSectionHtml, SCHEMAT_SECTION_CSS, loadSchematicsForExcel } from '../../../utils/schematPdfExport';
 import ExportChoiceModal from '../ExportChoiceModal';
 import WBSHybridTable from './WBSHybridTable';
 import BudgetTable from './BudgetTable';
+import OfferAiCheckModal, { OFFER_AI_SEVERITY, OFFER_AI_CATEGORY } from './OfferAiCheckModal';
+import { saveOfferAiReportToDocs } from '../../../utils/offerAiReport';
 import BudgetModesPanel from './BudgetModesPanel';
 import ComparisonPanel from '../ComparisonPanel';
 import QaTreeView from './QaTreeView';
@@ -386,6 +388,17 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const [materialUnifyChoices, setMaterialUnifyChoices] = useState({});
     // @anchor material-unifying
     const [materialUnifying, setMaterialUnifying] = useState(false);
+    // @anchor offer-ai-check
+    // Analiza AI „oferta + strategie vs budżet": { open, loading, error, result }.
+    // Ostatni wynik trzymamy w localStorage per projekt/wersja — trafia też do eksportu
+    // „Analiza projektu do Excel" (arkusz „Analiza AI"), również po przeładowaniu strony.
+    const offerAiStorageKey = `offerAiCheck:${nodeId}:${versionId || 'live'}`;
+    const [offerAiCheck, setOfferAiCheck] = useState(null);
+    const offerAiResult = useMemo(() => {
+        if (offerAiCheck?.result) return offerAiCheck.result;
+        try { return JSON.parse(localStorage.getItem(offerAiStorageKey) || 'null'); } catch { return null; }
+    }, [offerAiCheck, offerAiStorageKey]);
+
     const safeFileBase = () => String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|\s]+/g, '_') || 'projekt';
     const ganttExportRef = useRef(null);
     const ganttGetHtmlRef = useRef(null);
@@ -2169,6 +2182,120 @@ ${ganttSectionHtml}
         return { ok: true, empty: false, invalidRows: [], rows, summary, qaSheetRows, ref };
     };
 
+    // @anchor append-strategy-sheet
+    // Arkusz „Strategia" w eksporcie budżetu: strategie w kolejności drzewa WBS.
+    // Gałąź najwyższego poziomu = pogrubiony niebieski nagłówek, przed każdą kolejną
+    // pusty wiersz; gałęzie pośrednie = pogrubione nagłówki z wcięciem wg głębokości;
+    // węzeł ze strategią = punkt „• nazwa", a opis pod nim z dodatkowym wcięciem.
+    // Między liśćmi nie ma pustych wierszy. Tak jak w PDF: gdy potomkowie mają własne
+    // strategie, strategię węzła top-level (złożoną z nich) pomijamy, by nie dublować.
+    const appendStrategySheet = (workbook, projectLabel) => {
+        const byParent = {};
+        for (const n of budgetScopeData) {
+            const key = n.parentId || '__root__';
+            (byParent[key] = byParent[key] || []).push(n);
+        }
+        Object.values(byParent).forEach(list => list.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)));
+        const strategyOf = (n) => String(n.strategy || '').trim();
+        const nameOf = (n) => String(n.name || '').trim() || '(bez nazwy)';
+        const hasDescStrategy = (id) => (byParent[id] || []).some(c => strategyOf(c) || hasDescStrategy(c.id));
+
+        const sheet = workbook.addWorksheet('Strategia');
+        sheet.getColumn(1).width = 110;
+        const titleRow = sheet.addRow([`Strategia realizacji — ${projectLabel}`]);
+        titleRow.font = { bold: true, size: 14 };
+        sheet.addRow([]);
+
+        const addLine = (text, indent, font) => {
+            const row = sheet.addRow([text]);
+            row.getCell(1).alignment = { wrapText: true, vertical: 'top', indent };
+            if (font) row.getCell(1).font = font;
+            return row;
+        };
+        const addDescription = (text, indent) => {
+            text.split('\n').map(l => l.trim()).filter(Boolean).forEach(l => addLine(l, indent));
+        };
+        const walk = (parentId, depth) => {
+            for (const n of byParent[parentId] || []) {
+                const own = strategyOf(n);
+                const kids = byParent[n.id] || [];
+                const descendants = hasDescStrategy(n.id);
+                if (!own && !descendants) continue;
+                if (kids.length && descendants) {
+                    // Gałąź pośrednia — nagłówek; jej własna strategia jako opis pod nim.
+                    addLine(nameOf(n), depth, { bold: true, color: { argb: 'FF1F2937' } });
+                    if (own) addDescription(own, depth + 2);
+                    walk(n.id, depth + 1);
+                } else {
+                    addLine(`•  ${nameOf(n)}`, depth, { bold: true });
+                    addDescription(own, depth + 2);
+                }
+            }
+        };
+
+        let written = 0;
+        for (const top of byParent.__root__ || []) {
+            const own = strategyOf(top);
+            const descendants = hasDescStrategy(top.id);
+            if (!own && !descendants) continue;
+            if (written++) sheet.addRow([]);
+            addLine(nameOf(top), 0, { bold: true, size: 12, color: { argb: 'FF1D4ED8' } });
+            if (descendants) walk(top.id, 1);
+            else addDescription(own, 2);
+        }
+        if (!written) addLine('Brak strategii w projekcie.', 0, { italic: true, color: { argb: 'FF6B7280' } });
+        sheet.views = [{ state: 'frozen', ySplit: 1 }];
+        return sheet;
+    };
+
+    // @anchor append-schematics-sheet
+    // Arkusz „Schematy" w eksporcie budżetu: tabela znaczników (numery = numery na
+    // obrazach), a pod nią każda strona schematu jako obraz JPEG z naniesionymi
+    // znacznikami. Obraz nie zajmuje komórek, więc pod nim rezerwujemy tyle pustych
+    // wierszy, ile ma wysokości. Brak schematów w projekcie ⇒ arkusza nie ma.
+    const appendSchematicsSheet = async (workbook, projectLabel) => {
+        let data = null;
+        try {
+            data = await loadSchematicsForExcel({ nodeId, token: sessionStorage.getItem('token') || localStorage.getItem('token') });
+        } catch (err) {
+            console.error('[eksport schematów]', err);
+        }
+        if (!data) return;
+        const sheet = workbook.addWorksheet('Schematy');
+        [6, 28, 28, 28, 28, 50].forEach((w, i) => { sheet.getColumn(i + 1).width = w; });
+        sheet.addRow([`Schematy — ${projectLabel}`]).font = { bold: true, size: 14 };
+        sheet.addRow([]);
+
+        if (data.markers.length) {
+            const hdr = sheet.addRow(['#', 'Schemat', 'Przedmiot projektu', 'Pozycja przedmiotu', 'Nazwa znacznika', 'Opis']);
+            hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            hdr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+            data.markers.forEach((m) => {
+                const row = sheet.addRow([m.num, m.page > 1 ? `${m.schematicName} (str. ${m.page})` : m.schematicName, m.przedmiot, m.wymaganie, m.name, m.note]);
+                row.eachCell((c) => { c.alignment = { wrapText: true, vertical: 'top' }; });
+            });
+            sheet.addRow([]);
+        }
+
+        // Szerokość obrazu ≈ szerokość kolumn A–F; wiersz domyślny = 20 px.
+        const IMG_WIDTH = 1000;
+        const ROW_PX = 20;
+        data.files.forEach((file) => {
+            file.pages.forEach((pg, i) => {
+                const title = sheet.addRow([`${file.name}${file.pages.length > 1 ? ` — strona ${i + 1} / ${file.pages.length}` : ''}`]);
+                title.font = { bold: true, size: 12, color: { argb: 'FF1D4ED8' } };
+                const width = Math.min(IMG_WIDTH, pg.width);
+                const height = Math.round(pg.height * (width / pg.width));
+                const imageId = workbook.addImage({ base64: pg.dataUrl.replace(/^data:image\/\w+;base64,/, ''), extension: 'jpeg' });
+                // tl.row jest liczone od 0 — obraz startuje w wierszu zaraz pod tytułem.
+                sheet.addImage(imageId, { tl: { col: 0, row: title.number }, ext: { width, height } });
+                const rowsForImage = Math.ceil(height / ROW_PX) + 1;
+                for (let r = 0; r < rowsForImage; r++) sheet.addRow([]);
+            });
+        });
+        sheet.views = [{ state: 'frozen', ySplit: 1 }];
+    };
+
     // @anchor build-wbs-tree-dump
     // Pełny zrzut drzewa WBS: wszystkie węzły w kolejności hierarchii; gałęzie
     // rolują sumę z dzieci. Koszt/cena własna węzła liczone TAK SAMO jak w
@@ -2353,6 +2480,129 @@ ${ganttSectionHtml}
         if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: baseCols.length } };
 
         return { added: true };
+    };
+
+    // @anchor build-offer-ai-payload
+    // Drzewo WBS w kolejności DFS: gałęzie z sumami (ta sama reguła co Drzewo WBS /
+    // Podsumowanie) i liście budżetu z wartościami + strategie przy swoich węzłach.
+    // Agent dostaje strukturę, a nie płaską listę — musi wiedzieć, której gałęzi
+    // dotyczy pozycja.
+    const buildOfferAiPayload = () => {
+        const byParent = {};
+        for (const n of budgetScopeData) (byParent[n.parentId || '__root__'] = byParent[n.parentId || '__root__'] || []).push(n);
+        Object.values(byParent).forEach(list => list.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)));
+        const nodes = [];
+        const walk = (parentId, depth, parentPath) => {
+            let cost = 0, price = 0;
+            for (const n of byParent[parentId] || []) {
+                const name = String(n.name || '').trim() || '(bez nazwy)';
+                const path = parentPath ? `${parentPath} › ${name}` : name;
+                const kids = byParent[n.id] || [];
+                const isBranch = depth === 0 || kids.length > 0;
+                const q = Math.max(0, parseFloat(n.quantity) || 0);
+                const uc = Math.max(0, parseFloat(n.unitCost) || 0);
+                const m = (n.margin != null && String(n.margin) !== '') ? parseFloat(n.margin) : 0;
+                const d = Math.max(0, parseFloat(n.discount) || 0);
+                const isBudgetLeaf = n.parentId != null && n.type !== 'group';
+                const ownCost = isBudgetLeaf ? uc * q : 0;
+                let ownPrice = isBudgetLeaf && m ? ownCost * (1 + m / 100) : 0;
+                if (ownPrice > 0 && d > 0) ownPrice = Math.max(0, ownPrice * (1 - d / 100));
+                const entry = {
+                    id: n.id, depth, name, type: TYPE_LABELS[n.type] || n.type || '', isBranch, path,
+                    quantity: q, unit: n.unit || '', unitCost: uc, margin: m,
+                    comment: String(n.comment || '').trim(), strategy: String(n.strategy || '').trim(),
+                    totalCost: ownCost, offerPrice: ownPrice,
+                };
+                nodes.push(entry);
+                if (kids.length) {
+                    const sub = walk(n.id, depth + 1, path);
+                    entry.totalCost += sub.cost;
+                    entry.offerPrice += sub.price;
+                }
+                cost += entry.totalCost;
+                price += entry.offerPrice;
+            }
+            return { cost, price };
+        };
+        walk('__root__', 0, '');
+        // Tokeny oferty rozwijamy do wartości; tabele WBS pomijamy — budżet idzie osobno.
+        const offer = String(offerText || '')
+            .replace(/\{nazwa projektu\}/g, orderName || projectName || '')
+            .replace(/\{wartość oferty\}/g, fmtPLN(offerRevenueTotal) + ' PLN')
+            .replace(/\{data oferty\}/g, offerDate)
+            .replace(/\{Roboczo dni w projekcie\}/gi, String(workDaysMemo))
+            .replace(/\{tabela wbs[123]?\}/gi, '');
+        return { nodeId, versionId, projectName: orderName || projectName || '', offerText: offer, nodes };
+    };
+
+    // @anchor run-offer-ai-check
+    const runOfferAiCheck = async () => {
+        setOfferAiCheck(prev => ({ ...(prev || {}), open: true, loading: true, error: null }));
+        try {
+            const res = await fetch(`${API_URL}/ai/offer-budget-check`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token') || localStorage.getItem('token')}` },
+                body: JSON.stringify(buildOfferAiPayload()),
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(data?.message || `Błąd analizy (HTTP ${res.status})`);
+            try { localStorage.setItem(offerAiStorageKey, JSON.stringify(data)); } catch { /* brak miejsca — wynik zostaje w stanie */ }
+            setOfferAiCheck({ open: true, loading: false, error: null, result: data, doc: { status: 'saving' } });
+            // Raport PDF do dokumentacji projektu — czytany w panelu bocznym Dokumentacji
+            // równolegle z edycją budżetu. Błąd zapisu nie kasuje wyniku analizy.
+            try {
+                const name = await saveOfferAiReportToDocs({ result: data, nodeId, projectName: orderName || projectName || '' });
+                setOfferAiCheck(prev => ({ ...prev, doc: { status: 'saved', name } }));
+            } catch (docErr) {
+                setOfferAiCheck(prev => ({ ...prev, doc: { status: 'error', error: docErr.message } }));
+            }
+        } catch (err) {
+            setOfferAiCheck(prev => ({ ...(prev || {}), open: true, loading: false, error: err.message || 'Błąd analizy AI' }));
+        }
+    };
+
+    // @anchor append-offer-ai-check-sheet
+    // Arkusz „Analiza AI" — ostatni wynik porównania oferty i strategii z budżetem
+    // (z zakładki Oferta). Brak uruchomionej analizy ⇒ arkusza nie ma.
+    const appendOfferAiCheckSheet = (workbook) => {
+        const r = offerAiResult;
+        if (!r) return;
+        const sheet = workbook.addWorksheet('Analiza AI');
+        [14, 22, 26, 50, 50, 55, 45].forEach((w, i) => { sheet.getColumn(i + 1).width = w; });
+        sheet.addRow(['Analiza AI: oferta i strategie vs budżet']).font = { bold: true, size: 14 };
+        sheet.addRow([`${new Date(r.createdAt).toLocaleString('pl-PL')} · ${r.model} · sprawdzono ${r.itemsChecked} pozycji budżetu i ${r.strategiesChecked} strategii. Wynik AI to lista kontrolna do przejrzenia.`]).font = { italic: true, color: { argb: 'FF6B7280' } };
+        sheet.addRow([]);
+        const textBlock = (label, text) => {
+            if (!text) return;
+            sheet.addRow([label]).font = { bold: true, color: { argb: 'FF1D4ED8' } };
+            const row = sheet.addRow([text]);
+            sheet.mergeCells(row.number, 1, row.number, 7);
+            row.getCell(1).alignment = { wrapText: true, vertical: 'top' };
+            row.height = Math.min(400, 15 * Math.max(1, Math.ceil(text.length / 180)));
+            sheet.addRow([]);
+        };
+        textBlock('Jak agent rozumie projekt', r.projectUnderstanding);
+        textBlock('Ocena', r.summary);
+        const hdr = sheet.addRow(['Waga', 'Kategoria', 'Gałąź', 'Cytat (oferta / strategia)', 'Pozycje w WBS', 'Opis rozbieżności', 'Sugestia']);
+        hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        hdr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+        const SEV_FILL = { error: 'FFFEE2E2', warning: 'FFFEF3C7', info: 'FFE0F2FE' };
+        const findings = r.findings || [];
+        findings.forEach((f) => {
+            const row = sheet.addRow([
+                OFFER_AI_SEVERITY[f.severity]?.label || f.severity,
+                OFFER_AI_CATEGORY[f.category] || f.category,
+                f.branch || '',
+                f.quote ? `${f.source ? `[${f.source}] ` : ''}„${f.quote}"` : '',
+                (f.budgetItems || []).map(b => `• ${b.path} (${b.quantity} ${b.unit})`).join('\n'),
+                f.description || '',
+                f.suggestion || '',
+            ]);
+            row.eachCell((c) => { c.alignment = { wrapText: true, vertical: 'top' }; });
+            row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SEV_FILL[f.severity] || SEV_FILL.info } };
+        });
+        if (!findings.length) sheet.addRow(['Nie znaleziono rozbieżności.']);
+        else sheet.autoFilter = { from: { row: hdr.number, column: 1 }, to: { row: hdr.number + findings.length, column: 7 } };
     };
 
     const handleExportBudgetExcel = async () => {
@@ -3325,6 +3575,10 @@ ${ganttSectionHtml}
         if (treeDump.rows.length > 0) {
             treeSheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: treeDump.rows.length + 1, column: treeSheet.columnCount } };
         }
+
+        appendStrategySheet(workbook, fileProjectName);
+        await appendSchematicsSheet(workbook, fileProjectName);
+        appendOfferAiCheckSheet(workbook);
 
         // Q&A sheet — zagnieżdżona tabela: Pozycja WBS / Pytanie / Odpowiedź
         const qaSheet = workbook.addWorksheet('Q&A');
@@ -6273,9 +6527,23 @@ ${ganttSectionHtml}
                             />
                         </div>
                     ), () => handleExportPDF('oferta'), (
-                        <button onClick={(e) => { e.stopPropagation(); startGuardedExcelExport('oferta'); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
-                            <FileDown size={11} /> Eksport tabel oferty
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button onClick={(e) => { e.stopPropagation(); startGuardedExcelExport('oferta'); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                                <FileDown size={11} /> Eksport tabel oferty
+                            </button>
+                            {/* @anchor offer-ai-check-button */}
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (offerAiResult) setOfferAiCheck({ open: true, loading: false, error: null, result: offerAiResult });
+                                    else runOfferAiCheck();
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/25 rounded-lg text-violet-200 text-[10px] font-bold uppercase tracking-widest transition-all whitespace-nowrap"
+                                title="Agent AI porównuje tekst oferty i strategie z pozycjami budżetu"
+                            >
+                                <Sparkles size={11} /> Analiza AI vs budżet
+                            </button>
+                        </div>
                     ));
                 }
                 if (key === 'strategy') {
@@ -6639,6 +6907,13 @@ ${ganttSectionHtml}
                 </div>
             )}
 
+            {offerAiCheck?.open && (
+                <OfferAiCheckModal
+                    state={offerAiCheck}
+                    onClose={() => setOfferAiCheck(prev => ({ ...prev, open: false }))}
+                    onRun={runOfferAiCheck}
+                />
+            )}
             {pendingExport && (
                 <ExportChoiceModal
                     open={!!pendingExport}

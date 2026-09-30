@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { VectorService } from './vector.service';
 
@@ -147,6 +147,150 @@ export class AiService {
     /**
      * "Reviewer AI" - krytyczna analiza istniejącego planu
      */
+    // @anchor check-offer-vs-budget
+    /**
+     * Porównuje zapisy tekstowe (oferta + strategie) z pozycjami budżetu.
+     * Model dostaje najpierw KONTEKST: przedmiot projektu (cel/zakres z wymagań
+     * zamówienia) i pełne drzewo WBS — gałęzie z sumami i składowe z wartościami —
+     * żeby rozumiał, czego dotyczy każda pozycja, zanim zacznie porównywać.
+     * Pozycje budżetu (liście) dostają krótkie identyfikatory B1..Bn, na które model
+     * się powołuje; mapujemy je z powrotem na węzły WBS. Wynik to lista rozbieżności
+     * do przejrzenia przez człowieka, nie automatyczny werdykt.
+     */
+    async checkOfferVsBudget(body: any) {
+        const clip = (v: any, max: number) => String(v ?? '').slice(0, max);
+        const num = (v: any) => Number(v) || 0;
+        const offerText = clip(body?.offerText, 60000).trim();
+        const projectName = clip(body?.projectName, 200);
+
+        // Drzewo WBS w kolejności DFS (front liczy sumy gałęzi tak jak w budżecie).
+        const nodes = (Array.isArray(body?.nodes) ? body.nodes : []).slice(0, 3000).map((n: any) => ({
+            id: clip(n?.id, 64),
+            depth: Math.max(0, Math.min(12, Math.floor(num(n?.depth)))),
+            name: clip(n?.name, 300),
+            type: clip(n?.type, 40),
+            isBranch: !!n?.isBranch,
+            path: clip(n?.path, 500),
+            quantity: num(n?.quantity),
+            unit: clip(n?.unit, 20),
+            unitCost: num(n?.unitCost),
+            totalCost: num(n?.totalCost),
+            marginPct: num(n?.margin),
+            offerPrice: num(n?.offerPrice),
+            comment: clip(n?.comment, 500),
+            strategy: clip(n?.strategy, 4000).trim(),
+            ref: '',
+        }));
+        let refNo = 0;
+        for (const n of nodes) if (!n.isBranch) n.ref = `B${++refNo}`;
+        const items = nodes.filter((n: any) => n.ref);
+        const strategies = nodes.filter((n: any) => n.strategy);
+        if (!offerText && !strategies.length) throw new BadRequestException('Brak tekstu oferty i strategii do porównania');
+        if (!items.length) throw new BadRequestException('Budżet nie ma pozycji do porównania');
+
+        // Przedmiot projektu — cel i zakres z wymagań zamówienia (jeśli uzupełnione).
+        let goal = '';
+        let scope = '';
+        if (body?.nodeId) {
+            const vId = body?.versionId && body.versionId !== 'null' ? String(body.versionId) : null;
+            const req = await this.prisma.orderRequirements.findFirst({ where: { nodeId: String(body.nodeId), versionId: vId } })
+                ?? await this.prisma.orderRequirements.findFirst({ where: { nodeId: String(body.nodeId) }, orderBy: { updatedAt: 'desc' } });
+            goal = clip(req?.projectGoal, 4000).trim();
+            scope = clip(req?.projectItems, 8000).trim();
+        }
+
+        const money = (v: number) => v.toFixed(2);
+        const treeLines = nodes.map((n: any) => {
+            const indent = '  '.repeat(n.depth);
+            if (n.isBranch) return `${indent}[GAŁĄŹ] ${n.name} (${n.type || 'grupa'}) — suma koszt ${money(n.totalCost)}, cena ofert. ${money(n.offerPrice)}`;
+            return `${indent}${n.ref} ${n.name} | ${n.type} | ${n.quantity} ${n.unit} | koszt jedn. ${money(n.unitCost)} | koszt ${money(n.totalCost)} | narzut ${n.marginPct}% | cena ofert. ${money(n.offerPrice)}${n.comment ? ` | komentarz: ${n.comment}` : ''}`;
+        }).join('\n');
+        const topBranches = nodes.filter((n: any) => n.depth === 0).map((n: any) => `- ${n.name}`).join('\n');
+        const strategyLines = strategies.map((s: any) => `### ${s.path}${s.ref ? ` (${s.ref})` : ''}\n${s.strategy}`).join('\n\n');
+
+        const prompt = `Jesteś kontrolerem ofert firmy instalacyjnej (teletechnika, okablowanie, monitoring, łączność, prace montażowe). Twoje zadanie: sprawdzić, czy ZAPISY TEKSTOWE (oferta dla klienta + wewnętrzne strategie realizacji) zgadzają się z BUDŻETEM projektu.
+
+KROK 1 — ZROZUM PROJEKT. Zanim porównasz cokolwiek, ustal na podstawie sekcji PRZEDMIOT PROJEKTU i DRZEWO WBS:
+- co jest przedmiotem projektu (co firma dostarcza i wykonuje, dla kogo, gdzie),
+- jakie są główne gałęzie (zakresy) i z jakich składowych się składają,
+- do której gałęzi odnosi się każdy fragment oferty i każda strategia.
+Pozycję budżetu oceniaj ZAWSZE w kontekście jej gałęzi (np. „kabel" w gałęzi „Monitoring" to okablowanie kamer, a nie zasilania).
+
+KROK 2 — PORÓWNAJ. Szukaj rozbieżności w czterech kategoriach:
+- "brak_w_budzecie": tekst obiecuje/zakłada dostawę, pracę, materiał lub usługę, której nie ma w budżecie danej gałęzi (albo ma zerowy koszt/ilość).
+- "brak_w_tekscie": pozycja budżetu o istotnym koszcie, której oferta ani strategie w ogóle nie uzasadniają.
+- "niezgodnosc_wartosci": liczby w tekście (ilości, dni, obiekty, km, osoby, parametry, np. moc UPS) nie zgadzają się z ilościami/jednostkami w budżecie.
+- "sprzecznosc": sens zapisu przeczy budżetowi (np. strategia „nie liczymy podnośnika", a podnośnik ma koszt; „dostawa po stronie klienta", a pozycja jest w budżecie).
+
+Zasady:
+- Zgłaszaj tylko rozbieżności, które da się wskazać konkretnym cytatem lub konkretną pozycją. Nie zgłaszaj ogólnych rad ani stylu tekstu.
+- Pozycje zbiorcze (np. „materiały drobne", „zarządzanie projektem") mogą pokrywać wiele zapisów — nie zgłaszaj braku, jeśli pozycja zbiorcza rozsądnie to obejmuje.
+- Strategia przypisana do gałęzi/pozycji dotyczy tej gałęzi — porównuj ją przede wszystkim z pozycjami tej gałęzi.
+- "branch" = nazwa gałęzi najwyższego poziomu, której dotyczy rozbieżność (pusta, jeśli dotyczy całego projektu).
+- "quote" = dosłowny, krótki (do 200 znaków) fragment oferty lub strategii; pusty dla "brak_w_tekscie".
+- "budgetRefs" = identyfikatory B.. z drzewa WBS; pusta lista, gdy pozycji brak.
+- "severity": "error" (realna strata pieniędzy lub obietnica bez pokrycia), "warning" (prawdopodobna niespójność), "info" (do sprawdzenia).
+- Pisz po polsku, zwięźle.
+
+Zwróć WYŁĄCZNIE JSON bez komentarzy i bez bloków kodu:
+{"projectUnderstanding":"3-5 zdań: czym jest projekt, główne gałęzie i co obejmują","summary":"2-3 zdania oceny zgodności oferty z budżetem","findings":[{"severity":"error|warning|info","category":"brak_w_budzecie|brak_w_tekscie|niezgodnosc_wartosci|sprzecznosc","branch":"...","source":"oferta|strategia|budzet","quote":"...","budgetRefs":["B1"],"description":"na czym polega rozbieżność","suggestion":"co poprawić"}]}
+
+=== PRZEDMIOT PROJEKTU ===
+Nazwa: ${projectName || '(brak)'}
+Cel projektu: ${goal || '(nie uzupełniono)'}
+Zakres zamówienia: ${scope || '(nie uzupełniono)'}
+Główne gałęzie WBS:
+${topBranches || '(brak)'}
+
+=== DRZEWO WBS (wcięcie = poziom; [GAŁĄŹ] = zakres grupujący z sumą; B.. = pozycja budżetu: typ | ilość jednostka | koszt jedn. | koszt | narzut | cena ofertowa) ===
+${treeLines}
+
+=== OFERTA DLA KLIENTA ===
+${offerText || '(brak tekstu oferty)'}
+
+=== STRATEGIE REALIZACJI (ścieżka gałęzi WBS, pod nią treść) ===
+${strategyLines || '(brak strategii)'}`;
+
+        const raw = await this.vectorService.generateRaw(prompt);
+        const jsonText = raw.match(/\{[\s\S]*\}/)?.[0];
+        let parsed: any;
+        try {
+            parsed = JSON.parse(jsonText || '');
+        } catch {
+            this.logger.warn(`[OfferBudgetCheck] niepoprawny JSON od modelu: ${raw.slice(0, 300)}`);
+            throw new BadRequestException('Model AI zwrócił nieczytelną odpowiedź — spróbuj ponownie');
+        }
+
+        const byRef = new Map(items.map((it: any) => [it.ref, it]));
+        const SEVERITIES = ['error', 'warning', 'info'];
+        const CATEGORIES = ['brak_w_budzecie', 'brak_w_tekscie', 'niezgodnosc_wartosci', 'sprzecznosc'];
+        const findings = (Array.isArray(parsed?.findings) ? parsed.findings : []).map((f: any) => ({
+            severity: SEVERITIES.includes(f?.severity) ? f.severity : 'info',
+            category: CATEGORIES.includes(f?.category) ? f.category : 'sprzecznosc',
+            branch: clip(f?.branch, 300),
+            source: ['oferta', 'strategia', 'budzet'].includes(f?.source) ? f.source : '',
+            quote: clip(f?.quote, 400),
+            description: clip(f?.description, 1500),
+            suggestion: clip(f?.suggestion, 1000),
+            budgetItems: (Array.isArray(f?.budgetRefs) ? f.budgetRefs : [])
+                .map((r: any) => byRef.get(String(r).trim()))
+                .filter(Boolean)
+                .map((it: any) => ({ id: it.id, path: it.path, quantity: it.quantity, unit: it.unit, totalCost: it.totalCost, offerPrice: it.offerPrice })),
+        })).filter((f: any) => f.description);
+        const rank: Record<string, number> = { error: 0, warning: 1, info: 2 };
+        findings.sort((a: any, b: any) => rank[a.severity] - rank[b.severity]);
+
+        return {
+            createdAt: new Date().toISOString(),
+            model: process.env.AI_MODEL || '',
+            projectUnderstanding: clip(parsed?.projectUnderstanding, 3000),
+            summary: clip(parsed?.summary, 2000),
+            itemsChecked: items.length,
+            strategiesChecked: strategies.length,
+            findings,
+        };
+    }
+
     async analyzePlan(nodeId: string, versionId: string) {
         // Pobierz obecny WBS i Budżet
         const subtasks = await this.prisma.subtask.findMany({ where: { nodeId, versionId } });

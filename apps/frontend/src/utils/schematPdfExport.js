@@ -101,6 +101,85 @@ const drawMarkers = (ctx, w, h, markers) => {
     });
 };
 
+// @anchor render-schematic-pages
+// Renderuje plik schematu do obrazów JPEG z naniesionymi znacznikami: PDF → strona po
+// stronie przez pdf.js, JPG/PNG bezpośrednio. Wspólne dla eksportu PDF i Excela.
+// Zwraca [{ dataUrl, width, height }] (pusta tablica, gdy pliku nie da się pobrać/odczytać).
+export async function renderSchematicPages(sch, token) {
+    const ext = String(sch.fileName || '').split('.').pop().toLowerCase();
+    const canvasToPage = (canvas) => ({ dataUrl: canvas.toDataURL('image/jpeg', 0.9), width: canvas.width, height: canvas.height });
+    try {
+        const res = await fetch(`${API_URL}/schematics/file/${sch.fileUrl}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) return [];
+        const blob = await res.blob();
+        if (ext === 'pdf') {
+            const arrayBuffer = await blob.arrayBuffer();
+            const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+            const pages = [];
+            for (let p = 1; p <= pdf.numPages; p++) {
+                const page = await pdf.getPage(p);
+                const viewport = page.getViewport({ scale: 1.5 });
+                const canvas = document.createElement('canvas');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                const ctx = canvas.getContext('2d');
+                await page.render({ canvasContext: ctx, viewport }).promise;
+                drawMarkers(ctx, canvas.width, canvas.height, (sch.markers || []).filter(m => m.pageNumber === p));
+                pages.push(canvasToPage(canvas));
+            }
+            return pages;
+        }
+        const page = await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                drawMarkers(ctx, canvas.width, canvas.height, (sch.markers || []).filter(m => m.pageNumber === 1));
+                resolve(canvasToPage(canvas));
+            };
+            img.onerror = reject;
+            img.src = URL.createObjectURL(blob);
+        });
+        return [page];
+    } catch { return []; /* pomiń uszkodzony plik */ }
+}
+
+// @anchor load-schematics-for-excel
+// Dane zakładki „Schematy" w eksporcie Excel: lista znaczników (numeracja globalna jak
+// w PDF) + wyrenderowane strony schematów. null = projekt nie ma schematów.
+export async function loadSchematicsForExcel({ nodeId, token }) {
+    const res = await fetch(`${API_URL}/schematics/node/${nodeId}`, { headers: { Authorization: `Bearer ${token}` } });
+    const schematics = res.ok ? await res.json() : [];
+    if (!schematics.length) return null;
+    let num = 0;
+    const markers = schematics.flatMap(sch => (sch.markers || []).map(m => {
+        const links = m.wbsLinks || [];
+        const childLink = links.find(l => l.wbsParentName && l.wbsNodeName);
+        const rootLink = links.find(l => !l.wbsParentName && l.wbsNodeName);
+        return {
+            num: ++num,
+            schematicName: sch.fileName,
+            page: m.pageNumber || 1,
+            przedmiot: childLink?.wbsParentName || rootLink?.wbsNodeName || m.subtask?.name || '',
+            wymaganie: childLink?.wbsNodeName || '',
+            name: m.name || '',
+            note: m.note || '',
+        };
+    }));
+    // Numery na obrazach muszą się zgadzać z tabelą — drawMarkers czyta m._num.
+    let drawNum = 0;
+    for (const sch of schematics) for (const m of (sch.markers || [])) m._num = ++drawNum;
+    const files = [];
+    for (const sch of schematics) {
+        const pages = await renderSchematicPages(sch, token);
+        if (pages.length) files.push({ name: sch.fileName, pages });
+    }
+    return { markers, files };
+}
+
 /**
  * Buduje HTML sekcji "Schemat" (tabela znaczników + Q&A z WBS + strony schematów z naniesionymi markerami).
  * @param {{ nodeId: string, wbsData?: Array, orderName?: string, token: string, sectionTitle?: string|null, pageBreakBefore?: boolean }} opts
@@ -157,46 +236,8 @@ export async function buildSchematSectionHtml({ nodeId, wbsData = [], orderName 
     // Renderuj wszystkie schematy (PDF → canvas per strona, obrazy bezpośrednio)
     const schematicSections = [];
     for (const sch of freshSchematics) {
-        const ext = sch.fileName.split('.').pop().toLowerCase();
-        try {
-            const res = await fetch(`${API_URL}/schematics/file/${sch.fileUrl}`, { headers: { Authorization: `Bearer ${token}` } });
-            if (!res.ok) continue;
-            const blob = await res.blob();
-            if (ext === 'pdf') {
-                const arrayBuffer = await blob.arrayBuffer();
-                const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-                const pages = [];
-                for (let p = 1; p <= pdf.numPages; p++) {
-                    const page = await pdf.getPage(p);
-                    const viewport = page.getViewport({ scale: 1.5 });
-                    const canvas = document.createElement('canvas');
-                    canvas.width = viewport.width;
-                    canvas.height = viewport.height;
-                    const ctx = canvas.getContext('2d');
-                    await page.render({ canvasContext: ctx, viewport }).promise;
-                    const pageMarkers = (sch.markers || []).filter(m => m.pageNumber === p);
-                    drawMarkers(ctx, canvas.width, canvas.height, pageMarkers);
-                    pages.push(canvas.toDataURL('image/jpeg', 0.9));
-                }
-                schematicSections.push({ name: sch.fileName, pages });
-            } else {
-                const b64 = await new Promise(resolve => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = img.naturalWidth;
-                        canvas.height = img.naturalHeight;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0);
-                        const pageMarkers = (sch.markers || []).filter(m => m.pageNumber === 1);
-                        drawMarkers(ctx, canvas.width, canvas.height, pageMarkers);
-                        resolve(canvas.toDataURL('image/jpeg', 0.9));
-                    };
-                    img.src = URL.createObjectURL(blob);
-                });
-                schematicSections.push({ name: sch.fileName, pages: [b64] });
-            }
-        } catch { /* pomiń uszkodzony plik */ }
+        const pages = await renderSchematicPages(sch, token);
+        if (pages.length) schematicSections.push({ name: sch.fileName, pages: pages.map(pg => pg.dataUrl) });
     }
 
     let rowNum = 0;

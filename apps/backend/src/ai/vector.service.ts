@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, OnModuleInit, Logger, Inject, forwardRef, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { QdrantClient } from '@qdrant/js-client-rest';
@@ -371,6 +371,8 @@ export class VectorService implements OnModuleInit {
     async generateRaw(prompt: string): Promise<string> {
         const modelName = this.configService.get<string>('AI_MODEL');
         this.logger.log(`[GenerateRaw] model: ${modelName}, prompt length: ${prompt.length}`);
+        // Brak AI_MODEL (np. dev bez kluczy) — czytelny błąd zamiast TypeError na startsWith.
+        if (!modelName) throw new ServiceUnavailableException('AI nie jest skonfigurowane na tym serwerze (brak AI_MODEL / klucza API)');
 
         if (modelName.startsWith('gpt') && this.openai) {
             const completion = await this.openai.chat.completions.create({
@@ -398,7 +400,7 @@ export class VectorService implements OnModuleInit {
             return completion.choices[0]?.message?.content || '';
         }
 
-        throw new Error(`Brak obsługiwanego providera AI dla modelu: ${modelName}`);
+        throw new ServiceUnavailableException(`Brak obsługiwanego providera AI dla modelu: ${modelName} (sprawdź klucz API)`);
     }
 
     /**

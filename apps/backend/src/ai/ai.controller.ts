@@ -1,4 +1,5 @@
-import { Controller, Post, Body, Get, Query, Param, Delete, Patch, Res, BadRequestException, UseInterceptors, UploadedFile, Inject, forwardRef } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query, Param, Delete, Patch, Res, BadRequestException, UseInterceptors, UploadedFile, Inject, forwardRef, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { randomUUID } from 'crypto';
 import { VectorService } from './vector.service';
 import { ProcessTreeService } from '../process-tree/process-tree.service';
@@ -219,6 +220,14 @@ export class AiController {
     @Post('analyze-plan/:nodeId/:versionId')
     async analyzePlan(@Param('nodeId') nodeId: string, @Param('versionId') versionId: string) {
         return this.aiService.analyzePlan(nodeId, versionId);
+    }
+
+    // @anchor offer-budget-check-endpoint
+    // Analiza AI zgodności tekstu oferty i strategii z pozycjami budżetu (ręcznie, z zakładki Oferta).
+    @UseGuards(JwtAuthGuard)
+    @Post('offer-budget-check')
+    async offerBudgetCheck(@Body() body: any) {
+        return this.aiService.checkOfferVsBudget(body);
     }
 
     @Post('apply-estimation/:nodeId/:versionId')

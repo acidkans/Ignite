@@ -101,6 +101,7 @@ Modele na produkcji: `AI_MODEL=gemini-2.5-flash`, `EMBEDDING_MODEL=gemini-embedd
 | AI_INDEKS_DOK | Embeddingi chunków wgranego dokumentu | EMBEDDING | Wgranie / reindeks dokumentu; `reindexAll()` przy nowej kolekcji Qdrant | `documents.service.ts` → `processDocument()`, `reindexDocument()` |
 | AI_ESTYMACJA | Estymacja, analiza planu, propozycja WBS | AI_MODEL + EMBEDDING | Użytkownik | `ai.service.ts` → `estimateProject()`, `analyzePlan()`, `proposeWbs()` |
 | AI_AUTO_WBS | Auto-generowanie WBS z OPZ/SWZ | AI_MODEL | Użytkownik: `POST /ai/workflow/auto-generate` | `ai.service.ts` → `runAutoDeployWorkflow()` |
+| AI_OFERTA_VS_BUDZET | Porównanie tekstu oferty i strategii z pozycjami budżetu (drzewo WBS + przedmiot projektu) | AI_MODEL | Użytkownik: „Analiza AI vs budżet” w zakładce Oferta → `POST /ai/offer-budget-check` | `ai.service.ts` → `checkOfferVsBudget()` |
 
 Zasady:
 - Żaden proces w tle nie woła Gemini cyklicznie — do 2026-09-24 robił to cron `sync-db-to-vector` co godzinę (~3600 wywołań/dzień), zastąpiony przez `ensureDailyDbSync`. Nie dodawaj cronów wołających Gemini bez sprawdzenia kosztu.
@@ -369,6 +370,19 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-typ | WbsTreeItem | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-tree-item |
 | back-endpoint | GET /wbs-nodes/unified/:nodeId | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-unified-get |
 | back-endpoint | POST /wbs-nodes/unified/:nodeId | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-unified-post |
+| back-endpoint | POST /ai/offer-budget-check | apps/backend/src/ai/ai.controller.ts | @anchor offer-budget-check-endpoint |
+| back-funkcja | AiService.checkOfferVsBudget | apps/backend/src/ai/ai.service.ts | @anchor check-offer-vs-budget |
+| ui-modal | OfferAiCheckModal | apps/frontend/src/components/shared/wbs/OfferAiCheckModal.jsx | @anchor offer-ai-check-modal |
+| ui-stala | OFFER_AI_SEVERITY / OFFER_AI_CATEGORY | apps/frontend/src/components/shared/wbs/OfferAiCheckModal.jsx | @anchor offer-ai-check-labels |
+| ui-stan | offerAiCheck | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor offer-ai-check |
+| ui-funkcja | buildOfferAiPayload | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor build-offer-ai-payload |
+| ui-funkcja | runOfferAiCheck | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor run-offer-ai-check |
+| ui-funkcja | appendOfferAiCheckSheet | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor append-offer-ai-check-sheet |
+| ui-przycisk | Analiza AI vs budżet | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor offer-ai-check-button |
+| ui-stala | OFFER_AI_REPORT_FILENAME | apps/frontend/src/utils/offerAiReport.js | @anchor offer-ai-report-filename |
+| ui-funkcja | buildOfferAiReportBody | apps/frontend/src/utils/offerAiReport.js | @anchor build-offer-ai-report-html |
+| ui-funkcja | saveOfferAiReportToDocs | apps/frontend/src/utils/offerAiReport.js | @anchor save-offer-ai-report-to-docs |
+| ui-hook | DocumentationSidebar — nasłuch `documents-changed` | apps/frontend/src/components/Documentation/DocumentationSidebar.jsx | @anchor docs-sidebar-documents-changed |
 | back-endpoint | POST /wbs-nodes | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-create |
 | back-endpoint | PATCH /wbs-nodes/:id | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-update |
 | back-endpoint | PATCH /wbs-nodes/:id/budget | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-update-budget |
@@ -547,6 +561,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | noPricesBannerHtml | apps/frontend/src/utils/exportWithoutPrices.js | @anchor no-prices-banner-html |
 | ui-funkcja | handleExportBudgetExcel | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-budget-excel |
 | ui-funkcja | buildWbsTreeDump | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor build-wbs-tree-dump |
+| ui-funkcja | appendStrategySheet | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor append-strategy-sheet |
+| ui-funkcja | appendSchematicsSheet | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor append-schematics-sheet |
+| ui-funkcja | renderSchematicPages | apps/frontend/src/utils/schematPdfExport.js | @anchor render-schematic-pages |
+| ui-funkcja | loadSchematicsForExcel | apps/frontend/src/utils/schematPdfExport.js | @anchor load-schematics-for-excel |
 | ui-funkcja | handleExportOfertaWbsExcel | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-oferta-wbs-excel |
 | ui-funkcja | buildMarkdownSheet | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor build-markdown-sheet |
 | ui-funkcja | kwotaSlownie | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor kwota-slownie |

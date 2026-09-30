@@ -1,3 +1,28 @@
+## 2026-09-30 — Analiza AI oferta vs budżet, arkusze Strategia / Schematy / Analiza AI w eksporcie budżetu, eksport „same koszty”
+
+### architektura / API
+- `back-endpoint` `POST /ai/offer-budget-check` (JwtAuthGuard) — body `{ nodeId, versionId, projectName, offerText, nodes[] }`;
+  `nodes` = drzewo WBS w kolejności DFS (gałęzie z sumami `isBranch`, liście budżetu z wartościami, strategie przy węzłach).
+  Zwraca `{ createdAt, model, projectUnderstanding, summary, itemsChecked, strategiesChecked, findings[] }`
+- `back-funkcja` `AiService.checkOfferVsBudget` — prompt dwuetapowy: najpierw zrozumienie przedmiotu projektu
+  (cel/zakres z `OrderRequirements` + drzewo WBS), potem rozbieżności w 4 kategoriach; liście dostają refy B1..Bn
+- `ui-modal` `OfferAiCheckModal` + `ui-przycisk` „Analiza AI vs budżet” w zakładce Oferta; ostatni wynik w localStorage
+  (`offerAiCheck:<nodeId>:<versionId>`)
+- eksport „Analiza projektu do Excel”: nowe arkusze „Strategia”, „Schematy” (obrazy stron ze znacznikami) i „Analiza AI”;
+  checkbox „Eksport: same koszty” w kaflu Marża (`stripRevenueFromWorkbook`)
+- raport analizy AI zapisywany automatycznie jako PDF w dokumentacji projektu (`POST /documents/upload`, kategoria standard,
+  stała nazwa `Analiza AI - oferta vs budzet.pdf` — nowa analiza nadpisuje poprzednią); panel Dokumentacji odświeża listę
+  po zdarzeniu `documents-changed`
+- `back-kontener` frontend nginx `location /api` — `proxy_read_timeout`/`proxy_send_timeout` 300s (analiza AI trwa ~1,5 min, domyślne 60 s dawało 504)
+
+### słownik
+- dodano `AI_OFERTA_VS_BUDZET` — płatne wywołanie Gemini, `ai.service.ts` → `checkOfferVsBudget()`
+
+### wytyczne
+- `back-endpoint` `POST /ai/offer-budget-check` — tylko ręcznie z UI, nigdy z crona (koszt Gemini)
+- `ui-funkcja` `saveOfferAiReportToDocs` — raport czytamy w panelu Dokumentacji obok edytowanego budżetu, nie w modalu blokującym ekran
+- `ui-funkcja` `buildOfferAiPayload` — agent musi dostać strukturę WBS (gałęzie + składowe), nie płaską listę pozycji
+
 ## 2026-09-23 — realizacja_new: zakupy nadmiarowe, status oferty „Poza ofertą”, kolumna Rozliczenie i arkusz Analiza zakupow w eksporcie, delta w kolumnie Koszt calkowity
 
 ### schema.prisma

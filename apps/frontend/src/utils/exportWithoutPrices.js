@@ -142,7 +142,9 @@ export function stripRevenueFromWorkbook(workbook) {
             row.eachCell({ includeEmpty: false }, (cell) => cells.push(cell));
             const first = cells[0];
             const firstTxt = first ? cellText(first.value).trim() : '';
-            const labelRow = isRevenueText(firstTxt) && cells.slice(1).every((c) => {
+            // Musi nieść choć jedną liczbę — sam tekst (np. opis strategii ze słowem
+            // „cena") nie jest wierszem wartości i zostaje.
+            const labelRow = isRevenueText(firstTxt) && cells.some(c => isNumericCell(c.value)) && cells.slice(1).every((c) => {
                 const t = cellText(c.value).trim();
                 return isNumericCell(c.value) || !t || isRevenueText(t);
             });
