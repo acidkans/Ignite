@@ -7,9 +7,13 @@ import { buildPdfDocument, fetchLogoDataUrl, esc } from './wbsPdfExport';
 import { renderHtmlToPdf } from './exportMail';
 
 // @anchor offer-ai-report-filename
-// Stała nazwa: ponowna analiza nadpisuje dokument (processDocument aktualizuje węzeł o tej
-// samej nazwie), więc w dokumentacji zawsze leży jedna, najnowsza wersja.
-export const OFFER_AI_REPORT_FILENAME = 'Analiza AI - oferta vs budzet.pdf';
+// „Analiza AI oferty - <nazwa oferty>.pdf". Nazwa stała dla danej oferty: ponowna analiza
+// nadpisuje dokument (processDocument aktualizuje węzeł o tej samej nazwie), więc w
+// dokumentacji zawsze leży jedna, najnowsza wersja. Znaki niedozwolone w nazwach plików → „_".
+export const offerAiReportFilename = (offerName) => {
+    const safe = String(offerName || '').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, ' ').trim().slice(0, 120);
+    return safe ? `Analiza AI oferty - ${safe}.pdf` : 'Analiza AI oferty.pdf';
+};
 
 const SEVERITY = {
     error: { label: 'Błąd', color: '#b91c1c', bg: '#fef2f2' },
@@ -82,9 +86,10 @@ export async function saveOfferAiReportToDocs({ result, nodeId, projectName }) {
         bodyHtml: buildOfferAiReportBody(result),
         extraCss: REPORT_CSS,
     });
-    const pdf = await renderHtmlToPdf(html, OFFER_AI_REPORT_FILENAME);
+    const filename = offerAiReportFilename(projectName);
+    const pdf = await renderHtmlToPdf(html, filename);
     const form = new FormData();
-    form.append('file', new File([pdf], OFFER_AI_REPORT_FILENAME, { type: 'application/pdf' }));
+    form.append('file', new File([pdf], filename, { type: 'application/pdf' }));
     form.append('nodeId', nodeId);
     form.append('category', 'standard');
     const res = await fetch(`${API_URL}/documents/upload`, {
@@ -94,5 +99,5 @@ export async function saveOfferAiReportToDocs({ result, nodeId, projectName }) {
     });
     if (!res.ok) throw new Error(`Zapis do dokumentacji nieudany (HTTP ${res.status})`);
     window.dispatchEvent(new CustomEvent('documents-changed', { detail: { nodeId } }));
-    return OFFER_AI_REPORT_FILENAME;
+    return filename;
 }

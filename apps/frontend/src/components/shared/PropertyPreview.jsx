@@ -496,7 +496,9 @@ export default function PropertyPreview({ nodeId, versionId = null, searchQuery 
                         onClose={() => setSelectedFile(null)}
                         documentId={selectedFile.id}
                         token={sessionStorage.getItem('token')}
-                        isOffer={isFinancialTab || isOfferTab || selectedFile.fileName?.toLowerCase().includes('oferta')}
+                        // Parser ofert tylko w zakładkach z ofertami — nie po nazwie pliku: słowo
+                        // „oferta" w nazwie dokumentacji (np. raport Analizy AI) odpalało parsowanie.
+                        isOffer={isFinancialTab || isOfferTab}
                         isDatasheet={isDatasheetTab}
                         onApprove={onApprove}
                         onDatasheetApprove={onDatasheetApprove}

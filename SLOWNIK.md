@@ -379,7 +379,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | runOfferAiCheck | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor run-offer-ai-check |
 | ui-funkcja | appendOfferAiCheckSheet | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor append-offer-ai-check-sheet |
 | ui-przycisk | Analiza AI vs budżet | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor offer-ai-check-button |
-| ui-stala | OFFER_AI_REPORT_FILENAME | apps/frontend/src/utils/offerAiReport.js | @anchor offer-ai-report-filename |
+| ui-funkcja | offerAiReportFilename | apps/frontend/src/utils/offerAiReport.js | @anchor offer-ai-report-filename |
 | ui-funkcja | buildOfferAiReportBody | apps/frontend/src/utils/offerAiReport.js | @anchor build-offer-ai-report-html |
 | ui-funkcja | saveOfferAiReportToDocs | apps/frontend/src/utils/offerAiReport.js | @anchor save-offer-ai-report-to-docs |
 | ui-hook | DocumentationSidebar — nasłuch `documents-changed` | apps/frontend/src/components/Documentation/DocumentationSidebar.jsx | @anchor docs-sidebar-documents-changed |

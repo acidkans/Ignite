@@ -11,7 +11,7 @@
 - eksport „Analiza projektu do Excel”: nowe arkusze „Strategia”, „Schematy” (obrazy stron ze znacznikami) i „Analiza AI”;
   checkbox „Eksport: same koszty” w kaflu Marża (`stripRevenueFromWorkbook`)
 - raport analizy AI zapisywany automatycznie jako PDF w dokumentacji projektu (`POST /documents/upload`, kategoria standard,
-  stała nazwa `Analiza AI - oferta vs budzet.pdf` — nowa analiza nadpisuje poprzednią); panel Dokumentacji odświeża listę
+  nazwa `Analiza AI oferty - <nazwa oferty>.pdf` — nowa analiza nadpisuje poprzednią); panel Dokumentacji odświeża listę
   po zdarzeniu `documents-changed`
 - `back-kontener` frontend nginx `location /api` — `proxy_read_timeout`/`proxy_send_timeout` 300s (analiza AI trwa ~1,5 min, domyślne 60 s dawało 504)
 
