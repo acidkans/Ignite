@@ -396,6 +396,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | nodeDurationMonths | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor node-duration-months |
 | ui-funkcja | addCalendarMonths | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor add-calendar-months |
 | ui-funkcja | isValidGanttDate | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor is-valid-gantt-date |
+| ui-stan | projectStartInput / projectEndInput | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor project-date-inputs |
 | ui-sekcja | TasksCalendarSection | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-section |
 | ui-sekcja | ProjectItemsPanel | apps/frontend/src/components/shared/wbs/ProjectItemsPanel.jsx | @anchor project-items-panel |
 | ui-tabela | BudgetTable | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table |
@@ -522,6 +523,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | guardPricingBeforeExport | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor guard-pricing-before-export |
 | ui-funkcja | askPricingGap | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor ask-pricing-gap |
 | ui-stan | exportNoPricesRef | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor export-no-prices |
+| ui-stan | budgetCostsOnly | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor budget-costs-only |
 | ui-stan | pricingGapPrompt | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor pricing-gap-prompt |
 | ui-modal | modal braków w wycenie (eksport bez cen) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor pricing-gap-modal |
 | ui-funkcja | validateMaterialConsistency | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor validate-material-consistency |
@@ -538,6 +540,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | NO_PRICES_NOTE | apps/frontend/src/utils/exportWithoutPrices.js | @anchor no-prices-note |
 | ui-funkcja | noPricesFilename | apps/frontend/src/utils/exportWithoutPrices.js | @anchor no-prices-filename |
 | ui-funkcja | stripPricesFromWorkbook | apps/frontend/src/utils/exportWithoutPrices.js | @anchor strip-prices-from-workbook |
+| ui-funkcja | stripRevenueFromWorkbook | apps/frontend/src/utils/exportWithoutPrices.js | @anchor strip-revenue-from-workbook |
+| ui-stala | REVENUE_HEADER_RE | apps/frontend/src/utils/exportWithoutPrices.js | @anchor revenue-header-re |
+| ui-funkcja | costsOnlyFilename | apps/frontend/src/utils/exportWithoutPrices.js | @anchor costs-only-filename |
 | ui-funkcja | stripPricesFromHtml | apps/frontend/src/utils/exportWithoutPrices.js | @anchor strip-prices-from-html |
 | ui-funkcja | noPricesBannerHtml | apps/frontend/src/utils/exportWithoutPrices.js | @anchor no-prices-banner-html |
 | ui-funkcja | handleExportBudgetExcel | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-budget-excel |
@@ -1899,6 +1904,7 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-stan | offerLocked (UnifiedWbsPanel) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor offer-locked |
 | ui-funkcja | guard w updateNodeField | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor update-node-field-offer-lock |
 | ui-propsy | BudgetTable.offerLocked | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table-offer-locked |
+| ui-propsy | BudgetTable.costsOnly | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table-costs-only |
 | ui-propsy | WBSHybridTable.offerLocked | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-offer-lock |
 | ui-propsy | WbsMaterialsPanel.offerLocked | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-offer-locked |
 

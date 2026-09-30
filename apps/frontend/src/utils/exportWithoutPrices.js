@@ -95,6 +95,78 @@ export function stripPricesFromWorkbook(workbook) {
     return cleared;
 }
 
+// @anchor revenue-header-re
+// Nagłówek/etykieta po stronie PRZYCHODU (cena ofertowa, narzut, rabat, zysk, marża).
+// Wszystko co zawiera „koszt" zostaje — patrz `COST_HEADER_RE`.
+export const REVENUE_HEADER_RE = /(przych|cena|ceny|cenow|ofertow|narzut|marż|marz|rabat|zysk)/i;
+const COST_HEADER_RE = /koszt/i;
+const isRevenueText = (txt) => !!txt && REVENUE_HEADER_RE.test(txt) && !COST_HEADER_RE.test(txt);
+const REVENUE_HEADER_MAX_LEN = 40;
+
+// @anchor costs-only-filename
+export const costsOnlyFilename = (filename) =>
+    String(filename || '').replace(/(\.[a-z0-9]+)$/i, '_KOSZTY$1') || 'eksport_KOSZTY';
+
+// @anchor strip-revenue-from-workbook
+// Eksport „same koszty": usuwa ze skoroszytu wszystko po stronie przychodu, koszty
+// zostają nietknięte. Kolumny z nagłówkiem przychodowym (w dowolnym wierszu — tabele
+// w Podsumowaniu zaczynają się niżej niż HEADER_SCAN_ROWS) tracą wartości i nagłówek;
+// wiersze etykieta→wartość z etykietą przychodową (Przychód, Rabat, Zysk, Marża…)
+// są czyszczone w całości. Kolumna, w której nic nie zostało, jest ukrywana.
+export function stripRevenueFromWorkbook(workbook) {
+    let cleared = 0;
+    workbook.eachSheet((sheet) => {
+        const revenueCols = new Set();
+        const headerCells = [];
+        sheet.eachRow({ includeEmpty: false }, (row) => {
+            let strings = 0;
+            let others = 0;
+            row.eachCell({ includeEmpty: false }, (cell) => {
+                if (cellText(cell.value).trim()) strings++;
+                else if (cell.value != null && cell.value !== '') others++;
+            });
+            if (strings < 2 || others > 0) return;
+            row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+                const txt = cellText(cell.value).trim();
+                if (txt.length <= REVENUE_HEADER_MAX_LEN && isRevenueText(txt)) {
+                    revenueCols.add(colNumber);
+                    headerCells.push(cell);
+                }
+            });
+        });
+
+        sheet.eachRow({ includeEmpty: false }, (row) => {
+            // Wiersz etykieta→wartość: pierwsza niepusta komórka to etykieta przychodowa,
+            // reszta to liczby/formuły albo kolejne etykiety przychodowe.
+            const cells = [];
+            row.eachCell({ includeEmpty: false }, (cell) => cells.push(cell));
+            const first = cells[0];
+            const firstTxt = first ? cellText(first.value).trim() : '';
+            const labelRow = isRevenueText(firstTxt) && cells.slice(1).every((c) => {
+                const t = cellText(c.value).trim();
+                return isNumericCell(c.value) || !t || isRevenueText(t);
+            });
+            row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+                if (labelRow || (revenueCols.has(colNumber) && isNumericCell(cell.value))) {
+                    cell.value = null;
+                    cleared++;
+                }
+            });
+        });
+        headerCells.forEach((cell) => { cell.value = null; });
+
+        // Ukryj kolumny przychodowe, które po czyszczeniu są całkiem puste.
+        revenueCols.forEach((colNumber) => {
+            let empty = true;
+            sheet.getColumn(colNumber).eachCell({ includeEmpty: false }, (cell) => {
+                if (cell.value != null && cell.value !== '') empty = false;
+            });
+            if (empty) sheet.getColumn(colNumber).hidden = true;
+        });
+    });
+    return cleared;
+}
+
 // @anchor strip-prices-from-html
 // To samo dla HTML-a PDF-a: opróżnia komórki w kolumnach z pieniężnym nagłówkiem
 // oraz liczbowe komórki w wierszach sum/etykiet. Przyjmuje pełny dokument HTML

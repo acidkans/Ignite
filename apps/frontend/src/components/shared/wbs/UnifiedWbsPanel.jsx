@@ -12,7 +12,7 @@ import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLoo
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
-import { stripPricesFromWorkbook, stripPricesFromHtml, noPricesFilename, noPricesBannerHtml } from '../../../utils/exportWithoutPrices';
+import { stripPricesFromWorkbook, stripPricesFromHtml, noPricesFilename, noPricesBannerHtml, stripRevenueFromWorkbook, costsOnlyFilename } from '../../../utils/exportWithoutPrices';
 import { buildSchematSectionHtml, SCHEMAT_SECTION_CSS } from '../../../utils/schematPdfExport';
 import ExportChoiceModal from '../ExportChoiceModal';
 import WBSHybridTable from './WBSHybridTable';
@@ -291,6 +291,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const [ganttProjectEnd, setGanttProjectEnd] = useState(null);
     const [budgetDiscountAmount, setBudgetDiscountAmount] = useState('');
     const [budgetDiscountPercent, setBudgetDiscountPercent] = useState('');
+    // @anchor budget-costs-only
+    // Checkbox w kaflu Marża: eksport budżetu bez przychodu (same koszty).
+    const [budgetCostsOnly, setBudgetCostsOnly] = useState(false);
     const [markerLinksCache, setMarkerLinksCache] = useState({});
     const [previewAttachment, setPreviewAttachment] = useState(null);
     const [budgetImportOpen, setBudgetImportOpen] = useState(false);
@@ -1491,6 +1494,17 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         if (kind === 'materials') {
             exportNoPricesRef.current = false;
             openExport({ title: 'Materiały (Excel)', defaultFilename: `${safeFileBase()}_materialy.xlsx`, makeArtifact: () => materialsExportFn.current?.() });
+            return;
+        }
+        if (kind === 'budget' && budgetCostsOnly) {
+            // Same koszty: narzut/cena ofertowa nie trafiają do pliku, więc bramka
+            // braków wyceny nie ma tu sensu.
+            exportNoPricesRef.current = false;
+            openExport({
+                title: 'Analiza projektu (Excel) — SAME KOSZTY',
+                defaultFilename: costsOnlyFilename(`${safeFileBase()}_budzet.xlsx`),
+                makeArtifact: handleExportBudgetExcel,
+            });
             return;
         }
         if (!(await guardPricingBeforeExport())) return;
@@ -3736,10 +3750,11 @@ ${ganttSectionHtml}
         // Tryb „bez cen": czyścimy wszystkie wartości i formuły w całym skoroszycie.
         const noPrices = exportNoPricesRef.current;
         if (noPrices) stripPricesFromWorkbook(workbook);
+        else if (budgetCostsOnly) stripRevenueFromWorkbook(workbook);
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const budgetFilename = `${safeProjectName}_budzet.xlsx`;
-        return { blob, filename: noPrices ? noPricesFilename(budgetFilename) : budgetFilename };
+        return { blob, filename: noPrices ? noPricesFilename(budgetFilename) : budgetCostsOnly ? costsOnlyFilename(budgetFilename) : budgetFilename };
     };
 
     // @anchor kwota-slownie
@@ -6405,6 +6420,8 @@ ${ganttSectionHtml}
                                     discountAmount={budgetDiscountAmount}
                                     onDiscountPercentChange={setBudgetDiscountPercent}
                                     onDiscountAmountChange={setBudgetDiscountAmount}
+                                    costsOnly={budgetCostsOnly}
+                                    onCostsOnlyChange={setBudgetCostsOnly}
                                 />
                             ) : (
                                 <BudgetModesPanel nodeId={nodeId} mode={budgetMode} acceptance={budgetAcceptance} />

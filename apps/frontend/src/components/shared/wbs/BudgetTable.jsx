@@ -93,6 +93,9 @@ export default function BudgetTable({
     // @anchor budget-table-offer-locked — akceptacja baseline zamraża kolumny wartości ofertowej
     // (Koszt jedn., Ilość, Narzut %, Rabat %) i rabat globalny; opis/komentarz/jednostka zostają.
     offerLocked = false,
+    // @anchor budget-table-costs-only — checkbox w kaflu Marża: eksport budżetu bez przychodu
+    costsOnly = false,
+    onCostsOnlyChange,
 }) {
     const lockProps = offerLockInputProps(offerLocked);
     const lockCls = offerLocked ? ' cursor-not-allowed opacity-70' : '';
@@ -489,6 +492,21 @@ export default function BudgetTable({
                                 <span className="text-[8px] uppercase tracking-wider text-green-300/60">Zafiltrowane</span>
                                 <span className="text-xs font-bold text-green-200/80">{fmtPctFull(filteredSums.marginPct)}</span>
                             </div>
+                        )}
+                        {onCostsOnlyChange && (
+                            <label
+                                className="mt-1.5 flex items-center gap-1.5 cursor-pointer select-none text-[10px] text-green-200/80 hover:text-green-100"
+                                title="Eksport Excel budżetu bez kwot przychodu (cena ofertowa, narzut, rabat, zysk, marża) — same koszty"
+                                onClick={e => e.stopPropagation()}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={costsOnly}
+                                    onChange={e => onCostsOnlyChange(e.target.checked)}
+                                    className="accent-green-500 w-3 h-3"
+                                />
+                                Eksport: same koszty
+                            </label>
                         )}
                     </div>
                     <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 px-3 py-2 col-span-2 xl:col-span-2">

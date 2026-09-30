@@ -544,18 +544,26 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         d.setHours(0, 0, 0, 0);
         return d.toISOString().slice(0, 10);
     });
+    // @anchor project-date-inputs
+    // Surowa wartość pól Start/Koniec — podczas wpisywania z klawiatury bywa pusta albo
+    // z rokiem „0002". Do Gantta idzie tylko poprawna data (projectStart/projectEnd),
+    // inaczej gantt-task-react wywala się na Invalid Date („reading 'getTime'").
+    const [projectStartInput, setProjectStartInput] = useState(projectStart);
     const syncedStartRef = useRef(false);
     useEffect(() => {
         if (projectStartDate && !syncedStartRef.current) {
             setProjectStart(projectStartDate.slice(0, 10));
+            setProjectStartInput(projectStartDate.slice(0, 10));
             syncedStartRef.current = true;
         }
     }, [projectStartDate]);
     const [projectEnd, setProjectEnd] = useState(() => projectEndDate ? projectEndDate.slice(0, 10) : '');
+    const [projectEndInput, setProjectEndInput] = useState(projectEnd);
     const syncedEndRef = useRef(false);
     useEffect(() => {
         if (projectEndDate && !syncedEndRef.current) {
             setProjectEnd(projectEndDate.slice(0, 10));
+            setProjectEndInput(projectEndDate.slice(0, 10));
             syncedEndRef.current = true;
         }
     }, [projectEndDate]);
@@ -598,6 +606,8 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
 
     const { tasks, taskBranchMap, branchNameMap } = useMemo(() => {
         const result = buildTasksFromTree(items, new Date(projectStart), projectName, overrides, branchWorkOnHolidays);
+        // Zadanie z Invalid Date wywala gantt-task-react — odfiltruj zamiast crashować cały panel.
+        result.tasks = result.tasks.filter(t => t && isValidGanttDate(t.start) && isValidGanttDate(t.end));
         result.tasks.sort((a, b) => a.start - b.start);
         return result;
     }, [items, projectStart, projectName, overrides, branchWorkOnHolidays]);
@@ -1413,8 +1423,12 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                     Start:
                     <input
                         type="date"
-                        value={projectStart}
-                        onChange={(e) => setProjectStart(e.target.value)}
+                        value={projectStartInput}
+                        onChange={(e) => {
+                            const v = e.target.value;
+                            setProjectStartInput(v);
+                            if (v && isValidGanttDate(v)) setProjectStart(v);
+                        }}
                         className="bg-black/40 border border-white/10 rounded px-2 py-1 text-white text-xs"
                     />
                 </label>
@@ -1423,8 +1437,12 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                     Koniec:
                     <input
                         type="date"
-                        value={projectEnd}
-                        onChange={(e) => setProjectEnd(e.target.value)}
+                        value={projectEndInput}
+                        onChange={(e) => {
+                            const v = e.target.value;
+                            setProjectEndInput(v);
+                            if (!v || isValidGanttDate(v)) setProjectEnd(v);
+                        }}
                         className="bg-black/40 border border-white/10 rounded px-2 py-1 text-white text-xs"
                     />
                 </label>
