@@ -122,7 +122,8 @@ export class ProcessTreeService {
                         sortOrder: 1,
                     },
                 });
-                // Liść "Paliwo" — domyślne wartości (kilometry, 0,70 zł/km, bez ilości)
+                // Liść "Paliwo" — kilometry, bez ceny i ilości: cenę, narzut i km (2 × odległość)
+                // nadaje zapis modalu „Domyślne wartości" (apply-fuel-defaults w UnifiedWbsPanel)
                 const paliwoLeaf = await tx.wbsNode.create({
                     data: {
                         nodeId: node.id,
@@ -132,7 +133,6 @@ export class ProcessTreeService {
                         type: 'fuel',
                         status: '',
                         unit: 'kilometry',
-                        unitCost: 0.7,
                         comment: 'utworzony automatycznie',
                         sortOrder: 2,
                     },
@@ -250,7 +250,6 @@ export class ProcessTreeService {
                                             type: 'fuel',
                                             status: '',
                                             unit: 'kilometry',
-                                            unitCost: 0.7,
                                             owner: '',
                                             resources: '',
                                             cost: '',

@@ -5336,9 +5336,75 @@ ${ganttSectionHtml}
         return () => { cancelled = true; };
     }, [nodeId, authHeaders, isManagerOrAdmin, offerLocked]);
 
+    // @anchor apply-fuel-defaults
+    // Przenosi domyślne paliwa (koszt jedn., narzut, jednostka) i km = 2 × odległość do klienta
+    // na liście typu Paliwo, które już są w drzewie — m.in. auto-liść „Koszty ogólne > Paliwo”
+    // tworzony przy zakładaniu zlecenia, ZANIM ktokolwiek wypełni modal. Nadpisujemy tylko
+    // wartości nietknięte ręcznie: równe 0, dawnej stawce na sztywno (0,70) albo poprzedniej
+    // wartości domyślnej. Po akceptacji baseline nic nie ruszamy (stawki zamrożone).
+    const applyFuelDefaults = useCallback(async (next, prev) => {
+        if (offerLocked) return;
+        const defs = getLeafDefaultFrom(next, 'fuel') || {};
+        const prevDefs = getLeafDefaultFrom(prev, 'fuel') || {};
+        const km = Number(next?.order?.distanceKm);
+        const prevKm = Number(prev?.order?.distanceKm);
+        const newQty = Number.isFinite(km) && km > 0 ? 2 * km : null;
+        const prevQty = Number.isFinite(prevKm) && prevKm > 0 ? 2 * prevKm : null;
+        const same = (a, b) => Math.abs((Number(a) || 0) - (Number(b) || 0)) < 1e-9;
+        const updates = [];
+        for (const n of wbsData) {
+            if (String(n.type || '').toLowerCase() !== 'fuel') continue;
+            const patch = {};
+            const cost = Number(n.unitCost) || 0;
+            const costUntouched = cost === 0 || same(cost, 0.7) || same(cost, prevDefs.unitCost);
+            if (costUntouched && !same(cost, defs.unitCost)) patch.unitCost = Number(defs.unitCost) || 0;
+            const margin = Number(n.margin) || 0;
+            if ((margin === 0 || same(margin, prevDefs.margin)) && !same(margin, defs.margin)) patch.margin = Number(defs.margin) || 0;
+            const qty = parseFloat(n.quantity) || 0;
+            // Ilość 1 = domyślna Prisma dla węzła bez km, czyli też „nietknięta”.
+            if (newQty != null && (qty <= 1 || (prevQty != null && same(qty, prevQty))) && !same(qty, newQty)) patch.quantity = newQty;
+            if (Object.keys(patch).length) updates.push({ n, patch });
+        }
+        if (!updates.length) return;
+        if (!(await guardOfferEdit())) return;
+        setWbsData(list => list.map(item => {
+            const u = updates.find(x => x.n.id === item.id);
+            if (!u) return item;
+            const unitCost = u.patch.unitCost ?? (Number(item.unitCost) || 0);
+            const margin = u.patch.margin ?? (Number(item.margin) || 0);
+            const quantity = u.patch.quantity ?? (parseFloat(item.quantity) || 0);
+            const discount = parseFloat(item.discount) || 0;
+            const unitPrice = unitCost * (1 + margin / 100) * (1 - discount / 100);
+            return { ...item, unitCost, margin, quantity, unitPrice, totalCost: unitCost * quantity, totalPrice: unitPrice * quantity };
+        }));
+        setWbsTreeAndRef(t => {
+            const upd = items => items.map(it => {
+                const u = updates.find(x => x.n.id === it.id);
+                const base = u ? { ...it, ...u.patch } : it;
+                return it.children?.length ? { ...base, children: upd(it.children) } : base;
+            });
+            return { ...t, items: upd(t.items || []) };
+        });
+        try {
+            // /budget z którymkolwiek polem cenowym przelicza z KOMPLETU (brak = 0), więc
+            // przy zmianie ceny/narzutu dosyłamy też pozostałe pola cenowe węzła.
+            await Promise.all(updates.map(({ n, patch }) => {
+                const body = ('unitCost' in patch || 'margin' in patch)
+                    ? { unitCost: Number(n.unitCost) || 0, margin: Number(n.margin) || 0, discount: parseFloat(n.discount) || 0, ...patch }
+                    : patch;
+                return fetch(`${API_URL}/wbs-nodes/${n.id}/budget`, {
+                    method: 'PATCH', headers: authHeaders(), body: JSON.stringify(body),
+                });
+            }));
+            await refreshWbsNodes();
+        } catch (e) { console.error('Apply fuel defaults error:', e); }
+    }, [offerLocked, wbsData, authHeaders, refreshWbsNodes, setWbsTreeAndRef]);
+
     // @anchor save-leaf-defaults-to-server
-    // Zapisuje wartości domyślne liści dla bieżącego zamówienia (upsert po nodeId).
+    // Zapisuje wartości domyślne liści dla bieżącego zamówienia (upsert po nodeId),
+    // a potem przenosi stawkę paliwa na istniejące liście Paliwo (apply-fuel-defaults).
     const saveLeafDefaultsToServer = useCallback(async (defaults) => {
+        const prev = leafDefaults;
         const merged = mergeLeafDefaults(defaults);
         setLeafDefaults(merged);
         if (!nodeId) return;
@@ -5347,7 +5413,8 @@ ${ganttSectionHtml}
                 method: 'PUT', headers: authHeaders(), body: JSON.stringify({ data: merged }),
             });
         } catch (e) { console.error('Save leaf defaults error:', e); }
-    }, [nodeId, authHeaders]);
+        await applyFuelDefaults(merged, prev);
+    }, [nodeId, authHeaders, leafDefaults, applyFuelDefaults]);
 
     const applyLeafDefaults = useCallback(async (id, defaults) => {
         if (!id || !defaults) return;

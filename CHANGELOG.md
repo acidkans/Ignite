@@ -1,3 +1,17 @@
+## 2026-10-01 — Paliwo bez ceny 0,70 na sztywno; domyślne paliwa i km z odległości trafiają na istniejące liście Paliwo (v2026.10.01.1200)
+
+### architektura / API
+- `back-serwis` `ProcessTreeService.create` — auto-liść „Koszty ogólne > Paliwo” nie dostaje już `unitCost: 0.7` (ani w `WbsNode`, ani w mirrorze `OrderRequirements.wbsTree`). Cenę nadaje modal „Domyślne wartości”.
+- `back-funkcja` `flattenForInsert` — dla liścia `type='fuel'` przenosi `quantity` z drzewa przy tworzeniu węzła (km = 2 × odległość); dla pozostałych typów nadal celowo nie.
+- `ui-funkcja` `buildFuelLeaf` — usunięty fallback 0,70 zł/km; brak stawki w modalu = 0, ilość = 2 × `order.distanceKm`.
+
+### słownik
+- dodano `apply-fuel-defaults` — `applyFuelDefaults`, UnifiedWbsPanel.jsx: po zapisie modalu „Domyślne wartości” przenosi koszt jedn., narzut i km na liście Paliwo w drzewie
+
+### wytyczne
+- `ui-funkcja` `applyFuelDefaults` — nadpisuje tylko wartości nietknięte ręcznie (0, dawne 0,70, poprzednia wartość domyślna; ilość ≤ 1 lub poprzednie 2 × odległość); po akceptacji baseline nie działa.
+- `back-endpoint` `PATCH /wbs-nodes/:id/budget` — wysyłając którekolwiek pole cenowe, wysyłaj komplet (`unitCost`, `margin`, `discount`), inaczej brakujące są zerowane.
+
 ## 2026-09-30 — Analiza AI oferty liczona w tle na serwerze + toast + porównanie pozycji budżetu między sobą
 
 ### schema.prisma

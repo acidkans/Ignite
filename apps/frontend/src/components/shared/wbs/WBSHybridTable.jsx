@@ -1310,13 +1310,16 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // @anchor build-fuel-leaf
     // Liść Paliwo z wartościami domyślnymi z modalu „Domyślne wartości” (jednostka,
     // cena, NARZUT). Wcześniej narzut nie był wypełniany — automatycznie dodane paliwo
-    // wchodziło do oferty z pustym narzutem. Fallback: kilometry, 0,70 zł/km.
+    // wchodziło do oferty z pustym narzutem. Bez ceny zaszytej na sztywno (dawniej 0,70 zł/km) —
+    // brak stawki w modalu = 0. Ilość km = przejazd tam i z powrotem (2 × odległość do klienta).
     const buildFuelLeaf = (extra = {}) => {
         const defs = getLeafDefaultFrom(leafDefaults, 'fuel') || {};
         const unit = defs.unit || 'kilometry';
-        const unitCost = defs.unitCost != null && Number(defs.unitCost) !== 0 ? defs.unitCost : 0.7;
+        const unitCost = Number(defs.unitCost) || 0;
         const leaf = { ...mkNode(false, 'fuel'), name: 'Paliwo', unit, unitCost, ...extra };
         if (defs.margin != null) leaf.margin = defs.margin;
+        const km = Number(leafDefaults?.order?.distanceKm);
+        if (Number.isFinite(km) && km > 0) leaf.quantity = 2 * km;
         return leaf;
     };
 

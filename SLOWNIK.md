@@ -595,6 +595,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | leafDefaultsOpen | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor leaf-defaults-modal-state |
 | ui-stan | leafDefaults | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor leaf-defaults-state |
 | ui-funkcja | fetchLeafDefaults | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor fetch-leaf-defaults |
+| ui-funkcja | applyFuelDefaults | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor apply-fuel-defaults |
 | ui-funkcja | saveLeafDefaultsToServer | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor save-leaf-defaults-to-server |
 
 #### Frontend — stałe i utilsy (`wbsConstants.js`)

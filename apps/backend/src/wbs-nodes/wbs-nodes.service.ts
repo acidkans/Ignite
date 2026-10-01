@@ -276,6 +276,11 @@ export class WbsNodesService {
             const mRaw = (item as any).margin;
             const mNum = (mRaw === '' || mRaw == null) ? undefined : Number(mRaw);
             const margin = Number.isFinite(mNum) ? mNum : undefined;
+            // Wyjątek od reguły „bez quantity”: liść Paliwo rodzi się z km wyliczonymi z odległości
+            // do klienta (2 × distanceKm z modalu „Domyślne wartości”) — to stała zamówienia, nie gałęzi.
+            const qRaw = (item as any).quantity;
+            const qNum = item.type === 'fuel' && qRaw !== '' && qRaw != null ? Number(qRaw) : undefined;
+            const quantity = Number.isFinite(qNum) && (qNum as number) > 0 ? qNum : undefined;
             rows.push({
                 id: item.id,
                 parentId,
@@ -294,6 +299,7 @@ export class WbsNodesService {
                 qa: Array.isArray(item.qa) && item.qa.length > 0 ? JSON.stringify(item.qa) : null,
                 unitCost,
                 margin,
+                quantity,
                 sortOrder: i,
             });
             if (item.children?.length) {
