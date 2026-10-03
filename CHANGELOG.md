@@ -1,3 +1,12 @@
+## 2026-10-03 — OneDrive: pliki poza strukturą 01/02/03 nie są importowane (v2026.10.03.2300)
+
+### architektura / API
+- `back-stala` `OUTSIDE_KEY` — plik luzem w folderze zamówienia albo w jego dawnych podkatalogach (spoza 01/02/03) dostaje `folderKey = '__outside'` i status `skipped`: bez pobierania, dokumentu i indeksu; wyniesienie pliku ze struktury usuwa go z aplikacji (zostaje na OneDrive)
+- pliki bezpośrednio w `01`/`02`/`03` (bez podkatalogu) dalej importowane jako dokumentacja (`standard`)
+
+### wytyczne
+- `back-funkcja` `resolveFolderKeys` — aplikacja importuje wyłącznie zawartość struktury 01/02/03; wcześniejsza zawartość folderów zamówień zostaje na OneDrive bez zmian
+
 ## 2026-10-03 — OneDrive etap 5: wspólny katalog ofert dostawców (dostawca → zamówienie) z dopasowaniem i ręcznym przypisaniem (v2026.10.03.2230)
 
 ### schema.prisma

@@ -2637,6 +2637,7 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-env | ONEDRIVE_AUTO_SYNC | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-auto-sync |
 | back-funkcja | cleanupDeleted | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-cleanup-deleted |
 | back-funkcja | fetchDelta | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-fetch-delta |
+| back-stala | OUTSIDE_KEY | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-outside-key |
 | back-funkcja | applyDeltaItems | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-apply-delta-items |
 | schema-model | OneDriveSettings | apps/backend/prisma/schema.prisma | @anchor onedrive-settings |
 | schema-pole | OneDriveSettings.sharedOffersFolderId | apps/backend/prisma/schema.prisma | @anchor onedrive-settings-shared-offers-folder-id |

@@ -16,6 +16,11 @@ const DELTA_SELECT = 'id,name,folder,file,parentReference,cTag,size,lastModified
 // Stare katalogi sprzed struktury ORDER_FOLDERS — zostają na OneDrive bez zmian, sync ich nie importuje.
 const LEGACY_KEY = '__legacy';
 const LEGACY_NAMES = ['pliki_finansowe', 'dokumentacja_projektowa'];
+// @anchor onedrive-outside-key
+// Pliki poza strukturą 01/02/03 (luzem w folderze zamówienia albo w jego dawnych, własnych podkatalogach)
+// nie są importowane — foldery zamówień mają lata wcześniejszej zawartości, aplikacja widzi tylko to,
+// co świadomie wrzucono do struktury. Zostają na OneDrive bez zmian.
+const OUTSIDE_KEY = '__outside';
 const MAX_ATTEMPTS = 3;
 // @anchor onedrive-sync-archive-area
 // Gałąź z zamówieniami archiwalnymi — rozpoznawana po nazwie obszaru (tak jak w drzewie aplikacji).
@@ -263,18 +268,19 @@ export class OneDriveSyncService implements OnModuleInit {
     const all = await this.prisma.driveFile.findMany({ where: { nodeId, scope: 'order', status: { not: 'deleted' } } });
     const folders = new Map(all.filter((f) => f.isFolder).map((f) => [f.driveItemId, f]));
 
+    // null = w strukturze, ale poza podkatalogiem (luzem w 01/02/03) → import jako dokumentacja.
     const keyFor = (parentId: string | null): string | null => {
       let cur = parentId;
       for (let depth = 0; cur && depth < 30; depth++) {
         const key = byId.get(cur);
         if (key) return key.startsWith('root:') ? null : key;
-        if (cur === orderFolderId) return null;
+        if (cur === orderFolderId) return OUTSIDE_KEY;
         const f = folders.get(cur);
-        if (!f) return null;
+        if (!f) return OUTSIDE_KEY;
         if (f.parentItemId === orderFolderId && LEGACY_NAMES.includes(f.name)) return LEGACY_KEY;
         cur = f.parentItemId;
       }
-      return null;
+      return OUTSIDE_KEY;
     };
 
     for (const f of all) {
@@ -282,6 +288,12 @@ export class OneDriveSyncService implements OnModuleInit {
       const key = keyFor(f.parentItemId);
       if (key === f.folderKey) continue;
       const def = ORDER_FOLDERS.find((d) => d.key === key);
+      // Wyniesiony poza strukturę → znika z aplikacji (zostaje na OneDrive).
+      if ((key === OUTSIDE_KEY || key === LEGACY_KEY) && f.documentId) {
+        await this.documents.deleteDocument(f.documentId, true).catch(() => null);
+        await this.prisma.driveFile.update({ where: { id: f.id }, data: { folderKey: key, documentId: null, processedTag: null, status: 'skipped' } });
+        continue;
+      }
       // Przeniesiony do katalogu z indeksem, a dotąd tylko pobrany → do ponownego przetworzenia.
       const reindex = !!def?.index && f.status === 'downloaded';
       await this.prisma.driveFile.update({
@@ -388,7 +400,7 @@ export class OneDriveSyncService implements OnModuleInit {
       return;
     }
     const shared = f.scope === 'sharedOffers';
-    if (!shared && (f.folderKey === LEGACY_KEY || (def && !def.documentCategory))) {
+    if (!shared && (f.folderKey === LEGACY_KEY || f.folderKey === OUTSIDE_KEY || (def && !def.documentCategory))) {
       await this.prisma.driveFile.update({ where: { id: f.id }, data: { status: 'skipped', error: null } });
       return;
     }
@@ -423,7 +435,7 @@ export class OneDriveSyncService implements OnModuleInit {
       const ext = path.extname(meta.name || '').toLowerCase();
       const rel = shared
         ? path.posix.join('_shared', 'offers', f.supplierId || '_bez_dostawcy', `${f.driveItemId}${ext}`)
-        : path.posix.join(f.nodeId, def ? orderFolderPath(def.key) : '_poza_struktura', `${f.driveItemId}${ext}`);
+        : path.posix.join(f.nodeId, def ? orderFolderPath(def.key) : '_luzem', `${f.driveItemId}${ext}`);
       const full = uploadPath(rel);
       fs.mkdirSync(path.dirname(full), { recursive: true });
       const res = await axios.get(downloadUrl, { responseType: 'stream' });
@@ -452,7 +464,7 @@ export class OneDriveSyncService implements OnModuleInit {
       // zakładać kolejnej kopii dokumentu.
       await this.prisma.driveFile.update({ where: { id: f.id }, data: { documentId, storagePath: rel } });
 
-      // Pliki luzem w folderze zamówienia (bez katalogu struktury) też indeksujemy — to zwykle dokumentacja.
+      // Pliki luzem w 01/02/03 (bez podkatalogu) też indeksujemy — to zwykle dokumentacja.
       const shouldIndex = (shared || (def ? def.index : true)) && INDEXABLE_MIME.test(mimeType) && (meta.size ?? 0) <= MAX_INDEX_BYTES;
       let status = 'downloaded';
       if (shouldIndex) {
@@ -509,7 +521,9 @@ export class OneDriveSyncService implements OnModuleInit {
       files: files.map((f) => ({
         ...f,
         folderPath: f.scope === 'sharedOffers' ? 'wspólny katalog ofert'
-          : f.folderKey === LEGACY_KEY ? 'archiwum (stare katalogi)' : orderFolderPath(f.folderKey) || 'poza strukturą',
+          : f.folderKey === LEGACY_KEY ? 'archiwum (stare katalogi)'
+          : f.folderKey === OUTSIDE_KEY ? 'poza strukturą 01/02/03 (pomijane)'
+          : orderFolderPath(f.folderKey) || 'luzem w strukturze',
       })),
     };
   }
