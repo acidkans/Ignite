@@ -1,3 +1,21 @@
+## 2026-10-03 — OneDrive etap 1: struktura katalogów zamówienia (01/02/03 + podkatalogi) i wspólny helper ścieżek uploads (v2026.10.03.1200)
+
+### schema.prisma
+- dodano pole `oneDriveFolderIds Json?` w modelu `ProcessNode` — id katalogów struktury `ORDER_FOLDERS` (`root:<finance|project|realization>` + klucz podkatalogu); migracja `20261003120000_onedrive_folder_ids`
+
+### architektura / API
+- `back-stala` `ORDER_FOLDERS` / `ORDER_ROOT_FOLDERS` (`apps/backend/src/onedrive/order-folders.ts`) — struktura katalogów zamówienia: katalog → `documentCategory`, indeks AI; plan w `docs/PLAN-onedrive-sync.md`
+- `back-funkcja` `ensureOrderFolders` — zakłada brakujące katalogi, rozpoznaje istniejące po zapisanym id, potem po nazwie
+- `back-endpoint` `POST /onedrive/set-folder` — ZMIANA: zakłada nową strukturę zamiast `pliki_finansowe` / `dokumentacja_projektowa`, zeruje `oneDriveFinanseId` / `oneDriveDocumentacjaId`, zwraca `{ created, existing, errors, folderIds }`
+- `back-endpoint` `POST /onedrive/structure/:nodeId` — uzupełnia strukturę (zamówienia powiązane wcześniej); w UI menu OneDrive → „Utwórz strukturę katalogów”
+- `back-endpoint` `GET /onedrive/folders` — definicja struktury dla frontu
+- `back-funkcja` `uploadPath` + `back-stala` `UPLOADS_ROOT` (`apps/backend/src/common/uploads.util.ts`) — jedna definicja katalogu plików serwera (env `UPLOADS_ROOT`), obsługa ścieżek względnych z podkatalogami, legacy absolutnych i blokada wyjścia poza katalog; podpięte w documents, material-requirements, materials, schematics
+
+### wytyczne
+- `back-stala` `ORDER_FOLDERS` — numerowane są tylko katalogi główne (01/02/03), podkatalogi nie; katalogi rozpoznawane po id z `ProcessNode.oneDriveFolderIds`, nie po nazwie
+- `back-funkcja` `uploadPath` — każdy odczyt/zapis pliku z `uploads/` przez ten helper, nie `path.join(process.cwd(), 'uploads', …)`
+- stare katalogi `pliki_finansowe` / `dokumentacja_projektowa` zostają bez migracji; do etapu 3 eksporty dalej tam trafiają (`ensureCategoryFolder` zakłada je przy pierwszym zapisie)
+
 ## 2026-10-01 — Paliwo bez ceny 0,70 na sztywno; domyślne paliwa i km z odległości trafiają na istniejące liście Paliwo (v2026.10.01.1200)
 
 ### architektura / API

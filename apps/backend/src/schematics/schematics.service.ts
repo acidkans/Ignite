@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { VectorService } from '../ai/vector.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import { UPLOADS_ROOT, uploadPath } from '../common/uploads.util';
 import { Response } from 'express';
 
 @Injectable()
@@ -13,7 +14,7 @@ export class SchematicsService {
         private vectorService: VectorService,
     ) {}
 
-    private readonly UPLOAD_DIR = path.join(process.cwd(), 'uploads');
+    private readonly UPLOAD_DIR = UPLOADS_ROOT;
 
     private getFileType(mimeType: string): string {
         if (mimeType.startsWith('image/')) return 'IMAGE';
@@ -112,7 +113,7 @@ export class SchematicsService {
     }
 
     async getFile(fileName: string, res: Response) {
-        const filePath = path.join(process.cwd(), 'uploads', fileName);
+        const filePath = uploadPath(fileName);
         if (!fs.existsSync(filePath)) {
             throw new NotFoundException('Plik nie istnieje na serwerze');
         }

@@ -11,13 +11,14 @@ import { ExtraOrderNotifierService, EXTRA_ORDER_STATUS } from '../notifications/
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import { UPLOADS_ROOT, uploadPath } from '../common/uploads.util';
 import * as mammoth from 'mammoth';
 import { randomUUID } from 'crypto';
 import { normalizeLeafType, DEFAULT_CATALOG_TYPE } from '../common/leaf-types.util';
 const PDFParser = require('pdf2json');
 const pdfParse = require('pdf-parse');
 
-const UPLOADS_DIR = '/usr/src/app/uploads';
+const UPLOADS_DIR = UPLOADS_ROOT;
 
 @Injectable()
 // @anchor material-requirements-service
@@ -1457,7 +1458,7 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
     // @anchor resolve-upload-path
     private resolveUploadPath(stored: string): string {
         if (path.isAbsolute(stored)) return stored; // legacy: absolutna ścieżka Docker
-        return path.join(process.cwd(), 'uploads', stored);
+        return uploadPath(stored);
     }
 
     async getDatasheetStream(id: string) {
@@ -1948,7 +1949,7 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
         const doc = await this.prisma.processNode.findUnique({ where: { id: documentId } });
         if (!doc || !doc.storagePath) throw new NotFoundException('Dokument nie znaleziony lub brak pliku');
 
-        const filePath = path.join(process.cwd(), 'uploads', doc.storagePath);
+        const filePath = uploadPath(doc.storagePath);
         if (!fs.existsSync(filePath)) throw new NotFoundException('Plik nie istnieje na dysku');
 
         const text = await this.extractDocumentText(filePath);
@@ -2192,7 +2193,7 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
             try { return { supplier: null, positions: JSON.parse((doc as any).parsedPositions) }; } catch {}
         }
 
-        const filePath = path.join(process.cwd(), 'uploads', doc.storagePath);
+        const filePath = uploadPath(doc.storagePath);
         if (!fs.existsSync(filePath)) throw new NotFoundException('Plik nie istnieje na dysku');
 
         const ext = path.extname(doc.storagePath || '').toLowerCase();

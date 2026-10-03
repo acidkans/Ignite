@@ -2,6 +2,7 @@ import { diskStorage } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
+import { UPLOADS_ROOT } from '../common/uploads.util';
 
 /**
  * Konfiguracja multera dla uploadów schematów i załączników znaczników.
@@ -20,7 +21,7 @@ import * as path from 'path';
 
 /// Katalog docelowy — ta sama ścieżka, z której czyta SchematicsService.
 // @anchor schematics-upload-dir
-export const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
+export const UPLOAD_DIR = UPLOADS_ROOT;
 
 /**
  * Serwerowy limit rozmiaru pojedynczego pliku.

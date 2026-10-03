@@ -8,6 +8,7 @@ import { firstValueFrom } from 'rxjs';
 import * as mammoth from 'mammoth';
 import * as fs from 'fs';
 import * as path from 'path';
+import { UPLOADS_ROOT, uploadPath } from '../common/uploads.util';
 const PDFParser = require('pdf2json');
 
 @Injectable()
@@ -64,7 +65,7 @@ export class DocumentsService {
         const fileName = Buffer.from(file.originalname, 'latin1').toString('utf8');
 
         // Physical storage
-        const uploadDir = path.join(process.cwd(), 'uploads');
+        const uploadDir = UPLOADS_ROOT;
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
         }
@@ -91,7 +92,7 @@ export class DocumentsService {
             // np. raporcie Analizy AI nadpisywanym przy każdej analizie, zostawał sierotą w uploads/).
             const previousStorage = fileNode.storagePath;
             if (previousStorage && previousStorage !== storageFileName) {
-                try { fs.unlinkSync(path.join(uploadDir, path.basename(previousStorage))); } catch (e) { console.warn(`[DOCS] Usunięcie starego pliku ${previousStorage} nieudane (non-fatal): ${e.message}`); }
+                try { fs.unlinkSync(uploadPath(previousStorage)); } catch (e) { console.warn(`[DOCS] Usunięcie starego pliku ${previousStorage} nieudane (non-fatal): ${e.message}`); }
             }
             // Update storage path, mime, size and category in case they changed
             await this.prisma.processNode.update({
@@ -276,7 +277,7 @@ export class DocumentsService {
         if (!doc || doc.type !== 'document') throw new BadRequestException('Document not found');
         if (!doc.storagePath) throw new BadRequestException('No physical file — cannot re-index');
 
-        const filePath = path.join(process.cwd(), 'uploads', doc.storagePath);
+        const filePath = uploadPath(doc.storagePath);
         if (!fs.existsSync(filePath)) throw new BadRequestException('Physical file not found on disk');
 
         const fileBuffer = fs.readFileSync(filePath);
@@ -473,7 +474,7 @@ export class DocumentsService {
             throw new BadRequestException('Document not found or has no storage path');
         }
 
-        const filePath = path.join(process.cwd(), 'uploads', doc.storagePath);
+        const filePath = uploadPath(doc.storagePath);
         if (!fs.existsSync(filePath)) {
             throw new BadRequestException('Physical file not found on server');
         }
@@ -562,7 +563,7 @@ export class DocumentsService {
         const doc = await this.prisma.processNode.findUnique({ where: { id: documentId } });
         if (!doc || !doc.storagePath) throw new BadRequestException('Document not found');
 
-        const filePath = path.join(process.cwd(), 'uploads', doc.storagePath);
+        const filePath = uploadPath(doc.storagePath);
         if (!fs.existsSync(filePath)) throw new BadRequestException('Physical file not found');
 
         const fileBuffer = fs.readFileSync(filePath);

@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { normalizeManufacturer } from '../common/normalize.util';
 import * as fs from 'fs';
 import * as path from 'path';
+import { uploadPath } from '../common/uploads.util';
 import { normalizeLeafType, DEFAULT_CATALOG_TYPE } from '../common/leaf-types.util';
 
 @Injectable()
@@ -13,7 +14,7 @@ export class MaterialsService {
     // @anchor materials-resolve-upload-path
     private resolveUploadPath(stored: string): string {
         if (path.isAbsolute(stored)) return stored; // legacy: absolutna ścieżka Docker
-        return path.join(process.cwd(), 'uploads', stored);
+        return uploadPath(stored);
     }
 
     // @anchor materials-get-image-stream

@@ -2581,6 +2581,22 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-funkcja | tokenFromRecord | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-token-from-record |
 | back-funkcja | ensureCategoryFolder | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-ensure-category-folder |
 | back-env | MS_SHARED_ACCOUNT_EMAIL | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-shared-token |
+| back-stala | UPLOADS_ROOT | apps/backend/src/common/uploads.util.ts | @anchor uploads-root |
+| back-env | UPLOADS_ROOT | apps/backend/src/common/uploads.util.ts | @anchor uploads-root |
+| back-funkcja | uploadPath | apps/backend/src/common/uploads.util.ts | @anchor uploads-path |
+| back-stala | ORDER_ROOT_FOLDERS | apps/backend/src/onedrive/order-folders.ts | @anchor order-root-folders |
+| back-typ | OrderFolderDef | apps/backend/src/onedrive/order-folders.ts | @anchor order-folder-def |
+| back-stala | ORDER_FOLDERS | apps/backend/src/onedrive/order-folders.ts | @anchor order-folders |
+| back-funkcja | orderFolderPath | apps/backend/src/onedrive/order-folders.ts | @anchor order-folder-path |
+| back-typ | OrderFoldersResult | apps/backend/src/onedrive/onedrive.service.ts | @anchor order-folders-result |
+| back-funkcja | ensureOrderFolders | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-ensure-order-folders |
+| back-funkcja | listChildFolders | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-list-child-folders |
+| back-funkcja | createChildFolder | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-create-child-folder |
+| back-endpoint | GET /onedrive/folders | apps/backend/src/onedrive/onedrive.controller.ts | @anchor onedrive-folders-endpoint |
+| back-endpoint | POST /onedrive/structure/:nodeId | apps/backend/src/onedrive/onedrive.controller.ts | @anchor onedrive-structure-endpoint |
+| schema-pole | ProcessNode.oneDriveFolderIds | apps/backend/prisma/schema.prisma | @anchor process-node-one-drive-folder-ids |
+| ui-stan | oneDriveStructure | apps/frontend/src/DashboardPage.jsx | @anchor onedrive-structure-state |
+| ui-funkcja | createOneDriveStructure | apps/frontend/src/DashboardPage.jsx | @anchor create-onedrive-structure |
 
 #### Frontend (`apps/frontend/src/utils/protokolOdbioruExport.js`)
 

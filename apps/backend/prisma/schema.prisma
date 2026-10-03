@@ -223,6 +223,8 @@ model ProcessNode {
   oneDriveFolderName        String?
   oneDriveFinanseId         String?
   oneDriveDocumentacjaId    String?
+  /// @anchor process-node-one-drive-folder-ids
+  oneDriveFolderIds         Json? // id katalogów struktury ORDER_FOLDERS: { "root:finance": id, supplierOffers: id, ... }
   /// @anchor process-node-task-list-slug
   taskListSlug              String?  @unique
   /// @anchor process-node-order-stage

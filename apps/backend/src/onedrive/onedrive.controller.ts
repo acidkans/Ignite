@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OneDriveService } from './onedrive.service';
 import { ConfigService } from '@nestjs/config';
+import { ORDER_FOLDERS, ORDER_ROOT_FOLDERS, orderFolderPath } from './order-folders';
 
 // @anchor onedrive-controller
 @Controller('onedrive')
@@ -33,9 +34,9 @@ export class OneDriveController {
     const frontendUrl = this.config.get('FRONTEND_URL') || 'http://localhost:5174';
     try {
       await this.oneDriveService.handleCallback(code, userId);
-      res.redirect(`${frontendUrl}/notification-settings?ms=connected`);
+      res.redirect(`${frontendUrl}/notifications?ms=connected`);
     } catch {
-      res.redirect(`${frontendUrl}/notification-settings?ms=error`);
+      res.redirect(`${frontendUrl}/notifications?ms=error`);
     }
   }
 
@@ -63,6 +64,25 @@ export class OneDriveController {
     return this.oneDriveService.setNodeFolder(
       req.user.userId, body.nodeId, body.folderId, body.driveId, body.folderName,
     );
+  }
+
+  // @anchor onedrive-folders-endpoint
+  // Definicja struktury katalogów zamówienia — front buduje z niej ścieżki w komunikatach.
+  @Get('folders')
+  @UseGuards(JwtAuthGuard)
+  folders() {
+    return {
+      roots: ORDER_ROOT_FOLDERS,
+      folders: ORDER_FOLDERS.map((f) => ({ ...f, path: orderFolderPath(f.key) })),
+    };
+  }
+
+  // @anchor onedrive-structure-endpoint
+  // Zakłada brakujące katalogi struktury w folderze zamówienia (np. dla zamówień powiązanych przed zmianą).
+  @Post('structure/:nodeId')
+  @UseGuards(JwtAuthGuard)
+  structure(@Param('nodeId') nodeId: string) {
+    return this.oneDriveService.ensureOrderFolders(nodeId);
   }
 
   // @anchor onedrive-upload-endpoint

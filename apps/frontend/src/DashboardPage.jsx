@@ -115,6 +115,8 @@ export default function DashboardPage() {
     const [oneDriveMsConnected, setOneDriveMsConnected] = useState(false);
     const [showOneDriveMenu, setShowOneDriveMenu] = useState(false);
     // @anchor onedrive-picker-state — modal własnego przeglądarki folderów (Graph), zastępuje konsumencki picker js.live.net
+    // @anchor onedrive-structure-state — wynik zakładania struktury katalogów zamówienia (komunikat w menu OneDrive)
+    const [oneDriveStructure, setOneDriveStructure] = useState({ busy: false, msg: '', error: false });
     const [oneDrivePicker, setOneDrivePicker] = useState({ open: false, nodeId: null, items: [], stack: [{ id: null, name: 'OneDrive' }], loading: false, error: '' });
     const oneDriveMenuRef = useRef(null);
 
@@ -472,16 +474,38 @@ export default function DashboardPage() {
         const current = stack[stack.length - 1];
         if (!current.id) { setOneDrivePicker(p => ({ ...p, error: 'Wejdź do folderu, który chcesz przypisać.' })); return; }
         try {
-            await fetch(`${API_URL}/onedrive/set-folder`, {
+            const r = await fetch(`${API_URL}/onedrive/set-folder`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ nodeId, folderId: current.id, driveId: current.driveId || '', folderName: current.name }),
             });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const result = await r.json().catch(() => null);
             if (typeof refreshTree === 'function') refreshTree();
             setOneDriveMsConnected(true);
             setOneDrivePicker(p => ({ ...p, open: false }));
+            // Niepełna struktura katalogów nie blokuje powiązania — pokazujemy, czego brakuje, z opcją ponowienia.
+            if (result?.errors?.length) {
+                setOneDriveStructure({ busy: false, msg: `Brak części katalogów: ${result.errors.join('; ')}`, error: true });
+                setShowOneDriveMenu(true);
+            }
         } catch {
             setOneDrivePicker(p => ({ ...p, error: 'Nie udało się przypisać folderu.' }));
+        }
+    };
+
+    // @anchor create-onedrive-structure — zakłada brakujące katalogi struktury zamówienia (01/02/03 + podkatalogi)
+    const createOneDriveStructure = async (nodeId) => {
+        const token = localStorage.getItem('token');
+        setOneDriveStructure({ busy: true, msg: 'Zakładam katalogi…', error: false });
+        try {
+            const r = await fetch(`${API_URL}/onedrive/structure/${nodeId}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const { created = [], errors = [] } = await r.json();
+            if (errors.length) setOneDriveStructure({ busy: false, msg: `Nie udało się: ${errors.join('; ')}`, error: true });
+            else setOneDriveStructure({ busy: false, msg: created.length ? `Założono katalogi: ${created.length}` : 'Struktura katalogów jest kompletna', error: false });
+        } catch {
+            setOneDriveStructure({ busy: false, msg: 'Nie udało się założyć struktury katalogów.', error: true });
         }
     };
 
@@ -497,6 +521,7 @@ export default function DashboardPage() {
             openOneDrivePicker(activeNode.id);
             return;
         }
+        setOneDriveStructure(st => (st.busy ? st : { busy: false, msg: '', error: false }));
         setShowOneDriveMenu(v => !v);
     };
 
@@ -820,7 +845,7 @@ export default function DashboardPage() {
                                     <span className={`text-[11px] font-bold max-w-[120px] truncate ${textCls}`}>{label}</span>
                                 </button>
                                 {showOneDriveMenu && folderLinked && (
-                                    <div className="absolute right-0 top-full mt-1 w-52 bg-gray-900 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
+                                    <div className="absolute right-0 top-full mt-1 w-64 bg-gray-900 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
                                         <button
                                             className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-gray-300 hover:bg-white/5 transition-colors"
                                             onClick={() => { window.open(`https://onedrive.live.com/`, '_blank'); setShowOneDriveMenu(false); }}
@@ -835,6 +860,20 @@ export default function DashboardPage() {
                                             <Cloud size={13} className="text-orange-400" />
                                             Zmień folder
                                         </button>
+                                        <button
+                                            className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-gray-300 hover:bg-white/5 transition-colors disabled:opacity-50"
+                                            disabled={oneDriveStructure.busy}
+                                            onClick={() => createOneDriveStructure(activeNode.id)}
+                                            title="Zakłada brakujące katalogi: 01 Dokumenty finansowe, 02 Dokumentacja projektowa, 03 Realizacja z podkatalogami"
+                                        >
+                                            <FolderOpen size={13} className="text-blue-400" />
+                                            Utwórz strukturę katalogów
+                                        </button>
+                                        {oneDriveStructure.msg && (
+                                            <div className={`px-4 pb-2 text-[10px] leading-snug ${oneDriveStructure.error ? 'text-red-400' : 'text-green-400'}`}>
+                                                {oneDriveStructure.msg}
+                                            </div>
+                                        )}
                                         <div className="h-px bg-white/10 mx-3" />
                                         <button
                                             className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
