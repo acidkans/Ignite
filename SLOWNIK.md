@@ -2633,6 +2633,10 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-funkcja | putContent | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-put-content |
 | back-funkcja | ensureOrderFolder | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-ensure-order-folder |
 | back-funkcja | pushDocument | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-push-document |
+| back-funkcja | autoSyncAll | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-auto-sync |
+| back-env | ONEDRIVE_AUTO_SYNC | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-auto-sync |
+| back-funkcja | cleanupDeleted | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-cleanup-deleted |
+| ui-funkcja | synchronizacja przy wejściu (OneDriveSyncBar) | apps/frontend/src/components/shared/OneDriveSyncBar.jsx | @anchor onedrive-sync-on-open |
 | back-funkcja | onDocumentUploaded / uploadListeners | apps/backend/src/documents/documents.service.ts | @anchor document-uploaded-listeners |
 | back-typ | DocumentUploadedEvent | apps/backend/src/documents/documents.service.ts | @anchor document-uploaded-event |
 | back-stala | UPLOAD_CATEGORY_FOLDER | apps/backend/src/onedrive/order-folders.ts | @anchor upload-category-folder |

@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException, ConflictException, OnModuleInit } from '@nestjs/common';
-import { Interval } from '@nestjs/schedule';
+import { Cron, Interval } from '@nestjs/schedule';
+import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -23,6 +24,8 @@ const ARCHIVE_AREA_NAME = 'Archiwum';
 // Reszta (XLSX, zdjęcia, filmy) jest pobierana i widoczna w aplikacji, ale nie trafia do Qdrant.
 const INDEXABLE_MIME = /^(application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|text\/)/;
 const MAX_INDEX_BYTES = 50 * 1024 * 1024;
+// Kopia pliku usuniętego z OneDrive (lub z aplikacji) zostaje na serwerze tyle dni — na wypadek pomyłki.
+const KEEP_DELETED_DAYS = 30;
 
 // @anchor onedrive-sync-result
 export interface OneDriveSyncResult {
@@ -51,6 +54,7 @@ export class OneDriveSyncService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly oneDrive: OneDriveService,
     private readonly documents: DocumentsService,
+    private readonly config: ConfigService,
   ) {}
 
   onModuleInit() {
@@ -276,6 +280,55 @@ export class OneDriveSyncService implements OnModuleInit {
       const children = await this.prisma.driveFile.findMany({ where: { parentItemId: f.driveItemId, status: { not: 'deleted' } } });
       for (const c of children) await this.markDeleted(c);
     }
+  }
+
+  // @anchor onedrive-auto-sync
+  // Automatyczna synchronizacja co 30 min — tylko aktywne zamówienia (bez Archiwum i ROZLICZONE).
+  // Wyłączana `ONEDRIVE_AUTO_SYNC=false` (dev: baza jest kopią produkcji z prawdziwymi folderami,
+  // automat ściągałby firmowe pliki na komputer dewelopera). Zamówienia po kolei — bez skoków obciążenia Graph.
+  @Cron('*/30 * * * *', { name: 'onedrive-auto-sync' })
+  async autoSyncAll(): Promise<void> {
+    if (this.config.get<string>('ONEDRIVE_AUTO_SYNC') === 'false') return;
+    try {
+      await this.oneDrive.getSharedToken();
+    } catch {
+      return; // brak podpiętego konta Microsoft — nie ma czym synchronizować
+    }
+    const nodes = await this.prisma.processNode.findMany({
+      where: { oneDriveFolderId: { not: null }, NOT: { orderStage: 'ROZLICZONE' } },
+      select: { id: true },
+    });
+    let ok = 0;
+    for (const { id } of nodes) {
+      if (this.syncing.has(id) || (await this.syncBlockedReason(id))) continue;
+      try {
+        await this.syncNode(id);
+        ok++;
+      } catch (e: any) {
+        this.logger.warn(`Auto-sync zamówienia ${id}: ${e?.response?.data?.error?.message || e?.message}`);
+      }
+    }
+    if (ok) this.logger.log(`Auto-sync OneDrive: ${ok} zamówień`);
+  }
+
+  // @anchor onedrive-cleanup-deleted
+  // Raz na dobę: usuwa z serwera kopie plików skasowanych na OneDrive lub w aplikacji ponad 30 dni temu.
+  // Wpis `DriveFile` zostaje (status `deleted` / `ignored`) — synchronizacja musi dalej wiedzieć, że plik był.
+  @Cron('30 3 * * *', { name: 'onedrive-cleanup-deleted' })
+  async cleanupDeleted(): Promise<number> {
+    const before = new Date(Date.now() - KEEP_DELETED_DAYS * 24 * 3600 * 1000);
+    const stale = await this.prisma.driveFile.findMany({
+      where: { storagePath: { not: null }, updatedAt: { lt: before }, OR: [{ status: 'deleted' }, { ignored: true }] },
+      select: { id: true, storagePath: true },
+    });
+    for (const f of stale) {
+      // Plik pod tą ścieżką może wciąż wskazywać dokument (upload z aplikacji) — wtedy zostaje.
+      const inUse = await this.prisma.processNode.findFirst({ where: { storagePath: f.storagePath }, select: { id: true } });
+      if (!inUse) await fs.promises.unlink(uploadPath(f.storagePath)).catch(() => null);
+      await this.prisma.driveFile.update({ where: { id: f.id }, data: { storagePath: null } });
+    }
+    if (stale.length) this.logger.log(`OneDrive: usunięto ${stale.length} kopii skasowanych plików (> ${KEEP_DELETED_DAYS} dni)`);
+    return stale.length;
   }
 
   // @anchor onedrive-process-queue

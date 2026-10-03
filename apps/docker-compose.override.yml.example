@@ -13,6 +13,8 @@ services:
       # Lokalnie łączymy się do bazy po nazwie serwisu w dockerze
       - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-changeme}@db:5432/${DB_NAME:-erp_db}
       - VECTOR_DB_URL=http://vector-db:6333
+      # dev = kopia produkcji z prawdziwymi folderami OneDrive: bez automatycznej synchronizacji
+      - ONEDRIVE_AUTO_SYNC=false
 
 networks:
   traefik-public:

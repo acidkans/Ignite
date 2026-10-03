@@ -4,6 +4,9 @@ import { API_URL } from '../../config';
 
 const token = () => sessionStorage.getItem('token') || localStorage.getItem('token');
 
+// Wejście do zakładki synchronizuje folder, jeśli ostatnia synchronizacja jest starsza niż tyle.
+const STALE_MS = 5 * 60 * 1000;
+
 const STATUS_LABEL = {
   pending: 'w kolejce',
   discovered: 'w kolejce',
@@ -23,6 +26,7 @@ export default function OneDriveSyncBar({ nodeId, onSynced }) {
   const [error, setError] = useState('');
   const [showErrors, setShowErrors] = useState(false);
   const lastDone = useRef(null);
+  const autoTried = useRef(null);
 
   const fetchStatus = useCallback(async () => {
     if (!nodeId) return null;
@@ -72,6 +76,15 @@ export default function OneDriveSyncBar({ nodeId, onSynced }) {
       setBusy(false);
     }
   };
+
+  // @anchor onedrive-sync-on-open — świeże pliki od razu po wejściu, bez czekania na cykl co 30 min.
+  useEffect(() => {
+    if (!status?.linked || status.blocked || status.syncing || autoTried.current === nodeId) return;
+    autoTried.current = nodeId;
+    const age = status.syncedAt ? Date.now() - new Date(status.syncedAt).getTime() : Infinity;
+    if (age > STALE_MS) runSync();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, nodeId]);
 
   if (!status?.linked) return null;
 

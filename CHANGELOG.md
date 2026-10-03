@@ -1,3 +1,15 @@
+## 2026-10-03 — OneDrive etap 4: automatyczna synchronizacja aktywnych zamówień + sprzątanie kopii usuniętych plików (v2026.10.03.2110)
+
+### architektura / API
+- `back-funkcja` `autoSyncAll` — `@Cron` co 30 min: zamówienia z folderem OneDrive, bez Archiwum i `ROZLICZONE`, po kolei; wyłączane `back-env` `ONEDRIVE_AUTO_SYNC=false`
+- `back-funkcja` `cleanupDeleted` — `@Cron` 3:30 codziennie: kasuje z serwera kopie plików usuniętych na OneDrive lub w aplikacji ponad 30 dni temu (wpis `DriveFile` zostaje, `storagePath = null`); plik wskazywany przez dokument zostaje
+- `ui-funkcja` synchronizacja przy wejściu do zakładki Dokumentacja / Pliki finansowe, gdy ostatnia starsza niż 5 min
+- dev: `ONEDRIVE_AUTO_SYNC=false` w `apps/docker-compose.override.yml(.example)` — baza dev to kopia produkcji z prawdziwymi folderami
+- webhooki Graph (subskrypcje) odłożone — synchronizacja przy wejściu + co 30 min wystarcza
+
+### wytyczne
+- `back-env` `ONEDRIVE_AUTO_SYNC` — na dev zawsze `false`; na produkcji brak zmiennej = włączone
+
 ## 2026-10-03 — OneDrive etap 3: eksporty i uploady z aplikacji do katalogów struktury zamówienia (v2026.10.03.2030)
 
 ### architektura / API

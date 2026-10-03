@@ -244,7 +244,7 @@ Endpointy (`back-endpoint`):
 | 1 | `ORDER_FOLDERS`, `ensureOrderFolders`, `resolveUploadPath`, wolumen `uploads`, `GET /onedrive/folders`, `POST /onedrive/structure` | Struktura katalogów zakładana na OD, porządek ścieżek na serwerze |
 | 2 | `DriveFile` + pola sync w `ProcessNode`, `OneDriveSyncService` (delta + kolejka), `POST /onedrive/sync`, UI „Synchronizuj teraz” | Pliki wrzucone na OD pojawiają się w aplikacji i w indeksie AI |
 | 3 | Eksporty i uploady na `folderKey`, rekord `DriveFile(source='app')`, upload session | Eksporty lądują w nowych katalogach bez duplikatów po sync |
-| 4 | Cron 15 min, webhook Graph, sprzątanie kopii usuniętych plików po 30 dniach | Synchronizacja automatyczna |
+| 4 | Cron co 30 min (aktywne zamówienia), synchronizacja przy wejściu do zakładki (> 5 min), sprzątanie kopii usuniętych plików po 30 dniach; webhooki Graph odłożone | Synchronizacja automatyczna |
 | 5 | `OneDriveSettings`, `Supplier.oneDriveFolderId`, sync wspólnego katalogu ofert (dostawca → zamówienie), UI wyboru katalogu i przypisań w Logistyce → Oferty, dedup po hash | Oferty dostawców z jednego wspólnego katalogu trafiają do Logistyki albo do zamówienia |
 
 Każdy etap = osobny commit, wpis w `CHANGELOG.md`, nowe anchory w `SLOWNIK.md`, bump wersji w `LoginPage.jsx`.
