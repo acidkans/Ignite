@@ -7,6 +7,7 @@ import { Response } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OneDriveService } from './onedrive.service';
+import { OneDriveSyncService } from './onedrive-sync.service';
 import { ConfigService } from '@nestjs/config';
 import { ORDER_FOLDERS, ORDER_ROOT_FOLDERS, orderFolderPath } from './order-folders';
 
@@ -15,6 +16,7 @@ import { ORDER_FOLDERS, ORDER_ROOT_FOLDERS, orderFolderPath } from './order-fold
 export class OneDriveController {
   constructor(
     private readonly oneDriveService: OneDriveService,
+    private readonly syncService: OneDriveSyncService,
     private readonly config: ConfigService,
     private readonly jwtService: JwtService,
   ) {}
@@ -83,6 +85,21 @@ export class OneDriveController {
   @UseGuards(JwtAuthGuard)
   structure(@Param('nodeId') nodeId: string) {
     return this.oneDriveService.ensureOrderFolders(nodeId);
+  }
+
+  // @anchor onedrive-sync-endpoint
+  // Odczytuje zmiany z OneDrive (delta) i kolejkuje pobranie/indeksowanie; przetwarzanie idzie w tle.
+  @Post('sync/:nodeId')
+  @UseGuards(JwtAuthGuard)
+  sync(@Param('nodeId') nodeId: string) {
+    return this.syncService.syncNode(nodeId);
+  }
+
+  // @anchor onedrive-sync-status-endpoint
+  @Get('sync/:nodeId/status')
+  @UseGuards(JwtAuthGuard)
+  syncStatus(@Param('nodeId') nodeId: string) {
+    return this.syncService.getStatus(nodeId);
   }
 
   // @anchor onedrive-upload-endpoint

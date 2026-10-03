@@ -225,6 +225,12 @@ model ProcessNode {
   oneDriveDocumentacjaId    String?
   /// @anchor process-node-one-drive-folder-ids
   oneDriveFolderIds         Json? // id katalogów struktury ORDER_FOLDERS: { "root:finance": id, supplierOffers: id, ... }
+  /// @anchor process-node-one-drive-delta-link
+  oneDriveDeltaLink         String? // token Graph delta query — następna synchronizacja pobiera tylko zmiany
+  /// @anchor process-node-one-drive-synced-at
+  oneDriveSyncedAt          DateTime?
+  /// @anchor process-node-one-drive-sync-error
+  oneDriveSyncError         String?
   /// @anchor process-node-task-list-slug
   taskListSlug              String?  @unique
   /// @anchor process-node-order-stage
@@ -264,6 +270,8 @@ model ProcessNode {
   /// @anchor process-node-acceptance-protocols
   acceptanceProtocols       AcceptanceProtocolRecord[]
 
+  /// @anchor process-node-drive-files
+  driveFiles                DriveFile[]
   @@map("process_nodes")
 }
 
@@ -1930,4 +1938,48 @@ model OfferAiAnalysis {
 
   @@index([nodeId, versionId, createdAt])
   @@map("offer_ai_analyses")
+}
+
+/// @anchor drive-file
+/// Rejestr plików i katalogów z folderu zamówienia na OneDrive (synchronizacja Graph delta).
+/// Plik → po pobraniu dokument `ProcessNode(type='document')` z kategorią wynikającą z katalogu (ORDER_FOLDERS).
+/// Katalogi (`isFolder`) trzymane po to, by z `parentItemId` ustalić, w którym katalogu struktury leży plik.
+model DriveFile {
+  id           String    @id @default(uuid())
+  /// @anchor drive-file-node-id
+  nodeId       String // zamówienie
+  driveId      String
+  /// @anchor drive-file-drive-item-id
+  driveItemId  String    @unique
+  /// @anchor drive-file-parent-item-id
+  parentItemId String?
+  isFolder     Boolean   @default(false)
+  /// @anchor drive-file-folder-key
+  folderKey    String? // klucz ORDER_FOLDERS; null = poza strukturą; '__legacy' = stare pliki_finansowe / dokumentacja_projektowa
+  name         String
+  mimeType     String?
+  size         Int?
+  /// @anchor drive-file-c-tag
+  cTag         String? // zmienia się tylko przy zmianie treści → ponowne przetworzenie
+  lastModified DateTime?
+  webUrl       String?
+  /// @anchor drive-file-document-id
+  documentId   String? // ProcessNode(type='document') utworzony z pliku
+  storagePath  String? // kopia na serwerze, względem UPLOADS_ROOT
+  processedTag String? // cTag, z którego powstała kopia / indeks
+  /// @anchor drive-file-status
+  status       String    @default("pending") // discovered | pending | downloaded | indexed | skipped | error | deleted
+  attempts     Int       @default(0)
+  error        String?
+  /// @anchor drive-file-ignored
+  ignored      Boolean   @default(false) // dokument usunięty w aplikacji — sync go nie odtwarza
+  source       String    @default("onedrive") // onedrive | app
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  node ProcessNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([nodeId, status])
+  @@index([documentId])
+  @@map("drive_files")
 }

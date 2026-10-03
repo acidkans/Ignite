@@ -9,6 +9,7 @@ import * as mammoth from 'mammoth';
 import * as fs from 'fs';
 import * as path from 'path';
 import { UPLOADS_ROOT, uploadPath } from '../common/uploads.util';
+import { FINANCIAL_TAB_CATEGORIES, STANDARD_TAB_CATEGORIES, orderFolderPath } from '../onedrive/order-folders';
 const PDFParser = require('pdf2json');
 
 @Injectable()
@@ -106,31 +107,70 @@ export class DocumentsService {
             });
         } else {
             console.log(`[DOCS] Creating new file node for: ${fileName}`);
-            fileNode = await this.prisma.processNode.create({
-                data: {
-                    name: fileName,
-                    type: 'document',
-                    parentId: nodeId,
-                    ownerId: null,
-                    storagePath: storageFileName,
-                    mimeType: file.mimetype,
-                    fileSize: file.size,
-                    documentCategory: category || null,
-                }
+            fileNode = await this.createDocumentNode({
+                nodeId,
+                name: fileName,
+                storagePath: storageFileName,
+                mimeType: file.mimetype,
+                fileSize: file.size,
+                documentCategory: category || null,
             });
-
-            await this.prisma.processNodeClosure.create({
-                data: { ancestorId: fileNode.id, descendantId: fileNode.id, depth: 0 }
-            });
-
-            // Connect to parent nodes
-            await this.prisma.$executeRaw`
-                INSERT INTO process_node_closure ("ancestorId", "descendantId", "depth")
-                SELECT "ancestorId", ${fileNode.id}, "depth" + 1
-                FROM process_node_closure
-                WHERE "descendantId" = ${nodeId}
-            `;
         }
+
+        const chunks = await this.indexDocumentBuffer(fileNode.id, nodeId, fileName, file.buffer, file.mimetype);
+
+        return {
+            success: true,
+            nodeId: fileNode.id,
+            chunks,
+            message: "File indexed successfully"
+        };
+    }
+
+    // @anchor create-document-node
+    // Węzeł dokumentu pod gałęzią + wpisy w closure table (bez nich dokument nie jest widoczny w drzewie).
+    async createDocumentNode(data: { nodeId: string; name: string; storagePath: string; mimeType: string | null; fileSize: number | null; documentCategory: string | null }) {
+        const fileNode = await this.prisma.processNode.create({
+            data: {
+                name: data.name,
+                type: 'document',
+                parentId: data.nodeId,
+                ownerId: null,
+                storagePath: data.storagePath,
+                mimeType: data.mimeType,
+                fileSize: data.fileSize,
+                documentCategory: data.documentCategory,
+            }
+        });
+
+        await this.prisma.processNodeClosure.create({
+            data: { ancestorId: fileNode.id, descendantId: fileNode.id, depth: 0 }
+        });
+
+        // Connect to parent nodes
+        await this.prisma.$executeRaw`
+            INSERT INTO process_node_closure ("ancestorId", "descendantId", "depth")
+            SELECT "ancestorId", ${fileNode.id}, "depth" + 1
+            FROM process_node_closure
+            WHERE "descendantId" = ${data.nodeId}
+        `;
+        return fileNode;
+    }
+
+    // @anchor clear-document-index
+    // Usuwa fragmenty dokumentu z Qdrant przed ponownym indeksowaniem nowej treści.
+    async clearDocumentIndex(documentId: string) {
+        try { await this.vectorService.deleteDocumentChunks(documentId); } catch (e) { console.warn(`[DOCS] Vector delete non-fatal: ${e.message}`); }
+    }
+
+    // @anchor index-document-buffer
+    // Wyciąga tekst z pliku (PDF przez parser-service z fallbackiem pdf2json, DOCX przez mammoth)
+    // i zapisuje fragmenty w Qdrant pod `documentId`. Zwraca liczbę fragmentów.
+    // Wspólne dla uploadu z aplikacji i synchronizacji OneDrive.
+    // `strict` — błąd zapisu do Qdrant jest rzucany dalej (synchronizacja OneDrive musi wiedzieć, że indeks nie powstał).
+    async indexDocumentBuffer(documentId: string, nodeId: string, fileName: string, buffer: Buffer, mimetype: string, strict = false): Promise<number> {
+        const file = { buffer, mimetype: mimetype || 'application/octet-stream' };
+        const fileNode = { id: documentId };
 
         // 2. Extract text
         let text = '';
@@ -259,15 +299,11 @@ export class DocumentsService {
             await this.vectorService.upsertDocuments(documentsPayload);
             console.log(`[DOCS] All chunks indexed successfully.`);
         } catch (e) {
+            if (strict) throw new Error(`Indeks AI: ${e.message}`);
             console.warn(`[DOCS] Vector indexing failed (non-fatal): ${e.message}`);
         }
 
-        return {
-            success: true,
-            nodeId: fileNode.id,
-            chunks: chunks.length,
-            message: "File indexed successfully"
-        };
+        return chunks.length;
     }
 
     // ─── RE-INDEKSOWANIE BEZ PONOWNEGO UPLOADU ────────────────────────────────
@@ -397,18 +433,24 @@ export class DocumentsService {
 
     async getDocumentsByNode(nodeId: string, category?: string) {
         const where: any = { parentId: nodeId, type: 'document' };
+        // Kategorie z katalogów OneDrive (ORDER_FOLDERS) trafiają do tej zakładki, do której należy ich katalog.
         if (category === 'financial') {
-            where.documentCategory = 'financial';
+            where.documentCategory = { in: FINANCIAL_TAB_CATEGORIES };
         } else if (category === 'offer') {
             where.documentCategory = 'offer';
         } else if (category === 'standard' || !category) {
-            where.OR = [{ documentCategory: null }, { documentCategory: 'standard' }, { documentCategory: '' }];
+            where.OR = [{ documentCategory: null }, { documentCategory: { in: STANDARD_TAB_CATEGORIES } }];
         }
 
         const documents = await this.prisma.processNode.findMany({
             where,
             orderBy: { createdAt: 'desc' }
         });
+
+        const driveFiles = documents.length
+            ? await this.prisma.driveFile.findMany({ where: { documentId: { in: documents.map(d => d.id) } }, select: { documentId: true, webUrl: true, folderKey: true } })
+            : [];
+        const driveByDoc = new Map(driveFiles.map(f => [f.documentId, f]));
 
         return documents.map(doc => {
             let parsedPositions: any[] | null = null;
@@ -432,6 +474,9 @@ export class DocumentsService {
                 fileSize: doc.fileSize,
                 documentCategory: doc.documentCategory,
                 parsedPositions,
+                oneDrive: driveByDoc.has(doc.id)
+                    ? { webUrl: driveByDoc.get(doc.id).webUrl, folderPath: orderFolderPath(driveByDoc.get(doc.id).folderKey) }
+                    : null,
             };
         });
     }
@@ -504,8 +549,14 @@ export class DocumentsService {
         return { success: true, id: documentId, fileName: name };
     }
 
-    async deleteDocument(documentId: string) {
+    // `fromSync` — usunięcie wywołane synchronizacją (plik skasowany na OneDrive). Usunięcie przez
+    // użytkownika oznacza plik OneDrive jako `ignored`, żeby następna synchronizacja go nie odtworzyła.
+    async deleteDocument(documentId: string, fromSync = false) {
         try {
+            if (!fromSync) {
+                await this.prisma.driveFile.updateMany({ where: { documentId }, data: { ignored: true, documentId: null } });
+            }
+
             // 1. Delete from Qdrant (all chunks)
             try {
                 await this.vectorService.deleteDocumentChunks(documentId);

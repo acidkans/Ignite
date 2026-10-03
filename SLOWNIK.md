@@ -2597,6 +2597,39 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | schema-pole | ProcessNode.oneDriveFolderIds | apps/backend/prisma/schema.prisma | @anchor process-node-one-drive-folder-ids |
 | ui-stan | oneDriveStructure | apps/frontend/src/DashboardPage.jsx | @anchor onedrive-structure-state |
 | ui-funkcja | createOneDriveStructure | apps/frontend/src/DashboardPage.jsx | @anchor create-onedrive-structure |
+| schema-model | DriveFile | apps/backend/prisma/schema.prisma | @anchor drive-file |
+| schema-pole | DriveFile.nodeId | apps/backend/prisma/schema.prisma | @anchor drive-file-node-id |
+| schema-pole | DriveFile.driveItemId | apps/backend/prisma/schema.prisma | @anchor drive-file-drive-item-id |
+| schema-pole | DriveFile.parentItemId | apps/backend/prisma/schema.prisma | @anchor drive-file-parent-item-id |
+| schema-pole | DriveFile.folderKey | apps/backend/prisma/schema.prisma | @anchor drive-file-folder-key |
+| schema-pole | DriveFile.cTag | apps/backend/prisma/schema.prisma | @anchor drive-file-c-tag |
+| schema-pole | DriveFile.documentId | apps/backend/prisma/schema.prisma | @anchor drive-file-document-id |
+| schema-pole | DriveFile.status | apps/backend/prisma/schema.prisma | @anchor drive-file-status |
+| schema-pole | DriveFile.ignored | apps/backend/prisma/schema.prisma | @anchor drive-file-ignored |
+| schema-relacja | ProcessNode.driveFiles | apps/backend/prisma/schema.prisma | @anchor process-node-drive-files |
+| schema-pole | ProcessNode.oneDriveDeltaLink | apps/backend/prisma/schema.prisma | @anchor process-node-one-drive-delta-link |
+| schema-pole | ProcessNode.oneDriveSyncedAt | apps/backend/prisma/schema.prisma | @anchor process-node-one-drive-synced-at |
+| schema-pole | ProcessNode.oneDriveSyncError | apps/backend/prisma/schema.prisma | @anchor process-node-one-drive-sync-error |
+| back-serwis | OneDriveSyncService | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-sync-service |
+| back-typ | OneDriveSyncResult | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-sync-result |
+| back-funkcja | syncNode | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-sync-node |
+| back-funkcja | syncBlockedReason | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-sync-blocked-reason |
+| back-stala | ARCHIVE_AREA_NAME | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-sync-archive-area |
+| back-funkcja | resolveFolderKeys | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-resolve-folder-keys |
+| back-funkcja | markDeleted | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-mark-deleted |
+| back-funkcja | processQueue | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-process-queue |
+| back-funkcja | processFile | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-process-file |
+| back-funkcja | getStatus (OneDriveSyncService) | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-sync-status |
+| back-endpoint | POST /onedrive/sync/:nodeId | apps/backend/src/onedrive/onedrive.controller.ts | @anchor onedrive-sync-endpoint |
+| back-endpoint | GET /onedrive/sync/:nodeId/status | apps/backend/src/onedrive/onedrive.controller.ts | @anchor onedrive-sync-status-endpoint |
+| back-stala | FINANCIAL_TAB_CATEGORIES | apps/backend/src/onedrive/order-folders.ts | @anchor financial-tab-categories |
+| back-stala | STANDARD_TAB_CATEGORIES | apps/backend/src/onedrive/order-folders.ts | @anchor standard-tab-categories |
+| back-funkcja | createDocumentNode | apps/backend/src/documents/documents.service.ts | @anchor create-document-node |
+| back-funkcja | indexDocumentBuffer | apps/backend/src/documents/documents.service.ts | @anchor index-document-buffer |
+| back-funkcja | clearDocumentIndex | apps/backend/src/documents/documents.service.ts | @anchor clear-document-index |
+| ui-sekcja | OneDriveSyncBar | apps/frontend/src/components/shared/OneDriveSyncBar.jsx | @anchor onedrive-sync-bar |
+| ui-funkcja | runSync (OneDriveSyncBar) | apps/frontend/src/components/shared/OneDriveSyncBar.jsx | @anchor onedrive-sync-run |
+| ui-funkcja | refreshFiles (PropertyPreview) | apps/frontend/src/components/shared/PropertyPreview.jsx | @anchor property-preview-refresh-files |
 
 #### Frontend (`apps/frontend/src/utils/protokolOdbioruExport.js`)
 

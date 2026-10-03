@@ -1,3 +1,25 @@
+## 2026-10-03 — OneDrive etap 2: synchronizacja folderu zamówienia (delta) → dokumenty z kategorią wg katalogu + indeks AI (v2026.10.03.1900)
+
+### schema.prisma
+- dodano model `DriveFile` (`drive_files`) — rejestr plików i katalogów folderu zamówienia: `driveItemId` (unique), `parentItemId`, `isFolder`, `folderKey`, `cTag`, `processedTag`, `documentId`, `storagePath`, `status` (discovered | pending | downloaded | indexed | skipped | error | deleted), `attempts`, `error`, `ignored`, `source`
+- dodano pola `oneDriveDeltaLink`, `oneDriveSyncedAt`, `oneDriveSyncError` oraz relację `driveFiles` w modelu `ProcessNode`
+- migracja `20261003180000_drive_files`
+
+### architektura / API
+- `back-serwis` `OneDriveSyncService` — Graph delta na folderze zamówienia (działa na podfolderze OneDrive for Business), `folderKey` ustalany po `parentItemId` w górę do katalogów `oneDriveFolderIds`; kolejka `@Interval(30 s)`, 2 pliki naraz, 3 próby, pauza przy 429/503
+- pliki pobierane strumieniowo do `uploads/<nodeId>/<katalog struktury>/<driveItemId>.<ext>`; dokument `ProcessNode(type='document')` z `documentCategory` z `ORDER_FOLDERS`; indeks AI tylko dla PDF/DOC/DOCX/TXT z katalogów `index: true` (i plików luzem)
+- `Zamówienia i faktury` oraz stare `pliki_finansowe` / `dokumentacja_projektowa` → `skipped` (bez pobierania)
+- `back-endpoint` `POST /onedrive/sync/:nodeId` (zwraca `{ newFiles, changed, deleted, pending, fullSync }`), `GET /onedrive/sync/:nodeId/status`
+- `back-endpoint` `GET /documents/node/:nodeId` — ZMIANA: `category=financial` obejmuje `FINANCIAL_TAB_CATEGORIES`, `standard` obejmuje `STANDARD_TAB_CATEGORIES`; każdy dokument ma pole `oneDrive: { webUrl, folderPath } | null`
+- `back-funkcja` `deleteDocument` — usunięcie przez użytkownika ustawia `DriveFile.ignored` (sync nie odtwarza pliku); `processDocument` rozbity na `createDocumentNode` + `indexDocumentBuffer` (wspólne z synchronizacją)
+- `ui-sekcja` `OneDriveSyncBar` w zakładkach Dokumentacja / Pliki finansowe: „Synchronizuj OneDrive”, czas, liczniki, lista błędów; dokumenty z OneDrive oznaczone ☁ + katalog
+
+### wytyczne
+- `schema-model` `DriveFile` — nowe pliki dostają `discovered` i przechodzą w `pending` dopiero po `resolveFolderKeys` (inaczej kolejka weźmie plik bez katalogu); `documentId` zapisywany zaraz po utworzeniu dokumentu, przed indeksem (ponowienie nie dubluje dokumentu)
+- `back-funkcja` `indexDocumentBuffer` — w synchronizacji z `strict = true` (błąd indeksu = status `error`); upload z aplikacji zostaje non-fatal
+- plik usunięty z OneDrive → dokument usuwany z aplikacji i indeksu; kopia na serwerze zostaje (sprzątanie — etap 4)
+- `back-funkcja` `syncBlockedReason` — zamówienia pod obszarem „Archiwum” i z `orderStage = ROZLICZONE` nie są synchronizowane (ręcznie → 409, kolejka → `skipped`); dotyczy też automatycznej synchronizacji z etapu 4
+
 ## 2026-10-03 — OneDrive etap 1: struktura katalogów zamówienia (01/02/03 + podkatalogi) i wspólny helper ścieżek uploads (v2026.10.03.1200)
 
 ### schema.prisma

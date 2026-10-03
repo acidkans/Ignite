@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Trash2, Upload, MapPin, Hash, User, FileText, Eye, Clock, Image, Film, FileCode, ChevronDown, Pencil, ChevronLeft, ChevronRight } from 'lucide-react';
 import { API_URL } from '../../config';
 import DocumentViewer from './DocumentViewer';
 import { importQaFormPdf } from './wbs/importQaFormPdf';
 import OneDriveFilesSection from './OneDriveFilesSection';
+import OneDriveSyncBar from './OneDriveSyncBar';
 
 const UPLOAD_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.jpg,.jpeg,.png,.gif,.webp,.mp4,.webm';
 
@@ -223,6 +224,21 @@ export default function PropertyPreview({ nodeId, versionId = null, searchQuery 
         fetchNodeFiles();
     }, [nodeId]);
 
+    // @anchor property-preview-refresh-files — ponowne pobranie listy dokumentów (po synchronizacji OneDrive)
+    const refreshFiles = useCallback(async () => {
+        if (!nodeId) return;
+        try {
+            const token = sessionStorage.getItem('token');
+            const category = isFinancialTab ? 'financial' : isOfferTab ? 'offer' : 'standard';
+            const res = await fetch(`${API_URL}/documents/node/${nodeId}?category=${category}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) setFiles(await res.json());
+        } catch (err) {
+            console.error('Error refreshing node files:', err);
+        }
+    }, [nodeId, isFinancialTab, isOfferTab]);
+
     // Fetch all tree files when search query is active
     useEffect(() => {
         if (!searchQuery.trim() || !nodeId) {
@@ -411,7 +427,10 @@ export default function PropertyPreview({ nodeId, versionId = null, searchQuery 
                                                             {file.fileName}
                                                         </div>
                                                     )}
-                                                    <div className="text-[10px] opacity-60 mt-0.5">{new Date(file.uploadedAt).toLocaleDateString()}</div>
+                                                    <div className="text-[10px] opacity-60 mt-0.5">
+                                                        {new Date(file.uploadedAt).toLocaleDateString()}
+                                                        {file.oneDrive && <span className="ml-1.5 text-sky-300" title={`Z OneDrive: ${file.oneDrive.folderPath || 'poza strukturą'}`}>☁ {file.oneDrive.folderPath?.split('/').pop() || 'OneDrive'}</span>}
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
@@ -440,6 +459,7 @@ export default function PropertyPreview({ nodeId, versionId = null, searchQuery 
 
                 {/* Dropdown plików OneDrive */}
                 <OneDriveFilesSection nodeId={nodeId} category={isFinancialTab ? 'finanse' : 'dokumentacja'} />
+                {!isOfferTab && !isDatasheetTab && <OneDriveSyncBar nodeId={nodeId} onSynced={refreshFiles} />}
 
                 {/* Prev/next navigation */}
                 {files.length > 1 && (() => {

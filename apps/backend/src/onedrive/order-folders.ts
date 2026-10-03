@@ -46,7 +46,15 @@ export const ORDER_FOLDERS: OrderFolderDef[] = [
 
 // @anchor order-folder-path
 // Ścieżka katalogu względem folderu zamówienia — do komunikatów w UI i katalogu na serwerze.
-export function orderFolderPath(key: string): string | null {
+export function orderFolderPath(key: string | null): string | null {
   const def = ORDER_FOLDERS.find((f) => f.key === key);
   return def ? `${ORDER_ROOT_FOLDERS[def.root]}/${def.name}` : null;
 }
+
+// @anchor financial-tab-categories
+// Kategorie dokumentów pokazywane w zakładce „Pliki finansowe” (`GET /documents/node/:id?category=financial`).
+export const FINANCIAL_TAB_CATEGORIES = ['financial', 'clientOffer', 'budget', 'protocol', 'aiReport'];
+
+// @anchor standard-tab-categories
+// Kategorie dokumentów zakładki „Dokumentacja” (obok `null` — dokumenty wgrane przed kategoriami).
+export const STANDARD_TAB_CATEGORIES = ['standard', '', 'datasheet', 'schematic', 'materials', 'schedule', 'report', 'sitePhoto'];

@@ -130,7 +130,7 @@ Migracja: `prisma migrate dev` + ręczne psql na dev (wg [[project_prisma_migrat
 2. Dla każdego pliku: wyliczenie `folderKey` z `parentReference.path` względem folderu zamówienia;
    pomijane: stare `pliki_finansowe/`, `dokumentacja_projektowa/`.
 3. Upsert `DriveFile`. Nowy lub zmieniony `cTag` → `status = pending`.
-4. `deleted` → `status = deleted`, dokument ukryty w aplikacji (soft), lokalna kopia zostaje 30 dni.
+4. `deleted` → `status = deleted`, dokument usuwany z aplikacji i indeksu (jak ręczne usunięcie), lokalna kopia zostaje 30 dni.
 5. Zapis nowego `deltaLink`, `oneDriveSyncedAt`.
 
 Kolejka przetwarzania: tabela `DriveFile.status` + `@Interval` co 30 s, max 2 pliki równolegle
@@ -148,6 +148,8 @@ Wyzwalacze:
 - etap 4: webhook Graph (`/subscriptions`) → natychmiastowy sync.
 
 Token: `getSharedToken()` (konto usługowe) — sync działa bez zalogowanego użytkownika.
+
+Zamówienia archiwalne (pod obszarem „Archiwum”) i rozliczone (`orderStage = ROZLICZONE`) nie są synchronizowane — ani ręcznie, ani automatycznie.
 
 ### 4.3 Endpointy (`back-endpoint`)
 - `POST /onedrive/sync/:nodeId` — uruchamia sync, zwraca liczniki (nowe/zmienione/usunięte/błędy).
