@@ -2,21 +2,23 @@ import { useState, useEffect } from 'react';
 import { X, Download, Mail, Send, Loader2, CheckCircle, ArrowLeft, Cloud } from 'lucide-react';
 import RecipientInput from './RecipientInput';
 import { resolveArtifact, downloadBlob, sendExport, uploadToOneDrive } from '../../utils/exportMail';
-import { API_URL } from '../../config';
+import { useOneDriveFolders, resolveOneDriveFolder } from '../../utils/oneDriveFolders';
 
 // @anchor export-choice-modal
 // Wspólny modal eksportu: „Pobierz na urządzenie", „Wyślij mailem" albo „Zapisz na OneDrive".
 // makeArtifact: async () => ({ blob, filename }) | ({ html, filename }) — generuje plik dopiero po wyborze.
 // oneDriveFolderName: string|null — gdy podany, folder jest powiązany i przycisk OneDrive jest aktywny.
-// oneDriveCategory: 'finanse'|'dokumentacja' — domyślnie 'finanse'.
-// oneDriveSubfolder: string|null — podkatalog W ŚRODKU folderu kategorii, zakładany przy
-//   pierwszym zapisie. Protokoły odbioru lądują w `pliki_finansowe/<nazwa gałęzi WBS>`.
+// oneDriveFolderKey: katalog struktury zamówienia (ORDER_FOLDERS: 'budget', 'reports', 'protocols'…).
+// oneDriveDocumentCategory: zamiast klucza — kategoria istniejącego dokumentu; katalog wynika z niej
+//   (eksport dokumentu z podglądu trafia tam, skąd dokument pochodzi).
+// oneDriveSubfolder: string|null — podkatalog W ŚRODKU katalogu struktury, zakładany przy
+//   pierwszym zapisie. Protokoły odbioru lądują w `Protokoły odbioru/<nazwa gałęzi WBS>`.
 // onExported: () => void | Promise — wołane po UDANYM eksporcie (pobranie, mail, OneDrive).
 //   Używa go protokół odbioru: dopiero wyjście dokumentu z aplikacji zapisuje odbiór w rejestrze.
 // defaultTo / defaultCc / defaultSubject / defaultMessage — podpowiedzi formularza maila. Tylko
 //   wartości startowe: każde pole zostaje w pełni edytowalne, bo adresat i treść bywają inne niż
 //   domyślne (protokół idzie czasem do inwestora, nie do wykonawcy zakresu).
-export default function ExportChoiceModal({ open, onClose, title = 'Eksport', defaultFilename = 'plik', nodeId, makeArtifact, oneDriveFolderName, oneDriveCategory = 'finanse', oneDriveSubfolder = '', onExported, defaultTo, defaultCc, defaultSubject, defaultMessage }) {
+export default function ExportChoiceModal({ open, onClose, title = 'Eksport', defaultFilename = 'plik', nodeId, makeArtifact, oneDriveFolderName, oneDriveFolderKey = 'reports', oneDriveDocumentCategory, oneDriveSubfolder = '', onExported, defaultTo, defaultCc, defaultSubject, defaultMessage }) {
   const [mode, setMode] = useState('choice'); // 'choice' | 'email'
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -27,6 +29,9 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
   const [cc, setCc] = useState([]);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
+  const folders = useOneDriveFolders();
+  const target = resolveOneDriveFolder(folders, { folderKey: oneDriveFolderKey, documentCategory: oneDriveDocumentCategory });
+  const sciezka = [oneDriveFolderName, target.path, oneDriveSubfolder].filter(Boolean).join(' → ');
 
   // Reset TYLKO na otwarciu modala. Świadomie bez podpowiedzi w zależnościach: domyślna
   // treść zmienia się przy każdym przeliczeniu zakresu, a wpadnięcie tu w trakcie pisania
@@ -63,13 +68,12 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
     setBusy(true); setError('');
     try {
       const art = await resolveArtifact(await makeArtifact());
-      const { webUrl } = await uploadToOneDrive({
+      const { webUrl, path } = await uploadToOneDrive({
         blob: art.blob, filename: art.filename, nodeId,
-        category: oneDriveCategory, subfolder: oneDriveSubfolder,
+        folderKey: target.key, subfolder: oneDriveSubfolder,
       });
       await onExported?.();
-      const sciezka = [oneDriveFolderName, oneDriveCategory === 'finanse' ? 'pliki_finansowe' : 'dokumentacja_projektowa', oneDriveSubfolder].filter(Boolean).join(' → ');
-      setDone(`Zapisano na OneDrive${sciezka ? ` → ${sciezka}` : ''}`);
+      setDone(`Zapisano na OneDrive → ${[oneDriveFolderName, path].filter(Boolean).join(' → ')}`);
       setBusy(false);
       if (webUrl) setTimeout(() => window.open(webUrl, '_blank'), 400);
       setTimeout(onClose, 2000);
@@ -91,11 +95,11 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
       let odInfo = '';
       if (oneDriveFolderName) {
         try {
-          await uploadToOneDrive({
+          const { path } = await uploadToOneDrive({
             blob: art.blob, filename: art.filename, nodeId,
-            category: oneDriveCategory, subfolder: oneDriveSubfolder,
+            folderKey: target.key, subfolder: oneDriveSubfolder,
           });
-          odInfo = ` · zapisano na OneDrive → ${[oneDriveFolderName, oneDriveCategory === 'finanse' ? 'pliki_finansowe' : 'dokumentacja_projektowa', oneDriveSubfolder].filter(Boolean).join(' → ')}`;
+          odInfo = ` · zapisano na OneDrive → ${[oneDriveFolderName, path].filter(Boolean).join(' → ')}`;
         } catch (e) {
           setError(`Mail wysłany, ale zapis na OneDrive się nie udał: ${e?.message || 'błąd'}`);
         }
@@ -143,11 +147,11 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
               <button
                 onClick={handleUploadOneDrive}
                 disabled={busy || !oneDriveFolderName}
-                title={!oneDriveFolderName ? 'Najpierw powiąż folder OneDrive z tą gałęzią' : `Zapisz w: ${oneDriveFolderName}`}
+                title={!oneDriveFolderName ? 'Najpierw powiąż folder OneDrive z tą gałęzią' : `Zapisz w: ${sciezka}`}
                 className={`${btnBase} border ${oneDriveFolderName ? 'bg-green-500/10 border-green-500/20 hover:bg-green-500/20 text-green-300' : 'bg-white/5 border-white/10 text-gray-600 cursor-not-allowed'}`}
               >
                 {busy ? <Loader2 size={16} className="animate-spin" /> : <Cloud size={16} />}
-                {oneDriveFolderName ? `OneDrive → ${oneDriveFolderName}` : 'OneDrive (brak folderu)'}
+                {oneDriveFolderName ? `OneDrive → ${target.path ? target.path.split('/').pop() : oneDriveFolderName}` : 'OneDrive (brak folderu)'}
               </button>
             </div>
           ) : (
@@ -179,7 +183,7 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
               <p className="text-[10px] text-gray-500 text-center">
                 Załącznik = ten sam plik, który zostałby pobrany.
                 {oneDriveFolderName
-                  ? ` Kopia trafia na OneDrive → ${[oneDriveFolderName, oneDriveCategory === 'finanse' ? 'pliki_finansowe' : 'dokumentacja_projektowa', oneDriveSubfolder].filter(Boolean).join(' → ')}.`
+                  ? ` Kopia trafia na OneDrive → ${sciezka}.`
                   : ' Gałąź nie ma folderu OneDrive — kopia nie zostanie zarchiwizowana.'}
               </p>
             </div>

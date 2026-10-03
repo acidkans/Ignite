@@ -71,15 +71,15 @@ export async function resolveArtifact(artifact) {
 }
 
 // @anchor upload-to-onedrive
-// Wrzuca gotowy plik do folderu OneDrive powiązanego z zamówieniem:
-// `<folder zamówienia>/pliki_finansowe/<subfolder>` (albo `dokumentacja_projektowa`).
+// Wrzuca gotowy plik do katalogu struktury zamówienia na OneDrive (`folderKey` z ORDER_FOLDERS),
+// opcjonalnie do podkatalogu (`subfolder` — protokoły: nazwa gałęzi). Zwraca `{ webUrl, itemId, path }`.
 // Jedna implementacja dla modala eksportu i dla przycisku „Generuj" w protokole odbioru —
 // przy dwóch kopiach jedna zawsze zostaje bez poprawki.
-export async function uploadToOneDrive({ blob, filename, nodeId, category = 'finanse', subfolder = '' }) {
+export async function uploadToOneDrive({ blob, filename, nodeId, folderKey, subfolder = '' }) {
   const form = new FormData();
   form.append('file', blob, filename);
   form.append('nodeId', nodeId || '');
-  form.append('category', category);
+  form.append('folderKey', folderKey);
   if (subfolder) form.append('subfolder', subfolder);
 
   const res = await fetch(`${API_URL}/onedrive/upload`, {
@@ -87,7 +87,10 @@ export async function uploadToOneDrive({ blob, filename, nodeId, category = 'fin
     headers: { Authorization: `Bearer ${token()}` },
     body: form,
   });
-  if (!res.ok) throw new Error(`Błąd uploadu na OneDrive (${res.status})`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.message || `Błąd uploadu na OneDrive (${res.status})`);
+  }
   return res.json();
 }
 

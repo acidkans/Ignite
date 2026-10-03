@@ -12,6 +12,17 @@ import { UPLOADS_ROOT, uploadPath } from '../common/uploads.util';
 import { FINANCIAL_TAB_CATEGORIES, STANDARD_TAB_CATEGORIES, orderFolderPath } from '../onedrive/order-folders';
 const PDFParser = require('pdf2json');
 
+// @anchor document-uploaded-event
+export interface DocumentUploadedEvent {
+    documentId: string;
+    nodeId: string;
+    fileName: string;
+    mimeType: string;
+    storagePath: string; // względem UPLOADS_ROOT
+    category: string | null;
+    folderKey?: string;
+}
+
 @Injectable()
 export class DocumentsService {
     constructor(
@@ -58,7 +69,17 @@ export class DocumentsService {
         return { ok: true };
     }
 
-    async processDocument(file: Express.Multer.File, nodeId: string, category?: string) {
+    // @anchor document-uploaded-listeners
+    // Subskrybenci uploadu dokumentu (OneDriveSyncService wysyła plik do folderu zamówienia).
+    // Callback zamiast importu modułu — OneDriveModule już zależy od DocumentsModule.
+    private readonly uploadListeners: Array<(e: DocumentUploadedEvent) => Promise<void> | void> = [];
+
+    onDocumentUploaded(fn: (e: DocumentUploadedEvent) => Promise<void> | void) {
+        this.uploadListeners.push(fn);
+    }
+
+    // `oneDriveFolderKey` — katalog OneDrive inny niż wynikający z kategorii (raport AI → `aiReports`).
+    async processDocument(file: Express.Multer.File, nodeId: string, category?: string, oneDriveFolderKey?: string) {
         if (!file) throw new BadRequestException('No file provided');
         if (!nodeId) throw new BadRequestException('No nodeId provided');
 
@@ -118,6 +139,14 @@ export class DocumentsService {
         }
 
         const chunks = await this.indexDocumentBuffer(fileNode.id, nodeId, fileName, file.buffer, file.mimetype);
+
+        const event: DocumentUploadedEvent = {
+            documentId: fileNode.id, nodeId, fileName, mimeType: file.mimetype,
+            storagePath: storageFileName, category: category || null, folderKey: oneDriveFolderKey,
+        };
+        for (const fn of this.uploadListeners) {
+            Promise.resolve().then(() => fn(event)).catch((e) => console.warn(`[DOCS] Listener uploadu: ${e?.message || e}`));
+        }
 
         return {
             success: true,
@@ -503,6 +532,7 @@ export class DocumentsService {
             nodeId: doc.id,
             mimeType: doc.mimeType,
             fileSize: doc.fileSize,
+            documentCategory: doc.documentCategory,
             nodeName: (doc.parent as any)?.name || null,
             nodeType: (doc.parent as any)?.type || null,
             nodeCustomLabel: (doc.parent as any)?.customTypeLabel || null,

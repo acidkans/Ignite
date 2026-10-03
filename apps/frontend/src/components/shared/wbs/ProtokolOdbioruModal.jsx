@@ -666,12 +666,12 @@ export default function ProtokolOdbioruModal({
         try {
             const art = await resolveArtifact(format === 'docx' ? await makeProtokolDocx(dane) : makeProtokolPdf(dane));
             setWysylka('Wgrywam na OneDrive…');
-            const { webUrl } = await uploadToOneDrive({
+            const { webUrl, path } = await uploadToOneDrive({
                 blob: art.blob, filename: art.filename, nodeId,
-                category: 'finanse', subfolder: pola.podkatalog,
+                folderKey: 'protocols', subfolder: pola.podkatalog,
             });
             await poEksporcie();
-            setWysylka(`Zapisano: ${oneDriveFolderName} → pliki_finansowe${pola.podkatalog ? ` → ${pola.podkatalog}` : ''}`);
+            setWysylka(`Zapisano: ${oneDriveFolderName} → ${path}`);
             if (webUrl) setTimeout(() => window.open(webUrl, '_blank'), 400);
             setTimeout(() => { setWysylka(''); onClose(); }, 2000);
         } catch (e) {
@@ -1289,7 +1289,7 @@ export default function ProtokolOdbioruModal({
                             onClick={naOneDrive}
                             disabled={brakZaznaczenia || !!wysylka || !oneDriveFolderName}
                             title={oneDriveFolderName
-                                ? `Zapisze w: ${oneDriveFolderName} → pliki_finansowe${pola.podkatalog ? ` → ${pola.podkatalog}` : ''}`
+                                ? `Zapisze w: ${oneDriveFolderName} → 01 Dokumenty finansowe → Protokoły odbioru${pola.podkatalog ? ` → ${pola.podkatalog}` : ''}`
                                 : 'Zamówienie nie ma powiązanego folderu OneDrive'}
                             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white disabled:opacity-40 transition-all"
                         >
@@ -1335,7 +1335,7 @@ export default function ProtokolOdbioruModal({
                 nodeId={nodeId}
                 makeArtifact={() => (format === 'docx' ? makeProtokolDocx(dane) : makeProtokolPdf(dane))}
                 oneDriveFolderName={oneDriveFolderName}
-                oneDriveCategory="finanse"
+                oneDriveFolderKey="protocols"
                 oneDriveSubfolder={pola.podkatalog}
                 onExported={poEksporcie}
                 defaultTo={domyslniOdbiorcy}

@@ -215,7 +215,7 @@ export default function DocumentationSidebar({ nodeId, onClose, onOpenFullscreen
                     defaultFilename={pendingExport.defaultFilename}
                     makeArtifact={pendingExport.makeArtifact}
                     oneDriveFolderName={oneDriveFolderName}
-                    oneDriveCategory="dokumentacja"
+                    oneDriveDocumentCategory={selectedFile?.documentCategory ?? null}
                 />
             )}
             {/* Header */}

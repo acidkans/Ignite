@@ -1531,7 +1531,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         if (!(await guardMaterialConsistencyBeforeExport(kind))) return;
         if (kind === 'materials') {
             exportNoPricesRef.current = false;
-            openExport({ title: 'Materiały (Excel)', defaultFilename: `${safeFileBase()}_materialy.xlsx`, makeArtifact: () => materialsExportFn.current?.() });
+            openExport({ title: 'Materiały (Excel)', defaultFilename: `${safeFileBase()}_materialy.xlsx`, makeArtifact: () => materialsExportFn.current?.(), oneDriveFolderKey: 'materials' });
             return;
         }
         if (kind === 'budget' && budgetCostsOnly) {
@@ -1542,6 +1542,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 title: 'Analiza projektu (Excel) — SAME KOSZTY',
                 defaultFilename: costsOnlyFilename(`${safeFileBase()}_budzet.xlsx`),
                 makeArtifact: handleExportBudgetExcel,
+                oneDriveFolderKey: 'budget',
             });
             return;
         }
@@ -1552,6 +1553,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 title: exportNoPricesRef.current ? 'Tabele oferty (Excel) — BEZ CEN' : 'Tabele oferty (Excel)',
                 defaultFilename: exportNoPricesRef.current ? noPricesFilename(fn) : fn,
                 makeArtifact: handleExportOfertaWbsExcel,
+                oneDriveFolderKey: 'clientOffer',
             });
             return;
         }
@@ -1560,6 +1562,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             title: exportNoPricesRef.current ? 'Analiza projektu (Excel) — BEZ CEN' : 'Analiza projektu (Excel)',
             defaultFilename: exportNoPricesRef.current ? noPricesFilename(fn) : fn,
             makeArtifact: handleExportBudgetExcel,
+            oneDriveFolderKey: 'budget',
         });
     };
 
@@ -1598,9 +1601,12 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         // Modal otwieramy natychmiast; ciężki build HTML (fetch logo, schematów,
         // materiałów, wklejanie obrazów base64) dzieje się dopiero po wyborze akcji —
         // wcześniej klik blokował UI na kilka sekund zanim modal się pojawił.
+        // Katalog OneDrive wg sekcji: oferta → nasza oferta, budżet / harmonogram / materiały → swoje katalogi, reszta → raporty.
+        const sectionFolder = { oferta: 'clientOffer', budget: 'budget', gantt: 'schedule', materials: 'materials' };
         openExport({
             title: `Eksport PDF: ${labels[sectionKey] || sectionKey}`,
             defaultFilename: filename,
+            oneDriveFolderKey: sectionFolder[sectionKey] || 'reports',
             makeArtifact: async () => {
         const date = new Date().toLocaleDateString('pl-PL', { day: '2-digit', month: 'long', year: 'numeric' });
         const show = (key) => sectionKey === key || sectionKey === 'all';
@@ -6504,7 +6510,7 @@ ${ganttSectionHtml}
                         )}
                         {(key === 'wbs' || key === 'wbs-hybrid') && (
                             <button
-                                onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'Q&A PDF', defaultFilename: `Q&A_${safeFileBase()}.pdf`, makeArtifact: () => exportQaFormPdf(wbsData, orderName || projectName || 'Projekt') }); }}
+                                onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'Q&A PDF', defaultFilename: `Q&A_${safeFileBase()}.pdf`, oneDriveFolderKey: 'reports', makeArtifact: () => exportQaFormPdf(wbsData, orderName || projectName || 'Projekt') }); }}
                                 className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                             >
                                 <FileDown size={11} /> Q&A PDF
@@ -6512,7 +6518,7 @@ ${ganttSectionHtml}
                         )}
                         {(key === 'wbs' || key === 'wbs-hybrid' || onExport) && (
                             <button
-                                onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'PDF — wszystkie sekcje', defaultFilename: `${safeFileBase()}_projekt.pdf`, makeArtifact: () => buildProjectPdfArtifact({ nodeId, versionId, projectName, orderName, ganttHtml: ganttGetHtmlRef.current?.() || null }) }); }}
+                                onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'PDF — wszystkie sekcje', defaultFilename: `${safeFileBase()}_projekt.pdf`, oneDriveFolderKey: 'reports', makeArtifact: () => buildProjectPdfArtifact({ nodeId, versionId, projectName, orderName, ganttHtml: ganttGetHtmlRef.current?.() || null }) }); }}
                                 className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                             >
                                 <FileDown size={11} /> PDF wszystkie sekcje
@@ -6683,7 +6689,7 @@ ${ganttSectionHtml}
                             projectEndDate={ganttProjectEnd}
                         />
                     ), () => handleExportPDF('gantt'), (
-                        <button onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'Harmonogram (Excel)', defaultFilename: `Harmonogram_${safeFileBase()}.xlsx`, makeArtifact: handleExportGanttExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                        <button onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'Harmonogram (Excel)', defaultFilename: `Harmonogram_${safeFileBase()}.xlsx`, oneDriveFolderKey: 'schedule', makeArtifact: handleExportGanttExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                             <FileDown size={11} /> Eksport do Excel
                         </button>
                     ));
@@ -7012,7 +7018,7 @@ ${ganttSectionHtml}
                     defaultFilename={pendingExport.defaultFilename}
                     makeArtifact={pendingExport.makeArtifact}
                     oneDriveFolderName={oneDriveFolderName}
-                    oneDriveCategory="finanse"
+                    oneDriveFolderKey={pendingExport.oneDriveFolderKey || 'reports'}
                 />
             )}
 

@@ -523,6 +523,7 @@ export default function PropertyPreview({ nodeId, versionId = null, searchQuery 
                         onApprove={onApprove}
                         onDatasheetApprove={onDatasheetApprove}
                         nodeId={nodeId}
+                        documentCategory={selectedFile?.documentCategory ?? null}
                     />
                 ) : (
                     <div className="flex-1 flex flex-col items-center justify-center text-gray-500 opacity-30 gap-4">

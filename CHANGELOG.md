@@ -1,3 +1,20 @@
+## 2026-10-03 — OneDrive etap 3: eksporty i uploady z aplikacji do katalogów struktury zamówienia (v2026.10.03.2030)
+
+### architektura / API
+- `back-endpoint` `POST /onedrive/upload` — ZMIANA sygnatury: `folderKey` (katalog ORDER_FOLDERS) + opcjonalny `subfolder` zamiast `category`; zwraca `{ webUrl, itemId, path }`; `category` ('finanse' / 'dokumentacja') przyjmowane przejściowo od starych klientów
+- `back-funkcja` `uploadFile` — zapis do katalogu struktury (`ensureOrderFolder` weryfikuje id, przy braku uzupełnia strukturę), `replaceItemId` podmienia treść istniejącego pliku zamiast tworzyć kopię; każdy zapis → `DriveFile(source='app', processedTag=cTag)`, więc synchronizacja go nie importuje
+- `back-funkcja` `putContent` — pliki > 4 MB przez upload session (kawałki 10 MB)
+- `back-funkcja` `pushDocument` — plik wgrany w zakładce Dokumentacja / Pliki finansowe (i raport Analizy AI) trafia na OneDrive do katalogu wg kategorii (`UPLOAD_CATEGORY_FOLDER`); ponowny upload podmienia treść; zamówienia archiwalne / rozliczone pomijane
+- `back-funkcja` `processDocument` — nowy 4. parametr `oneDriveFolderKey`; raport Analizy AI → `01 Dokumenty finansowe/Analizy AI` (w aplikacji dalej w dokumentacji)
+- `back-endpoint` `GET /onedrive/folders` — dodatkowo `categoryFolders`; `GET /documents/tree/:nodeId` — dodatkowo `documentCategory`
+- stare katalogi `pliki_finansowe` / `dokumentacja_projektowa` nie są już zakładane (tylko odczyt archiwum w `listFiles`)
+- `ui-funkcja` `uploadToOneDrive` — `folderKey` zamiast `category`; `ExportChoiceModal` — propsy `oneDriveFolderKey` / `oneDriveDocumentCategory` zamiast `oneDriveCategory`, ścieżka katalogu z `GET /onedrive/folders`
+- mapowanie eksportów: budżet (też „same koszty”) → `budget`; tabele oferty i PDF sekcji Oferta → `clientOffer`; harmonogram (XLSX, PDF) → `schedule`; materiały (XLSX, PDF) → `materials`; PDF pozostałych sekcji, wszystkie sekcje, Q&A, Informacje o zamówieniu → `reports`; protokół odbioru → `protocols/<gałąź>`; dokument z podglądu → katalog wg jego kategorii
+
+### wytyczne
+- `back-funkcja` `uploadFile` — każdy zapis z aplikacji na OneDrive tylko przez tę funkcję (rejestr `DriveFile` chroni przed ponownym importem przez synchronizację)
+- `ui-sekcja` `ExportChoiceModal` — nowy eksport musi podać `oneDriveFolderKey` (domyślnie `reports`)
+
 ## 2026-10-03 — OneDrive etap 2: synchronizacja folderu zamówienia (delta) → dokumenty z kategorią wg katalogu + indeks AI (v2026.10.03.1900)
 
 ### schema.prisma

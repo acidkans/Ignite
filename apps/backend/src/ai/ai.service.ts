@@ -108,7 +108,7 @@ export class AiService implements OnModuleInit {
                     buffer: pdf,
                     mimetype: 'application/pdf',
                     size: pdf.length,
-                } as any, nodeId, 'standard');
+                } as any, nodeId, 'standard', 'aiReports');
                 documentId = saved?.nodeId || null;
                 result.documentName = filename;
             } catch (e) {

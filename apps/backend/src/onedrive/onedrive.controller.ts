@@ -9,7 +9,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OneDriveService } from './onedrive.service';
 import { OneDriveSyncService } from './onedrive-sync.service';
 import { ConfigService } from '@nestjs/config';
-import { ORDER_FOLDERS, ORDER_ROOT_FOLDERS, orderFolderPath } from './order-folders';
+import { ORDER_FOLDERS, ORDER_ROOT_FOLDERS, UPLOAD_CATEGORY_FOLDER, orderFolderPath } from './order-folders';
 
 // @anchor onedrive-controller
 @Controller('onedrive')
@@ -76,6 +76,7 @@ export class OneDriveController {
     return {
       roots: ORDER_ROOT_FOLDERS,
       folders: ORDER_FOLDERS.map((f) => ({ ...f, path: orderFolderPath(f.key) })),
+      categoryFolders: UPLOAD_CATEGORY_FOLDER,
     };
   }
 
@@ -103,21 +104,21 @@ export class OneDriveController {
   }
 
   // @anchor onedrive-upload-endpoint
+  // `folderKey` — katalog struktury ORDER_FOLDERS. `category` ('finanse' | 'dokumentacja') przyjmowane
+  // przejściowo od klientów z zcache'owanym starym frontem.
   @Post('upload')
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 100 * 1024 * 1024 } }))
   upload(
-    @Req() req: any,
     @UploadedFile() file: Express.Multer.File,
-    @Body() body: { nodeId: string; category: 'finanse' | 'dokumentacja'; subfolder?: string },
+    @Body() body: { nodeId: string; folderKey?: string; category?: 'finanse' | 'dokumentacja'; subfolder?: string },
   ) {
     const filename = Buffer.from(file.originalname || 'eksport', 'latin1').toString('utf8');
     // `subfolder` przychodzi z FormData, więc pusty wybór to pusty string, a nie undefined —
     // bez tego `ensureSubfolder` próbowałby założyć katalog o pustej nazwie.
     const subfolder = (body.subfolder || '').trim() || undefined;
-    return this.oneDriveService.uploadFile(
-      req.user.userId, body.nodeId, body.category, filename, file.buffer, file.mimetype, subfolder,
-    );
+    const folderKey = body.folderKey || (body.category === 'dokumentacja' ? 'reports' : subfolder ? 'protocols' : 'budget');
+    return this.oneDriveService.uploadFile(body.nodeId, folderKey, filename, file.buffer, file.mimetype, { subfolder });
   }
 
   // @anchor onedrive-files-endpoint

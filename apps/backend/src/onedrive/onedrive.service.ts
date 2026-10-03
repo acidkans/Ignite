@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
-import { ORDER_FOLDERS, ORDER_ROOT_FOLDERS, OrderRootKey } from './order-folders';
+import { ORDER_FOLDERS, ORDER_ROOT_FOLDERS, OrderRootKey, orderFolderPath } from './order-folders';
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
 // Tasks.ReadWrite wymagany dla sync z MS To Do / Samsung Reminder
@@ -311,37 +311,107 @@ export class OneDriveService {
   }
 
   // @anchor onedrive-upload-file
-  // `subfolder` — opcjonalny podkatalog W ŚRODKU folderu kategorii, zakładany przy pierwszym
-  // zapisie i potem odnajdywany po nazwie (patrz `ensureSubfolder`). Używa go eksport protokołu
-  // odbioru, który ląduje w `pliki_finansowe/<nazwa gałęzi WBS>`.
+  // Zapis pliku z aplikacji (eksport, upload w zakładce, raport AI) do katalogu struktury `folderKey`.
+  // `subfolder` — podkatalog W ŚRODKU katalogu struktury (protokoły odbioru: `<gałąź WBS>`).
+  // `replaceItemId` — podmiana treści istniejącego pliku (ponowny upload tego samego dokumentu),
+  // zamiast tworzenia kopii „nazwa 1.pdf”.
+  // Każdy zapis trafia do rejestru `DriveFile` jako `source = 'app'` z `processedTag = cTag` —
+  // synchronizacja rozpozna go po id i nie zaimportuje drugi raz.
   async uploadFile(
-    userId: string,
     nodeId: string,
-    category: 'finanse' | 'dokumentacja',
+    folderKey: string,
     filename: string,
     buffer: Buffer,
     mimeType = 'application/octet-stream',
-    subfolder?: string,
-  ): Promise<{ webUrl: string; itemId: string }> {
+    opts: { subfolder?: string; replaceItemId?: string; documentId?: string; status?: string } = {},
+  ): Promise<{ webUrl: string; itemId: string; path: string }> {
+    const def = ORDER_FOLDERS.find((f) => f.key === folderKey);
+    if (!def) throw new NotFoundException(`Nieznany katalog OneDrive: ${folderKey}`);
     const node = await this.prisma.processNode.findUnique({ where: { id: nodeId } });
     if (!node?.oneDriveFolderId) throw new NotFoundException('Folder OneDrive nie jest powiązany z tą gałęzią');
 
     const token = await this.getSharedToken();
     const driveId = node.oneDriveDriveId;
-    const categoryFolderId = await this.ensureCategoryFolder(token, node, category);
-    const folderId = subfolder
-      ? await this.ensureSubfolder(token, driveId, categoryFolderId, subfolder)
-      : categoryFolderId;
+    const base = driveId ? `${GRAPH_BASE}/drives/${driveId}` : `${GRAPH_BASE}/me/drive`;
+    const folderId = await this.ensureOrderFolder(token, node, folderKey);
+    const parentId = opts.subfolder ? await this.ensureSubfolder(token, driveId, folderId, opts.subfolder) : folderId;
 
-    const uploadUrl = driveId
-      ? `${GRAPH_BASE}/drives/${driveId}/items/${folderId}:/${encodeURIComponent(filename)}:/content?@microsoft.graph.conflictBehavior=rename`
-      : `${GRAPH_BASE}/me/drive/items/${folderId}:/${encodeURIComponent(filename)}:/content?@microsoft.graph.conflictBehavior=rename`;
+    let item: any = null;
+    if (opts.replaceItemId) {
+      item = await this.putContent(token, `${base}/items/${opts.replaceItemId}`, buffer, mimeType).catch((e) => {
+        // Plik skasowany na OneDrive w międzyczasie — zapisujemy jako nowy.
+        if (e?.response?.status === 404) return null;
+        throw e;
+      });
+    }
+    if (!item) {
+      item = await this.putContent(token, `${base}/items/${parentId}:/${encodeURIComponent(filename)}:`, buffer, mimeType, 'rename');
+    }
 
-    const response = await axios.put(uploadUrl, buffer, {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': mimeType },
+    await this.prisma.driveFile.upsert({
+      where: { driveItemId: item.id },
+      create: {
+        nodeId, driveId: item.parentReference?.driveId || driveId || '', driveItemId: item.id, parentItemId: item.parentReference?.id || parentId,
+        folderKey, name: item.name, mimeType, size: item.size ?? buffer.length, cTag: item.cTag ?? null, processedTag: item.cTag ?? null,
+        webUrl: item.webUrl ?? null, documentId: opts.documentId ?? null, status: opts.status ?? 'skipped', source: 'app',
+      },
+      update: {
+        name: item.name, size: item.size ?? buffer.length, cTag: item.cTag ?? null, processedTag: item.cTag ?? null, webUrl: item.webUrl ?? null,
+        ...(opts.documentId ? { documentId: opts.documentId } : {}), ...(opts.status ? { status: opts.status } : {}), error: null,
+      },
     });
 
-    return { webUrl: response.data.webUrl, itemId: response.data.id };
+    const path = [orderFolderPath(folderKey), opts.subfolder].filter(Boolean).join('/');
+    return { webUrl: item.webUrl, itemId: item.id, path };
+  }
+
+  // @anchor onedrive-put-content
+  // Zapis treści: do 4 MB jednym PUT, większe przez upload session w kawałkach 10 MB
+  // (wielokrotność 320 KiB, wymóg Graph). `target` to `items/{id}` (podmiana) albo `items/{parent}:/{nazwa}:` (nowy).
+  private async putContent(token: string, target: string, buffer: Buffer, mimeType: string, conflict?: 'rename'): Promise<any> {
+    const headers = { Authorization: `Bearer ${token}` };
+    const SIMPLE_LIMIT = 4 * 1024 * 1024;
+    if (buffer.length <= SIMPLE_LIMIT) {
+      const q = conflict ? `?@microsoft.graph.conflictBehavior=${conflict}` : '';
+      const res = await axios.put(`${target}/content${q}`, buffer, { headers: { ...headers, 'Content-Type': mimeType }, maxBodyLength: Infinity });
+      return res.data;
+    }
+    const session = await axios.post(
+      `${target}/createUploadSession`,
+      { item: { '@microsoft.graph.conflictBehavior': conflict || 'replace' } },
+      { headers: { ...headers, 'Content-Type': 'application/json' } },
+    );
+    const uploadUrl: string = session.data.uploadUrl;
+    const CHUNK = 10 * 1024 * 1024;
+    let last: any = null;
+    for (let start = 0; start < buffer.length; start += CHUNK) {
+      const end = Math.min(start + CHUNK, buffer.length);
+      // uploadUrl jest pre-autoryzowany — bez nagłówka Authorization.
+      last = await axios.put(uploadUrl, buffer.subarray(start, end), {
+        headers: { 'Content-Length': String(end - start), 'Content-Range': `bytes ${start}-${end - 1}/${buffer.length}` },
+        maxBodyLength: Infinity,
+      });
+    }
+    return last?.data;
+  }
+
+  // @anchor onedrive-ensure-order-folder
+  // Aktualne id katalogu struktury: zapisane id weryfikowane w Graph, przy braku — uzupełnienie struktury.
+  private async ensureOrderFolder(token: string, node: { id: string; oneDriveDriveId: string | null; oneDriveFolderIds: any }, folderKey: string): Promise<string> {
+    const saved = (node.oneDriveFolderIds as Record<string, string> | null)?.[folderKey];
+    if (saved) {
+      const base = node.oneDriveDriveId ? `${GRAPH_BASE}/drives/${node.oneDriveDriveId}` : `${GRAPH_BASE}/me/drive`;
+      try {
+        await axios.get(`${base}/items/${saved}`, { headers: { Authorization: `Bearer ${token}` }, params: { $select: 'id' } });
+        return saved;
+      } catch {
+        this.logger.warn(`Katalog „${folderKey}" zamówienia ${node.id} nie istnieje pod zapisanym id — uzupełniam strukturę`);
+      }
+    }
+    const res = await this.ensureOrderFolders(node.id);
+    const id = res.folderIds[folderKey];
+    if (!id) throw new NotFoundException(`Nie udało się założyć katalogu ${orderFolderPath(folderKey)}: ${res.errors.join('; ')}`);
+    return id;
   }
 
   // @anchor onedrive-list-files
@@ -353,7 +423,7 @@ export class OneDriveService {
     const driveId = node.oneDriveDriveId;
     // Tylko odczyt: brak starego katalogu = pusta lista. Zakładanie go tutaj tworzyło
     // `dokumentacja_projektowa` w każdym folderze zamówienia przy samym otwarciu zakładki Dokumentacja.
-    const folderId = await this.ensureCategoryFolder(token, node, category, false).catch(() => null);
+    const folderId = await this.ensureCategoryFolder(token, node, category).catch(() => null);
     if (!folderId) return [];
 
     const url = driveId
@@ -419,22 +489,14 @@ export class OneDriveService {
       }));
   }
 
-  // @anchor onedrive-ensure-subfolder
-  // Podkatalog „załóż albo znajdź". `createFolder` NIE nadaje się do powtarzalnego wywołania —
-  // ma `conflictBehavior: 'rename'`, więc drugi protokół z tej samej gałęzi trafiłby do
-  // „Uszczelnienie przejść 1", trzeci do „… 2". Tutaj najpierw szukamy po nazwie, a zakładamy
-  // dopiero gdy nie ma; przy wyścigu dwóch zapisów `fail` zwraca 409 i wtedy szukamy ponownie.
   // @anchor onedrive-ensure-category-folder
-  // Zwraca AKTUALNE id folderu kategorii (`pliki_finansowe` / `dokumentacja_projektowa`).
-  // Id zapisane przy wiązaniu zamówienia bywa martwe: folder skasowany albo odtworzony ręcznie
-  // na OneDrive dostaje nowe id, a Graph odpowiada wtedy 404 i eksport wywalał się komunikatem
-  // „nie udało się zapisać", mimo że folder projektu istniał. Dlatego id jest WERYFIKOWANE,
-  // a przy braku trafienia katalog zakładany na nowo po nazwie i zapisywany do bazy.
+  // Id STAREGO katalogu kategorii (`pliki_finansowe` / `dokumentacja_projektowa`) — tylko do odczytu archiwum
+  // w `listFiles`. Nowe zapisy idą do struktury ORDER_FOLDERS; stare katalogi nie są już zakładane.
+  // Zapisane id jest weryfikowane (katalog mógł zostać skasowany/odtworzony), przy braku — szukanie po nazwie.
   private async ensureCategoryFolder(
     token: string,
     node: { id: string; oneDriveDriveId: string | null; oneDriveFolderId: string | null; oneDriveFinanseId: string | null; oneDriveDocumentacjaId: string | null },
     category: 'finanse' | 'dokumentacja',
-    create = true,
   ): Promise<string | null> {
     const driveId = node.oneDriveDriveId;
     const zapisane = category === 'finanse' ? node.oneDriveFinanseId : node.oneDriveDocumentacjaId;
@@ -453,9 +515,7 @@ export class OneDriveService {
     }
 
     if (!node.oneDriveFolderId) throw new NotFoundException('Folder OneDrive nie jest powiązany z tą gałęzią');
-    const swieze = create
-      ? await this.ensureSubfolder(token, driveId, node.oneDriveFolderId, nazwa)
-      : (await this.listChildFolders(token, driveId, node.oneDriveFolderId)).find((c) => c.name === nazwa)?.id ?? null;
+    const swieze = (await this.listChildFolders(token, driveId, node.oneDriveFolderId)).find((c) => c.name === nazwa)?.id ?? null;
     if (!swieze) return null;
     await this.prisma.processNode.update({
       where: { id: node.id },
@@ -464,6 +524,10 @@ export class OneDriveService {
     return swieze;
   }
 
+  // @anchor onedrive-ensure-subfolder
+  // Podkatalog „załóż albo znajdź” (np. protokoły: `Protokoły odbioru/<gałąź WBS>`). Najpierw szukamy po
+  // nazwie, zakładamy dopiero gdy nie ma — zakładanie z `conflictBehavior: rename` dawałoby „Gałąź 1”, „Gałąź 2”.
+  // Przy wyścigu dwóch zapisów `fail` zwraca 409 i wtedy szukamy ponownie.
   private async ensureSubfolder(
     token: string,
     driveId: string | null,

@@ -2630,6 +2630,15 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-sekcja | OneDriveSyncBar | apps/frontend/src/components/shared/OneDriveSyncBar.jsx | @anchor onedrive-sync-bar |
 | ui-funkcja | runSync (OneDriveSyncBar) | apps/frontend/src/components/shared/OneDriveSyncBar.jsx | @anchor onedrive-sync-run |
 | ui-funkcja | refreshFiles (PropertyPreview) | apps/frontend/src/components/shared/PropertyPreview.jsx | @anchor property-preview-refresh-files |
+| back-funkcja | putContent | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-put-content |
+| back-funkcja | ensureOrderFolder | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-ensure-order-folder |
+| back-funkcja | pushDocument | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-push-document |
+| back-funkcja | onDocumentUploaded / uploadListeners | apps/backend/src/documents/documents.service.ts | @anchor document-uploaded-listeners |
+| back-typ | DocumentUploadedEvent | apps/backend/src/documents/documents.service.ts | @anchor document-uploaded-event |
+| back-stala | UPLOAD_CATEGORY_FOLDER | apps/backend/src/onedrive/order-folders.ts | @anchor upload-category-folder |
+| ui-funkcja | loadOneDriveFolders | apps/frontend/src/utils/oneDriveFolders.js | @anchor load-onedrive-folders |
+| ui-hook | useOneDriveFolders | apps/frontend/src/utils/oneDriveFolders.js | @anchor use-onedrive-folders |
+| ui-funkcja | resolveOneDriveFolder | apps/frontend/src/utils/oneDriveFolders.js | @anchor resolve-onedrive-folder |
 
 #### Frontend (`apps/frontend/src/utils/protokolOdbioruExport.js`)
 

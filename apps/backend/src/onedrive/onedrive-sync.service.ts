@@ -1,13 +1,13 @@
-import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException, OnModuleInit } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 import { pipeline } from 'stream/promises';
 import { PrismaService } from '../prisma/prisma.service';
-import { DocumentsService } from '../documents/documents.service';
+import { DocumentsService, DocumentUploadedEvent } from '../documents/documents.service';
 import { OneDriveService } from './onedrive.service';
-import { ORDER_FOLDERS, orderFolderPath } from './order-folders';
+import { ORDER_FOLDERS, UPLOAD_CATEGORY_FOLDER, orderFolderPath } from './order-folders';
 import { uploadPath } from '../common/uploads.util';
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
@@ -41,7 +41,7 @@ export interface OneDriveSyncResult {
 //    tworzy/aktualizuje dokument i indeksuje go dla AI, jeśli katalog ma `index: true`.
 // Analiza AI czyta potem tylko z serwera — nigdy z OneDrive.
 @Injectable()
-export class OneDriveSyncService {
+export class OneDriveSyncService implements OnModuleInit {
   private readonly logger = new Logger(OneDriveSyncService.name);
   private readonly syncing = new Set<string>();
   private queueBusy = false;
@@ -52,6 +52,37 @@ export class OneDriveSyncService {
     private readonly oneDrive: OneDriveService,
     private readonly documents: DocumentsService,
   ) {}
+
+  onModuleInit() {
+    this.documents.onDocumentUploaded((e) => this.pushDocument(e));
+  }
+
+  // @anchor onedrive-push-document
+  // Plik wgrany w aplikacji (zakładka Dokumentacja / Pliki finansowe, raport AI) → kopia w katalogu
+  // struktury na OneDrive. Ponowny upload tego samego dokumentu podmienia treść pliku zamiast tworzyć kopię.
+  // Rekord `DriveFile` dostaje `documentId` i `processedTag = cTag` — synchronizacja nie zaimportuje go ponownie.
+  async pushDocument(e: DocumentUploadedEvent): Promise<void> {
+    const folderKey = e.folderKey || UPLOAD_CATEGORY_FOLDER[e.category ?? 'standard'];
+    const def = ORDER_FOLDERS.find((d) => d.key === folderKey);
+    if (!def) return;
+    const node = await this.prisma.processNode.findUnique({ where: { id: e.nodeId }, select: { oneDriveFolderId: true } });
+    if (!node?.oneDriveFolderId) return;
+    if (await this.syncBlockedReason(e.nodeId)) return;
+
+    try {
+      const existing = await this.prisma.driveFile.findFirst({ where: { documentId: e.documentId, status: { not: 'deleted' } } });
+      const buffer = await fs.promises.readFile(uploadPath(e.storagePath));
+      const indexed = def.index && INDEXABLE_MIME.test(e.mimeType || '');
+      const res = await this.oneDrive.uploadFile(e.nodeId, folderKey, e.fileName, buffer, e.mimeType, {
+        replaceItemId: existing?.driveItemId,
+        documentId: e.documentId,
+        status: indexed ? 'indexed' : 'downloaded',
+      });
+      await this.prisma.driveFile.update({ where: { driveItemId: res.itemId }, data: { storagePath: e.storagePath } });
+    } catch (err: any) {
+      this.logger.warn(`Wysyłka „${e.fileName}" na OneDrive (${folderKey}) nieudana: ${err?.response?.data?.error?.message || err?.message}`);
+    }
+  }
 
   // @anchor onedrive-sync-blocked-reason
   // Zamówienia archiwalne (pod obszarem „Archiwum”) i rozliczone nie są synchronizowane — ani ręcznie,

@@ -527,7 +527,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                     defaultFilename={pendingExport.defaultFilename}
                     makeArtifact={pendingExport.makeArtifact}
                     oneDriveFolderName={oneDriveFolderName}
-                    oneDriveCategory="dokumentacja"
+                    oneDriveFolderKey="reports"
                 />
             )}
             {/* Top action bar */}

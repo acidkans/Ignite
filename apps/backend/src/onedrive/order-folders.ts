@@ -58,3 +58,22 @@ export const FINANCIAL_TAB_CATEGORIES = ['financial', 'clientOffer', 'budget', '
 // @anchor standard-tab-categories
 // Kategorie dokumentów zakładki „Dokumentacja” (obok `null` — dokumenty wgrane przed kategoriami).
 export const STANDARD_TAB_CATEGORIES = ['standard', '', 'datasheet', 'schematic', 'materials', 'schedule', 'report', 'sitePhoto'];
+
+// @anchor upload-category-folder
+// Katalog OneDrive dla pliku wgranego w zakładce aplikacji (wg `documentCategory`).
+// Brak wpisu (np. `offer` — oferty ogólne z Logistyki) = plik nie jest wysyłany na OneDrive zamówienia.
+export const UPLOAD_CATEGORY_FOLDER: Record<string, string> = {
+  standard: 'clientDocs',
+  '': 'clientDocs',
+  financial: 'supplierOffers',
+  clientOffer: 'clientOffer',
+  budget: 'budget',
+  protocol: 'protocols',
+  aiReport: 'aiReports',
+  datasheet: 'datasheets',
+  schematic: 'schematics',
+  materials: 'materials',
+  schedule: 'schedule',
+  report: 'reports',
+  sitePhoto: 'sitePhotos',
+};
