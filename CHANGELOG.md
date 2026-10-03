@@ -1,3 +1,25 @@
+## 2026-10-03 — OneDrive etap 5: wspólny katalog ofert dostawców (dostawca → zamówienie) z dopasowaniem i ręcznym przypisaniem (v2026.10.03.2230)
+
+### schema.prisma
+- dodano model `OneDriveSettings` (`onedrive_settings`, jeden wiersz `singleton`) — `sharedOffersFolderId`, `sharedOffersDriveId`, `sharedOffersFolderName`, `sharedOffersDeltaLink`, `sharedOffersSyncedAt`, `sharedOffersSyncError`
+- dodano pole `oneDriveFolderId` (unique) w modelu `Supplier` — katalog dostawcy we wspólnym katalogu ofert
+- dodano pola `scope` (order | sharedOffers), `supplierId`, `orderNodeId`, `hash` (quickXorHash) w modelu `DriveFile`; nowy status `unmatched`
+- migracja `20261003210000_shared_offers`
+
+### architektura / API
+- `back-serwis` `OneDriveSharedOffersService` — `<katalog>/<Dostawca>/plik` → oferta ogólna (Logistyka → Oferty, `documentCategory = offer`), `<katalog>/<Dostawca>/<Zamówienie>/…/plik` → Pliki finansowe zamówienia (`financial`); dostawca dopasowywany po znormalizowanej nazwie (bez polskich znaków i form prawnych, tylko jednoznaczne trafienie) i zapamiętywany w `Supplier.oneDriveFolderId`; zamówienie po nazwie zamówienia lub nazwie jego folderu OneDrive, zapamiętywane na wpisie katalogu (`DriveFile.orderNodeId`); nierozpoznane zamówienie → pliki `unmatched` do ręcznego przypisania
+- `back-endpoint` `GET/PUT /onedrive/shared-offers`, `POST /onedrive/shared-offers/sync`, `GET /onedrive/shared-offers/orders`, `POST /onedrive/shared-offers/match`
+- `back-funkcja` `fetchDelta` / `applyDeltaItems` — wspólne dla folderu zamówienia i katalogu wspólnego; logika zamówienia filtruje `scope = 'order'`
+- `back-funkcja` `processFile` — duplikat (ten sam `hash` jako dokument tego samego zamówienia) → `skipped` bez parsowania i indeksu; `uploadFile` zapisuje `hash`
+- `back-funkcja` `OffersService.create` — gdy w modalu nie wybrano dostawcy, oferta z katalogu wspólnego dostaje dostawcę z katalogu
+- `back-endpoint` `GET /documents/node/:nodeId` — `oneDrive` zawiera `supplierId`, dla katalogu wspólnego `folderPath = 'Wspólne oferty'`
+- auto-sync katalogu wspólnego `@Cron` 15 i 45 min każdej godziny (ten sam wyłącznik `ONEDRIVE_AUTO_SYNC`)
+- `ui-sekcja` `SharedOffersOneDrive` w Logistyka → Oferty: wybór katalogu (`OneDriveFolderPicker`), synchronizacja, przypisania dostawców i zamówień
+
+### wytyczne
+- `schema-pole` `DriveFile.nodeId` — dla `scope = sharedOffers` to cel dokumentu (zamówienie albo obszar Logistyka), ustalany przez `resolveShared`, nie przez deltę
+- `schema-pole` `DriveFile.scope` — każde zapytanie synchronizacji zamówienia filtruje `scope = 'order'` (inaczej pełna synchronizacja zamówienia skasowałaby przypisane do niego oferty z katalogu wspólnego)
+
 ## 2026-10-03 — OneDrive etap 4: automatyczna synchronizacja aktywnych zamówień + sprzątanie kopii usuniętych plików (v2026.10.03.2110)
 
 ### architektura / API

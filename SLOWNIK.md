@@ -2636,6 +2636,34 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-funkcja | autoSyncAll | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-auto-sync |
 | back-env | ONEDRIVE_AUTO_SYNC | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-auto-sync |
 | back-funkcja | cleanupDeleted | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-cleanup-deleted |
+| back-funkcja | fetchDelta | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-fetch-delta |
+| back-funkcja | applyDeltaItems | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-apply-delta-items |
+| schema-model | OneDriveSettings | apps/backend/prisma/schema.prisma | @anchor onedrive-settings |
+| schema-pole | OneDriveSettings.sharedOffersFolderId | apps/backend/prisma/schema.prisma | @anchor onedrive-settings-shared-offers-folder-id |
+| schema-pole | Supplier.oneDriveFolderId | apps/backend/prisma/schema.prisma | @anchor supplier-one-drive-folder-id |
+| schema-pole | DriveFile.scope | apps/backend/prisma/schema.prisma | @anchor drive-file-scope |
+| schema-pole | DriveFile.supplierId | apps/backend/prisma/schema.prisma | @anchor drive-file-supplier-id |
+| schema-pole | DriveFile.orderNodeId | apps/backend/prisma/schema.prisma | @anchor drive-file-order-node-id |
+| schema-pole | DriveFile.hash | apps/backend/prisma/schema.prisma | @anchor drive-file-hash |
+| back-serwis | OneDriveSharedOffersService | apps/backend/src/onedrive/onedrive-shared-offers.service.ts | @anchor onedrive-shared-offers-service |
+| back-funkcja | normalizeFolderName | apps/backend/src/onedrive/onedrive-shared-offers.service.ts | @anchor normalize-folder-name |
+| back-funkcja | setFolder (wspólny katalog ofert) | apps/backend/src/onedrive/onedrive-shared-offers.service.ts | @anchor onedrive-shared-offers-set-folder |
+| back-funkcja | syncShared | apps/backend/src/onedrive/onedrive-shared-offers.service.ts | @anchor onedrive-shared-offers-sync |
+| back-funkcja | resolveShared | apps/backend/src/onedrive/onedrive-shared-offers.service.ts | @anchor onedrive-shared-offers-resolve |
+| back-funkcja | match (wspólny katalog ofert) | apps/backend/src/onedrive/onedrive-shared-offers.service.ts | @anchor onedrive-shared-offers-match |
+| back-funkcja | getStatus (wspólny katalog ofert) | apps/backend/src/onedrive/onedrive-shared-offers.service.ts | @anchor onedrive-shared-offers-status |
+| back-funkcja | orderCandidates | apps/backend/src/onedrive/onedrive-shared-offers.service.ts | @anchor onedrive-shared-offers-orders |
+| back-funkcja | autoSync (wspólny katalog ofert) | apps/backend/src/onedrive/onedrive-shared-offers.service.ts | @anchor onedrive-shared-offers-auto-sync |
+| back-endpoint | GET /onedrive/shared-offers | apps/backend/src/onedrive/onedrive.controller.ts | @anchor onedrive-shared-offers-endpoint |
+| back-endpoint | PUT /onedrive/shared-offers | apps/backend/src/onedrive/onedrive.controller.ts | @anchor onedrive-shared-offers-set-endpoint |
+| back-endpoint | POST /onedrive/shared-offers/sync | apps/backend/src/onedrive/onedrive.controller.ts | @anchor onedrive-shared-offers-sync-endpoint |
+| back-endpoint | GET /onedrive/shared-offers/orders | apps/backend/src/onedrive/onedrive.controller.ts | @anchor onedrive-shared-offers-orders-endpoint |
+| back-endpoint | POST /onedrive/shared-offers/match | apps/backend/src/onedrive/onedrive.controller.ts | @anchor onedrive-shared-offers-match-endpoint |
+| ui-modal | OneDriveFolderPicker | apps/frontend/src/components/shared/OneDriveFolderPicker.jsx | @anchor onedrive-folder-picker |
+| ui-sekcja | SharedOffersOneDrive | apps/frontend/src/components/shared/SharedOffersOneDrive.jsx | @anchor shared-offers-onedrive |
+| ui-funkcja | runSync (SharedOffersOneDrive) | apps/frontend/src/components/shared/SharedOffersOneDrive.jsx | @anchor shared-offers-sync-run |
+| ui-funkcja | match (SharedOffersOneDrive) | apps/frontend/src/components/shared/SharedOffersOneDrive.jsx | @anchor shared-offers-match |
+| ui-stan | docsKey (OffersTab) | apps/frontend/src/components/shared/OffersTab.jsx | @anchor offers-tab-docs-key |
 | ui-funkcja | synchronizacja przy wejściu (OneDriveSyncBar) | apps/frontend/src/components/shared/OneDriveSyncBar.jsx | @anchor onedrive-sync-on-open |
 | back-funkcja | onDocumentUploaded / uploadListeners | apps/backend/src/documents/documents.service.ts | @anchor document-uploaded-listeners |
 | back-typ | DocumentUploadedEvent | apps/backend/src/documents/documents.service.ts | @anchor document-uploaded-event |

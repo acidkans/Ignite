@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Delete, Query, Body, Req, Res, UseGuards,
+  Controller, Get, Post, Put, Delete, Query, Body, Req, Res, UseGuards,
   UploadedFile, UseInterceptors, Param,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OneDriveService } from './onedrive.service';
 import { OneDriveSyncService } from './onedrive-sync.service';
+import { OneDriveSharedOffersService } from './onedrive-shared-offers.service';
 import { ConfigService } from '@nestjs/config';
 import { ORDER_FOLDERS, ORDER_ROOT_FOLDERS, UPLOAD_CATEGORY_FOLDER, orderFolderPath } from './order-folders';
 
@@ -17,6 +18,7 @@ export class OneDriveController {
   constructor(
     private readonly oneDriveService: OneDriveService,
     private readonly syncService: OneDriveSyncService,
+    private readonly sharedOffers: OneDriveSharedOffersService,
     private readonly config: ConfigService,
     private readonly jwtService: JwtService,
   ) {}
@@ -101,6 +103,42 @@ export class OneDriveController {
   @UseGuards(JwtAuthGuard)
   syncStatus(@Param('nodeId') nodeId: string) {
     return this.syncService.getStatus(nodeId);
+  }
+
+  // @anchor onedrive-shared-offers-endpoint
+  // Wspólny katalog ofert dostawców: stan, przypisania katalogów, błędy.
+  @Get('shared-offers')
+  @UseGuards(JwtAuthGuard)
+  sharedOffersStatus() {
+    return this.sharedOffers.getStatus();
+  }
+
+  // @anchor onedrive-shared-offers-set-endpoint
+  @Put('shared-offers')
+  @UseGuards(JwtAuthGuard)
+  sharedOffersSet(@Body() body: { folderId: string; driveId: string; folderName: string }) {
+    return this.sharedOffers.setFolder(body.folderId, body.driveId, body.folderName);
+  }
+
+  // @anchor onedrive-shared-offers-sync-endpoint
+  @Post('shared-offers/sync')
+  @UseGuards(JwtAuthGuard)
+  sharedOffersSync() {
+    return this.sharedOffers.syncShared();
+  }
+
+  // @anchor onedrive-shared-offers-orders-endpoint
+  @Get('shared-offers/orders')
+  @UseGuards(JwtAuthGuard)
+  sharedOffersOrders() {
+    return this.sharedOffers.orderCandidates();
+  }
+
+  // @anchor onedrive-shared-offers-match-endpoint
+  @Post('shared-offers/match')
+  @UseGuards(JwtAuthGuard)
+  sharedOffersMatch(@Body() body: { folderItemId: string; supplierId?: string; orderNodeId?: string }) {
+    return this.sharedOffers.match(body.folderItemId, { supplierId: body.supplierId, orderNodeId: body.orderNodeId });
   }
 
   // @anchor onedrive-upload-endpoint

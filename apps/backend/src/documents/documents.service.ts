@@ -477,7 +477,7 @@ export class DocumentsService {
         });
 
         const driveFiles = documents.length
-            ? await this.prisma.driveFile.findMany({ where: { documentId: { in: documents.map(d => d.id) } }, select: { documentId: true, webUrl: true, folderKey: true } })
+            ? await this.prisma.driveFile.findMany({ where: { documentId: { in: documents.map(d => d.id) } }, select: { documentId: true, webUrl: true, folderKey: true, scope: true, supplierId: true } })
             : [];
         const driveByDoc = new Map(driveFiles.map(f => [f.documentId, f]));
 
@@ -504,7 +504,11 @@ export class DocumentsService {
                 documentCategory: doc.documentCategory,
                 parsedPositions,
                 oneDrive: driveByDoc.has(doc.id)
-                    ? { webUrl: driveByDoc.get(doc.id).webUrl, folderPath: orderFolderPath(driveByDoc.get(doc.id).folderKey) }
+                    ? {
+                        webUrl: driveByDoc.get(doc.id).webUrl,
+                        folderPath: driveByDoc.get(doc.id).scope === 'sharedOffers' ? 'Wspólne oferty' : orderFolderPath(driveByDoc.get(doc.id).folderKey),
+                        supplierId: driveByDoc.get(doc.id).supplierId,
+                    }
                     : null,
             };
         });

@@ -965,6 +965,8 @@ model Supplier {
   vatStatus     String? // status z Białej listy podatników VAT (np. "Czynny")
   /// @anchor supplier-verified-at
   verifiedAt    DateTime? // stempel ostatniej weryfikacji NIP w Białej liście
+  /// @anchor supplier-one-drive-folder-id
+  oneDriveFolderId String? @unique // katalog dostawcy we wspólnym katalogu ofert OneDrive (OneDriveSettings)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -1968,12 +1970,20 @@ model DriveFile {
   storagePath  String? // kopia na serwerze, względem UPLOADS_ROOT
   processedTag String? // cTag, z którego powstała kopia / indeks
   /// @anchor drive-file-status
-  status       String    @default("pending") // discovered | pending | downloaded | indexed | skipped | error | deleted
+  status       String    @default("pending") // discovered | pending | unmatched | downloaded | indexed | skipped | error | deleted
   attempts     Int       @default(0)
   error        String?
   /// @anchor drive-file-ignored
   ignored      Boolean   @default(false) // dokument usunięty w aplikacji — sync go nie odtwarza
   source       String    @default("onedrive") // onedrive | app
+  /// @anchor drive-file-scope
+  scope        String    @default("order") // order = folder zamówienia | sharedOffers = wspólny katalog ofert
+  /// @anchor drive-file-supplier-id
+  supplierId   String? // sharedOffers: dostawca z katalogu 1. poziomu
+  /// @anchor drive-file-order-node-id
+  orderNodeId  String? // sharedOffers: zamówienie z katalogu 2. poziomu (na katalogu — ręczne/automatyczne przypisanie)
+  /// @anchor drive-file-hash
+  hash         String? // quickXorHash z Graph — wykrywanie tego samego pliku w dwóch miejscach
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -1981,5 +1991,24 @@ model DriveFile {
 
   @@index([nodeId, status])
   @@index([documentId])
+  @@index([scope, status])
+  @@index([hash])
   @@map("drive_files")
+}
+
+/// @anchor onedrive-settings
+/// Ustawienia OneDrive całej aplikacji (jeden wiersz, id = "singleton").
+/// Wspólny katalog ofert dostawców: `<katalog>/<Dostawca>/[<Nazwa zamówienia>/]plik` (etap 5, docs/PLAN-onedrive-sync.md).
+model OneDriveSettings {
+  id                     String    @id @default("singleton")
+  /// @anchor onedrive-settings-shared-offers-folder-id
+  sharedOffersFolderId   String?
+  sharedOffersDriveId    String?
+  sharedOffersFolderName String?
+  sharedOffersDeltaLink  String?
+  sharedOffersSyncedAt   DateTime?
+  sharedOffersSyncError  String?
+  updatedAt              DateTime  @updatedAt
+
+  @@map("onedrive_settings")
 }

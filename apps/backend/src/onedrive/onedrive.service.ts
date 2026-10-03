@@ -354,9 +354,11 @@ export class OneDriveService {
         nodeId, driveId: item.parentReference?.driveId || driveId || '', driveItemId: item.id, parentItemId: item.parentReference?.id || parentId,
         folderKey, name: item.name, mimeType, size: item.size ?? buffer.length, cTag: item.cTag ?? null, processedTag: item.cTag ?? null,
         webUrl: item.webUrl ?? null, documentId: opts.documentId ?? null, status: opts.status ?? 'skipped', source: 'app',
+        hash: item.file?.hashes?.quickXorHash ?? null,
       },
       update: {
         name: item.name, size: item.size ?? buffer.length, cTag: item.cTag ?? null, processedTag: item.cTag ?? null, webUrl: item.webUrl ?? null,
+        hash: item.file?.hashes?.quickXorHash ?? null,
         ...(opts.documentId ? { documentId: opts.documentId } : {}), ...(opts.status ? { status: opts.status } : {}), error: null,
       },
     });

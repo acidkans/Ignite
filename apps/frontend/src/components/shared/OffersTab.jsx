@@ -3,6 +3,7 @@ import { ChevronDown, Package, Zap, Trash2 } from 'lucide-react';
 import { API_URL } from '../../config';
 import PropertyPreview from './PropertyPreview';
 import QuickQuotesSection from './QuickQuotesSection';
+import SharedOffersOneDrive from './SharedOffersOneDrive';
 
 
 // ─── Sekcja zwijalna ──────────────────────────────────────────────────────────
@@ -216,6 +217,8 @@ export default function OffersTab({ nodeId, searchQuery = '', isGlobal = false }
     // null = wszystkie zwinięte, 'upload' | 'list' = jedna sekcja na pełny ekran
     const [focusedSection, setFocusedSection] = useState(null);
     const [refreshKey, setRefreshKey] = useState(0);
+    // @anchor offers-tab-docs-key — przeładowanie listy plików ofert po synchronizacji wspólnego katalogu OneDrive
+    const [docsKey, setDocsKey] = useState(0);
 
     const handleApprove = async (positions, documentId, fileName, meta) => {
         try {
@@ -236,6 +239,7 @@ export default function OffersTab({ nodeId, searchQuery = '', isGlobal = false }
 
     return (
         <div className="flex flex-col gap-3 h-full">
+            {isGlobal && <SharedOffersOneDrive onSynced={() => setDocsKey(k => k + 1)} />}
             {(focusedSection === null || focusedSection === 'upload') && (
                 <CollapsibleSection
                     title="Wgrywanie ofert"
@@ -246,6 +250,7 @@ export default function OffersTab({ nodeId, searchQuery = '', isGlobal = false }
                     onHeaderDblClick={handleDblClick}
                 >
                     <PropertyPreview
+                        key={docsKey}
                         nodeId={nodeId}
                         isOfferTab={true}
                         onApprove={handleApprove}

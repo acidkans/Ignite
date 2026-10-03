@@ -23,6 +23,13 @@ export class OffersService {
         if (meta?.offerDate !== undefined) metaData.offerDate = meta.offerDate ? new Date(meta.offerDate) : null;
         if (meta?.validUntil !== undefined) metaData.validUntil = meta.validUntil ? new Date(meta.validUntil) : null;
 
+        // Oferta z wspólnego katalogu OneDrive: dostawca wynika z katalogu `<Dostawca>/…` — gdy użytkownik
+        // nie wybrał innego w modalu, bierzemy go z rejestru synchronizacji.
+        if (!metaData.supplierId && documentId) {
+            const fromDrive = await this.prisma.driveFile.findFirst({ where: { documentId, supplierId: { not: null } }, select: { supplierId: true } });
+            if (fromDrive) metaData.supplierId = fromDrive.supplierId;
+        }
+
         // Upsert — jeśli oferta z tym samym documentId już istnieje, zaktualizuj zamiast tworzyć duplikat
         if (documentId) {
             const existing = await this.prisma.offer.findFirst({ where: { documentId } });

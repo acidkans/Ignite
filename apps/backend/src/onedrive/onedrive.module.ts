@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { OneDriveService } from './onedrive.service';
 import { OneDriveController } from './onedrive.controller';
 import { OneDriveSyncService } from './onedrive-sync.service';
+import { OneDriveSharedOffersService } from './onedrive-shared-offers.service';
 import { DocumentsModule } from '../documents/documents.module';
 
 // @anchor onedrive-module
@@ -19,7 +20,7 @@ import { DocumentsModule } from '../documents/documents.module';
     }),
   ],
   controllers: [OneDriveController],
-  providers: [OneDriveService, OneDriveSyncService],
+  providers: [OneDriveService, OneDriveSyncService, OneDriveSharedOffersService],
   exports: [OneDriveService, OneDriveSyncService],
 })
 export class OneDriveModule {}

@@ -130,13 +130,43 @@ export class OneDriveSyncService implements OnModuleInit {
       node = await this.prisma.processNode.findUnique({ where: { id: nodeId } });
     }
 
+    const driveBase = node.oneDriveDriveId ? `${GRAPH_BASE}/drives/${node.oneDriveDriveId}` : `${GRAPH_BASE}/me/drive`;
+    const { items, deltaLink, fullSync } = await this.fetchDelta(
+      node.oneDriveDeltaLink,
+      `${driveBase}/items/${node.oneDriveFolderId}/delta?$select=${DELTA_SELECT}`,
+      `zamówienia ${nodeId}`,
+    );
+    const { result, seen } = await this.applyDeltaItems(items, {
+      nodeId, driveId: node.oneDriveDriveId || '', rootId: node.oneDriveFolderId, scope: 'order', fullSync,
+    });
+
+    // Pełna synchronizacja zwraca wszystko, co istnieje — czego w niej nie ma, zniknęło z OneDrive.
+    if (fullSync) {
+      const missing = await this.prisma.driveFile.findMany({ where: { nodeId, scope: 'order', status: { not: 'deleted' }, driveItemId: { notIn: [...seen] } } });
+      for (const f of missing) { await this.markDeleted(f); result.deleted++; }
+    }
+
+    await this.resolveFolderKeys(nodeId, node.oneDriveFolderId, (node.oneDriveFolderIds as Record<string, string>) || {});
+    // Do kolejki dopiero z ustalonym katalogiem — inaczej `processQueue` mógłby wziąć plik przed `resolveFolderKeys`.
+    await this.prisma.driveFile.updateMany({ where: { nodeId, scope: 'order', status: 'discovered' }, data: { status: 'pending' } });
+    // Ręczna synchronizacja ponawia też pliki, które wyczerpały próby.
+    await this.prisma.driveFile.updateMany({ where: { nodeId, scope: 'order', status: 'error', ignored: false }, data: { status: 'pending', attempts: 0 } });
+
+    await this.prisma.processNode.update({
+      where: { id: nodeId },
+      data: { oneDriveDeltaLink: deltaLink, oneDriveSyncedAt: new Date(), oneDriveSyncError: null },
+    });
+    result.pending = await this.prisma.driveFile.count({ where: { nodeId, isFolder: false, status: 'pending', ignored: false } });
+    return result;
+  }
+
+  // @anchor onedrive-fetch-delta
+  // Graph delta od zapisanego tokenu (albo od zera). 410 = token wygasł → pełna synchronizacja.
+  async fetchDelta(savedLink: string | null, freshUrl: string, label: string): Promise<{ items: any[]; deltaLink: string | null; fullSync: boolean }> {
     const token = await this.oneDrive.getSharedToken();
     const headers = { Authorization: `Bearer ${token}` };
-    const driveBase = node.oneDriveDriveId ? `${GRAPH_BASE}/drives/${node.oneDriveDriveId}` : `${GRAPH_BASE}/me/drive`;
-    const freshUrl = `${driveBase}/items/${node.oneDriveFolderId}/delta?$select=${DELTA_SELECT}`;
-
-    let fullSync = !node.oneDriveDeltaLink;
-    let url: string | null = node.oneDriveDeltaLink || freshUrl;
+    let fullSync = !savedLink;
+    let url: string | null = savedLink || freshUrl;
     let deltaLink: string | null = null;
     let items: any[] = [];
     while (url) {
@@ -144,9 +174,8 @@ export class OneDriveSyncService implements OnModuleInit {
       try {
         res = await axios.get(url, { headers });
       } catch (e: any) {
-        // 410 = token delta wygasł → pełna synchronizacja od zera.
         if (e?.response?.status === 410 && !fullSync) {
-          this.logger.warn(`Delta zamówienia ${nodeId} wygasła — pełna synchronizacja`);
+          this.logger.warn(`Delta ${label} wygasła — pełna synchronizacja`);
           fullSync = true; items = []; url = freshUrl;
           continue;
         }
@@ -156,11 +185,21 @@ export class OneDriveSyncService implements OnModuleInit {
       url = res.data?.['@odata.nextLink'] || null;
       deltaLink = res.data?.['@odata.deltaLink'] || deltaLink;
     }
+    return { items, deltaLink, fullSync };
+  }
 
-    const result: OneDriveSyncResult = { newFiles: 0, changed: 0, deleted: 0, pending: 0, fullSync };
+  // @anchor onedrive-apply-delta-items
+  // Zapis zmian z delty do rejestru `DriveFile`: katalogi, nowe pliki (`discovered`), zmiana treści → ponownie
+  // do kolejki, zmiana nazwy → nazwa dokumentu, usunięcie → `markDeleted`. `nodeId` tylko przy tworzeniu wpisu —
+  // w katalogu wspólnym ofert wskazuje docelowe zamówienie i ustala go `resolveShared`, nie delta.
+  async applyDeltaItems(
+    items: any[],
+    ctx: { nodeId: string; driveId: string; rootId: string; scope: 'order' | 'sharedOffers'; fullSync: boolean },
+  ): Promise<{ result: OneDriveSyncResult; seen: Set<string> }> {
+    const result: OneDriveSyncResult = { newFiles: 0, changed: 0, deleted: 0, pending: 0, fullSync: ctx.fullSync };
     const seen = new Set<string>();
     for (const it of items) {
-      if (it.id === node.oneDriveFolderId) continue;
+      if (it.id === ctx.rootId) continue;
       seen.add(it.id);
       const existing = await this.prisma.driveFile.findUnique({ where: { driveItemId: it.id } });
 
@@ -173,33 +212,36 @@ export class OneDriveSyncService implements OnModuleInit {
       }
 
       const base = {
-        nodeId,
-        driveId: it.parentReference?.driveId || node.oneDriveDriveId || '',
+        driveId: it.parentReference?.driveId || ctx.driveId || '',
         parentItemId: it.parentReference?.id || null,
         name: it.name,
         webUrl: it.webUrl ?? null,
         lastModified: it.lastModifiedDateTime ? new Date(it.lastModifiedDateTime) : null,
+        scope: ctx.scope,
       };
 
       if (it.folder) {
         await this.prisma.driveFile.upsert({
           where: { driveItemId: it.id },
-          create: { ...base, driveItemId: it.id, isFolder: true, status: 'skipped' },
+          create: { ...base, nodeId: ctx.nodeId, driveItemId: it.id, isFolder: true, status: 'skipped' },
           update: { ...base, isFolder: true, status: 'skipped' },
         });
         continue;
       }
 
-      const fileData = { ...base, isFolder: false, mimeType: it.file?.mimeType ?? null, size: it.size ?? null, cTag: it.cTag ?? null };
+      const fileData = {
+        ...base, isFolder: false, mimeType: it.file?.mimeType ?? null, size: it.size ?? null, cTag: it.cTag ?? null,
+        hash: it.file?.hashes?.quickXorHash ?? null,
+      };
       if (!existing) {
-        await this.prisma.driveFile.create({ data: { ...fileData, driveItemId: it.id, status: 'discovered' } });
+        await this.prisma.driveFile.create({ data: { ...fileData, nodeId: ctx.nodeId, driveItemId: it.id, status: 'discovered' } });
         result.newFiles++;
         continue;
       }
 
       const contentChanged = existing.processedTag !== (it.cTag ?? null);
       const restored = existing.status === 'deleted';
-      const requeue = !existing.ignored && (restored || (contentChanged && !['pending', 'discovered'].includes(existing.status)));
+      const requeue = !existing.ignored && (restored || (contentChanged && !['pending', 'discovered', 'unmatched'].includes(existing.status)));
       await this.prisma.driveFile.update({
         where: { id: existing.id },
         data: { ...fileData, ...(requeue ? { status: 'discovered', attempts: 0, error: null } : {}) },
@@ -209,25 +251,7 @@ export class OneDriveSyncService implements OnModuleInit {
         await this.documents.renameDocument(existing.documentId, it.name).catch(() => null);
       }
     }
-
-    // Pełna synchronizacja zwraca wszystko, co istnieje — czego w niej nie ma, zniknęło z OneDrive.
-    if (fullSync) {
-      const missing = await this.prisma.driveFile.findMany({ where: { nodeId, status: { not: 'deleted' }, driveItemId: { notIn: [...seen] } } });
-      for (const f of missing) { await this.markDeleted(f); result.deleted++; }
-    }
-
-    await this.resolveFolderKeys(nodeId, node.oneDriveFolderId, (node.oneDriveFolderIds as Record<string, string>) || {});
-    // Do kolejki dopiero z ustalonym katalogiem — inaczej `processQueue` mógłby wziąć plik przed `resolveFolderKeys`.
-    await this.prisma.driveFile.updateMany({ where: { nodeId, status: 'discovered' }, data: { status: 'pending' } });
-    // Ręczna synchronizacja ponawia też pliki, które wyczerpały próby.
-    await this.prisma.driveFile.updateMany({ where: { nodeId, status: 'error', ignored: false }, data: { status: 'pending', attempts: 0 } });
-
-    await this.prisma.processNode.update({
-      where: { id: nodeId },
-      data: { oneDriveDeltaLink: deltaLink, oneDriveSyncedAt: new Date(), oneDriveSyncError: null },
-    });
-    result.pending = await this.prisma.driveFile.count({ where: { nodeId, isFolder: false, status: 'pending', ignored: false } });
-    return result;
+    return { result, seen };
   }
 
   // @anchor onedrive-resolve-folder-keys
@@ -236,7 +260,7 @@ export class OneDriveSyncService implements OnModuleInit {
   // plików w środku, więc kategorie trzeba odświeżyć dla wszystkich.
   private async resolveFolderKeys(nodeId: string, orderFolderId: string, folderIds: Record<string, string>) {
     const byId = new Map(Object.entries(folderIds).map(([k, id]) => [id, k]));
-    const all = await this.prisma.driveFile.findMany({ where: { nodeId, status: { not: 'deleted' } } });
+    const all = await this.prisma.driveFile.findMany({ where: { nodeId, scope: 'order', status: { not: 'deleted' } } });
     const folders = new Map(all.filter((f) => f.isFolder).map((f) => [f.driveItemId, f]));
 
     const keyFor = (parentId: string | null): string | null => {
@@ -273,7 +297,7 @@ export class OneDriveSyncService implements OnModuleInit {
   // @anchor onedrive-mark-deleted
   // Plik usunięty z OneDrive znika z aplikacji (dokument + indeks AI). Kopia na serwerze zostaje
   // (sprzątanie po 30 dniach — etap 4). Usunięty katalog pociąga za sobą wszystko, co w nim było.
-  private async markDeleted(f: { id: string; driveItemId: string; isFolder: boolean; documentId: string | null }) {
+  async markDeleted(f: { id: string; driveItemId: string; isFolder: boolean; documentId: string | null }) {
     if (f.documentId) await this.documents.deleteDocument(f.documentId, true).catch(() => null);
     await this.prisma.driveFile.update({ where: { id: f.id }, data: { status: 'deleted', documentId: null } });
     if (f.isFolder) {
@@ -363,9 +387,23 @@ export class OneDriveSyncService implements OnModuleInit {
       await this.prisma.driveFile.update({ where: { id: f.id }, data: { status: 'skipped', error: 'Zamówienie archiwalne lub rozliczone' } });
       return;
     }
-    if (f.folderKey === LEGACY_KEY || (def && !def.documentCategory)) {
+    const shared = f.scope === 'sharedOffers';
+    if (!shared && (f.folderKey === LEGACY_KEY || (def && !def.documentCategory))) {
       await this.prisma.driveFile.update({ where: { id: f.id }, data: { status: 'skipped', error: null } });
       return;
+    }
+    // Ten sam plik (hash) już jest dokumentem tego zamówienia — np. oferta wrzucona i do folderu zamówienia,
+    // i do wspólnego katalogu ofert. Drugi egzemplarz nie jest parsowany ani indeksowany.
+    if (f.hash && !f.documentId) {
+      const dup = await this.prisma.driveFile.findFirst({
+        where: { hash: f.hash, nodeId: f.nodeId, id: { not: f.id }, documentId: { not: null }, status: { in: ['indexed', 'downloaded'] } },
+        select: { name: true, scope: true },
+      });
+      if (dup) {
+        const where = dup.scope === 'sharedOffers' ? 'we wspólnym katalogu ofert' : 'w folderze zamówienia';
+        await this.prisma.driveFile.update({ where: { id: f.id }, data: { status: 'skipped', error: `Duplikat pliku „${dup.name}” ${where}` } });
+        return;
+      }
     }
 
     try {
@@ -382,8 +420,10 @@ export class OneDriveSyncService implements OnModuleInit {
       if (!downloadUrl) throw new Error('Graph nie zwrócił adresu pobrania');
 
       // Nazwa pliku na dysku = id OneDrive: stała przy zmianie nazwy, bez kolizji, bez znaków spoza systemu plików.
-      const folder = def ? orderFolderPath(def.key) : '_poza_struktura';
-      const rel = path.posix.join(f.nodeId, folder, `${f.driveItemId}${path.extname(meta.name || '').toLowerCase()}`);
+      const ext = path.extname(meta.name || '').toLowerCase();
+      const rel = shared
+        ? path.posix.join('_shared', 'offers', f.supplierId || '_bez_dostawcy', `${f.driveItemId}${ext}`)
+        : path.posix.join(f.nodeId, def ? orderFolderPath(def.key) : '_poza_struktura', `${f.driveItemId}${ext}`);
       const full = uploadPath(rel);
       fs.mkdirSync(path.dirname(full), { recursive: true });
       const res = await axios.get(downloadUrl, { responseType: 'stream' });
@@ -395,7 +435,8 @@ export class OneDriveSyncService implements OnModuleInit {
         storagePath: rel,
         mimeType,
         fileSize: meta.size ?? null,
-        documentCategory: def?.documentCategory || 'standard',
+        // Wspólny katalog: oferta przypisana do zamówienia → Pliki finansowe zamówienia, ogólna → Oferty w Logistyce.
+        documentCategory: shared ? (f.orderNodeId ? 'financial' : 'offer') : def?.documentCategory || 'standard',
       };
 
       let documentId: string | null = f.documentId;
@@ -412,7 +453,7 @@ export class OneDriveSyncService implements OnModuleInit {
       await this.prisma.driveFile.update({ where: { id: f.id }, data: { documentId, storagePath: rel } });
 
       // Pliki luzem w folderze zamówienia (bez katalogu struktury) też indeksujemy — to zwykle dokumentacja.
-      const shouldIndex = (def ? def.index : true) && INDEXABLE_MIME.test(mimeType) && (meta.size ?? 0) <= MAX_INDEX_BYTES;
+      const shouldIndex = (shared || (def ? def.index : true)) && INDEXABLE_MIME.test(mimeType) && (meta.size ?? 0) <= MAX_INDEX_BYTES;
       let status = 'downloaded';
       if (shouldIndex) {
         await this.documents.indexDocumentBuffer(documentId, f.nodeId, meta.name, await fs.promises.readFile(full), mimeType, true);
@@ -451,7 +492,7 @@ export class OneDriveSyncService implements OnModuleInit {
     if (!node) throw new NotFoundException('Gałąź nie istnieje');
     const files = await this.prisma.driveFile.findMany({
       where: { nodeId, isFolder: false, status: { not: 'deleted' }, ignored: false },
-      select: { id: true, name: true, folderKey: true, status: true, error: true, size: true, webUrl: true, documentId: true, lastModified: true },
+      select: { id: true, name: true, folderKey: true, scope: true, status: true, error: true, size: true, webUrl: true, documentId: true, lastModified: true },
       orderBy: { name: 'asc' },
       take: 1000,
     });
@@ -467,7 +508,8 @@ export class OneDriveSyncService implements OnModuleInit {
       counts,
       files: files.map((f) => ({
         ...f,
-        folderPath: f.folderKey === LEGACY_KEY ? 'archiwum (stare katalogi)' : orderFolderPath(f.folderKey) || 'poza strukturą',
+        folderPath: f.scope === 'sharedOffers' ? 'wspólny katalog ofert'
+          : f.folderKey === LEGACY_KEY ? 'archiwum (stare katalogi)' : orderFolderPath(f.folderKey) || 'poza strukturą',
       })),
     };
   }
