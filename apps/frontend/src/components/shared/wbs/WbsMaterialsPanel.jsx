@@ -10,7 +10,7 @@ import {
 import { API_URL } from '../../../config';
 import { useDevice } from '../../../hooks/useDevice';
 import SupplierPicker from '../SupplierPicker';
-import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula, parsePriceInput, DRAWER, usesWorkStatuses, resolveStatusCode, PLAN_STATUS_META, planStatusFromAny, planStatusLabel } from './wbsConstants';
+import { UNIT_OPTIONS, wbsTypeFromAny, sanitizeQtyInput, evalQtyFormula, parsePriceInput, DRAWER, usesWorkStatuses, resolveStatusCode, PLAN_STATUS_META, planStatusFromAny, planStatusLabel, applyGroupMultipliers } from './wbsConstants';
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
 import { guardOfferEdit, requestOfferUnlock, offerLockInputProps } from '../OfferLockGuard';
 import AutoResizeTextarea from './AutoResizeTextarea';
@@ -1586,7 +1586,7 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
         const evaluated = evalQtyFormula(raw);
         const n = evaluated !== null ? evaluated : parseFloat(raw.replace(',', '.'));
         const v = Number.isFinite(n) && n >= 0 ? n : 0;
-        if (v !== node.quantity) onPatchNode(node.id, { quantity: v });
+        if (v !== node.quantity) onPatchNode(node.id, { quantity: v / (node._groupMult || 1) });
     };
 
     const handlePriceBlur = () => {
@@ -1664,6 +1664,9 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
                         title={offerLocked ? 'Ilość zamrożona akceptacją baseline' : undefined}
                         className={`text-sm text-gray-200 whitespace-nowrap ${!readOnly ? (offerLocked ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:text-white') : ''}`}>
                         {node.quantity ?? 0} <span className="text-xs text-gray-500">{node.unit || 'szt'}</span>
+                        {node._groupMult && (
+                            <span title={`${node._ownQuantity} na pakiet × ${node._groupMult} pakietów`} className="ml-1 text-[10px] text-purple-300">×{node._groupMult}</span>
+                        )}
                         {offerLocked && <Lock size={9} className="inline-block ml-1 -mt-0.5 text-amber-400/60" />}
                     </span>
                 )}
@@ -2084,7 +2087,9 @@ export default function WbsMaterialsPanel({
     const { isTouch } = useDevice();
 
     const [internalWbsNodes, setInternalWbsNodes] = useState([]);
-    const wbsNodes = externalWbsNodes ?? internalWbsNodes;
+    // Ilości pozycji w pakietach (gałęziach grupujących z ilością) pokazujemy ŁĄCZNIE — to ilość
+    // do zakupu i do porównania z realizacją. Zapis ilości wraca na węzeł podzielony przez `_groupMult`.
+    const wbsNodes = useMemo(() => applyGroupMultipliers(externalWbsNodes ?? internalWbsNodes), [externalWbsNodes, internalWbsNodes]);
 
     const [cards, setCards] = useState({});
     const [materialDb, setMaterialDb] = useState([]);

@@ -6,6 +6,7 @@ import { resolveVersionId } from '../common/version.util';
 import { isManagerRoles, isOpenLeafType } from '../common/leaf-types.util';
 import { isRejectedPlan, planStatusFromAny, rejectedNodeIds } from '../common/plan-status.util';
 import { VersioningService } from '../ai/versioning.service';
+import { groupMultiplierMap } from '../common/group-qty.util';
 
 // @anchor orders-service
 // Akceptacja wersji zamówienia (baseline) + etapy zamówienia (Faza 4).
@@ -59,8 +60,10 @@ export class OrdersService {
         });
         const rejectedIds = rejectedNodeIds(allNodes);
         const wbsLeaves = allNodes.filter((n) => String(n.type || '').toLowerCase() !== 'group');
-        const value = (n: { unitCost: number | null; quantity: number | null }) =>
-            Math.max(0, n.unitCost ?? 0) * Math.max(0, n.quantity ?? 0);
+        // Pakiety (gałęzie grupujące z ilością) mnożą wartość swojego poddrzewa.
+        const groupMult = groupMultiplierMap(allNodes);
+        const value = (n: { id: string; unitCost: number | null; quantity: number | null }) =>
+            Math.max(0, n.unitCost ?? 0) * Math.max(0, n.quantity ?? 0) * (groupMult.get(n.id) ?? 1);
         const rejectedLeaves = wbsLeaves.filter((n) => rejectedIds.has(n.id));
         const budgetSum = wbsLeaves.filter((n) => !rejectedIds.has(n.id)).reduce((s, n) => s + value(n), 0);
         const rejectedSum = Math.round(rejectedLeaves.reduce((s, n) => s + value(n), 0) * 100) / 100;
@@ -355,9 +358,13 @@ export class OrdersService {
         // w jednym miejscu, więc wypada naraz z wierszy, z sum KPI i z mianownika pokrycia.
         const onlyPositions = (rows: typeof baselineAll) => {
             const rejected = rejectedNodeIds(rows);
+            // Ilość pozycji = ilość własna × ilości pakietów (gałęzi grupujących) nad nią —
+            // ta sama reguła co suma w `acceptPreview` i w Budżecie.
+            const groupMult = groupMultiplierMap(rows);
             return rows.filter((r) => r.parentId != null
                 && String(r.type || '').toLowerCase() !== 'group'
-                && !rejected.has(r.id));
+                && !rejected.has(r.id))
+                .map((r) => ({ ...r, quantity: (r.quantity ?? 0) * (groupMult.get(r.id) ?? 1) }));
         };
         const baselineLeaves = onlyPositions(baselineAll);
         const liveLeaves = onlyPositions(liveAll);

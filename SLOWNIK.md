@@ -689,6 +689,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | planStatusLabel | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor plan-status-label |
 | ui-funkcja | isRejectedPlanNode | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor is-rejected-plan-node |
 | ui-funkcja | stripRejectedNodes (zakres pieniędzy) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor strip-rejected-nodes |
+| ui-funkcja | groupQtyFactor (ilość pakietu jako mnożnik, pusta/0 ⇒ 1) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor group-qty-factor |
+| ui-funkcja | buildGroupMultiplierMap (id → iloczyn ilości pakietów nad węzłem) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor build-group-multiplier-map |
+| ui-funkcja | applyGroupMultipliers (ilości i wartości poddrzewa × pakiety; `_ownQuantity`, `_groupMult`) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor apply-group-multipliers |
 | ui-stan | budgetScopeData | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor budget-scope-data |
 | ui-stala | PLAN_STRUCT_STATUS_META | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor plan-struct-status-meta |
 | ui-funkcja | getInheritedMaterialStatus (status planu pozycji) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor wbs-plan-status-of |
@@ -857,6 +860,11 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | syncMaterialsFromWbsNode | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-sync-qty-direct-link |
 | back-funkcja | nodeShareFromDto | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-node-share-from-dto |
 | back-funkcja | writeWbsNodeQuantity | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-write-wbs-node-quantity |
+| back-funkcja | groupQtyFactor (ilość pakietu jako mnożnik) | apps/backend/src/common/group-qty.util.ts | @anchor group-qty-factor-back |
+| back-funkcja | groupMultiplierMap (id → iloczyn ilości pakietów nad węzłem) | apps/backend/src/common/group-qty.util.ts | @anchor group-multiplier-map-back |
+| back-funkcja | updateNode — przeliczenie kart po zmianie ilości/typu pakietu | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-group-qty-resync |
+| back-funkcja | resyncGroupSubtree | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor resync-group-subtree |
+| back-funkcja | groupMultForScopeOf | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor group-mult-for-scope-of |
 | back-funkcja | update (gałąź quantity bez alokacji) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-qty-to-wbs |
 | back-funkcja | update (gałąź katalogowa — cena) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-catalog-price-guard |
 | ui-funkcja | syncMaterialRequirementsFromWbsQuantity | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor sync-material-requirements-from-wbs-quantity |

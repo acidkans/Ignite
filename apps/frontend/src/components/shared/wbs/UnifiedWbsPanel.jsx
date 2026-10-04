@@ -8,7 +8,7 @@ import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import GanttSection from './GanttSection';
-import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, PRICED_LEAF_TYPES, orderDefaultsFrom, leafDefaultsMissing, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes } from './wbsConstants';
+import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, PRICED_LEAF_TYPES, orderDefaultsFrom, leafDefaultsMissing, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes, applyGroupMultipliers } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
@@ -142,7 +142,9 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // walidacja wyceny przed eksportem, eksporty oferty i budżetu, tabele w Założeniach.
     // Drzewo WBS w Strukturze projektu zostaje na `wbsData` — tam pozycja odrzucona ma być
     // widoczna razem z dropdownem, którym cofa się decyzję.
-    const budgetScopeData = useMemo(() => stripRejectedNodes(wbsData), [wbsData]);
+    // Pakiety (gałęzie grupujące z ilością) są tu już rozwinięte — `applyGroupMultipliers`
+    // mnoży ilości i wartości poddrzewa przez ilość pakietu (Budżet, oferta, eksporty, zakupy).
+    const budgetScopeData = useMemo(() => applyGroupMultipliers(stripRejectedNodes(wbsData)), [wbsData]);
     const wbsDataRef = useRef(wbsData);
 
     // @anchor budget-acceptance — stan akceptacji zamówienia (F7): segmented control
@@ -1995,14 +1997,15 @@ ${ganttSectionHtml}
 
         // Przelicz tak samo jak BudgetTable (calcDerived: uc×qty).
         const rows = rawRows.map(r => {
-            const q = Math.max(0, parseFloat(r.quantity) || 0);
+            // Arkusz pokazuje ilość ŁĄCZNĄ (własna × pakiety), żeby formuła koszt×ilość się zgadzała.
+            const q = Math.max(0, parseFloat(r.quantity) || 0) * (r._groupMult || 1);
             const uc = Math.max(0, parseFloat(r.unitCost) || 0);
             const marginRaw = (r.margin != null && String(r.margin) !== '') ? parseFloat(r.margin) : null;
             const d = Math.max(0, parseFloat(r.discount) || 0);
             const totalCost = uc * q;
             let offerPrice = (marginRaw !== null && marginRaw !== 0) ? totalCost * (1 + marginRaw / 100) : 0;
             if (offerPrice > 0 && d > 0) offerPrice = Math.max(0, offerPrice * (1 - d / 100));
-            return { ...r, totalCost, cost: totalCost, offerPrice };
+            return { ...r, quantity: q, totalCost, cost: totalCost, offerPrice };
         });
 
         const summary = summarizeBudgetRows(rows);
@@ -6170,7 +6173,11 @@ ${ganttSectionHtml}
                     const inheritedCost = parseFloat(materialCostsByNode[item.id])
                         || parseFloat(item.materialsTotalCost)
                         || 0;
-                    const persistedQuantity = Number.isFinite(parseFloat(item.quantity)) ? parseFloat(item.quantity) : 0;
+                    // Ilość w Budżecie to ilość WŁASNA (na jeden pakiet) — ją się edytuje i zapisuje.
+                    // Mnożnik pakietów (`_groupMult`) wchodzi tylko w wartości łączne.
+                    const groupMult = item._groupMult || 1;
+                    const ownQuantity = item._ownQuantity ?? item.quantity;
+                    const persistedQuantity = Number.isFinite(parseFloat(ownQuantity)) ? parseFloat(ownQuantity) : 0;
                     const isWorkType = normalizedType === 'work' || normalizedType === 'praca'
                         || String(item.budgetType || '').toUpperCase() === 'WORK';
                     const wbsReqQty = Object.prototype.hasOwnProperty.call(requirementsQtyByNode, item.id)
@@ -6185,10 +6192,10 @@ ${ganttSectionHtml}
                     // co powodowało rozbieżność z kolumną "Cena netto" w WBS (ta czyta z DB).
                     const unitCost = persistedUnitCost;
                     const totalCost = inheritedFromMaterials
-                        ? persistedUnitCost * quantity
+                        ? persistedUnitCost * quantity * groupMult
                         : (Number.isFinite(parseFloat(item.totalCost))
                             ? parseFloat(item.totalCost)
-                            : persistedUnitCost * quantity);
+                            : persistedUnitCost * quantity * groupMult);
                     const clearDerivedFields = inheritedFromMaterials && totalCost <= 0;
                     const margin = clearDerivedFields ? 0 : (parseFloat(item.margin) || 0);
                     const discount = clearDerivedFields ? 0 : (parseFloat(item.discount) || 0);
@@ -6221,6 +6228,7 @@ ${ganttSectionHtml}
                         discount,
                         offerPrice,
                         quantity,
+                        _groupMult: groupMult,
                         inheritedFromMaterials,
                     };
                 })

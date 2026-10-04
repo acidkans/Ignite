@@ -15,6 +15,7 @@ import { UPLOADS_ROOT, uploadPath } from '../common/uploads.util';
 import * as mammoth from 'mammoth';
 import { randomUUID } from 'crypto';
 import { normalizeLeafType, DEFAULT_CATALOG_TYPE } from '../common/leaf-types.util';
+import { groupMultiplierMap } from '../common/group-qty.util';
 const PDFParser = require('pdf2json');
 const pdfParse = require('pdf-parse');
 
@@ -870,12 +871,21 @@ export class MaterialRequirementsService {
     // @anchor mat-req-write-wbs-node-quantity — zapis ilości na węźle WBS wraz z przeliczeniem
     // totali. Sam `quantity` nie wystarcza: `totalCost` i `totalPrice` to iloczyny z ilością i bez
     // przeliczenia budżet gałęzi rozjeżdża się z jej własnymi pozycjami.
-    private async writeWbsNodeQuantity(wbsNodeId: string, quantity: number) {
+    // Ilość karty to ilość ZAKUPOWA (własna × pakiety nad węzłem, patrz `group-multiplier-map-back`),
+    // więc na węzeł trafia po podzieleniu przez mnożnik pakietów — inaczej pakiet ×3 mnożyłby się
+    // przy każdym zapisie z karty.
+    private async writeWbsNodeQuantity(wbsNodeId: string, purchaseQuantity: number) {
         const node = await this.prisma.wbsNode.findUnique({
             where: { id: wbsNodeId },
-            select: { unitCost: true, unitPrice: true },
+            select: { unitCost: true, unitPrice: true, nodeId: true, versionId: true },
         });
         if (!node) return;
+        const scope = await this.prisma.wbsNode.findMany({
+            where: { nodeId: node.nodeId, versionId: node.versionId },
+            select: { id: true, parentId: true, type: true, quantity: true },
+        });
+        const mult = groupMultiplierMap(scope).get(wbsNodeId) ?? 1;
+        const quantity = purchaseQuantity / mult;
         await this.prisma.wbsNode.update({
             where: { id: wbsNodeId },
             data: {

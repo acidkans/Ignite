@@ -3,7 +3,7 @@
 // Includes: Informacje o projekcie + Strategia + WBS + Materiały. NO budget.
 
 import { API_URL } from '../config';
-import { TYPE_LABELS as WBS_TYPE_LABELS, wbsTypeFromAny, MATERIAL_STATUS_LABELS, stripRejectedNodes } from '../components/shared/wbs/wbsConstants';
+import { TYPE_LABELS as WBS_TYPE_LABELS, wbsTypeFromAny, MATERIAL_STATUS_LABELS, stripRejectedNodes, applyGroupMultipliers } from '../components/shared/wbs/wbsConstants';
 
 const flattenWbsItems = (items) => {
     const result = [];
@@ -243,7 +243,7 @@ export async function buildProjectPdfArtifact({ nodeId, versionId, projectName, 
     // === Section: Budżet ===
     // Sekcja WBS wyżej pokazuje CAŁĄ strukturę (także pozycje odrzucone — to historia
     // oferty), ale budżet liczy wyłącznie zakres, który klient kupuje.
-    const budgetNodes = stripRejectedNodes(wbsNodes);
+    const budgetNodes = applyGroupMultipliers(stripRejectedNodes(wbsNodes));
     const budgetItems = budgetNodes.filter((n) => n.parentId != null);
     const budgetTotalCost = budgetItems.reduce((s, n) => s + (parseFloat(n.totalCost) || 0), 0);
     const budgetTotalPrice = budgetItems.reduce((s, n) => s + (parseFloat(n.totalPrice) || 0), 0);

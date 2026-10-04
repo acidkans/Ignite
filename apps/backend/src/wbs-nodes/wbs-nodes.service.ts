@@ -6,6 +6,7 @@ import { defaultLogisticianOwner } from '../common/default-logistician.util';
 import { resolveVersionId } from '../common/version.util';
 import { assertOfferEditable, pickOfferChanges, OfferLockUser } from '../common/offer-lock.util';
 import { ExtraOrderNotifierService, EXTRA_ORDER_STATUS } from '../notifications/extra-order-notifier.service';
+import { groupMultiplierMap } from '../common/group-qty.util';
 
 // @anchor qa-pair
 export interface QaPair {
@@ -713,6 +714,13 @@ export class WbsNodesService {
             }
         }
 
+        // Typ sprzed zapisu — wejście/wyjście z `group` zmienia mnożnik pakietu dla poddrzewa.
+        let typeBefore: string | null = null;
+        if (allowed.type !== undefined) {
+            const b = await this.prisma.wbsNode.findUnique({ where: { id }, select: { type: true } });
+            typeBefore = b?.type ?? null;
+        }
+
         let updated;
         try {
             updated = await this.prisma.wbsNode.update({ where: { id }, data: allowed });
@@ -721,7 +729,15 @@ export class WbsNodesService {
             throw e;
         }
 
-        if (quantityChanged) {
+        // @anchor wbs-group-qty-resync — ilość pakietu (gałęzi grupującej) mnoży ilości zakupowe
+        // całego poddrzewa, więc jej zmiana (albo wejście/wyjście z typu `group`) przelicza karty
+        // materiałowe wszystkich pozycji pod spodem.
+        const isGroup = (t: unknown) => String(t || '').toLowerCase() === 'group';
+        const groupMultChanged = (isGroup(updated.type) && (quantityChanged || allowed.type !== undefined))
+            || (allowed.type !== undefined && isGroup(typeBefore) && !isGroup(updated.type));
+        if (groupMultChanged) {
+            await this.resyncGroupSubtree(id);
+        } else if (quantityChanged) {
             await this.syncMaterialsFromWbsNode(id, allowed.quantity).catch(() => {});
         }
 
@@ -756,7 +772,11 @@ export class WbsNodesService {
      * zostaje z dotychczasową wartością. Usunięcie go obniżyłoby ilość zakupową po cichu, przy okazji
      * niepowiązanej edycji; to osobna decyzja, nie efekt uboczny zapisu ilości.
      */
-    private async syncMaterialsFromWbsNode(wbsNodeId: string, newQuantity: number) {
+    private async syncMaterialsFromWbsNode(wbsNodeId: string, ownQuantity: number) {
+        // Ilość zakupowa = ilość węzła × ilości pakietów (gałęzi grupujących) nad nim.
+        const groupMult = await this.groupMultForScopeOf(wbsNodeId);
+        const effQty = (nid: string, q: number) => q * (groupMult.get(nid) ?? 1);
+        const newQuantity = effQty(wbsNodeId, ownQuantity);
         // Tabela relacyjna pozostaje żywa dla rozbić zakładanych przez `selectProposal`.
         await this.prisma.wbsNodeMaterial.updateMany({
             where: { wbsNodeId },
@@ -795,7 +815,7 @@ export class WbsNodesService {
                 where: { id: { in: keys } },
                 select: { id: true, quantity: true },
             });
-            const realne = new Map(nodes.map(n => [n.id, n.quantity ?? 0]));
+            const realne = new Map(nodes.map(n => [n.id, effQty(n.id, n.quantity ?? 0)]));
 
             // Gałąź, która ma WŁASNĄ kartę, nie należy do tej karty — jej ilość jest już policzona
             // po tamtej stronie. Wpis to ślad po nieaktualnym powiązaniu i wliczenie go dawałoby
@@ -912,6 +932,36 @@ export class WbsNodesService {
         return { deleted: allIds.length, deletedRequirements: orphanedIds.length };
     }
 
+    // @anchor resync-group-subtree — przelicza ilości kart materiałowych wszystkich pozycji pod
+    // pakietem po zmianie jego ilości albo typu.
+    private async resyncGroupSubtree(groupId: string) {
+        const descIds = (await this.collectDescendantIds(groupId)).filter(d => d !== groupId);
+        if (!descIds.length) return;
+        const desc = await this.prisma.wbsNode.findMany({
+            where: { id: { in: descIds } },
+            select: { id: true, type: true, quantity: true },
+        });
+        for (const d of desc) {
+            if (String(d.type || '').toLowerCase() === 'group') continue;
+            await this.syncMaterialsFromWbsNode(d.id, d.quantity ?? 0).catch(() => {});
+        }
+    }
+
+    // @anchor group-mult-for-scope-of — mapa mnożników pakietów dla całego drzewa (zamówienie
+    // + wersja), w którym siedzi węzeł. Pusta mapa ⇒ mnożnik 1 wszędzie.
+    private async groupMultForScopeOf(wbsNodeId: string): Promise<Map<string, number>> {
+        const node = await this.prisma.wbsNode.findUnique({
+            where: { id: wbsNodeId },
+            select: { nodeId: true, versionId: true },
+        });
+        if (!node) return new Map();
+        const scope = await this.prisma.wbsNode.findMany({
+            where: { nodeId: node.nodeId, versionId: node.versionId },
+            select: { id: true, parentId: true, type: true, quantity: true },
+        });
+        return groupMultiplierMap(scope);
+    }
+
     private async collectDescendantIds(id: string): Promise<string[]> {
         const ids = [id];
         const children = await this.prisma.wbsNode.findMany({
@@ -1018,7 +1068,9 @@ export class WbsNodesService {
         });
 
         // Sync: WbsNode.quantity → WbsNodeMaterial → MaterialRequirement
-        await this.syncMaterialsFromWbsNode(id, quantity).catch(() => {});
+        // (pakiet — ilość gałęzi grupującej mnoży zakupy całego poddrzewa)
+        if (String(updated.type || '').toLowerCase() === 'group') await this.resyncGroupSubtree(id);
+        else await this.syncMaterialsFromWbsNode(id, quantity).catch(() => {});
 
         // Sync: WbsNode.unitCost → MaterialRequirement.budgetedPriceNetto → propozycja isOffer
         if (sentPricing && effectiveType !== 'group') {

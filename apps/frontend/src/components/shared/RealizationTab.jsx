@@ -16,7 +16,7 @@ import { sanitizeQtyInput, parsePriceInput, DRAWER, STRUCTURE_STATUS_META, statu
     PLAN_STATUS_META, planStatusFromAny, PURCHASE_STATUS_META, EXEC_STATUS_META, execStatusLabel,
     hasPurchaseAxis, hasExecAxis, DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS,
     suggestAxisStatus, handedOverFromProtocol, axisGateOf,
-    AXIS_STATUS_ORDER } from './wbs/wbsConstants';
+    AXIS_STATUS_ORDER, applyGroupMultipliers } from './wbs/wbsConstants';
 import {
     ENTRY_INPUT, FORMULA_HINT, NUMERIC_ENTRY_FIELDS, growsWithText, resolveEntryNumber,
     selectAllOnFocus, focusNextInRow,
@@ -1684,7 +1684,8 @@ export default function RealizationTab({
                 fetch(`${API_URL}/material-requirements/node/${nodeId}${q}`, { headers }),
                 fetch(`${API_URL}/leaf-actuals/order/${nodeId}`, { headers }),
             ]);
-            const flat = wbsRes.ok ? flattenWbsNodes((await wbsRes.json()).items || []) : [];
+            // Pakiety (gałęzie grupujące z ilością) rozwinięte: ilość planu = własna × pakiety.
+            const flat = wbsRes.ok ? applyGroupMultipliers(flattenWbsNodes((await wbsRes.json()).items || [])) : [];
             setWbsNodes(flat);
             setCards(reqRes.ok ? buildCardMap(flat, await reqRes.json()) : {});
             setActuals(actRes.ok ? await actRes.json() : []);

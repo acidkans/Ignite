@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, buildOwnerOptions, defaultLogisticianOwner, isRejectedPlanNode } from './wbsConstants';
+import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, buildOwnerOptions, defaultLogisticianOwner, isRejectedPlanNode, groupQtyFactor } from './wbsConstants';
 import AutoResizeTextarea from './AutoResizeTextarea';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
@@ -622,7 +622,8 @@ const insertNode = (nodes, targetId, node, position) => {
 // ── Stats ─────────────────────────────────────────────────────────────────────
 // @anchor sum-children-cost
 // Koszt węzła = własny Q×unitCost + suma dzieci.
-// Węzeł grupujący (type=group) jest czystym agregatorem — liczy TYLKO sumę dzieci,
+// Węzeł grupujący (type=group) jest czystym agregatorem — liczy TYLKO sumę dzieci × ilość pakietu
+// (`groupQtyFactor`: pusta/0 ⇒ 1),
 // nigdy własną cenę, nawet jeśli ma niezerowe unitCost/margin (spójne z buildRows(VIEWS.BUDGET),
 // offerRevenueTotal i backendowym zerowaniem pól cenowych dla type=group).
 const sumChildrenCost = node => {
@@ -631,7 +632,7 @@ const sumChildrenCost = node => {
     // i w eksportach; rozjazd znaczyłby, że suma nad gałęzią kłóci się z tabelą Budżet.
     if (isRejectedPlanNode(node)) return 0;
     const kids = node.children || [];
-    if (node.type === 'group') return kids.reduce((a, c) => a + sumChildrenCost(c), 0);
+    if (node.type === 'group') return groupQtyFactor(node) * kids.reduce((a, c) => a + sumChildrenCost(c), 0);
     const own = (parseFloat(node.unitCost) || 0) * (parseFloat(node.quantity) || 0);
     if (!kids.length) return own;
     return own + kids.reduce((a, c) => a + sumChildrenCost(c), 0);
@@ -644,7 +645,7 @@ const sumChildrenCost = node => {
 const sumChildrenOfferPrice = node => {
     if (isRejectedPlanNode(node)) return 0;
     const kids = node.children || [];
-    if (node.type === 'group') return kids.reduce((a, c) => a + sumChildrenOfferPrice(c), 0);
+    if (node.type === 'group') return groupQtyFactor(node) * kids.reduce((a, c) => a + sumChildrenOfferPrice(c), 0);
     const cost = (parseFloat(node.unitCost) || 0) * (parseFloat(node.quantity) || 0);
     const marginRaw = node.margin != null && node.margin !== '' ? parseLocaleNumber(String(node.margin)) : null;
     const disc = Math.max(0, parseLocaleNumber(String(node.discount ?? '')) ?? 0);

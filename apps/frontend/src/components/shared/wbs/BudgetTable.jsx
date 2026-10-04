@@ -29,7 +29,9 @@ function calcDerived(r) {
     const uc = Math.max(0, parseLocaleNumber(String(r.unitCost ?? '')) ?? 0);
     const marginRaw = r.margin != null && r.margin !== '' ? parseLocaleNumber(String(r.margin)) : null;
     const d = Math.max(0, parseLocaleNumber(String(r.discount ?? '')) ?? 0);
-    const totalCost = uc * q;
+    // `_groupMult` — iloczyn ilości pakietów (gałęzi grupujących) nad pozycją; ilość w kolumnie
+    // jest WŁASNA (na jeden pakiet), wartości łączne liczą całość.
+    const totalCost = uc * q * (r._groupMult || 1);
     let offerPrice = (marginRaw !== null && marginRaw !== 0) ? totalCost * (1 + marginRaw / 100) : 0;
     if (offerPrice > 0 && d > 0) offerPrice = Math.max(0, offerPrice * (1 - d / 100));
     return { ...r, totalCost, offerPrice };
@@ -319,7 +321,7 @@ export default function BudgetTable({
     const filteredSums = useMemo(() => {
         const s = calcSummary(displayedRows);
         let quantity = 0;
-        for (const r of displayedRows) quantity += parseLocaleNumber(String(r.quantity ?? '')) ?? 0;
+        for (const r of displayedRows) quantity += (parseLocaleNumber(String(r.quantity ?? '')) ?? 0) * (r._groupMult || 1);
         return { ...s, quantity, count: displayedRows.length };
     }, [displayedRows, calcSummary]);
 
@@ -745,6 +747,13 @@ export default function BudgetTable({
                                             {...lockProps}
                                             className={`${INPUT} text-center tabular-nums${lockCls}`}
                                         />
+                                        {(row._groupMult || 1) !== 1 && (
+                                            <span
+                                                title={`Pozycja w pakiecie — ilość łączna: ${fmtQty((parseLocaleNumber(String(row.quantity ?? '')) ?? 0) * row._groupMult)}`}
+                                                className="absolute right-0 top-1/2 -translate-y-1/2 text-[10px] text-purple-300 cursor-help">
+                                                ×{fmtQty(row._groupMult)}
+                                            </span>
+                                        )}
                                         {warnCell === `${row.id}:quantity` && (
                                             <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>
                                         )}

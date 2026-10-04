@@ -510,6 +510,60 @@ export const stripRejectedNodes = (nodes) => {
   return list.filter(n => !dropped(n));
 };
 
+// @anchor group-qty-factor — ilość gałęzi grupującej (pakietu) jako mnożnik jej poddrzewa.
+// Pusta / 0 / niepoprawna ⇒ 1, żeby istniejące pakiety bez ilości nie wyzerowały wartości.
+export const groupQtyFactor = (node) => {
+  if (String(node?.type || '').toLowerCase() !== 'group') return 1;
+  const q = parseFloat(String(node?.quantity ?? '').replace(',', '.'));
+  return Number.isFinite(q) && q > 0 ? q : 1;
+};
+
+// @anchor build-group-multiplier-map — id węzła → iloczyn ilości wszystkich gałęzi grupujących
+// NAD nim (bez niego samego). Pakiet ×3 z podpakietem ×2 daje liściom mnożnik 6.
+export const buildGroupMultiplierMap = (nodes) => {
+  const list = Array.isArray(nodes) ? nodes : [];
+  const byId = new Map(list.map(n => [n.id, n]));
+  const memo = new Map();
+  const multOf = (node, guard = 0) => {
+    if (!node?.parentId || guard > 100) return 1;
+    if (memo.has(node.id)) return memo.get(node.id);
+    const parent = byId.get(node.parentId);
+    const m = parent ? multOf(parent, guard + 1) * groupQtyFactor(parent) : 1;
+    memo.set(node.id, m);
+    return m;
+  };
+  for (const n of list) multOf(n);
+  return memo;
+};
+
+// @anchor apply-group-multipliers — zakres PIENIĘDZY i ZAKUPÓW z pakietami rozwiniętymi:
+// węzeł pod gałęzią grupującą dostaje `quantity` = własna ilość × mnożnik pakietów, a koszty
+// i ceny łączne przeskalowane tym samym mnożnikiem. Własna ilość zostaje w `_ownQuantity`,
+// mnożnik w `_groupMult` — tabela Budżet edytuje ilość WŁASNĄ (na jeden pakiet), a nie łączną.
+// Gałęzie grupujące zostają bez zmian (ich wartość to suma dzieci, a ilość jest mnożnikiem).
+export const applyGroupMultipliers = (nodes) => {
+  const list = Array.isArray(nodes) ? nodes : [];
+  if (!list.some(n => groupQtyFactor(n) !== 1)) return list;
+  const mults = buildGroupMultiplierMap(list);
+  const scale = (v, m) => {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n * m : v;
+  };
+  return list.map(n => {
+    const m = mults.get(n.id) || 1;
+    if (m === 1 || String(n.type || '').toLowerCase() === 'group') return n;
+    const own = parseFloat(n.quantity);
+    return {
+      ...n,
+      _groupMult: m,
+      _ownQuantity: Number.isFinite(own) ? own : 0,
+      quantity: (Number.isFinite(own) ? own : 0) * m,
+      totalCost: scale(n.totalCost, m),
+      totalPrice: scale(n.totalPrice, m),
+    };
+  });
+};
+
 // ── Statusy ETAPU REALIZACJI ─────────────────────────────────────────────────
 // Realizacja ma DWIE niezależne osie, bo pozycja przechodzi przez dwa różne światy:
 //   ZAKUP     — droga towaru albo zlecenia: zamawiamy, przyjeżdża, wydajemy, fakturujemy

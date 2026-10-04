@@ -1,3 +1,21 @@
+## 2026-10-04 — Ilość gałęzi grupującej (pakietu) mnoży całe poddrzewo: drzewo, Budżet, oferta, eksporty, karty materiałowe, Realizacja (v2026.10.04.1230)
+
+### architektura / API
+- dodano `back-funkcja` `groupMultiplierMap()` / `groupQtyFactor()` (`common/group-qty.util.ts`) i frontowe odpowiedniki `ui-funkcja` `buildGroupMultiplierMap()` / `applyGroupMultipliers()` (`wbsConstants.js`)
+- `ui-stala` `budgetScopeData` (UnifiedWbsPanel) — rozwinięte pakiety: `quantity` = własna × pakiety, `totalCost`/`totalPrice` przeskalowane; Budżet edytuje ilość własną (`_ownQuantity`), mnożnik w `_groupMult`
+- `back-funkcja` `syncMaterialsFromWbsNode` — ilość karty = ilość węzła × pakiety; zmiana ilości/typu pakietu przelicza karty całego poddrzewa (`resyncGroupSubtree`, w `updateNode` i `/budget`)
+- `back-funkcja` `writeWbsNodeQuantity` — ilość z karty wraca na węzeł podzielona przez mnożnik pakietów
+- `orders.service` `acceptPreview` i `comparison` — ilości/wartości pozycji z mnożnikiem pakietów
+- Realizacja (obie zakładki), panel Materiałów, tryby Budżetu, eksport PDF projektu — ilość planu z pakietami
+
+### słownik
+- dodano `group-qty-factor`, `build-group-multiplier-map`, `apply-group-multipliers`, `group-qty-factor-back`, `group-multiplier-map-back`, `wbs-group-qty-resync`, `resync-group-subtree`, `group-mult-for-scope-of`
+
+### wytyczne
+- `schema-pole` `WbsNode.quantity` na `type='group'` — mnożnik poddrzewa (pusta/0 ⇒ 1); na pozycji pod pakietem to ilość NA JEDEN pakiet. W bazie zostaje ilość własna, mnożenie zawsze w runtime
+- `schema-pole` `MaterialRequirement.quantity` / `wbsNodeAllocations` — ilość ZAKUPOWA (własna × pakiety); przy zapisie z karty na węzeł dzielić przez mnożnik
+- nowe miejsce liczące pieniądze/ilości z WBS — brać `budgetScopeData` albo `applyGroupMultipliers()`, nie surowe `wbsData`
+
 ## 2026-10-03 — OneDrive: pliki poza strukturą 01/02/03 nie są importowane (v2026.10.03.2300)
 
 ### architektura / API

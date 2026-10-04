@@ -37,7 +37,7 @@ import { liczBilansWykonania, NIEROZPOCZETE_LABEL } from './wbs/realizationBilan
 import {
     PLAN_STATUS_META, planStatusFromAny, PURCHASE_STATUS_META, EXEC_STATUS_META, execStatusLabel,
     hasPurchaseAxis, hasExecAxis, DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS, axisGateOf,
-    AXIS_STATUS_ORDER, sanitizeQtyInput, parsePriceInput, DRAWER, buildOwnerOptions,
+    AXIS_STATUS_ORDER, sanitizeQtyInput, parsePriceInput, DRAWER, buildOwnerOptions, applyGroupMultipliers,
 } from './wbs/wbsConstants';
 import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath, leafNodesOf, buildCardMap,
@@ -515,7 +515,8 @@ export default function RealizationNewTab({
                 fetch(`${API_URL}/material-requirements/node/${nodeId}${q}`, { headers }),
                 fetch(`${API_URL}/leaf-actuals/order/${nodeId}`, { headers }),
             ]);
-            const flat = wbsRes.ok ? flattenWbsNodes((await wbsRes.json()).items || []) : [];
+            // Pakiety (gałęzie grupujące z ilością) rozwinięte: ilość planu = własna × pakiety.
+            const flat = wbsRes.ok ? applyGroupMultipliers(flattenWbsNodes((await wbsRes.json()).items || [])) : [];
             setWbsNodes(markOutOfBaseline(flat, acceptedAt));
             setCards(reqRes.ok ? buildCardMap(flat, await reqRes.json()) : {});
             setActuals(actRes.ok ? await actRes.json() : []);

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import ExcelJS from 'exceljs';
 import { Lock, FileSpreadsheet, RefreshCw } from 'lucide-react';
-import { isRejectedPlanNode } from './wbsConstants';
+import { isRejectedPlanNode, applyGroupMultipliers } from './wbsConstants';
 
 const API_URL = '/api';
 
@@ -59,7 +59,8 @@ export default function BudgetModesPanel({ nodeId, mode, acceptance }) {
                 fetch(`${API_URL}/orders/${nodeId}/comparison`, { headers: auth }),
             ]);
             const wbs = wbsRes.ok ? await wbsRes.json() : [];
-            setBaselineWbs(Array.isArray(wbs) ? wbs : (wbs?.nodes || []));
+            // Pakiety rozwinięte: ilość pozycji = własna × ilości gałęzi grupujących nad nią.
+            setBaselineWbs(applyGroupMultipliers(Array.isArray(wbs) ? wbs : (wbs?.nodes || [])));
             const bReqs = bReqRes.ok ? await bReqRes.json() : [];
             setBaselineReqs((Array.isArray(bReqs) ? bReqs : []).filter(r => r.versionId === acceptance.acceptedVersionId));
             // Żywe wymagania = wiersze AKTYWNEJ wersji. Endpoint dokłada wiersze
