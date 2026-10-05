@@ -83,7 +83,9 @@ export class DocumentsService {
     }
 
     // `oneDriveFolderKey` — katalog OneDrive inny niż wynikający z kategorii (raport AI → `NO_ONEDRIVE_FOLDER`, bez kopii na OneDrive).
-    async processDocument(file: Express.Multer.File, nodeId: string, category?: string, oneDriveFolderKey?: string) {
+    // `options.skipIndex` — bez parsowania i embeddingów (dokument wygenerowany przez aplikację, np. Opis
+    // zakresu prac: indeksowanie PDF trwało >100 s i kończyło żądanie timeoutem 524 na Cloudflare).
+    async processDocument(file: Express.Multer.File, nodeId: string, category?: string, oneDriveFolderKey?: string, options?: { skipIndex?: boolean }) {
         if (!file) throw new BadRequestException('No file provided');
         if (!nodeId) throw new BadRequestException('No nodeId provided');
 
@@ -142,7 +144,7 @@ export class DocumentsService {
             });
         }
 
-        const chunks = await this.indexDocumentBuffer(fileNode.id, nodeId, fileName, file.buffer, file.mimetype);
+        const chunks = options?.skipIndex ? 0 : await this.indexDocumentBuffer(fileNode.id, nodeId, fileName, file.buffer, file.mimetype);
 
         const event: DocumentUploadedEvent = {
             documentId: fileNode.id, nodeId, fileName, mimeType: file.mimetype,

@@ -578,7 +578,7 @@ ${lines.join('\n')}`;
             buffer: pdf,
             mimetype: 'application/pdf',
             size: pdf.length,
-        } as any, nodeId, 'clientOffer');
+        } as any, nodeId, 'clientOffer', undefined, { skipIndex: true });
         const updated = await this.prisma.scopeDocument.update({ where: { nodeId }, data: { documentId: saved?.nodeId || null } });
         return { document: updated, filename, documentId: saved?.nodeId || null, offerNumber, revisionLabel: `1.${updated.revision}` };
     }
