@@ -29,14 +29,12 @@ Analiza AI czyta tylko z serwera (baza + Qdrant), nigdy z OD w trakcie analizy.
 │   ├── Oferta finansowa/
 │   ├── Analiza budżetu/
 │   ├── Zamówienia i faktury/
-│   ├── Protokoły odbioru/<gałąź>/
-│   └── Analizy AI/
+│   └── Protokoły odbioru/<gałąź>/
 ├── 02 Dokumentacja projektowa/
 │   ├── Dokumentacja klienta/
 │   ├── Karty katalogowe/
 │   ├── Schematy i rysunki/
 │   ├── Zestawienia materiałów/
-│   ├── Harmonogram/
 │   └── Raporty projektu/
 └── 03 Realizacja/
     └── Zdjęcia i dokumentacja z budowy/
@@ -52,13 +50,11 @@ Jedno źródło prawdy: stała `back-stala` `ORDER_FOLDERS` w `apps/backend/src/
 | `budget` | 01/Analiza budżetu | `budget` | bez indeksu (XLSX z aplikacji) | Pliki finansowe |
 | `invoices` | 01/Zamówienia i faktury | — | **pomijany przez sync** (tylko katalog na OD, brak obsługi w aplikacji) | — |
 | `protocols` | 01/Protokoły odbioru | `protocol` | bez indeksu | Pliki finansowe |
-| `aiReports` | 01/Analizy AI | `aiReport` | **wykluczony z indeksu** (AI nie czyta własnych raportów) | Pliki finansowe |
 | `clientDocs` | 02/Dokumentacja klienta | `standard` | indeks AI (źródło wymagań) | Pliki |
 | `datasheets` | 02/Karty katalogowe | `datasheet` | indeks AI | Pliki |
 | `schematics` | 02/Schematy i rysunki | `schematic` | indeks AI (PDF) | Pliki |
 | `materials` | 02/Zestawienia materiałów | `materials` | bez indeksu | Pliki |
-| `schedule` | 02/Harmonogram | `schedule` | bez indeksu | Pliki |
-| `reports` | 02/Raporty projektu | `report` | bez indeksu | Pliki |
+| `reports` | 02/Raporty projektu | `report` | bez indeksu (także eksport harmonogramu) | Pliki |
 | `sitePhotos` | 03/Zdjęcia i dokumentacja z budowy | `sitePhoto` | bez indeksu, miniatury z Graph | Pliki |
 
 Pliki leżące luzem w katalogu zamówienia lub w `01`/`02` (poza podkatalogami) → `standard`, oznaczone
@@ -165,7 +161,7 @@ Zamówienia archiwalne (pod obszarem „Archiwum”) i rozliczone (`orderStage =
 - Upload w zakładkach „Pliki” / „Pliki finansowe”: zapis lokalny + indeks od razu (jak dziś),
   wysyłka na OD w tle do katalogu wynikającego z zakładki. Upload session (`createUploadSession`)
   dla plików > 4 MB.
-- Raport „Analiza AI oferty” → dodatkowo do `01/Analizy AI`.
+- Raport „Analiza AI oferty” → tylko w aplikacji, bez kopii na OD (`NO_ONEDRIVE_FOLDER`). Katalogi „Analizy AI” i „Harmonogram” usunięte ze struktury 2026-10-05 — w starszych zamówieniach zostały na OD, pliki w nich liczą się jak luzem w 01/02.
 - Usunięcie dokumentu w aplikacji → `DriveFile.ignored = true`; plik na OD **nie jest kasowany**.
 
 ### 4.5 Wspólny katalog ofert dostawców (poza zamówieniami)
@@ -225,7 +221,7 @@ Endpointy (`back-endpoint`):
   | Analiza projektu / budżet (też „same koszty”) | `budget` |
   | Oferta dla klienta (PDF/XLSX) | `clientOffer` |
   | Materiały XLSX | `materials` |
-  | Harmonogram XLSX | `schedule` |
+  | Harmonogram XLSX | `reports` |
   | PDF sekcji / wszystkie sekcje / Informacje o zamówieniu / Q&A | `reports` |
   | Protokół odbioru | `protocols` + podkatalog gałęzi |
   | Dokument z DocumentViewer / DocumentationSidebar | katalog wg `documentCategory` dokumentu |

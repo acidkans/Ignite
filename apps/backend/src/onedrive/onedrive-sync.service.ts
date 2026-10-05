@@ -264,7 +264,10 @@ export class OneDriveSyncService implements OnModuleInit {
   // Liczone po każdej synchronizacji (tylko baza) — przeniesienie katalogu na OneDrive nie zgłasza w delcie
   // plików w środku, więc kategorie trzeba odświeżyć dla wszystkich.
   private async resolveFolderKeys(nodeId: string, orderFolderId: string, folderIds: Record<string, string>) {
-    const byId = new Map(Object.entries(folderIds).map(([k, id]) => [id, k]));
+    // Tylko katalogi z aktualnej struktury — id usuniętych (np. stary „Harmonogram”) pomijamy,
+    // więc pliki w nich liczą się jak luzem w katalogu głównym.
+    const known = new Set(ORDER_FOLDERS.map((d) => d.key));
+    const byId = new Map(Object.entries(folderIds).filter(([k]) => k.startsWith('root:') || known.has(k)).map(([k, id]) => [id, k]));
     const all = await this.prisma.driveFile.findMany({ where: { nodeId, scope: 'order', status: { not: 'deleted' } } });
     const folders = new Map(all.filter((f) => f.isFolder).map((f) => [f.driveItemId, f]));
 

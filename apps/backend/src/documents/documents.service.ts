@@ -78,7 +78,7 @@ export class DocumentsService {
         this.uploadListeners.push(fn);
     }
 
-    // `oneDriveFolderKey` — katalog OneDrive inny niż wynikający z kategorii (raport AI → `aiReports`).
+    // `oneDriveFolderKey` — katalog OneDrive inny niż wynikający z kategorii (raport AI → `NO_ONEDRIVE_FOLDER`, bez kopii na OneDrive).
     async processDocument(file: Express.Multer.File, nodeId: string, category?: string, oneDriveFolderKey?: string) {
         if (!file) throw new BadRequestException('No file provided');
         if (!nodeId) throw new BadRequestException('No nodeId provided');

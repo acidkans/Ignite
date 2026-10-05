@@ -1604,7 +1604,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         // materiałów, wklejanie obrazów base64) dzieje się dopiero po wyborze akcji —
         // wcześniej klik blokował UI na kilka sekund zanim modal się pojawił.
         // Katalog OneDrive wg sekcji: oferta → nasza oferta, budżet / harmonogram / materiały → swoje katalogi, reszta → raporty.
-        const sectionFolder = { oferta: 'clientOffer', budget: 'budget', gantt: 'schedule', materials: 'materials' };
+        const sectionFolder = { oferta: 'clientOffer', budget: 'budget', gantt: 'reports', materials: 'materials' };
         openExport({
             title: `Eksport PDF: ${labels[sectionKey] || sectionKey}`,
             defaultFilename: filename,
@@ -6713,7 +6713,7 @@ ${ganttSectionHtml}
                             projectEndDate={ganttProjectEnd}
                         />
                     ), () => handleExportPDF('gantt'), (
-                        <button onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'Harmonogram (Excel)', defaultFilename: `Harmonogram_${safeFileBase()}.xlsx`, oneDriveFolderKey: 'schedule', makeArtifact: handleExportGanttExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
+                        <button onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'Harmonogram (Excel)', defaultFilename: `Harmonogram_${safeFileBase()}.xlsx`, oneDriveFolderKey: 'reports', makeArtifact: handleExportGanttExcel }); }} className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all">
                             <FileDown size={11} /> Eksport do Excel
                         </button>
                     ));

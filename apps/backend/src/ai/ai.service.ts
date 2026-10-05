@@ -6,6 +6,7 @@ import { PdfService } from '../pdf/pdf.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PushService } from '../push/push.service';
 import { buildOfferAiReportHtml, offerAiReportFilename } from './offer-ai-report';
+import { NO_ONEDRIVE_FOLDER } from '../onedrive/order-folders';
 
 @Injectable()
 export class AiService implements OnModuleInit {
@@ -108,7 +109,8 @@ export class AiService implements OnModuleInit {
                     buffer: pdf,
                     mimetype: 'application/pdf',
                     size: pdf.length,
-                } as any, nodeId, 'standard', 'aiReports');
+                    // Raport AI zostaje tylko w aplikacji — bez kopii na OneDrive.
+                } as any, nodeId, 'standard', NO_ONEDRIVE_FOLDER);
                 documentId = saved?.nodeId || null;
                 result.documentName = filename;
             } catch (e) {

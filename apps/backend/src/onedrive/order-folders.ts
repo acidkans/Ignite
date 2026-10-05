@@ -34,15 +34,21 @@ export const ORDER_FOLDERS: OrderFolderDef[] = [
   { key: 'budget', root: 'finance', name: 'Analiza budżetu', documentCategory: 'budget', index: false, description: 'Eksporty budżetu, same koszty, inne koszty' },
   { key: 'invoices', root: 'finance', name: 'Zamówienia i faktury', documentCategory: null, index: false, description: 'Tylko archiwum na OneDrive — brak obsługi w aplikacji' },
   { key: 'protocols', root: 'finance', name: 'Protokoły odbioru', documentCategory: 'protocol', index: false, description: 'Protokoły odbioru, podkatalog per gałąź' },
-  { key: 'aiReports', root: 'finance', name: 'Analizy AI', documentCategory: 'aiReport', index: false, description: 'Raporty generowane przez aplikację — wykluczone z indeksu AI' },
   { key: 'clientDocs', root: 'project', name: 'Dokumentacja klienta', documentCategory: 'standard', index: true, description: 'Zapytanie, OPZ, SIWZ, rysunki od klienta' },
   { key: 'datasheets', root: 'project', name: 'Karty katalogowe', documentCategory: 'datasheet', index: true, description: 'Karty katalogowe i deklaracje zgodności' },
   { key: 'schematics', root: 'project', name: 'Schematy i rysunki', documentCategory: 'schematic', index: true, description: 'Nasze schematy i rysunki wykonawcze' },
   { key: 'materials', root: 'project', name: 'Zestawienia materiałów', documentCategory: 'materials', index: false, description: 'Eksport „Materiały” XLSX' },
-  { key: 'schedule', root: 'project', name: 'Harmonogram', documentCategory: 'schedule', index: false, description: 'Eksport harmonogramu' },
-  { key: 'reports', root: 'project', name: 'Raporty projektu', documentCategory: 'report', index: false, description: 'PDF sekcji, wszystkie sekcje, Informacje o zamówieniu, Q&A' },
+  { key: 'reports', root: 'project', name: 'Raporty projektu', documentCategory: 'report', index: false, description: 'PDF sekcji, wszystkie sekcje, Informacje o zamówieniu, Q&A, eksport harmonogramu' },
   { key: 'sitePhotos', root: 'realization', name: 'Zdjęcia i dokumentacja z budowy', documentCategory: 'sitePhoto', index: false, description: 'Zdjęcia i filmy z realizacji' },
 ];
+
+// Katalogi „Harmonogram” i „Analizy AI” usunięte ze struktury (2026-10-05): harmonogram idzie do
+// „Raporty projektu”, raporty AI zostają tylko w aplikacji. W starszych zamówieniach katalogi
+// zostały na OneDrive — pliki w nich traktowane są jak luzem w katalogu głównym (02/01).
+
+// @anchor no-onedrive-folder — klucz „nie wysyłaj na OneDrive” dla dokumentów tworzonych przez
+// aplikację (raport analizy AI). Pusty klucz nie wystarcza: wtedy działa katalog domyślny kategorii.
+export const NO_ONEDRIVE_FOLDER = 'none';
 
 // @anchor order-folder-path
 // Ścieżka katalogu względem folderu zamówienia — do komunikatów w UI i katalogu na serwerze.
@@ -69,11 +75,10 @@ export const UPLOAD_CATEGORY_FOLDER: Record<string, string> = {
   clientOffer: 'clientOffer',
   budget: 'budget',
   protocol: 'protocols',
-  aiReport: 'aiReports',
   datasheet: 'datasheets',
   schematic: 'schematics',
   materials: 'materials',
-  schedule: 'schedule',
+  schedule: 'reports',
   report: 'reports',
   sitePhoto: 'sitePhotos',
 };

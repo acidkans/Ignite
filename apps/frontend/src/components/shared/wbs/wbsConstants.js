@@ -312,7 +312,9 @@ export const fmtPctFull = v =>
 
 // Utility functions
 // @anchor norm-key
-export const normKey = value => String(value || '').trim().toLowerCase();
+// Białe znaki zwijane do jednej spacji — nazwy WBS są normalizowane przy zapisie
+// (normalizeWbsName), a nazwy wymagań materiałowych nie, więc klucz musi to wyrównać.
+export const normKey = value => String(value || '').replace(/[\s ]+/g, ' ').trim().toLowerCase();
 
 // @anchor make-material-lookup-key
 export const makeMaterialLookupKey = (subjectName, itemName) =>
