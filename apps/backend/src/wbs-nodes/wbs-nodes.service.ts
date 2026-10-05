@@ -600,6 +600,8 @@ export class WbsNodesService {
         for (const key of ['name', 'type', 'status', 'purchaseStatus', 'execStatus', 'owner', 'resources', 'cost', 'parentId', 'sortOrder', 'comment', 'strategy', 'unit', 'unitPrice']) {
             if (data[key] !== undefined) allowed[key] = data[key];
         }
+        // Flaga „pokaż w opisie zakresu" — wybór pozycji do tabeli ilościowej (ScopeDocument).
+        if (data.showInScope !== undefined) allowed.showInScope = !!data.showInScope;
         if (data.ganttStart !== undefined) {
             allowed.ganttStart = data.ganttStart ? new Date(data.ganttStart) : null;
         }

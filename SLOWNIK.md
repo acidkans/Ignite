@@ -2857,6 +2857,35 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | schema-model | OfferNumberCounter | apps/backend/prisma/schema.prisma | @anchor offer-number-counter |
 | schema-pole | OfferNumberCounter.year | apps/backend/prisma/schema.prisma | @anchor offer-number-counter-year |
 | schema-pole | OfferNumberCounter.lastNumber | apps/backend/prisma/schema.prisma | @anchor offer-number-counter-last-number |
+| back-funkcja | scopeMdToHtml | apps/backend/src/scope-documents/scope-document-pdf.ts | @anchor scope-md-to-html |
+| back-typ | ScopeDocumentModel | apps/backend/src/scope-documents/scope-document-pdf.ts | @anchor scope-document-model-type |
+| back-funkcja | buildScopeDocumentHtml | apps/backend/src/scope-documents/scope-document-pdf.ts | @anchor build-scope-document-html |
+| back-typ | ScopeLayout | apps/backend/src/scope-documents/scope-documents.service.ts | @anchor scope-layout-type |
+| back-funkcja | deriveShortCode | apps/backend/src/scope-documents/scope-documents.service.ts | @anchor derive-short-code |
+| back-serwis | ScopeDocumentsService | apps/backend/src/scope-documents/scope-documents.service.ts | @anchor scope-documents-service |
+| back-funkcja | defaultWorkDuration | apps/backend/src/scope-documents/scope-documents.service.ts | @anchor scope-default-work-duration |
+| back-funkcja | buildModel | apps/backend/src/scope-documents/scope-documents.service.ts | @anchor build-scope-model |
+| back-funkcja | ScopeDocumentsService.get | apps/backend/src/scope-documents/scope-documents.service.ts | @anchor get-scope-document |
+| back-funkcja | ScopeDocumentsService.update | apps/backend/src/scope-documents/scope-documents.service.ts | @anchor update-scope-document |
+| back-funkcja | detectLayout | apps/backend/src/scope-documents/scope-documents.service.ts | @anchor detect-scope-layout |
+| back-funkcja | generateSections | apps/backend/src/scope-documents/scope-documents.service.ts | @anchor generate-scope-sections |
+| back-funkcja | suggestScopeItems | apps/backend/src/scope-documents/scope-documents.service.ts | @anchor suggest-scope-items |
+| back-funkcja | assignOfferNumber | apps/backend/src/scope-documents/scope-documents.service.ts | @anchor assign-offer-number |
+| back-funkcja | renderHtml | apps/backend/src/scope-documents/scope-documents.service.ts | @anchor render-scope-html |
+| back-funkcja | savePdf | apps/backend/src/scope-documents/scope-documents.service.ts | @anchor save-scope-pdf |
+| back-controller | ScopeDocumentsController | apps/backend/src/scope-documents/scope-documents.controller.ts | @anchor scope-documents-controller |
+| back-endpoint | GET /scope-documents/:nodeId | apps/backend/src/scope-documents/scope-documents.controller.ts | @anchor scope-documents-get-endpoint |
+| back-endpoint | PATCH /scope-documents/:nodeId | apps/backend/src/scope-documents/scope-documents.controller.ts | @anchor scope-documents-patch-endpoint |
+| back-endpoint | POST /scope-documents/:nodeId/detect-layout | apps/backend/src/scope-documents/scope-documents.controller.ts | @anchor scope-documents-detect-layout-endpoint |
+| back-endpoint | POST /scope-documents/:nodeId/generate | apps/backend/src/scope-documents/scope-documents.controller.ts | @anchor scope-documents-generate-endpoint |
+| back-endpoint | POST /scope-documents/:nodeId/suggest-items | apps/backend/src/scope-documents/scope-documents.controller.ts | @anchor scope-documents-suggest-items-endpoint |
+| back-endpoint | GET /scope-documents/:nodeId/preview | apps/backend/src/scope-documents/scope-documents.controller.ts | @anchor scope-documents-preview-endpoint |
+| back-endpoint | POST /scope-documents/:nodeId/pdf | apps/backend/src/scope-documents/scope-documents.controller.ts | @anchor scope-documents-pdf-endpoint |
+| back-modul | ScopeDocumentsModule | apps/backend/src/scope-documents/scope-documents.module.ts | @anchor scope-documents-module |
+| back-funkcja | SuppliersService.setLogo | apps/backend/src/suppliers/suppliers.service.ts | @anchor suppliers-set-logo |
+| back-funkcja | SuppliersService.logoFile | apps/backend/src/suppliers/suppliers.service.ts | @anchor suppliers-logo-file |
+| back-endpoint | POST /suppliers/:id/logo | apps/backend/src/suppliers/suppliers.controller.ts | @anchor suppliers-logo-upload-endpoint |
+| back-endpoint | GET /suppliers/:id/logo | apps/backend/src/suppliers/suppliers.controller.ts | @anchor suppliers-logo-get-endpoint |
 
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)

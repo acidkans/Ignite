@@ -1,3 +1,25 @@
+## 2026-10-05 — Opis zakresu prac: backend (AI układ/sekcje/pozycje, numer oferty, PDF) (v2026.10.05.2200)
+
+### architektura / API
+- dodano `back-modul` `ScopeDocumentsModule` z `back-controller` `ScopeDocumentsController` (`/scope-documents/:nodeId`):
+  - `GET` — dokument + model z drzewa (pakiety, lokalizacje, macierz, zakres ilościowy, metryczka)
+  - `PATCH` — teksty sekcji, układ, `layoutConfirmed`, `validityDays`, `warrantyMonths`, `workDuration`
+  - `POST detect-layout` — AI: najwyższe gałęzie to pakiety czy lokalizacje; łączy warianty tej samej funkcji w jeden pakiet
+  - `POST generate` — AI: tytuł, przedmiot, inwestor, sekcja 1 (Cel projektu + parsowana dokumentacja z Qdrant), 2 (strategie), 4 (opis pakietów); `only` wymusza nadpisanie wskazanych sekcji
+  - `POST suggest-items` — AI wybiera kluczowe elementy (unikalne nazwa+j.m.) → `showInScope=true`
+  - `GET preview` — HTML dokumentu; `POST pdf` — numer oferty (raz), wersja +1, PDF do dokumentów zamówienia (kategoria `clientOffer`)
+- `PATCH /wbs-nodes/:id` przyjmuje `showInScope`
+- `PATCH /suppliers/:id` przyjmuje `shortCode` (3 litery A-Z); dodano `POST/GET /suppliers/:id/logo`
+- szablon PDF `buildScopeDocumentHtml` — stała struktura: metryczka + 9 sekcji (pusta = „—"), podpisy
+
+### słownik
+- dodano anchory modułu `scope-documents` (serwis, kontroler, 7 endpointów, `build-scope-document-html`, `derive-short-code`, `assign-offer-number` …) oraz `suppliers-set-logo`, `suppliers-logo-file`, `suppliers-logo-upload-endpoint`, `suppliers-logo-get-endpoint`
+
+### wytyczne
+- `back-funkcja` `loadRequirements` (scope) — wymagania wersji uzupełniane polami z wiersza bazowego (PM i cel bywają tylko tam)
+- `back-funkcja` `assignOfferNumber` — skrót z firmy Zamawiającego (`Supplier` po NIP/nazwie); brak skrótu = wyliczony z nazwy i zapisany w firmie
+- `back-funkcja` `savePdf` — zapis wysyła plik na OneDrive zamówienia (`clientOffer`); na dev (kopia prod) testować na zamówieniu bez `oneDriveFolderId`
+
 ## 2026-10-05 — Opis zakresu prac: model danych (skrót i logo firmy, flaga pozycji w zakresie, dokument i licznik numerów ofert) (v2026.10.05.2000)
 
 ### schema.prisma

@@ -34,6 +34,7 @@ import { SmtpModule } from './smtp/smtp.module';
 import { MailModule } from './mail/mail.module';
 import { PdfModule } from './pdf/pdf.module';
 import { OneDriveModule } from './onedrive/onedrive.module';
+import { ScopeDocumentsModule } from './scope-documents/scope-documents.module';
 import { NotificationSettingsModule } from './notification-settings/notification-settings.module';
 import { MsTodoModule } from './ms-todo/ms-todo.module';
 import { UserTasksModule } from './user-tasks/user-tasks.module';
@@ -86,6 +87,7 @@ import { LeafActualsModule } from './leaf-actuals/leaf-actuals.module';
     MailModule,
     PdfModule,
     OneDriveModule,
+    ScopeDocumentsModule,
     NotificationSettingsModule,
     MsTodoModule,
     UserTasksModule,

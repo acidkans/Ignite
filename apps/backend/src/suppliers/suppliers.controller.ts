@@ -1,4 +1,6 @@
-import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch, Post, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { NipLookupService } from './nip-lookup.service';
 import { SuppliersService, SupplierUpsertInput } from './suppliers.service';
@@ -50,5 +52,18 @@ export class SuppliersController {
     @Patch(':id')
     update(@Param('id') id: string, @Body() body: SupplierUpsertInput) {
         return this.service.update(id, body);
+    }
+
+    // @anchor suppliers-logo-upload-endpoint — POST /suppliers/:id/logo (multipart `file`).
+    @Post(':id/logo')
+    @UseInterceptors(FileInterceptor('file'))
+    uploadLogo(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+        return this.service.setLogo(id, file);
+    }
+
+    // @anchor suppliers-logo-get-endpoint — GET /suppliers/:id/logo → plik obrazu.
+    @Get(':id/logo')
+    async getLogo(@Param('id') id: string, @Res() res: Response) {
+        res.sendFile(await this.service.logoFile(id));
     }
 }
