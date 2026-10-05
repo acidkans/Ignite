@@ -3,7 +3,7 @@ import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, u
 import AutoResizeTextarea from './AutoResizeTextarea';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
-import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo } from 'lucide-react';
+import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, ArrowRight, ArrowLeft } from 'lucide-react';
 import AddTaskModal from '../AddTaskModal';
 import { useDevice } from '../../../hooks/useDevice';
 
@@ -1209,6 +1209,29 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         }
     };
 
+    // @anchor copy-comment-strategy
+    // Kopiowanie między kolumnami Komentarz ↔ Strategia (ikonki na styku kolumn). Pusty cel =
+    // wstawienie; niepusty = dopisanie w nowej linii (nic nie ginie); ten sam tekst = bez zmian.
+    const mergeCopy = (target, source) => {
+        const t = (target || '').trim();
+        const src = (source || '').trim();
+        if (!src || t === src || t.includes(src)) return null;
+        return t ? `${target.replace(/\s+$/, '')}\n${src}` : src;
+    };
+    const copyCommentToStrategy = (node) => {
+        const next = mergeCopy(node.strategy, node.comment);
+        if (next === null) return;
+        handleField(node.id, 'strategy', next);
+        saveLeafStrategy(node.id, next);
+    };
+    const copyStrategyToComment = (node) => {
+        const next = mergeCopy(node.comment, node.strategy);
+        if (next === null) return;
+        handleField(node.id, 'comment', next);
+        onNodeFieldSave?.(node.id, 'comment', next);
+        window.dispatchEvent(new CustomEvent('wbs-comment-changed', { detail: { wbsNodeIds: [node.id], comment: next } }));
+    };
+
     // Po usunięciu węzła przelicza złożenie strategii gałęzi top-level, do której należał
     // usunięty węzeł, i utrwala je (także czyści, gdy usunięto ostatni wpis strategii —
     // top-level jest read-only, więc bez tego stary wpis zostawał w eksportach i nie dało
@@ -2207,8 +2230,25 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     )}
                 </td>
 
-                {/* Komentarz */}
-                <td className="px-3 py-2.5 min-w-[180px]" onClick={e => e.stopPropagation()}>
+                {/* Komentarz — przy prawej krawędzi ikonki kopiujące do/z sąsiedniej Strategii
+                    (tylko węzły-elementy: strategia top-level jest złożeniem, read-only). */}
+                <td className="px-3 pr-6 py-2.5 min-w-[180px] relative group/cs" onClick={e => e.stopPropagation()}>
+                    {depth > 0 && ((node.comment || '').trim() || (node.strategy || '').trim()) && (
+                        <div className="absolute right-0.5 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 opacity-30 group-hover/cs:opacity-100 transition-opacity">
+                            {(node.comment || '').trim() && (
+                                <button type="button" tabIndex={-1} onClick={() => copyCommentToStrategy(node)}
+                                    className="p-0.5 rounded text-gray-400 hover:text-sky-300 hover:bg-white/10" title="Kopiuj komentarz do strategii (dopisze, jeśli strategia jest wypełniona)">
+                                    <ArrowRight size={11} />
+                                </button>
+                            )}
+                            {(node.strategy || '').trim() && (
+                                <button type="button" tabIndex={-1} onClick={() => copyStrategyToComment(node)}
+                                    className="p-0.5 rounded text-gray-400 hover:text-sky-300 hover:bg-white/10" title="Kopiuj strategię do komentarza (dopisze, jeśli komentarz jest wypełniony)">
+                                    <ArrowLeft size={11} />
+                                </button>
+                            )}
+                        </div>
+                    )}
                     <AutoResizeTextarea
                         value={node.comment || ''}
                         onChange={e => handleField(node.id, 'comment', e.target.value)}

@@ -290,14 +290,20 @@ export class ScopeDocumentsService {
     // @anchor get-scope-document
     // Stan dokumentu dla okna podglądu: zapis + model wyliczony z drzewa + domyślne wartości.
     async get(nodeId: string, versionId?: string | null) {
-        const { doc, model, layout, tree } = await this.buildModel(nodeId, versionId);
+        const { doc, model, layout, tree, supplier } = await this.buildModel(nodeId, versionId);
         return {
             document: doc,
             layout,
             layoutDetected: !!doc.layout,
             model,
+            // Firma Zamawiającego z rejestru — UI pozwala ustawić jej skrót (numer oferty) i logo.
+            supplier: supplier ? { id: supplier.id, name: supplier.name, nip: supplier.nip, shortCode: supplier.shortCode, logoPath: supplier.logoPath } : null,
             scopeItemsCount: tree.rows.filter(r => r.showInScope).length,
-            tree: tree.rows.map(r => ({ id: r.id, parentId: r.parentId, name: r.name, type: r.type, showInScope: r.showInScope })),
+            tree: tree.rows.map(r => ({
+                id: r.id, parentId: r.parentId, name: r.name, type: r.type, showInScope: r.showInScope,
+                isBranch: (tree.children.get(r.id) || []).length > 0,
+                quantity: (Number(r.quantity) || 0) * (tree.mult.get(r.id) ?? 1), unit: r.unit,
+            })),
         };
     }
 
@@ -319,9 +325,15 @@ export class ScopeDocumentsService {
             const next = { ...cur };
             for (const k of SECTION_KEYS) {
                 if (body.sections[k] === undefined) continue;
-                next[k] = k === 'packages'
-                    ? Object.fromEntries(Object.entries(body.sections.packages || {}).map(([pk, v]) => [clip(pk, 200), clip(v, 20000)]))
-                    : clip(body.sections[k], 20000);
+                if (k === 'packages') {
+                    // Scalanie per pakiet (równoległe edycje kilku pakietów się nie nadpisują); null = usuń tekst.
+                    const pk = { ...(cur.packages || {}) };
+                    for (const [name, v] of Object.entries(body.sections.packages || {})) {
+                        if (v === null) delete pk[clip(name, 200)];
+                        else pk[clip(name, 200)] = clip(v, 20000);
+                    }
+                    next.packages = pk;
+                } else next[k] = clip(body.sections[k], 20000);
             }
             data.sections = next;
         }
@@ -429,7 +441,7 @@ Przygotuj pola (markdown: akapity, listy „- "; bez nagłówków #):
 - "investor": inwestor / odbiorca końcowy, jeśli wynika z dokumentacji (inny niż Zamawiający); inaczej "".
 - "goal": sekcja „Przedmiot i cel projektu" — 1–2 akapity. Źródło PRIORYTETOWE: CEL PROJEKTU; uzupełnij faktami z DOKUMENTACJI (obiekty, cel, skala). Jeśli rozwiązanie jest powtarzalne w lokalizacjach — napisz to.
 - "assumptions": sekcja „Sytuacja wyjściowa i założenia" — lista 3–8 punktów WYŁĄCZNIE na podstawie STRATEGII REALIZACJI: co dostarcza Zamawiający, co obejmuje instalacja, warunki techniczne i ograniczenia. Nie powtarzaj opisu pakietów.
-- "packages": lista [{ "ref": "K1", "text": "lista 2–6 punktów: co obejmuje pakiet" }] — po jednym wpisie dla KAŻDEGO pakietu K.. z sekcji PAKIETY PRAC, na podstawie jego strategii i składowych. Ilości podawaj tylko gdy są oczywiste; szczegółowe ilości są w osobnej tabeli.
+- "packages": lista [{ "ref": "K1", "text": "2–6 punktów markdown, KAŻDY w osobnej linii zaczynającej się od \"- \" (nie akapit prozy): co obejmuje pakiet" }] — po jednym wpisie dla KAŻDEGO pakietu K.. z sekcji PAKIETY PRAC, na podstawie jego strategii i składowych. Ilości podawaj tylko gdy są oczywiste; szczegółowe ilości są w osobnej tabeli.
 
 Zwróć WYŁĄCZNIE JSON: {"title":"","subject":"","investor":"","goal":"","assumptions":"","packages":[{"ref":"K1","text":""}]}
 

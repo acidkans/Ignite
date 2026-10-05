@@ -2886,6 +2886,11 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-funkcja | SuppliersService.logoFile | apps/backend/src/suppliers/suppliers.service.ts | @anchor suppliers-logo-file |
 | back-endpoint | POST /suppliers/:id/logo | apps/backend/src/suppliers/suppliers.controller.ts | @anchor suppliers-logo-upload-endpoint |
 | back-endpoint | GET /suppliers/:id/logo | apps/backend/src/suppliers/suppliers.controller.ts | @anchor suppliers-logo-get-endpoint |
+| ui-funkcja | scopeApi | apps/frontend/src/components/shared/wbs/ScopeDocumentModal.jsx | @anchor scope-api |
+| ui-modal | ScopeDocumentModal | apps/frontend/src/components/shared/wbs/ScopeDocumentModal.jsx | @anchor scope-document-modal |
+| ui-stan | scopeDocOpen | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor scope-document-open |
+| ui-przycisk | Opis zakresu prac | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor scope-document-button |
+| ui-funkcja | copyCommentToStrategy / copyStrategyToComment | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor copy-comment-strategy |
 
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)

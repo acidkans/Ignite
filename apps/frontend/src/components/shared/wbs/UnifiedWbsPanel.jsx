@@ -18,6 +18,7 @@ import ExportChoiceModal from '../ExportChoiceModal';
 import WBSHybridTable from './WBSHybridTable';
 import BudgetTable from './BudgetTable';
 import OfferAiCheckModal, { OFFER_AI_SEVERITY, OFFER_AI_CATEGORY } from './OfferAiCheckModal';
+import ScopeDocumentModal from './ScopeDocumentModal';
 import BudgetModesPanel from './BudgetModesPanel';
 import ComparisonPanel from '../ComparisonPanel';
 import QaTreeView from './QaTreeView';
@@ -398,6 +399,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // `start-offer-budget-check`), panel tylko ją startuje i odpytuje status.
     const [offerAiState, setOfferAiState] = useState({ job: null, done: null });
     const [offerAiOpen, setOfferAiOpen] = useState(false);
+    // @anchor scope-document-open — okno „Opis zakresu prac" (załącznik do oferty).
+    const [scopeDocOpen, setScopeDocOpen] = useState(false);
     const [offerAiStartError, setOfferAiStartError] = useState(null);
     const offerAiResult = offerAiState.done?.result || null;
     const offerAiRunning = offerAiState.job?.status === 'RUNNING';
@@ -6660,6 +6663,14 @@ ${ganttSectionHtml}
                                     ? <><div className="w-3 h-3 border-2 border-violet-300/30 border-t-violet-300 rounded-full animate-spin" /> Analiza w toku…</>
                                     : <><Sparkles size={11} /> Analiza AI vs budżet</>}
                             </button>
+                            {/* @anchor scope-document-button */}
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setScopeDocOpen(true); }}
+                                className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 rounded-lg text-emerald-200 text-[10px] font-bold uppercase tracking-widest transition-all whitespace-nowrap"
+                                title="Załącznik do oferty: struktura zakresu, opis pakietów, zakres ilościowy — PDF z numerem oferty"
+                            >
+                                <FileText size={11} /> Opis zakresu prac
+                            </button>
                         </div>
                     ));
                 }
@@ -7024,6 +7035,13 @@ ${ganttSectionHtml}
                 </div>
             )}
 
+            {scopeDocOpen && (
+                <ScopeDocumentModal
+                    nodeId={nodeId}
+                    versionId={versionId}
+                    onClose={() => setScopeDocOpen(false)}
+                />
+            )}
             {offerAiOpen && (
                 <OfferAiCheckModal
                     job={offerAiState.job}

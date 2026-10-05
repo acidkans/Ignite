@@ -1,3 +1,16 @@
+## 2026-10-05 — Opis zakresu prac: okno w sekcji Oferta (układ, metryczka, treść, zakres ilościowy, PDF) (v2026.10.05.2310)
+
+### architektura / API
+- dodano `ui-modal` `ScopeDocumentModal` (zakładki: Układ — AI rozpoznanie, zatwierdzenie, łączenie/zmiana nazw/usuwanie pakietów i lokalizacji; Metryczka — tytuł, przedmiot, inwestor, ważność, gwarancja, czas prac, skrót i logo firmy Zamawiającego; Treść — edytory sekcji 1/2/4/6/7/8/9 z „AI od nowa"; Zakres ilościowy — podgląd tabeli i wybór pozycji drzewa, „AI: zaproponuj pozycje"); podgląd HTML i zapis PDF
+- `ui-przycisk` „Opis zakresu prac" w pasku sekcji Oferta (UnifiedWbsPanel)
+- `GET /scope-documents/:nodeId` zwraca `supplier` (id, skrót, logo) i ilości pozycji drzewa; `PATCH` scala teksty pakietów per klucz (`null` = usuń)
+
+### słownik
+- dodano `scope-api`, `scope-document-modal`, `scope-document-open`, `scope-document-button`
+
+### wytyczne
+- `schema-json` `ScopeDocument.sections.packages` — kluczowane nazwą pakietu; zmiana nazwy/łączenie pakietów w UI przenosi teksty (stary klucz = null)
+
 ## 2026-10-05 — Opis zakresu prac: backend (AI układ/sekcje/pozycje, numer oferty, PDF) (v2026.10.05.2200)
 
 ### architektura / API
