@@ -282,7 +282,19 @@ export class WbsNodesService {
             const qRaw = (item as any).quantity;
             const qNum = item.type === 'fuel' && qRaw !== '' && qRaw != null ? Number(qRaw) : undefined;
             const quantity = Number.isFinite(qNum) && (qNum as number) > 0 ? qNum : undefined;
+            // @anchor wbs-flatten-insert-totals — nowy węzeł z ceną (wklejony klon, wartości domyślne
+            // typu) rodzi się z policzonymi totalami, tak jak po `updateBudgetFields`. Bez tego
+            // zostawały zera z @default(0): koszt jedn. i narzut były, koszt całościowy 0.
+            const isGroupItem = String(item.type || '').toLowerCase() === 'group';
+            const totals = (!isGroupItem && unitCost !== undefined)
+                ? (() => {
+                    const q = quantity ?? 1; // Prisma @default(1) dla quantity
+                    const unitPrice = margin ? unitCost * (1 + margin / 100) : 0;
+                    return { totalCost: unitCost * q, unitPrice, totalPrice: unitPrice * q };
+                })()
+                : {};
             rows.push({
+                ...totals,
                 id: item.id,
                 parentId,
                 nodeId,
@@ -626,6 +638,19 @@ export class WbsNodesService {
             allowed.discount = 0;
             allowed.unitPrice = 0;
             allowed.totalPrice = 0;
+        } else if (quantityChanged) {
+            // @anchor wbs-node-quantity-totals — ilość z drzewa/Gantta przelicza totale tak jak
+            // `updateBudgetFields`; wcześniej zostawał koszt całościowy sprzed zmiany ilości.
+            const cur = await this.prisma.wbsNode.findUnique({
+                where: { id },
+                select: { type: true, unitCost: true, unitPrice: true },
+            });
+            const typeAfter = String(allowed.type ?? cur?.type ?? '').toLowerCase();
+            if (cur && typeAfter !== 'group') {
+                const up = allowed.unitPrice !== undefined ? (parseFloat(allowed.unitPrice) || 0) : (cur.unitPrice ?? 0);
+                allowed.totalCost = (cur.unitCost ?? 0) * allowed.quantity;
+                allowed.totalPrice = up * allowed.quantity;
+            }
         }
 
         // @anchor wbs-node-offer-lock — ta sama blokada co na `/budget`: ilość i cena jednostkowa

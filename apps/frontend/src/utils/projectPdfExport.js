@@ -3,7 +3,7 @@
 // Includes: Informacje o projekcie + Strategia + WBS + Materiały. NO budget.
 
 import { API_URL } from '../config';
-import { TYPE_LABELS as WBS_TYPE_LABELS, wbsTypeFromAny, MATERIAL_STATUS_LABELS, stripRejectedNodes, applyGroupMultipliers } from '../components/shared/wbs/wbsConstants';
+import { TYPE_LABELS as WBS_TYPE_LABELS, wbsTypeFromAny, MATERIAL_STATUS_LABELS, stripRejectedNodes, applyGroupMultipliers, nodeCostOf, nodeOfferOf } from '../components/shared/wbs/wbsConstants';
 
 const flattenWbsItems = (items) => {
     const result = [];
@@ -63,8 +63,8 @@ const buildBudgetRows = (nodes, parentId, depth) => {
             <td class="num">${fmtN(n.quantity, 0)}</td>
             <td>${esc(n.unit || '')}</td>
             <td class="num">${fmtPct(n.margin)}</td>
-            <td class="num">${fmtN(n.totalCost)}</td>
-            <td class="num">${fmtN(n.totalPrice)}</td>
+            <td class="num">${fmtN(nodeCostOf(n))}</td>
+            <td class="num">${fmtN(nodeOfferOf(n))}</td>
         </tr>${buildBudgetRows(nodes, n.id, depth + 1)}`;
     }).join('');
 };
@@ -245,8 +245,8 @@ export async function buildProjectPdfArtifact({ nodeId, versionId, projectName, 
     // oferty), ale budżet liczy wyłącznie zakres, który klient kupuje.
     const budgetNodes = applyGroupMultipliers(stripRejectedNodes(wbsNodes));
     const budgetItems = budgetNodes.filter((n) => n.parentId != null);
-    const budgetTotalCost = budgetItems.reduce((s, n) => s + (parseFloat(n.totalCost) || 0), 0);
-    const budgetTotalPrice = budgetItems.reduce((s, n) => s + (parseFloat(n.totalPrice) || 0), 0);
+    const budgetTotalCost = budgetItems.reduce((s, n) => s + nodeCostOf(n), 0);
+    const budgetTotalPrice = budgetItems.reduce((s, n) => s + nodeOfferOf(n), 0);
     const budgetHtml = `
         <div class="section">
             <div class="section-header">Budżet</div>

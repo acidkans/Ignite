@@ -536,6 +536,27 @@ export const buildGroupMultiplierMap = (nodes) => {
   return memo;
 };
 
+// @anchor node-cost-of — koszt całościowy węzła = koszt jedn. × ilość (po applyGroupMultipliers
+// ilość zawiera już mnożnik pakietów). Gałąź grupująca ⇒ 0. Zapisanego `WbsNode.totalCost` nie
+// czytamy — bywa nieaktualny (np. 0 po Kopiuj/Wklej poddrzewa).
+export const nodeCostOf = (node) => {
+  if (String(node?.type || '').toLowerCase() === 'group') return 0;
+  const q = Math.max(0, parseFloat(node?.quantity) || 0);
+  const uc = Math.max(0, parseFloat(node?.unitCost) || 0);
+  return uc * q;
+};
+
+// @anchor node-offer-of — cena ofertowa węzła: koszt × (1 + narzut) × (1 − rabat); brak narzutu ⇒ 0.
+// Ta sama formuła co localPriceOf w UnifiedWbsPanel i formuła w eksporcie Excel.
+export const nodeOfferOf = (node) => {
+  const tc = nodeCostOf(node);
+  const m = parseFloat(node?.margin) || 0;
+  const d = Math.max(0, parseFloat(node?.discount) || 0);
+  let p = m !== 0 ? tc * (1 + m / 100) : 0;
+  if (p > 0 && d > 0) p = Math.max(0, p * (1 - d / 100));
+  return p;
+};
+
 // @anchor apply-group-multipliers — zakres PIENIĘDZY i ZAKUPÓW z pakietami rozwiniętymi:
 // węzeł pod gałęzią grupującą dostaje `quantity` = własna ilość × mnożnik pakietów, a koszty
 // i ceny łączne przeskalowane tym samym mnożnikiem. Własna ilość zostaje w `_ownQuantity`,

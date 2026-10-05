@@ -406,6 +406,11 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | Tag | Nazwa | Plik | Anchor |
 |-----|-------|------|--------|
 | back-funkcja | normalizeManufacturer | apps/backend/src/common/normalize.util.ts | @anchor normalize-manufacturer |
+| back-funkcja | normalizeWbsName | apps/backend/src/common/normalize.util.ts | @anchor normalize-wbs-name |
+| back-funkcja | normalizeNameIn | apps/backend/src/prisma/prisma.service.ts | @anchor normalize-wbs-name-data |
+| back-funkcja | PrismaService.$use (normalizacja nazw WBS) | apps/backend/src/prisma/prisma.service.ts | @anchor prisma-wbs-name-middleware |
+| back-funkcja | flattenForInsert (totale nowego węzła) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-flatten-insert-totals |
+| back-funkcja | updateNode (totale po zmianie ilości) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-node-quantity-totals |
 | back-funkcja | normalizeVersionId | apps/backend/src/common/version.util.ts | @anchor normalize-version-id |
 | back-funkcja | resolveVersionId | apps/backend/src/common/version.util.ts | @anchor resolve-version-id |
 | back-funkcja | cloneVersionData | apps/backend/src/ai/versioning.service.ts | @anchor clone-version-data |
@@ -692,6 +697,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | groupQtyFactor (ilość pakietu jako mnożnik, pusta/0 ⇒ 1) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor group-qty-factor |
 | ui-funkcja | buildGroupMultiplierMap (id → iloczyn ilości pakietów nad węzłem) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor build-group-multiplier-map |
 | ui-funkcja | applyGroupMultipliers (ilości i wartości poddrzewa × pakiety; `_ownQuantity`, `_groupMult`) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor apply-group-multipliers |
+| ui-funkcja | nodeCostOf | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor node-cost-of |
+| ui-funkcja | nodeOfferOf | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor node-offer-of |
 | ui-stan | budgetScopeData | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor budget-scope-data |
 | ui-stala | PLAN_STRUCT_STATUS_META | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor plan-struct-status-meta |
 | ui-funkcja | getInheritedMaterialStatus (status planu pozycji) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor wbs-plan-status-of |

@@ -2146,7 +2146,9 @@ ${ganttSectionHtml}
             const discFactor = hasRowDiscount ? `*(1-${cDiscount}${r})` : '';
             budgetSheet.addRow({
                 index: index + 1,
-                subjectName: row.subjectName || '',
+                // Trim jak klucz w „Podsumowaniu per główne gałęzie" — inaczej SUMIF nie
+                // dopasuje gałęzi z nazwą kończącą się spacją (np. „Lisowice ") i pokaże 0.
+                subjectName: String(row.subjectName || '').trim(),
                 parentName: branchPath(row.id),
                 name: row.name || '',
                 requirementName: reqNameByNodeId[row.id] || '',
@@ -5908,7 +5910,9 @@ ${ganttSectionHtml}
                     : persistedRowUnitCost;
                 const totalCost = inheritedFromMaterials
                     ? (inheritedCost > 0 ? inheritedCost : resolvedUnitCost * resolvedQuantity)
-                    : (Number.isFinite(parseFloat(row.totalCost)) ? parseFloat(row.totalCost) : resolvedUnitCost * resolvedQuantity);
+                    // Nie z zapisanego `totalCost` — przy wartości nieaktualnej (0) linia niżej
+                    // wyliczała z niej koszt jedn. i zerowała cenę pozycji przy zmianie typu.
+                    : resolvedUnitCost * resolvedQuantity;
                 // Narzut przy zmianie typu idzie za wartościami domyślnymi typu. Materiał/sprzęt
                 // swoich nie mają (poza modalem), więc narzut poprzedniego typu zjeżdża do zera
                 // razem z ceną — inaczej na materiale zostawał np. 20% wzięte z pracy.
@@ -6191,11 +6195,11 @@ ${ganttSectionHtml}
                     // Poprzednia logika używała inheritedCost/inheritedQuantity z materialMetaByLookupKey,
                     // co powodowało rozbieżność z kolumną "Cena netto" w WBS (ta czyta z DB).
                     const unitCost = persistedUnitCost;
-                    const totalCost = inheritedFromMaterials
-                        ? persistedUnitCost * quantity * groupMult
-                        : (Number.isFinite(parseFloat(item.totalCost))
-                            ? parseFloat(item.totalCost)
-                            : persistedUnitCost * quantity * groupMult);
+                    // Koszt całościowy ZAWSZE = koszt jedn. × ilość × mnożnik pakietów — ta sama reguła
+                    // co oferta (localPriceOf), drzewo WBS i formuła w eksporcie Excel. Zapisanego
+                    // `WbsNode.totalCost` nie czytamy: bywa nieaktualny (np. 0 po Kopiuj/Wklej
+                    // poddrzewa), przez co Budżet pokazywał mniej niż eksport „Analiza projektu”.
+                    const totalCost = persistedUnitCost * quantity * groupMult;
                     const clearDerivedFields = inheritedFromMaterials && totalCost <= 0;
                     const margin = clearDerivedFields ? 0 : (parseFloat(item.margin) || 0);
                     const discount = clearDerivedFields ? 0 : (parseFloat(item.discount) || 0);
