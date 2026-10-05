@@ -513,6 +513,7 @@ export class WbsNodesService {
                 // rozliczenia pozycji — panel Materiały liczy z nich licznik i Δ.
                 sourceWbsNodeId: node.sourceWbsNodeId,
                 realizationClosed: node.realizationClosed,
+                showInScope: node.showInScope,
                 // Materials
                 materials,
                 materialsTotalCost,

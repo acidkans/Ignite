@@ -1,3 +1,25 @@
+## 2026-10-05 — Opis zakresu prac: model danych (skrót i logo firmy, flaga pozycji w zakresie, dokument i licznik numerów ofert) (v2026.10.05.2000)
+
+### schema.prisma
+- dodano `schema-pole` `Supplier.shortCode` — 3 litery (A-Z, bez polskich znaków), prefiks numeru oferty `SKR/n/RRRR`
+- dodano `schema-pole` `Supplier.logoPath` — logo Zamawiającego w nagłówku Opisu zakresu
+- dodano `schema-pole` `WbsNode.showInScope` (domyślnie false) — pozycja w tabeli „Zakres ilościowy"
+- dodano `schema-model` `ScopeDocument` (jeden na zamówienie, `nodeId` unique) — numer oferty, `revision`, `validityDays` (30), `warrantyMonths` (24), `workDuration`, `layout` (JSON: pakiety/lokalizacje), `layoutConfirmed`, `sections` (JSON teksty sekcji), `documentId`
+- dodano `schema-model` `OfferNumberCounter` (`year` PK, `lastNumber`) — wspólny licznik numerów ofert w roku
+- dodano `schema-relacja` `ProcessNode.scopeDocument`
+- migracja `20261005200000_scope_document`
+
+### architektura / API
+- `cloneVersionData` klonuje `WbsNode.showInScope`; `GET /wbs-nodes/unified` zwraca `showInScope`
+
+### słownik
+- dodano `supplier-short-code`, `supplier-logo-path`, `wbs-node-show-in-scope`, `process-node-scope-document`, `scope-document*`, `offer-number-counter*`
+
+### wytyczne
+- `schema-pole` `ScopeDocument.offerNumber` — nadawany raz przy pierwszym zapisie PDF (inkrement `OfferNumberCounter` w transakcji), potem niezmienny; `revision` rośnie przy każdym zapisie
+- `schema-json` `ScopeDocument.sections` — edycje żyją tylko w dokumencie, nie nadpisują `OrderRequirements.projectGoal` ani `WbsNode.strategy`
+- `schema-pole` `WbsNode.showInScope` — ilości w tabeli liczyć z mnożnikiem pakietów (`groupQtyFactor`), nie z surowego `quantity`
+
 ## 2026-10-04 — Ilość gałęzi grupującej (pakietu) mnoży całe poddrzewo: drzewo, Budżet, oferta, eksporty, karty materiałowe, Realizacja (v2026.10.04.1230)
 
 ### architektura / API

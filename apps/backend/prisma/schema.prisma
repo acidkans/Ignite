@@ -272,6 +272,8 @@ model ProcessNode {
 
   /// @anchor process-node-drive-files
   driveFiles                DriveFile[]
+  /// @anchor process-node-scope-document
+  scopeDocument             ScopeDocument?
   @@map("process_nodes")
 }
 
@@ -967,6 +969,13 @@ model Supplier {
   verifiedAt    DateTime? // stempel ostatniej weryfikacji NIP w Białej liście
   /// @anchor supplier-one-drive-folder-id
   oneDriveFolderId String? @unique // katalog dostawcy we wspólnym katalogu ofert OneDrive (OneDriveSettings)
+  /// @anchor supplier-short-code
+  /// Skrót firmy (3 litery, A-Z bez polskich znaków) — prefiks numeru oferty `SKR/n/RRRR`.
+  /// Domyślnie z pierwszych liter nazwy, edytowalny (rozróżnianie kolizji).
+  shortCode     String?
+  /// @anchor supplier-logo-path
+  /// Logo firmy (ścieżka w uploads) — nagłówek „Opisu zakresu prac", gdy firma jest Zamawiającym.
+  logoPath      String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -1264,6 +1273,9 @@ model WbsNode {
   /// Pozycja rozliczona mimo niedowykonania planu — różnica przestaje być „brakiem",
   /// liczy się jako oszczędność, a liść wypada z niedokończonych w pokryciu.
   realizationClosed Boolean @default(false)
+  /// @anchor wbs-node-show-in-scope
+  /// Pozycja trafia do tabeli „Zakres ilościowy" w Opisie zakresu prac (sumy per lokalizacja).
+  showInScope       Boolean @default(false)
 
   /// @anchor wbs-node-parent
   parent              WbsNode?          @relation("WbsTree", fields: [parentId], references: [id], onDelete: Cascade)
@@ -2011,4 +2023,55 @@ model OneDriveSettings {
   updatedAt              DateTime  @updatedAt
 
   @@map("onedrive_settings")
+}
+
+/// @anchor scope-document
+/// „Opis zakresu prac" — załącznik do oferty (PDF), jeden na zamówienie (docs/PLAN-opis-zakresu-oferty.md).
+/// Teksty sekcji po edycji żyją tylko tutaj (nie nadpisują `projectGoal` ani strategii gałęzi);
+/// ponowne generowanie nie kasuje ich, chyba że użytkownik odświeży konkretną sekcję.
+model ScopeDocument {
+  id              String    @id @default(uuid())
+  /// @anchor scope-document-node-id
+  nodeId          String    @unique // ProcessNode type='order'
+  /// @anchor scope-document-version-id
+  versionId       String? // wersja WBS będąca podstawą ostatniego zapisu
+  /// @anchor scope-document-offer-number
+  offerNumber     String?   @unique // `SKR/n/RRRR` — nadawany przy pierwszym zapisie PDF, potem stały
+  /// @anchor scope-document-revision
+  revision        Int       @default(0) // wersja dokumentu wyświetlana jako `1.<revision>`, rośnie przy każdym zapisie
+  /// @anchor scope-document-validity-days
+  validityDays    Int       @default(30)
+  /// @anchor scope-document-warranty-months
+  warrantyMonths  Int       @default(24)
+  /// @anchor scope-document-work-duration
+  workDuration    String? // szacowany czas prac (domyślnie z projectStart–projectEnd), edytowalny
+  /// @anchor scope-document-layout
+  /// Rozpoznany przez AI i zatwierdzony układ drzewa:
+  /// { mode: 'packages'|'locations', locations: [{ name, wbsNodeIds }], packages: [{ name, wbsNodeIds }] }
+  layout          Json?
+  /// @anchor scope-document-layout-confirmed
+  layoutConfirmed Boolean   @default(false)
+  /// @anchor scope-document-sections
+  /// Teksty sekcji (markdown): { goal, assumptions, packages: { [nazwa]: tekst }, supplies, exclusions, organization, acceptance }
+  sections        Json      @default("{}")
+  /// @anchor scope-document-document-id
+  documentId      String? // ostatni zapisany PDF w dokumentacji zamówienia (ProcessNode type=document)
+  createdById     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  node ProcessNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@map("scope_documents")
+}
+
+/// @anchor offer-number-counter
+/// Wspólny licznik numerów ofert w roku — `n` w `SKR/n/RRRR`; nowy rok = nowy wiersz od 1.
+model OfferNumberCounter {
+  /// @anchor offer-number-counter-year
+  year       Int @id
+  /// @anchor offer-number-counter-last-number
+  lastNumber Int @default(0)
+
+  @@map("offer_number_counters")
 }

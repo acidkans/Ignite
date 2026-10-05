@@ -215,6 +215,8 @@ export class VersioningService {
                     // liście baseline↔żywe (F5) i po nim wiszą wpisy realizacji, więc
                     // zakupy nie gubią się przy tworzeniu nowej wersji.
                     sourceWbsNodeId: (wn as any).sourceWbsNodeId ?? wn.id,
+                    // Wybór pozycji do „Zakresu ilościowego" (Opis zakresu prac) jedzie z klonem.
+                    showInScope: (wn as any).showInScope ?? false,
                     // Zamknięcie realizacji NIE jest klonowane: nowa wersja to nowy plan,
                     // a rozliczenie odnosi się do konkretnego zakresu.
                 },

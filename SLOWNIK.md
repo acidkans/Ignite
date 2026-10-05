@@ -2838,6 +2838,25 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | Tag | Nazwa | Plik | Anchor |
 |-----|-------|------|--------|
 | back-funkcja | ensureDailyDbSync | apps/backend/src/ai/vector.service.ts | @anchor ensure-daily-db-sync |
+| schema-pole | Supplier.shortCode | apps/backend/prisma/schema.prisma | @anchor supplier-short-code |
+| schema-pole | Supplier.logoPath | apps/backend/prisma/schema.prisma | @anchor supplier-logo-path |
+| schema-pole | WbsNode.showInScope | apps/backend/prisma/schema.prisma | @anchor wbs-node-show-in-scope |
+| schema-relacja | ProcessNode.scopeDocument | apps/backend/prisma/schema.prisma | @anchor process-node-scope-document |
+| schema-model | ScopeDocument | apps/backend/prisma/schema.prisma | @anchor scope-document |
+| schema-pole | ScopeDocument.nodeId | apps/backend/prisma/schema.prisma | @anchor scope-document-node-id |
+| schema-pole | ScopeDocument.versionId | apps/backend/prisma/schema.prisma | @anchor scope-document-version-id |
+| schema-pole | ScopeDocument.offerNumber | apps/backend/prisma/schema.prisma | @anchor scope-document-offer-number |
+| schema-pole | ScopeDocument.revision | apps/backend/prisma/schema.prisma | @anchor scope-document-revision |
+| schema-pole | ScopeDocument.validityDays | apps/backend/prisma/schema.prisma | @anchor scope-document-validity-days |
+| schema-pole | ScopeDocument.warrantyMonths | apps/backend/prisma/schema.prisma | @anchor scope-document-warranty-months |
+| schema-pole | ScopeDocument.workDuration | apps/backend/prisma/schema.prisma | @anchor scope-document-work-duration |
+| schema-json | ScopeDocument.layout | apps/backend/prisma/schema.prisma | @anchor scope-document-layout |
+| schema-pole | ScopeDocument.layoutConfirmed | apps/backend/prisma/schema.prisma | @anchor scope-document-layout-confirmed |
+| schema-json | ScopeDocument.sections | apps/backend/prisma/schema.prisma | @anchor scope-document-sections |
+| schema-pole | ScopeDocument.documentId | apps/backend/prisma/schema.prisma | @anchor scope-document-document-id |
+| schema-model | OfferNumberCounter | apps/backend/prisma/schema.prisma | @anchor offer-number-counter |
+| schema-pole | OfferNumberCounter.year | apps/backend/prisma/schema.prisma | @anchor offer-number-counter-year |
+| schema-pole | OfferNumberCounter.lastNumber | apps/backend/prisma/schema.prisma | @anchor offer-number-counter-last-number |
 
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
@@ -2850,4 +2869,3 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 - utils/projectPdfExport.js (exportProjectPdf)
 - utils/requirementsPdfExport.js (exportRequirementsPdf)
 -->
-
