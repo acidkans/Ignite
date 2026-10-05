@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { X, Sparkles, RefreshCw, FileText, Eye, Save, Check, Merge, Trash2, Upload, AlertTriangle } from 'lucide-react';
+import { X, Sparkles, RefreshCw, FileText, Eye, Save, Check, Merge, Trash2, Upload, AlertTriangle, Download, ExternalLink, FolderOpen } from 'lucide-react';
 import MarkdownEditor from '../MarkdownEditor';
 import { API_URL } from '../../../config';
 import { fmtQty } from './wbsConstants';
@@ -59,6 +59,8 @@ export default function ScopeDocumentModal({ nodeId, versionId, onClose, onScope
     const [layoutReason, setLayoutReason] = useState('');
     const [selectedPkgs, setSelectedPkgs] = useState([]);
     const [confirmPdf, setConfirmPdf] = useState(false);
+    // @anchor scope-pdf-access — okno dostępu do zapisanego PDF (po zapisie i z przycisku „Zapisany PDF").
+    const [pdfAccess, setPdfAccess] = useState(null);
     const [itemFilter, setItemFilter] = useState('');
     const [onlyChecked, setOnlyChecked] = useState(false);
     const vq = versionId ? `?versionId=${versionId}` : '';
@@ -229,8 +231,8 @@ export default function ScopeDocumentModal({ nodeId, versionId, onClose, onScope
     const savePdf = () => run('pdf', async () => {
         setConfirmPdf(false);
         const r = await scopeApi('POST', `/scope-documents/${nodeId}/pdf`, vBody);
-        setNotice(`Zapisano „${r.filename}" (oferta ${r.offerNumber}, wersja ${r.revisionLabel}) w dokumentach zamówienia.`);
         await load();
+        setPdfAccess({ documentId: r.documentId, filename: r.filename, offerNumber: r.offerNumber, revisionLabel: r.revisionLabel, justSaved: true });
     });
 
     if (!data) {
@@ -249,6 +251,14 @@ export default function ScopeDocumentModal({ nodeId, versionId, onClose, onScope
             <span className="text-[11px] text-gray-400 mr-2">
                 {doc.offerNumber ? <>Oferta <b className="text-gray-200">{doc.offerNumber}</b> · wersja {doc.documentId ? `1.${doc.revision}` : '1.0'}</> : 'Numer oferty nadany przy pierwszym zapisie'}
             </span>
+            {doc.documentId && doc.offerNumber && (
+                <button className={btnGray} onClick={() => setPdfAccess({
+                    documentId: doc.documentId,
+                    filename: `Opis zakresu prac - ${doc.offerNumber.replace(/\//g, '-')}.pdf`,
+                    offerNumber: doc.offerNumber,
+                    revisionLabel: `1.${doc.revision}`,
+                })}><FileText size={11} /> Zapisany PDF</button>
+            )}
             <button className={btnGray} onClick={preview} disabled={busy.preview}>{busy.preview ? <Spin /> : <Eye size={11} />} Podgląd</button>
             <button className={btnGreen} onClick={() => (doc.layoutConfirmed ? savePdf() : setConfirmPdf(true))} disabled={busy.pdf}>
                 {busy.pdf ? <Spin /> : <Save size={11} />} Zapisz PDF
@@ -473,6 +483,7 @@ export default function ScopeDocumentModal({ nodeId, versionId, onClose, onScope
                 )}
             </div>
 
+            {pdfAccess && <PdfAccessModal info={pdfAccess} onClose={() => setPdfAccess(null)} />}
             {confirmPdf && (
                 <div className="fixed inset-0 z-[260] flex items-center justify-center bg-black/60" onClick={() => setConfirmPdf(false)}>
                     <div className="w-full max-w-md rounded-2xl border border-amber-500/30 bg-[#0b0f17] p-5 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
@@ -537,6 +548,64 @@ function Info({ label, value, hint }) {
         <div className="flex flex-col gap-0.5">
             <span className="text-[10px] uppercase tracking-widest text-gray-500">{label}{hint && <span className="normal-case tracking-normal text-gray-600"> · {hint}</span>}</span>
             <span className="text-sm text-gray-200">{value || <span className="text-gray-600">—</span>}</span>
+        </div>
+    );
+}
+
+// @anchor scope-pdf-access-modal
+// Gdzie leży zapisany PDF i szybki dostęp: otwarcie w nowej karcie albo pobranie.
+// Plik pobierany z tokenem (blob), bo zwykły link nie niesie autoryzacji.
+function PdfAccessModal({ info, onClose }) {
+    const [busy, setBusy] = useState('');
+    const [err, setErr] = useState('');
+    const fetchBlob = async () => {
+        const res = await fetch(`${API_URL}/documents/download/${info.documentId}`, { headers: { Authorization: `Bearer ${token()}` } });
+        if (!res.ok) throw new Error(`Nie udało się pobrać pliku (${res.status})`);
+        return res.blob();
+    };
+    const open = async () => {
+        setBusy('open'); setErr('');
+        try {
+            const url = URL.createObjectURL(new Blob([await fetchBlob()], { type: 'application/pdf' }));
+            window.open(url, '_blank');
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+        } catch (e) { setErr(e.message); } finally { setBusy(''); }
+    };
+    const download = async () => {
+        setBusy('download'); setErr('');
+        try {
+            const url = URL.createObjectURL(await fetchBlob());
+            const a = document.createElement('a');
+            a.href = url; a.download = info.filename;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
+        } catch (e) { setErr(e.message); } finally { setBusy(''); }
+    };
+    return (
+        <div className="fixed inset-0 z-[260] flex items-center justify-center bg-black/60" onClick={onClose}>
+            <div className="w-full max-w-lg rounded-2xl border border-emerald-500/30 bg-[#0b0f17] p-5 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+                <div className="flex items-start gap-3">
+                    <FileText size={20} className="text-emerald-300 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                        <div className="text-sm font-bold text-gray-100">{info.justSaved ? 'PDF zapisany' : 'Zapisany PDF'}</div>
+                        <div className="text-sm text-gray-300 break-words">{info.filename}</div>
+                        <div className="text-xs text-gray-500">Oferta {info.offerNumber} · wersja {info.revisionLabel}</div>
+                    </div>
+                    <button onClick={onClose} className="p-1 rounded hover:bg-white/10 text-gray-400"><X size={16} /></button>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 flex flex-col gap-2 text-xs text-gray-300">
+                    <div className="flex items-start gap-2"><FolderOpen size={13} className="text-amber-300 mt-0.5 flex-shrink-0" />
+                        <span>W aplikacji: zakładka <b className="text-gray-100">Pliki finansowe</b> zamówienia (kategoria „Oferta finansowa”).</span></div>
+                    <div className="flex items-start gap-2"><FolderOpen size={13} className="text-sky-300 mt-0.5 flex-shrink-0" />
+                        <span>OneDrive: <b className="text-gray-100">01 Dokumenty finansowe / Oferta finansowa</b> — gdy zamówienie ma podpięty folder.</span></div>
+                    <div className="text-gray-500">Kolejny zapis nadpisuje ten plik (ta sama nazwa), podbijając wersję dokumentu.</div>
+                </div>
+                {err && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">{err}</div>}
+                <div className="flex justify-end gap-2">
+                    <button className={btnGray} onClick={download} disabled={!!busy}>{busy === 'download' ? <Spin /> : <Download size={11} />} Pobierz</button>
+                    <button className={btnGreen} onClick={open} disabled={!!busy}>{busy === 'open' ? <Spin /> : <ExternalLink size={11} />} Otwórz PDF</button>
+                </div>
+            </div>
         </div>
     );
 }

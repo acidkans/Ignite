@@ -2891,6 +2891,8 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-stan | scopeDocOpen | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor scope-document-open |
 | ui-przycisk | Opis zakresu prac | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor scope-document-button |
 | ui-funkcja | copyCommentToStrategy / copyStrategyToComment | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor copy-comment-strategy |
+| ui-stan | pdfAccess | apps/frontend/src/components/shared/wbs/ScopeDocumentModal.jsx | @anchor scope-pdf-access |
+| ui-modal | PdfAccessModal | apps/frontend/src/components/shared/wbs/ScopeDocumentModal.jsx | @anchor scope-pdf-access-modal |
 
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
