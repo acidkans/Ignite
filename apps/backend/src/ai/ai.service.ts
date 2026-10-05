@@ -303,6 +303,10 @@ export class AiService implements OnModuleInit {
             offerPrice: num(n?.offerPrice),
             comment: clip(n?.comment, 500),
             strategy: clip(n?.strategy, 4000).trim(),
+            // Pakiet (gałąź grupująca) ×N oraz ilość pozycji na jeden pakiet — patrz `build-offer-ai-payload`.
+            groupQty: n?.groupQty != null ? num(n.groupQty) : null,
+            ownQuantity: n?.ownQuantity != null ? num(n.ownQuantity) : null,
+            groupMult: Math.max(1, num(n?.groupMult) || 1),
             ref: '',
         }));
         let refNo = 0;
@@ -326,8 +330,12 @@ export class AiService implements OnModuleInit {
         const money = (v: number) => v.toFixed(2);
         const treeLines = nodes.map((n: any) => {
             const indent = '  '.repeat(n.depth);
-            if (n.isBranch) return `${indent}[GAŁĄŹ] ${n.name} (${n.type || 'grupa'}) — suma koszt ${money(n.totalCost)}, cena ofert. ${money(n.offerPrice)}`;
-            return `${indent}${n.ref} ${n.name} | ${n.type} | ${n.quantity} ${n.unit} | koszt jedn. ${money(n.unitCost)} | koszt ${money(n.totalCost)} | narzut ${n.marginPct}% | cena ofert. ${money(n.offerPrice)}${n.comment ? ` | komentarz: ${n.comment}` : ''}`;
+            if (n.isBranch) {
+                const pack = n.groupQty && n.groupQty !== 1 ? ` [PAKIET ×${n.groupQty}]` : '';
+                return `${indent}[GAŁĄŹ] ${n.name}${pack} — suma koszt ${money(n.totalCost)}, cena ofert. ${money(n.offerPrice)}`;
+            }
+            const perPack = n.groupMult > 1 && n.ownQuantity != null ? ` (= ${n.ownQuantity} na pakiet × ${n.groupMult})` : '';
+            return `${indent}${n.ref} ${n.name} | ${n.type} | ${n.quantity} ${n.unit}${perPack} | koszt jedn. ${money(n.unitCost)} | koszt ${money(n.totalCost)} | narzut ${n.marginPct}% | cena ofert. ${money(n.offerPrice)}${n.comment ? ` | komentarz: ${n.comment}` : ''}`;
         }).join('\n');
         const topBranches = nodes.filter((n: any) => n.depth === 0).map((n: any) => `- ${n.name}`).join('\n');
         const strategyLines = strategies.map((s: any) => `### ${s.path}${s.ref ? ` (${s.ref})` : ''}\n${s.strategy}`).join('\n\n');
@@ -353,6 +361,11 @@ KROK 3 — PORÓWNAJ POZYCJE BUDŻETU MIĘDZY SOBĄ (kategoria "miedzy_pozycjami
 - ta sama pozycja w różnych gałęziach z różną jednostką albo nieproporcjonalną ilością,
 - narzut rażąco odbiegający od podobnych pozycji.
 Różnic cen jednostkowych tej samej pozycji NIE zgłaszaj — liczy je osobno program.
+
+JAK CZYTAĆ ILOŚCI W DRZEWIE (ważne przy porównywaniu ilości):
+- [GAŁĄŹ] … [PAKIET ×N] = zestaw powtórzony N razy (np. „montaż BTS ×5" = 5 identycznych BTS-ów). Ilości pozycji pod pakietem są JUŻ ŁĄCZNE (przemnożone przez N); „(= X na pakiet × N)" mówi, ile przypada na jeden zestaw. Porównuj tekst „na sztukę/na obiekt" z ilością na pakiet, a tekst o całości z ilością łączną.
+- Mnoży WYŁĄCZNIE pakiet. Pozycja wcięta pod inną POZYCJĄ (np. „baterie" pod „Siłownia") to osobna pozycja towarzysząca z własną ilością ŁĄCZNĄ — ilość pozycji nadrzędnej jej NIE mnoży. Np. Siłownia 5 szt. i pod nią baterie 4 szt. = 4 baterie na wszystkie 5 siłowni; jeśli strategia mówi „4 baterie na siłownię", to rozbieżność (powinno być 20).
+- Pozycja nadrzędna ma własny koszt — nie jest sumą pozycji pod nią.
 
 Zasady:
 - Zgłaszaj tylko rozbieżności, które da się wskazać konkretnym cytatem lub konkretną pozycją. Nie zgłaszaj ogólnych rad ani stylu tekstu.

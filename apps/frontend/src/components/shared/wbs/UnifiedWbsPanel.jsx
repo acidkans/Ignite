@@ -8,7 +8,7 @@ import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import GanttSection from './GanttSection';
-import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, PRICED_LEAF_TYPES, orderDefaultsFrom, leafDefaultsMissing, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes, applyGroupMultipliers } from './wbsConstants';
+import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, PRICED_LEAF_TYPES, orderDefaultsFrom, leafDefaultsMissing, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes, applyGroupMultipliers, groupQtyFactor } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
@@ -2534,7 +2534,11 @@ ${ganttSectionHtml}
                 const name = String(n.name || '').trim() || '(bez nazwy)';
                 const path = parentPath ? `${parentPath} › ${name}` : name;
                 const kids = byParent[n.id] || [];
-                const isBranch = depth === 0 || kids.length > 0;
+                // Gałąź = przedmiot (depth 0) albo węzeł typu `group`. Pozycja z dziećmi (np. Siłownia
+                // z bateriami) zostaje POZYCJĄ z własną ilością i kosztem — wcześniej szła jako gałąź
+                // i agent gubił, że siłowni jest 5, a baterie to osobna pozycja.
+                const isGroupNode = String(n.type || '').toLowerCase() === 'group';
+                const isBranch = depth === 0 || isGroupNode;
                 const q = Math.max(0, parseFloat(n.quantity) || 0);
                 const uc = Math.max(0, parseFloat(n.unitCost) || 0);
                 const m = (n.margin != null && String(n.margin) !== '') ? parseFloat(n.margin) : 0;
@@ -2548,15 +2552,23 @@ ${ganttSectionHtml}
                     quantity: q, unit: n.unit || '', unitCost: uc, margin: m,
                     comment: String(n.comment || '').trim(), strategy: String(n.strategy || '').trim(),
                     totalCost: ownCost, offerPrice: ownPrice,
+                    // Pakiet: ilość gałęzi grupującej = mnożnik poddrzewa. Pozycja: ilość `q` jest już
+                    // łączna (× pakiety), `ownQuantity`/`groupMult` mówią, ile to na jeden pakiet.
+                    groupQty: isGroupNode ? groupQtyFactor(n) : null,
+                    ownQuantity: isBudgetLeaf ? (parseFloat(n._ownQuantity ?? n.quantity) || 0) : null,
+                    groupMult: n._groupMult || 1,
                 };
                 nodes.push(entry);
+                let subCost = 0, subPrice = 0;
                 if (kids.length) {
                     const sub = walk(n.id, depth + 1, path);
-                    entry.totalCost += sub.cost;
-                    entry.offerPrice += sub.price;
+                    subCost = sub.cost; subPrice = sub.price;
+                    // Gałąź pokazuje sumę poddrzewa; pozycja z dziećmi — tylko własny koszt
+                    // (dzieci mają własne wiersze B.., suma szłaby podwójnie).
+                    if (isBranch) { entry.totalCost += sub.cost; entry.offerPrice += sub.price; }
                 }
-                cost += entry.totalCost;
-                price += entry.offerPrice;
+                cost += isBranch ? entry.totalCost : entry.totalCost + subCost;
+                price += isBranch ? entry.offerPrice : entry.offerPrice + subPrice;
             }
             return { cost, price };
         };
