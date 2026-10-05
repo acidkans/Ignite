@@ -2604,6 +2604,8 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-stala | ORDER_FOLDERS | apps/backend/src/onedrive/order-folders.ts | @anchor order-folders |
 | back-funkcja | orderFolderPath | apps/backend/src/onedrive/order-folders.ts | @anchor order-folder-path |
 | back-stala | NO_ONEDRIVE_FOLDER | apps/backend/src/onedrive/order-folders.ts | @anchor no-onedrive-folder |
+| back-funkcja | processFile (próba zapisana przed przetwarzaniem) | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-attempt-before-processing |
+| back-stala | LOCAL_PDF_FALLBACK_MAX_BYTES (limit lokalnego pdf2json) | apps/backend/src/documents/documents.service.ts | @anchor local-pdf-fallback-limit |
 | back-typ | OrderFoldersResult | apps/backend/src/onedrive/onedrive.service.ts | @anchor order-folders-result |
 | back-funkcja | ensureOrderFolders | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-ensure-order-folders |
 | back-funkcja | listChildFolders | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-list-child-folders |

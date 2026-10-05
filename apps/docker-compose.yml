@@ -122,7 +122,8 @@ services:
       dockerfile: Dockerfile
     container_name: erp-parser-service
     restart: always
-    mem_limit: 256m
+    # 256m nie wystarczało na schematy PDF 5–11 MB z OneDrive — parser wisiał na limicie pamięci.
+    mem_limit: 768m
     ports:
       - "8000:8000"
     networks:

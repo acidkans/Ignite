@@ -421,6 +421,20 @@ export class OneDriveSyncService implements OnModuleInit {
       }
     }
 
+    // @anchor onedrive-attempt-before-processing — numer próby zapisany PRZED pracą. Gdy proces
+    // padnie w trakcie (np. zabity za przekroczenie pamięci przy ciężkim PDF), `catch` się nie
+    // wykona — bez tego licznik zostawał 0 i po restarcie ten sam plik kładł backend od nowa.
+    const attempt = (f.attempts || 0) + 1;
+    if (attempt > MAX_ATTEMPTS) {
+      await this.prisma.driveFile.update({
+        where: { id: f.id },
+        data: { status: 'error', error: f.error || 'Przetwarzanie przerywane — serwer padał w trakcie (prawdopodobnie zbyt duży plik)' },
+      });
+      this.logger.warn(`Plik OneDrive „${f.name}" (${f.driveItemId}) pominięty po ${MAX_ATTEMPTS} przerwanych próbach`);
+      return;
+    }
+    await this.prisma.driveFile.update({ where: { id: f.id }, data: { attempts: attempt } });
+
     try {
       const token = await this.oneDrive.getSharedToken();
       const driveBase = f.driveId ? `${GRAPH_BASE}/drives/${f.driveId}` : `${GRAPH_BASE}/me/drive`;
@@ -485,10 +499,11 @@ export class OneDriveSyncService implements OnModuleInit {
         const retryAfter = Number(e?.response?.headers?.['retry-after']) || 60;
         this.pausedUntil = Date.now() + retryAfter * 1000;
         this.logger.warn(`Graph ${code} — kolejka OneDrive wstrzymana na ${retryAfter} s`);
-        await this.prisma.driveFile.update({ where: { id: f.id }, data: { updatedAt: new Date() } });
+        // Ograniczenie Graph to nie wina pliku — zwracamy zużytą próbę.
+        await this.prisma.driveFile.update({ where: { id: f.id }, data: { updatedAt: new Date(), attempts: f.attempts || 0 } });
         return;
       }
-      const attempts = (f.attempts || 0) + 1;
+      const attempts = attempt;
       const msg = e?.response?.data?.error?.message || e?.message || 'Błąd przetwarzania';
       this.logger.warn(`Plik OneDrive „${f.name}" (${f.driveItemId}): ${msg} — próba ${attempts}/${MAX_ATTEMPTS}`);
       await this.prisma.driveFile.update({

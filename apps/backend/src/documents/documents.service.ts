@@ -11,6 +11,10 @@ import * as path from 'path';
 import { UPLOADS_ROOT, uploadPath } from '../common/uploads.util';
 import { FINANCIAL_TAB_CATEGORIES, STANDARD_TAB_CATEGORIES, orderFolderPath } from '../onedrive/order-folders';
 const PDFParser = require('pdf2json');
+// Największy PDF parsowany lokalnie (pdf2json w procesie backendu), gdy parser-service nie odpowiada.
+const LOCAL_PDF_FALLBACK_MAX_BYTES = 3 * 1024 * 1024;
+// Maksymalny czas odpowiedzi parser-service przy indeksowaniu dokumentu.
+const PARSER_TIMEOUT_MS = 3 * 60 * 1000;
 
 // @anchor document-uploaded-event
 export interface DocumentUploadedEvent {
@@ -214,8 +218,10 @@ export class DocumentsService {
                 formData.append('mode', 'table'); // table mode preserves row/column structure
 
                 // Call Python service
+                // Limit czasu: parser przy ciężkim PDF potrafi utknąć na swoim limicie pamięci,
+                // a bez timeoutu stała cała kolejka OneDrive.
                 const response = await firstValueFrom(
-                    this.httpService.post(`${parserUrl}/parse`, formData)
+                    this.httpService.post(`${parserUrl}/parse`, formData, { timeout: PARSER_TIMEOUT_MS })
                 );
 
                 const data = response.data;
@@ -226,8 +232,17 @@ export class DocumentsService {
 
                 text = `[Dokument PDF: ${fileName}]\n${pdfText}`;
             } catch (e) {
+                // @anchor local-pdf-fallback-limit — pdf2json działa w procesie backendu (limit kontenera 1 GB);
+                // ciężki PDF (schematy 5–11 MB) zabijał cały serwer, a kolejka OneDrive brała go po restarcie
+                // od nowa. Duże pliki czekają na parser-service: w trybie strict (OneDrive) błąd → ponowienie
+                // później, przy uploadzie z aplikacji dokument zostaje bez treści w indeksie.
+                if (file.buffer.length > LOCAL_PDF_FALLBACK_MAX_BYTES) {
+                    const msg = `Parser PDF niedostępny (${e.message}); plik ${(file.buffer.length / 1048576).toFixed(1)} MB za duży na parsowanie lokalne`;
+                    console.warn(`[DOCS] ${msg} — ${fileName}`);
+                    if (strict) throw new Error(msg);
+                    text = `[Dokument PDF: ${fileName}] (${msg})`;
+                } else try {
                 console.warn(`[DOCS] Python service failed or unavailable: ${e.message}. Falling back to pdf2json.`);
-                try {
                     const parsedDataStr = await new Promise<string>((resolve, reject) => {
                         const pdfParser = new PDFParser(this, 1); // 1 is TEXT_ONLY mode
                         let isResolved = false;
