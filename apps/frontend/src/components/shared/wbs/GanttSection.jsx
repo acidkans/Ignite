@@ -568,6 +568,8 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         }
     }, [projectEndDate]);
     const [overrides, setOverrides] = useState({});
+    // Węzły z datami zapisanymi w bazie (ganttStart/ganttEnd) — tylko je utrwala przesunięcie Startu.
+    const persistedIdsRef = useRef(new Set());
     const prevWbsTreeRef = useRef(null);
     useEffect(() => {
         if (wbsTree === prevWbsTreeRef.current) return;
@@ -577,6 +579,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
             for (const node of nodes) {
                 if (node.ganttStart && node.ganttEnd) {
                     dbOverrides[node.id] = { start: node.ganttStart, end: node.ganttEnd };
+                    persistedIdsRef.current.add(node.id);
                 }
                 if (Array.isArray(node.children)) walk(node.children);
             }
@@ -682,6 +685,7 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
                 }
             }
         }
+        persistedIdsRef.current.add(taskId);
         onGanttDateChange?.(taskId, newStart.toISOString(), newEnd.toISOString());
     }, [tasks, taskBranchMap, branchWorkOnHolidays, onNodeDurationChange, onGanttDateChange]);
 
@@ -773,10 +777,42 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
                 }
             }
         }
+        persistedIdsRef.current.add(task.id);
         onGanttDateChange?.(task.id, start.toISOString(), end.toISOString());
     }, [onNodeDurationChange, onGanttDateChange, branchWorkOnHolidays, taskBranchMap, tasks]);
 
     const resetOverrides = useCallback(() => setOverrides({}), []);
+
+    // Zmiana Startu projektu przesuwa wszystkie ręcznie ustawione daty zadań o tę samą liczbę dni
+    // kalendarzowych. Zapis do bazy z opóźnieniem — wpisywanie roku z klawiatury przechodzi
+    // przez pośrednie poprawne daty, nie chcemy PATCH-a na każdą cyfrę.
+    const pendingShiftRef = useRef({});
+    const shiftTimerRef = useRef(null);
+    const flushShift = useCallback(() => {
+        clearTimeout(shiftTimerRef.current);
+        const pending = pendingShiftRef.current;
+        pendingShiftRef.current = {};
+        for (const [id, o] of Object.entries(pending)) onGanttDateChange?.(id, o.start, o.end);
+    }, [onGanttDateChange]);
+    useEffect(() => () => flushShift(), [flushShift]);
+    // @anchor shift-project-start
+    const shiftProjectStart = useCallback((newStartStr) => {
+        const oldD = new Date(`${projectStart}T00:00:00`);
+        const newD = new Date(`${newStartStr}T00:00:00`);
+        setProjectStart(newStartStr);
+        if (!isValidGanttDate(oldD)) return;
+        const delta = Math.round((newD - oldD) / DAY_MS);
+        if (!delta) return;
+        const shift = (iso) => { const d = new Date(iso); d.setDate(d.getDate() + delta); return d.toISOString(); };
+        const next = {};
+        for (const [id, o] of Object.entries(overrides)) {
+            next[id] = { start: shift(o.start), end: shift(o.end) };
+            if (persistedIdsRef.current.has(id)) pendingShiftRef.current[id] = next[id];
+        }
+        setOverrides(next);
+        clearTimeout(shiftTimerRef.current);
+        shiftTimerRef.current = setTimeout(flushShift, 800);
+    }, [projectStart, overrides, flushShift]);
 
     // Hover na barach SVG w timeline → popup per gałąź (depth-0)
     useEffect(() => {
@@ -1427,7 +1463,7 @@ ${projectEnd   ? `<span style="display:flex;align-items:center;gap:6px;"><span s
                         onChange={(e) => {
                             const v = e.target.value;
                             setProjectStartInput(v);
-                            if (v && isValidGanttDate(v)) setProjectStart(v);
+                            if (v && isValidGanttDate(v)) shiftProjectStart(v);
                         }}
                         className="bg-black/40 border border-white/10 rounded px-2 py-1 text-white text-xs"
                     />
