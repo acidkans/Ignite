@@ -783,8 +783,11 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
 
     const resetOverrides = useCallback(() => setOverrides({}), []);
 
-    // Zmiana Startu projektu przesuwa wszystkie ręcznie ustawione daty zadań o tę samą liczbę dni
-    // kalendarzowych. Zapis do bazy z opóźnieniem — wpisywanie roku z klawiatury przechodzi
+    // Zmiana Startu projektu przesuwa wszystkie ręcznie ustawione daty zadań razem ze Startem.
+    // Punkt odniesienia = stary Start albo najwcześniejsze zadanie, jeśli leży przed nim
+    // (daty zapisane przy dawnym Starcie) — harmonogram zawsze zaczyna się od nowego Startu.
+    // Zadania bez pracy w dni wolne lądują na dniu roboczym i zachowują liczbę dni roboczych.
+    // Zapis do bazy z opóźnieniem — wpisywanie roku z klawiatury przechodzi
     // przez pośrednie poprawne daty, nie chcemy PATCH-a na każdą cyfrę.
     const pendingShiftRef = useRef({});
     const shiftTimerRef = useRef(null);
@@ -800,19 +803,39 @@ export default function GanttSection({ wbsTree, projectName, onNodeDurationChang
         const oldD = new Date(`${projectStart}T00:00:00`);
         const newD = new Date(`${newStartStr}T00:00:00`);
         setProjectStart(newStartStr);
-        if (!isValidGanttDate(oldD)) return;
-        const delta = Math.round((newD - oldD) / DAY_MS);
+        const ids = Object.keys(overrides);
+        if (!ids.length) return;
+        let anchor = isValidGanttDate(oldD) ? oldD : null;
+        for (const id of ids) {
+            const st = new Date(overrides[id].start); st.setHours(0, 0, 0, 0);
+            if (!anchor || st < anchor) anchor = st;
+        }
+        const delta = Math.round((newD - anchor) / DAY_MS);
         if (!delta) return;
-        const shift = (iso) => { const d = new Date(iso); d.setDate(d.getDate() + delta); return d.toISOString(); };
         const next = {};
         for (const [id, o] of Object.entries(overrides)) {
-            next[id] = { start: shift(o.start), end: shift(o.end) };
+            const os = new Date(o.start); os.setHours(0, 0, 0, 0);
+            const oe = new Date(o.end);   oe.setHours(0, 0, 0, 0);
+            let ns = new Date(os); ns.setDate(ns.getDate() + delta);
+            let ne;
+            const wow = Object.prototype.hasOwnProperty.call(branchWorkOnHolidays, id)
+                ? (branchWorkOnHolidays[id] ?? false)
+                : (branchWorkOnHolidays[taskBranchMap[id]] ?? false);
+            if (wow) {
+                ne = new Date(oe); ne.setDate(ne.getDate() + delta);
+            } else {
+                let wd = 0; const c = new Date(os);
+                while (c < oe) { if (!isNonWorkingDay(c)) wd++; c.setDate(c.getDate() + 1); }
+                ns = advanceToWorkingDay(ns);
+                ne = addWorkingDays(ns, Math.max(1, wd));
+            }
+            next[id] = { start: ns.toISOString(), end: ne.toISOString() };
             if (persistedIdsRef.current.has(id)) pendingShiftRef.current[id] = next[id];
         }
         setOverrides(next);
         clearTimeout(shiftTimerRef.current);
         shiftTimerRef.current = setTimeout(flushShift, 800);
-    }, [projectStart, overrides, flushShift]);
+    }, [projectStart, overrides, flushShift, branchWorkOnHolidays, taskBranchMap]);
 
     // Hover na barach SVG w timeline → popup per gałąź (depth-0)
     useEffect(() => {
