@@ -178,6 +178,7 @@ export function buildWbsHtmlTable(wbsData, depth, opts = {}) {
         return chain;
     };
 
+    const fmtQty = (n) => Number(n).toLocaleString('pl-PL', { maximumFractionDigits: 2 });
     const tblStyle = 'border-collapse:collapse;width:100%;font-size:11px;margin:0;';
     const thS = 'background:#1e3a5f !important;color:#fff !important;font-weight:bold;padding:7px 16px;text-align:center;border:1px solid #16304d;white-space:nowrap;text-transform:none !important;font-size:11px !important;';
     const tdS = 'padding:5px 14px;border:1px solid #ccc;vertical-align:middle;font-weight:normal;';
@@ -251,8 +252,10 @@ export function buildWbsHtmlTable(wbsData, depth, opts = {}) {
             const g1 = level1.get(d1.id);
             if (!g1.children.has(d2.id)) g1.children.set(d2.id, { name: d2.name || '', children: new Map() });
             const g2 = g1.children.get(d2.id);
-            if (!g2.children.has(d3.id)) g2.children.set(d3.id, { name: d3.name || '', total: 0 });
-            g2.children.get(d3.id).total += price;
+            if (!g2.children.has(d3.id)) g2.children.set(d3.id, { name: d3.name || '', total: 0, leaves: [] });
+            const g3 = g2.children.get(d3.id);
+            g3.total += price;
+            g3.leaves.push(item);
         }
         if (!level1.size) return '';
         const total = [...level1.values()].reduce((s, g1) => s + [...g1.children.values()].reduce((s2, g2) => s2 + [...g2.children.values()].reduce((s3, c) => s3 + c.total, 0), 0), 0);
@@ -267,11 +270,19 @@ export function buildWbsHtmlTable(wbsData, depth, opts = {}) {
                     rows += `<tr>`;
                     rows += `<td style="${tdS}">${esc(g1.name)}</td>`;
                     rows += `<td style="${tdS}">${esc(g2.name)}</td>`;
-                    rows += `<td style="${tdS}">${esc(d3list[i].name)}</td><td style="${tdR}">${fmtPLN(d3list[i].total)}</td></tr>`;
+                    // Ilość × cena jedn. = cena ofertowa — jak w arkuszu WBS3 eksportu Excel.
+                    // Pozycja zbierająca kilka liści (głębsze drzewo) nie ma jednej ilości — puste pola.
+                    const pos = d3list[i];
+                    const leaf = pos.leaves.length === 1 ? pos.leaves[0] : null;
+                    const qty = leaf ? Math.max(0, parseFloat(leaf.quantity) || 0) : 0;
+                    const qtyTd = leaf ? fmtQty(qty) : '';
+                    const unitTd = leaf ? esc(leaf.unit || '') : '';
+                    const unitPriceTd = leaf && qty > 0 ? fmtPLN(pos.total / qty) : '';
+                    rows += `<td style="${tdS}">${esc(pos.name)}</td><td style="${tdR}">${qtyTd}</td><td style="${tdS}text-align:center;">${unitTd}</td><td style="${tdR}">${unitPriceTd}</td><td style="${tdR}">${fmtPLN(pos.total)}</td></tr>`;
                 }
             }
         }
-        return `<div class="wbs-offer-table"><table style="${tblStyle}"><thead><tr><th style="${thS}">Zakresy</th><th style="${thS}">Składowe zakresów</th><th style="${thS}">Pozycje</th><th style="${thS}">Cena ofertowa (PLN)</th></tr></thead><tbody>${rows}<tr><td colspan="3" style="${sumS}text-align:right;"><strong>Razem</strong></td><td style="${sumR}"><strong>${fmtPLN(total)}</strong></td></tr></tbody></table></div>`;
+        return `<div class="wbs-offer-table"><table style="${tblStyle}"><thead><tr><th style="${thS}">Zakresy</th><th style="${thS}">Składowe zakresów</th><th style="${thS}">Pozycje</th><th style="${thS}">Ilość</th><th style="${thS}">J.m.</th><th style="${thS}">Cena jedn. (PLN)</th><th style="${thS}">Cena ofertowa (PLN)</th></tr></thead><tbody>${rows}<tr><td colspan="6" style="${sumS}text-align:right;"><strong>Razem</strong></td><td style="${sumR}"><strong>${fmtPLN(total)}</strong></td></tr></tbody></table></div>`;
     }
 
     return '';

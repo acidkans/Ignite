@@ -1,3 +1,9 @@
+## 2026-10-06 — Eksport tabel oferty: ilość, j.m. i cena jednostkowa w tabeli Pozycje (Excel WBS3 + PDF) (v2026.10.06.1845)
+
+### architektura / API
+- `ui-funkcja` `buildWbsHtmlTable` (depth=3) — tabela PDF „Pozycje” ma kolumny Ilość, J.m., Cena jedn. (PLN) przed Ceną ofertową; pozycja zbierająca kilka liści ma te pola puste
+- arkusz Excel „WBS3 - Szczegóły” — kolumny Ilość, J.m., Cena jedn. netto; Cena netto = formuła Ilość × Cena jedn., brutto/VAT liczone od niej
+
 ## 2026-10-06 — Pozycja ofertowana w częściach: cena z kilku pozycji ofert lub z całej oferty (v2026.10.06.1700)
 
 ### schema.prisma
