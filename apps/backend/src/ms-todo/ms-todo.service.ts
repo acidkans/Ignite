@@ -1,4 +1,4 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, PreconditionFailedException } from '@nestjs/common';
 import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import { OneDriveService } from '../onedrive/onedrive.service';
@@ -213,7 +213,8 @@ export class MsTodoService {
     const status = err?.response?.status;
     if (status === 401 || status === 403) {
       await this.prisma.userMsToken.updateMany({ where: { userId }, data: { needsReauth: true } });
-      throw new UnauthorizedException(
+      // 412, NIE 401 — 401 frontend traktuje jako wygasłą sesję i wylogowuje
+      throw new PreconditionFailedException(
         'Brak uprawnień do MS To Do — wymagane ponowne połączenie konta Microsoft (Tasks.ReadWrite)'
       );
     }

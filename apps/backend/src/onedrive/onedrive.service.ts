@@ -1,4 +1,4 @@
-import { Injectable, Logger, UnauthorizedException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, PreconditionFailedException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
@@ -115,20 +115,22 @@ export class OneDriveService {
   //
   // UWAGA: `getValidToken(userId)` zostaje osobno dla MS To Do — tam synchronizują się PRYWATNE
   // zadania użytkownika i wspólne konto byłoby błędem.
+  // 412, NIE 401: brak konta Microsoft to brak zależności, a nie wygasła sesja — frontend na
+  // każde 401 wylogowuje użytkownika (globalny wrapper fetch w App.jsx).
   async getSharedToken(): Promise<string> {
     const email = this.config.get<string>('MS_SHARED_ACCOUNT_EMAIL') || '';
     const record = (email
       ? await this.prisma.userMsToken.findFirst({ where: { user: { email } } })
       : null)
       || await this.prisma.userMsToken.findFirst({ orderBy: { createdAt: 'asc' } });
-    if (!record) throw new UnauthorizedException('Konto Microsoft aplikacji nie jest podpięte — połącz OneDrive na koncie usługowym');
+    if (!record) throw new PreconditionFailedException('Konto Microsoft aplikacji nie jest podpięte — połącz OneDrive na koncie usługowym');
     return this.tokenFromRecord(record);
   }
 
   // @anchor onedrive-get-valid-token
   async getValidToken(userId: string): Promise<string> {
     const record = await this.prisma.userMsToken.findUnique({ where: { userId } });
-    if (!record) throw new UnauthorizedException('Brak połączonego konta Microsoft');
+    if (!record) throw new PreconditionFailedException('Brak połączonego konta Microsoft');
     return this.tokenFromRecord(record);
   }
 
