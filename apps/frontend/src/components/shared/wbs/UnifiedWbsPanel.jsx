@@ -4533,12 +4533,12 @@ ${ganttSectionHtml}
         // ── Sheet WBS3 ──
         {
             const sheet = workbook.addWorksheet('WBS3 - Szczegóły');
-            sheet.columns = [{ width: 28 }, { width: 28 }, { width: 28 }, { width: 18 }, { width: 24 }, { width: 10 }, { width: 24 }, { width: 24 }];
-            const hdr = sheet.addRow(['Zakresy', 'Składowe zakresów', 'Pozycje', 'Typ', 'Cena netto (PLN)', 'VAT', 'Wartość brutto (PLN)', 'Kwota podatku VAT (PLN)']);
+            sheet.columns = [{ width: 28 }, { width: 28 }, { width: 28 }, { width: 18 }, { width: 12 }, { width: 8 }, { width: 20 }, { width: 24 }, { width: 10 }, { width: 24 }, { width: 24 }];
+            const hdr = sheet.addRow(['Zakresy', 'Składowe zakresów', 'Pozycje', 'Typ', 'Ilość', 'J.m.', 'Cena jedn. netto (PLN)', 'Cena netto (PLN)', 'VAT', 'Wartość brutto (PLN)', 'Kwota podatku VAT (PLN)']);
             hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
             hdr.fill = navyFill;
-            hdr.alignment = { horizontal: 'center', vertical: 'middle' };
-            applyBorder(hdr, 8, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
+            hdr.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            applyBorder(hdr, 11, { top: thinBorder('FF16304D'), bottom: thinBorder('FF16304D'), left: thinBorder('FF16304D'), right: thinBorder('FF16304D') });
 
             const level1 = new Map();
             for (const item of budgetScopeData) {
@@ -4556,7 +4556,7 @@ ${ganttSectionHtml}
                 const g1 = level1.get(d1.id);
                 if (!g1.children.has(d2.id)) g1.children.set(d2.id, { id: d2.id, name: d2.name || '', children: new Map() });
                 const g2 = g1.children.get(d2.id);
-                if (!g2.children.has(d3.id)) g2.children.set(d3.id, { id: d3.id, name: d3.name || '', type: d3.type || '', total: 0 });
+                if (!g2.children.has(d3.id)) g2.children.set(d3.id, { id: d3.id, name: d3.name || '', type: d3.type || '', quantity: Math.max(0, parseFloat(d3.quantity) || 0), unit: d3.unit || '', total: 0 });
                 g2.children.get(d3.id).total += price;
             }
             const total = [...level1.values()].reduce((s, g1) => s + [...g1.children.values()].reduce((s2, g2) => s2 + [...g2.children.values()].reduce((s3, c) => s3 + c.total, 0), 0), 0);
@@ -4565,40 +4565,48 @@ ${ganttSectionHtml}
                 for (const g2 of [...g1.children.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
                     let firstD2 = true;
                     for (const d3 of [...g2.children.values()].sort((a, b) => wbsOrd(a.id) - wbsOrd(b.id))) {
-                        // Brutto/VAT jako formuły (=E*(1+F) / =E*F) — nie statyczne liczby,
-                        // żeby zmiana netto lub stawki VAT w pliku przeliczyła kolumny automatycznie.
+                        // Netto = Ilość × Cena jedn. (=E*G), brutto/VAT (=H*(1+I) / =H*I) — formuły,
+                        // żeby było widać skąd bierze się suma i żeby zmiana w pliku przeliczała kolumny.
+                        // Cena jedn. = cena ofertowa pozycji / ilość (koszt jedn. z narzutem i rabatem).
                         const rowNum = sheet.rowCount + 1;
+                        const unitPrice = d3.quantity > 0 ? d3.total / d3.quantity : 0;
                         const r = sheet.addRow([
                             g1.name, g2.name, d3.name, TYPE_LABELS[d3.type] || d3.type || '',
-                            d3.total,
+                            d3.quantity,
+                            d3.unit,
+                            unitPrice,
+                            { formula: `=E${rowNum}*G${rowNum}`, result: d3.total },
                             0.23,
-                            { formula: `=E${rowNum}*(1+F${rowNum})`, result: d3.total * 1.23 },
-                            { formula: `=E${rowNum}*F${rowNum}`, result: d3.total * 0.23 },
+                            { formula: `=H${rowNum}*(1+I${rowNum})`, result: d3.total * 1.23 },
+                            { formula: `=H${rowNum}*I${rowNum}`, result: d3.total * 0.23 },
                         ]);
-                        r.getCell(5).numFmt = numFmt; r.getCell(5).alignment = { horizontal: 'right' };
-                        r.getCell(6).numFmt = '0%';   r.getCell(6).alignment = { horizontal: 'center' };
+                        r.getCell(5).numFmt = '#,##0.##'; r.getCell(5).alignment = { horizontal: 'right' };
+                        r.getCell(6).alignment = { horizontal: 'center' };
                         r.getCell(7).numFmt = numFmt; r.getCell(7).alignment = { horizontal: 'right' };
                         r.getCell(8).numFmt = numFmt; r.getCell(8).alignment = { horizontal: 'right' };
-                        applyBorder(r, 8, cellBorder);
+                        r.getCell(9).numFmt = '0%';   r.getCell(9).alignment = { horizontal: 'center' };
+                        r.getCell(10).numFmt = numFmt; r.getCell(10).alignment = { horizontal: 'right' };
+                        r.getCell(11).numFmt = numFmt; r.getCell(11).alignment = { horizontal: 'right' };
+                        applyBorder(r, 11, cellBorder);
                         if (firstD1 && firstD2) firstD1 = false;
                         firstD2 = false;
                     }
                 }
             }
             const lastDataRow = sheet.rowCount;
-            const sumRow = sheet.addRow(['Razem', '', '', '', total, 0.23, total * 1.23, total * 0.23]);
+            const sumRow = sheet.addRow(['Razem', '', '', '', '', '', '', total, 0.23, total * 1.23, total * 0.23]);
             sumRow.font = { bold: true };
             sumRow.fill = sumFill;
-            sumRow.getCell(5).value = lastDataRow >= 2 ? { formula: `SUBTOTAL(9,E2:E${lastDataRow})`, result: total } : total;
-            sumRow.getCell(5).numFmt = numFmt; sumRow.getCell(5).alignment = { horizontal: 'right' };
-            sumRow.getCell(6).value = 0.23; sumRow.getCell(6).numFmt = '0%'; sumRow.getCell(6).alignment = { horizontal: 'center' };
-            sumRow.getCell(7).value = lastDataRow >= 2 ? { formula: `SUBTOTAL(9,G2:G${lastDataRow})`, result: total * 1.23 } : total * 1.23;
-            sumRow.getCell(7).numFmt = numFmt; sumRow.getCell(7).alignment = { horizontal: 'right' };
-            sumRow.getCell(8).value = lastDataRow >= 2 ? { formula: `SUBTOTAL(9,H2:H${lastDataRow})`, result: total * 0.23 } : total * 0.23;
+            sumRow.getCell(8).value = lastDataRow >= 2 ? { formula: `SUBTOTAL(9,H2:H${lastDataRow})`, result: total } : total;
             sumRow.getCell(8).numFmt = numFmt; sumRow.getCell(8).alignment = { horizontal: 'right' };
-            applyBorder(sumRow, 8, sumBorder);
+            sumRow.getCell(9).value = 0.23; sumRow.getCell(9).numFmt = '0%'; sumRow.getCell(9).alignment = { horizontal: 'center' };
+            sumRow.getCell(10).value = lastDataRow >= 2 ? { formula: `SUBTOTAL(9,J2:J${lastDataRow})`, result: total * 1.23 } : total * 1.23;
+            sumRow.getCell(10).numFmt = numFmt; sumRow.getCell(10).alignment = { horizontal: 'right' };
+            sumRow.getCell(11).value = lastDataRow >= 2 ? { formula: `SUBTOTAL(9,K2:K${lastDataRow})`, result: total * 0.23 } : total * 0.23;
+            sumRow.getCell(11).numFmt = numFmt; sumRow.getCell(11).alignment = { horizontal: 'right' };
+            applyBorder(sumRow, 11, sumBorder);
             sheet.views = [{ state: 'frozen', ySplit: 1 }];
-            if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 8 } };
+            if (lastDataRow > 1) sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastDataRow, column: 11 } };
         }
 
         // ── Sheet Zakresy grupujące: suma cen ofertowych poddrzewa każdego zakresu type='group' ──
