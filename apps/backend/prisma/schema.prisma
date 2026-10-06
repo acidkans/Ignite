@@ -939,8 +939,43 @@ model MaterialRequirement {
   proposals       ProductProposal[]
   /// @anchor mat-req-quick-quote-items
   quickQuoteItems QuickQuoteItem[]
+  /// @anchor mat-req-offer-parts
+  offerParts      MaterialRequirementOfferPart[]
 
   @@map("material_requirements")
+}
+
+/// @anchor mat-req-offer-part
+/// Część pozycji ofertowanej w kawałkach: jedna pozycja w aplikacji (wymaganie) złożona z kilku
+/// pozycji jednej lub wielu ofert dostawców, albo pokryta całą ofertą (`positionIdx` = NULL).
+/// Źródło prawdy dla składania ceny; `MaterialRequirement.budgetedPriceNetto` = Σ(cena części ×
+/// `qty`), a `offerPositionSnapshot` trzyma zagregowaną kopię (z tablicą `parts`) dla starych
+/// czytelników. Pojedyncza pozycja z qty=1 NIE tworzy tu wiersza — idzie starą ścieżką
+/// `offerId`/`offerPositionIdx`. `offerId` świadomie bez FK: usunięcie oferty nie kasuje wyceny,
+/// bo `snapshot` jest samowystarczalny (tak jak `offerPositionSnapshot`).
+model MaterialRequirementOfferPart {
+  /// @anchor mat-req-offer-part-id
+  id                    String  @id @default(uuid())
+  /// @anchor mat-req-offer-part-material-requirement-id
+  materialRequirementId String
+  /// @anchor mat-req-offer-part-offer-id
+  offerId               String
+  /// @anchor mat-req-offer-part-position-idx
+  positionIdx           Int? // indeks w Offer.positions[]; NULL = cała oferta
+  /// @anchor mat-req-offer-part-qty
+  qty                   Float   @default(1) // ilość części na 1 jednostkę wymagania
+  /// @anchor mat-req-offer-part-snapshot
+  snapshot              String // JSON: {lp, name, manufacturer, model, priceNetto (PLN, za 1 szt. części / suma oferty), unit, supplier, offerNumber, fileName, wholeOffer}
+  /// @anchor mat-req-offer-part-sort-order
+  sortOrder             Int     @default(0)
+  createdAt             DateTime @default(now())
+
+  /// @anchor mat-req-offer-part-material-requirement
+  materialRequirement MaterialRequirement @relation(fields: [materialRequirementId], references: [id], onDelete: Cascade)
+
+  @@index([materialRequirementId])
+  @@index([offerId])
+  @@map("material_requirement_offer_parts")
 }
 
 /// @anchor supplier

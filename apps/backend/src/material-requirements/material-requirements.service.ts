@@ -2092,6 +2092,8 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
             materialId = mat.id;
         }
 
+        // Pojedyncza pozycja zastępuje ewentualne składanie z części
+        await this.prisma.materialRequirementOfferPart.deleteMany({ where: { materialRequirementId: id } });
         return this.prisma.materialRequirement.update({
             where: { id },
             data: {
@@ -2135,9 +2137,132 @@ Zasady: null gdy pole nieznane, wyodrębnij każdy produkt osobno, nie wymyślaj
                 changes: { requirementName: reqRow.name, offerId: { old: reqRow.offerId, new: null } },
             });
         }
+        await this.prisma.materialRequirementOfferPart.deleteMany({ where: { materialRequirementId: id } });
         return this.prisma.materialRequirement.update({
             where: { id },
             data: { offerId: null, offerPositionIdx: null, offerPositionSnapshot: null },
+        });
+    }
+
+    // @anchor build-offer-part-snapshot
+    /** Snapshot jednej części: pozycja oferty (cena PLN za szt.) albo cała oferta (suma cena x ilość). */
+    private buildOfferPartSnapshot(offer: any, positions: any[], positionIdx: number | null): any {
+        const supplier = offer.supplier
+            ? { id: offer.supplier.id, name: offer.supplier.name, nip: offer.supplier.nip }
+            : null;
+        const base = { offerId: offer.id, fileName: offer.fileName, supplier, offerNumber: offer.offerNumber ?? null };
+        if (positionIdx == null) {
+            const priced = positions.filter(p => (p?.priceNettoPln ?? p?.priceNetto) != null);
+            const total = priced.reduce((acc, p) => acc + Number(p.priceNettoPln ?? p.priceNetto) * (Number(p.quantity) || 1), 0);
+            return {
+                ...base, wholeOffer: true, positionIdx: null, lp: null,
+                name: `Cała oferta${offer.offerNumber ? ` ${offer.offerNumber}` : ''} (${priced.length} poz.)`,
+                manufacturer: null, model: null, unit: 'kpl',
+                priceNetto: Math.round(total * 100) / 100,
+            };
+        }
+        const pos = positions[positionIdx];
+        if (!pos) throw new BadRequestException(`Indeks pozycji ${positionIdx} poza zakresem oferty ${offer.fileName}`);
+        const pricePln = pos.priceNettoPln ?? pos.priceNetto ?? null;
+        if (pricePln == null) throw new BadRequestException(`Pozycja ${pos.lp ?? positionIdx + 1} oferty ${offer.fileName} nie ma ceny`);
+        return {
+            ...base, wholeOffer: false, positionIdx,
+            lp: pos.lp ?? positionIdx + 1,
+            name: pos.name || pos.description || '',
+            manufacturer: normalizeManufacturer(pos.manufacturer ?? null),
+            model: pos.model ?? null,
+            unit: pos.unit || '',
+            priceNetto: Number(pricePln),
+        };
+    }
+
+    // @anchor set-offer-parts
+    /**
+     * Składa cenę wymagania z kilku pozycji ofert lub z całej oferty (pozycja ofertowana w częściach).
+     * Zastępuje cały zestaw części. Pusta lista = usunięcie przypisania; jedna pozycja z qty=1 = stara
+     * ścieżka `assignOfferPosition`. Cena jedn. = suma(cena części x qty); qty to ilość części na 1 jedn.
+     */
+    async setOfferParts(
+        id: string,
+        parts: { offerId: string; positionIdx?: number | null; qty?: number }[],
+        user?: OfferLockUser,
+    ): Promise<any> {
+        const list = Array.isArray(parts) ? parts : [];
+        if (!list.length) return this.removeOfferPosition(id, user);
+        const single = list[0];
+        if (list.length === 1 && single.positionIdx != null && (single.qty == null || Number(single.qty) === 1)) {
+            return this.assignOfferPosition(id, single.offerId, single.positionIdx, user);
+        }
+
+        const reqRow = await this.prisma.materialRequirement.findUnique({
+            where: { id }, select: { nodeId: true, name: true, unit: true },
+        });
+        if (!reqRow) throw new NotFoundException('Wymaganie nie znalezione');
+        await assertOfferEditable(this.prisma, {
+            processNodeId: reqRow.nodeId,
+            user,
+            entity: 'MaterialRequirement',
+            entityId: id,
+            changes: { requirementName: reqRow.name, offerParts: list },
+        });
+
+        const offerIds = [...new Set(list.map(p => p.offerId).filter(Boolean))];
+        const offers = await this.prisma.offer.findMany({ where: { id: { in: offerIds } }, include: { supplier: true } });
+        const offerMap = new Map(offers.map(o => [o.id, o]));
+
+        const built = list.map((p, i) => {
+            const offer = offerMap.get(p.offerId);
+            if (!offer) throw new NotFoundException('Oferta nie znaleziona');
+            let positions: any[];
+            try { positions = JSON.parse(offer.positions); } catch { positions = []; }
+            const qty = Number(p.qty ?? 1);
+            if (!Number.isFinite(qty) || qty <= 0) throw new BadRequestException('Ilość części musi być większa od zera');
+            const snap = this.buildOfferPartSnapshot(offer, positions, p.positionIdx ?? null);
+            return { offerId: offer.id, positionIdx: p.positionIdx ?? null, qty, snap, sortOrder: i };
+        });
+
+        const sum = Math.round(built.reduce((acc, b) => acc + b.snap.priceNetto * b.qty, 0) * 100) / 100;
+        const same = (key: (b: any) => any) => {
+            const vals = [...new Set(built.map(key))];
+            return vals.length === 1 ? vals[0] : null;
+        };
+        const supplierId = same(b => b.snap.supplier?.id ?? null);
+        // Zagregowany snapshot czytany przez stare widoki (lp/name/priceNetto) — tablica `parts`
+        // niesie szczegóły dla edycji w karcie produktu.
+        const aggregate = {
+            composite: true,
+            lp: built.map(b => (b.snap.wholeOffer ? 'całość' : b.snap.lp)).join('+'),
+            name: `Złożona z ${built.length} części: ${built.map(b => b.snap.name).join('; ')}`,
+            manufacturer: null,
+            model: null,
+            priceNetto: sum,
+            unit: reqRow.unit || '',
+            supplier: supplierId ? built[0].snap.supplier : null,
+            offerNumber: same(b => b.snap.offerNumber ?? null),
+            parts: built.map(b => ({ ...b.snap, qty: b.qty })),
+        };
+
+        return this.prisma.$transaction(async (tx) => {
+            await tx.materialRequirementOfferPart.deleteMany({ where: { materialRequirementId: id } });
+            await tx.materialRequirementOfferPart.createMany({
+                data: built.map(b => ({
+                    materialRequirementId: id,
+                    offerId: b.offerId,
+                    positionIdx: b.positionIdx,
+                    qty: b.qty,
+                    snapshot: JSON.stringify(b.snap),
+                    sortOrder: b.sortOrder,
+                })),
+            });
+            return tx.materialRequirement.update({
+                where: { id },
+                data: {
+                    offerId: built[0].offerId,
+                    offerPositionIdx: null,
+                    budgetedPriceNetto: sum,
+                    offerPositionSnapshot: JSON.stringify(aggregate),
+                },
+            });
         });
     }
 

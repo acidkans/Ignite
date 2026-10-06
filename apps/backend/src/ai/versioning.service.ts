@@ -374,6 +374,24 @@ export class VersioningService {
             }
         }
 
+        // 9b'. Clone części ofertowe (pozycja ofertowana w częściach) — bez nich klon zachowuje
+        // zagregowaną cenę, ale edycja składu w nowej wersji startuje od zera.
+        const offerParts = await tx.materialRequirementOfferPart.findMany({
+            where: { materialRequirementId: { in: Array.from(matReqIdMap.keys()) } },
+        });
+        if (offerParts.length) {
+            await tx.materialRequirementOfferPart.createMany({
+                data: offerParts.map(op => ({
+                    materialRequirementId: matReqIdMap.get(op.materialRequirementId)!,
+                    offerId: op.offerId,
+                    positionIdx: op.positionIdx,
+                    qty: op.qty,
+                    snapshot: op.snapshot,
+                    sortOrder: op.sortOrder,
+                })),
+            });
+        }
+
         // 9c. Clone ProductProposals (remapowane na nowe ID wymagań)
         const proposals = await tx.productProposal.findMany({
             where: { materialRequirementId: { in: Array.from(matReqIdMap.keys()) } },

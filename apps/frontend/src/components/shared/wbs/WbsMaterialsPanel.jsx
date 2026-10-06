@@ -5,7 +5,7 @@ import {
     ChevronRight, ChevronDown, CheckCircle, Trash2, AlertCircle,
     Plus, Search, Sparkles,
     FileText, Link as LinkIcon, Download, BookOpen, X, Database, Paperclip,
-    Lock, Maximize2,
+    Lock, Maximize2, Pencil,
 } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { useDevice } from '../../../hooks/useDevice';
@@ -561,50 +561,135 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
     );
 }
 
-// ─── OfferPickerDropdown ──────────────────────────────────────────────────────
+// ─── OfferPartsModal ──────────────────────────────────────────────────────────
 
-function OfferPickerDropdown({ offers, onSelect, onClose }) {
-    const ref = useRef(null);
-    useEffect(() => {
-        const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
-    }, [onClose]);
+// Cena jedn. pozycji w PLN — waluta obca idzie przez przeliczony `priceNettoPln`
+const offerPosPricePln = (pos) => (pos?.priceNettoPln ?? pos?.priceNetto ?? null);
+// Wartość całej oferty: suma(cena x ilość) po pozycjach z ceną
+const offerWholeTotal = (offer) => (offer.positions || [])
+    .filter(p => offerPosPricePln(p) != null)
+    .reduce((acc, p) => acc + Number(offerPosPricePln(p)) * (Number(p.quantity) || 1), 0);
+const partKey = (offerId, positionIdx) => `${offerId}:${positionIdx == null ? 'all' : positionIdx}`;
+const parseQty = (v) => { const n = parseFloat(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
 
-    const allPositions = offers.flatMap(offer =>
-        (offer.positions || []).map((pos, idx) => ({ offer, pos, idx }))
-    ).filter(({ pos }) => pos.priceNetto != null);
+// @anchor offer-parts-modal — przypisanie ceny z oferty, gdy jedna pozycja jest ofertowana w częściach:
+// zaznacza się kilka pozycji (z jednej lub wielu ofert) albo całą ofertę, z ilością części na 1 jedn.
+// pozycji. Cena jedn. = suma(cena części x ilość). Jedna pozycja z ilością 1 = klasyczne przypisanie.
+function OfferPartsModal({ offers, initialParts, reqQty, onSave, onClose }) {
+    const [sel, setSel] = useState(() => {
+        const m = {};
+        (initialParts || []).forEach(p => { m[partKey(p.offerId, p.positionIdx)] = String(p.qty ?? 1); });
+        return m;
+    });
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState(null);
 
-    if (!allPositions.length) return (
-        <div ref={ref} className="absolute z-50 top-full left-0 mt-1 w-72 bg-gray-900 border border-amber-500/30 rounded-xl shadow-xl p-3 text-xs text-gray-500">
-            Brak pozycji z cenami w ofertach tego węzła.
-        </div>
+    const wholeDefaultQty = reqQty > 1 ? String(Math.round((1 / reqQty) * 10000) / 10000) : '1';
+    const toggle = (key, defQty = '1') => setSel(prev => {
+        const next = { ...prev };
+        if (key in next) delete next[key]; else next[key] = defQty;
+        return next;
+    });
+    const setQty = (key, v) => setSel(prev => ({ ...prev, [key]: sanitizeQtyInput(v) }));
+
+    const rows = useMemo(() => offers.flatMap(offer => {
+        const out = [];
+        const allKey = partKey(offer.id, null);
+        if (allKey in sel) out.push({ offerId: offer.id, positionIdx: null, qty: parseQty(sel[allKey]), price: offerWholeTotal(offer) });
+        (offer.positions || []).forEach((pos, idx) => {
+            const k = partKey(offer.id, idx);
+            if (k in sel) out.push({ offerId: offer.id, positionIdx: idx, qty: parseQty(sel[k]), price: Number(offerPosPricePln(pos)) });
+        });
+        return out;
+    }), [offers, sel]);
+    const invalid = rows.some(r => r.qty == null || r.qty <= 0);
+    const sum = rows.reduce((acc, r) => acc + (r.qty > 0 ? r.price * r.qty : 0), 0);
+
+    const save = async () => {
+        if (invalid || saving) return;
+        setSaving(true); setError(null);
+        try {
+            await onSave(rows.map(r => ({ offerId: r.offerId, positionIdx: r.positionIdx, qty: r.qty })));
+        } catch (e) {
+            setError(e?.message || 'Nie udało się zapisać');
+            setSaving(false);
+        }
+    };
+
+    const qtyInput = (key) => (
+        <input type="text" inputMode="decimal" value={sel[key] ?? ''} disabled={!(key in sel)}
+            onChange={e => setQty(key, e.target.value)}
+            title="Ilość tej części na 1 jedn. pozycji"
+            className="w-14 bg-black/30 border border-white/10 rounded px-1.5 py-0.5 text-[11px] text-white text-right font-mono outline-none focus:border-amber-500/50 disabled:opacity-30" />
     );
 
-    return (
-        <div ref={ref} className="absolute z-50 top-full left-0 mt-1 w-80 bg-gray-900 border border-amber-500/30 rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto">
-            {offers.map(offer => {
-                const positions = (offer.positions || []).filter(p => p.priceNetto != null);
-                if (!positions.length) return null;
-                return (
-                    <div key={offer.id}>
-                        <div className="px-3 py-1.5 text-[9px] font-semibold text-amber-400/70 bg-white/5 truncate uppercase tracking-widest">{offer.fileName}</div>
-                        {positions.map((pos, idx) => (
-                            <button key={idx} onClick={() => onSelect(offer.id, (offer.positions || []).indexOf(pos))}
-                                className="w-full text-left px-3 py-1.5 text-xs hover:bg-amber-500/10 transition-colors flex items-center gap-2 border-b border-white/5 last:border-0">
-                                <span className="text-gray-500 shrink-0 w-6 text-right">{pos.lp ?? idx + 1}.</span>
-                                <span className="flex-1 truncate text-gray-200">{pos.name || pos.description || '—'}</span>
-                                <span className="text-amber-300 whitespace-nowrap font-mono text-[10px] shrink-0">
-                                    {pos.priceNettoPln != null
-                                        ? `${Number(pos.priceNettoPln).toFixed(2)} zł`
-                                        : `${Number(pos.priceNetto).toFixed(2)} ${pos.currency || 'zł'}`}
-                                </span>
-                            </button>
-                        ))}
+    return createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70" onMouseDown={onClose}>
+            <div className="w-[min(680px,95vw)] max-h-[85vh] flex flex-col bg-gray-900 border border-amber-500/30 rounded-xl shadow-2xl"
+                onMouseDown={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                    <div>
+                        <div className="text-sm font-semibold text-amber-300">Cena z oferty</div>
+                        <div className="text-[10px] text-gray-500">Zaznacz jedną lub kilka pozycji albo całą ofertę. Ilość = ile danej części przypada na 1 jedn. pozycji.</div>
                     </div>
-                );
-            })}
-        </div>
+                    <button onClick={onClose} className="p-1 text-gray-500 hover:text-white"><X size={14} /></button>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                    {offers.map(offer => {
+                        const positions = (offer.positions || []).map((pos, idx) => ({ pos, idx })).filter(({ pos }) => offerPosPricePln(pos) != null);
+                        if (!positions.length) return null;
+                        const allKey = partKey(offer.id, null);
+                        return (
+                            <div key={offer.id} className="border-b border-white/5">
+                                <div className="flex items-center gap-2 px-4 py-1.5 bg-white/5">
+                                    <span className="flex-1 truncate text-[10px] font-semibold text-amber-400/80 uppercase tracking-widest" title={offer.fileName}>
+                                        {offer.supplier?.name ? `${offer.supplier.name} · ` : ''}{offer.offerNumber || offer.fileName}
+                                    </span>
+                                    <label className="flex items-center gap-1.5 text-[11px] text-gray-300 cursor-pointer shrink-0">
+                                        <input type="checkbox" checked={allKey in sel} onChange={() => toggle(allKey, wholeDefaultQty)} className="accent-amber-500" />
+                                        Cała oferta
+                                        <span className="font-mono text-amber-300">{offerWholeTotal(offer).toFixed(2)} zł</span>
+                                    </label>
+                                    {qtyInput(allKey)}
+                                </div>
+                                {positions.map(({ pos, idx }) => {
+                                    const k = partKey(offer.id, idx);
+                                    return (
+                                        <label key={idx} className={`flex items-center gap-2 px-4 py-1 text-xs cursor-pointer hover:bg-amber-500/5 ${k in sel ? 'bg-amber-500/10' : ''}`}>
+                                            <input type="checkbox" checked={k in sel} onChange={() => toggle(k)} className="accent-amber-500" />
+                                            <span className="text-gray-500 shrink-0 w-6 text-right">{pos.lp ?? idx + 1}.</span>
+                                            <span className="flex-1 truncate text-gray-200" title={pos.name || pos.description}>{pos.name || pos.description || '—'}</span>
+                                            <span className="text-gray-500 text-[10px] shrink-0">{pos.quantity ?? 1} {pos.unit || ''}</span>
+                                            <span className="text-amber-300 whitespace-nowrap font-mono text-[10px] shrink-0 w-24 text-right">
+                                                {pos.priceNettoPln != null
+                                                    ? `${Number(pos.priceNettoPln).toFixed(2)} zł`
+                                                    : `${Number(pos.priceNetto).toFixed(2)} ${pos.currency || 'zł'}`}
+                                            </span>
+                                            {qtyInput(k)}
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })}
+                </div>
+                <div className="flex items-center gap-3 px-4 py-3 border-t border-white/10">
+                    <div className="flex-1 text-xs text-gray-400">
+                        {rows.length > 0
+                            ? <>Części: {rows.length} · koszt jedn.: <span className="font-mono text-amber-300">{sum.toFixed(2)} zł</span></>
+                            : 'Nic nie zaznaczono'}
+                        {invalid && <span className="ml-2 text-red-400">ilość musi być &gt; 0</span>}
+                        {error && <span className="ml-2 text-red-400">{error}</span>}
+                    </div>
+                    <button onClick={onClose} className="px-3 py-1.5 text-xs text-gray-400 hover:text-white">Anuluj</button>
+                    <button onClick={save} disabled={!rows.length || invalid || saving}
+                        className="px-3 py-1.5 text-xs rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 hover:bg-amber-500/30 disabled:opacity-40">
+                        {saving ? 'Zapisuję…' : 'Przypisz'}
+                    </button>
+                </div>
+            </div>
+        </div>,
+        document.body
     );
 }
 
@@ -642,14 +727,26 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
     // nie gdy zawiera sam dostawcę — inaczej dodanie dostawcy blokuje ręczną edycję ceny.
     const hasOfferPos = !!offerSnap && (offerSnap.priceNetto != null || offerSnap.lp != null);
 
-    const assignOffer = useCallback(async (offerId, positionIdx) => {
-        setOfferPicker(false);
-        if (offerLocked && !(await guardOfferEdit())) return;
-        const res = await fetch(`${API_URL}/material-requirements/${card.id}/offer`, {
-            method: 'PATCH', headers,
-            body: JSON.stringify({ offerId, positionIdx }),
+    // Części już przypisane — do wstępnego zaznaczenia w oknie (złożenie albo pojedyncza pozycja)
+    const offerInitialParts = useMemo(() => {
+        if (Array.isArray(offerSnap?.parts)) return offerSnap.parts.map(p => ({ offerId: p.offerId, positionIdx: p.positionIdx, qty: p.qty }));
+        if (card?.offerId && card?.offerPositionIdx != null) return [{ offerId: card.offerId, positionIdx: card.offerPositionIdx, qty: 1 }];
+        return [];
+    }, [offerSnap, card?.offerId, card?.offerPositionIdx]);
+
+    // @anchor save-offer-parts
+    const saveOfferParts = useCallback(async (parts) => {
+        if (offerLocked && !(await guardOfferEdit())) { setOfferPicker(false); return; }
+        const res = await fetch(`${API_URL}/material-requirements/${card.id}/offer-parts`, {
+            method: 'PUT', headers,
+            body: JSON.stringify({ parts }),
         });
-        const updated = res.ok ? await res.json() : null;
+        if (!res.ok) {
+            const err = await res.json().catch(() => null);
+            throw new Error(err?.message || `Błąd ${res.status}`);
+        }
+        setOfferPicker(false);
+        const updated = await res.json();
         onRefresh();
         const pricePln = updated?.budgetedPriceNetto ?? null;
         if (pricePln != null && onPropagatePrice) {
@@ -1026,22 +1123,44 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                     </div>
                     <div className="flex-1 min-w-[90px]">
                         <label className="block text-[10px] italic uppercase tracking-widest text-white mb-1">Koszt jedn.</label>
+                        {offerPicker && offers?.length > 0 && (
+                            <OfferPartsModal offers={offers} initialParts={offerInitialParts}
+                                reqQty={Number(card?.quantity) || 1}
+                                onSave={saveOfferParts} onClose={() => setOfferPicker(false)} />
+                        )}
                         {hasOfferPos ? (
                             <div>
                                 <div className="flex items-center gap-1">
                                     <div className="flex-1 bg-black/30 border border-amber-500/30 rounded px-2 py-1.5 text-xs text-amber-300 font-mono truncate">
                                         {offerSnap.priceNetto != null ? `${Number(offerSnap.priceNetto).toFixed(2)} zł` : '—'}
                                     </div>
+                                    {!readOnly && offers?.length > 0 && (
+                                        <button onClick={() => { onRefreshOffers?.(); setOfferPicker(true); }} title="Zmień skład z oferty (pozycje / części / cała oferta)" className="p-1 text-gray-600 hover:text-amber-400 transition-colors shrink-0">
+                                            <Pencil size={11} />
+                                        </button>
+                                    )}
                                     {!readOnly && (
                                         <button onClick={removeOffer} title="Usuń przypisanie oferty" className="p-1 text-gray-600 hover:text-red-400 transition-colors shrink-0">
                                             <Trash2 size={12} />
                                         </button>
                                     )}
                                 </div>
-                                <div className="mt-0.5 flex items-center gap-1 text-[9px] text-amber-400/60 truncate" title={offerSnap.wbsPath || offerSnap.name}>
-                                    <Paperclip size={8} className="shrink-0" />
-                                    <span className="truncate">Poz.{offerSnap.lp} · {offerSnap.name}</span>
-                                </div>
+                                {Array.isArray(offerSnap.parts) ? (
+                                    <div className="mt-0.5 space-y-0.5">
+                                        {offerSnap.parts.map((pt, i) => (
+                                            <div key={i} className="flex items-center gap-1 text-[9px] text-amber-400/60" title={`${pt.offerNumber || pt.fileName || ''} · ${pt.name}`}>
+                                                <Paperclip size={8} className="shrink-0" />
+                                                <span className="truncate flex-1">{pt.wholeOffer ? pt.name : `Poz.${pt.lp} · ${pt.name}`}</span>
+                                                <span className="font-mono shrink-0">{pt.qty !== 1 ? `${pt.qty}× ` : ''}{Number(pt.priceNetto).toFixed(2)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="mt-0.5 flex items-center gap-1 text-[9px] text-amber-400/60 truncate" title={offerSnap.wbsPath || offerSnap.name}>
+                                        <Paperclip size={8} className="shrink-0" />
+                                        <span className="truncate">Poz.{offerSnap.lp} · {offerSnap.name}</span>
+                                    </div>
+                                )}
                                 {offerSnap.rateComment && (
                                     <div className="mt-0.5 text-[9px] text-amber-400/50 font-mono truncate" title={offerSnap.rateComment}>
                                         {offerSnap.rateComment}
@@ -1089,9 +1208,6 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                                         className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-gray-600 hover:text-amber-400 transition-colors">
                                         <Paperclip size={10} />
                                     </button>
-                                )}
-                                {offerPicker && offers?.length > 0 && (
-                                    <OfferPickerDropdown offers={offers} onSelect={assignOffer} onClose={() => setOfferPicker(false)} />
                                 )}
                                 {priceWarn && (
                                     <span className="absolute right-0 top-full mt-0.5 z-20 whitespace-nowrap text-[10px] text-red-300 bg-red-900/90 border border-red-500/40 px-1.5 py-0.5 rounded shadow-lg">tylko cyfry</span>

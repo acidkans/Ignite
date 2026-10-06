@@ -425,6 +425,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-sekcja | MaterialRequirementsPanel | apps/frontend/src/components/shared/wbs/MaterialRequirementsPanel.jsx | @anchor material-requirements-panel |
 | ui-sekcja | GanttSection | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor gantt-section |
 | ui-stala | COL_BRANCH | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor gantt-col-branch |
+| ui-funkcja | shiftProjectStart | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor shift-project-start |
 | ui-funkcja | nodeDurationMonths | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor node-duration-months |
 | ui-funkcja | addCalendarMonths | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor add-calendar-months |
 | ui-funkcja | isValidGanttDate | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor is-valid-gantt-date |
@@ -522,6 +523,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-widok | CalendarView | apps/frontend/src/components/shared/wbs/CalendarView.jsx | @anchor calendar-view |
 | ui-karta | ProductCard | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card |
 | ui-propsy | ProductCard.offerLocked | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card-offer-lock |
+| ui-modal | OfferPartsModal (cena z kilku pozycji / całej oferty) | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor offer-parts-modal |
+| ui-funkcja | saveOfferParts | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor save-offer-parts |
 | ui-input | pole „Kod EAN" w karcie produktu | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor product-card-ean |
 | schema-pole | MaterialRequirement.ean (kod EAN pozycji) | apps/backend/prisma/schema.prisma | @anchor mat-req-ean |
 | schema-pole | Material.ean (kod EAN produktu katalogowego) | apps/backend/prisma/schema.prisma | @anchor material-ean |
@@ -913,6 +916,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-endpoint | DELETE /material-requirements/:id | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-delete-one |
 | back-endpoint | PATCH /material-requirements/:id/offer | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-patch-offer |
 | back-endpoint | DELETE /material-requirements/:id/offer | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-delete-offer |
+| back-endpoint | PUT /material-requirements/:id/offer-parts | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-put-offer-parts |
+| back-funkcja | setOfferParts | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor set-offer-parts |
+| back-funkcja | buildOfferPartSnapshot | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor build-offer-part-snapshot |
 | back-endpoint | POST /offers/:id/auto-assign | apps/backend/src/offers/offers.controller.ts | @anchor offers-post-auto-assign |
 | back-endpoint | PATCH /offers/:id/positions | apps/backend/src/offers/offers.controller.ts | @anchor offers-patch-positions |
 | back-endpoint | POST /material-requirements/extract/:nodeId | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-post-extract |
@@ -1397,6 +1403,16 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | MaterialRequirement.sourceRequirementId | apps/backend/prisma/schema.prisma | @anchor mat-req-source-requirement-id |
 | schema-pole | MaterialRequirement.budgetSource | apps/backend/prisma/schema.prisma | @anchor mat-req-budget-source |
 | schema-relacja | MaterialRequirement.quickQuoteItems | apps/backend/prisma/schema.prisma | @anchor mat-req-quick-quote-items |
+| schema-relacja | MaterialRequirement.offerParts | apps/backend/prisma/schema.prisma | @anchor mat-req-offer-parts |
+| schema-model | MaterialRequirementOfferPart (pozycja ofertowana w częściach) | apps/backend/prisma/schema.prisma | @anchor mat-req-offer-part |
+| schema-pole | MaterialRequirementOfferPart.id | apps/backend/prisma/schema.prisma | @anchor mat-req-offer-part-id |
+| schema-pole | MaterialRequirementOfferPart.materialRequirementId | apps/backend/prisma/schema.prisma | @anchor mat-req-offer-part-material-requirement-id |
+| schema-pole | MaterialRequirementOfferPart.offerId | apps/backend/prisma/schema.prisma | @anchor mat-req-offer-part-offer-id |
+| schema-pole | MaterialRequirementOfferPart.positionIdx (NULL = cała oferta) | apps/backend/prisma/schema.prisma | @anchor mat-req-offer-part-position-idx |
+| schema-pole | MaterialRequirementOfferPart.qty | apps/backend/prisma/schema.prisma | @anchor mat-req-offer-part-qty |
+| schema-json | MaterialRequirementOfferPart.snapshot | apps/backend/prisma/schema.prisma | @anchor mat-req-offer-part-snapshot |
+| schema-pole | MaterialRequirementOfferPart.sortOrder | apps/backend/prisma/schema.prisma | @anchor mat-req-offer-part-sort-order |
+| schema-relacja | MaterialRequirementOfferPart.materialRequirement | apps/backend/prisma/schema.prisma | @anchor mat-req-offer-part-material-requirement |
 
 ### Moduł Suppliers — rejestr dostawców + NIP (Faza 1)
 

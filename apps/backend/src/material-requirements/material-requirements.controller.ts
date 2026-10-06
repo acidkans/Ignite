@@ -1,5 +1,5 @@
 import {
-    Controller, Get, Post, Patch, Delete,
+    Controller, Get, Post, Patch, Put, Delete,
     Param, Body, Query, UseGuards, Req, Res,
     UseInterceptors, UploadedFile,
     BadRequestException,
@@ -205,6 +205,14 @@ export class MaterialRequirementsController {
     assignOffer(@Param('id') id: string, @Body() body: { offerId: string; positionIdx: number }, @Req() req: any) {
         if (!body.offerId || body.positionIdx == null) throw new BadRequestException('offerId i positionIdx wymagane');
         return this.service.assignOfferPosition(id, body.offerId, body.positionIdx, req.user);
+    }
+
+    // @anchor mat-req-put-offer-parts
+    /** Składa cenę z kilku pozycji ofert lub z całej oferty (positionIdx = null) — zastępuje cały zestaw */
+    @Put(':id/offer-parts')
+    setOfferParts(@Param('id') id: string, @Body() body: { parts: { offerId: string; positionIdx?: number | null; qty?: number }[] }, @Req() req: any) {
+        if (!Array.isArray(body?.parts)) throw new BadRequestException('parts wymagane');
+        return this.service.setOfferParts(id, body.parts, req.user);
     }
 
     // @anchor mat-req-delete-offer

@@ -1,3 +1,23 @@
+## 2026-10-06 — Pozycja ofertowana w częściach: cena z kilku pozycji ofert lub z całej oferty (v2026.10.06.1700)
+
+### schema.prisma
+- dodano model `MaterialRequirementOfferPart` (`material_requirement_offer_parts`) — części składające cenę jednego wymagania: `offerId`, `positionIdx` (NULL = cała oferta), `qty` (ilość części na 1 jedn. wymagania), `snapshot` (JSON), `sortOrder`; kaskada po `materialRequirementId`, `offerId` bez FK
+- dodano relację `offerParts` w modelu `MaterialRequirement`
+- migracja `20261006120000_mat_req_offer_parts`
+
+### architektura / API
+- dodano `back-endpoint` `PUT /material-requirements/:id/offer-parts` body `{ parts: [{ offerId, positionIdx|null, qty }] }` — zastępuje cały skład; pusta lista = usunięcie przypisania; jedna pozycja z qty=1 idzie starą ścieżką `assignOfferPosition`
+- `budgetedPriceNetto` = Σ(cena części × qty); cała oferta = Σ(cena × ilość pozycji); `offerPositionSnapshot` dostaje zagregowany snapshot (`composite`, `lp` „1+2+całość”, `parts[]`) — stare widoki czytają go bez zmian
+- `PATCH /:id/offer` i `DELETE /:id/offer` czyszczą części; `cloneVersionData` klonuje części na nowe ID wymagań
+- `ui-modal` `OfferPartsModal` zastąpił listę rozwijaną `OfferPickerDropdown` w karcie produktu: wielokrotny wybór pozycji z wielu ofert + „Cała oferta”, ilość na część, suma na żywo; ołówek przy cenie otwiera edycję składu
+
+### słownik
+- dodano `mat-req-offer-parts`, `mat-req-offer-part` (+ 8 anchorów pól), `mat-req-put-offer-parts`, `set-offer-parts`, `build-offer-part-snapshot`, `offer-parts-modal`, `save-offer-parts`
+
+### wytyczne
+- `schema-model` `MaterialRequirementOfferPart` — źródło prawdy składu ceny; `MaterialRequirement.offerPositionSnapshot` to tylko kopia dla czytelników, nie edytuj go z pominięciem `setOfferParts`
+- `schema-pole` `MaterialRequirementOfferPart.qty` — ilość części na 1 jedn. wymagania; dla całej oferty przy ilości wymagania N domyślnie 1/N (oferta pokrywa całą ilość)
+
 ## 2026-10-05 — Opis zakresu prac: okno w sekcji Oferta (układ, metryczka, treść, zakres ilościowy, PDF) (v2026.10.05.2310)
 
 ### architektura / API
