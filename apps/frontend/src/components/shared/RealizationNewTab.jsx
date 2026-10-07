@@ -41,7 +41,7 @@ import {
 } from './wbs/wbsConstants';
 import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath, leafNodesOf, buildCardMap,
-    wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf, planUnitOf, planValueOf, fmtQty, fmtZl, fmtDate,
+    wbsRootOf, shortCompanyName, purchaseUnitOf, REAL_STATE, realizationOf, planUnitOf, planValueOf, fmtQty, fmtZl, fmtDate,
     markOutOfBaseline, POZA_BASELINE_META,
 } from './wbs/realizationShared';
 import {
@@ -152,7 +152,7 @@ export function filterValuesOf(node, entries) {
         status: offerStatusMetaOf(node)?.label || '',
         purchaseStatus: axisDisplay(node, 'purchase')?.label || '',
         execStatus: axisDisplay(node, 'exec')?.label || '',
-        supplier: [...new Set(entries.map(e => e.supplier?.name).filter(Boolean))],
+        supplier: [...new Set(entries.map(e => shortCompanyName(e.supplier?.name)).filter(Boolean))],
     };
 }
 
@@ -1429,8 +1429,9 @@ function Cell({ colKey, node, card, r, planValue, deltaQty, readOnly, onSaveAxis
         case 'owner':
             return <OwnerCell node={node} readOnly={readOnly} options={ownerOptions} onSave={onSaveOwner} />;
         case 'supplier': {
-            const names = [...new Set(r.entries.map(e => e.supplier?.name).filter(Boolean))];
-            return <span className="text-[length:var(--rn-md)] text-gray-400">{names.length ? names.join(', ') : '—'}</span>;
+            const full = [...new Set(r.entries.map(e => e.supplier?.name).filter(Boolean))];
+            const names = [...new Set(full.map(shortCompanyName))];
+            return <span className="text-[length:var(--rn-md)] text-gray-400" title={full.join(', ') || undefined}>{names.length ? names.join(', ') : '—'}</span>;
         }
         case 'qty':
             return <>{fmtQty(node.quantity)} <span className="text-[length:var(--rn-md)] text-gray-500">{node.unit}</span></>;
@@ -1650,7 +1651,7 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, o
                 {pr && agreed != null && (
                     <>
                         <br /><span className="text-teal-300">Cena uzgodniona</span> {fmtZl(agreed)} zł/{node.unit}
-                        {pr.seller ? ` u ${pr.seller}` : ''}
+                        {pr.seller ? ` u ${shortCompanyName(pr.seller)}` : ''}
                         {pr.offerNumber ? ` (oferta ${pr.offerNumber})` : ''}
                         {pr.availability ? ` · dostępność ${pr.availability}` : ''}
                         {' '}— to <b className="text-gray-200">uzgodnienie</b>, nie zrealizowany zakup.
@@ -1714,13 +1715,15 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, o
 // po „=", Enter do następnego pola, zaznaczenie całej treści przy wejściu, rosnące pola
 // tekstowe) pochodzi z `wbs/entryFields.js` i jest WSPÓLNE z zakładką „Realizacja" — ten sam
 // wpis ma znaczyć w obu tabelach to samo.
-function entryField({ k, value, onChange, onBlur, onKeyDown, disabled, extra = '', placeholder, label }) {
+function entryField({ k, value, onChange, onBlur, onKeyDown, disabled, extra = '', placeholder, label, invalid = false }) {
     const wspolne = {
         value, disabled, placeholder, onChange, onBlur, onKeyDown,
         'data-entry-field': true,
+        'data-entry-key': k,
         'aria-label': label,
+        'aria-invalid': invalid || undefined,
         onFocus: selectAllOnFocus,
-        className: `${ENTRY_INPUT_LG} ${extra} disabled:opacity-60`,
+        className: `${ENTRY_INPUT_LG} ${extra} ${invalid ? '!border-red-500/80 !bg-red-500/15' : ''} disabled:opacity-60`,
     };
     if (growsWithText(k)) {
         return <AutoResizeTextarea {...wspolne} style={{ minHeight: FIELD_H }} className={`${wspolne.className} align-top`} />;
@@ -1783,9 +1786,9 @@ function EntryRow({ entry, cols, readOnly, onSave, onDelete }) {
             case 'entryDate':    return pole('entryDate', 'font-mono text-teal-300', { label: 'Data zdarzenia' });
             case 'docNumber':    return pole('docNumber', 'font-mono', { placeholder: 'FV / PZ', label: 'Numer dokumentu' });
             case 'supplier':     return readOnly
-                ? <span className="text-gray-300">{entry.supplier?.name || 'zasoby własne'}</span>
+                ? <span className="text-gray-300" title={entry.supplier?.name}>{shortCompanyName(entry.supplier?.name) || 'zasoby własne'}</span>
                 : <div className={PICKER_BOX}>
-                    <SupplierPicker dark size="sm" textClass={FIELD_FONT} value={entry.supplier?.id ?? null} onChange={sup => onSave(entry.id, { supplierId: sup?.id ?? null })} />
+                    <SupplierPicker dark size="sm" shortNames textClass={FIELD_FONT} value={entry.supplier?.id ?? null} onChange={sup => onSave(entry.id, { supplierId: sup?.id ?? null })} />
                 </div>;
             case 'manufacturer': return pole('manufacturer', '', { placeholder: 'producent', label: 'Producent' });
             case 'model':        return pole('model', '', { placeholder: 'model', label: 'Model' });
@@ -1827,6 +1830,11 @@ function EntryRow({ entry, cols, readOnly, onSave, onDelete }) {
 // Wymagane pola są te same co w zakładce „Realizacja": ilość, koszt jedn. oraz producent
 // i model (materiał, sprzęt) albo zakres (praca, usługa, nocleg, paliwo) — inaczej jedna
 // tabela wpuszczałaby dane, których druga by nie przyjęła.
+// @anchor realization-new-missing-labels — nazwy brakujących pól w komunikacie pod formularzem.
+const BRAK_ETYKIETY_NEW = {
+    qty: 'ilość', unitCost: 'koszt jedn.', manufacturer: 'producent', model: 'model', scope: 'zakres',
+};
+
 function EntryForm({ node, cols, withCard, defaultQty, defaultSurplus = false, onAdd, onClose }) {
     const dzis = new Date().toISOString().slice(0, 10);
     const [draft, setDraft] = useState(() => ({
@@ -1841,24 +1849,36 @@ function EntryForm({ node, cols, withCard, defaultQty, defaultSurplus = false, o
     const [brak, setBrak] = useState([]);
     const [zapisuje, setZapisuje] = useState(false);
 
-    const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
+    // Poprawienie pola gasi jego czerwoną obwódkę od razu, bez czekania na kolejny zapis.
+    const set = (k, v) => {
+        setDraft(d => ({ ...d, [k]: v }));
+        setBrak(b => (b.includes(k) ? b.filter(x => x !== k) : b));
+    };
+    const rowRef = useRef(null);
 
+    // Klucze pól (nie etykiety) — te same co w `realization-entry-form-validate`, żeby dało się
+    // podświetlić konkretne okno. Sam napis pod wierszem był za mały: formularz zostawał
+    // otwarty z wpisanymi wartościami i wyglądał jak dodany wpis, którego po odświeżeniu nie było.
     const czegoBrak = () => {
         const b = [];
         const qty = parsePriceInput(draft.qty);
-        if (!String(draft.qty).trim() || qty === null || qty <= 0) b.push('ilość');
-        if (!String(draft.unitCost).trim() || parsePriceInput(draft.unitCost) === null) b.push('koszt jedn.');
+        if (!String(draft.qty).trim() || qty === null || qty <= 0) b.push('qty');
+        if (!String(draft.unitCost).trim() || parsePriceInput(draft.unitCost) === null) b.push('unitCost');
         if (withCard) {
-            if (!draft.manufacturer.trim()) b.push('producent');
+            if (!draft.manufacturer.trim()) b.push('manufacturer');
             if (!draft.model.trim()) b.push('model');
-        } else if (!draft.scope.trim()) b.push('zakres');
+        } else if (!draft.scope.trim()) b.push('scope');
         return b;
     };
 
     const submit = async () => {
+        if (zapisuje) return;
         const b = czegoBrak();
         setBrak(b);
-        if (b.length || zapisuje) return;
+        if (b.length) {
+            rowRef.current?.querySelector(`[data-entry-key="${b[0]}"]`)?.focus();
+            return;
+        }
         setZapisuje(true);
         const ok = await onAdd({
             ...draft,
@@ -1877,7 +1897,7 @@ function EntryForm({ node, cols, withCard, defaultQty, defaultSurplus = false, o
     // 1330 od razu, tak samo jak w wierszu zapisanego wpisu. Niedokończone („=3990/") zostaje
     // w polu bez zmian i czeka na dokończenie.
     const pole = (k, extra = '', props = {}) => entryField({
-        k, extra, value: draft[k], disabled: zapisuje,
+        k, extra, value: draft[k], disabled: zapisuje, invalid: brak.includes(k),
         placeholder: props.placeholder, label: props.label,
         onChange: e => set(k, props.sanitize ? sanitizeQtyInput(e.target.value) : e.target.value),
         onBlur: () => {
@@ -1895,7 +1915,7 @@ function EntryForm({ node, cols, withCard, defaultQty, defaultSurplus = false, o
             case 'entryDate':    return pole('entryDate', 'font-mono text-teal-300', { label: 'Data zdarzenia' });
             case 'docNumber':    return pole('docNumber', 'font-mono', { placeholder: 'FV / PZ', label: 'Numer dokumentu' });
             case 'supplier':     return <div className={PICKER_BOX}>
-                    <SupplierPicker dark size="sm" textClass={FIELD_FONT} value={draft.supplierId} onChange={sup => set('supplierId', sup?.id ?? null)} />
+                    <SupplierPicker dark size="sm" shortNames textClass={FIELD_FONT} value={draft.supplierId} onChange={sup => set('supplierId', sup?.id ?? null)} />
                 </div>;
             case 'manufacturer': return pole('manufacturer', '', { placeholder: 'producent', label: 'Producent' });
             case 'model':        return pole('model', '', { placeholder: 'model', label: 'Model' });
@@ -1919,7 +1939,7 @@ function EntryForm({ node, cols, withCard, defaultQty, defaultSurplus = false, o
 
     return (
         <>
-            <tr className="bg-teal-500/[.06]">
+            <tr ref={rowRef} className="bg-teal-500/[.06]">
                 {cols.map(c => (
                     <td key={c[0]} className={`border-b border-white/[.04] px-2 py-1.5 align-top ${c[3] ? 'text-right tabular-nums' : ''}`}>
                         {cellOf(c[0])}
@@ -1928,8 +1948,8 @@ function EntryForm({ node, cols, withCard, defaultQty, defaultSurplus = false, o
             </tr>
             {brak.length > 0 && (
                 <tr className="bg-teal-500/[.06]">
-                    <td colSpan={cols.length} className="border-b border-white/[.04] px-2 pb-1.5 text-[11px] text-amber-300">
-                        Uzupełnij lub popraw: {brak.join(', ')}.
+                    <td colSpan={cols.length} className="border-b border-red-400/30 px-2 py-1.5 text-[length:var(--rn-lg)] font-semibold text-red-300">
+                        Wpis NIE został zapisany — uzupełnij lub popraw: {brak.map(k => BRAK_ETYKIETY_NEW[k] || k).join(', ')}.
                     </td>
                 </tr>
             )}
@@ -1985,10 +2005,10 @@ function LeafCard({ node, card, r, planValue, readOnly, token, onRefreshCard, on
                             card={card} token={token} onRefresh={onRefreshCard}
                             readOnly={readOnly} boxClass="w-full h-[132px]" className="mt-2" />
                         <div className="mt-2 space-y-1">
-                            <CardField label="Producent" value={card.manufacturer} />
+                            <CardField label="Producent" value={shortCompanyName(card.manufacturer)} />
                             <CardField label="Model" value={card.model} valueClass="font-mono" />
                             <CardField label="Nazwa handlowa" value={card.productName} />
-                            <CardField label="Oferent" value={card.supplier?.name || card.seller} />
+                            <CardField label="Oferent" value={shortCompanyName(card.supplier?.name || card.seller)} />
                             <CardField label="Koszt jedn." valueClass="tabular-nums text-orange-300"
                                 value={unitCost != null ? `${fmtZl(unitCost)} zł` : null} />
                             <CardField label="Dostępność" value={card.availability} />
@@ -2152,7 +2172,7 @@ const PurchaseLine = ({ e, node }) => {
     const unit = Number(e.unitCost) || 0;
     // Producent, model i EAN wchodzą tylko wtedy, gdy pozycja je niesie (materiał i sprzęt);
     // praca, usługa, nocleg i paliwo mają zamiast nich jedno pole `scope`.
-    const produkt = [e.manufacturer, e.model, e.ean].filter(Boolean).join(' · ');
+    const produkt = [shortCompanyName(e.manufacturer), e.model, e.ean].filter(Boolean).join(' · ');
     return (
         <div className="rounded border border-white/[.06] p-2">
             <div className="flex items-baseline gap-2">
@@ -2165,7 +2185,7 @@ const PurchaseLine = ({ e, node }) => {
             <div className="text-[11px] tabular-nums text-gray-400">
                 {fmtQty(qty)} {node.unit} × {fmtZl(unit)} zł
             </div>
-            <div className="break-words text-[11px] text-gray-500">{e.supplier?.name || 'oferent nieznany'}</div>
+            <div className="break-words text-[11px] text-gray-500">{shortCompanyName(e.supplier?.name) || 'oferent nieznany'}</div>
             {produkt && <div className="break-words text-[11px] text-gray-500">{produkt}</div>}
             {e.scope && <div className="break-words text-[11px] text-gray-500">{e.scope}</div>}
             {e.comment && <div className="break-words text-[11px] text-gray-400">{e.comment}</div>}
@@ -2224,10 +2244,10 @@ const ProposalLine = ({ p }) => {
             </div>
             <div className="mt-1 break-words text-xs text-gray-300">{p.productName || '—'}</div>
             <div className="break-words text-[11px] text-gray-500">
-                {[p.manufacturer, p.model].filter(Boolean).join(' ') || '—'}
+                {[shortCompanyName(p.manufacturer), p.model].filter(Boolean).join(' ') || '—'}
             </div>
             <div className="break-words text-[11px] text-gray-500">
-                {p.supplier?.name || p.seller || 'oferent nieznany'}{p.offerNumber ? ` · ${p.offerNumber}` : ''}
+                {shortCompanyName(p.supplier?.name || p.seller) || 'oferent nieznany'}{p.offerNumber ? ` · ${p.offerNumber}` : ''}
             </div>
             {p.availability && <div className="break-words text-[11px] text-gray-500">dostępność: {p.availability}</div>}
             {cenaZakupu != null && cenaZakupu !== p.priceNetto && (

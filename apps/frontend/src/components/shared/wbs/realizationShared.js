@@ -174,6 +174,28 @@ export const fmtQty = (v) => {
     return Number.isInteger(n) ? String(n) : n.toLocaleString('pl-PL', { maximumFractionDigits: 3 });
 };
 export const fmtZl = (v) => v == null ? '—' : Number(v).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// @anchor short-company-name — nazwa firmy bez formy prawnej („SPÓŁKA Z OGRANICZONĄ
+// ODPOWIEDZIALNOŚCIĄ", „sp. z o.o.", „S.A." itd.) i bez otaczających cudzysłowów. Wyłącznie do
+// WYŚWIETLANIA: w wąskich kolumnach forma prawna zajmowała dwie linie, a niczego nie odróżnia.
+// Pełna nazwa zostaje w bazie i w dymku (`title`).
+const FORMY_PRAWNE = [
+    /sp[óo]łka\s+z\s+ograniczon[ąa]\s+odpowiedzialno[śs]ci[ąa]/giu,
+    /sp[óo]łka\s+komandytowo[\s-]*akcyjna/giu,
+    /sp[óo]łka\s+(akcyjna|komandytowa|jawna|cywilna|partnerska)/giu,
+    /sp\.?\s*z\s*o\.?\s*o\.?/giu,
+    /sp\.\s*(k\.?\s*a\.?|k\.?|j\.?|p\.?)(?=\s|,|$)/giu,
+    /(^|\s)(s\.\s*a\.|s\.\s*c\.|s\.k\.a\.)(?=\s|,|$)/giu,
+    /(^|\s)(gmbh|ltd\.?|llc|inc\.?)(?=\s|,|$)/giu,
+];
+export function shortCompanyName(name) {
+    if (!name) return name || '';
+    let s = String(name);
+    for (const re of FORMY_PRAWNE) s = s.replace(re, (m, pre) => (typeof pre === 'string' && /^\s?$/.test(pre) ? pre : ' '));
+    s = s.replace(/\s{2,}/g, ' ').replace(/[\s,.\-–]+$/u, '').trim();
+    s = s.replace(/^["'„”“]+|["'„”“]+$/gu, '').trim();
+    return s || String(name).trim();
+}
+
 export const fmtDate = (d) => { try { return new Date(d).toISOString().slice(0, 10); } catch { return ''; } };
 
 // @anchor realization-plan-unit-of — koszt jedn. PLANU, czyli ta sama liczba, którą pokazuje

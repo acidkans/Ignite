@@ -1,0 +1,2 @@
+import { shortCompanyName as f } from 'file:///C:/Users/Cosinus/Documents/programiki/ignite/apps/frontend/src/components/shared/wbs/realizationShared.js';
+for (const n of ["AIRTEL SERVICES SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ","'ROMI' SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ","Ronson Sp. z o.o.","ABC sp.z o.o. sp.k.","Orange Polska S.A.","Kowalski i Syn s.c.","Firma Sp. j.","Spark Spółka Akcyjna","BP","Schneider Electric GmbH","SPA Sp. k.", "drobni"]) console.log(JSON.stringify(n),'→',JSON.stringify(f(n)));

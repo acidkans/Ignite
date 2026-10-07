@@ -1,3 +1,13 @@
+## 2026-10-07 — Realizacja_new: wyraźna walidacja formularza wpisu i skrócone nazwy firm (v2026.10.07.1730)
+
+### słownik
+- dodano `ui-funkcja` `shortCompanyName` — nazwa firmy bez formy prawnej, tylko do wyświetlania (realizationShared.js, @anchor short-company-name)
+- dodano `ui-stala` `BRAK_ETYKIETY_NEW` — etykiety brakujących pól formularza wpisu (RealizationNewTab.jsx, @anchor realization-new-missing-labels)
+
+### wytyczne
+- `ui-formularz` `EntryForm` (Realizacja_new) — niezapisany wpis musi być widoczny: czerwone obwódki brakujących pól + fokus na pierwszym; drobny napis wyglądał jak zapisany wiersz
+- `ui-funkcja` `shortCompanyName` — tylko na ekranie; w bazie i w dymku zostaje pełna nazwa
+
 ## 2026-10-06 — Eksport tabel oferty: ilość, j.m. i cena jednostkowa w tabeli Pozycje (Excel WBS3 + PDF) (v2026.10.06.1845)
 
 ### architektura / API

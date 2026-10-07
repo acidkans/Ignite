@@ -1816,6 +1816,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | brakujace (puste pola wymagane przy zapisie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-missing |
 | ui-funkcja | waliduj (cena, producent, model / zakres) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-validate |
 | ui-stala | BRAK_ETYKIETY (nazwy pól w komunikacie „Uzupełnij lub popraw: …") | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-missing-labels |
+| ui-funkcja | shortCompanyName (nazwa firmy bez formy prawnej — tylko wyświetlanie) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor short-company-name |
+| ui-stala | BRAK_ETYKIETY_NEW (nazwy brakujących pól formularza wpisu w Realizacja_new) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-missing-labels |
 | ui-stala | NUMERIC_ENTRY_FIELDS (pola wpisu niosące liczbę: qty, unitCost) | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor realization-entry-numeric-fields |
 | ui-funkcja | resolveEntryNumber (działanie „=4,3*220" → 946 przed zapisem) | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor realization-entry-formula |
 | ui-stala | FORMULA_HINT (dymek „można wpisać działanie") | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor realization-formula-hint |

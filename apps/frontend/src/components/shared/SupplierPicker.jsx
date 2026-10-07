@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ChevronDown, Plus, Search, Loader2, CheckCircle2, XCircle, X } from 'lucide-react';
+import { shortCompanyName } from './wbs/realizationShared';
 import { API_URL } from '../../config';
 
 // @anchor supplier-picker-theme
@@ -64,6 +65,8 @@ const SIZES = {
 // co nie przesądza, u kogo ostatecznie kupimy.
 export default function SupplierPicker({
   value, onChange, disabled = false, dark = false, textClass = 'text-sm',
+  // Wyświetlanie nazwy bez formy prawnej (`short-company-name`); pełna nazwa zostaje w dymku.
+  shortNames = false,
   size = 'md', placeholder = 'Wybierz dostawcę…',
 }) {
   const t = THEMES[dark ? 'dark' : 'light'];
@@ -154,7 +157,7 @@ export default function SupplierPicker({
         className={`w-full flex items-center justify-between border disabled:opacity-50 disabled:cursor-not-allowed ${t.trigger} ${sz.trigger} ${clearable ? sz.padded : sz.bare}`}
       >
         <span className={`truncate ${selected ? t.triggerText : t.triggerPlaceholder}`}>
-          {selected ? `${selected.name}${selected.nip ? ` (NIP ${selected.nip})` : ''}` : placeholder}
+          {selected ? `${shortNames ? shortCompanyName(selected.name) : selected.name}${selected.nip && !shortNames ? ` (NIP ${selected.nip})` : ''}` : placeholder}
         </span>
         <ChevronDown size={sz.chevron} className="text-gray-400 shrink-0" />
       </button>
@@ -209,7 +212,7 @@ export default function SupplierPicker({
                     onClick={() => { onChange?.(s); setOpen(false); }}
                     className={`w-full text-left px-3 py-2 ${t.item} ${s.id === value ? t.itemSelected : ''}`}
                   >
-                    <span className={s.isActive ? t.itemText : 'text-gray-500 line-through'}>{s.name}</span>
+                    <span className={s.isActive ? t.itemText : 'text-gray-500 line-through'} title={shortNames ? s.name : undefined}>{shortNames ? shortCompanyName(s.name) : s.name}</span>
                     {s.nip && <span className="ml-2 text-xs text-gray-400">NIP {s.nip}</span>}
                     {s.vatStatus && (
                       <span className={`ml-2 text-xs ${s.vatStatus === 'Czynny' ? 'text-teal-500' : 'text-amber-500'}`}>{s.vatStatus}</span>
