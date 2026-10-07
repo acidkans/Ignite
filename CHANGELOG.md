@@ -1,3 +1,17 @@
+## 2026-10-07 — Eksport realizacji: wartość oferty w Zakupach i Analizie zakupów ograniczona do ilości z wyceny, kolumna Koszt planowany (v2026.10.07.1815)
+
+### architektura / API
+- arkusz Excel „Zakupy” — nowa ukryta kolumna Y „Ilość wyceny”; „Wartość oferty” = MIN(ilość wpisu, ilość wyceny − wcześniejsze wpisy „w ofercie” tej pozycji) × cena ofertowa
+- arkusz „Analiza zakupów” — sumy wartości oferty liczone z tak ograniczonych wierszy
+- arkusz „Analiza zakupów” — nowa kolumna K „Koszt planowany” (ilość wyceny × koszt jedn. z baseline; 0 dla pozycji spoza baseline), suma w „Suma końcowa” oraz wiersz „Koszt planowany — cały baseline” (wszystkie pozycje zakupowe eksportu, także bez zakupów)
+
+### słownik
+- dodano `ui-funkcja` `realization-export-offer-cap` — limit wartości oferty do ilości z wyceny (RealizationTab.jsx)
+- dodano `ui-kolumna` `realization-export-planned-cost` — Koszt planowany w Analizie zakupów (RealizationTab.jsx)
+
+### wytyczne
+- `ui-funkcja` `eksportRealizacjiXlsx` — wartość oferty pozycji nigdy nie przekracza ilość z wyceny × cena; zakup ponad plan bez znacznika nadmiarowy ma wartość oferty 0
+
 ## 2026-10-07 — Realizacja_new: wyraźna walidacja formularza wpisu i skrócone nazwy firm (v2026.10.07.1730)
 
 ### słownik

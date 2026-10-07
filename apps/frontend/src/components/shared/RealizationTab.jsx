@@ -1113,12 +1113,28 @@ export async function eksportRealizacjiXlsx({
     const zakupy = [];
     for (const { node, card, realization: r } of rows) {
         if (entryNoun(node.type) !== 'zakup') continue;
-        for (const e of r.entries) zakupy.push({ node, card, e, ...rozliczenieOf(node, card, e) });
+        for (const e of r.entries) zakupy.push({ node, card, e, planQty: Number(r.plan) || 0, ...rozliczenieOf(node, card, e) });
     }
     for (const e of orphanEntries) {
         if (entryNoun(e.leafType) !== 'zakup') continue;
         const node = { name: e.leafName || '(pozycja usunięta z wyceny)', type: e.leafType, path: null, unit: 'szt', sourceWbsNodeId: e.wbsRootId };
-        zakupy.push({ node, card: null, e, rozl: ROZLICZENIE.POZA, powod: POWOD_POZA_OFERTA.USUNIETA });
+        zakupy.push({ node, card: null, e, planQty: 0, rozl: ROZLICZENIE.POZA, powod: POWOD_POZA_OFERTA.USUNIETA });
+    }
+    // @anchor realization-export-offer-cap — wartość oferty pozycji NIE PRZEKRACZA ilości z wyceny.
+    // Wpisy „w ofercie" zjadają ilość planu po kolei (data zakupu); to, co ponad plan, dostaje
+    // wartość oferty 0, więc w całości powiększa Δ. Bez limitu dwa zakupy po 3 szt. przy wycenie
+    // na 3 szt. pokazywały wartość oferty za 6 szt. — oferta „rosła" razem z zakupami.
+    {
+        const pozostalo = new Map();
+        for (const z of zakupy) {
+            const id = wbsRootOf(z.node);
+            if (!pozostalo.has(id)) pozostalo.set(id, z.planQty);
+            const planUnit = planUnitOf(z.node, z.card);
+            if (z.rozl !== ROZLICZENIE.OFERTA || planUnit == null) { z.pv = 0; continue; }
+            const ile = Math.max(0, Math.min(Number(z.e.qty) || 0, pozostalo.get(id)));
+            pozostalo.set(id, pozostalo.get(id) - ile);
+            z.pv = Math.round(ile * planUnit * 100) / 100;
+        }
     }
     zk.columns = [
         { header: 'Wymaganie', key: 'req', width: 34 },
@@ -1159,19 +1175,20 @@ export async function eksportRealizacjiXlsx({
         { header: 'Komentarz', key: 'comment', width: 40 },
         // Klucz pozycji dla SUMIFS w „Analizie zakupów" — nazwa się powtarza między gałęziami.
         { header: 'Id pozycji', key: 'rootId', width: 12, hidden: true },
+        // Ilość z wyceny pozycji — limit dla „Wartości oferty" (`realization-export-offer-cap`).
+        { header: 'Ilość wyceny', key: 'planQty', width: 12, hidden: true },
     ];
     zk.getRow(1).font = { bold: true };
     zk.views = [{ state: 'frozen', ySplit: 1 }];
     zk.autoFilter = 'A1:W1';
 
     const W_OFERCIE = ROZLICZENIE.OFERTA;
-    zakupy.forEach(({ node, card, e, rozl, powod }, i) => {
+    zakupy.forEach(({ node, card, e, rozl, powod, planQty, pv }, i) => {
         const n = i + 2;
         const qty = Number(e.qty) || 0;
         const unitCost = Number(e.unitCost) || 0;
         const planUnit = planUnitOf(node, card);
         const wOfercie = rozl === W_OFERCIE;
-        const pv = wOfercie && planUnit != null ? Math.round(qty * planUnit * 100) / 100 : 0;
         const val = Math.round(qty * unitCost * 100) / 100;
         const row = zk.addRow({
             req: card?.name || '—',
@@ -1194,12 +1211,14 @@ export async function eksportRealizacjiXlsx({
             unitCost,
             dUnit: { formula: `IF(AND(M${n}="${W_OFERCIE}",O${n}<>""),P${n}-O${n},"")`, result: wOfercie && planUnit != null ? Math.round((unitCost - planUnit) * 100) / 100 : '' },
             dPct: { formula: `IF(AND(M${n}="${W_OFERCIE}",O${n}<>"",O${n}<>0),Q${n}/O${n},"")`, result: wOfercie && planUnit ? (unitCost - planUnit) / planUnit : '' },
-            planValue: { formula: `IF(M${n}="${W_OFERCIE}",K${n}*O${n},0)`, result: pv },
+            // Ilość objęta wyceną = to, co zostało z planu po wcześniejszych wpisach tej pozycji.
+            planValue: { formula: `IF(AND(M${n}="${W_OFERCIE}",O${n}<>""),MIN(K${n},MAX(0,Y${n}-SUMIFS(K$1:K${n - 1},X$1:X${n - 1},X${n},M$1:M${n - 1},"${W_OFERCIE}")))*O${n},0)`, result: pv },
             value: { formula: `K${n}*P${n}`, result: val },
             dValue: { formula: `T${n}-S${n}`, result: Math.round((val - pv) * 100) / 100 },
             author: [e.author?.firstName, e.author?.lastName].filter(Boolean).join(' ') || e.author?.email || '',
             comment: e.comment || '',
             rootId: wbsRootOf(node),
+            planQty,
         });
         row.getCell('rozl').dataValidation = {
             type: 'list', allowBlank: false, showErrorMessage: true,
@@ -1212,7 +1231,7 @@ export async function eksportRealizacjiXlsx({
     const qtyOf = (x) => Number(x.e.qty) || 0;
     const agregat = (lista) => ({
         qty: Math.round(lista.reduce((s, x) => s + qtyOf(x), 0) * 1000) / 1000,
-        pv: Math.round(lista.reduce((s, x) => s + (x.rozl === W_OFERCIE ? qtyOf(x) * (planUnitOf(x.node, x.card) || 0) : 0), 0) * 100) / 100,
+        pv: Math.round(lista.reduce((s, x) => s + (x.pv || 0), 0) * 100) / 100,
         val: Math.round(lista.reduce((s, x) => s + qtyOf(x) * (Number(x.e.unitCost) || 0), 0) * 100) / 100,
     });
     if (zakupy.length) {
@@ -1262,6 +1281,11 @@ export async function eksportRealizacjiXlsx({
         { header: 'Id pozycji', key: 'h', width: 12, hidden: true },
         { header: 'Rozliczenie', key: 'i', width: 14, hidden: true },
         { header: 'Powód', key: 'j', width: 20, hidden: true },
+        // @anchor realization-export-planned-cost — PEŁNY koszt pozycji z baseline (ilość wyceny ×
+        // koszt jedn. wyceny, `planValueOf`), obok „Wartości oferty" przypisanej do zakupów. Kolumna
+        // za ukrytymi H–J, żeby nie przesuwać liter w formułach C–G. Pozycja dodana po akceptacji
+        // (`_outOfBaseline`) ma 0 — w baseline jej nie było.
+        { header: 'Koszt planowany', key: 'k', width: 16 },
     ];
     az.getRow(1).font = { bold: true };
     az.views = [{ state: 'frozen', ySplit: 1 }];
@@ -1301,10 +1325,13 @@ export async function eksportRealizacjiXlsx({
         if (!poPozycji.has(id)) poPozycji.set(id, []);
         poPozycji.get(id).push(z);
     }
+    const kosztPlanowany = (node, card) => (node?._outOfBaseline ? 0 : Math.round(planValueOf(node, card) * 100) / 100);
+    const wierszePozycji = [];
     for (const [id, lista] of poPozycji) {
-        const { node } = lista[0];
-        wierszAnalizy({ a: node.name || '', b: getParentPath(node.path), h: id },
+        const { node, card } = lista[0];
+        const rp = wierszAnalizy({ a: node.name || '', b: getParentPath(node.path), h: id, k: kosztPlanowany(node, card) },
             n => `${ZR('X')},$H${n}`, agregat(lista), 'grupa');
+        wierszePozycji.push(rp.number);
         for (const kat of kategorie) {
             const czesc = lista.filter(x => x.rozl === kat);
             if (!czesc.length) continue;
@@ -1317,6 +1344,10 @@ export async function eksportRealizacjiXlsx({
         const s = az.rowCount + 1;
         const suma = az.addRow({
             a: 'Suma końcowa',
+            k: {
+                formula: wierszePozycji.length ? `SUM(${wierszePozycji.map(r => `K${r}`).join(',')})` : '0',
+                result: Math.round([...poPozycji.values()].reduce((acc, l) => acc + kosztPlanowany(l[0].node, l[0].card), 0) * 100) / 100,
+            },
             c: { formula: `Zakupy!K${razemZ}`, result: all.qty },
             d: { formula: `Zakupy!S${razemZ}`, result: all.pv },
             e: { formula: `Zakupy!T${razemZ}`, result: all.val },
@@ -1342,7 +1373,17 @@ export async function eksportRealizacjiXlsx({
     } else {
         az.addRow({ a: 'Brak wpisów zakupu w tym widoku' }).font = { italic: true };
     }
-    ['d', 'e', 'f'].forEach(k => { az.getColumn(k).numFmt = FMT_PLN; });
+    // Suma kosztu planowanego CAŁEGO baseline pozycji zakupowych w eksporcie — także tych,
+    // na które nic jeszcze nie kupiono. „Suma końcowa" wyżej obejmuje tylko pozycje z zakupami.
+    {
+        const bazowe = rows.filter(({ node }) => entryNoun(node.type) === 'zakup' && !node._outOfBaseline);
+        const suma = Math.round(bazowe.reduce((acc, { node, card }) => acc + planValueOf(node, card), 0) * 100) / 100;
+        az.addRow({});
+        const r = az.addRow({ a: `Koszt planowany — cały baseline (${bazowe.length} poz. zakupowych)`, k: suma });
+        r.font = { bold: true };
+        r.eachCell({ includeEmpty: true }, c => { c.border = { top: { style: 'thin' } }; });
+    }
+    ['d', 'e', 'f', 'k'].forEach(k => { az.getColumn(k).numFmt = FMT_PLN; });
     az.getColumn('g').numFmt = '0.0%';
 
     // ─ Podsumowanie ──────────────────────────────────────────────────
