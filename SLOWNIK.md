@@ -1816,6 +1816,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | brakujace (puste pola wymagane przy zapisie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-missing |
 | ui-funkcja | waliduj (cena, producent, model / zakres) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-entry-form-validate |
 | ui-stala | BRAK_ETYKIETY (nazwy pól w komunikacie „Uzupełnij lub popraw: …") | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-missing-labels |
+| ui-funkcja | porownajGalezie (sortowanie wierszy eksportu realizacji gałęziami) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-branch-sort |
+| ui-kolumna | Gałąź / Podgałąź N (ścieżka pozycji w osobnych kolumnach eksportu realizacji; formuły przez kol(arkusz, klucz)) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-branch-cols |
 | ui-kolumna | Koszt planowany (Analiza zakupów — pełny koszt pozycji z baseline + suma całego baseline) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-planned-cost |
 | ui-funkcja | limit wartości oferty w arkuszu Zakupy (wpisy „w ofercie” zjadają ilość z wyceny po kolei) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-offer-cap |
 | ui-funkcja | shortCompanyName (nazwa firmy bez formy prawnej — tylko wyświetlanie) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor short-company-name |

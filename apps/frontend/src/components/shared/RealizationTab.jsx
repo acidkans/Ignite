@@ -1002,6 +1002,21 @@ export async function eksportRealizacjiXlsx({
     rows, visibleTypes, odbiorByRoot = {}, orderName = '', searchQuery = '', colFilters = {},
     etykietyKolumn = null, accepted = false, orphanEntries = [],
 }) {
+    // @anchor realization-export-branch-sort — wiersze eksportu POGRUPOWANE gałęziami: sortowanie
+    // po kolejnych segmentach ścieżki (Gałąź, Podgałąź 1…), pozycje leżące wprost w gałęzi przed
+    // jej podgałęziami. Sortowanie stabilne — w obrębie jednej gałęzi zostaje kolejność z ekranu,
+    // a wpisy jednej pozycji zostają po kolei (od tego zależy limit wartości oferty w „Zakupach").
+    const kluczGalezi = (node) => (node?.path ? node.path.split(' › ').slice(0, -1) : []);
+    const porownajGalezie = (x, y) => {
+        const a = kluczGalezi(x), b = kluczGalezi(y);
+        if (!a.length || !b.length) return (!a.length) - (!b.length);
+        for (let i = 0; i < Math.min(a.length, b.length); i++) {
+            const c = a[i].localeCompare(b[i], 'pl', { numeric: true, sensitivity: 'base' });
+            if (c) return c;
+        }
+        return a.length - b.length;
+    };
+    rows = [...rows].sort((x, y) => porownajGalezie(x.node, y.node));
     const totals = liczTotals(rows);
     const analiza = liczAnalize(rows);
     const etykietaKolumny = (k) => (etykietyKolumn?.[k]) || COL_DEFS.find(c => c.key === k)?.label || k;
@@ -1010,6 +1025,17 @@ export async function eksportRealizacjiXlsx({
     // tutaj, a wypełniamy niżej: „Podsumowanie" ma otwierać plik (najpierw wnioski, potem
     // dane), ale liczy się z gotowej tabeli. Formuły `Realizacja!…` adresują po nazwie,
     // więc kolejność arkuszy im nie przeszkadza.
+    // @anchor realization-export-branch-cols — ścieżka pozycji rozbita na OSOBNE kolumny: „Gałąź",
+    // „Podgałąź 1", „Podgałąź 2"… Jedna kolumna „A / B / C" nie dawała się filtrować ani sortować
+    // po samej gałęzi. Liczba kolumn = najgłębsza ścieżka w eksporcie. Formuły adresują kolumny
+    // przez `kol(arkusz, klucz)`, nie literami na sztywno — wstawienie kolumn gałęzi przesuwa litery.
+    const galezieOf = kluczGalezi;
+    const GLEBOKOSC = Math.max(1, ...rows.map(({ node }) => galezieOf(node).length));
+    const KOLUMNY_GALEZI = Array.from({ length: GLEBOKOSC }, (_, i) => ({
+        header: i === 0 ? 'Gałąź' : `Podgałąź ${i}`, key: `gal${i}`, width: i === 0 ? 30 : 26,
+    }));
+    const galezie = (node) => Object.fromEntries(galezieOf(node).map((g, i) => [`gal${i}`, g]));
+    const kol = (arkusz, klucz) => arkusz.getColumn(klucz).letter;
     const ps = wb.addWorksheet('Podsumowanie');
     const ws = wb.addWorksheet('Realizacja');
     const zk = wb.addWorksheet('Zakupy');
@@ -1017,7 +1043,7 @@ export async function eksportRealizacjiXlsx({
     // Waluta w postaci, którą Excel rozpoznaje jako PLN, a nie jako format niestandardowy.
     const FMT_PLN = '#,##0.00\\ [$zł-415]';
     ws.columns = [
-        { header: 'Przedmiot projektu', key: 'parent', width: 32 },
+        ...KOLUMNY_GALEZI,
         { header: 'Nazwa', key: 'name', width: 38 },
         { header: 'Typ', key: 'typ', width: 12 },
         { header: 'Produkt / zakres', key: 'product', width: 28 },
@@ -1050,7 +1076,9 @@ export async function eksportRealizacjiXlsx({
     ];
     ws.getRow(1).font = { bold: true };
     ws.views = [{ state: 'frozen', ySplit: 1 }];
-    ws.autoFilter = 'A1:U1';
+    ws.autoFilter = `A1:${kol(ws, 'comment')}1`;
+    const W = (k) => kol(ws, k);
+    const RZ = (k) => `Realizacja!$${W(k)}$2:$${W(k)}$${rows.length + 1}`;
 
     rows.forEach(({ node, card, realization: r }, i) => {
         const n = i + 2;
@@ -1061,7 +1089,7 @@ export async function eksportRealizacjiXlsx({
         const scopes = [...new Set(r.entries.map(e => e.scope).filter(Boolean))];
         const product = [card?.manufacturer, card?.model].filter(Boolean).join(' ') || scopes.join('; ');
         ws.addRow({
-            parent: getParentPath(node.path),
+            ...galezie(node),
             name: node.name || '',
             typ: TYPE_META[node.type]?.label || node.type || '',
             product,
@@ -1070,13 +1098,13 @@ export async function eksportRealizacjiXlsx({
             qtyPlan: Number(node.quantity) || 0,
             unit: node.unit || 'szt',
             qtyReal: r.qty,
-            dQty: { formula: `I${n}-G${n}`, result: Math.round((r.qty - r.plan) * 1000) / 1000 },
+            dQty: { formula: `${W('qtyReal')}${n}-${W('qtyPlan')}${n}`, result: Math.round((r.qty - r.plan) * 1000) / 1000 },
             pricePlan: planUnit,
             pricePurchase: purchaseUnit,
-            valuePlan: planUnit != null ? { formula: `G${n}*K${n}`, result: planValue ?? 0 } : null,
+            valuePlan: planUnit != null ? { formula: `${W('qtyPlan')}${n}*${W('pricePlan')}${n}`, result: planValue ?? 0 } : null,
             // Zakup to SUMA wpisów o różnych cenach, nie iloczyn — zostaje wartością.
             valueReal: hasReal ? r.value : null,
-            delta: planValue != null && hasReal ? { formula: `N${n}-M${n}`, result: Math.round((r.value - planValue) * 100) / 100 } : null,
+            delta: planValue != null && hasReal ? { formula: `${W('valueReal')}${n}-${W('valuePlan')}${n}`, result: Math.round((r.value - planValue) * 100) / 100 } : null,
             statusPlan: statusLabel(node),
             statusPurchase: purchaseStatusLabel(node) || '—',
             statusExec: execStatusLabelOf(node, odbiorByRoot[wbsRootOf(node)]) || '—',
@@ -1088,11 +1116,11 @@ export async function eksportRealizacjiXlsx({
 
     const last = rows.length + 1;
     const sum = ws.addRow({
-        parent: 'Razem',
-        valuePlan: { formula: `SUM(M2:M${last})`, result: totals.plan },
-        valueReal: { formula: `SUM(N2:N${last})`, result: totals.real },
-        delta: { formula: `SUM(O2:O${last})`, result: totals.delta },
-        entries: { formula: `SUM(T2:T${last})`, result: totals.entries },
+        gal0: 'Razem',
+        valuePlan: { formula: `SUM(${W('valuePlan')}2:${W('valuePlan')}${last})`, result: totals.plan },
+        valueReal: { formula: `SUM(${W('valueReal')}2:${W('valueReal')}${last})`, result: totals.real },
+        delta: { formula: `SUM(${W('delta')}2:${W('delta')}${last})`, result: totals.delta },
+        entries: { formula: `SUM(${W('entries')}2:${W('entries')}${last})`, result: totals.entries },
     });
     sum.font = { bold: true };
     // Kwoty jako waluta PLN, ilości bez formatu (ogólne) — jednostka siedzi w osobnej
@@ -1138,7 +1166,7 @@ export async function eksportRealizacjiXlsx({
     }
     zk.columns = [
         { header: 'Wymaganie', key: 'req', width: 34 },
-        { header: 'Przedmiot projektu', key: 'parent', width: 30 },
+        ...KOLUMNY_GALEZI,
         { header: 'Pozycja', key: 'name', width: 34 },
         { header: 'Typ', key: 'typ', width: 12 },
         { header: 'Data zakupu', key: 'date', width: 13 },
@@ -1180,7 +1208,8 @@ export async function eksportRealizacjiXlsx({
     ];
     zk.getRow(1).font = { bold: true };
     zk.views = [{ state: 'frozen', ySplit: 1 }];
-    zk.autoFilter = 'A1:W1';
+    zk.autoFilter = `A1:${kol(zk, 'comment')}1`;
+    const Z = (k) => kol(zk, k);
 
     const W_OFERCIE = ROZLICZENIE.OFERTA;
     zakupy.forEach(({ node, card, e, rozl, powod, planQty, pv }, i) => {
@@ -1192,7 +1221,7 @@ export async function eksportRealizacjiXlsx({
         const val = Math.round(qty * unitCost * 100) / 100;
         const row = zk.addRow({
             req: card?.name || '—',
-            parent: getParentPath(node.path),
+            ...galezie(node),
             name: node.name || '',
             typ: TYPE_META[node.type]?.label || node.type || '',
             date: fmtDate(e.entryDate),
@@ -1209,12 +1238,12 @@ export async function eksportRealizacjiXlsx({
             powod,
             planUnit,
             unitCost,
-            dUnit: { formula: `IF(AND(M${n}="${W_OFERCIE}",O${n}<>""),P${n}-O${n},"")`, result: wOfercie && planUnit != null ? Math.round((unitCost - planUnit) * 100) / 100 : '' },
-            dPct: { formula: `IF(AND(M${n}="${W_OFERCIE}",O${n}<>"",O${n}<>0),Q${n}/O${n},"")`, result: wOfercie && planUnit ? (unitCost - planUnit) / planUnit : '' },
+            dUnit: { formula: `IF(AND(${Z('rozl')}${n}="${W_OFERCIE}",${Z('planUnit')}${n}<>""),${Z('unitCost')}${n}-${Z('planUnit')}${n},"")`, result: wOfercie && planUnit != null ? Math.round((unitCost - planUnit) * 100) / 100 : '' },
+            dPct: { formula: `IF(AND(${Z('rozl')}${n}="${W_OFERCIE}",${Z('planUnit')}${n}<>"",${Z('planUnit')}${n}<>0),${Z('dUnit')}${n}/${Z('planUnit')}${n},"")`, result: wOfercie && planUnit ? (unitCost - planUnit) / planUnit : '' },
             // Ilość objęta wyceną = to, co zostało z planu po wcześniejszych wpisach tej pozycji.
-            planValue: { formula: `IF(AND(M${n}="${W_OFERCIE}",O${n}<>""),MIN(K${n},MAX(0,Y${n}-SUMIFS(K$1:K${n - 1},X$1:X${n - 1},X${n},M$1:M${n - 1},"${W_OFERCIE}")))*O${n},0)`, result: pv },
-            value: { formula: `K${n}*P${n}`, result: val },
-            dValue: { formula: `T${n}-S${n}`, result: Math.round((val - pv) * 100) / 100 },
+            planValue: { formula: `IF(AND(${Z('rozl')}${n}="${W_OFERCIE}",${Z('planUnit')}${n}<>""),MIN(${Z('qty')}${n},MAX(0,${Z('planQty')}${n}-SUMIFS(${Z('qty')}$1:${Z('qty')}${n - 1},${Z('rootId')}$1:${Z('rootId')}${n - 1},${Z('rootId')}${n},${Z('rozl')}$1:${Z('rozl')}${n - 1},"${W_OFERCIE}")))*${Z('planUnit')}${n},0)`, result: pv },
+            value: { formula: `${Z('qty')}${n}*${Z('unitCost')}${n}`, result: val },
+            dValue: { formula: `${Z('value')}${n}-${Z('planValue')}${n}`, result: Math.round((val - pv) * 100) / 100 },
             author: [e.author?.firstName, e.author?.lastName].filter(Boolean).join(' ') || e.author?.email || '',
             comment: e.comment || '',
             rootId: wbsRootOf(node),
@@ -1238,22 +1267,22 @@ export async function eksportRealizacjiXlsx({
         const all = agregat(zakupy);
         const sumZ = zk.addRow({
             req: 'Razem',
-            qty: { formula: `SUM(K2:K${lastZ})`, result: all.qty },
-            planValue: { formula: `SUM(S2:S${lastZ})`, result: all.pv },
-            value: { formula: `SUM(T2:T${lastZ})`, result: all.val },
-            dValue: { formula: `SUM(U2:U${lastZ})`, result: Math.round((all.val - all.pv) * 100) / 100 },
+            qty: { formula: `SUM(${Z('qty')}2:${Z('qty')}${lastZ})`, result: all.qty },
+            planValue: { formula: `SUM(${Z('planValue')}2:${Z('planValue')}${lastZ})`, result: all.pv },
+            value: { formula: `SUM(${Z('value')}2:${Z('value')}${lastZ})`, result: all.val },
+            dValue: { formula: `SUM(${Z('dValue')}2:${Z('dValue')}${lastZ})`, result: Math.round((all.val - all.pv) * 100) / 100 },
         });
         sumZ.font = { bold: true };
         // Autofiltr tylko na wierszach wpisów — z „Razem" w zakresie filtr pokazywał „(Puste)".
-        zk.autoFilter = `A1:W${lastZ}`;
+        zk.autoFilter = `A1:${Z('comment')}${lastZ}`;
         // @anchor realization-export-red-rows — zakup poza ofertą (nadmiarowy, nieofertowany,
         // dodana po akceptacji, usunięta) na czerwono. Formatowanie WARUNKOWE, a nie stały kolor: przestawienie
         // „Rozliczenia" w pliku ma od razu przemalować wiersz.
         zk.addConditionalFormatting({
-            ref: `A2:W${lastZ}`,
+            ref: `A2:${Z('comment')}${lastZ}`,
             rules: [{
                 type: 'expression',
-                formulae: [`$M2<>"${W_OFERCIE}"`],
+                formulae: [`$${Z('rozl')}2<>"${W_OFERCIE}"`],
                 style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: CZERWONE_TLO } }, font: { color: { argb: CZERWONY_TEKST } } },
             }],
         });
@@ -1272,7 +1301,7 @@ export async function eksportRealizacjiXlsx({
     // id, więc zgadza się także po przestawieniu kategorii w pliku.
     az.columns = [
         { header: 'Pozycja / rozliczenie', key: 'a', width: 40 },
-        { header: 'Przedmiot projektu', key: 'b', width: 30 },
+        ...KOLUMNY_GALEZI,
         { header: 'Ilość', key: 'c', width: 10 },
         { header: 'Wartość oferty', key: 'd', width: 16 },
         { header: 'Wartość zakupu', key: 'e', width: 16 },
@@ -1289,7 +1318,8 @@ export async function eksportRealizacjiXlsx({
     ];
     az.getRow(1).font = { bold: true };
     az.views = [{ state: 'frozen', ySplit: 1 }];
-    const ZR = (col) => `Zakupy!$${col}$2:$${col}$${Math.max(lastZ, 2)}`;
+    const ZR = (klucz) => { const c = Z(klucz); return `Zakupy!$${c}$2:$${c}$${Math.max(lastZ, 2)}`; };
+    const AZ = (k) => kol(az, k);
     const pomaluj = (r, styl) => {
         if (styl === 'grupa') {
             r.font = { bold: true };
@@ -1308,11 +1338,11 @@ export async function eksportRealizacjiXlsx({
         const sumifs = (col) => `SUMIFS(${ZR(col)},${warunki(n)})`;
         const r = az.addRow({
             ...vals,
-            c: { formula: sumifs('K'), result: agg.qty },
-            d: { formula: sumifs('S'), result: agg.pv },
-            e: { formula: sumifs('T'), result: agg.val },
-            f: { formula: `E${n}-D${n}`, result: Math.round((agg.val - agg.pv) * 100) / 100 },
-            g: { formula: `IF(D${n}=0,"",F${n}/D${n})`, result: agg.pv ? (agg.val - agg.pv) / agg.pv : '' },
+            c: { formula: sumifs('qty'), result: agg.qty },
+            d: { formula: sumifs('planValue'), result: agg.pv },
+            e: { formula: sumifs('value'), result: agg.val },
+            f: { formula: `${AZ('e')}${n}-${AZ('d')}${n}`, result: Math.round((agg.val - agg.pv) * 100) / 100 },
+            g: { formula: `IF(${AZ('d')}${n}=0,"",${AZ('f')}${n}/${AZ('d')}${n})`, result: agg.pv ? (agg.val - agg.pv) / agg.pv : '' },
         });
         pomaluj(r, styl);
         return r;
@@ -1329,14 +1359,14 @@ export async function eksportRealizacjiXlsx({
     const wierszePozycji = [];
     for (const [id, lista] of poPozycji) {
         const { node, card } = lista[0];
-        const rp = wierszAnalizy({ a: node.name || '', b: getParentPath(node.path), h: id, k: kosztPlanowany(node, card) },
-            n => `${ZR('X')},$H${n}`, agregat(lista), 'grupa');
+        const rp = wierszAnalizy({ a: node.name || '', ...galezie(node), h: id, k: kosztPlanowany(node, card) },
+            n => `${ZR('rootId')},$${AZ('h')}${n}`, agregat(lista), 'grupa');
         wierszePozycji.push(rp.number);
         for (const kat of kategorie) {
             const czesc = lista.filter(x => x.rozl === kat);
             if (!czesc.length) continue;
-            wierszAnalizy({ a: `    ${kat}`, h: id, i: kat },
-                n => `${ZR('X')},$H${n},${ZR('M')},$I${n}`, agregat(czesc), kat === W_OFERCIE ? null : 'czerwony');
+            wierszAnalizy({ a: `    ${kat}`, ...galezie(node), h: id, i: kat },
+                n => `${ZR('rootId')},$${AZ('h')}${n},${ZR('rozl')},$${AZ('i')}${n}`, agregat(czesc), kat === W_OFERCIE ? null : 'czerwony');
         }
     }
     if (zakupy.length) {
@@ -1345,14 +1375,14 @@ export async function eksportRealizacjiXlsx({
         const suma = az.addRow({
             a: 'Suma końcowa',
             k: {
-                formula: wierszePozycji.length ? `SUM(${wierszePozycji.map(r => `K${r}`).join(',')})` : '0',
+                formula: wierszePozycji.length ? `SUM(${wierszePozycji.map(r => `${AZ('k')}${r}`).join(',')})` : '0',
                 result: Math.round([...poPozycji.values()].reduce((acc, l) => acc + kosztPlanowany(l[0].node, l[0].card), 0) * 100) / 100,
             },
-            c: { formula: `Zakupy!K${razemZ}`, result: all.qty },
-            d: { formula: `Zakupy!S${razemZ}`, result: all.pv },
-            e: { formula: `Zakupy!T${razemZ}`, result: all.val },
-            f: { formula: `E${s}-D${s}`, result: Math.round((all.val - all.pv) * 100) / 100 },
-            g: { formula: `IF(D${s}=0,"",F${s}/D${s})`, result: all.pv ? (all.val - all.pv) / all.pv : '' },
+            c: { formula: `Zakupy!${Z('qty')}${razemZ}`, result: all.qty },
+            d: { formula: `Zakupy!${Z('planValue')}${razemZ}`, result: all.pv },
+            e: { formula: `Zakupy!${Z('value')}${razemZ}`, result: all.val },
+            f: { formula: `${AZ('e')}${s}-${AZ('d')}${s}`, result: Math.round((all.val - all.pv) * 100) / 100 },
+            g: { formula: `IF(${AZ('d')}${s}=0,"",${AZ('f')}${s}/${AZ('d')}${s})`, result: all.pv ? (all.val - all.pv) / all.pv : '' },
         });
         suma.font = { bold: true };
         suma.eachCell({ includeEmpty: true }, c => { c.border = { top: { style: 'medium' } }; });
@@ -1360,14 +1390,14 @@ export async function eksportRealizacjiXlsx({
             const czesc = zakupy.filter(x => x.rozl === kat);
             if (!czesc.length) continue;
             wierszAnalizy({ a: `    w tym ${kat}`, i: kat },
-                n => `${ZR('M')},$I${n}`, agregat(czesc), kat === W_OFERCIE ? null : 'czerwony');
+                n => `${ZR('rozl')},$${AZ('i')}${n}`, agregat(czesc), kat === W_OFERCIE ? null : 'czerwony');
             // Rozbicie „poza ofertą" na powody — dlaczego koszt poszedł ponad plan.
             if (kat === W_OFERCIE) continue;
             for (const powod of Object.values(POWOD_POZA_OFERTA)) {
                 const zPowodu = czesc.filter(x => x.powod === powod);
                 if (!zPowodu.length) continue;
                 wierszAnalizy({ a: `        ${powod}`, i: kat, j: powod },
-                    n => `${ZR('M')},$I${n},${ZR('N')},$J${n}`, agregat(zPowodu), 'czerwony');
+                    n => `${ZR('rozl')},$${AZ('i')}${n},${ZR('powod')},$${AZ('j')}${n}`, agregat(zPowodu), 'czerwony');
             }
         }
     } else {
@@ -1435,8 +1465,8 @@ export async function eksportRealizacjiXlsx({
     ps.addRow({});
 
     naglowek('Porównanie globalne');
-    ps.addRow({ a: 'Koszt całkowity wyceny', b: { formula: `Realizacja!M${last + 1}`, result: totals.plan } });
-    ps.addRow({ a: 'Wartość zakupów / realizacji zadań', b: { formula: `Realizacja!N${last + 1}`, result: totals.real } });
+    ps.addRow({ a: 'Koszt całkowity wyceny', b: { formula: `Realizacja!${W('valuePlan')}${last + 1}`, result: totals.plan } });
+    ps.addRow({ a: 'Wartość zakupów / realizacji zadań', b: { formula: `Realizacja!${W('valueReal')}${last + 1}`, result: totals.real } });
     const wRow = ps.rowCount - 1;
     // Obie pozycje liczone „w plus": ile budżetu ZOSTAŁO (wycena − realizacja) i jaka jego
     // część JEST już wydana (realizacja ÷ wycena). Odwrotnie niż kolumna „Δ wartość"
@@ -1577,10 +1607,10 @@ export async function eksportRealizacjiXlsx({
         const n = ps.rowCount + 1;
         ps.addRow({
             a: t,
-            b: { formula: `COUNTIF(Realizacja!$C$2:$C$${last},$A${n})`, result: mine.length },
-            c: { formula: `COUNTIFS(Realizacja!$C$2:$C$${last},$A${n},Realizacja!$S$2:$S$${last},"tak")`, result: mine.filter(x => x.node.realizationClosed).length },
-            d: { formula: `SUMIF(Realizacja!$C$2:$C$${last},$A${n},Realizacja!$M$2:$M$${last})`, result: planT },
-            e: { formula: `SUMIF(Realizacja!$C$2:$C$${last},$A${n},Realizacja!$N$2:$N$${last})`, result: realT },
+            b: { formula: `COUNTIF(${RZ('typ')},$A${n})`, result: mine.length },
+            c: { formula: `COUNTIFS(${RZ('typ')},$A${n},${RZ('closed')},"tak")`, result: mine.filter(x => x.node.realizationClosed).length },
+            d: { formula: `SUMIF(${RZ('typ')},$A${n},${RZ('valuePlan')})`, result: planT },
+            e: { formula: `SUMIF(${RZ('typ')},$A${n},${RZ('valueReal')})`, result: realT },
             f: { formula: `E${n}-D${n}`, result: Math.round((realT - planT) * 100) / 100 },
         });
     }

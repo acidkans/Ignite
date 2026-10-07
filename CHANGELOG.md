@@ -1,3 +1,17 @@
+## 2026-10-07 — Eksport realizacji: gałęzie i podgałęzie w osobnych kolumnach, wiersze sortowane gałęziami (v2026.10.07.1900)
+
+### architektura / API
+- arkusze „Realizacja”, „Zakupy”, „Analiza zakupów” — kolumna „Przedmiot projektu” zastąpiona kolumnami „Gałąź”, „Podgałąź 1”, „Podgałąź 2”… (liczba = najgłębsza ścieżka w eksporcie)
+- wiersze wszystkich arkuszy posortowane gałęziami (`porownajGalezie`), stabilnie — w gałęzi kolejność z ekranu
+- formuły eksportu adresują kolumny po kluczu (`kol(arkusz, klucz)`), nie sztywnymi literami
+
+### słownik
+- dodano `ui-funkcja` `porownajGalezie` — sortowanie wierszy eksportu gałęziami (RealizationTab.jsx, @anchor realization-export-branch-sort)
+- dodano `ui-kolumna` `realization-export-branch-cols` — kolumny gałęzi w eksporcie realizacji (RealizationTab.jsx)
+
+### wytyczne
+- `ui-funkcja` `eksportRealizacjiXlsx` — nowe formuły pisać przez `W()/Z()/AZ()/RZ()` (litera z klucza kolumny); litery na sztywno rozjadą się przy innej głębokości drzewa
+
 ## 2026-10-07 — Eksport realizacji: wartość oferty w Zakupach i Analizie zakupów ograniczona do ilości z wyceny, kolumna Koszt planowany (v2026.10.07.1815)
 
 ### architektura / API
