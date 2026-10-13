@@ -14,6 +14,13 @@ function cacheKey(nodeId, versionId) {
     return `qaTree:${nodeId}:${versionId || ''}`;
 }
 
+// Stabilny klucz pary Q&A (tylko w UI, nie trafia do zapisu) — pozwala trzymać
+// migawkę "pytań bez odpowiedzi" niezależnie od przesuwania indeksów.
+let pairSeq = 0;
+const withPairKey = (p) => ({ ...p, _k: ++pairSeq });
+
+const isUnanswered = (p) => (p.question || '').trim() && !(p.answer || '').trim();
+
 // Spłaszcza drzewo do wierszy { id, name, path, depth, topId, topName, qa }
 function flattenRows(nodes, prefix = '', top = null, acc = []) {
     nodes.forEach((n, i) => {
@@ -27,7 +34,7 @@ function flattenRows(nodes, prefix = '', top = null, acc = []) {
             topId: topRef.id,
             topName: topRef.name,
             topPath: topRef.path,
-            qa: Array.isArray(n.qa) ? n.qa : [],
+            qa: Array.isArray(n.qa) ? n.qa.map(withPairKey) : [],
         });
         if (n.children?.length) flattenRows(n.children, path, topRef, acc);
     });
@@ -77,6 +84,17 @@ export default function QaTreeView({ nodeId, versionId, onClose }) {
     const dirtyRef = useRef(new Set());
     const rowsRef = useRef([]);
     useEffect(() => { rowsRef.current = rows || []; }, [rows]);
+
+    // Migawka par bez odpowiedzi — liczona przy wejściu w filtr, żeby wpisana
+    // odpowiedź nie znikała z ekranu w trakcie pisania.
+    const [unansweredKeys, setUnansweredKeys] = useState(new Set());
+    const loaded = rows !== null;
+    useEffect(() => {
+        if (!loaded || qaFilter !== 'unanswered') return;
+        const keys = new Set();
+        rowsRef.current.forEach(r => r.qa.forEach(p => { if (isUnanswered(p)) keys.add(p._k); }));
+        setUnansweredKeys(keys);
+    }, [qaFilter, loaded]);
 
     const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
     useEffect(() => {
@@ -176,7 +194,9 @@ export default function QaTreeView({ nodeId, versionId, onClose }) {
             : r));
     };
     const addPair = (wbsNodeId) => {
-        setRows(prev => prev.map(r => r.id === wbsNodeId ? { ...r, qa: [...r.qa, { question: '', answer: '' }] } : r));
+        const pair = withPairKey({ question: '', answer: '' });
+        setUnansweredKeys(prev => new Set(prev).add(pair._k));
+        setRows(prev => prev.map(r => r.id === wbsNodeId ? { ...r, qa: [...r.qa, pair] } : r));
     };
     const removePair = (wbsNodeId, idx) => {
         dirtyRef.current.add(wbsNodeId);
@@ -186,13 +206,16 @@ export default function QaTreeView({ nodeId, versionId, onClose }) {
     };
 
     const q = search.trim().toLowerCase();
+    // W trybie "Bez odpowiedzi" pokazujemy tylko pojedyncze pary z migawki
+    const isPairVisible = (p) => qaFilter !== 'unanswered' || unansweredKeys.has(p._k);
     const visibleGroups = useMemo(() => {
         if (!rows) return [];
         const visible = rows.filter(r => {
+            const pairs = qaFilter === 'unanswered' ? r.qa.filter(p => unansweredKeys.has(p._k)) : r.qa;
             if (qaFilter === 'withQa' && r.qa.length === 0) return false;
-            if (qaFilter === 'unanswered' && !r.qa.some(p => (p.question || '').trim() && !(p.answer || '').trim())) return false;
+            if (qaFilter === 'unanswered' && pairs.length === 0) return false;
             if (q) {
-                const hay = `${r.name} ${r.qa.map(p => `${p.question} ${p.answer}`).join(' ')}`.toLowerCase();
+                const hay = `${r.name} ${pairs.map(p => `${p.question} ${p.answer}`).join(' ')}`.toLowerCase();
                 if (!hay.includes(q)) return false;
             }
             return true;
@@ -208,7 +231,7 @@ export default function QaTreeView({ nodeId, versionId, onClose }) {
             byTop.get(r.topId).rows.push(r);
         }
         return groups;
-    }, [rows, qaFilter, q]);
+    }, [rows, qaFilter, q, unansweredKeys]);
 
     const totalPairs = useMemo(() => (rows || []).reduce((s, r) => s + r.qa.filter(p => (p.question || '').trim() || (p.answer || '').trim()).length, 0), [rows]);
 
@@ -300,8 +323,8 @@ export default function QaTreeView({ nodeId, versionId, onClose }) {
                                             <Plus size={11} /> pytanie
                                         </button>
                                     </div>
-                                    {row.qa.map((p, idx) => (
-                                        <div key={idx} className={`gap-2 ${isMobile ? 'flex flex-col' : 'grid grid-cols-[1fr_1fr_auto] items-start'}`}>
+                                    {row.qa.map((p, idx) => isPairVisible(p) && (
+                                        <div key={p._k} className={`gap-2 ${isMobile ? 'flex flex-col' : 'grid grid-cols-[1fr_1fr_auto] items-start'}`}>
                                             <GrowingTextarea value={p.question || ''} placeholder="Pytanie…"
                                                 onChange={e => updatePair(row.id, idx, 'question', e.target.value)}
                                                 onBlur={() => persistNodeQa(row.id)}
