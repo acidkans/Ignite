@@ -11,6 +11,7 @@ import { NotificationSettingsService } from '../notification-settings/notificati
 export class NotificationCronService {
   private readonly logger = new Logger(NotificationCronService.name);
   private syncRunning = false;
+  private lastMsTodoSyncAt: number | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -21,12 +22,18 @@ export class NotificationCronService {
   ) {}
 
   // @anchor notification-cron-ms-todo-sync
-  // Domyślnie co 5 minut — interwał nadpisywany przez SystemNotificationSettings.msTodoSyncIntervalMinutes
-  @Cron('*/5 * * * *')
+  // Cron tyka co minutę, a właściwy sync startuje co SystemNotificationSettings.msTodoSyncIntervalMinutes
+  // (domyślnie 5) — zmiana w ustawieniach działa od razu, bez restartu backendu.
+  @Cron(CronExpression.EVERY_MINUTE)
   async syncMsTodo(): Promise<void> {
     if (this.syncRunning) return;
     const settings = await this.notifSettings.getOrCreate();
     if (!settings.msTodoEnabled) return;
+
+    const intervalMs = Math.min(60, Math.max(1, settings.msTodoSyncIntervalMinutes || 5)) * 60_000;
+    // 5 s luzu, żeby drobne opóźnienie ticka nie przesuwało syncu o całą minutę
+    if (this.lastMsTodoSyncAt && Date.now() - this.lastMsTodoSyncAt < intervalMs - 5_000) return;
+    this.lastMsTodoSyncAt = Date.now();
 
     this.syncRunning = true;
     try {
