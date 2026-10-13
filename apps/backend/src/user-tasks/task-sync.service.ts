@@ -27,10 +27,15 @@ export class TaskSyncService {
 
       for (const list of lists) {
         let deltaLink = deltaLinksMap[list.id] as string | undefined;
+        // Pełny fetch (brak deltaLink) nie zwraca @removed dla zadań usuniętych wcześniej —
+        // po nim zadania listy nieobecne w MS oznaczamy jako usunięte.
+        const isFullFetch = !deltaLink;
+        const seenIds = new Set<string>();
         let hasMore = true;
 
         while (hasMore) {
           const page = await this.msTodo.fetchTasksDelta(userId, list.id, deltaLink);
+          for (const t of page.tasks) if (!(t as any)['@removed']) seenIds.add(t.id);
           await this.processDeltaTasks(userId, list, page.tasks);
 
           if (page.deltaLink) {
@@ -42,7 +47,20 @@ export class TaskSyncService {
             hasMore = false;
           }
         }
+
+        if (isFullFetch) {
+          await this.prisma.userTask.updateMany({
+            where: { userId, msListId: list.id, msToDoId: { notIn: [...seenIds] }, deletedAt: null },
+            data: { deletedAt: new Date() },
+          });
+        }
       }
+
+      // Zadania z list usuniętych w MS To Do — delta usuniętej listy już nic nie zwróci
+      await this.prisma.userTask.updateMany({
+        where: { userId, msToDoId: { not: null }, msListId: { notIn: lists.map((l) => l.id) }, deletedAt: null },
+        data: { deletedAt: new Date() },
+      });
 
       await this.msTodo.updateSyncState(userId, {
         deltaLink: JSON.stringify(deltaLinksMap),

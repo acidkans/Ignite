@@ -66,13 +66,13 @@ export class MsTodoService {
 
   // @anchor ms-todo-fetch-tasks-delta
   // Pobiera delta zadań dla jednej listy. Gdy deltaLink=null, startuje pełny fetch.
+  // Bez $top — Graph odrzuca go na tasks/delta (400 "Delta query is not supported by this resource").
   async fetchTasksDelta(userId: string, listId: string, deltaLink?: string): Promise<MsTodoDeltaResult> {
     const token = await this.getValidAccessToken(userId);
     const url = deltaLink ?? `${GRAPH_BASE}/me/todo/lists/${listId}/tasks/delta`;
     try {
       const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
-        params: deltaLink ? undefined : { $top: 200 },
       });
       const data = res.data;
       return {
