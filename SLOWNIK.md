@@ -1915,6 +1915,10 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-wiersz | wiersz filtrów w nagłówku tabeli pozycji | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-filter-row |
 | ui-stala | BRAK_WLASCICIELA (etykieta pozycji bez osoby odpowiedzialnej) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-brak-wlasciciela |
 | ui-stan | leafBranchPath (ścieżka gałęzi wybranej pozycji — podświetlenie lewego panelu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-leaf-branch-path |
+| ui-stan | openBranches (rozwinięte gałęzie drzewa; reset przy zmianie gałęzi głównej) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-open-branches |
+| ui-funkcja | mainBranchOf (gałąź główna danej gałęzi) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor main-branch-of |
+| ui-funkcja | selectBranch (wybór gałęzi + rozwinięcie, reset przy innej gałęzi głównej) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor select-branch |
+| ui-funkcja | toggleBranchOpen (strzałka zwiń/rozwiń gałąź) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor toggle-branch-open |
 | ui-wiersz | EntryRow (zapisany wpis, edycja w miejscu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-row |
 | ui-stan | podział wpisów w ofercie / nadmiarowe w szufladzie | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-surplus-split |
 | ui-przycisk | SurplusToggle (znacznik „nadmiarowy") | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-surplus-toggle |

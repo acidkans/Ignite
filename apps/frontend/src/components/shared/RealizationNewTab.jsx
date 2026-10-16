@@ -902,6 +902,51 @@ export default function RealizationNewTab({
         return { branchId: leaf.branchId, path };
     }, [idx, selectedLeaf]);
 
+    // @anchor realization-new-open-branches — rozwinięte gałęzie drzewa. Start ZWINIĘTY: widać tylko
+    // gałęzie główne. Rozwinięcia trzymają się, dopóki wybór zostaje w tej samej gałęzi głównej;
+    // wybór w innej gałęzi głównej zaczyna od zwiniętego drzewa (otwarta tylko kliknięta gałąź).
+    // Powrót do całego zamówienia (korzeń) nie jest przejściem do innej gałęzi — stan zostaje.
+    const [openBranches, setOpenBranches] = useState(() => new Set());
+    const mainBranchRef = useRef(null);
+    useEffect(() => { setOpenBranches(new Set()); mainBranchRef.current = null; }, [nodeId]);
+    // @anchor main-branch-of — gałąź główna (dziecko korzenia) danej gałęzi; null dla korzenia.
+    const mainBranchOf = useCallback((id) => {
+        const seen = new Set();
+        while (id && id !== SYNTHETIC_ROOT && !seen.has(id)) {
+            seen.add(id);
+            const parent = idx.nodeById[id]?.parentId;
+            if (parent === SYNTHETIC_ROOT) return id;
+            id = parent;
+        }
+        return null;
+    }, [idx]);
+    // @anchor select-branch — wybór gałęzi w drzewie: filtruje tabelę i rozwija klikniętą gałąź.
+    const selectBranch = (id) => {
+        const main = mainBranchOf(id);
+        const nowaGlowna = main && main !== mainBranchRef.current;
+        if (main) mainBranchRef.current = main;
+        setOpenBranches(prev => {
+            const next = nowaGlowna ? new Set() : new Set(prev);
+            if (idx.childrenOf[id]?.length) next.add(id);
+            return next;
+        });
+        setSelectedBranch(id);
+        setSelectedLeaf(null);
+    };
+    // @anchor toggle-branch-open — strzałka gałęzi: samo zwinięcie/rozwinięcie, bez zmiany wyboru.
+    const toggleBranchOpen = (id) => setOpenBranches(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
+    // Gałąź pozycji wybranej w tabeli musi być widoczna, żeby podświetlenie ścieżki coś mówiło —
+    // dokładamy rozwinięcia jej przodków, niczego nie zwijając.
+    useEffect(() => {
+        const przodkowie = [...leafBranchPath.path].filter(id => id !== leafBranchPath.branchId && id !== SYNTHETIC_ROOT);
+        if (!przodkowie.length) return;
+        setOpenBranches(prev => (przodkowie.every(id => prev.has(id)) ? prev : new Set([...prev, ...przodkowie])));
+    }, [leafBranchPath]);
+
     // @anchor realization-new-export-rows — wiersze dla eksportu i protokołu w kształcie, którego
     // oczekują obie ścieżki: { node, card, realization }. To DOKŁADNIE to, co widać w tabeli —
     // po wyborze gałęzi, filtrach kolumn i przełączniku „Tylko niedomknięte". Odbiera się i
@@ -1123,7 +1168,8 @@ export default function RealizationNewTab({
                         <BranchTree
                             idx={idx} rootId={SYNTHETIC_ROOT} level={0}
                             selected={selectedBranch}
-                            onSelect={(id) => { setSelectedBranch(id); setSelectedLeaf(null); }}
+                            onSelect={selectBranch}
+                            open={openBranches} onToggleOpen={toggleBranchOpen}
                             cardOf={cardOf} actualsOf={actualsOf} isUnfinished={isUnfinished}
                             leafBranch={leafBranchPath.branchId} leafPath={leafBranchPath.path}
                             showMoney={canSeeMoney}
@@ -1251,7 +1297,7 @@ const MiniBtn = ({ children, onClick, muted }) => (
 // (`realization-new-leaf-branch-path`): pełny kolor na samej gałęzi, przygaszony na jej
 // przodkach, więc linia prowadzi wzrok od korzenia w dół. To NIE jest wybór gałęzi — wybór
 // dalej filtruje tabelę i ma własne tło.
-function BranchTree({ idx, rootId, level, selected, onSelect, cardOf, actualsOf, isUnfinished, leafBranch, leafPath, showMoney }) {
+function BranchTree({ idx, rootId, level, selected, onSelect, open, onToggleOpen, cardOf, actualsOf, isUnfinished, leafBranch, leafPath, showMoney }) {
     // Hooki stoją PRZED wyjściem na brakującym węźle — inaczej ten sam komponent raz
     // wywoływałby `useRef`/`useEffect`, a raz nie, i React zgłosiłby zmianę liczby hooków.
     const rowRef = useRef(null);
@@ -1274,6 +1320,8 @@ function BranchTree({ idx, rootId, level, selected, onSelect, cardOf, actualsOf,
     const real = showMoney ? leaves.reduce((s, n) => s + realizationOf(n, actualsOf(n)).value, 0) : 0;
     const waiting = leaves.some(isUnfinished);
     const children = idx.childrenOf[rootId] || [];
+    // Korzeń zawsze rozwinięty — gałęzie główne są widoczne od startu.
+    const rozwinieta = rootId === SYNTHETIC_ROOT || open?.has(rootId);
 
     return (
         <>
@@ -1293,16 +1341,19 @@ function BranchTree({ idx, rootId, level, selected, onSelect, cardOf, actualsOf,
                     level <= 1 ? 'font-semibold text-gray-200' : 'text-gray-400'} ${
                     level === 1 ? 'border-t border-white/[.07]' : ''}`}>
                 <span style={{ width: level * 13 }} className="shrink-0" />
-                <ChevronRight size={11} className={`shrink-0 text-gray-600 ${children.length ? 'rotate-90' : 'invisible'}`} />
+                <span onClick={(e) => { if (!children.length || rootId === SYNTHETIC_ROOT) return; e.stopPropagation(); onToggleOpen(rootId); }}
+                    className={`-m-1 shrink-0 p-1 ${children.length ? 'hover:text-gray-300' : 'invisible'}`}>
+                    <ChevronRight size={11} className={`text-gray-600 transition-transform ${rozwinieta ? 'rotate-90' : ''}`} />
+                </span>
                 <span className="min-w-0 flex-1 truncate">{node.name}</span>
                 {waiting && <span title={`${node.name} — są pozycje bez pełnego pokrycia zakupami`} className="size-1.5 shrink-0 rounded-full bg-amber-400" />}
                 <span className="w-9 shrink-0 text-right text-gray-500 tabular-nums" title={`${node.name} — ${leaves.length} pozycji kosztowych`}>{leaves.length}</span>
                 {showMoney && <span className="w-24 shrink-0 text-right text-orange-400 tabular-nums" title={`${node.name} — wycena gałęzi`}>{fmtZl(plan)}</span>}
                 {showMoney && <span className="w-24 shrink-0 text-right text-red-400 tabular-nums" title={`${node.name} — zakupy zrealizowane`}>{fmtZl(real)}</span>}
             </div>
-            {children.map(c => (
+            {rozwinieta && children.map(c => (
                 <BranchTree key={c.id} idx={idx} rootId={c.id} level={level + 1}
-                    selected={selected} onSelect={onSelect}
+                    selected={selected} onSelect={onSelect} open={open} onToggleOpen={onToggleOpen}
                     cardOf={cardOf} actualsOf={actualsOf} isUnfinished={isUnfinished}
                     leafBranch={leafBranch} leafPath={leafPath} showMoney={showMoney} />
             ))}
