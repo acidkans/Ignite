@@ -1148,25 +1148,24 @@ export async function eksportRealizacjiXlsx({
             zakupy.push({ node, card, e, planQty: Number(r.plan) || 0, rozl: rozl === ROZLICZENIE.OFERTA ? ROZL_XLS.OFERTA : ROZL_XLS.POZA, powod });
         }
     }
-    for (const e of orphanEntries) {
+    // Sieroty grupowane po id pozycji — plan i Δ stoją w PIERWSZYM wierszu pozycji, więc jej wpisy muszą leżeć razem.
+    for (const e of [...orphanEntries].sort((x, y) => String(x.wbsRootId).localeCompare(String(y.wbsRootId)))) {
         if (entryNoun(e.leafType) !== 'zakup') continue;
         const node = { name: e.leafName || '(pozycja usunięta z wyceny)', type: e.leafType, path: null, unit: 'szt', sourceWbsNodeId: e.wbsRootId };
         zakupy.push({ node, card: null, e, planQty: 0, rozl: ROZL_XLS.POZA, powod: POWOD_POZA_OFERTA.USUNIETA });
     }
-    // @anchor realization-export-offer-cap — wartość oferty pozycji NIE PRZEKRACZA ilości z wyceny.
-    // Wpisy „w ofercie" zjadają ilość planu po kolei (data zakupu); to, co ponad plan, dostaje
-    // wartość oferty 0, więc w całości powiększa Δ. Bez limitu dwa zakupy po 3 szt. przy wycenie
-    // na 3 szt. pokazywały wartość oferty za 6 szt. — oferta „rosła" razem z zakupami.
+    // @anchor realization-export-plan-per-position — plan (koszt jedn., wartość) i Δ są cechą POZYCJI,
+    // nie wpisu: pozycja „Bypass” za 8000 zł bywa kupowana w częściach (urządzenie, wspornik, montaż),
+    // więc porównanie każdego wpisu z 8000 zł dawało bzdurne Δ jedn. i Δ %. Wartości planu i Δ
+    // stoją wyłącznie w PIERWSZYM wierszu pozycji; Δ = suma wszystkich jej wpisów − wartość
+    // zaplanowana, czyli dokładnie to, co pokazuje tabela w aplikacji.
     {
-        const pozostalo = new Map();
+        const widziane = new Set();
         for (const z of zakupy) {
             const id = wbsRootOf(z.node);
-            if (!pozostalo.has(id)) pozostalo.set(id, z.planQty);
-            const planUnit = planUnitOf(z.node, z.card);
-            if (z.rozl !== ROZL_XLS.OFERTA || planUnit == null) { z.pv = 0; continue; }
-            const ile = Math.max(0, Math.min(Number(z.e.qty) || 0, pozostalo.get(id)));
-            pozostalo.set(id, pozostalo.get(id) - ile);
-            z.pv = Math.round(ile * planUnit * 100) / 100;
+            z.pierwszy = !widziane.has(id);
+            widziane.add(id);
+            z.pv = z.pierwszy ? Math.round(planValueOf(z.node, z.card) * 100) / 100 : 0;
         }
     }
     zk.columns = [
@@ -1183,33 +1182,25 @@ export async function eksportRealizacjiXlsx({
         { header: 'Dokument', key: 'doc', width: 16 },
         { header: 'Ilość', key: 'qty', width: 10 },
         { header: 'Jedn.', key: 'unit', width: 8 },
-        // @anchor realization-export-purchase-vs-offer — cena ofertowa obok ceny zakupu
-        // i różnica między nimi. Ofertowa jest cechą POZYCJI (`planUnitOf`: karta
-        // produktowa, a dla liści bez karty `WbsNode.unitCost`), więc przy kilku
-        // dostawach powtarza się w każdym wierszu — to ta sama baza porównania.
-        // Δ liczona jako zakup − oferta: plus = kupiliśmy drożej, minus = taniej. Porównanie
-        // ceny ma sens WYŁĄCZNIE dla zakupu w ofercie — nadmiarowy nie ma czego porównać.
+        // @anchor realization-export-purchase-vs-offer — koszt jedn. zaplanowany (`planUnitOf`) obok
+        // ceny zakupu — tylko w pierwszym wierszu pozycji (`realization-export-plan-per-position`).
         { header: 'Koszt jednostkowy zaplanowany', key: 'planUnit', width: 18 },
         { header: 'Cena zakupu', key: 'unitCost', width: 14 },
-        { header: 'Δ jedn.', key: 'dUnit', width: 12 },
-        { header: 'Δ %', key: 'dPct', width: 10 },
-        // @anchor realization-export-offer-value — wartość oferty PRZYPISANA do wpisu: ilość ×
-        // cena ofertowa dla zakupu w ofercie, 0 dla pozostałych. Dzięki temu Δ wartość zakupu
-        // nadmiarowego to cały jego koszt, a suma Δ zgadza się z „wycena vs zakupy" z karty.
+        // @anchor realization-export-offer-value — wartość zaplanowana POZYCJI (`planValueOf`) w jej
+        // pierwszym wierszu, w pozostałych pusto — suma kolumny = plan pozycji z zakupami.
         { header: 'Wartość zaplanowana', key: 'planValue', width: 18 },
         { header: 'Wartość zakupu', key: 'value', width: 16 },
         { header: 'Δ wartość', key: 'dValue', width: 14 },
-        // @anchor realization-export-settlement-col — „Rozliczenie" wpisu (`rozliczenieOf`):
-        // w ofercie / poza ofertą, plus „Powód" dla drugiej. Od niej zależą „Δ jedn.",
-        // „Wartość oferty" i „Δ wartość" (formuły czytają tę komórkę), więc zmiana kategorii
-        // w pliku przelicza wiersz, kolor i arkusz „Analiza zakupów".
+        // @anchor realization-export-settlement-col — „Rozliczenie” wpisu (`rozliczenieOf`):
+        // zaplanowany / poza planem, plus „Powód” dla drugiej. Zmiana kategorii w pliku
+        // przemalowuje wiersz i przelicza podział na kategorie w arkuszu „Analiza zakupów”.
         { header: 'Rozliczenie', key: 'rozl', width: 14 },
         { header: 'Powód', key: 'powod', width: 20 },
         { header: 'Kupujący', key: 'author', width: 22 },
         { header: 'Komentarz', key: 'comment', width: 40 },
         // Klucz pozycji dla SUMIFS w „Analizie zakupów" — nazwa się powtarza między gałęziami.
         { header: 'Id pozycji', key: 'rootId', width: 12, hidden: true },
-        // Ilość z wyceny pozycji — limit dla „Wartości oferty" (`realization-export-offer-cap`).
+        // Ilość z wyceny pozycji — czynnik formuły „Wartości zaplanowanej”.
         { header: 'Ilość wyceny', key: 'planQty', width: 12, hidden: true },
     ];
     zk.getRow(1).font = { bold: true };
@@ -1218,13 +1209,18 @@ export async function eksportRealizacjiXlsx({
     const Z = (k) => kol(zk, k);
 
     const W_OFERCIE = ROZL_XLS.OFERTA;
-    zakupy.forEach(({ node, card, e, rozl, powod, planQty, pv }, i) => {
+    const wartoscPozycji = new Map();
+    for (const z of zakupy) {
+        const id = wbsRootOf(z.node);
+        wartoscPozycji.set(id, (wartoscPozycji.get(id) || 0) + (Number(z.e.qty) || 0) * (Number(z.e.unitCost) || 0));
+    }
+    zakupy.forEach(({ node, card, e, rozl, powod, planQty, pv, pierwszy }, i) => {
         const n = i + 2;
         const qty = Number(e.qty) || 0;
         const unitCost = Number(e.unitCost) || 0;
         const planUnit = planUnitOf(node, card);
-        const wOfercie = rozl === W_OFERCIE;
         const val = Math.round(qty * unitCost * 100) / 100;
+        const id = wbsRootOf(node);
         const row = zk.addRow({
             ...galezie(node),
             name: node.name || '',
@@ -1241,17 +1237,18 @@ export async function eksportRealizacjiXlsx({
             unit: node.unit || 'szt',
             rozl,
             powod,
-            planUnit,
+            planUnit: pierwszy ? planUnit : null,
             unitCost,
-            dUnit: { formula: `IF(AND(${Z('rozl')}${n}="${W_OFERCIE}",${Z('planUnit')}${n}<>""),${Z('unitCost')}${n}-${Z('planUnit')}${n},"")`, result: wOfercie && planUnit != null ? Math.round((unitCost - planUnit) * 100) / 100 : '' },
-            dPct: { formula: `IF(AND(${Z('rozl')}${n}="${W_OFERCIE}",${Z('planUnit')}${n}<>"",${Z('planUnit')}${n}<>0),${Z('dUnit')}${n}/${Z('planUnit')}${n},"")`, result: wOfercie && planUnit ? (unitCost - planUnit) / planUnit : '' },
-            // Ilość objęta wyceną = to, co zostało z planu po wcześniejszych wpisach tej pozycji.
-            planValue: { formula: `IF(AND(${Z('rozl')}${n}="${W_OFERCIE}",${Z('planUnit')}${n}<>""),MIN(${Z('qty')}${n},MAX(0,${Z('planQty')}${n}-SUMIFS(${Z('qty')}$1:${Z('qty')}${n - 1},${Z('rootId')}$1:${Z('rootId')}${n - 1},${Z('rootId')}${n},${Z('rozl')}$1:${Z('rozl')}${n - 1},"${W_OFERCIE}")))*${Z('planUnit')}${n},0)`, result: pv },
+            planValue: pierwszy
+                ? (planUnit != null ? { formula: `${Z('planQty')}${n}*${Z('planUnit')}${n}`, result: pv } : 0)
+                : null,
             value: { formula: `${Z('qty')}${n}*${Z('unitCost')}${n}`, result: val },
-            dValue: { formula: `${Z('value')}${n}-${Z('planValue')}${n}`, result: Math.round((val - pv) * 100) / 100 },
+            dValue: pierwszy
+                ? { formula: `SUMIFS(${Z('value')}:${Z('value')},${Z('rootId')}:${Z('rootId')},${Z('rootId')}${n})-${Z('planValue')}${n}`, result: Math.round(((wartoscPozycji.get(id) || 0) - pv) * 100) / 100 }
+                : null,
             author: [e.author?.firstName, e.author?.lastName].filter(Boolean).join(' ') || e.author?.email || '',
             comment: e.comment || '',
-            rootId: wbsRootOf(node),
+            rootId: id,
             planQty,
         });
         row.getCell('rozl').dataValidation = {
@@ -1294,8 +1291,7 @@ export async function eksportRealizacjiXlsx({
     } else {
         zk.addRow({ gal0: 'Brak wpisów zakupu w tym widoku' }).font = { italic: true };
     }
-    ['planUnit', 'unitCost', 'dUnit', 'planValue', 'value', 'dValue'].forEach(k => { zk.getColumn(k).numFmt = FMT_PLN; });
-    zk.getColumn('dPct').numFmt = '0.0%';
+    ['planUnit', 'unitCost', 'planValue', 'value', 'dValue'].forEach(k => { zk.getColumn(k).numFmt = FMT_PLN; });
 
     // ─ Analiza zakupów ───────────────────────────────────────────────
     // @anchor realization-export-purchase-analysis — tabela „przestawna" z arkusza Zakupy:
@@ -1338,16 +1334,20 @@ export async function eksportRealizacjiXlsx({
         }
     };
     // Wiersz analizy: C–E z SUMIFS (warunki podane jako tekst formuły), F i G z tego wiersza.
-    const wierszAnalizy = (vals, warunki, agg, styl) => {
+    // `bezPlanu` — wiersz kategorii/powodu: plan jest cechą pozycji (`realization-export-plan-per-position`)
+    // i nie dzieli się na kategorie wpisów, więc taki wiersz niesie tylko ilość i wartość zakupu.
+    const wierszAnalizy = (vals, warunki, agg, styl, bezPlanu = false) => {
         const n = az.rowCount + 1;
         const sumifs = (col) => `SUMIFS(${ZR(col)},${warunki(n)})`;
         const r = az.addRow({
             ...vals,
             c: { formula: sumifs('qty'), result: agg.qty },
-            d: { formula: sumifs('planValue'), result: agg.pv },
             e: { formula: sumifs('value'), result: agg.val },
-            f: { formula: `${AZ('e')}${n}-${AZ('d')}${n}`, result: Math.round((agg.val - agg.pv) * 100) / 100 },
-            g: { formula: `IF(${AZ('d')}${n}=0,"",${AZ('f')}${n}/${AZ('d')}${n})`, result: agg.pv ? (agg.val - agg.pv) / agg.pv : '' },
+            ...(bezPlanu ? {} : {
+                d: { formula: sumifs('planValue'), result: agg.pv },
+                f: { formula: `${AZ('e')}${n}-${AZ('d')}${n}`, result: Math.round((agg.val - agg.pv) * 100) / 100 },
+                g: { formula: `IF(${AZ('d')}${n}=0,"",${AZ('f')}${n}/${AZ('d')}${n})`, result: agg.pv ? (agg.val - agg.pv) / agg.pv : '' },
+            }),
         });
         pomaluj(r, styl);
         return r;
@@ -1371,7 +1371,7 @@ export async function eksportRealizacjiXlsx({
             const czesc = lista.filter(x => x.rozl === kat);
             if (!czesc.length) continue;
             wierszAnalizy({ a: `    ${kat}`, ...galezie(node), h: id, i: kat },
-                n => `${ZR('rootId')},$${AZ('h')}${n},${ZR('rozl')},$${AZ('i')}${n}`, agregat(czesc), kat === W_OFERCIE ? null : 'czerwony');
+                n => `${ZR('rootId')},$${AZ('h')}${n},${ZR('rozl')},$${AZ('i')}${n}`, agregat(czesc), kat === W_OFERCIE ? null : 'czerwony', true);
         }
     }
     if (zakupy.length) {
@@ -1395,14 +1395,14 @@ export async function eksportRealizacjiXlsx({
             const czesc = zakupy.filter(x => x.rozl === kat);
             if (!czesc.length) continue;
             wierszAnalizy({ a: `    w tym ${kat}`, i: kat },
-                n => `${ZR('rozl')},$${AZ('i')}${n}`, agregat(czesc), kat === W_OFERCIE ? null : 'czerwony');
+                n => `${ZR('rozl')},$${AZ('i')}${n}`, agregat(czesc), kat === W_OFERCIE ? null : 'czerwony', true);
             // Rozbicie „poza ofertą" na powody — dlaczego koszt poszedł ponad plan.
             if (kat === W_OFERCIE) continue;
             for (const powod of Object.values(POWOD_POZA_OFERTA)) {
                 const zPowodu = czesc.filter(x => x.powod === powod);
                 if (!zPowodu.length) continue;
                 wierszAnalizy({ a: `        ${powod}`, i: kat, j: powod },
-                    n => `${ZR('rozl')},$${AZ('i')}${n},${ZR('powod')},$${AZ('j')}${n}`, agregat(zPowodu), 'czerwony');
+                    n => `${ZR('rozl')},$${AZ('i')}${n},${ZR('powod')},$${AZ('j')}${n}`, agregat(zPowodu), 'czerwony', true);
             }
         }
     } else {

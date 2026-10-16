@@ -1763,12 +1763,12 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | eksportRealizacjiXlsx (widok + podsumowanie, wspólny dla obu zakładek) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-excel |
 | ui-funkcja | exportExcel (stan „eksportuję…" i komunikat o błędzie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-excel-call |
 | ui-funkcja | arkusz „Zakupy" w eksporcie Excel (wpisy zakupu + wymaganie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchases |
-| ui-kolumna | Cena ofertowa vs cena zakupu (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchase-vs-offer |
+| ui-kolumna | Koszt jednostkowy zaplanowany vs cena zakupu (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchase-vs-offer |
 | ui-stala | ROZL_XLS (etykiety Rozliczenia w Excelu: zaplanowany / poza planem) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-settlement-labels |
 | ui-stala | CZERWONE_TLO / CZERWONY_TEKST (zakup poza ofertą w Excelu) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-red |
 | ui-kolumna | Zakup (arkusz Zakupy — model z wpisu, przed Producentem) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchase-col |
 | ui-kolumna | Rozliczenie (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-settlement-col |
-| ui-kolumna | Wartość oferty przypisana do wpisu (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-offer-value |
+| ui-kolumna | Wartość zaplanowana pozycji w pierwszym wierszu (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-offer-value |
 | ui-funkcja | formatowanie warunkowe wierszy poza ofertą (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-red-rows |
 | ui-tabela | arkusz Analiza zakupów (SUMIFS pozycja → rozliczenie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchase-analysis |
 | ui-kolumna | trzy osie statusu w arkuszu „Realizacja" | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-status-cols |
@@ -1821,7 +1821,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | porownajGalezie (sortowanie wierszy eksportu realizacji gałęziami) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-branch-sort |
 | ui-kolumna | Gałąź / Podgałąź N (ścieżka pozycji w osobnych kolumnach eksportu realizacji; formuły przez kol(arkusz, klucz)) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-branch-cols |
 | ui-kolumna | Koszt planowany (Analiza zakupów — pełny koszt pozycji z baseline + suma całego baseline) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-planned-cost |
-| ui-funkcja | limit wartości oferty w arkuszu Zakupy (wpisy „w ofercie” zjadają ilość z wyceny po kolei) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-offer-cap |
+| ui-funkcja | plan i Δ raz na pozycję w arkuszu Zakupy (pierwszy wiersz pozycji) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-plan-per-position |
 | ui-funkcja | shortCompanyName (nazwa firmy bez formy prawnej — tylko wyświetlanie) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor short-company-name |
 | ui-stala | BRAK_ETYKIETY_NEW (nazwy brakujących pól formularza wpisu w Realizacja_new) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-missing-labels |
 | ui-stala | NUMERIC_ENTRY_FIELDS (pola wpisu niosące liczbę: qty, unitCost) | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor realization-entry-numeric-fields |
