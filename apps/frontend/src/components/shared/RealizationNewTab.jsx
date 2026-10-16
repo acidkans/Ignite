@@ -63,6 +63,8 @@ export const SYNTHETIC_ROOT = '__root__';
 //   „Dokument"           — 0 z 8 wpisów ma numer; został w szufladzie, bo faktura opisuje
 //                          pojedynczy zakup, a nie pozycję.
 //   „Wpisy"              — licznik powtarzał strzałkę rozwijania i nagłówek panelu.
+//   „Koszt jedn. zakupu" — średnia z wpisów o różnych cenach (sprzęt + montaż + paliwo)
+//                          nic nie mówiła; ceny wpisów stoją w szufladzie, suma w „Koszcie całkowitym".
 // Doszły dwie: „Typ" — pod nazwą dokładał każdemu wierszowi trzecią linię, jako kolumna daje
 // się przebiec wzrokiem w pionie; „Osoba odpowiedzialna" — przy zakupach pierwsze pytanie po
 // „co i za ile" brzmi „kogo o to zapytać".
@@ -88,7 +90,6 @@ export const REALIZATION_NEW_COLS = [
     { key: 'realization',    label: 'Zakup / wykonanie',  w: 255, prio: 1, right: true },
     { key: 'deltaQty',       label: 'Δ ilość',            w: 155, prio: 3, right: true },
     { key: 'price',          label: 'Koszt jedn. wyceny', w: 210, prio: 2, right: true },
-    { key: 'purchasePrice',  label: 'Koszt jedn. zakupu', w: 230, prio: 2, right: true },
     { key: 'total',          label: 'Koszt całkowity',    w: 275, prio: 1, right: true },
     { key: 'status',         label: 'Status oferty',      w: 230, prio: 3 },
     { key: 'purchaseStatus', label: 'Status zakupu',      w: 255, prio: 1 },
@@ -168,7 +169,6 @@ export function filterTextOf(key, node, card, r, entries) {
         realization: `${r.qty} / ${r.plan}`,
         deltaQty: String(Math.round((r.qty - r.plan) * 1000) / 1000),
         price: String(planUnitOf(node, card) ?? ''),
-        purchasePrice: String(r.avg ?? purchaseUnitOf(card) ?? ''),
         total: `${Math.round(planValueOf(node, card) * 100) / 100} ${r.value}`,
         status: offerStatusMetaOf(node)?.label || '',
         purchaseStatus: axisDisplay(node, 'purchase')?.label || '',
@@ -760,13 +760,17 @@ export default function RealizationNewTab({
 
     // Punkt startowy liczy się Z ZAWARTOŚCI, nigdy z zaszytego id: dane pochodzą z bazy
     // i identyfikatory zmieniają się przy każdej nowej wersji zamówienia.
+    // Rozwinięcie startowe ustawia się RAZ na zamówienie: `actualsOf` zmienia się po każdym
+    // zapisie wpisu, a bez tej blokady każda poprawka w szufladzie zwijała ją do „najbogatszej".
+    const startExpandedFor = useRef(null);
     useEffect(() => {
-        if (!idx.leaves.length) return;
+        if (!idx.leaves.length || startExpandedFor.current === nodeId) return;
+        startExpandedFor.current = nodeId;
         const richest = idx.leaves
             .map(n => ({ id: n.id, ile: actualsOf(n).length }))
             .sort((a, b) => b.ile - a.ile)[0];
         if (richest?.ile) setExpanded(new Set([richest.id]));
-    }, [idx.leaves, actualsOf]);
+    }, [idx.leaves, actualsOf, nodeId]);
 
     // Opcje filtrów liczą się z pozycji WYBRANEJ GAŁĘZI przed filtrowaniem — gdyby liczyły
     // się z wyniku, po zaznaczeniu jednego statusu zniknęłyby z listy pozostałe i nie dałoby
@@ -1451,20 +1455,6 @@ function Cell({ colKey, node, card, r, planValue, deltaQty, readOnly, onSaveAxis
                 : <span className={deltaQty < 0 ? 'text-amber-300' : 'text-red-300'}>{deltaQty > 0 ? '+' : ''}{fmtQty(deltaQty)}</span>;
         case 'price':
             return <>{fmtZl(planUnitOf(node, card))}</>;
-        // Średnia ważona z wpisów, a przy ich braku cena z propozycji `isPurchase`. Bez tego
-        // fallbacku pozycja zamówiona, ale jeszcze niedostarczona, udawałaby, że nie ma
-        // uzgodnionej ceny zakupu.
-        case 'purchasePrice': {
-            const unit = r.avg ?? purchaseUnitOf(card);
-            if (unit == null) return <span className="text-gray-600">—</span>;
-            return (
-                <>
-                    {fmtZl(unit)}
-                    {r.avg != null && r.mixedPrices && <span className="ml-1 text-[length:var(--rn-md)] text-gray-500" title="Średnia ważona z wpisów realizacji">śr.</span>}
-                    {r.avg == null && <span className="ml-1 text-[length:var(--rn-md)] text-gray-500" title="Cena z propozycji isPurchase — brak wpisów">ofert.</span>}
-                </>
-            );
-        }
         case 'total':
             return (
                 <>
@@ -1696,7 +1686,7 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, o
                             <tr>
                                 <td colSpan={withCard ? 6 : 4} className="border-t border-teal-300/35 px-2 py-1.5 text-gray-400">Razem zakupy tej pozycji</td>
                                 <td className="border-t border-teal-300/35 px-2 py-1.5 text-right tabular-nums text-gray-200">{fmtQty(r.qty)}</td>
-                                <td className="border-t border-teal-300/35 px-2 py-1.5 text-right tabular-nums text-gray-500">śr. {fmtZl(r.avg)}</td>
+                                <td className="border-t border-teal-300/35" />
                                 <td className="border-t border-teal-300/35 px-2 py-1.5 text-right font-semibold tabular-nums text-red-400">{fmtZl(r.value)}</td>
                                 <td colSpan={2} className="border-t border-teal-300/35 px-2 py-1.5 text-gray-500">
                                     wycena {fmtZl(planValue)} zł · <span className={delta <= 0 ? 'text-emerald-300' : 'text-red-300'}>
