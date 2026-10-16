@@ -1181,14 +1181,14 @@ export async function eksportRealizacjiXlsx({
         // dostawach powtarza się w każdym wierszu — to ta sama baza porównania.
         // Δ liczona jako zakup − oferta: plus = kupiliśmy drożej, minus = taniej. Porównanie
         // ceny ma sens WYŁĄCZNIE dla zakupu w ofercie — nadmiarowy nie ma czego porównać.
-        { header: 'Koszt jednostkowy oferty', key: 'planUnit', width: 16 },
+        { header: 'Koszt jednostkowy zaplanowany', key: 'planUnit', width: 18 },
         { header: 'Cena zakupu', key: 'unitCost', width: 14 },
         { header: 'Δ jedn.', key: 'dUnit', width: 12 },
         { header: 'Δ %', key: 'dPct', width: 10 },
         // @anchor realization-export-offer-value — wartość oferty PRZYPISANA do wpisu: ilość ×
         // cena ofertowa dla zakupu w ofercie, 0 dla pozostałych. Dzięki temu Δ wartość zakupu
         // nadmiarowego to cały jego koszt, a suma Δ zgadza się z „wycena vs zakupy" z karty.
-        { header: 'Wartość oferty', key: 'planValue', width: 16 },
+        { header: 'Wartość zaplanowana', key: 'planValue', width: 18 },
         { header: 'Wartość zakupu', key: 'value', width: 16 },
         { header: 'Δ wartość', key: 'dValue', width: 14 },
         // @anchor realization-export-settlement-col — „Rozliczenie" wpisu (`rozliczenieOf`):
@@ -1300,7 +1300,7 @@ export async function eksportRealizacjiXlsx({
         { header: 'Pozycja / rozliczenie', key: 'a', width: 40 },
         ...KOLUMNY_GALEZI,
         { header: 'Ilość', key: 'c', width: 10 },
-        { header: 'Wartość oferty', key: 'd', width: 16 },
+        { header: 'Wartość zaplanowana', key: 'd', width: 18 },
         { header: 'Wartość zakupu', key: 'e', width: 16 },
         { header: 'Δ wartość', key: 'f', width: 14 },
         { header: 'Δ %', key: 'g', width: 10 },
@@ -1468,7 +1468,7 @@ export async function eksportRealizacjiXlsx({
     // Obie pozycje liczone „w plus": ile budżetu ZOSTAŁO (wycena − realizacja) i jaka jego
     // część JEST już wydana (realizacja ÷ wycena). Odwrotnie niż kolumna „Δ wartość"
     // w arkuszu Realizacja, która zostaje znakowanym odchyleniem.
-    ps.addRow({ a: 'Wartość niezrealizowanego budżetu ofertowego', b: { formula: `B${wRow}-B${wRow + 1}`, result: Math.round((totals.plan - totals.real) * 100) / 100 } });
+    ps.addRow({ a: 'Wartość niezrealizowanego budżetu zaplanowanego', b: { formula: `B${wRow}-B${wRow + 1}`, result: Math.round((totals.plan - totals.real) * 100) / 100 } });
     ps.addRow({ a: 'Procentowa realizacja budżetu', b: { formula: `IF(B${wRow}=0,"",B${wRow + 1}/B${wRow})`, result: totals.plan ? totals.real / totals.plan : '' } });
     ps.getCell(`B${ps.rowCount}`).numFmt = '0.0%';
     // wRow = „Koszt całkowity wyceny"; kolejne dwa wiersze to realizacja i Δ wartość.
@@ -1481,7 +1481,7 @@ export async function eksportRealizacjiXlsx({
     // idzie po 100% wyceny. Na końcu suma — prognoza całego budżetu.
     if (analiza.ruszone) {
         naglowek('Prognoza wydatków');
-        const glowka = ps.addRow({ a: 'Rodzaj kosztów', b: 'Wycena', c: 'Wykonanie', d: '% wykonania', e: 'Prognoza', f: 'Δ do oferty' });
+        const glowka = ps.addRow({ a: 'Rodzaj kosztów', b: 'Wycena', c: 'Wykonanie', d: '% wykonania', e: 'Prognoza', f: 'Δ do planu' });
         glowka.font = { bold: true };
         const odRow = ps.rowCount + 1;
         const typy = analiza.typy.filter(g => g.planCaly > 0);
@@ -1542,9 +1542,9 @@ export async function eksportRealizacjiXlsx({
     if (!totals.plan) {
         zdania.push(`Pozycje w tym widoku nie mają kwot w wycenie, a na zakupy i wykonanie zadań poszło dotąd ${zl(totals.real)} — nie ma do czego porównać realizacji.`);
     } else if (totals.real > totals.plan) {
-        zdania.push(`Wycena zamówienia to ${zl(totals.plan)}, a na zakupy i wykonanie zadań poszło dotąd ${zl(totals.real)} — budżet ofertowy jest wyczerpany i przekroczony o ${zl(totals.real - totals.plan)}, co daje ${pct(totals.real, totals.plan)} wyceny.`);
+        zdania.push(`Wycena zamówienia to ${zl(totals.plan)}, a na zakupy i wykonanie zadań poszło dotąd ${zl(totals.real)} — budżet zaplanowany jest wyczerpany i przekroczony o ${zl(totals.real - totals.plan)}, co daje ${pct(totals.real, totals.plan)} wyceny.`);
     } else {
-        zdania.push(`Wycena zamówienia to ${zl(totals.plan)}, a na zakupy i wykonanie zadań poszło dotąd ${zl(totals.real)} — zrealizowano ${pct(totals.real, totals.plan)} budżetu ofertowego, do wykorzystania zostaje ${zl(totals.plan - totals.real)}.`);
+        zdania.push(`Wycena zamówienia to ${zl(totals.plan)}, a na zakupy i wykonanie zadań poszło dotąd ${zl(totals.real)} — zrealizowano ${pct(totals.real, totals.plan)} budżetu zaplanowanego, do wykorzystania zostaje ${zl(totals.plan - totals.real)}.`);
     }
 
     if (!A.ruszone) {
