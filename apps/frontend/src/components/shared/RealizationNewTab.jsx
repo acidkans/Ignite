@@ -1655,7 +1655,7 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, o
     // Szuflada CELOWO bez `overflow-hidden`: przycinał rozwiniętą listę `SupplierPicker`
     // na swojej dolnej krawędzi. Zaokrąglenie zostaje — róg tabeli wystaje o pół piksela.
     return (
-        <div className={`${DRAWER.card} ${DRAWER.accent.real.card}`}
+        <div data-entry-drawer className={`${DRAWER.card} ${DRAWER.accent.real.card}`}
             onClick={e => e.stopPropagation()}>
             {head}
             {!r.entries.length && pusta()}
@@ -1855,11 +1855,14 @@ function EntryForm({ node, cols, withCard, defaultQty, defaultSurplus = false, o
     // danych nie przechodzi dalej, tylko pyta o zapis. Bez tego zwinięcie szuflady albo klik
     // w inną pozycję po cichu gubił wpis, który wyglądał jak dodany. Przycisk „Anuluj" w
     // nagłówku szuflady (`data-entry-cancel`) to świadoma rezygnacja — tam nie pytamy.
+    // Klik w obrębie WŁASNEJ szuflady (`data-entry-drawer`) przechodzi swobodnie: formularz
+    // nie znika, a stąd kopiuje się opis z zakupu powyżej.
     const zmieniony = Object.keys(start).some(k => String(draft[k] ?? '') !== String(start[k] ?? ''));
     useEffect(() => {
         if (!zmieniony || zapisuje || ostrzezenie) return;
         const wSrodku = (t) => [rowRef, errRef, modalRef].some(r => r.current?.contains(t))
-            || t.closest?.('[data-entry-cancel]');
+            || t.closest?.('[data-entry-cancel]')
+            || rowRef.current?.closest('[data-entry-drawer]')?.contains(t);
         const onDown = (e) => {
             if (wSrodku(e.target)) return;
             e.preventDefault();
