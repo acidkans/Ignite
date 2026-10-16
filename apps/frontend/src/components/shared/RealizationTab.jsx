@@ -1175,19 +1175,13 @@ export async function eksportRealizacjiXlsx({
         { header: 'Dokument', key: 'doc', width: 16 },
         { header: 'Ilość', key: 'qty', width: 10 },
         { header: 'Jedn.', key: 'unit', width: 8 },
-        // @anchor realization-export-settlement-col — „Rozliczenie" wpisu (`rozliczenieOf`):
-        // w ofercie / poza ofertą, plus „Powód" dla drugiej. Od niej zależą „Δ jedn.",
-        // „Wartość oferty" i „Δ wartość" (formuły czytają tę komórkę), więc zmiana kategorii
-        // w pliku przelicza wiersz, kolor i arkusz „Analiza zakupów".
-        { header: 'Rozliczenie', key: 'rozl', width: 14 },
-        { header: 'Powód', key: 'powod', width: 20 },
         // @anchor realization-export-purchase-vs-offer — cena ofertowa obok ceny zakupu
         // i różnica między nimi. Ofertowa jest cechą POZYCJI (`planUnitOf`: karta
         // produktowa, a dla liści bez karty `WbsNode.unitCost`), więc przy kilku
         // dostawach powtarza się w każdym wierszu — to ta sama baza porównania.
         // Δ liczona jako zakup − oferta: plus = kupiliśmy drożej, minus = taniej. Porównanie
         // ceny ma sens WYŁĄCZNIE dla zakupu w ofercie — nadmiarowy nie ma czego porównać.
-        { header: 'Cena ofertowa', key: 'planUnit', width: 14 },
+        { header: 'Koszt jednostkowy oferty', key: 'planUnit', width: 16 },
         { header: 'Cena zakupu', key: 'unitCost', width: 14 },
         { header: 'Δ jedn.', key: 'dUnit', width: 12 },
         { header: 'Δ %', key: 'dPct', width: 10 },
@@ -1197,6 +1191,12 @@ export async function eksportRealizacjiXlsx({
         { header: 'Wartość oferty', key: 'planValue', width: 16 },
         { header: 'Wartość zakupu', key: 'value', width: 16 },
         { header: 'Δ wartość', key: 'dValue', width: 14 },
+        // @anchor realization-export-settlement-col — „Rozliczenie" wpisu (`rozliczenieOf`):
+        // w ofercie / poza ofertą, plus „Powód" dla drugiej. Od niej zależą „Δ jedn.",
+        // „Wartość oferty" i „Δ wartość" (formuły czytają tę komórkę), więc zmiana kategorii
+        // w pliku przelicza wiersz, kolor i arkusz „Analiza zakupów".
+        { header: 'Rozliczenie', key: 'rozl', width: 14 },
+        { header: 'Powód', key: 'powod', width: 20 },
         { header: 'Kupujący', key: 'author', width: 22 },
         { header: 'Komentarz', key: 'comment', width: 40 },
         // Klucz pozycji dla SUMIFS w „Analizie zakupów" — nazwa się powtarza między gałęziami.
