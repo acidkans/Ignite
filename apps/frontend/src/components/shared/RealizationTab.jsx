@@ -1025,14 +1025,14 @@ export async function eksportRealizacjiXlsx({
     // tutaj, a wypełniamy niżej: „Podsumowanie" ma otwierać plik (najpierw wnioski, potem
     // dane), ale liczy się z gotowej tabeli. Formuły `Realizacja!…` adresują po nazwie,
     // więc kolejność arkuszy im nie przeszkadza.
-    // @anchor realization-export-branch-cols — ścieżka pozycji rozbita na OSOBNE kolumny: „Gałąź",
-    // „Podgałąź 1", „Podgałąź 2"… Jedna kolumna „A / B / C" nie dawała się filtrować ani sortować
+    // @anchor realization-export-branch-cols — ścieżka pozycji rozbita na OSOBNE kolumny: „Zakres",
+    // „Podzakres 1", „Podzakres 2"… (jeden poziom pod zakresem — samo „Podzakres"; nazwy jak w pozostałych eksportach) Jedna kolumna „A / B / C" nie dawała się filtrować ani sortować
     // po samej gałęzi. Liczba kolumn = najgłębsza ścieżka w eksporcie. Formuły adresują kolumny
     // przez `kol(arkusz, klucz)`, nie literami na sztywno — wstawienie kolumn gałęzi przesuwa litery.
     const galezieOf = kluczGalezi;
     const GLEBOKOSC = Math.max(1, ...rows.map(({ node }) => galezieOf(node).length));
     const KOLUMNY_GALEZI = Array.from({ length: GLEBOKOSC }, (_, i) => ({
-        header: i === 0 ? 'Gałąź' : `Podgałąź ${i}`, key: `gal${i}`, width: i === 0 ? 30 : 26,
+        header: i === 0 ? 'Zakres' : (GLEBOKOSC === 2 ? 'Podzakres' : `Podzakres ${i}`), key: `gal${i}`, width: i === 0 ? 30 : 26,
     }));
     const galezie = (node) => Object.fromEntries(galezieOf(node).map((g, i) => [`gal${i}`, g]));
     const kol = (arkusz, klucz) => arkusz.getColumn(klucz).letter;
@@ -1133,9 +1133,6 @@ export async function eksportRealizacjiXlsx({
     // KUPUJE — praca i usługa to wykonanie, nie zakup (ten sam podział co `entryNoun`).
     // Arkusz „Realizacja" agreguje wpisy do pozycji, więc nie da się z niego wyczytać
     // pojedynczej dostawy: daty, faktury ani ceny konkretnego egzemplarza.
-    // Pierwsza kolumna niesie WYMAGANIE (`MaterialRequirement.name`), do którego zakup
-    // jest przypisany — po nim rozlicza się dostawy wobec zakresu z dokumentacji.
-    // Liście bez karty produktowej (nocleg, paliwo) wymagania nie mają — zostaje „—".
     // Na końcu wpisy pozycji usuniętych z wyceny (`orphanEntries`): nie ma ich w wersji planu,
     // więc nie mają wiersza w tabeli, ale pieniądze wydano i muszą wejść do rozliczenia.
     const zakupy = [];
@@ -1165,13 +1162,14 @@ export async function eksportRealizacjiXlsx({
         }
     }
     zk.columns = [
-        { header: 'Wymaganie', key: 'req', width: 34 },
         ...KOLUMNY_GALEZI,
         { header: 'Pozycja', key: 'name', width: 34 },
         { header: 'Typ', key: 'typ', width: 12 },
         { header: 'Data zakupu', key: 'date', width: 13 },
+        // @anchor realization-export-purchase-col — „Zakup" = model z wpisu (co faktycznie kupiono),
+        // przed producentem — to pierwsza rzecz, której się w tym arkuszu szuka.
+        { header: 'Zakup', key: 'model', width: 24 },
         { header: 'Producent', key: 'manufacturer', width: 20 },
-        { header: 'Model', key: 'model', width: 24 },
         { header: 'Kod EAN', key: 'ean', width: 16 },
         { header: 'Dostawca', key: 'supplier', width: 24 },
         { header: 'Dokument', key: 'doc', width: 16 },
@@ -1220,7 +1218,6 @@ export async function eksportRealizacjiXlsx({
         const wOfercie = rozl === W_OFERCIE;
         const val = Math.round(qty * unitCost * 100) / 100;
         const row = zk.addRow({
-            req: card?.name || '—',
             ...galezie(node),
             name: node.name || '',
             typ: TYPE_META[node.type]?.label || node.type || '',
@@ -1266,7 +1263,7 @@ export async function eksportRealizacjiXlsx({
     if (zakupy.length) {
         const all = agregat(zakupy);
         const sumZ = zk.addRow({
-            req: 'Razem',
+            gal0: 'Razem',
             qty: { formula: `SUM(${Z('qty')}2:${Z('qty')}${lastZ})`, result: all.qty },
             planValue: { formula: `SUM(${Z('planValue')}2:${Z('planValue')}${lastZ})`, result: all.pv },
             value: { formula: `SUM(${Z('value')}2:${Z('value')}${lastZ})`, result: all.val },
@@ -1287,7 +1284,7 @@ export async function eksportRealizacjiXlsx({
             }],
         });
     } else {
-        zk.addRow({ req: 'Brak wpisów zakupu w tym widoku' }).font = { italic: true };
+        zk.addRow({ gal0: 'Brak wpisów zakupu w tym widoku' }).font = { italic: true };
     }
     ['planUnit', 'unitCost', 'dUnit', 'planValue', 'value', 'dValue'].forEach(k => { zk.getColumn(k).numFmt = FMT_PLN; });
     zk.getColumn('dPct').numFmt = '0.0%';
