@@ -1922,6 +1922,8 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-funkcja | DeltaLine (Δ w kolumnie Koszt całkowity) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-delta-line |
 | ui-funkcja | offerStatusMetaOf (status oferty z „Poza baseline”) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-offer-status-meta |
 | ui-formularz | EntryForm (nowy wpis jako ostatni wiersz szuflady) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-form |
+| ui-funkcja | ostrzeżenie o niezapisanym wpisie przy kliknięciu poza formularzem EntryForm | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-form-unsaved |
+| ui-modal | UnsavedEntryModal (Zapisz / Wróć / Odrzuć niezapisany wpis szuflady) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-unsaved-entry-modal |
 | ui-stala | ENTRY_INPUT (wygląd pola wpisu, wspólny dla obu zakładek) | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor entry-input-class |
 
 ### Moduł tryby Budżetu — baseline / wykonanie / porównanie (Faza 7)

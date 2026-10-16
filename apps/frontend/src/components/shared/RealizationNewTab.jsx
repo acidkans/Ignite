@@ -16,6 +16,7 @@
 // Poza zapisem zostają: status PLANU (decyduje o nim Struktura projektu, nie realizacja),
 // filtry, sortowanie, eksport Excel i protokół odbioru.
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronRight, Loader2, Plus, Trash2, FileSpreadsheet, FileText, ExternalLink } from 'lucide-react';
 import { API_URL } from '../../config';
 import { useDevice } from '../../hooks/useDevice';
@@ -1628,7 +1629,7 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, o
                 </span>
             )}
             {!readOnly && (
-                <button
+                <button data-entry-cancel={adding || undefined}
                     onClick={(e) => { e.stopPropagation(); setAdding(v => !v); }}
                     className={`flex shrink-0 items-center gap-1.5 rounded border px-3 py-1 text-[length:var(--rn-xl)] transition-colors ${
                         adding ? 'border-white/[.14] text-gray-400 hover:text-gray-200'
@@ -1837,7 +1838,7 @@ const BRAK_ETYKIETY_NEW = {
 
 function EntryForm({ node, cols, withCard, defaultQty, defaultSurplus = false, onAdd, onClose }) {
     const dzis = new Date().toISOString().slice(0, 10);
-    const [draft, setDraft] = useState(() => ({
+    const [start] = useState(() => ({
         entryDate: dzis,
         qty: defaultQty != null ? String(defaultQty) : '1',
         unitCost: '',
@@ -1846,8 +1847,10 @@ function EntryForm({ node, cols, withCard, defaultQty, defaultSurplus = false, o
         // Plan już pokryty zakupami w ofercie — kolejny wpis z definicji idzie ponad wycenę.
         isSurplus: defaultSurplus,
     }));
+    const [draft, setDraft] = useState(start);
     const [brak, setBrak] = useState([]);
     const [zapisuje, setZapisuje] = useState(false);
+    const [ostrzezenie, setOstrzezenie] = useState(false);
 
     // Poprawienie pola gasi jego czerwoną obwódkę od razu, bez czekania na kolejny zapis.
     const set = (k, v) => {
@@ -1855,6 +1858,31 @@ function EntryForm({ node, cols, withCard, defaultQty, defaultSurplus = false, o
         setBrak(b => (b.includes(k) ? b.filter(x => x !== k) : b));
     };
     const rowRef = useRef(null);
+    const errRef = useRef(null);
+    const modalRef = useRef(null);
+
+    // @anchor realization-new-entry-form-unsaved — kliknięcie POZA formularzem przy wpisanych
+    // danych nie przechodzi dalej, tylko pyta o zapis. Bez tego zwinięcie szuflady albo klik
+    // w inną pozycję po cichu gubił wpis, który wyglądał jak dodany. Przycisk „Anuluj" w
+    // nagłówku szuflady (`data-entry-cancel`) to świadoma rezygnacja — tam nie pytamy.
+    const zmieniony = Object.keys(start).some(k => String(draft[k] ?? '') !== String(start[k] ?? ''));
+    useEffect(() => {
+        if (!zmieniony || zapisuje || ostrzezenie) return;
+        const wSrodku = (t) => [rowRef, errRef, modalRef].some(r => r.current?.contains(t))
+            || t.closest?.('[data-entry-cancel]');
+        const onDown = (e) => {
+            if (wSrodku(e.target)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            // Klik, który wywołał ostrzeżenie, nie może dojść do celu (np. chevronu zwijającego).
+            const polknij = (ev) => { ev.preventDefault(); ev.stopPropagation(); };
+            window.addEventListener('click', polknij, { capture: true, once: true });
+            setTimeout(() => window.removeEventListener('click', polknij, { capture: true }), 400);
+            setOstrzezenie(true);
+        };
+        window.addEventListener('mousedown', onDown, true);
+        return () => window.removeEventListener('mousedown', onDown, true);
+    }, [zmieniony, zapisuje, ostrzezenie]);
 
     // Klucze pól (nie etykiety) — te same co w `realization-entry-form-validate`, żeby dało się
     // podświetlić konkretne okno. Sam napis pod wierszem był za mały: formularz zostawał
@@ -1947,13 +1975,56 @@ function EntryForm({ node, cols, withCard, defaultQty, defaultSurplus = false, o
                 ))}
             </tr>
             {brak.length > 0 && (
-                <tr className="bg-teal-500/[.06]">
+                <tr ref={errRef} className="bg-teal-500/[.06]">
                     <td colSpan={cols.length} className="border-b border-red-400/30 px-2 py-1.5 text-[length:var(--rn-lg)] font-semibold text-red-300">
                         Wpis NIE został zapisany — uzupełnij lub popraw: {brak.map(k => BRAK_ETYKIETY_NEW[k] || k).join(', ')}.
                     </td>
                 </tr>
             )}
+            {ostrzezenie && createPortal(
+                <UnsavedEntryModal boxRef={modalRef} nazwa={node.name}
+                    onSave={() => { setOstrzezenie(false); submit(); }}
+                    onDiscard={() => { setOstrzezenie(false); onClose(); }}
+                    onBack={() => {
+                        setOstrzezenie(false);
+                        rowRef.current?.querySelector('[data-entry-field]')?.focus();
+                    }} />,
+                document.body,
+            )}
         </>
+    );
+}
+
+// @anchor realization-new-unsaved-entry-modal — pytanie o niezapisany wpis szuflady. Trzy
+// wyjścia, bo „nie zapisuj" znaczy dwie różne rzeczy: porzuć wpis albo wróć go dokończyć.
+function UnsavedEntryModal({ boxRef, nazwa, onSave, onDiscard, onBack }) {
+    const zapisz = useRef(null);
+    useEffect(() => { zapisz.current?.focus(); }, []);
+    useEffect(() => {
+        const onKey = e => {
+            if (e.key === 'Escape') { e.preventDefault(); onBack(); }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [onBack]);
+    const btn = 'flex-1 px-4 py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all active:scale-95';
+    return (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-[#05070bcc] p-4 backdrop-blur-sm">
+            <div ref={boxRef} className="w-full max-w-md rounded-2xl border border-amber-400/30 bg-[#0b0f17] shadow-2xl">
+                <div className="px-6 pt-5 pb-3">
+                    <div className="text-base font-bold text-amber-300">Wpis nie został zapisany</div>
+                    <div className="mt-2 text-sm text-gray-300">
+                        Nowy zakup pozycji <b className="text-gray-100">{nazwa}</b> ma wpisane dane, ale nie
+                        został zapisany. Po wyjściu zniknie.
+                    </div>
+                </div>
+                <div className="flex gap-2 px-6 pb-5">
+                    <button ref={zapisz} onClick={onSave} className={`${btn} bg-teal-500/20 text-teal-200 hover:bg-teal-500/30`}>Zapisz</button>
+                    <button onClick={onBack} className={`${btn} bg-white/[.06] text-gray-300 hover:bg-white/10`}>Wróć</button>
+                    <button onClick={onDiscard} className={`${btn} bg-red-500/15 text-red-300 hover:bg-red-500/25`}>Odrzuć</button>
+                </div>
+            </div>
+        </div>
     );
 }
 
