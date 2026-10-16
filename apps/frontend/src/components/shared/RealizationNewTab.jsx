@@ -178,6 +178,49 @@ export function filterTextOf(key, node, card, r, entries) {
     return String(v ?? '').toLowerCase();
 }
 
+// @anchor realization-new-search-terms — fraza wyszukiwarki nagłówka rozbita na słowa; każde
+// musi wystąpić (kolejność dowolna), więc „bypass montaż" znajduje „montaż bypass".
+export const searchTermsOf = (q) => String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+const hasAllTerms = (text, terms) => { const t = text.toLowerCase(); return terms.every(x => t.includes(x)); };
+
+// @anchor realization-new-search-number — liczba w kilku zapisach naraz, żeby „6358", „6358,00",
+// „6358.00" i „6 358,00" (bez spacji tysięcy, bo spacja dzieli frazę na słowa) trafiały w tę samą kwotę.
+const numSearchText = (v) => {
+    if (v == null || v === '' || !Number.isFinite(Number(v))) return '';
+    const n = Math.round(Number(v) * 100) / 100;
+    const f = n.toFixed(2);
+    return [String(n), String(n).replace('.', ','), f, f.replace('.', ',')].join(' ');
+};
+
+// @anchor realization-new-entry-matches — czy WPIS `LeafActual` pasuje do frazy: KAŻDE pole
+// szuflady — data, dokument, oferent, producent, model, EAN, zakres, ilość, koszt jedn.,
+// wartość, rozliczenie (nadmiarowy / w ofercie), komentarz i autor.
+export function entryMatchesSearch(e, terms) {
+    if (!terms.length) return true;
+    const autor = [e.author?.firstName, e.author?.lastName, e.author?.email].filter(Boolean).join(' ');
+    return hasAllTerms([
+        e.entryDate ? fmtDate(e.entryDate) : '', e.docNumber, e.supplier?.name, e.manufacturer, e.model, e.ean, e.scope,
+        numSearchText(e.qty), numSearchText(e.unitCost), numSearchText((Number(e.qty) || 0) * (Number(e.unitCost) || 0)),
+        e.isSurplus ? 'nadmiarowy' : 'w ofercie', e.comment, autor,
+    ].filter(Boolean).join(' '), terms);
+}
+
+// @anchor realization-new-leaf-matches — czy POZYCJA pasuje do frazy sama (nazwa, ścieżka,
+// typ, karta produktu, statusy, komentarz). Zakupy liczy się osobno (`entryMatchesSearch`),
+// bo szuflada pokazuje wtedy tylko te wpisy, które pasują.
+// Kwoty pozycji też: ilość wyceny, koszt jedn. wyceny, wycena i suma zakupów.
+export function leafMatchesSearch(node, card, terms, entries = null) {
+    if (!terms.length) return true;
+    const r = entries ? realizationOf(node, entries) : null;
+    return hasAllTerms([
+        node.name, getParentPath(node.path), TYPE_META[node.type]?.label, node.owner, node.comment, node.unit,
+        card?.manufacturer, card?.model, card?.technicalSpec,
+        offerStatusMetaOf(node)?.label, axisDisplay(node, 'purchase')?.label, axisDisplay(node, 'exec')?.label,
+        numSearchText(node.quantity), numSearchText(planUnitOf(node, card)), numSearchText(planValueOf(node, card)),
+        r ? numSearchText(r.value) : '', r ? numSearchText(r.qty) : '',
+    ].filter(Boolean).join(' '), terms);
+}
+
 // @anchor realization-new-branch-index — indeks drzewa liczony NA FRONCIE, bo `branchId`
 // nie jest kolumną w bazie. Zwraca: mapę węzłów, listę gałęzi (z syntetycznym korzeniem),
 // listę liści kosztowych oraz `branchIdOf` — najbliższą gałąź w górę dla każdego liścia.
@@ -395,7 +438,7 @@ const KARTA_DOK_MIN = 2200;
 // @anchor realization-new-tab — patrz nagłówek pliku.
 export default function RealizationNewTab({
     nodeId, versionId, orderName = '', userRoles = [], planLabel = '',
-    accepted = false, acceptedAt = null, oneDriveFolderName = null,
+    accepted = false, acceptedAt = null, oneDriveFolderName = null, searchQuery = '',
 }) {
     const token = sessionStorage.getItem('token');
     const isManagerOrAdmin = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
@@ -815,13 +858,29 @@ export default function RealizationNewTab({
         return true;
     }, [colFilters, actualsOf, cardOf]);
 
-    const filtryAktywne = Object.values(colFilters).some(hasColFilter);
+    const searchTerms = useMemo(() => searchTermsOf(searchQuery), [searchQuery]);
+    const filtryAktywne = Object.values(colFilters).some(hasColFilter) || searchTerms.length > 0;
 
+    // @anchor realization-new-search-filter — wyszukiwarka nagłówka strony: pozycja zostaje,
+    // gdy pasuje sama ALBO choć jeden jej zakup (nr FV, oferent, model…).
     const visibleLeaves = useMemo(() => {
         let list = idx.leavesOfSubtree(selectedBranch);
         if (onlyOpen) list = list.filter(isUnfinished);
-        return filtryAktywne ? list.filter(matchesFilters) : list;
-    }, [idx, selectedBranch, onlyOpen, isUnfinished, filtryAktywne, matchesFilters]);
+        if (searchTerms.length) list = list.filter(n => leafMatchesSearch(n, cardOf(n), searchTerms, actualsOf(n))
+            || actualsOf(n).some(e => entryMatchesSearch(e, searchTerms)));
+        return Object.values(colFilters).some(hasColFilter) ? list.filter(matchesFilters) : list;
+    }, [idx, selectedBranch, onlyOpen, isUnfinished, colFilters, matchesFilters, searchTerms, cardOf, actualsOf]);
+
+    // Pozycja znaleziona WYŁĄCZNIE przez zakup (np. po nr FV) rozwija się sama — inaczej
+    // trafienie siedziałoby w zwiniętej szufladzie. Tylko dokłada rozwinięcia, nigdy nie zwija.
+    useEffect(() => {
+        if (!searchTerms.length) return;
+        const ids = visibleLeaves
+            .filter(n => !leafMatchesSearch(n, cardOf(n), searchTerms, actualsOf(n)))
+            .map(n => n.id);
+        if (!ids.length) return;
+        setExpanded(prev => (ids.every(id => prev.has(id)) ? prev : new Set([...prev, ...ids])));
+    }, [searchTerms, visibleLeaves, cardOf, actualsOf]);
 
     // @anchor realization-new-leaf-branch-path — ŚCIEŻKA gałęzi wybranej pozycji: od jej
     // najbliższej gałęzi w górę aż po korzeń. Tabela pokazuje PŁASKĄ listę całego poddrzewa,
@@ -874,6 +933,7 @@ export default function RealizationNewTab({
                 orderName,
                 accepted,
                 colFilters,
+                searchQuery,
                 etykietyKolumn: Object.fromEntries(REALIZATION_NEW_COLS.map(c => [c.key, c.label])),
             });
         } catch (e) {
@@ -1083,7 +1143,7 @@ export default function RealizationNewTab({
                                 <MiniBtn muted={!onlyOpen} onClick={() => setOnlyOpen(v => !v)}>
                                     {onlyOpen ? 'Pokaż wszystkie' : 'Tylko niedomknięte'}
                                 </MiniBtn>
-                                {filtryAktywne && <MiniBtn onClick={() => setColFilters({})}>Wyczyść filtry</MiniBtn>}
+                                {Object.values(colFilters).some(hasColFilter) && <MiniBtn onClick={() => setColFilters({})}>Wyczyść filtry</MiniBtn>}
                                 {ukryteKolumny.length > 0 && (
                                     <span title={`Za wąski panel na komplet kolumn — schowane: ${ukryteKolumny.join(', ')}. Wszystkie te dane są w karcie pozycji i w eksporcie do Excela.`}
                                         className="cursor-help self-center text-[10px] uppercase tracking-wider text-amber-300/70">
@@ -1098,7 +1158,7 @@ export default function RealizationNewTab({
                     />
                     <div className="min-h-0 flex-1 overflow-auto">
                         <PositionsTable
-                            leaves={visibleLeaves} rowOf={rowOf} actualsOf={actualsOf}
+                            leaves={visibleLeaves} rowOf={rowOf} actualsOf={actualsOf} searchTerms={searchTerms}
                             expanded={expanded} onToggleExpanded={toggleExpanded}
                             selected={selectedLeaf} onSelect={setSelectedLeaf}
                             readOnly={readOnly}
@@ -1254,7 +1314,7 @@ function BranchTree({ idx, rootId, level, selected, onSelect, cardOf, actualsOf,
 // Szuflada, a nie płaska lista zakupów: płaska gubiłaby pozycje bez ani jednego zakupu,
 // a to właśnie one wymagają działania.
 function PositionsTable({
-    leaves, rowOf, actualsOf, expanded, onToggleExpanded, selected, onSelect,
+    leaves, rowOf, actualsOf, searchTerms = [], expanded, onToggleExpanded, selected, onSelect,
     readOnly, filters = {}, filterOptions = {}, onFilterChange, onClearFilters,
     onSaveAxis, onSaveComment, onSaveOwner, ownerOptions = [], onAddActual, onUpdateActual, onDeleteActual, onColsChange,
 }) {
@@ -1372,7 +1432,7 @@ function PositionsTable({
                                     <td colSpan={cols.length + 1}
                                         className={`${DRAWER.cardCell} ${DRAWER.accent.real.cell}`}>
                                         <PurchaseDrawer node={node} card={card} r={r} planValue={planValue}
-                                            readOnly={readOnly}
+                                            readOnly={readOnly} searchTerms={searchTerms}
                                             onAdd={draft => onAddActual(node, draft)}
                                             onUpdate={onUpdateActual} onDelete={onDeleteActual} />
                                     </td>
@@ -1572,9 +1632,16 @@ function CommentCell({ node, readOnly, onSave }) {
 // Wpisy są tu EDYTOWALNE w miejscu, a nowy dodaje się przyciskiem w nagłówku szuflady —
 // dopisywanie jest świadomą czynnością, więc formularz otwiera się na żądanie, a nie stoi
 // pustym wierszem pod każdą pozycją.
-function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, onDelete }) {
+function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms = [], onAdd, onUpdate, onDelete }) {
     const withCard = TYPE_META[node.type]?.hasCard;
     const [adding, setAdding] = useState(false);
+    // @anchor realization-new-drawer-search — wyszukiwarka nagłówka zawęża WPISY szuflady, gdy
+    // pozycja trafiła do wyniku przez zakup, a nie przez własną nazwę. Sumy w stopce zostają
+    // z całej pozycji — rozliczenie wobec wyceny nie może zależeć od wpisanej frazy.
+    const [wszystkie, setWszystkie] = useState(false);
+    const zawezone = searchTerms.length > 0 && !wszystkie && !leafMatchesSearch(node, card, searchTerms, r.entries);
+    const wpisy = zawezone ? r.entries.filter(e => entryMatchesSearch(e, searchTerms)) : r.entries;
+    const ukryte = r.entries.length - wpisy.length;
     const delta = round2(r.value - planValue);
     // @anchor realization-new-surplus-split — podział wpisów na zakupy w ofercie i nadmiarowe
     // (`LeafActual.isSurplus`). Wycenę pokrywają WYŁĄCZNIE wpisy bez znacznika: ich ilość ponad
@@ -1628,6 +1695,12 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, o
                     {adding ? 'Anuluj' : addEntryLabel(node.type)}
                 </button>
             )}
+            {(ukryte > 0 || wszystkie) && (
+                <button onClick={(e) => { e.stopPropagation(); setWszystkie(v => !v); }}
+                    className="rounded border border-sky-400/30 bg-sky-500/10 px-2 py-0.5 text-[length:var(--rn-md)] text-sky-300 hover:bg-sky-500/20">
+                    {wszystkie ? 'pokaż tylko pasujące do wyszukiwania' : `pokazano ${wpisy.length} z ${r.entries.length} — pokaż wszystkie`}
+                </button>
+            )}
         </div>
     );
 
@@ -1671,7 +1744,7 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, onAdd, onUpdate, o
                         </tr>
                     </thead>
                     <tbody>
-                        {r.entries.map(a => (
+                        {wpisy.map(a => (
                             <EntryRow key={a.id} entry={a} cols={COLS}
                                 readOnly={readOnly} onSave={onUpdate} onDelete={onDelete} />
                         ))}

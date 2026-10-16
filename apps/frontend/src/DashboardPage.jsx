@@ -581,14 +581,13 @@ export default function DashboardPage() {
     // @anchor dashboard-content-ref — kontener treści zakładek, do capture-guardu edycji snapszota
     const contentRef = useRef(null);
 
-    // „Realizacja_new" nie konsumuje jeszcze `searchQuery` — wyszukiwarka i filtry kolumn są
-    // otwartą częścią projektu tego układu. Pole, które nic nie robi, kłamałoby, więc go tu nie ma.
-    const showSearch = activeTab !== 'requirements' && activeTab !== 'realizationNew';
+    // „Realizacja_new" filtruje pozycje i wpisy szuflady (`realization-new-search-filter`).
+    const showSearch = activeTab !== 'requirements';
     const searchPlaceholder = activeTab === 'unified'
         ? 'Szukaj w strukturze, budżecie, materiałach…'
         : activeTab === 'materialDatabase'
         ? 'Szukaj w materiałach i kartach katalogowych…'
-        : activeTab === 'realization'
+        : activeTab === 'realization' || activeTab === 'realizationNew'
         // Wyszukiwarka nagłówka filtruje tabelę realizacji także po treści WPISÓW —
         // pozycję najczęściej szuka się po numerze faktury albo dostawcy, nie po nazwie.
         ? 'Szukaj po pozycji, produkcie, dostawcy, nr FV…'
@@ -1151,6 +1150,7 @@ export default function DashboardPage() {
                                     accepted={baselineAccepted}
                                     acceptedAt={realizationVersion?.source === 'baseline' ? (acceptance?.acceptedAt ?? null) : null}
                                     oneDriveFolderName={activeNode?.oneDriveFolderName || null}
+                                    searchQuery={searchQuery}
                                 />
                             </div>
                         )}

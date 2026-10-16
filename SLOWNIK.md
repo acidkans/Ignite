@@ -1924,6 +1924,12 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-formularz | EntryForm (nowy wpis jako ostatni wiersz szuflady) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-form |
 | ui-funkcja | ostrzeżenie o niezapisanym wpisie przy kliknięciu poza formularzem EntryForm | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-form-unsaved |
 | ui-modal | UnsavedEntryModal (Zapisz / Wróć / Odrzuć niezapisany wpis szuflady) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-unsaved-entry-modal |
+| ui-funkcja | searchTermsOf (fraza wyszukiwarki nagłówka → słowa) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-search-terms |
+| ui-funkcja | numSearchText (kwota w kilku zapisach do wyszukiwania) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-search-number |
+| ui-funkcja | entryMatchesSearch (wpis LeafActual pasuje do frazy) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-matches |
+| ui-funkcja | leafMatchesSearch (pozycja pasuje do frazy sama) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-leaf-matches |
+| ui-funkcja | visibleLeaves — filtr wyszukiwarki nagłówka w Realizacja_new | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-search-filter |
+| ui-stan | wszystkie / zawezone — zawężenie wpisów szuflady do pasujących | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-drawer-search |
 | ui-stala | ENTRY_INPUT (wygląd pola wpisu, wspólny dla obu zakładek) | apps/frontend/src/components/shared/wbs/entryFields.js | @anchor entry-input-class |
 
 ### Moduł tryby Budżetu — baseline / wykonanie / porównanie (Faza 7)
