@@ -982,6 +982,11 @@ export function liczAnalize(rows) {
         };
 }
 
+// @anchor realization-export-settlement-labels — kategorie „Rozliczenia" w Excelu mówią „zaplanowany"
+// / „poza planem" zamiast „w ofercie" / „poza ofertą": w pliku kwota z wyceny ma się wyraźnie odróżniać
+// od kwoty zakupu. Ekran zostaje przy `ROZLICZENIE` — mapowanie dzieje się wyłącznie w eksporcie.
+const ROZL_XLS = { OFERTA: 'zaplanowany', POZA: 'poza planem' };
+
 // @anchor realization-export-red — czerwień zakupu poza ofertą, ta sama co „zła" komórka Excela.
 const CZERWONE_TLO = 'FFFFC7CE';
 const CZERWONY_TEKST = 'FF9C0006';
@@ -1067,7 +1072,7 @@ export async function eksportRealizacjiXlsx({
         // Oś wykonania niesie stan WYLICZONY (`execStatusLabelOf` z rejestrem odbiorów),
         // więc pozycja odebrana protokołem wychodzi w Excelu jako „Odebrane" — tak samo
         // jak w tabeli, mimo że w bazie stoi na „Wykonane".
-        { header: 'Status oferty', key: 'statusPlan', width: 16 },
+        { header: 'Status planu', key: 'statusPlan', width: 16 },
         { header: 'Status zakupu', key: 'statusPurchase', width: 18 },
         { header: 'Status wykonania', key: 'statusExec', width: 20 },
         { header: 'Rozliczone', key: 'closed', width: 11 },
@@ -1105,7 +1110,7 @@ export async function eksportRealizacjiXlsx({
             // Zakup to SUMA wpisów o różnych cenach, nie iloczyn — zostaje wartością.
             valueReal: hasReal ? r.value : null,
             delta: planValue != null && hasReal ? { formula: `${W('valueReal')}${n}-${W('valuePlan')}${n}`, result: Math.round((r.value - planValue) * 100) / 100 } : null,
-            statusPlan: statusLabel(node),
+            statusPlan: node?._outOfBaseline ? 'Poza planem' : statusLabel(node),
             statusPurchase: purchaseStatusLabel(node) || '—',
             statusExec: execStatusLabelOf(node, odbiorByRoot[wbsRootOf(node)]) || '—',
             closed: node.realizationClosed ? 'tak' : 'nie',
@@ -1138,12 +1143,15 @@ export async function eksportRealizacjiXlsx({
     const zakupy = [];
     for (const { node, card, realization: r } of rows) {
         if (entryNoun(node.type) !== 'zakup') continue;
-        for (const e of r.entries) zakupy.push({ node, card, e, planQty: Number(r.plan) || 0, ...rozliczenieOf(node, card, e) });
+        for (const e of r.entries) {
+            const { rozl, powod } = rozliczenieOf(node, card, e);
+            zakupy.push({ node, card, e, planQty: Number(r.plan) || 0, rozl: rozl === ROZLICZENIE.OFERTA ? ROZL_XLS.OFERTA : ROZL_XLS.POZA, powod });
+        }
     }
     for (const e of orphanEntries) {
         if (entryNoun(e.leafType) !== 'zakup') continue;
         const node = { name: e.leafName || '(pozycja usunięta z wyceny)', type: e.leafType, path: null, unit: 'szt', sourceWbsNodeId: e.wbsRootId };
-        zakupy.push({ node, card: null, e, planQty: 0, rozl: ROZLICZENIE.POZA, powod: POWOD_POZA_OFERTA.USUNIETA });
+        zakupy.push({ node, card: null, e, planQty: 0, rozl: ROZL_XLS.POZA, powod: POWOD_POZA_OFERTA.USUNIETA });
     }
     // @anchor realization-export-offer-cap — wartość oferty pozycji NIE PRZEKRACZA ilości z wyceny.
     // Wpisy „w ofercie" zjadają ilość planu po kolei (data zakupu); to, co ponad plan, dostaje
@@ -1155,7 +1163,7 @@ export async function eksportRealizacjiXlsx({
             const id = wbsRootOf(z.node);
             if (!pozostalo.has(id)) pozostalo.set(id, z.planQty);
             const planUnit = planUnitOf(z.node, z.card);
-            if (z.rozl !== ROZLICZENIE.OFERTA || planUnit == null) { z.pv = 0; continue; }
+            if (z.rozl !== ROZL_XLS.OFERTA || planUnit == null) { z.pv = 0; continue; }
             const ile = Math.max(0, Math.min(Number(z.e.qty) || 0, pozostalo.get(id)));
             pozostalo.set(id, pozostalo.get(id) - ile);
             z.pv = Math.round(ile * planUnit * 100) / 100;
@@ -1209,7 +1217,7 @@ export async function eksportRealizacjiXlsx({
     zk.autoFilter = `A1:${kol(zk, 'comment')}1`;
     const Z = (k) => kol(zk, k);
 
-    const W_OFERCIE = ROZLICZENIE.OFERTA;
+    const W_OFERCIE = ROZL_XLS.OFERTA;
     zakupy.forEach(({ node, card, e, rozl, powod, planQty, pv }, i) => {
         const n = i + 2;
         const qty = Number(e.qty) || 0;
@@ -1248,7 +1256,7 @@ export async function eksportRealizacjiXlsx({
         });
         row.getCell('rozl').dataValidation = {
             type: 'list', allowBlank: false, showErrorMessage: true,
-            formulae: [`"${Object.values(ROZLICZENIE).join(',')}"`],
+            formulae: [`"${Object.values(ROZL_XLS).join(',')}"`],
         };
     });
 
@@ -1345,7 +1353,7 @@ export async function eksportRealizacjiXlsx({
         return r;
     };
 
-    const kategorie = Object.values(ROZLICZENIE);
+    const kategorie = Object.values(ROZL_XLS);
     const poPozycji = new Map();
     for (const z of zakupy) {
         const id = wbsRootOf(z.node);

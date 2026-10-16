@@ -1764,6 +1764,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | exportExcel (stan „eksportuję…" i komunikat o błędzie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-excel-call |
 | ui-funkcja | arkusz „Zakupy" w eksporcie Excel (wpisy zakupu + wymaganie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchases |
 | ui-kolumna | Cena ofertowa vs cena zakupu (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchase-vs-offer |
+| ui-stala | ROZL_XLS (etykiety Rozliczenia w Excelu: zaplanowany / poza planem) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-settlement-labels |
 | ui-stala | CZERWONE_TLO / CZERWONY_TEKST (zakup poza ofertą w Excelu) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-red |
 | ui-kolumna | Zakup (arkusz Zakupy — model z wpisu, przed Producentem) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchase-col |
 | ui-kolumna | Rozliczenie (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-settlement-col |
