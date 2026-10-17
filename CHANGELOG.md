@@ -1,3 +1,38 @@
+## 2026-10-17 — Realizacja: status wpisu planowy / pozaplanowy / prognozowany, wynik zamówienia z przychodu oferty (v2026.10.17.1852)
+
+### schema.prisma
+- dodano enum `LeafActualStatus` (PLANNED, UNPLANNED, FORECAST)
+- dodano pole `status LeafActualStatus @default(PLANNED)` w modelu `LeafActual` — status wpisu; prognozowany = koszt, który dopiero przyjdzie
+- usunięto pole `isSurplus` z modelu `LeafActual` — migracja `20261017120000_leaf_actual_status` przepisuje `isSurplus = true` na `UNPLANNED`
+
+### architektura / API
+- `POST /leaf-actuals`, `PATCH /leaf-actuals/:id` — pole `status` (PLANNED / UNPLANNED / FORECAST) zamiast `isSurplus`; nieznana wartość → 400
+- `GET /orders/:nodeId/comparison` — pomija wpisy prognozowane (porównanie pokazuje koszty poniesione)
+- Realizacja_new: kolumna „Status” w szufladzie (trzy przyciski przy dodawaniu, plakietka po zapisie), blok „Wynik zamówienia” w analizie: przychód z oferty, koszt planowy / pozaplanowy / prognozowany, koszt całkowity, wynik i marża
+- Realizacja_new: kolumny „Zakup / wykonanie” i „Δ ilość” usunięte, „Ilość wyceny” → „Planowana ilość”, „Koszt jedn. wyceny” → „Planowany koszt jedn.”
+- eksport Excel realizacji: kolumna „Rozliczenie” → „Status”, kategorie planowy / pozaplanowy / prognozowany (bursztynowe tło), powód „oznaczony ręcznie”
+- eksport Excel realizacji, arkusz „Realizacja”: nowe kolumny Koszt planowy / pozaplanowy / prognozowany i Przychód z oferty (z sumą)
+- eksport Excel realizacji, arkusz „Podsumowanie”: sekcja „Wynik zamówienia” (koszty wg statusów → koszt całkowity → przychód → wynik → marża, żywe formuły, kolory czcionek jak w aplikacji); zdania „Analizy” rozdzielają koszty poniesione i prognozowane i podają wynik
+- eksport Excel realizacji, „Podsumowanie”: tabela „Porównanie wyników” (wynik planowany, bieżący, zysk nadzwyczajny / strata); „niezrealizowany budżet” zastąpiony „zyskiem nadzwyczajnym”
+- Realizacja_new: usunięty rząd kafli Wycena / Zakupy zrealizowane / Pozostaje do wydania / Dni niezrealizowane / Wykonane-odebrane
+- eksport Excel realizacji: „wycena” → „koszt planowany” we wszystkich arkuszach i zdaniach analizy; powody „bez kosztu planowanego”, „usunięta z planu”
+- eksport Excel realizacji: kolumny „Podzakres” usunięte ze wszystkich arkuszy (zostaje „Zakres”); Zakupy: „Planowy koszt jednostkowy”
+- eksport Excel realizacji: kolumny kosztowe kolorowane we wszystkich arkuszach (plan pomarańcz, realizacja czerwień, Δ warunkowo wg znaku); „Porównanie globalne” w kolorach wyniku
+- eksport Excel realizacji: „Koszt planowy / pozaplanowy” → „Poniesione koszty planowe / pozaplanowe”; „Prognoza wydatków” bez kolumn Prognoza i Δ do planu
+
+### słownik
+- zmieniono `schema-pole` `LeafActual.isSurplus` → `LeafActual.status` (@anchor leaf-actual-status), dodano `schema-enum` `LeafActualStatus`
+- zmieniono `back-dto` `LeafActualInput.isSurplus` → `LeafActualInput.status`, dodano `back-stala` `LEAF_ACTUAL_STATUSES`
+- zmieniono `ui-przycisk` `SurplusToggle` → `StatusPicker` (@anchor realization-new-status-picker)
+- dodano `ui-stala` `ENTRY_STATUS` / `ENTRY_STATUS_META`, `ui-funkcja` `offerPriceOf`, `realizationOf.byStatus`, `ui-sekcja` `WynikZamowienia`, `ui-stala` `BURSZTYN_TLO`
+- dodano `ui-stala` `KOLOR_WYNIKU`, `ui-kolumna` `realization-export-cost-by-status`, `ui-sekcja` `realization-export-result`, `ui-funkcja` `realization-export-totals-status`, `realization-export-analysis-status`
+- usunięto `ui-stala` `deltaZamkniete` (@anchor realization-new-delta-zamkniete) razem z kaflem „Wykonane / odebrane”
+
+### wytyczne
+- `schema-pole` `LeafActual.status` — koszt całkowity pozycji = suma wpisów wszystkich trzech statusów; „poniesione” (zakupy zrealizowane, pokrycie wyceny) = tylko PLANNED + UNPLANNED
+- `ui-sekcja` `realization-export-result` — koszty niższe od wyceny opisujemy jako zysk nadzwyczajny ponad wynik planowany, nigdy jako budżet „do wykorzystania” (wycena to sufit kosztów)
+- `ui-funkcja` `offerPriceOf` — przychód z oferty pomija pozycje dodane po akceptacji (`_outOfBaseline`); ich kwota pokazywana osobno w opisie kafla
+
 ## 2026-10-07 — Eksport realizacji: gałęzie i podgałęzie w osobnych kolumnach, wiersze sortowane gałęziami (v2026.10.07.1900)
 
 ### architektura / API

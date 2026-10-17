@@ -25,16 +25,29 @@ export interface LeafActualInput {
     ean?: string | null;
     // @anchor leaf-actual-input-scope — zakres wykonania dla liści bez karty produktowej
     scope?: string | null;
-    // @anchor leaf-actual-input-is-surplus — zakup ponad ilość z wyceny (znacznik z karty pozycji)
-    isSurplus?: boolean;
+    // @anchor leaf-actual-input-status — PLANNED / UNPLANNED / FORECAST (`LeafActual.status`)
+    status?: string;
 }
+
+// @anchor leaf-actual-statuses — dozwolone wartości `LeafActual.status`; nieznana wartość to 400,
+// a nie cichy powrót do planowego — inaczej literówka z frontu przestawiałaby rozliczenie.
+const LEAF_ACTUAL_STATUSES = ['PLANNED', 'UNPLANNED', 'FORECAST'] as const;
+type LeafActualStatusValue = (typeof LEAF_ACTUAL_STATUSES)[number];
+const statusOf = (v: unknown): LeafActualStatusValue | undefined => {
+    if (v === undefined || v === null || v === '') return undefined;
+    const s = String(v).toUpperCase();
+    if (!(LEAF_ACTUAL_STATUSES as readonly string[]).includes(s)) {
+        throw new BadRequestException(`Nieznany status wpisu: ${v}`);
+    }
+    return s as LeafActualStatusValue;
+};
 
 // @anchor leaf-actual-entry-select — kształt wpisu oddawany przez każdy endpoint (lista,
 // dodanie, poprawka): jedna definicja, żeby nowe pole nie trafiło tylko do części odpowiedzi.
 const ENTRY_SELECT = {
     id: true, wbsRootId: true, entryDate: true, qty: true, unitCost: true,
     comment: true, docNumber: true, manufacturer: true, model: true, ean: true, scope: true,
-    isSurplus: true, createdAt: true,
+    status: true, createdAt: true,
     supplier: { select: { id: true, name: true } },
     author: { select: { id: true, firstName: true, lastName: true, email: true } },
 } as const;
@@ -144,7 +157,7 @@ export class LeafActualsService {
                 model: input.model?.trim() || null,
                 ean: input.ean?.trim() || null,
                 scope: input.scope?.trim() || null,
-                isSurplus: !!input.isSurplus,
+                status: statusOf(input.status) ?? 'PLANNED',
                 authorId: user?.userId ?? null,
             },
             select: ENTRY_SELECT,
@@ -155,7 +168,7 @@ export class LeafActualsService {
                 action: AuditAction.CREATE,
                 entity: 'LeafActual',
                 entityId: created.id,
-                diff: { wbsNodeId: input.wbsNodeId, leaf: leaf.name, qty, unitCost, comment: created.comment },
+                diff: { wbsNodeId: input.wbsNodeId, leaf: leaf.name, qty, unitCost, comment: created.comment, status: created.status },
                 userId: user?.userId ?? null,
             },
         });
@@ -190,7 +203,7 @@ export class LeafActualsService {
                 ...(input.model !== undefined ? { model: input.model?.trim() || null } : {}),
                 ...(input.ean !== undefined ? { ean: input.ean?.trim() || null } : {}),
                 ...(input.scope !== undefined ? { scope: input.scope?.trim() || null } : {}),
-                ...(input.isSurplus !== undefined ? { isSurplus: !!input.isSurplus } : {}),
+                ...(input.status !== undefined ? { status: statusOf(input.status) ?? 'PLANNED' } : {}),
             },
             select: ENTRY_SELECT,
         });
@@ -201,8 +214,8 @@ export class LeafActualsService {
                 entity: 'LeafActual',
                 entityId: id,
                 diff: {
-                    przed: { qty: existing.qty, unitCost: existing.unitCost, comment: existing.comment, isSurplus: existing.isSurplus },
-                    po: { qty: updated.qty, unitCost: updated.unitCost, comment: updated.comment, isSurplus: updated.isSurplus },
+                    przed: { qty: existing.qty, unitCost: existing.unitCost, comment: existing.comment, status: existing.status },
+                    po: { qty: updated.qty, unitCost: updated.unitCost, comment: updated.comment, status: updated.status },
                 },
                 userId: user?.userId ?? null,
             },

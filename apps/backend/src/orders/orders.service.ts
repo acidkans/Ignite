@@ -331,8 +331,9 @@ export class OrdersService {
         const [baselineAll, liveVersionAll, actuals] = await Promise.all([
             findLeaves(node.acceptedVersionId),
             findLeaves(liveVersionId),
+            // Prognozowane wpisy to koszty, które dopiero przyjdą — porównanie pokazuje zakupy poniesione.
             this.prisma.leafActual.findMany({
-                where: { nodeId },
+                where: { nodeId, status: { not: 'FORECAST' } },
                 orderBy: [{ entryDate: 'asc' }, { createdAt: 'asc' }],
                 select: {
                     id: true, wbsRootId: true, entryDate: true, qty: true, unitCost: true,

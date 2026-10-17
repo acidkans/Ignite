@@ -228,18 +228,44 @@ export const planValueOf = (node, card) => {
 export const ROZLICZENIE = {
     OFERTA: 'w ofercie',
     POZA: 'poza ofertą',
+    PROGNOZA: 'prognozowany',
+};
+
+// @anchor leaf-entry-status — status wpisu `LeafActual.status`. Planowy i pozaplanowy to koszty
+// poniesione, prognozowany — koszt, który dopiero przyjdzie (kwota szacowana). Suma wszystkich
+// trzech to koszt całkowity pozycji, z którego liczy się wynik zamówienia.
+export const ENTRY_STATUS = { PLANNED: 'PLANNED', UNPLANNED: 'UNPLANNED', FORECAST: 'FORECAST' };
+export const ENTRY_STATUS_META = {
+    PLANNED:   { label: 'planowy',      text: 'text-teal-300',  chip: 'border-teal-400/40 bg-teal-500/10 text-teal-300',  dot: 'bg-teal-400' },
+    UNPLANNED: { label: 'pozaplanowy',  text: 'text-red-300',   chip: 'border-red-400/50 bg-red-500/15 text-red-300',     dot: 'bg-red-400' },
+    FORECAST:  { label: 'prognozowany', text: 'text-amber-300', chip: 'border-dashed border-amber-400/60 bg-amber-500/10 text-amber-300', dot: 'bg-amber-400' },
+};
+export const entryStatusOf = (e) => (ENTRY_STATUS_META[e?.status] ? e.status : ENTRY_STATUS.PLANNED);
+
+// @anchor offer-price-of — cena ofertowa pozycji: koszt jedn. × ilość × (1 + narzut) × (1 − rabat).
+// Formuła IDENTYCZNA z `offerRevenueTotal` w Budżecie (brak narzutu ⇒ 0). Pozycja dodana po
+// akceptacji nie była w ofercie, więc nie wnosi przychodu.
+export const offerPriceOf = (node) => {
+    if (!node || node.type === 'group' || node._outOfBaseline) return 0;
+    const q = Math.max(0, parseFloat(node.quantity) || 0);
+    const uc = Math.max(0, parseFloat(node.unitCost) || 0);
+    const m = node.margin != null && String(node.margin) !== '' ? parseFloat(node.margin) : null;
+    const d = Math.max(0, parseFloat(node.discount) || 0);
+    let p = m !== null && m !== 0 ? uc * q * (1 + m / 100) : 0;
+    if (p > 0 && d > 0) p = Math.max(0, p * (1 - d / 100));
+    return p;
 };
 
 // @anchor realization-settlement-reason — powód „poza ofertą":
-//   nadmiarowy            — ręczny znacznik `LeafActual.isSurplus` (ilość ponad wycenę),
-//   bez ceny w wycenie    — pozycja bez ceny albo bez ilości w wycenie,
+//   oznaczony ręcznie     — status pozaplanowy `LeafActual.status = UNPLANNED` (zakup poza planem),
+//   bez kosztu planowanego — pozycja bez ceny albo bez ilości w wycenie,
 //   dodana po akceptacji  — `_outOfBaseline`,
-//   usunięta z wyceny     — wpis pozycji, której nie ma już w wersji planu.
+//   usunięta z planu      — wpis pozycji, której nie ma już w wersji planu.
 export const POWOD_POZA_OFERTA = {
-    NADMIAR: 'nadmiarowy',
-    BEZ_CENY: 'bez ceny w wycenie',
+    NADMIAR: 'oznaczony ręcznie',
+    BEZ_CENY: 'bez kosztu planowanego',
     PO_AKCEPTACJI: 'dodana po akceptacji',
-    USUNIETA: 'usunięta z wyceny',
+    USUNIETA: 'usunięta z planu',
 };
 
 // @anchor realization-out-of-baseline — pozycja dodana PO akceptacji oferty: `WbsNode.createdAt`
@@ -258,13 +284,15 @@ export function markOutOfBaseline(nodes, acceptedAt) {
 export const POZA_BASELINE_META = { label: 'Poza ofertą', color: 'text-red-400' };
 
 // @anchor realization-settlement-of — { rozl, powod } wpisu. Kolejność powodów ma znaczenie:
-// brak ceny w wycenie wygrywa ze znacznikiem, bo „nadmiarowy" zakłada, że JEST jakaś ilość
+// brak ceny w wycenie wygrywa ze znacznikiem, bo „pozaplanowy" zakłada, że JEST jakaś ilość
 // ofertowa, ponad którą się wyszło.
 export function rozliczenieOf(node, card, entry) {
     const poza = (powod) => ({ rozl: ROZLICZENIE.POZA, powod });
+    // Prognozowany to osobna kategoria: koszt jeszcze nie poniesiony, więc ani „w ofercie", ani ponad nią.
+    if (entryStatusOf(entry) === ENTRY_STATUS.FORECAST) return { rozl: ROZLICZENIE.PROGNOZA, powod: '' };
     if (node?._outOfBaseline) return poza(POWOD_POZA_OFERTA.PO_AKCEPTACJI);
     if (!planUnitOf(node, card) || !(Number(node?.quantity) > 0)) return poza(POWOD_POZA_OFERTA.BEZ_CENY);
-    if (entry?.isSurplus) return poza(POWOD_POZA_OFERTA.NADMIAR);
+    if (entryStatusOf(entry) === ENTRY_STATUS.UNPLANNED) return poza(POWOD_POZA_OFERTA.NADMIAR);
     return { rozl: ROZLICZENIE.OFERTA, powod: '' };
 }
 
@@ -276,6 +304,10 @@ export function realizationOf(node, entries) {
     const list = entries || [];
     const qty = Math.round(list.reduce((s, e) => s + (Number(e.qty) || 0), 0) * 1000) / 1000;
     const value = Math.round(list.reduce((s, e) => s + (Number(e.qty) || 0) * (Number(e.unitCost) || 0), 0) * 100) / 100;
+    // @anchor realization-by-status — koszt pozycji rozbity na statusy wpisów; `value` to ich suma.
+    const byStatus = { PLANNED: 0, UNPLANNED: 0, FORECAST: 0 };
+    for (const e of list) byStatus[entryStatusOf(e)] += (Number(e.qty) || 0) * (Number(e.unitCost) || 0);
+    for (const k of Object.keys(byStatus)) byStatus[k] = Math.round(byStatus[k] * 100) / 100;
     const plan = Number(node?.quantity) || 0;
     const pct = plan > 0 ? Math.round((qty / plan) * 100) : (qty > 0 ? 100 : 0);
     const state = node?.realizationClosed ? 'closed'
@@ -287,6 +319,7 @@ export function realizationOf(node, entries) {
         entries: list,
         qty,
         value,
+        byStatus,
         plan,
         pct,
         state,

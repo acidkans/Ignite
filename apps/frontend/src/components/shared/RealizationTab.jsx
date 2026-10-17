@@ -25,6 +25,7 @@ import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath,
     leafNodesOf, buildCardMap, wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf,
     planUnitOf, planValueOf, fmtQty, fmtZl, fmtDate, ROZLICZENIE, POWOD_POZA_OFERTA, rozliczenieOf, POZA_BASELINE_META,
+    offerPriceOf,
 } from './wbs/realizationShared';
 
 // ─── Kolumny ──────────────────────────────────────────────────────────────────
@@ -923,10 +924,14 @@ export function RealizationExpandPanel({ node, card, realization, token, readOnl
 // @anchor realization-totals — sumy widocznych wierszy. Poziom modułu, bo liczy je i nagłówek
 // tabeli, i arkusz „Podsumowanie" w eksporcie — dwie kopie tej arytmetyki rozjechałyby się.
 export function liczTotals(rows) {
-        let plan = 0, real = 0, done = 0, entries = 0;
+        let plan = 0, real = 0, done = 0, entries = 0, przychod = 0, przychodPoAkceptacji = 0;
+        const wgStatusu = { PLANNED: 0, UNPLANNED: 0, FORECAST: 0 };
         for (const { node, card, realization } of rows) {
             plan += planValueOf(node, card);
             real += realization.value;
+            przychod += offerPriceOf(node);
+            if (node?._outOfBaseline) przychodPoAkceptacji += offerPriceOf({ ...node, _outOfBaseline: false });
+            for (const k of Object.keys(wgStatusu)) wgStatusu[k] += realization.byStatus?.[k] || 0;
             entries += realization.entries.length;
             if (realization.state === 'full' || realization.state === 'over' || realization.state === 'closed') done += 1;
         }
@@ -936,6 +941,12 @@ export function liczTotals(rows) {
             delta: Math.round((real - plan) * 100) / 100,
             done, entries,
             count: rows.length,
+            // @anchor realization-export-totals-status — koszt wg statusów wpisów i przychód z oferty;
+            // `real` = planowy + pozaplanowy + prognozowany, `poniesione` = bez prognozy.
+            przychod: Math.round(przychod * 100) / 100,
+            przychodPoAkceptacji: Math.round(przychodPoAkceptacji * 100) / 100,
+            wgStatusu: Object.fromEntries(Object.entries(wgStatusu).map(([k, v]) => [k, Math.round(v * 100) / 100])),
+            poniesione: Math.round((wgStatusu.PLANNED + wgStatusu.UNPLANNED) * 100) / 100,
         };
 }
 
@@ -982,10 +993,25 @@ export function liczAnalize(rows) {
         };
 }
 
-// @anchor realization-export-settlement-labels — kategorie „Rozliczenia" w Excelu mówią „zaplanowany"
-// / „poza planem" zamiast „w ofercie" / „poza ofertą": w pliku kwota z wyceny ma się wyraźnie odróżniać
+// @anchor realization-export-settlement-labels — kategorie „Rozliczenia" w Excelu mówią „planowy"
+// / „pozaplanowy" zamiast „w ofercie" / „poza ofertą": w pliku kwota z wyceny ma się wyraźnie odróżniać
 // od kwoty zakupu. Ekran zostaje przy `ROZLICZENIE` — mapowanie dzieje się wyłącznie w eksporcie.
-const ROZL_XLS = { OFERTA: 'zaplanowany', POZA: 'poza planem' };
+const ROZL_XLS = { OFERTA: 'planowy', POZA: 'pozaplanowy', PROGNOZA: 'prognozowany' };
+// @anchor realization-export-amber — bursztyn wpisu prognozowanego: koszt, który dopiero przyjdzie.
+const BURSZTYN_TLO = 'FFFFF2CC';
+const BURSZTYN_TEKST = 'FF9C5700';
+
+// @anchor realization-export-result-colors — kolory czcionek wyniku jak w aplikacji (te same odcienie
+// Tailwinda, o ton ciemniejsze tam, gdzie jasny odcień z ciemnego motywu znika na białym tle Excela).
+const KOLOR_WYNIKU = {
+    PLANNED: 'FFF97316',   // koszt planowy — pomarańcz (orange-400/500)
+    UNPLANNED: 'FFEF4444', // pozaplanowy — czerwień (red-300 → red-500)
+    FORECAST: 'FFD97706',  // prognozowany — bursztyn (amber-300 → amber-600)
+    KOSZT: 'FFDC2626',     // koszt całkowity — czerwień (red-400 → red-600)
+    PRZYCHOD: 'FF34D399',  // przychód z oferty — jasna zieleń (emerald-200 → emerald-400)
+    WYNIK: 'FF059669',     // wynik dodatni — zieleń (emerald-400 → emerald-600)
+    STRATA: 'FFDC2626',    // wynik ujemny
+};
 
 // @anchor realization-export-red — czerwień zakupu poza ofertą, ta sama co „zła" komórka Excela.
 const CZERWONE_TLO = 'FFFFC7CE';
@@ -1030,16 +1056,12 @@ export async function eksportRealizacjiXlsx({
     // tutaj, a wypełniamy niżej: „Podsumowanie" ma otwierać plik (najpierw wnioski, potem
     // dane), ale liczy się z gotowej tabeli. Formuły `Realizacja!…` adresują po nazwie,
     // więc kolejność arkuszy im nie przeszkadza.
-    // @anchor realization-export-branch-cols — ścieżka pozycji rozbita na OSOBNE kolumny: „Zakres",
-    // „Podzakres 1", „Podzakres 2"… (jeden poziom pod zakresem — samo „Podzakres"; nazwy jak w pozostałych eksportach) Jedna kolumna „A / B / C" nie dawała się filtrować ani sortować
-    // po samej gałęzi. Liczba kolumn = najgłębsza ścieżka w eksporcie. Formuły adresują kolumny
-    // przez `kol(arkusz, klucz)`, nie literami na sztywno — wstawienie kolumn gałęzi przesuwa litery.
+    // @anchor realization-export-branch-cols — kolumna „Zakres" (pierwszy segment ścieżki pozycji).
+    // Formuły adresują kolumny przez `kol(arkusz, klucz)`, nie literami na sztywno.
     const galezieOf = kluczGalezi;
-    const GLEBOKOSC = Math.max(1, ...rows.map(({ node }) => galezieOf(node).length));
-    const KOLUMNY_GALEZI = Array.from({ length: GLEBOKOSC }, (_, i) => ({
-        header: i === 0 ? 'Zakres' : (GLEBOKOSC === 2 ? 'Podzakres' : `Podzakres ${i}`), key: `gal${i}`, width: i === 0 ? 30 : 26,
-    }));
-    const galezie = (node) => Object.fromEntries(galezieOf(node).map((g, i) => [`gal${i}`, g]));
+    // Kolumny podzakresów wyłączone — w arkuszach zostaje sam „Zakres" (pierwszy segment ścieżki).
+    const KOLUMNY_GALEZI = [{ header: 'Zakres', key: 'gal0', width: 30 }];
+    const galezie = (node) => { const g = galezieOf(node); return g.length ? { gal0: g[0] } : {}; };
     const kol = (arkusz, klucz) => arkusz.getColumn(klucz).letter;
     const ps = wb.addWorksheet('Podsumowanie');
     const ws = wb.addWorksheet('Realizacja');
@@ -1047,6 +1069,19 @@ export async function eksportRealizacjiXlsx({
     const az = wb.addWorksheet('Analiza zakupów');
     // Waluta w postaci, którą Excel rozpoznaje jako PLN, a nie jako format niestandardowy.
     const FMT_PLN = '#,##0.00\\ [$zł-415]';
+    // Kolumny kosztowe w każdym arkuszu w kolorach aplikacji: plan pomarańczowy, realizacja/zakup
+    // czerwony, Δ (realizacja − plan) warunkowo — na plus czerwona (przekroczenie), na minus zielona.
+    const kolorCzcionki = (c, argb) => { c.font = { ...(c.font || {}), color: { argb } }; };
+    const kolorujKolumne = (arkusz, klucz, argb, pomin) => arkusz.getColumn(klucz).eachCell({ includeEmpty: false }, (c, nr) => {
+        if (nr > 1 && !pomin?.(c)) kolorCzcionki(c, argb);
+    });
+    const kolorDelty = (arkusz, ref) => arkusz.addConditionalFormatting({
+        ref,
+        rules: [
+            { type: 'cellIs', operator: 'greaterThan', formulae: ['0'], style: { font: { color: { argb: KOLOR_WYNIKU.STRATA } } } },
+            { type: 'cellIs', operator: 'lessThan', formulae: ['0'], style: { font: { color: { argb: KOLOR_WYNIKU.WYNIK } } } },
+        ],
+    });
     ws.columns = [
         ...KOLUMNY_GALEZI,
         { header: 'Nazwa', key: 'name', width: 38 },
@@ -1054,17 +1089,23 @@ export async function eksportRealizacjiXlsx({
         { header: 'Produkt / zakres', key: 'product', width: 28 },
         { header: 'Dostawca', key: 'supplier', width: 24 },
         { header: 'Dokument', key: 'doc', width: 16 },
-        { header: 'Ilość wyceny', key: 'qtyPlan', width: 12 },
+        { header: 'Ilość planowana', key: 'qtyPlan', width: 12 },
         { header: 'Jedn.', key: 'unit', width: 8 },
         { header: 'Zakup / wykonanie', key: 'qtyReal', width: 16 },
         { header: 'Δ ilość', key: 'dQty', width: 10 },
-        { header: 'Koszt jedn. wyceny', key: 'pricePlan', width: 16 },
+        { header: 'Koszt jedn. planowany', key: 'pricePlan', width: 16 },
         // „Zakup" tylko tam, gdzie faktycznie się kupuje. Arkusz obejmuje wszystkie typy
         // liści, a pracy i usługi się nie kupuje — kolumny zbiorcze mówią „realizacja".
         { header: 'Koszt jedn. realizacji', key: 'pricePurchase', width: 18 },
-        { header: 'Koszt całk. wyceny', key: 'valuePlan', width: 18 },
+        { header: 'Koszt całk. planowany', key: 'valuePlan', width: 18 },
         { header: 'Koszt całk. realizacji', key: 'valueReal', width: 20 },
         { header: 'Δ wartość', key: 'delta', width: 14 },
+        // @anchor realization-export-cost-by-status — koszt pozycji rozbity na statusy wpisów
+        // i jej cena ofertowa; z tych kolumn liczy się wynik w „Podsumowaniu" (żywe SUM).
+        { header: 'Poniesione koszty planowe', key: 'kPlanned', width: 22 },
+        { header: 'Poniesione koszty pozaplanowe', key: 'kUnplanned', width: 24 },
+        { header: 'Koszt prognozowany', key: 'kForecast', width: 18 },
+        { header: 'Przychód z oferty', key: 'revenue', width: 18 },
         // @anchor realization-export-status-cols — trzy osie statusu w tej samej
         // kolejności co na ekranie. Oś, której dany typ liścia NIE MA (praca nie ma
         // zakupu, paliwo nie ma wykonania), dostaje „—", a nie pustą komórkę: puste
@@ -1110,6 +1151,10 @@ export async function eksportRealizacjiXlsx({
             // Zakup to SUMA wpisów o różnych cenach, nie iloczyn — zostaje wartością.
             valueReal: hasReal ? r.value : null,
             delta: planValue != null && hasReal ? { formula: `${W('valueReal')}${n}-${W('valuePlan')}${n}`, result: Math.round((r.value - planValue) * 100) / 100 } : null,
+            kPlanned: r.byStatus?.PLANNED || 0,
+            kUnplanned: r.byStatus?.UNPLANNED || 0,
+            kForecast: r.byStatus?.FORECAST || 0,
+            revenue: Math.round(offerPriceOf(node) * 100) / 100,
             statusPlan: node?._outOfBaseline ? 'Poza planem' : statusLabel(node),
             statusPurchase: purchaseStatusLabel(node) || '—',
             statusExec: execStatusLabelOf(node, odbiorByRoot[wbsRootOf(node)]) || '—',
@@ -1125,12 +1170,22 @@ export async function eksportRealizacjiXlsx({
         valuePlan: { formula: `SUM(${W('valuePlan')}2:${W('valuePlan')}${last})`, result: totals.plan },
         valueReal: { formula: `SUM(${W('valueReal')}2:${W('valueReal')}${last})`, result: totals.real },
         delta: { formula: `SUM(${W('delta')}2:${W('delta')}${last})`, result: totals.delta },
+        kPlanned: { formula: `SUM(${W('kPlanned')}2:${W('kPlanned')}${last})`, result: totals.wgStatusu.PLANNED },
+        kUnplanned: { formula: `SUM(${W('kUnplanned')}2:${W('kUnplanned')}${last})`, result: totals.wgStatusu.UNPLANNED },
+        kForecast: { formula: `SUM(${W('kForecast')}2:${W('kForecast')}${last})`, result: totals.wgStatusu.FORECAST },
+        revenue: { formula: `SUM(${W('revenue')}2:${W('revenue')}${last})`, result: totals.przychod },
         entries: { formula: `SUM(${W('entries')}2:${W('entries')}${last})`, result: totals.entries },
     });
     sum.font = { bold: true };
+    for (const [k, kolor] of [
+        ['pricePlan', KOLOR_WYNIKU.PLANNED], ['valuePlan', KOLOR_WYNIKU.PLANNED],
+        ['pricePurchase', KOLOR_WYNIKU.KOSZT], ['valueReal', KOLOR_WYNIKU.KOSZT],
+        ['kPlanned', KOLOR_WYNIKU.PLANNED], ['kUnplanned', KOLOR_WYNIKU.UNPLANNED], ['kForecast', KOLOR_WYNIKU.FORECAST], ['revenue', KOLOR_WYNIKU.PRZYCHOD],
+    ]) kolorujKolumne(ws, k, kolor);
+    kolorDelty(ws, `${W('delta')}2:${W('delta')}${last + 1}`);
     // Kwoty jako waluta PLN, ilości bez formatu (ogólne) — jednostka siedzi w osobnej
     // kolumnie „Jedn.", więc doklejanie separatorów do liczby sztuk tylko myli.
-    ['pricePlan', 'pricePurchase', 'valuePlan', 'valueReal', 'delta'].forEach(k => { ws.getColumn(k).numFmt = FMT_PLN; });
+    ['pricePlan', 'pricePurchase', 'valuePlan', 'valueReal', 'delta', 'kPlanned', 'kUnplanned', 'kForecast', 'revenue'].forEach(k => { ws.getColumn(k).numFmt = FMT_PLN; });
 
     // ─ Zakupy ────────────────────────────────────────────────────────
     // @anchor realization-export-purchases — arkusz „Zakupy": jeden wiersz na WPIS
@@ -1145,13 +1200,13 @@ export async function eksportRealizacjiXlsx({
         if (entryNoun(node.type) !== 'zakup') continue;
         for (const e of r.entries) {
             const { rozl, powod } = rozliczenieOf(node, card, e);
-            zakupy.push({ node, card, e, planQty: Number(r.plan) || 0, rozl: rozl === ROZLICZENIE.OFERTA ? ROZL_XLS.OFERTA : ROZL_XLS.POZA, powod });
+            zakupy.push({ node, card, e, planQty: Number(r.plan) || 0, rozl: rozl === ROZLICZENIE.OFERTA ? ROZL_XLS.OFERTA : rozl === ROZLICZENIE.PROGNOZA ? ROZL_XLS.PROGNOZA : ROZL_XLS.POZA, powod });
         }
     }
     // Sieroty grupowane po id pozycji — plan i Δ stoją w PIERWSZYM wierszu pozycji, więc jej wpisy muszą leżeć razem.
     for (const e of [...orphanEntries].sort((x, y) => String(x.wbsRootId).localeCompare(String(y.wbsRootId)))) {
         if (entryNoun(e.leafType) !== 'zakup') continue;
-        const node = { name: e.leafName || '(pozycja usunięta z wyceny)', type: e.leafType, path: null, unit: 'szt', sourceWbsNodeId: e.wbsRootId };
+        const node = { name: e.leafName || '(pozycja usunięta z planu)', type: e.leafType, path: null, unit: 'szt', sourceWbsNodeId: e.wbsRootId };
         zakupy.push({ node, card: null, e, planQty: 0, rozl: ROZL_XLS.POZA, powod: POWOD_POZA_OFERTA.USUNIETA });
     }
     // @anchor realization-export-plan-per-position — plan (koszt jedn., wartość) i Δ są cechą POZYCJI,
@@ -1184,7 +1239,7 @@ export async function eksportRealizacjiXlsx({
         { header: 'Jedn.', key: 'unit', width: 8 },
         // @anchor realization-export-purchase-vs-offer — koszt jedn. zaplanowany (`planUnitOf`) obok
         // ceny zakupu — tylko w pierwszym wierszu pozycji (`realization-export-plan-per-position`).
-        { header: 'Koszt jednostkowy zaplanowany', key: 'planUnit', width: 18 },
+        { header: 'Planowy koszt jednostkowy', key: 'planUnit', width: 18 },
         { header: 'Cena zakupu', key: 'unitCost', width: 14 },
         // @anchor realization-export-offer-value — wartość zaplanowana POZYCJI (`planValueOf`) w jej
         // pierwszym wierszu, w pozostałych pusto — suma kolumny = plan pozycji z zakupami.
@@ -1192,16 +1247,16 @@ export async function eksportRealizacjiXlsx({
         { header: 'Wartość zakupu', key: 'value', width: 16 },
         { header: 'Δ wartość', key: 'dValue', width: 14 },
         // @anchor realization-export-settlement-col — „Rozliczenie” wpisu (`rozliczenieOf`):
-        // zaplanowany / poza planem, plus „Powód” dla drugiej. Zmiana kategorii w pliku
+        // planowy / pozaplanowy, plus „Powód” dla drugiej. Zmiana kategorii w pliku
         // przemalowuje wiersz i przelicza podział na kategorie w arkuszu „Analiza zakupów”.
-        { header: 'Rozliczenie', key: 'rozl', width: 14 },
+        { header: 'Status', key: 'rozl', width: 14 },
         { header: 'Powód', key: 'powod', width: 20 },
         { header: 'Kupujący', key: 'author', width: 22 },
         { header: 'Komentarz', key: 'comment', width: 40 },
         // Klucz pozycji dla SUMIFS w „Analizie zakupów" — nazwa się powtarza między gałęziami.
         { header: 'Id pozycji', key: 'rootId', width: 12, hidden: true },
         // Ilość z wyceny pozycji — czynnik formuły „Wartości zaplanowanej”.
-        { header: 'Ilość wyceny', key: 'planQty', width: 12, hidden: true },
+        { header: 'Ilość planowana', key: 'planQty', width: 12, hidden: true },
     ];
     zk.getRow(1).font = { bold: true };
     zk.views = [{ state: 'frozen', ySplit: 1 }];
@@ -1277,14 +1332,18 @@ export async function eksportRealizacjiXlsx({
         sumZ.font = { bold: true };
         // Autofiltr tylko na wierszach wpisów — z „Razem" w zakresie filtr pokazywał „(Puste)".
         zk.autoFilter = `A1:${Z('comment')}${lastZ}`;
-        // @anchor realization-export-red-rows — zakup poza ofertą (nadmiarowy, nieofertowany,
+        // @anchor realization-export-red-rows — zakup poza ofertą (oznaczony ręcznie, nieofertowany,
         // dodana po akceptacji, usunięta) na czerwono. Formatowanie WARUNKOWE, a nie stały kolor: przestawienie
         // „Rozliczenia" w pliku ma od razu przemalować wiersz.
         zk.addConditionalFormatting({
             ref: `A2:${Z('comment')}${lastZ}`,
             rules: [{
                 type: 'expression',
-                formulae: [`$${Z('rozl')}2<>"${W_OFERCIE}"`],
+                formulae: [`$${Z('rozl')}2="${ROZL_XLS.PROGNOZA}"`],
+                style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: BURSZTYN_TLO } }, font: { color: { argb: BURSZTYN_TEKST } } },
+            }, {
+                type: 'expression',
+                formulae: [`AND($${Z('rozl')}2<>"${W_OFERCIE}",$${Z('rozl')}2<>"${ROZL_XLS.PROGNOZA}")`],
                 style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: CZERWONE_TLO } }, font: { color: { argb: CZERWONY_TEKST } } },
             }],
         });
@@ -1292,6 +1351,12 @@ export async function eksportRealizacjiXlsx({
         zk.addRow({ gal0: 'Brak wpisów zakupu w tym widoku' }).font = { italic: true };
     }
     ['planUnit', 'unitCost', 'planValue', 'value', 'dValue'].forEach(k => { zk.getColumn(k).numFmt = FMT_PLN; });
+    // Kolory kolumn pod czerwonym/bursztynowym wierszem przykrywa formatowanie warunkowe wiersza
+    // (dodane wcześniej, więc ma pierwszeństwo) — kategoria rozliczenia zostaje czytelna.
+    if (zakupy.length) {
+        for (const [k, kolor] of [['planUnit', KOLOR_WYNIKU.PLANNED], ['planValue', KOLOR_WYNIKU.PLANNED], ['unitCost', KOLOR_WYNIKU.KOSZT], ['value', KOLOR_WYNIKU.KOSZT]]) kolorujKolumne(zk, k, kolor);
+        kolorDelty(zk, `${Z('dValue')}2:${Z('dValue')}${razemZ}`);
+    }
 
     // ─ Analiza zakupów ───────────────────────────────────────────────
     // @anchor realization-export-purchase-analysis — tabela „przestawna" z arkusza Zakupy:
@@ -1301,7 +1366,7 @@ export async function eksportRealizacjiXlsx({
     // Podwiersze kategorii powstają z danych w chwili eksportu; wiersz pozycji sumuje po samym
     // id, więc zgadza się także po przestawieniu kategorii w pliku.
     az.columns = [
-        { header: 'Pozycja / rozliczenie', key: 'a', width: 40 },
+        { header: 'Pozycja / status', key: 'a', width: 40 },
         ...KOLUMNY_GALEZI,
         { header: 'Ilość', key: 'c', width: 10 },
         { header: 'Wartość zaplanowana', key: 'd', width: 18 },
@@ -1309,7 +1374,7 @@ export async function eksportRealizacjiXlsx({
         { header: 'Δ wartość', key: 'f', width: 14 },
         { header: 'Δ %', key: 'g', width: 10 },
         { header: 'Id pozycji', key: 'h', width: 12, hidden: true },
-        { header: 'Rozliczenie', key: 'i', width: 14, hidden: true },
+        { header: 'Status', key: 'i', width: 14, hidden: true },
         { header: 'Powód', key: 'j', width: 20, hidden: true },
         // @anchor realization-export-planned-cost — PEŁNY koszt pozycji z baseline (ilość wyceny ×
         // koszt jedn. wyceny, `planValueOf`), obok „Wartości oferty" przypisanej do zakupów. Kolumna
@@ -1325,6 +1390,12 @@ export async function eksportRealizacjiXlsx({
         if (styl === 'grupa') {
             r.font = { bold: true };
             r.eachCell({ includeEmpty: true }, c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } }; });
+        }
+        if (styl === 'bursztyn') {
+            r.eachCell({ includeEmpty: true }, c => {
+                c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BURSZTYN_TLO } };
+                c.font = { color: { argb: BURSZTYN_TEKST } };
+            });
         }
         if (styl === 'czerwony') {
             r.eachCell({ includeEmpty: true }, c => {
@@ -1354,6 +1425,7 @@ export async function eksportRealizacjiXlsx({
     };
 
     const kategorie = Object.values(ROZL_XLS);
+    const stylKategorii = (kat) => (kat === W_OFERCIE ? null : kat === ROZL_XLS.PROGNOZA ? 'bursztyn' : 'czerwony');
     const poPozycji = new Map();
     for (const z of zakupy) {
         const id = wbsRootOf(z.node);
@@ -1371,7 +1443,7 @@ export async function eksportRealizacjiXlsx({
             const czesc = lista.filter(x => x.rozl === kat);
             if (!czesc.length) continue;
             wierszAnalizy({ a: `    ${kat}`, ...galezie(node), h: id, i: kat },
-                n => `${ZR('rootId')},$${AZ('h')}${n},${ZR('rozl')},$${AZ('i')}${n}`, agregat(czesc), kat === W_OFERCIE ? null : 'czerwony', true);
+                n => `${ZR('rootId')},$${AZ('h')}${n},${ZR('rozl')},$${AZ('i')}${n}`, agregat(czesc), stylKategorii(kat), true);
         }
     }
     if (zakupy.length) {
@@ -1395,9 +1467,9 @@ export async function eksportRealizacjiXlsx({
             const czesc = zakupy.filter(x => x.rozl === kat);
             if (!czesc.length) continue;
             wierszAnalizy({ a: `    w tym ${kat}`, i: kat },
-                n => `${ZR('rozl')},$${AZ('i')}${n}`, agregat(czesc), kat === W_OFERCIE ? null : 'czerwony', true);
+                n => `${ZR('rozl')},$${AZ('i')}${n}`, agregat(czesc), stylKategorii(kat), true);
             // Rozbicie „poza ofertą" na powody — dlaczego koszt poszedł ponad plan.
-            if (kat === W_OFERCIE) continue;
+            if (kat === W_OFERCIE || kat === ROZL_XLS.PROGNOZA) continue;
             for (const powod of Object.values(POWOD_POZA_OFERTA)) {
                 const zPowodu = czesc.filter(x => x.powod === powod);
                 if (!zPowodu.length) continue;
@@ -1420,6 +1492,10 @@ export async function eksportRealizacjiXlsx({
     }
     ['d', 'e', 'f', 'k'].forEach(k => { az.getColumn(k).numFmt = FMT_PLN; });
     az.getColumn('g').numFmt = '0.0%';
+    // Wiersze kategorii (bursztyn / czerwień) zostają w kolorze swojej kategorii.
+    const wierszKategorii = (c) => [BURSZTYN_TLO, CZERWONE_TLO].includes(c.fill?.fgColor?.argb);
+    for (const [k, kolor] of [['d', KOLOR_WYNIKU.PLANNED], ['k', KOLOR_WYNIKU.PLANNED], ['e', KOLOR_WYNIKU.KOSZT]]) kolorujKolumne(az, k, kolor, wierszKategorii);
+    if (az.rowCount > 1) kolorDelty(az, `${AZ('f')}2:${AZ('g')}${az.rowCount}`);
 
     // ─ Podsumowanie ──────────────────────────────────────────────────
     ps.columns = [
@@ -1469,42 +1545,128 @@ export async function eksportRealizacjiXlsx({
     if (filtry.length) wierszOpisowy('Filtry kolumn', filtry.join(' · '));
     ps.addRow({});
 
+    // @anchor realization-export-result — wynik zamówienia w kolejności z aplikacji: koszty wg statusów,
+    // koszt całkowity, przychód z oferty, wynik. Żywe formuły na sumach arkusza „Realizacja".
+    naglowek('Wynik zamówienia');
+    const WYNIK_KOLUMNY = [
+        ['a', 'Poniesione koszty planowe', KOLOR_WYNIKU.PLANNED],
+        ['b', 'Poniesione koszty pozaplanowe', KOLOR_WYNIKU.UNPLANNED],
+        ['c', 'Koszt prognozowany', KOLOR_WYNIKU.FORECAST],
+        ['d', 'Koszt całkowity', KOLOR_WYNIKU.KOSZT],
+        ['e', 'Przychód z oferty', KOLOR_WYNIKU.PRZYCHOD],
+        ['f', 'Wynik', null],
+        ['g', 'Marża', null],
+    ];
+    const glowkaWyniku = ps.addRow(Object.fromEntries(WYNIK_KOLUMNY.map(([k, t]) => [k, t])));
+    glowkaWyniku.font = { bold: true };
+    // Dłuższe nagłówki („Poniesione koszty pozaplanowe”) nie mieszczą się w 18 znakach kolumny — zawijamy.
+    glowkaWyniku.alignment = { wrapText: true, vertical: 'top' };
+    glowkaWyniku.height = 32;
+    const nW = ps.rowCount + 1;
+    const wynikZam = Math.round((totals.przychod - totals.real) * 100) / 100;
+    const rWyniku = ps.addRow({
+        a: { formula: `Realizacja!${W('kPlanned')}${last + 1}`, result: totals.wgStatusu.PLANNED },
+        b: { formula: `Realizacja!${W('kUnplanned')}${last + 1}`, result: totals.wgStatusu.UNPLANNED },
+        c: { formula: `Realizacja!${W('kForecast')}${last + 1}`, result: totals.wgStatusu.FORECAST },
+        d: { formula: `A${nW}+B${nW}+C${nW}`, result: totals.real },
+        e: { formula: `Realizacja!${W('revenue')}${last + 1}`, result: totals.przychod },
+        f: { formula: `E${nW}-D${nW}`, result: wynikZam },
+        g: { formula: `IF(E${nW}=0,"",F${nW}/E${nW})`, result: totals.przychod ? wynikZam / totals.przychod : '' },
+    });
+    rWyniku.font = { bold: true };
+    for (const [k, , kolor] of WYNIK_KOLUMNY) {
+        const c = rWyniku.getCell(k);
+        c.numFmt = k === 'g' ? '0.0%' : FMT_PLN;
+        const argb = kolor || (wynikZam < 0 ? KOLOR_WYNIKU.STRATA : KOLOR_WYNIKU.WYNIK);
+        c.font = { bold: true, color: { argb } };
+        glowkaWyniku.getCell(k).font = { bold: true, color: { argb } };
+    }
+    ps.addRow({});
+
+    // @anchor realization-export-result-compare — porównanie wyników: planowany (przychód − wycena
+    // kosztów) i bieżący (przychód − koszt całkowity). Różnica kosztów na korzyść to ZYSK NADZWYCZAJNY,
+    // nie budżet „do wykorzystania" — wycena jest sufitem kosztów, a nie kwotą do wydania.
+    naglowek('Porównanie wyników');
+    const glowkaPor = ps.addRow({ a: 'Wariant', b: 'Przychód z oferty', c: 'Koszt', d: 'Wynik', e: 'Marża' });
+    glowkaPor.font = { bold: true };
+    const nP = ps.rowCount + 1;
+    const wynikPlanowany = Math.round((totals.przychod - totals.plan) * 100) / 100;
+    ps.addRow({
+        a: 'Wynik planowany (koszt = koszt planowany)',
+        b: { formula: `E${nW}`, result: totals.przychod },
+        c: { formula: `Realizacja!${W('valuePlan')}${last + 1}`, result: totals.plan },
+        d: { formula: `B${nP}-C${nP}`, result: wynikPlanowany },
+        e: { formula: `IF(B${nP}=0,"",D${nP}/B${nP})`, result: totals.przychod ? wynikPlanowany / totals.przychod : '' },
+    });
+    ps.addRow({
+        a: 'Wynik bieżący (koszt całkowity)',
+        b: { formula: `E${nW}`, result: totals.przychod },
+        c: { formula: `D${nW}`, result: totals.real },
+        d: { formula: `B${nP + 1}-C${nP + 1}`, result: wynikZam },
+        e: { formula: `IF(B${nP + 1}=0,"",D${nP + 1}/B${nP + 1})`, result: totals.przychod ? wynikZam / totals.przychod : '' },
+    });
+    const roznica = Math.round((wynikZam - wynikPlanowany) * 100) / 100;
+    const rRoz = ps.addRow({
+        a: roznica >= 0 ? 'Zysk nadzwyczajny (bieżący − planowany)' : 'Strata względem planu (bieżący − planowany)',
+        c: { formula: `C${nP + 1}-C${nP}`, result: Math.round((totals.real - totals.plan) * 100) / 100 },
+        d: { formula: `D${nP + 1}-D${nP}`, result: roznica },
+        e: { formula: `IF(B${nP}=0,"",E${nP + 1}-E${nP})`, result: totals.przychod ? roznica / totals.przychod : '' },
+    });
+    rRoz.font = { bold: true };
+    for (let r = nP; r <= rRoz.number; r++) {
+        for (const k of ['B', 'C', 'D']) ps.getCell(`${k}${r}`).numFmt = FMT_PLN;
+        ps.getCell(`E${r}`).numFmt = '0.0%';
+        ps.getCell(`B${r}`).font = { ...(ps.getCell(`B${r}`).font || {}), color: { argb: KOLOR_WYNIKU.PRZYCHOD } };
+        ps.getCell(`C${r}`).font = { ...(ps.getCell(`C${r}`).font || {}), color: { argb: r === nP ? KOLOR_WYNIKU.PLANNED : KOLOR_WYNIKU.KOSZT } };
+        const dodatni = (r === rRoz.number ? roznica : r === nP ? wynikPlanowany : wynikZam) >= 0;
+        for (const k of ['D', 'E']) ps.getCell(`${k}${r}`).font = { ...(ps.getCell(`${k}${r}`).font || {}), color: { argb: dodatni ? KOLOR_WYNIKU.WYNIK : KOLOR_WYNIKU.STRATA } };
+    }
+    if (totals.przychodPoAkceptacji > 0) {
+        const r = ps.addRow({ a: `Przychód bez pozycji dodanych po akceptacji oferty (${fmtZl(totals.przychodPoAkceptacji)} zł).` });
+        ps.mergeCells(`A${r.number}:G${r.number}`);
+        r.getCell('a').font = { italic: true, color: { argb: 'FF6B7280' } };
+    }
+    ps.addRow({});
+
     naglowek('Porównanie globalne');
-    ps.addRow({ a: 'Koszt całkowity wyceny', b: { formula: `Realizacja!${W('valuePlan')}${last + 1}`, result: totals.plan } });
-    ps.addRow({ a: 'Wartość zakupów / realizacji zadań', b: { formula: `Realizacja!${W('valueReal')}${last + 1}`, result: totals.real } });
+    ps.addRow({ a: 'Koszt planowany', b: { formula: `Realizacja!${W('valuePlan')}${last + 1}`, result: totals.plan } });
+    ps.addRow({ a: 'Koszt całkowity realizacji (z prognozą)', b: { formula: `Realizacja!${W('valueReal')}${last + 1}`, result: totals.real } });
     const wRow = ps.rowCount - 1;
-    // Obie pozycje liczone „w plus": ile budżetu ZOSTAŁO (wycena − realizacja) i jaka jego
-    // część JEST już wydana (realizacja ÷ wycena). Odwrotnie niż kolumna „Δ wartość"
-    // w arkuszu Realizacja, która zostaje znakowanym odchyleniem.
-    ps.addRow({ a: 'Wartość niezrealizowanego budżetu zaplanowanego', b: { formula: `B${wRow}-B${wRow + 1}`, result: Math.round((totals.plan - totals.real) * 100) / 100 } });
+    // Wycena − koszt całkowity liczona „w plus": dodatnia to zysk nadzwyczajny ponad wynik
+    // planowany, ujemna — strata. Nie „budżet do wykorzystania": wycena to sufit kosztów.
+    ps.addRow({ a: 'Zysk nadzwyczajny (koszt planowany − koszt całkowity; minus = strata)', b: { formula: `B${wRow}-B${wRow + 1}`, result: Math.round((totals.plan - totals.real) * 100) / 100 } });
     ps.addRow({ a: 'Procentowa realizacja budżetu', b: { formula: `IF(B${wRow}=0,"",B${wRow + 1}/B${wRow})`, result: totals.plan ? totals.real / totals.plan : '' } });
     ps.getCell(`B${ps.rowCount}`).numFmt = '0.0%';
     // wRow = „Koszt całkowity wyceny"; kolejne dwa wiersze to realizacja i Δ wartość.
     for (let r = wRow; r <= wRow + 2; r++) ps.getCell(`B${r}`).numFmt = FMT_PLN;
+    // Kolory jak w „Porównaniu wyników": koszty czerwone, zysk zielony / strata czerwona,
+    // a realizacja budżetu ponad 100% to przekroczenie wyceny — też czerwona.
+    const zyskGlobalny = totals.plan - totals.real >= 0;
+    const kolorGlobalny = zyskGlobalny ? KOLOR_WYNIKU.WYNIK : KOLOR_WYNIKU.STRATA;
+    ps.getCell(`B${wRow}`).font = { color: { argb: KOLOR_WYNIKU.PLANNED } };
+    ps.getCell(`B${wRow + 1}`).font = { color: { argb: KOLOR_WYNIKU.KOSZT } };
+    for (const r of [wRow + 2, wRow + 3]) {
+        ps.getCell(`A${r}`).font = { bold: true };
+        ps.getCell(`B${r}`).font = { bold: true, color: { argb: kolorGlobalny } };
+    }
     ps.addRow({});
 
     // ─ Prognoza wydatków ─────────────────────────────────────────────
-    // Osobny wiersz na każdy rodzaj kosztów: współczynnik wyliczony z pozycji już
-    // ruszonych tego rodzaju, przeniesiony na cały jego plan. Rodzaj bez wydatków
-    // idzie po 100% wyceny. Na końcu suma — prognoza całego budżetu.
+    // Osobny wiersz na każdy rodzaj kosztów: koszt planowany, wykonanie i jego udział.
+    // Na końcu suma całego budżetu.
     if (analiza.ruszone) {
         naglowek('Prognoza wydatków');
-        const glowka = ps.addRow({ a: 'Rodzaj kosztów', b: 'Wycena', c: 'Wykonanie', d: '% wykonania', e: 'Prognoza', f: 'Δ do planu' });
+        const glowka = ps.addRow({ a: 'Rodzaj kosztów', b: 'Koszt planowany', c: 'Wykonanie', d: '% wykonania' });
         glowka.font = { bold: true };
         const odRow = ps.rowCount + 1;
         const typy = analiza.typy.filter(g => g.planCaly > 0);
         for (const g of typy) {
             const n = ps.rowCount + 1;
-            const prog = Math.round(g.planCaly * g.wsp * 100) / 100;
             ps.addRow({
                 a: g.typ,
                 b: g.planCaly,
                 c: g.realRuszone,
-                // Udział wykonania w wycenie rodzaju — to ta liczba decyduje, czy prognoza
-                // idzie z odchylenia, czy zostaje na 100% (próg `PROG_MIN_UDZIAL`).
                 d: { formula: `IF(B${n}=0,"",C${n}/B${n})`, result: g.planCaly ? g.realRuszone / g.planCaly : '' },
-                e: prog,
-                f: { formula: `B${n}-E${n}`, result: Math.round((g.planCaly - prog) * 100) / 100 },
             });
         }
         const doRow = ps.rowCount;
@@ -1513,23 +1675,13 @@ export async function eksportRealizacjiXlsx({
             b: { formula: `SUM(B${odRow}:B${doRow})`, result: totals.plan },
             c: { formula: `SUM(C${odRow}:C${doRow})`, result: totals.real },
             d: { formula: `IF(B${ps.rowCount + 1}=0,"",C${ps.rowCount + 1}/B${ps.rowCount + 1})`, result: totals.plan ? totals.real / totals.plan : '' },
-            e: { formula: `SUM(E${odRow}:E${doRow})`, result: analiza.prognoza },
-            f: { formula: `SUM(F${odRow}:F${doRow})`, result: Math.round((totals.plan - analiza.prognoza) * 100) / 100 },
         });
         suma.font = { bold: true };
         for (let r = odRow; r <= suma.number; r++) {
-            for (const k of ['B', 'C', 'E', 'F']) ps.getCell(`${k}${r}`).numFmt = FMT_PLN;
+            for (const k of ['B', 'C']) ps.getCell(`${k}${r}`).numFmt = FMT_PLN;
             ps.getCell(`D${r}`).numFmt = '0.0%';
-        }
-
-        // Rodzaje trzymane na 100% — bez tego wiersz z wykonaniem 100 zł przy wycenie
-        // 67 tys. i prognozą równą wycenie wygląda na błąd rachunku, a nie na decyzję.
-        const trzymane = typy.filter(g => g.pelna && g.realRuszone > 0).map(g => g.typ);
-        if (trzymane.length) {
-            const r = ps.addRow({ a: `Wykonanie poniżej ${Math.round(PROG_MIN_UDZIAL * 100)}% budżetu rodzaju — prognoza trzymana na 100% wyceny: ${trzymane.join(', ')}.` });
-            ps.mergeCells(`A${r.number}:F${r.number}`);
-            r.getCell('a').alignment = { wrapText: true, vertical: 'top' };
-            r.height = wysokosc(r.getCell('a').value, ZNAKI_A_F);
+            kolorCzcionki(ps.getCell(`B${r}`), KOLOR_WYNIKU.PLANNED);
+            kolorCzcionki(ps.getCell(`C${r}`), KOLOR_WYNIKU.KOSZT);
         }
         ps.addRow({});
     }
@@ -1547,37 +1699,51 @@ export async function eksportRealizacjiXlsx({
     const A = analiza;
     const zdania = [];
 
+    // @anchor realization-export-analysis-status — zdania liczą koszt całkowity z prognozą, ale mówią
+    // osobno, ile już poniesiono (planowy + pozaplanowy), a ile dopiero przyjdzie (prognozowany).
+    const S = totals.wgStatusu;
+    const zPrognoza = S.FORECAST > 0 ? ` (w tym ${zl(S.FORECAST)} prognozowanych — koszty, które dopiero przyjdą)` : '';
     if (!totals.plan) {
-        zdania.push(`Pozycje w tym widoku nie mają kwot w wycenie, a na zakupy i wykonanie zadań poszło dotąd ${zl(totals.real)} — nie ma do czego porównać realizacji.`);
+        zdania.push(`Pozycje w tym widoku nie mają kosztu planowanego, a koszt całkowity wynosi ${zl(totals.real)}${zPrognoza} — nie ma do czego porównać realizacji.`);
     } else if (totals.real > totals.plan) {
-        zdania.push(`Wycena zamówienia to ${zl(totals.plan)}, a na zakupy i wykonanie zadań poszło dotąd ${zl(totals.real)} — budżet zaplanowany jest wyczerpany i przekroczony o ${zl(totals.real - totals.plan)}, co daje ${pct(totals.real, totals.plan)} wyceny.`);
+        zdania.push(`Koszt planowany zamówienia to ${zl(totals.plan)}, a koszt całkowity wynosi ${zl(totals.real)}${zPrognoza} — budżet zaplanowany jest wyczerpany i przekroczony o ${zl(totals.real - totals.plan)}, co daje ${pct(totals.real, totals.plan)} kosztu planowanego.`);
     } else {
-        zdania.push(`Wycena zamówienia to ${zl(totals.plan)}, a na zakupy i wykonanie zadań poszło dotąd ${zl(totals.real)} — zrealizowano ${pct(totals.real, totals.plan)} budżetu zaplanowanego, do wykorzystania zostaje ${zl(totals.plan - totals.real)}.`);
+        zdania.push(`Koszt planowany zamówienia to ${zl(totals.plan)}, a koszt całkowity wynosi ${zl(totals.real)}${zPrognoza} — to ${pct(totals.real, totals.plan)} kosztu planowanego${totals.plan > totals.real ? `; koszty niższe od kosztu planowanego o ${zl(totals.plan - totals.real)} to zysk nadzwyczajny ponad wynik planowany` : ''}.`);
+    }
+    if (totals.real > 0) {
+        zdania.push(`Poniesiono dotąd ${zl(totals.poniesione)}: koszty planowe ${zl(S.PLANNED)}, pozaplanowe ${zl(S.UNPLANNED)}${totals.poniesione ? ` (${pct(S.UNPLANNED, totals.poniesione)} poniesionych)` : ''}. ${S.FORECAST > 0 ? `Prognozowane są jeszcze ${zl(S.FORECAST)}, czyli ${pct(S.FORECAST, totals.real)} kosztu całkowitego.` : 'Nie ma kosztów prognozowanych — koszt całkowity to wyłącznie koszty poniesione.'}`);
+    }
+    if (totals.przychod > 0) {
+        const wyn = totals.przychod - totals.real;
+        const wynPlan = totals.przychod - totals.plan;
+        zdania.push(wyn >= 0
+            ? `Przy przychodzie z oferty ${zl(totals.przychod)} wynik zamówienia wynosi ${zl(wyn)}, czyli ${pct(wyn, totals.przychod)} przychodu; wynik planowany to ${zl(wynPlan)} (${pct(wynPlan, totals.przychod)})${wyn > wynPlan ? `, więc zysk nadzwyczajny wynosi ${zl(wyn - wynPlan)}` : wyn < wynPlan ? `, więc tracimy względem planu ${zl(wynPlan - wyn)}` : ''}.`
+            : `Przy przychodzie z oferty ${zl(totals.przychod)} koszt całkowity przekracza przychód — strata ${zl(-wyn)}; wynik planowany to ${zl(wynPlan)} (${pct(wynPlan, totals.przychod)}).`);
     }
 
     if (!A.ruszone) {
-        zdania.push(`Żadna z ${totals.count} pozycji w widoku nie ma jeszcze wpisu zakupu ani wykonania, więc nie da się jeszcze powiedzieć, czy kupujemy taniej, czy drożej niż zakładała wycena.`);
+        zdania.push(`Żadna z ${totals.count} pozycji w widoku nie ma jeszcze wpisu zakupu ani wykonania, więc nie da się jeszcze powiedzieć, czy kupujemy taniej, czy drożej, niż zakładał koszt planowany.`);
     } else {
         const udzial = totals.plan ? `, czyli ${pct(A.planRuszone, totals.plan)} całego budżetu` : '';
-        zdania.push(`Realizacja ruszyła na ${A.ruszone} z ${totals.count} pozycji (${pct(A.ruszone, totals.count)}); w wycenie odpowiadały one za ${zl(A.planRuszone)}${udzial}.`);
+        zdania.push(`Realizacja ruszyła na ${A.ruszone} z ${totals.count} pozycji (${pct(A.ruszone, totals.count)}); w koszcie planowanym odpowiadały one za ${zl(A.planRuszone)}${udzial}.`);
 
         if (!A.planRuszone) {
-            zdania.push(`Ruszone pozycje nie miały w wycenie żadnej kwoty, więc całe ${zl(A.realRuszone)} to koszt ponad plan.`);
+            zdania.push(`Ruszone pozycje nie miały kosztu planowanego, więc całe ${zl(A.realRuszone)} to koszt ponad plan.`);
         } else if (A.deltaRuszone < 0) {
-            zdania.push(`Na tych pozycjach wydano ${zl(A.realRuszone)} przy planie ${zl(A.planRuszone)} — jesteśmy do przodu o ${zl(-A.deltaRuszone)}, czyli kupujemy ${pct(-A.deltaRuszone, A.planRuszone)} poniżej wyceny.`);
+            zdania.push(`Koszt całkowity tych pozycji to ${zl(A.realRuszone)} przy planie ${zl(A.planRuszone)} — zysk nadzwyczajny ${zl(-A.deltaRuszone)}, czyli koszty ${pct(-A.deltaRuszone, A.planRuszone)} poniżej kosztu planowanego.`);
         } else if (A.deltaRuszone > 0) {
-            zdania.push(`Na tych pozycjach wydano ${zl(A.realRuszone)} przy planie ${zl(A.planRuszone)} — wydajemy o ${zl(A.deltaRuszone)} więcej, niż zakładano, czyli ${pct(A.deltaRuszone, A.planRuszone)} powyżej wyceny.`);
+            zdania.push(`Koszt całkowity tych pozycji to ${zl(A.realRuszone)} przy planie ${zl(A.planRuszone)} — wydajemy o ${zl(A.deltaRuszone)} więcej, niż zakładano, czyli ${pct(A.deltaRuszone, A.planRuszone)} powyżej kosztu planowanego.`);
         } else {
-            zdania.push(`Na tych pozycjach wydano dokładnie tyle, ile zakładała wycena — ${zl(A.realRuszone)}.`);
+            zdania.push(`Koszt całkowity tych pozycji to dokładnie tyle, ile zakładał koszt planowany — ${zl(A.realRuszone)}.`);
         }
 
         // Wyliczenie bez orzeczenia — przy zmiennej liczbie pozycji każda forma czasownika
         // („wypadła / wypadły / wypadło") byłaby błędna dla dwóch pozostałych przypadków.
-        zdania.push(`Poniżej wyceny: ${A.taniej} ${poz(A.taniej)} na łączną oszczędność ${zl(A.oszczednosc)}. Powyżej wyceny: ${A.drozej} ${poz(A.drozej)} na łączne przekroczenie ${zl(A.przekroczenie)}${A.wPunkt ? `. Dokładnie w planie: ${A.wPunkt} ${poz(A.wPunkt)}` : ''}.`);
+        zdania.push(`Poniżej kosztu planowanego: ${A.taniej} ${poz(A.taniej)} na łączny zysk nadzwyczajny ${zl(A.oszczednosc)}. Powyżej kosztu planowanego: ${A.drozej} ${poz(A.drozej)} na łączne przekroczenie ${zl(A.przekroczenie)}${A.wPunkt ? `. Dokładnie w planie: ${A.wPunkt} ${poz(A.wPunkt)}` : ''}.`);
 
         if (A.planRuszone > 0 && totals.plan) {
             if (A.planRuszone / totals.plan < 0.2) {
-                zdania.push(`Próba jest jednak mała: ruszone pozycje to dopiero ${pct(A.planRuszone, totals.plan)} wartości wyceny, więc prognozę traktuj orientacyjnie — o rzeczywistym wyniku zamówienia zdecydują pozycje jeszcze nietknięte.`);
+                zdania.push(`Próba jest jednak mała: ruszone pozycje to dopiero ${pct(A.planRuszone, totals.plan)} kosztu planowanego, więc prognozę traktuj orientacyjnie — o rzeczywistym wyniku zamówienia zdecydują pozycje jeszcze nietknięte.`);
             }
         }
     }
@@ -1601,7 +1767,7 @@ export async function eksportRealizacjiXlsx({
 
     // Rozbicie po typie — SUMIF/COUNTIF po arkuszu „Realizacja", więc po ręcznej
     // korekcie liczby w tabeli podsumowanie idzie za nią.
-    const naglowekTypow = ps.addRow({ a: 'Typ pozycji', b: 'Pozycje', c: 'Rozliczone', d: 'Wycena', e: 'Realizacja', f: 'Δ' });
+    const naglowekTypow = ps.addRow({ a: 'Typ pozycji', b: 'Pozycje', c: 'Rozliczone', d: 'Koszt planowany', e: 'Realizacja', f: 'Δ' });
     naglowekTypow.font = { bold: true };
     const rozbicieOd = ps.rowCount + 1;
     const typy = [...new Set(rows.map(({ node }) => TYPE_META[node.type]?.label || node.type || '—'))];
@@ -1623,7 +1789,10 @@ export async function eksportRealizacjiXlsx({
     // prognozy, a `getColumn().numFmt` zamieniłby ten procent na złotówki.
     for (let r = rozbicieOd; r <= ps.rowCount; r++) {
         for (const k of ['D', 'E', 'F']) ps.getCell(`${k}${r}`).numFmt = FMT_PLN;
+        kolorCzcionki(ps.getCell(`D${r}`), KOLOR_WYNIKU.PLANNED);
+        kolorCzcionki(ps.getCell(`E${r}`), KOLOR_WYNIKU.KOSZT);
     }
+    if (ps.rowCount >= rozbicieOd) kolorDelty(ps, `F${rozbicieOd}:F${ps.rowCount}`);
 
     // ── Stan wykonania — ten sam podział, który widać pod analizą w zakładce ──────────
     // Trzy części dzielą zamówienie bez reszty, więc arkusz da się sprawdzić w pionie:
@@ -1634,7 +1803,7 @@ export async function eksportRealizacjiXlsx({
     naglowek('STAN WYKONANIA — PODZIAŁ ZAMÓWIENIA');
     const bilans = liczBilansWykonania(rows);
     const glowkaB = ps.addRow({
-        a: 'Przekrój', b: 'Pozycje', c: 'Wycena', d: 'Zakup', e: 'Δ', f: 'Pokrycie wyceny', g: 'Udział wyceny',
+        a: 'Przekrój', b: 'Pozycje', c: 'Koszt planowany', d: 'Zakup', e: 'Δ', f: 'Pokrycie kosztu planowanego', g: 'Udział w koszcie planowanym',
     });
     glowkaB.font = { bold: true };
     const bilansOd = ps.rowCount + 1;
@@ -1660,9 +1829,12 @@ export async function eksportRealizacjiXlsx({
     for (let r = bilansOd; r <= ps.rowCount; r++) {
         for (const k of ['C', 'D', 'E']) ps.getCell(`${k}${r}`).numFmt = FMT_PLN;
         for (const k of ['F', 'G']) ps.getCell(`${k}${r}`).numFmt = '0.0%';
+        kolorCzcionki(ps.getCell(`C${r}`), KOLOR_WYNIKU.PLANNED);
+        kolorCzcionki(ps.getCell(`D${r}`), KOLOR_WYNIKU.KOSZT);
     }
+    kolorDelty(ps, `E${bilansOd}:E${ps.rowCount}`);
     for (const opis of [
-        'Podział liczy się WYŁĄCZNIE ze statusu wykonania pozycji. Kwoty to wycena i zakup całych pozycji —',
+        'Podział liczy się WYŁĄCZNIE ze statusu wykonania pozycji. Kwoty to koszt planowany i zakup całych pozycji —',
         'status wykonania dotyczy pozycji razem z materiałem, który do niej wszedł.',
         'W wierszu „' + NIEROZPOCZETE_LABEL + '" stoi kwota zakupu, bo materiał bywa już kupiony i zapłacony,',
         'tylko jeszcze niezamontowany. Odwołane, czekające na akceptację oferty lub na dostawę, a także nocleg',

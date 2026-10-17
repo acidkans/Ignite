@@ -1635,9 +1635,11 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | LeafActual.model | apps/backend/prisma/schema.prisma | @anchor leaf-actual-model |
 | schema-pole | LeafActual.ean (kod EAN kupionego egzemplarza) | apps/backend/prisma/schema.prisma | @anchor leaf-actual-ean |
 | schema-pole | LeafActual.scope (zakres — liście bez karty) | apps/backend/prisma/schema.prisma | @anchor leaf-actual-scope |
-| schema-pole | LeafActual.isSurplus (zakup nadmiarowy — ponad wycenę) | apps/backend/prisma/schema.prisma | @anchor leaf-actual-is-surplus |
+| schema-pole | LeafActual.status (planowy / pozaplanowy / prognozowany) | apps/backend/prisma/schema.prisma | @anchor leaf-actual-status |
+| schema-enum | LeafActualStatus (PLANNED / UNPLANNED / FORECAST) | apps/backend/prisma/schema.prisma | @anchor leaf-actual-status-enum |
 | back-stala | ENTRY_SELECT (kształt wpisu realizacji w odpowiedziach) | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actual-entry-select |
-| back-dto | LeafActualInput.isSurplus | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actual-input-is-surplus |
+| back-dto | LeafActualInput.status | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actual-input-status |
+| back-stala | LEAF_ACTUAL_STATUSES (dozwolone statusy wpisu, walidacja) | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actual-statuses |
 | back-funkcja | leafName / leafType na wpisie (najnowszy klon korzenia) | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-leaf-label |
 | back-dto | createdAt w pozycji drzewa unified | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-unified-created-at |
 | schema-pole | LeafActual.supplierId | apps/backend/prisma/schema.prisma | @anchor leaf-actual-supplier-id |
@@ -1766,6 +1768,13 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-kolumna | Koszt jednostkowy zaplanowany vs cena zakupu (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchase-vs-offer |
 | ui-stala | ROZL_XLS (etykiety Rozliczenia w Excelu: zaplanowany / poza planem) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-settlement-labels |
 | ui-stala | CZERWONE_TLO / CZERWONY_TEKST (zakup poza ofertą w Excelu) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-red |
+| ui-stala | BURSZTYN_TLO / BURSZTYN_TEKST (wpis prognozowany w Excelu) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-amber |
+| ui-stala | KOLOR_WYNIKU (kolory czcionek wyniku w Excelu jak w aplikacji) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-result-colors |
+| ui-funkcja | liczTotals: koszty wg statusów, przychód, poniesione | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-totals-status |
+| ui-kolumna | Koszt planowy / pozaplanowy / prognozowany / Przychód z oferty (arkusz Realizacja) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-cost-by-status |
+| ui-sekcja | Wynik zamówienia (arkusz Podsumowanie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-result |
+| ui-tabela | Porównanie wyników: planowany / bieżący / zysk nadzwyczajny (Podsumowanie) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-result-compare |
+| ui-funkcja | zdania Analizy z kosztami poniesionymi i prognozowanymi | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-analysis-status |
 | ui-kolumna | Zakup (arkusz Zakupy — model z wpisu, przed Producentem) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-purchase-col |
 | ui-kolumna | Rozliczenie (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-settlement-col |
 | ui-kolumna | Wartość zaplanowana pozycji w pierwszym wierszu (arkusz Zakupy) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-export-offer-value |
@@ -1894,7 +1903,6 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-funkcja | wRealizacjiTest (pozycje, przy których praca trwa) | apps/frontend/src/components/shared/wbs/realizationBilans.js | @anchor realization-w-realizacji |
 | ui-funkcja | liczBilansWykonania (podział zamówienia wg statusu wykonania) | apps/frontend/src/components/shared/wbs/realizationBilans.js | @anchor realization-bilans-wykonania |
 | ui-tabela | BilansZamkniete (bilans kwotowy pozycji domkniętych) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-bilans-zamkniete |
-| ui-stala | deltaZamkniete (koszty rzeczywiste − koszty oferty na pozycjach wykonanych i odebranych) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-delta-zamkniete |
 | ui-funkcja | fetchActuals (przeładowanie samych wpisów po zapisie) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-fetch-actuals |
 | ui-funkcja | fetchCards (przeładowanie samych kart produktowych) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-fetch-cards |
 | ui-funkcja | saveOwner (WbsNode.owner z tabeli pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-save-owner |
@@ -1922,8 +1930,13 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-funkcja | mainBranchOf (gałąź główna danej gałęzi) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor main-branch-of |
 | ui-funkcja | selectBranch (wybór gałęzi; zwija szuflady przy innej gałęzi głównej) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor select-branch |
 | ui-wiersz | EntryRow (zapisany wpis, edycja w miejscu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-row |
-| ui-stan | podział wpisów w ofercie / nadmiarowe w szufladzie | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-surplus-split |
-| ui-przycisk | SurplusToggle (znacznik „nadmiarowy") | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-surplus-toggle |
+| ui-stan | podział wpisów wg statusu (pozaplanowe) w szufladzie | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-surplus-split |
+| ui-przycisk | StatusPicker (status wpisu: planowy / pozaplanowy / prognozowany) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-status-picker |
+| ui-funkcja | analiza: przychód z oferty i koszty wg statusów | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-result |
+| ui-sekcja | WynikZamowienia (przychód, koszty wg statusów, wynik) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-result-panel |
+| ui-stala | ENTRY_STATUS / ENTRY_STATUS_META / entryStatusOf (status wpisu) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor leaf-entry-status |
+| ui-funkcja | offerPriceOf (cena ofertowa pozycji) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor offer-price-of |
+| ui-funkcja | realizationOf.byStatus (koszt pozycji wg statusów) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-by-status |
 | ui-stan | orphanEntries (wpisy poza baseline do eksportu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-orphan-entries |
 | ui-funkcja | DeltaLine (Δ w kolumnie Koszt całkowity) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-delta-line |
 | ui-funkcja | offerStatusMetaOf (status oferty z „Poza baseline”) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-offer-status-meta |

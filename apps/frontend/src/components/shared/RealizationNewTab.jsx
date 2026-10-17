@@ -42,8 +42,8 @@ import {
 } from './wbs/wbsConstants';
 import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath, leafNodesOf, buildCardMap,
-    wbsRootOf, shortCompanyName, purchaseUnitOf, REAL_STATE, realizationOf, planUnitOf, planValueOf, fmtQty, fmtZl, fmtDate,
-    markOutOfBaseline, POZA_BASELINE_META,
+    wbsRootOf, shortCompanyName, purchaseUnitOf, realizationOf, planUnitOf, planValueOf, fmtQty, fmtZl, fmtDate,
+    markOutOfBaseline, POZA_BASELINE_META, ENTRY_STATUS, ENTRY_STATUS_META, entryStatusOf, offerPriceOf,
 } from './wbs/realizationShared';
 import {
     ENTRY_INPUT, FORMULA_HINT, NUMERIC_ENTRY_FIELDS, growsWithText, resolveEntryNumber,
@@ -86,10 +86,10 @@ export const REALIZATION_NEW_COLS = [
     // „Oferent", nie „Dostawca": `LeafActual.supplierId` niesie tego, KTO DAŁ CENĘ. Dostawcą
     // stanie się dopiero wtedy, gdy przy wpisie pojawi się faktura albo WZ.
     { key: 'supplier',       label: 'Oferent',            w: 300, prio: 2 },
-    { key: 'qty',            label: 'Ilość wyceny',       w: 185, prio: 1, right: true },
-    { key: 'realization',    label: 'Zakup / wykonanie',  w: 255, prio: 1, right: true },
-    { key: 'deltaQty',       label: 'Δ ilość',            w: 155, prio: 3, right: true },
-    { key: 'price',          label: 'Koszt jedn. wyceny', w: 210, prio: 2, right: true },
+    // Ilości zakupów nie rozliczamy — kolumny „Zakup / wykonanie" i „Δ ilość" usunięte;
+    // zostaje sama ilość z planu, a o rozliczeniu wpisu decyduje flaga planowy/pozaplanowy.
+    { key: 'qty',            label: 'Planowana ilość',    w: 185, prio: 1, right: true },
+    { key: 'price',          label: 'Planowany koszt jedn.', w: 210, prio: 2, right: true },
     { key: 'total',          label: 'Koszt całkowity',    w: 275, prio: 1, right: true },
     { key: 'status',         label: 'Status oferty',      w: 230, prio: 3 },
     { key: 'purchaseStatus', label: 'Status zakupu',      w: 255, prio: 1 },
@@ -166,8 +166,6 @@ export function filterTextOf(key, node, card, r, entries) {
         owner: node.owner || '',
         supplier: entries.map(e => e.supplier?.name || '').join(' '),
         qty: String(node.quantity ?? ''),
-        realization: `${r.qty} / ${r.plan}`,
-        deltaQty: String(Math.round((r.qty - r.plan) * 1000) / 1000),
         price: String(planUnitOf(node, card) ?? ''),
         total: `${Math.round(planValueOf(node, card) * 100) / 100} ${r.value}`,
         status: offerStatusMetaOf(node)?.label || '',
@@ -194,14 +192,14 @@ const numSearchText = (v) => {
 
 // @anchor realization-new-entry-matches — czy WPIS `LeafActual` pasuje do frazy: KAŻDE pole
 // szuflady — data, dokument, oferent, producent, model, EAN, zakres, ilość, koszt jedn.,
-// wartość, rozliczenie (nadmiarowy / w ofercie), komentarz i autor.
+// wartość, status (planowy / pozaplanowy / prognozowany), komentarz i autor.
 export function entryMatchesSearch(e, terms) {
     if (!terms.length) return true;
     const autor = [e.author?.firstName, e.author?.lastName, e.author?.email].filter(Boolean).join(' ');
     return hasAllTerms([
         e.entryDate ? fmtDate(e.entryDate) : '', e.docNumber, e.supplier?.name, e.manufacturer, e.model, e.ean, e.scope,
         numSearchText(e.qty), numSearchText(e.unitCost), numSearchText((Number(e.qty) || 0) * (Number(e.unitCost) || 0)),
-        e.isSurplus ? 'nadmiarowy' : 'w ofercie', e.comment, autor,
+        ENTRY_STATUS_META[entryStatusOf(e)].label, e.comment, autor,
     ].filter(Boolean).join(' '), terms);
 }
 
@@ -709,7 +707,7 @@ export default function RealizationNewTab({
                 model: draft.model || null,
                 ean: draft.ean || null,
                 scope: draft.scope || null,
-                isSurplus: !!draft.isSurplus,
+                status: draft.status || ENTRY_STATUS.PLANNED,
             }),
         });
         if (!res.ok) {
@@ -784,7 +782,7 @@ export default function RealizationNewTab({
     const rowOf = useCallback((node) => {
         const card = cardOf(node);
         const r = realizationOf(node, actualsOf(node));
-        return { card, r, planValue: planValueOf(node, card), deltaQty: Math.round((r.qty - r.plan) * 1000) / 1000 };
+        return { card, r, planValue: planValueOf(node, card) };
     }, [cardOf, actualsOf]);
 
     // Osoby JUŻ przypisane na pozycjach tego zamówienia wchodzą do listy jako `extras`
@@ -965,7 +963,8 @@ export default function RealizationNewTab({
             // eksport, protokół i bilans wykonania. Liczone RAZ i podawane dalej, żeby trzy
             // rachunki nie mogły rozejść się na tej samej pozycji.
             const wiersze = leaves.map(n => ({ node: n, card: cardOf(n), realization: realizationOf(n, actualsOf(n)) }));
-            let plan = 0, real = 0, wpisow = 0, zRealizacja = 0, dniPlan = 0, dniWyk = 0;
+            let plan = 0, real = 0, wpisow = 0, zRealizacja = 0, dniPlan = 0, dniWyk = 0, przychod = 0, przychodPoAkceptacji = 0;
+            const wgStatusu = { PLANNED: 0, UNPLANNED: 0, FORECAST: 0 };
             // @anchor realization-new-stage-dist — rozkład osi liczony w KWOTACH wyceny, nie
             // w sztukach pozycji. Sztuki zrównywały pozycję za 100 zł z pozycją za 100 000 zł,
             // więc pasek „w połowie zrobione" nie mówił nic o pieniądzach. Liczniki `n` zostają
@@ -981,6 +980,9 @@ export default function RealizationNewTab({
             for (const { node: n, card, realization: r } of wiersze) {
                 plan += planValueOf(n, card);
                 real += r.value;
+                przychod += offerPriceOf(n);
+                if (n._outOfBaseline) przychodPoAkceptacji += offerPriceOf({ ...n, _outOfBaseline: false });
+                for (const k of Object.keys(wgStatusu)) wgStatusu[k] += r.byStatus[k];
                 wpisow += r.entries.length;
                 if (r.entries.length) zRealizacja++;
                 if (isTimeUnit(n)) { dniPlan += r.plan; dniWyk += r.qty; }
@@ -996,6 +998,11 @@ export default function RealizationNewTab({
             }
             return {
                 plan: round2(plan), real: round2(real), wpisow, zRealizacja, pozycji: leaves.length,
+                // @anchor realization-new-result — przychód z oferty i koszty wg statusów wpisów;
+                // koszt całkowity = planowy + pozaplanowy + prognozowany (= `real`).
+                przychod: round2(przychod),
+                przychodPoAkceptacji: round2(przychodPoAkceptacji),
+                wgStatusu: { PLANNED: round2(wgStatusu.PLANNED), UNPLANNED: round2(wgStatusu.UNPLANNED), FORECAST: round2(wgStatusu.FORECAST) },
                 dniPlan: round2(dniPlan), dniWyk: round2(dniWyk),
                 osZakupu: zaokraglijRozklad(dist.purchase), osWykonania: zaokraglijRozklad(dist.exec),
                 zamkniete: liczBilansWykonania(wiersze),
@@ -1361,7 +1368,7 @@ function PositionsTable({
 
     // @anchor realization-new-footer-visible — stopka sumuje TYLKO to, co widać. Pozycja znaleziona
     // wyłącznie przez zakup ma szufladę zawężoną do pasujących wpisów (`realization-new-drawer-search`),
-    // więc do sumy wchodzą tylko te wpisy, a wycena — tylko część pokryta ich ilością (nadmiarowe
+    // więc do sumy wchodzą tylko te wpisy, a wycena — tylko część pokryta ich ilością (pozaplanowe
     // nie pokrywają wyceny, ilość ponad plan też nie).
     let sumPlan = 0, sumReal = 0;
     const rows = leaves.map(node => {
@@ -1374,7 +1381,7 @@ function PositionsTable({
             const wpisy = data.r.entries.filter(e => entryMatchesSearch(e, searchTerms));
             const kwota = (e) => (Number(e.qty) || 0) * (Number(e.unitCost) || 0);
             sumReal += wpisy.reduce((s, e) => s + kwota(e), 0);
-            const ileWOfercie = wpisy.filter(e => !e.isSurplus).reduce((s, e) => s + (Number(e.qty) || 0), 0);
+            const ileWOfercie = wpisy.filter(e => entryStatusOf(e) !== ENTRY_STATUS.UNPLANNED).reduce((s, e) => s + (Number(e.qty) || 0), 0);
             if (data.r.plan > 0) sumPlan += Math.min(ileWOfercie, data.r.plan) / data.r.plan * data.planValue;
         }
         return { node, ...data };
@@ -1431,7 +1438,7 @@ function PositionsTable({
                         </td>
                     </tr>
                 )}
-                {rows.map(({ node, card, r, planValue, deltaQty }) => {
+                {rows.map(({ node, card, r, planValue }) => {
                     const open = expanded.has(node.id);
                     // Rozwinięta pozycja i jej szuflada tworzą JEDNĄ kartę: wiersz dostaje seledynową
                     // krawędź górną i boczne, traci dolną (łączy się z szufladą), a tło jest jaśniejsze
@@ -1450,7 +1457,7 @@ function PositionsTable({
                                     <td key={c.key}
                                         className={`px-2 py-1.5 ${tdOpen} ${c.right ? 'text-right tabular-nums' : ''} ${
                                             open && i === cols.length - 1 ? 'border-r border-r-teal-300/45' : ''}`}>
-                                        <Cell colKey={c.key} node={node} card={card} r={r} planValue={planValue} deltaQty={deltaQty}
+                                        <Cell colKey={c.key} node={node} card={card} r={r} planValue={planValue}
                                             readOnly={readOnly} onSaveAxis={onSaveAxis} onSaveComment={onSaveComment}
                                             onSaveOwner={onSaveOwner} ownerOptions={ownerOptions} />
                                     </td>
@@ -1506,9 +1513,8 @@ function DeltaLine({ value }) {
 }
 
 // @anchor realization-new-cell — jedna komórka wiersza pozycji.
-function Cell({ colKey, node, card, r, planValue, deltaQty, readOnly, onSaveAxis, onSaveComment, onSaveOwner, ownerOptions = [] }) {
+function Cell({ colKey, node, card, r, planValue, readOnly, onSaveAxis, onSaveComment, onSaveOwner, ownerOptions = [] }) {
     const t = TYPE_META[node.type];
-    const state = REAL_STATE[r.state];
 
     switch (colKey) {
         // Sama nazwa liścia — bez ścieżki i okruszków: gałąź stoi w lewym panelu, a nazwy
@@ -1529,19 +1535,6 @@ function Cell({ colKey, node, card, r, planValue, deltaQty, readOnly, onSaveAxis
         }
         case 'qty':
             return <>{fmtQty(node.quantity)} <span className="text-[length:var(--rn-md)] text-gray-500">{node.unit}</span></>;
-        case 'realization':
-            return (
-                <>
-                    <span className={state.text}>{fmtQty(r.qty)} / {fmtQty(r.plan)}</span>
-                    <div className="mt-1 h-1 overflow-hidden rounded-sm bg-white/10">
-                        <i className={`block h-full ${state.bar}`} style={{ width: `${Math.min(100, r.pct)}%` }} />
-                    </div>
-                </>
-            );
-        case 'deltaQty':
-            return deltaQty === 0
-                ? <span className="text-gray-600">—</span>
-                : <span className={deltaQty < 0 ? 'text-amber-300' : 'text-red-300'}>{deltaQty > 0 ? '+' : ''}{fmtQty(deltaQty)}</span>;
         case 'price':
             return <>{fmtZl(planUnitOf(node, card))}</>;
         case 'total':
@@ -1549,6 +1542,11 @@ function Cell({ colKey, node, card, r, planValue, deltaQty, readOnly, onSaveAxis
                 <>
                     <div className="text-orange-400">{fmtZl(planValue)}</div>
                     <div className="text-red-400">{fmtZl(r.value)}</div>
+                    {r.byStatus.FORECAST > 0 && (
+                        <div className="whitespace-nowrap text-[length:var(--rn-md)] text-amber-300" title="Część kosztu całkowitego, która dopiero przyjdzie">
+                            w tym prognoza {fmtZl(r.byStatus.FORECAST)}
+                        </div>
+                    )}
                     {(r.qty > 0 || node.realizationClosed) && <DeltaLine value={r.value - planValue} />}
                 </>
             );
@@ -1672,14 +1670,12 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms = [], 
     const wpisy = zawezone ? r.entries.filter(e => entryMatchesSearch(e, searchTerms)) : r.entries;
     const ukryte = r.entries.length - wpisy.length;
     const delta = round2(r.value - planValue);
-    // @anchor realization-new-surplus-split — podział wpisów na zakupy w ofercie i nadmiarowe
-    // (`LeafActual.isSurplus`). Wycenę pokrywają WYŁĄCZNIE wpisy bez znacznika: ich ilość ponad
-    // plan to sygnał, że któryś zakup trzeba oznaczyć jako nadmiarowy.
-    const nadmiar = r.entries.filter(e => e.isSurplus);
+    // @anchor realization-new-surplus-split — podział wpisów wg `LeafActual.status`. Wycenę pokrywają
+    // wpisy planowe (i prognozowane, które dopiero przyjdą); pozaplanowe w całości powiększają koszt.
+    const nadmiar = r.entries.filter(e => entryStatusOf(e) === ENTRY_STATUS.UNPLANNED);
     const qtyNadmiar = Math.round(nadmiar.reduce((s, e) => s + (Number(e.qty) || 0), 0) * 1000) / 1000;
     const valNadmiar = round2(nadmiar.reduce((s, e) => s + (Number(e.qty) || 0) * (Number(e.unitCost) || 0), 0));
     const qtyWOfercie = Math.round((r.qty - qtyNadmiar) * 1000) / 1000;
-    const przekroczenie = Math.round((qtyWOfercie - r.plan) * 1000) / 1000;
     // Domyślna ilość nowego wpisu = ile brakuje do planu. Koszt jedn. zostaje PUSTY świadomie:
     // podpowiedziana cena zapisywała się kwotą, której nikt nie przeczytał, a to rozliczenie.
     const brakujaco = Math.round(Math.max(0, r.plan - qtyWOfercie) * 1000) / 1000;
@@ -1687,10 +1683,10 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms = [], 
     const BASE = withCard
         ? [['entryDate', 'Data', 160], ['docNumber', 'Dokument', 150], ['supplier', 'Oferent', 260],
            ['manufacturer', 'Producent', 200], ['model', 'Model', 200], ['ean', 'EAN', 190],
-           ['qty', 'Ilość', 90, 1], ['unitCost', 'Koszt jedn.', 150, 1], ['wartosc', 'Wartość', 130, 1], ['surplus', 'Rozliczenie', 140], ['comment', 'Komentarz', 420]]
+           ['qty', 'Ilość', 90, 1], ['unitCost', 'Koszt jedn.', 150, 1], ['wartosc', 'Wartość', 130, 1], ['surplus', 'Status', 140], ['comment', 'Komentarz', 420]]
         : [['entryDate', 'Data', 160], ['docNumber', 'Dokument', 150], ['supplier', 'Oferent', 260],
            ['scope', 'Zakres', 320],
-           ['qty', 'Ilość', 90, 1], ['unitCost', 'Koszt jedn.', 150, 1], ['wartosc', 'Wartość', 130, 1], ['surplus', 'Rozliczenie', 140], ['comment', 'Komentarz', 420]];
+           ['qty', 'Ilość', 90, 1], ['unitCost', 'Koszt jedn.', 150, 1], ['wartosc', 'Wartość', 130, 1], ['surplus', 'Status', 140], ['comment', 'Komentarz', 420]];
     const COLS = readOnly ? BASE : [...BASE, ['akcje', '', 100, 1]];
     // Szerokości szuflady liczone tak samo jak w tabeli pozycji — jako procent sumy, żeby
     // `table-fixed` nie rozepchnął jej do sumy pikseli i nie przywrócił poziomego suwaka.
@@ -1702,16 +1698,16 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms = [], 
             <span className={`${DRAWER.cardTitle} ${DRAWER.accent.real.title} text-[length:var(--rn-lg)]`}>
                 {withCard ? 'Zakupy zrealizowane' : 'Wykonanie zrealizowane'}
             </span>
-            {przekroczenie > 1e-9 && (
-                <span className="rounded border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[length:var(--rn-md)] text-amber-300"
-                    title="Wpisy bez znacznika „nadmiarowy” przekraczają ilość z wyceny">
-                    przekroczono wycenę o {fmtQty(przekroczenie)} {node.unit || 'szt'} — oznacz nadmiarowe
+            {nadmiar.length > 0 && (
+                <span className="rounded border border-red-400/40 bg-red-500/10 px-2 py-0.5 text-[length:var(--rn-md)] text-red-300"
+                    title="Zakupy pozaplanowe — bez wartości ofertowej, w całości powiększają koszt">
+                    pozaplanowe +{fmtZl(valNadmiar)} zł
                 </span>
             )}
-            {qtyNadmiar > 0 && (
-                <span className="rounded border border-red-400/40 bg-red-500/10 px-2 py-0.5 text-[length:var(--rn-md)] text-red-300"
-                    title="Zakupy ponad ilość z wyceny — bez wartości ofertowej, w całości powiększają koszt">
-                    nadmiarowe +{fmtQty(qtyNadmiar)} {node.unit || 'szt'} · +{fmtZl(valNadmiar)} zł
+            {r.byStatus.FORECAST > 0 && (
+                <span className="rounded border border-dashed border-amber-400/60 bg-amber-500/10 px-2 py-0.5 text-[length:var(--rn-md)] text-amber-300"
+                    title="Koszty prognozowane — jeszcze nie poniesione, wchodzą do kosztu całkowitego i wyniku">
+                    prognozowane +{fmtZl(r.byStatus.FORECAST)} zł
                 </span>
             )}
             {!readOnly && (
@@ -1779,7 +1775,6 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms = [], 
                         ))}
                         {adding && (
                             <EntryForm node={node} cols={COLS} withCard={withCard} defaultQty={brakujaco || 1}
-                                defaultSurplus={r.plan > 0 && brakujaco === 0}
                                 onAdd={onAdd} onClose={() => setAdding(false)} />
                         )}
                     </tbody>
@@ -1824,22 +1819,49 @@ function entryField({ k, value, onChange, onBlur, onKeyDown, disabled, extra = '
     return <input {...wspolne} style={{ height: FIELD_H }} title={NUMERIC_ENTRY_FIELDS.has(k) ? FORMULA_HINT : undefined} />;
 }
 
-// @anchor realization-new-surplus-toggle — znacznik „nadmiarowy" wpisu (`LeafActual.isSurplus`).
-// Przełącznik, nie checkbox w tle: czerwony stan ma być widoczny z daleka, bo taki wpis
-// w całości powiększa koszt pozycji.
-function SurplusToggle({ on, readOnly = false, onChange }) {
-    if (readOnly) return on ? <span className="text-red-300">nadmiarowy</span> : <span className="text-gray-600">w ofercie</span>;
+// @anchor realization-new-status-picker — status wpisu (`LeafActual.status`): planowy / pozaplanowy /
+// prognozowany. W nowym wpisie (`alwaysOpen`) trzy przyciski stoją od razu; w zapisanym widać jedną
+// plakietkę, a klik w nią rozwija trzy przyciski — wybór zapisuje zmianę i znów je chowa.
+function StatusPicker({ value, readOnly = false, alwaysOpen = false, onChange }) {
+    const [open, setOpen] = useState(false);
+    const cur = ENTRY_STATUS_META[value] ? value : ENTRY_STATUS.PLANNED;
+    const meta = ENTRY_STATUS_META[cur];
+    if (readOnly) return <span className={meta.text}>{meta.label}</span>;
+    if (!alwaysOpen && !open) {
+        return (
+            <button type="button" onClick={e => { e.stopPropagation(); setOpen(true); }}
+                title="Kliknij, aby zmienić status wpisu" style={{ height: FIELD_H }}
+                className={`inline-flex items-center gap-1.5 rounded border px-2 text-[length:var(--rn-md)] ${meta.chip}`}>
+                <span className={`inline-block h-2.5 w-2.5 rounded-full ${meta.dot}`} />
+                {meta.label}
+            </button>
+        );
+    }
     return (
-        <button type="button" onClick={e => { e.stopPropagation(); onChange(!on); }}
-            title={on ? 'Zakup ponad ilość z wyceny — kliknij, aby wrócić do oferty' : 'Oznacz zakup jako nadmiarowy (ponad ilość z wyceny)'}
-            style={{ height: FIELD_H }}
-            className={`inline-flex items-center gap-1.5 rounded border px-2 text-[length:var(--rn-md)] transition-colors ${
-                on ? 'border-red-400/50 bg-red-500/15 text-red-300' : 'border-white/10 text-gray-500 hover:text-gray-300'}`}>
-            <span className={`inline-block h-3 w-3 rounded-sm border ${on ? 'border-red-300 bg-red-400' : 'border-gray-500'}`} />
-            nadmiarowy
-        </button>
+        <div className="flex flex-wrap gap-1">
+            {Object.keys(ENTRY_STATUS_META).map(k => {
+                const active = k === cur;
+                return (
+                    <button key={k} type="button"
+                        onClick={e => { e.stopPropagation(); if (!active) onChange(k); setOpen(false); }}
+                        style={{ height: FIELD_H }}
+                        className={`inline-flex items-center gap-1.5 rounded border px-2 text-[length:var(--rn-md)] transition-colors ${
+                            active ? ENTRY_STATUS_META[k].chip : 'border-white/10 text-gray-500 hover:text-gray-300'}`}>
+                        <span className={`inline-block h-2.5 w-2.5 rounded-full ${active ? ENTRY_STATUS_META[k].dot : 'bg-gray-600'}`} />
+                        {ENTRY_STATUS_META[k].label}
+                    </button>
+                );
+            })}
+        </div>
     );
 }
+
+// Tło wiersza wpisu wg statusu — pozaplanowy czerwony, prognozowany bursztynowy.
+const ENTRY_ROW_BG = {
+    PLANNED: 'hover:bg-white/[.02]',
+    UNPLANNED: 'bg-red-500/[.07] hover:bg-red-500/[.1]',
+    FORECAST: 'bg-amber-500/[.07] hover:bg-amber-500/[.1]',
+};
 
 // @anchor realization-new-entry-row — zapisany wpis `LeafActual` jako wiersz szuflady,
 // edytowalny w miejscu. Zapis idzie na blur i TYLKO dla pola, które faktycznie się zmieniło —
@@ -1890,8 +1912,8 @@ function EntryRow({ entry, cols, readOnly, onSave, onDelete }) {
             case 'qty':          return pole('qty', 'text-right font-mono', { label: 'Ilość wpisu', sanitize: true });
             case 'unitCost':     return pole('unitCost', 'text-right font-mono', { label: 'Koszt jednostkowy', sanitize: true });
             case 'wartosc':      return <span className="text-red-400">{fmtZl(wartosc)}</span>;
-            case 'surplus':      return <SurplusToggle on={!!entry.isSurplus} readOnly={readOnly}
-                                     onChange={v => onSave(entry.id, { isSurplus: v })} />;
+            case 'surplus':      return <StatusPicker value={entryStatusOf(entry)} readOnly={readOnly}
+                                     onChange={v => onSave(entry.id, { status: v })} />;
             case 'comment':      return (
                 <>
                     {pole('comment', '', { placeholder: 'komentarz — co zrobione', label: 'Komentarz wpisu' })}
@@ -1909,7 +1931,7 @@ function EntryRow({ entry, cols, readOnly, onSave, onDelete }) {
     };
 
     return (
-        <tr className={`group/entry ${entry.isSurplus ? 'bg-red-500/[.07] hover:bg-red-500/[.1]' : 'hover:bg-white/[.02]'}`}>
+        <tr className={`group/entry ${ENTRY_ROW_BG[entryStatusOf(entry)]}`}>
             {cols.map(c => (
                 <td key={c[0]} className={`border-b border-white/[.04] px-2 py-1 align-top ${c[3] ? 'text-right tabular-nums' : ''}`}>
                     {cellOf(c[0])}
@@ -1928,7 +1950,7 @@ const BRAK_ETYKIETY_NEW = {
     qty: 'ilość', unitCost: 'koszt jedn.', manufacturer: 'producent', model: 'model', scope: 'zakres',
 };
 
-function EntryForm({ node, cols, withCard, defaultQty, defaultSurplus = false, onAdd, onClose }) {
+function EntryForm({ node, cols, withCard, defaultQty, onAdd, onClose }) {
     const dzis = new Date().toISOString().slice(0, 10);
     const [start] = useState(() => ({
         entryDate: dzis,
@@ -1936,8 +1958,8 @@ function EntryForm({ node, cols, withCard, defaultQty, defaultSurplus = false, o
         unitCost: '',
         comment: '', docNumber: '', supplierId: null,
         manufacturer: '', model: '', ean: '', scope: '',
-        // Plan już pokryty zakupami w ofercie — kolejny wpis z definicji idzie ponad wycenę.
-        isSurplus: defaultSurplus,
+        // Domyślnie planowy — pozaplanowy i prognozowany wybiera się świadomie.
+        status: ENTRY_STATUS.PLANNED,
     }));
     const [draft, setDraft] = useState(start);
     const [brak, setBrak] = useState([]);
@@ -2047,7 +2069,7 @@ function EntryForm({ node, cols, withCard, defaultQty, defaultSurplus = false, o
             case 'qty':          return pole('qty', 'text-right font-mono', { label: 'Ilość wpisu', sanitize: true });
             case 'unitCost':     return pole('unitCost', 'text-right font-mono', { label: 'Koszt jednostkowy', sanitize: true });
             case 'wartosc':      return <span className="text-red-400">{fmtZl(wartosc)}</span>;
-            case 'surplus':      return <SurplusToggle on={draft.isSurplus} onChange={v => set('isSurplus', v)} />;
+            case 'surplus':      return <StatusPicker value={draft.status} alwaysOpen onChange={v => set('status', v)} />;
             case 'comment':      return pole('comment', '', { placeholder: 'komentarz — co zrobione', label: 'Komentarz wpisu' });
             case 'akcje':        return (
                 <button onClick={submit} disabled={zapisuje} title="Zapisz wpis realizacji"
@@ -2442,17 +2464,61 @@ const AxisBadge = ({ node, axis }) => {
 // Wszystkie TRZY bloki analityczne (kafle+mierniki, zakresy główne, bilans domkniętych) chowają
 // się za przyciskiem w jednym rzędzie. Kafle wisiały wcześniej na stałe u góry zakładki i na
 // każdym ekranie poniżej 1440px spychały tabelę pozycji pod krawędź okna.
+// @anchor realization-new-result-panel — wynik zamówienia: przychód z oferty minus koszt całkowity
+// (planowy + pozaplanowy + prognozowany), obok wyniku planowanego (przychód − wycena kosztów).
+// Pasek pokazuje, jaką część przychodu zjadają koszty w każdym statusie, a reszta to wynik.
+function WynikZamowienia({ c }) {
+    const s = c.wgStatusu;
+    const koszt = round2(s.PLANNED + s.UNPLANNED + s.FORECAST);
+    const wynik = round2(c.przychod - koszt);
+    const wynikPlan = round2(c.przychod - c.plan);
+    const marza = c.przychod > 0 ? (wynik / c.przychod) * 100 : null;
+    const marzaPlan = c.przychod > 0 ? (wynikPlan / c.przychod) * 100 : null;
+    const zmiana = round2(wynik - wynikPlan);
+    const skala = Math.max(c.przychod, koszt) || 1;
+    const szer = (v) => `${Math.max(0, (v / skala) * 100).toFixed(2)}%`;
+    const kafle = [
+        { k: 'PLANNED', label: 'Koszt planowy', note: 'poniesiony w planie', color: 'text-orange-400' },
+        { k: 'UNPLANNED', label: 'Koszt pozaplanowy', note: 'poniesiony ponad plan', color: ENTRY_STATUS_META.UNPLANNED.text },
+        { k: 'FORECAST', label: 'Koszt prognozowany', note: 'jeszcze przyjdzie', color: ENTRY_STATUS_META.FORECAST.text },
+    ];
+    return (
+        <div className="mb-3 rounded border border-white/[.08] bg-white/[.02] p-2.5">
+            <div className="mb-2 flex flex-wrap gap-2.5">
+                {kafle.map(({ k, label, note, color }) => (
+                    <Tile key={k} label={label} value={`${fmtZl(s[k])} zł`} color={color} note={note} />
+                ))}
+                <Tile label="Koszt całkowity" value={`${fmtZl(koszt)} zł`} color="text-red-400" note="suma trzech statusów" />
+                <Tile label="Przychód z oferty" value={`${fmtZl(c.przychod)} zł`} color="text-emerald-200"
+                    note={c.przychod > 0
+                        ? `wynik planowany ${fmtZl(wynikPlan)} zł · ${fmtPct(marzaPlan)}${c.przychodPoAkceptacji > 0 ? ` · bez ${fmtZl(c.przychodPoAkceptacji)} zł z pozycji dodanych po akceptacji` : ''}`
+                        : 'brak cen ofertowych w planie'} />
+                <Tile label="Wynik" value={`${fmtZl(wynik)} zł`} color={wynik < 0 ? 'text-red-400' : 'text-emerald-400'}
+                    note={marza != null ? `${fmtPct(marza)} przychodu · ${zmiana >= 0 ? '+' : ''}${fmtZl(zmiana)} zł wobec planu` : 'brak przychodu z oferty'} />
+            </div>
+            <div className="flex h-3 overflow-hidden rounded-sm bg-white/[.06]" title="Przychód z oferty podzielony na koszty wg statusów i wynik">
+                <i className="block h-full bg-orange-400/80" style={{ width: szer(s.PLANNED) }} />
+                <i className="block h-full bg-red-400/80" style={{ width: szer(s.UNPLANNED) }} />
+                <i className="block h-full bg-amber-400/80" style={{ width: szer(s.FORECAST) }} />
+                {wynik > 0 && <i className="block h-full bg-emerald-400/40" style={{ width: szer(wynik) }} />}
+            </div>
+            <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-gray-500">
+                <span className="flex items-center gap-1"><i className="size-2 rounded-sm bg-orange-400/80" />planowy</span>
+                <span className="flex items-center gap-1"><i className="size-2 rounded-sm bg-red-400/80" />pozaplanowy</span>
+                <span className="flex items-center gap-1"><i className="size-2 rounded-sm bg-amber-400/80" />prognozowany</span>
+                <span className="flex items-center gap-1"><i className="size-2 rounded-sm bg-emerald-400/40" />wynik</span>
+                {koszt > c.przychod && c.przychod > 0 && <span className="text-red-400">koszt całkowity przekracza przychód z oferty</span>}
+            </div>
+        </div>
+    );
+}
+
 function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec, kpiOpen, onToggleKpi }) {
     const c = a.calosc;
-    const leftMoney = round2(c.plan - c.real);
-    const leftDays = round2(c.dniPlan - c.dniWyk);
+    // Poniesione = planowe + pozaplanowe; prognozowane jeszcze nie przyszły.
+    const poniesione = round2(c.wgStatusu.PLANNED + c.wgStatusu.UNPLANNED);
     const dTotal = round2(c.real - c.plan);
     const z = c.zamkniete;
-    // @anchor realization-new-delta-zamkniete — wynik na robocie, która jest już za nami:
-    // koszty rzeczywiste minus koszty oferty na pozycjach wykonanych i odebranych. Ujemna
-    // znaczy, że zeszliśmy poniżej wyceny — i tylko na tych pozycjach da się to policzyć
-    // uczciwie, bo reszta zamówienia nie ma jeszcze kompletu wpisów.
-    const deltaZamkniete = round2(z.lacznie.real - z.lacznie.plan);
 
     return (
         <>
@@ -2463,7 +2529,7 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec, kpiOpen
                 <button onClick={onToggleKpi} className="rounded border border-white/[.14] px-2 py-0.5 text-[11px] text-gray-400 hover:text-gray-200">
                     {kpiOpen
                         ? 'Ukryj analizę zamówienia'
-                        : `Analiza zamówienia — ${fmtZl(c.plan)} zł wyceny · ${fmtPct(pct(c.real, c.plan))} pokrycia zakupami`}
+                        : `Analiza zamówienia — wynik ${fmtZl(round2(c.przychod - c.real))} zł · ${fmtZl(c.plan)} zł wyceny · ${fmtPct(pct(poniesione, c.plan))} pokrycia zakupami`}
                 </button>
                 <button onClick={onToggle} className="rounded border border-white/[.14] px-2 py-0.5 text-[11px] text-gray-400 hover:text-gray-200">
                     {open ? 'Ukryj realizację zakresów' : `Realizacja ${a.galezie.length} zakresów głównych (${c.pozycji} pozycji) — plan wobec wykonania`}
@@ -2480,33 +2546,9 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec, kpiOpen
                     <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-teal-300">
                         Analiza zamówienia{orderName ? ` — ${orderName}` : ''}
                     </div>
-                    <div className="mb-3 flex flex-wrap gap-2.5">
-                        <Tile label="Wycena zamówienia" value={`${fmtZl(c.plan)} zł`} color="text-orange-400" note={`${c.pozycji} pozycji kosztowych`} />
-                        <Tile label="Zakupy zrealizowane" value={`${fmtZl(c.real)} zł`} color="text-red-400" note={`${c.wpisow} wpisów na ${c.zRealizacja} pozycjach`} />
-                        <Tile label="Pozostaje do wydania" value={`${fmtZl(leftMoney)} zł`} note={`${fmtPct(pct(leftMoney, c.plan))} wyceny`} />
-                        <Tile label="Dni niezrealizowane" value={fmtQty(leftDays)} color="text-amber-400" note={`z ${fmtQty(c.dniPlan)} zaplanowanych`} />
-                        {/* Kafel pokazuje OBIE strony tej samej roboty: ile była warta w ofercie
-                            i ile realnie kosztowała. Bez drugiej kwoty „mamy za sobą 159 tys."
-                            czytało się jak wydatek, a to jest wycena. Delta jest zielona, gdy
-                            zeszliśmy poniżej oferty, i czerwona, gdy ją przebiliśmy. */}
-                        <Tile
-                            label="Wykonane / odebrane"
-                            value={<>{fmtZl(z.lacznie.plan)} zł <span className="text-xs font-medium text-gray-500">— koszty oferty</span></>}
-                            color="text-orange-400"
-                            note={`${z.lacznie.pozycji} z ${c.pozycji} pozycji · ${fmtPct(pct(z.lacznie.plan, c.plan))} wyceny zamówienia`}>
-                            <div className="mt-1 text-[length:var(--rn-lg)] font-bold leading-tight tabular-nums text-red-400">
-                                {fmtZl(z.lacznie.real)} zł <span className="text-xs font-medium text-gray-500">— koszty rzeczywiste</span>
-                            </div>
-                            <div
-                                className={`mt-1.5 border-t border-white/[.07] pt-1.5 text-xs font-bold tabular-nums ${deltaZamkniete > 0 ? 'text-red-400' : 'text-emerald-400'}`}
-                                title="Δ = koszty rzeczywiste − koszty oferty na pozycjach wykonanych i odebranych">
-                                Δ {deltaZamkniete > 0 ? '+' : ''}{fmtZl(deltaZamkniete)} zł ({deltaZamkniete > 0 ? '+' : ''}{fmtPct(pct(deltaZamkniete, z.lacznie.plan))}) <span className="font-medium text-gray-500">— {deltaZamkniete > 0 ? 'wydaliśmy więcej niż planowaliśmy' : 'wydaliśmy mniej niż planowaliśmy'}</span>
-                            </div>
-                        </Tile>
-                    </div>
-
+                    <WynikZamowienia c={c} />
                     <div className="flex flex-wrap gap-4">
-                        <Meter label="Pokrycie wyceny zakupami" done={c.real} plan={c.plan} left={`${fmtZl(c.real)} zł`} right={`${fmtZl(c.plan)} zł`} />
+                        <Meter label="Pokrycie wyceny zakupami" done={poniesione} plan={c.plan} left={`${fmtZl(poniesione)} zł`} right={`${fmtZl(c.plan)} zł`} />
                         <Meter label="Dni wykonane" done={c.dniWyk} plan={c.dniPlan} left={`${fmtQty(c.dniWyk)} dni wykonanych`} right={`${fmtQty(c.dniPlan)} dni w planie`} />
                         <Meter label="Pozycje ruszone" done={c.zRealizacja} plan={c.pozycji} left={`${c.zRealizacja} pozycji z zakupami`} right={`${c.pozycji} pozycji`} />
                     </div>
