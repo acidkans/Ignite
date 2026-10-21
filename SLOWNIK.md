@@ -2944,6 +2944,113 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-funkcja | copyCommentToStrategy / copyStrategyToComment | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor copy-comment-strategy |
 | ui-stan | pdfAccess | apps/frontend/src/components/shared/wbs/ScopeDocumentModal.jsx | @anchor scope-pdf-access |
 | ui-modal | PdfAccessModal | apps/frontend/src/components/shared/wbs/ScopeDocumentModal.jsx | @anchor scope-pdf-access-modal |
+| ui-funkcja | addMonthsIso() | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor add-months-iso |
+| back-funkcja | addMonthsUtc() | apps/backend/src/trainings/trainings.service.ts | @anchor add-months-utc |
+| ui-modal | AssignTrainingModal | apps/frontend/src/components/shared/trainings/AssignTrainingModal.jsx | @anchor assign-training-modal |
+| back-stala | EXEC_LEAF_TYPES_BACKEND | apps/backend/src/common/order-closure.util.ts | @anchor exec-leaf-types-backend |
+| ui-funkcja | exportTrainingsExcel() | apps/frontend/src/utils/trainingsExcel.js | @anchor export-trainings-excel |
+| ui-funkcja | load() | apps/frontend/src/TrainingsPage.jsx | @anchor fetch-trainings-overview |
+| ui-funkcja | fuzzyMatch() | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor fuzzy-match |
+| ui-funkcja | fuzzyOrders() | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor fuzzy-orders |
+| ui-funkcja | Highlight | apps/frontend/src/components/shared/trainings/TrainingsUi.jsx | @anchor highlight-hits |
+| ui-funkcja | brakujace() | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor missing-trainings-for-order |
+| ui-przycisk | kafel Szkolenia (MobileHome, ADMIN) | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor mobile-home-tile-trainings |
+| ui-widok | mobileView 'trainings' | apps/frontend/src/App.jsx | @anchor mobile-view-trainings |
+| schema-pole | SystemNotificationSettings.trainingAlertHour | apps/backend/prisma/schema.prisma | @anchor notif-settings-training-alert-hour |
+| schema-pole | SystemNotificationSettings.trainingAlertIncludeMissing | apps/backend/prisma/schema.prisma | @anchor notif-settings-training-alert-include-missing |
+| schema-pole | SystemNotificationSettings.trainingAlertMode | apps/backend/prisma/schema.prisma | @anchor notif-settings-training-alert-mode |
+| schema-pole | SystemNotificationSettings.trainingAlertStages | apps/backend/prisma/schema.prisma | @anchor notif-settings-training-alert-stages |
+| schema-pole | SystemNotificationSettings.trainingAlertWarnDays | apps/backend/prisma/schema.prisma | @anchor notif-settings-training-alert-warn-days |
+| schema-pole | SystemNotificationSettings.trainingAlertsEnabled | apps/backend/prisma/schema.prisma | @anchor notif-settings-training-alerts-enabled |
+| ui-karta | OrderChip | apps/frontend/src/components/shared/trainings/TrainingsUi.jsx | @anchor order-chip |
+| back-stala | CLOSED_EXEC_CODES / NEUTRAL_EXEC_CODES | apps/backend/src/common/order-closure.util.ts | @anchor order-closure-codes |
+| back-funkcja | orderClosureState() | apps/backend/src/common/order-closure.util.ts | @anchor order-closure-state |
+| ui-stala | ORDER_STAGE_LABEL | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor order-stage-labels |
+| ui-dropdown | OrdersMultiSelect | apps/frontend/src/components/shared/trainings/OrdersMultiSelect.jsx | @anchor orders-multi-select |
+| back-funkcja | parseIsoDay() | apps/backend/src/trainings/trainings.service.ts | @anchor parse-iso-day |
+| schema-relacja | ProcessNode.assignedUsers | apps/backend/prisma/schema.prisma | @anchor process-node-assigned-users |
+| schema-relacja | ProcessNode.requiredTrainings | apps/backend/prisma/schema.prisma | @anchor process-node-required-trainings |
+| ui-widok | Route /szkolenia | apps/frontend/src/App.jsx | @anchor route-szkolenia |
+| ui-przycisk | Szkolenia (pozycja szuflady Użytkownicy) | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-szkolenia-button |
+| ui-panel | szuflada Użytkownicy (Lista użytkowników + Szkolenia) | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-users-drawer |
+| ui-stan | usersDrawerOpen | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-users-drawer-open |
+| back-funkcja | bucketOf() | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alert-bucket |
+| back-funkcja | computeAlerts() | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alert-compute |
+| back-typ | TrainingAlertItem | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alert-item |
+| schema-model | TrainingAlertLog | apps/backend/prisma/schema.prisma | @anchor training-alert-log |
+| schema-pole | TrainingAlertLog.key | apps/backend/prisma/schema.prisma | @anchor training-alert-log-key |
+| back-funkcja | buildMail() | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alert-mail |
+| back-stala | TRAINING_ALERT_MODES | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alert-modes |
+| back-funkcja | preview() | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alert-preview |
+| back-funkcja | recipients() | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alert-recipients |
+| schema-model | TrainingAlertRun | apps/backend/prisma/schema.prisma | @anchor training-alert-run |
+| schema-pole | TrainingAlertRun.error | apps/backend/prisma/schema.prisma | @anchor training-alert-run-error |
+| schema-pole | TrainingAlertRun.items | apps/backend/prisma/schema.prisma | @anchor training-alert-run-items |
+| schema-pole | TrainingAlertRun.ranAt | apps/backend/prisma/schema.prisma | @anchor training-alert-run-ran-at |
+| schema-pole | TrainingAlertRun.recipients | apps/backend/prisma/schema.prisma | @anchor training-alert-run-recipients |
+| back-funkcja | run() | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alert-run-send |
+| schema-pole | TrainingAlertRun.status | apps/backend/prisma/schema.prisma | @anchor training-alert-run-status |
+| back-funkcja | runs() | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alert-runs |
+| back-funkcja | sendTest() | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alert-send-test |
+| back-funkcja | getSettings() | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alert-settings-get |
+| back-funkcja | updateSettings() | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alert-settings-update |
+| back-stala | TRAINING_ALERT_STAGES | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alert-stages-all |
+| back-env | TRAINING_ALERTS_CRON | apps/backend/src/trainings/training-alerts-cron.service.ts | @anchor training-alerts-cron-env |
+| back-funkcja | TrainingAlertsCronService.tick() | apps/backend/src/trainings/training-alerts-cron.service.ts | @anchor training-alerts-cron-run |
+| back-serwis | TrainingAlertsCronService | apps/backend/src/trainings/training-alerts-cron.service.ts | @anchor training-alerts-cron-service |
+| back-serwis | TrainingAlertsService | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alerts-service |
+| ui-zakladka | TrainingAlertsTab | apps/frontend/src/components/shared/trainings/TrainingAlertsTab.jsx | @anchor training-alerts-tab |
+| ui-funkcja | trainingStatus() | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor training-status |
+| ui-stala | STATUS_STYLE | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor training-status-style |
+| schema-model | TrainingType | apps/backend/prisma/schema.prisma | @anchor training-type |
+| schema-pole | TrainingType.code | apps/backend/prisma/schema.prisma | @anchor training-type-code |
+| schema-pole | TrainingType.description | apps/backend/prisma/schema.prisma | @anchor training-type-description |
+| back-dto | TrainingTypeDto | apps/backend/src/trainings/trainings.service.ts | @anchor training-type-dto |
+| ui-modal | TrainingTypeModal | apps/frontend/src/components/shared/trainings/TrainingTypeModal.jsx | @anchor training-type-modal |
+| schema-pole | TrainingType.name | apps/backend/prisma/schema.prisma | @anchor training-type-name |
+| schema-model | TrainingTypeOrder | apps/backend/prisma/schema.prisma | @anchor training-type-order |
+| schema-relacja | TrainingType.orders | apps/backend/prisma/schema.prisma | @anchor training-type-orders |
+| schema-relacja | TrainingType.userTrainings | apps/backend/prisma/schema.prisma | @anchor training-type-user-trainings |
+| schema-pole | TrainingType.validityMonths | apps/backend/prisma/schema.prisma | @anchor training-type-validity-months |
+| ui-zakladka | TrainingTypesTab | apps/frontend/src/components/shared/trainings/TrainingTypesTab.jsx | @anchor training-types-tab |
+| back-endpoint | GET/PATCH /trainings/alerts/settings, GET alerts/preview, GET alerts/runs, POST alerts/send-test, POST alerts/run | apps/backend/src/trainings/trainings.controller.ts | @anchor trainings-alerts-endpoints |
+| ui-funkcja | trainingsApi() | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor trainings-api |
+| ui-modal | Confirm | apps/frontend/src/components/shared/trainings/TrainingsUi.jsx | @anchor trainings-confirm |
+| back-controller | TrainingsController | apps/backend/src/trainings/trainings.controller.ts | @anchor trainings-controller |
+| back-funkcja | createType() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-create-type |
+| back-funkcja | deleteType() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-delete-type |
+| back-funkcja | deleteUserTraining() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-delete-user-training |
+| ui-stala | XL_KOLOR | apps/frontend/src/utils/trainingsExcel.js | @anchor trainings-excel-colors |
+| ui-stan | ostatnioZamkniety | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-last-closed-select |
+| ui-zakladka | TrainingsMatrixTab | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-matrix-tab |
+| ui-modal | Modal | apps/frontend/src/components/shared/trainings/TrainingsUi.jsx | @anchor trainings-modal |
+| back-modul | TrainingsModule | apps/backend/src/trainings/trainings.module.ts | @anchor trainings-module |
+| back-funkcja | orderClosureMap() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-order-closure-map |
+| back-funkcja | overview() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-overview |
+| back-endpoint | GET /trainings/overview | apps/backend/src/trainings/trainings.controller.ts | @anchor trainings-overview-endpoint |
+| ui-widok | TrainingsPage | apps/frontend/src/TrainingsPage.jsx | @anchor trainings-page |
+| back-serwis | TrainingsService | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-service |
+| back-funkcja | setUserOrders() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-set-user-orders |
+| ui-stala | TRAINING_TABS | apps/frontend/src/TrainingsPage.jsx | @anchor trainings-tab-meta |
+| ui-sekcja | pasek zakładek Szkoleń | apps/frontend/src/TrainingsPage.jsx | @anchor trainings-tab-selector |
+| ui-funkcja | todayIso() | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor trainings-today |
+| back-endpoint | POST/PATCH/DELETE /trainings/types | apps/backend/src/trainings/trainings.controller.ts | @anchor trainings-types-endpoints |
+| ui-stala | BTN / BTN_PRIMARY / INPUT / LABEL | apps/frontend/src/components/shared/trainings/TrainingsUi.jsx | @anchor trainings-ui-classes |
+| back-funkcja | updateType() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-update-type |
+| back-funkcja | upsertUserTraining() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-upsert-user-training |
+| back-endpoint | PUT /trainings/users/:userId/orders | apps/backend/src/trainings/trainings.controller.ts | @anchor trainings-user-orders-endpoint |
+| back-endpoint | PUT /trainings/user-trainings, DELETE /trainings/user-trainings/:id | apps/backend/src/trainings/trainings.controller.ts | @anchor trainings-user-trainings-endpoints |
+| ui-funkcja | visibleRows() | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-visible-rows |
+| ui-stala | WARN_DAYS | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor trainings-warn-days |
+| schema-relacja | User.assignedOrders | apps/backend/prisma/schema.prisma | @anchor user-assigned-orders |
+| schema-model | UserOrder | apps/backend/prisma/schema.prisma | @anchor user-order |
+| schema-model | UserTraining | apps/backend/prisma/schema.prisma | @anchor user-training |
+| schema-pole | UserTraining.certificateNo | apps/backend/prisma/schema.prisma | @anchor user-training-certificate-no |
+| schema-pole | UserTraining.completedAt | apps/backend/prisma/schema.prisma | @anchor user-training-completed-at |
+| back-dto | UserTrainingDto | apps/backend/src/trainings/trainings.service.ts | @anchor user-training-dto |
+| schema-pole | UserTraining.validUntil | apps/backend/prisma/schema.prisma | @anchor user-training-valid-until |
+| schema-relacja | User.trainings | apps/backend/prisma/schema.prisma | @anchor user-trainings |
+| back-funkcja | warsawNow() | apps/backend/src/trainings/training-alerts.service.ts | @anchor warsaw-today |
 
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)

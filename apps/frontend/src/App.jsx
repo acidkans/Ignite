@@ -7,6 +7,7 @@ import SmtpSettingsPage from './SmtpSettingsPage';
 import NotificationSettingsPage from './NotificationSettingsPage';
 import ProcessTreePage from './ProcessTreePage';
 import LeavesPage from './LeavesPage';
+import TrainingsPage from './TrainingsPage';
 import DashboardPage from './DashboardPage';
 import MainLayout from './components/Layout/MainLayout';
 import MobileDashboard from './components/Mobile/MobileDashboard';
@@ -105,7 +106,7 @@ window.fetch = async (...args) => {
 function App() {
   const [token, setToken] = useState(loadValidToken);
   // @anchor mobile-view-state
-  const [mobileView, setMobileView] = useState('home'); // 'home' | 'tasks' | 'tree'
+  const [mobileView, setMobileView] = useState('home'); // 'home' | 'tasks' | 'tree' | 'trainings'
   const navigate = useNavigate();
   const location = useLocation();
   const { isMobile, isTablet } = useDevice();
@@ -230,9 +231,18 @@ function App() {
       <div className="flex flex-col h-[100dvh]">
         <OfflineBanner />
         <div className="flex-1 min-h-0">
-          {mobileView === 'home' && <MobileHome onNavigate={setMobileView} />}
+          {mobileView === 'home' && <MobileHome onNavigate={setMobileView} showTrainings={tokenRoles().includes('ADMIN')} />}
           {mobileView === 'tasks' && <MobileDashboard onLogout={handleLogout} onGoHome={() => setMobileView('home')} />}
           {mobileView === 'tree' && <MobileOrdersTree onBack={() => setMobileView('home')} />}
+          {/* @anchor mobile-view-trainings — ten sam widok co /szkolenia, z paskiem powrotu zamiast menu bocznego */}
+          {mobileView === 'trainings' && tokenRoles().includes('ADMIN') && (
+            <div className="flex h-full flex-col bg-gray-950 text-white">
+              <button onClick={() => setMobileView('home')} className="flex min-h-[44px] items-center gap-2 border-b border-white/5 bg-gray-900/50 px-4 text-sm text-gray-300">
+                ‹ Wybierz widok
+              </button>
+              <div className="min-h-0 flex-1"><TrainingsPage /></div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -247,6 +257,8 @@ function App() {
           <Route element={<MainLayout onLogout={handleLogout} />}>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
+            {/* @anchor route-szkolenia */}
+            <Route path="/szkolenia" element={<AdminRoute><TrainingsPage /></AdminRoute>} />
             <Route path="/firma" element={<AdminRoute><FirmaPage /></AdminRoute>} />
             <Route path="/smtp" element={<SmtpSettingsPage />} />
             <Route path="/notifications" element={<NotificationSettingsPage />} />

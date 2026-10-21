@@ -1,3 +1,29 @@
+## 2026-10-21 — Szkolenia pracowników: macierz ważności, przypisanie do zamówień, alerty e-mail do ADMIN-ów (v2026.10.21.2012)
+
+### schema.prisma
+- dodano model `TrainingType` (`name` unique, `code`, `validityMonths` — NULL = bezterminowe, `description`) — rodzaj szkolenia / uprawnień
+- dodano model `TrainingTypeOrder` (PK `trainingTypeId` + `orderId`) — zamówienia, dla których szkolenie jest wymagane
+- dodano model `UserTraining` (`completedAt`, `validUntil` — @db.Date, `certificateNo`; unique `userId` + `trainingTypeId`) — aktualne szkolenie pracownika, odnowienie nadpisuje wpis
+- dodano model `UserOrder` (PK `userId` + `orderId`) — pracownik przypisany do zamówienia (kolumna „Zamówienia” w Szkoleniach)
+- dodano modele `TrainingAlertRun` (historia wysyłek) i `TrainingAlertLog` (`key` unique — wysłane progi, żeby nie dublować maili)
+- dodano relacje `User.trainings`, `User.assignedOrders`, `ProcessNode.requiredTrainings`, `ProcessNode.assignedUsers`
+- dodano pola w `SystemNotificationSettings`: `trainingAlertsEnabled`, `trainingAlertStages` (Json), `trainingAlertWarnDays`, `trainingAlertHour`, `trainingAlertMode` (PROGI / DAILY / ONCE), `trainingAlertIncludeMissing`
+- migracja `20261021200000_trainings` (prod: `migrate deploy` przy starcie; dev: zastosowana ręcznie + wpis w `_prisma_migrations`)
+
+### architektura / API
+- nowy moduł `TrainingsModule` (`/trainings`, tylko ADMIN): `GET overview`, `POST/PATCH/DELETE types`, `PUT user-trainings`, `DELETE user-trainings/:id`, `PUT users/:userId/orders`, `GET/PATCH alerts/settings`, `GET alerts/preview`, `GET alerts/runs`, `POST alerts/send-test`, `POST alerts/run`
+- `TrainingAlertsCronService` — co godzinę; o godzinie z ustawień (czas polski) raz dziennie wysyła zbiorczy mail do aktywnych ADMIN-ów przez globalny SMTP. Zmienna `TRAINING_ALERTS_CRON=false` wyłącza automat (ustawiona lokalnie na dev w `docker-compose.override.yml`)
+- `orderClosureState()` (backend, `common/order-closure.util.ts`) — lustro frontowego `stanZamkniecia()`; zamówienie zamknięte nie generuje alertów
+- front: strona `/szkolenia` (`TrainingsPage`) z zakładkami Pracownicy / Typy szkoleń / Powiadomienia e-mail; szuflada „Użytkownicy” w pasku bocznym (Lista użytkowników + Szkolenia); kafel „Szkolenia” w widoku tabletowym (ADMIN)
+- eksport Excel (`exportTrainingsExcel`) — wiersze widoczne po filtrach, arkusze „Szkolenia” (macierz) i „Szczegóły”
+
+### wytyczne
+- `schema-model` `UserTraining` — jeden wpis na parę pracownik × typ; „Odnów” nadpisuje `completedAt`/`validUntil`, historii odnowień nie ma
+- `schema-pole` `UserTraining.validUntil` — kolumna @db.Date: daty z frontu przychodzą jako RRRR-MM-DD i zapisują się jako północ UTC (`parseIsoDay`), porównania dni robić na datach kalendarzowych w strefie Europe/Warsaw (`warsawNow`, `todayIso`)
+- `back-funkcja` `computeAlerts()` — aktywne zamówienie = etap z `trainingAlertStages` i NIE zamknięte; alert = przypisany pracownik × szkolenie wymagane przez zamówienie, wygasłe lub kończące się w progu. Mail idzie tylko, gdy jest choć jedna NOWA pozycja (`TrainingAlertLog.key`), ale zawiera wszystkie bieżące
+- `back-env` `TRAINING_ALERTS_CRON` — na dev zawsze `false`: baza dev to kopia produkcji z prawdziwymi adresami adminów
+- `ui-funkcja` `visibleRows()` — jedno źródło dla macierzy i eksportu Excel; pracownik bez żadnego szkolenia nie pojawia się na liście
+
 ## 2026-10-21 — Realizacja_new: statusy wykonania „Odebrane protokołem” i „Zafakturowane”, zamknięcie zamówienia (v2026.10.21.1952)
 
 ### architektura / API

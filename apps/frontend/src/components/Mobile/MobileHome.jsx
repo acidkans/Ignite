@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Briefcase, Network, AlertTriangle } from 'lucide-react';
+import { Briefcase, Network, AlertTriangle, GraduationCap } from 'lucide-react';
 import { getOrphanedAttachments } from '../../services/repos/outboxRepo';
 import OrphanAttachmentsPanel from '../shared/OrphanAttachmentsPanel';
 import SyncWarningBanner from '../shared/SyncWarningBanner';
 
 // @anchor mobile-home
-export default function MobileHome({ onNavigate }) {
+export default function MobileHome({ onNavigate, showTrainings = false }) {
     // Zdjęcia bez rozwiązywalnego znacznika. Kafelek stoi TUTAJ, na ekranie
     // wejściowym, bo przypisywanie zdjęć nie należy do żadnego z dwóch widoków
     // niżej — a zaległości trzeba zobaczyć od razu, nie po wejściu w zadania.
@@ -76,6 +76,25 @@ export default function MobileHome({ onNavigate }) {
                         </div>
                     </div>
                 </button>
+
+                {/* @anchor mobile-home-tile-trainings — Szkolenia na tablecie (tylko ADMIN); na desktopie są w pasku bocznym pod „Użytkownicy” */}
+                {showTrainings && (
+                    <button
+                        onClick={() => onNavigate('trainings')}
+                        className="bg-gray-900/60 border border-white/5 rounded-3xl p-6 active:scale-[0.97] transition-all shadow-xl hover:bg-gray-900/80 active:bg-amber-600/5 text-left relative overflow-hidden group"
+                    >
+                        <div className="absolute top-0 right-0 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl -mr-10 -mt-10" />
+                        <div className="flex items-center gap-4 relative z-10">
+                            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex-shrink-0">
+                                <GraduationCap size={26} className="text-amber-400" />
+                            </div>
+                            <div>
+                                <h2 className="font-bold text-base text-gray-100 group-active:text-amber-400 transition-colors">Szkolenia</h2>
+                                <p className="text-[11px] text-gray-500 mt-0.5">Ważność szkoleń pracowników i alerty</p>
+                            </div>
+                        </div>
+                    </button>
+                )}
 
                 {/* Kafelek widoczny tylko gdy jest co przypisać. */}
                 {/* @anchor mobile-home-tile-orphans */}

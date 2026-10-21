@@ -72,6 +72,10 @@ model User {
   /// @anchor user-leaf-actuals
   leafActuals            LeafActual[]    @relation("LeafActualAuthor")
   acceptanceProtocols    AcceptanceProtocolRecord[] @relation("AcceptanceProtocolAuthor")
+  /// @anchor user-trainings
+  trainings              UserTraining[]
+  /// @anchor user-assigned-orders
+  assignedOrders         UserOrder[]
 
   @@map("users")
 }
@@ -274,6 +278,10 @@ model ProcessNode {
   driveFiles                DriveFile[]
   /// @anchor process-node-scope-document
   scopeDocument             ScopeDocument?
+  /// @anchor process-node-required-trainings
+  requiredTrainings         TrainingTypeOrder[]
+  /// @anchor process-node-assigned-users
+  assignedUsers             UserOrder[]
   @@map("process_nodes")
 }
 
@@ -1552,6 +1560,24 @@ model SystemNotificationSettings {
   msTodoEnabled             Boolean  @default(true)
   /// @anchor notif-settings-web-push-enabled
   webPushEnabled            Boolean  @default(true)
+  /// @anchor notif-settings-training-alerts-enabled
+  /// Codzienny zbiorczy mail do ADMIN-ów o wygasających szkoleniach w aktywnych zamówieniach.
+  trainingAlertsEnabled     Boolean  @default(true)
+  /// @anchor notif-settings-training-alert-stages
+  /// Etapy `ProcessNode.orderStage`, na których zamówienie jest aktywnym projektem.
+  /// Zamówienie zamknięte (wszystkie pozycje odebrane protokołem / zafakturowane) i tak odpada.
+  trainingAlertStages       Json     @default("[\"ZAAKCEPTOWANE\",\"REALIZACJA\"]")
+  /// @anchor notif-settings-training-alert-warn-days
+  trainingAlertWarnDays     Int      @default(30)
+  /// @anchor notif-settings-training-alert-hour
+  /// Godzina wysyłki (0–23, czas polski).
+  trainingAlertHour         Int      @default(7)
+  /// @anchor notif-settings-training-alert-mode
+  /// PROGI = przy progach warnDays / 7 / 1 / dzień wygaśnięcia, DAILY = codziennie, ONCE = raz na szkolenie.
+  trainingAlertMode         String   @default("PROGI")
+  /// @anchor notif-settings-training-alert-include-missing
+  /// Zgłaszaj też BRAK szkolenia wymaganego przez zamówienie.
+  trainingAlertIncludeMissing Boolean @default(false)
   /// @anchor notif-settings-updated-at
   updatedAt                 DateTime @updatedAt
 
@@ -2116,4 +2142,113 @@ model OfferNumberCounter {
   lastNumber Int @default(0)
 
   @@map("offer_number_counters")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SZKOLENIA PRACOWNIKÓW
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// @anchor training-type
+/// Rodzaj szkolenia / uprawnień (BHP, SEP E1, prace na wysokości…).
+model TrainingType {
+  id             String              @id @default(uuid())
+  /// @anchor training-type-name
+  name           String              @unique
+  /// @anchor training-type-code
+  /// Skrót do nagłówka kolumny macierzy (np. „SEP-E1").
+  code           String?
+  /// @anchor training-type-validity-months
+  /// NULL = szkolenie bezterminowe.
+  validityMonths Int?
+  /// @anchor training-type-description
+  description    String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  /// @anchor training-type-user-trainings
+  userTrainings  UserTraining[]
+  /// @anchor training-type-orders
+  orders         TrainingTypeOrder[]
+
+  @@map("training_types")
+}
+
+/// @anchor training-type-order
+/// Zamówienie (ProcessNode type='order'), dla którego szkolenie jest WYMAGANE.
+model TrainingTypeOrder {
+  trainingTypeId String
+  orderId        String
+  trainingType   TrainingType @relation(fields: [trainingTypeId], references: [id], onDelete: Cascade)
+  order          ProcessNode  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@id([trainingTypeId, orderId])
+  @@index([orderId])
+  @@map("training_type_orders")
+}
+
+/// @anchor user-training
+/// Aktualne szkolenie pracownika — jedno na parę pracownik × typ; odnowienie nadpisuje wpis.
+model UserTraining {
+  id             String       @id @default(uuid())
+  userId         String
+  trainingTypeId String
+  /// @anchor user-training-completed-at
+  completedAt    DateTime     @db.Date
+  /// @anchor user-training-valid-until
+  /// NULL = bezterminowe. Domyślnie completedAt + validityMonths, edytowalne.
+  validUntil     DateTime?    @db.Date
+  /// @anchor user-training-certificate-no
+  certificateNo  String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trainingType   TrainingType @relation(fields: [trainingTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, trainingTypeId])
+  @@index([trainingTypeId])
+  @@map("user_trainings")
+}
+
+/// @anchor user-order
+/// Pracownik przypisany do zamówienia (kolumna „Zamówienia" w Szkoleniach) — podstawa alertów.
+model UserOrder {
+  userId  String
+  orderId String
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order   ProcessNode @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@id([userId, orderId])
+  @@index([orderId])
+  @@map("user_orders")
+}
+
+/// @anchor training-alert-run
+/// Przebieg wysyłki alertów — historia w zakładce „Powiadomienia e-mail".
+model TrainingAlertRun {
+  id         String   @id @default(uuid())
+  /// @anchor training-alert-run-ran-at
+  ranAt      DateTime @default(now())
+  /// @anchor training-alert-run-recipients
+  recipients Int      @default(0)
+  /// @anchor training-alert-run-items
+  items      Int      @default(0)
+  /// @anchor training-alert-run-status
+  /// SENT | SKIPPED (brak pozycji) | ERROR | TEST
+  status     String
+  /// @anchor training-alert-run-error
+  error      String?
+
+  @@index([ranAt])
+  @@map("training_alert_runs")
+}
+
+/// @anchor training-alert-log
+/// Wysłana pozycja alertu — pilnuje, żeby ten sam próg nie poszedł drugi raz.
+/// `key` = userId|trainingTypeId|orderId|validUntil(albo „brak")|próg.
+model TrainingAlertLog {
+  id     String   @id @default(uuid())
+  /// @anchor training-alert-log-key
+  key    String   @unique
+  sentAt DateTime @default(now())
+
+  @@map("training_alert_logs")
 }

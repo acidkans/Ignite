@@ -22,6 +22,8 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
     const navigate = useNavigate();
     const location = useLocation();
     const [filter, setFilter] = useState('');
+    // @anchor sidebar-users-drawer-open — szuflada „Użytkownicy” otwarta na start, gdy jesteśmy w jednej z jej stron
+    const [usersDrawerOpen, setUsersDrawerOpen] = useState(() => ['/users', '/szkolenia'].includes(location.pathname));
     // @anchor sidebar-drag-id
     const [dragId, setDragId] = useState(null);
     // @anchor sidebar-drag-over-id
@@ -127,20 +129,46 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
             <div>
                 <p className="px-2 py-1.5 text-[10px] font-bold text-gray-500 uppercase tracking-widest bg-white/[0.03] border-y border-white/[0.05] mb-1">System</p>
                 <div className="space-y-0.5">
-                    {/* @anchor sidebar-users-button */}
+                    {/* @anchor sidebar-users-button — rozwija szufladę z „Lista użytkowników” i „Szkolenia” */}
                     {isAdmin && (
                         <button
-                            onClick={() => navigate('/users')}
+                            onClick={() => setUsersDrawerOpen(v => !v)}
                             title="Użytkownicy"
-                            className={`w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md
-                                ${location.pathname === '/users'
+                            aria-expanded={usersDrawerOpen}
+                            className={`w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md flex items-center gap-1.5
+                                ${['/users', '/szkolenia'].includes(location.pathname) && !usersDrawerOpen
                                     ? 'text-blue-400 bg-blue-500/10'
                                     : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
                                 }
                             `}
                         >
+                            <span className={`text-[8px] text-gray-500 transition-transform ${usersDrawerOpen ? 'rotate-90' : ''}`}>▶</span>
                             Użytkownicy
                         </button>
+                    )}
+                    {/* @anchor sidebar-users-drawer — szuflada: ciemna studnia + kręgosłup w akcencie (jak DRAWER) */}
+                    {isAdmin && usersDrawerOpen && (
+                        <div className="ml-2.5 my-0.5 rounded-r-md border-l-[3px] border-teal-500 bg-[#05080f] py-0.5">
+                            {[
+                                { path: '/users', label: 'Lista użytkowników' },
+                                // @anchor sidebar-szkolenia-button
+                                { path: '/szkolenia', label: 'Szkolenia' },
+                            ].map(item => (
+                                <button
+                                    key={item.path}
+                                    onClick={() => navigate(item.path)}
+                                    title={item.label}
+                                    className={`w-full text-left pl-3 pr-2 py-1.5 text-xs transition-colors
+                                        ${location.pathname === item.path
+                                            ? 'text-teal-300 bg-teal-500/10'
+                                            : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                                        }
+                                    `}
+                                >
+                                    {item.label}
+                                </button>
+                            ))}
+                        </div>
                     )}
                     {/* @anchor sidebar-firma-button */}
                     {isAdmin && (
