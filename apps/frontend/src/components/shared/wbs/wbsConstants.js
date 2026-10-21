@@ -620,7 +620,12 @@ export const EXEC_STATUS_META = {
   IN_PROGRESS: { label: 'W toku',       montaz: 'Montaż w toku',   color: 'text-blue-400' },
   ON_HOLD:     { label: 'Wstrzymane',   montaz: 'Wstrzymany',      color: 'text-amber-400' },
   DONE:        { label: 'Wykonane',     montaz: 'Zainstalowane',   color: 'text-emerald-400' },
-  HANDED_OVER: { label: 'Odebrane',     montaz: 'Odebrane',        color: 'text-lime-400' },
+  HANDED_OVER: { label: 'Odebrane protokołem', montaz: 'Odebrane protokołem', color: 'text-lime-400' },
+  // `INVOICED` na osi WYKONANIA to faktura do klienta za pozycję już odebraną — inny fakt niż
+  // `purchaseStatus = INVOICED` (faktura dostawcy za towar). Stoi za odbiorem, więc też zamyka
+  // pozycję: zamówienie z samymi odebranymi i zafakturowanymi pozycjami jest zamknięte
+  // (`zamowienie-zamkniete` w `realizationBilans.js`).
+  INVOICED:    { label: 'Zafakturowane', montaz: 'Zafakturowane',  color: 'text-teal-400' },
   // Trzy kody ZAMYKAJĄ pozycję i celowo się nie sklejają: DONE = plan wykonany,
   // UNFINISHED = przerwane przed metą i rozliczone jak jest, CANCELLED = nigdy nie ruszyło.
   // `UNFINISHED` jest też jedynym miejscem, w które ma dokąd trafić stary robociznowy kod
@@ -811,7 +816,7 @@ export const AXIS_STATUS_ORDER = {
   purchase: { TO_ORDER: 0, ORDERED: 1, PARTIALLY_DELIVERED: 2, DELIVERED: 3, ISSUED: 4, INVOICED: 5, CANCELLED: Infinity },
   // `ON_HOLD` stoi na tej samej wysokości co `IN_PROGRESS`, więc podpowiedź „W toku" nie
   // odwiesza pozycji świadomie wstrzymanej — wznowienie jest decyzją, nie skutkiem wpisu.
-  exec:     { TO_DO: 0, IN_PROGRESS: 1, ON_HOLD: 1, DONE: 2, HANDED_OVER: 3, UNFINISHED: Infinity, CANCELLED: Infinity },
+  exec:     { TO_DO: 0, IN_PROGRESS: 1, ON_HOLD: 1, DONE: 2, HANDED_OVER: 3, INVOICED: 4, UNFINISHED: Infinity, CANCELLED: Infinity },
 };
 
 // @anchor axis-gate-of — czy oś realizacji CZEKA jeszcze na poprzedni etap. Zwraca opis

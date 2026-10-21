@@ -1,3 +1,14 @@
+## 2026-10-21 — Realizacja_new: statusy wykonania „Odebrane protokołem” i „Zafakturowane”, zamknięcie zamówienia (v2026.10.21.1952)
+
+### architektura / API
+- `WbsNode.execStatus` — nowy kod `INVOICED` („Zafakturowane”, faktura do klienta za pozycję odebraną); `HANDED_OVER` ma etykietę „Odebrane protokołem”. Backend nie waliduje kodów osi, migracja niepotrzebna
+- bilans wykonania (Realizacja_new, stara Realizacja, arkusz „Podsumowanie” eksportu Excel) — nowy przekrój „Zafakturowane”
+- Realizacja_new: plakietka „Zamówienie zamknięte” / „odebrane protokołem X z Y” nad tabelą
+
+### wytyczne
+- `ui-funkcja` `stanZamkniecia()` — zamówienie jest zamknięte, gdy każda pozycja z osią wykonania ma `HANDED_OVER` albo `INVOICED`; nie liczą się `CANCELLED`, `UNFINISHED`, pozycje odrzucone w planie i liście bez osi wykonania. Stan wyliczany, nie zapisywany; zamknięte zamówienie nie jest aktywnym projektem (alerty szkoleń go pomijają)
+- `ui-stala` `EXEC_STATUS_META.INVOICED` ≠ `PURCHASE_STATUS_META.INVOICED` — ten sam kod na dwóch różnych osiach: faktura do klienta vs faktura dostawcy
+
 ## 2026-10-17 — Realizacja: status wpisu planowy / pozaplanowy / prognozowany, wynik zamówienia z przychodu oferty (v2026.10.17.1852)
 
 ### schema.prisma

@@ -1901,6 +1901,8 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-sekcja | Analiza (kafle, mierniki, rozbicie na zakresy) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-analiza |
 | ui-stala | ZAMKNIECIE_CUTS (przekroje osi wykonania „to już za nami") | apps/frontend/src/components/shared/wbs/realizationBilans.js | @anchor realization-zamkniete-cuts |
 | ui-funkcja | wRealizacjiTest (pozycje, przy których praca trwa) | apps/frontend/src/components/shared/wbs/realizationBilans.js | @anchor realization-w-realizacji |
+| ui-funkcja | stanZamkniecia (zamówienie zamknięte = wszystkie pozycje odebrane protokołem / zafakturowane) | apps/frontend/src/components/shared/wbs/realizationBilans.js | @anchor zamowienie-zamkniete |
+| ui-stan | stanZamowienia (plakietka „Zamówienie zamknięte” w Realizacja_new) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-order-closed |
 | ui-funkcja | liczBilansWykonania (podział zamówienia wg statusu wykonania) | apps/frontend/src/components/shared/wbs/realizationBilans.js | @anchor realization-bilans-wykonania |
 | ui-tabela | BilansZamkniete (bilans kwotowy pozycji domkniętych) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-bilans-zamkniete |
 | ui-funkcja | fetchActuals (przeładowanie samych wpisów po zapisie) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-fetch-actuals |

@@ -17,7 +17,7 @@
 // filtry, sortowanie, eksport Excel i protokół odbioru.
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronRight, Loader2, Plus, Trash2, FileSpreadsheet, FileText, ExternalLink } from 'lucide-react';
+import { ChevronRight, Loader2, Plus, Trash2, FileSpreadsheet, FileText, ExternalLink, CheckCircle2 } from 'lucide-react';
 import { API_URL } from '../../config';
 import { useDevice } from '../../hooks/useDevice';
 import SupplierPicker from './SupplierPicker';
@@ -34,7 +34,7 @@ import { RequirementImageBox } from './wbs/WbsMaterialsPanel';
 import { eksportRealizacjiXlsx } from './RealizationTab';
 // Bilans stanu wykonania liczy moduł wspólny z eksportem Excel — tabela na ekranie i arkusz
 // „Podsumowanie" muszą pokazywać ten sam podział.
-import { liczBilansWykonania, NIEROZPOCZETE_LABEL } from './wbs/realizationBilans';
+import { liczBilansWykonania, NIEROZPOCZETE_LABEL, stanZamkniecia } from './wbs/realizationBilans';
 import {
     PLAN_STATUS_META, planStatusFromAny, PURCHASE_STATUS_META, EXEC_STATUS_META, execStatusLabel,
     hasPurchaseAxis, hasExecAxis, DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS, axisGateOf,
@@ -285,7 +285,7 @@ export const STAGE_META = [
     { key: 'otwarte',  label: 'Otwarte',  color: '#60a5fa' },
     { key: 'czeka',    label: 'Zablokowane', color: '#ef4444' },
 ];
-const STAGE_DONE = { purchase: ['DELIVERED', 'ISSUED', 'INVOICED'], exec: ['DONE', 'HANDED_OVER'] };
+const STAGE_DONE = { purchase: ['DELIVERED', 'ISSUED', 'INVOICED'], exec: ['DONE', 'HANDED_OVER', 'INVOICED'] };
 
 // Grosze zbierane z kilkudziesięciu pozycji potrafią dać w sumie 1 gr różnicy wobec kolumny
 // „Wycena" w tym samym wierszu — zaokrąglamy raz, na gotowym rozkładzie.
@@ -766,6 +766,10 @@ export default function RealizationNewTab({
 
     // ─ Model widoku ──────────────────────────────────────────────────────────
     const idx = useMemo(() => buildBranchIndex(wbsNodes, orderName, visibleTypes), [wbsNodes, orderName, visibleTypes]);
+    // @anchor realization-new-order-closed — stan zamknięcia liczony ze WSZYSTKICH liści, a nie
+    // z `idx.leaves`: logistyk widzi po filtrze roli tylko materiał i sprzęt, a zamówienie jest
+    // zamknięte dopiero wtedy, gdy odebrana jest też praca i usługi.
+    const stanZamowienia = useMemo(() => stanZamkniecia(leafNodesOf(wbsNodes)), [wbsNodes]);
 
     const actualsByRoot = useMemo(() => {
         const map = {};
@@ -1077,6 +1081,20 @@ export default function RealizationNewTab({
                             {planLabel}
                         </span>
                     )}
+                    {stanZamowienia.pozycji > 0 && (stanZamowienia.zamkniete ? (
+                        <span
+                            title="Wszystkie pozycje są odebrane protokołem lub zafakturowane. Zamówienie nie jest już aktywnym projektem — alerty o wygasających szkoleniach go nie dotyczą. Zmiana statusu dowolnej pozycji otwiera je z powrotem."
+                            className="flex items-center gap-1 rounded border border-lime-500/30 bg-lime-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-lime-300">
+                            <CheckCircle2 size={11} />
+                            Zamówienie zamknięte
+                        </span>
+                    ) : (
+                        <span
+                            title="Zamówienie zamyka się samo, gdy każda pozycja z wykonaniem jest odebrana protokołem lub zafakturowana. Pozycje odwołane, niedokończone i odrzucone w planie się nie liczą."
+                            className="cursor-help rounded border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                            odebrane protokołem <span className="font-mono text-gray-200">{stanZamowienia.odebrane}</span> z {stanZamowienia.pozycji}
+                        </span>
+                    ))}
                     {/* Eksport i protokół działają na TYM, co widać w tabeli — po wyborze gałęzi
                         i filtrach. Dlatego stoją przy analizie, a nie przy pojedynczej pozycji. */}
                     <button
