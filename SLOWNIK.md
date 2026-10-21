@@ -3051,6 +3051,10 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | schema-pole | UserTraining.validUntil | apps/backend/prisma/schema.prisma | @anchor user-training-valid-until |
 | schema-relacja | User.trainings | apps/backend/prisma/schema.prisma | @anchor user-trainings |
 | back-funkcja | warsawNow() | apps/backend/src/trainings/training-alerts.service.ts | @anchor warsaw-today |
+| ui-funkcja | CheckList (lista z wyszukiwaniem fuzzy i checkboxami) | apps/frontend/src/components/shared/trainings/AssignTrainingModal.jsx | @anchor assign-check-list |
+| back-dto | BulkUserTrainingDto | apps/backend/src/trainings/trainings.service.ts | @anchor bulk-user-training-dto |
+| back-endpoint | PUT /trainings/user-trainings/bulk | apps/backend/src/trainings/trainings.controller.ts | @anchor trainings-bulk-endpoint |
+| back-funkcja | bulkUpsertUserTrainings() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-bulk-user-trainings |
 
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)

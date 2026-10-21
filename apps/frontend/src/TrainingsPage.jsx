@@ -73,7 +73,7 @@ export default function TrainingsPage() {
                     <h2 className="bg-gradient-to-r from-teal-400 to-blue-400 bg-clip-text text-2xl font-bold text-transparent">Szkolenia</h2>
                     <p className="mt-1 text-xs text-gray-500">Daty ważności szkoleń pracowników, zamówienia, które ich wymagają, i alerty e-mail o wygasających szkoleniach.</p>
                 </div>
-                <div className="ml-auto flex flex-wrap gap-2">
+                <div className="flex w-full flex-wrap gap-2">
                     <button onClick={() => setAssignModal({ userId: '', typeId: '' })} disabled={!data?.types.length} title={data?.types.length ? '' : 'Najpierw dodaj typ szkolenia'} className={BTN}>+ Przypisz szkolenie</button>
                     <button onClick={() => setTypeModal({ type: null })} disabled={!data} className={BTN_PRIMARY}>+ Nowy typ szkolenia</button>
                 </div>

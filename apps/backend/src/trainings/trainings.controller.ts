@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Req, UseGuards 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { TrainingsService, TrainingTypeDto, UserTrainingDto } from './trainings.service';
+import { TrainingsService, TrainingTypeDto, UserTrainingDto, BulkUserTrainingDto } from './trainings.service';
 import { TrainingAlertsService } from './training-alerts.service';
 
 // @anchor trainings-controller — moduł Szkoleń jest pod „Użytkownicy", więc tylko ADMIN.
@@ -41,6 +41,12 @@ export class TrainingsController {
     @Put('user-trainings')
     upsertUserTraining(@Body() dto: UserTrainingDto) {
         return this.trainings.upsertUserTraining(dto);
+    }
+
+    // @anchor trainings-bulk-endpoint — PUT /trainings/user-trainings/bulk {userIds, trainingTypeIds, completedAt, validUntil?, certificateNo?}
+    @Put('user-trainings/bulk')
+    bulkUpsertUserTrainings(@Body() dto: BulkUserTrainingDto) {
+        return this.trainings.bulkUpsertUserTrainings(dto);
     }
 
     @Delete('user-trainings/:id')

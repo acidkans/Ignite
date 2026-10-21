@@ -21,6 +21,15 @@ export interface UserTrainingDto {
     certificateNo?: string | null;
 }
 
+// @anchor bulk-user-training-dto
+export interface BulkUserTrainingDto {
+    userIds: string[];
+    trainingTypeIds: string[];
+    completedAt: string;          // YYYY-MM-DD
+    validUntil?: string | null;   // tylko przy jednym typie; brak = z okresu ważności każdego typu
+    certificateNo?: string | null;
+}
+
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 // @anchor parse-iso-day — data kalendarzowa (kolumna @db.Date) jako północ UTC: bez strefy,
@@ -197,6 +206,40 @@ export class TrainingsService {
             create: { userId: dto.userId, trainingTypeId: dto.trainingTypeId, ...data },
             update: data,
         });
+    }
+
+    // @anchor trainings-bulk-user-trainings — wielu pracowników × wiele typów w jednym podejściu,
+    // w jednej transakcji (wszystko albo nic). `validUntil` pominięte = liczone osobno dla każdego
+    // typu z jego okresu ważności; podane wprost wolno tylko przy jednym typie.
+    async bulkUpsertUserTrainings(dto: BulkUserTrainingDto) {
+        const userIds = [...new Set(Array.isArray(dto?.userIds) ? dto.userIds.filter(Boolean) : [])];
+        const typeIds = [...new Set(Array.isArray(dto?.trainingTypeIds) ? dto.trainingTypeIds.filter(Boolean) : [])];
+        if (!userIds.length || !typeIds.length) throw new BadRequestException('Wybierz co najmniej jednego pracownika i jeden typ szkolenia');
+        if (userIds.length * typeIds.length > 1000) throw new BadRequestException('Za dużo par naraz (limit 1000)');
+        if (dto.validUntil !== undefined && typeIds.length > 1) throw new BadRequestException('Datę ważności można nadpisać tylko przy jednym typie szkolenia');
+        const [users, types] = await Promise.all([
+            this.prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true } }),
+            this.prisma.trainingType.findMany({ where: { id: { in: typeIds } } }),
+        ]);
+        if (users.length !== userIds.length) throw new BadRequestException('Część wskazanych pracowników nie istnieje');
+        if (types.length !== typeIds.length) throw new BadRequestException('Część wskazanych typów szkoleń nie istnieje');
+        const completedAt = parseIsoDay(dto.completedAt, 'completedAt');
+        const explicit = dto.validUntil === undefined ? undefined : dto.validUntil ? parseIsoDay(dto.validUntil, 'validUntil') : null;
+        if (explicit && explicit < completedAt) throw new BadRequestException('Data ważności nie może być wcześniejsza niż data ukończenia');
+        const certificateNo = String(dto.certificateNo ?? '').trim() || null;
+
+        const existing = await this.prisma.userTraining.count({ where: { userId: { in: userIds }, trainingTypeId: { in: typeIds } } });
+        await this.prisma.$transaction(types.flatMap(t => {
+            const validUntil = explicit !== undefined ? explicit : t.validityMonths ? addMonthsUtc(completedAt, t.validityMonths) : null;
+            const data = { completedAt, validUntil, certificateNo };
+            return userIds.map(userId => this.prisma.userTraining.upsert({
+                where: { userId_trainingTypeId: { userId, trainingTypeId: t.id } },
+                create: { userId, trainingTypeId: t.id, ...data },
+                update: data,
+            }));
+        }));
+        const total = userIds.length * typeIds.length;
+        return { total, created: total - existing, renewed: existing };
     }
 
     // @anchor trainings-delete-user-training

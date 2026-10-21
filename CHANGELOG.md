@@ -1,3 +1,13 @@
+## 2026-10-21 — Szkolenia: przypisanie wielu pracowników × wielu typów szkoleń w jednym podejściu (v2026.10.21.2102)
+
+### architektura / API
+- dodano `PUT /trainings/user-trainings/bulk` {userIds, trainingTypeIds, completedAt, validUntil?, certificateNo?} — upsert każdej pary pracownik × typ w jednej transakcji; zwraca {total, created, renewed}
+- modal „Przypisz szkolenia”: dwie listy z wyszukiwaniem fuzzy i checkboxami (pracownicy, typy), „zaznacz widoczne”, licznik par i odnowień
+- przyciski „Przypisz szkolenie” / „Nowy typ szkolenia” przeniesione na lewo, pod opis strony
+
+### wytyczne
+- `back-funkcja` `bulkUpsertUserTrainings()` — `validUntil` podane wprost tylko przy jednym typie (inaczej 400); bez niego ważność liczy się osobno z `validityMonths` każdego typu. Limit 1000 par na żądanie
+
 ## 2026-10-21 — Szkolenia pracowników: macierz ważności, przypisanie do zamówień, alerty e-mail do ADMIN-ów (v2026.10.21.2012)
 
 ### schema.prisma
