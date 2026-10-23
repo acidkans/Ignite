@@ -1189,15 +1189,14 @@ export async function eksportRealizacjiXlsx({
 
     // ─ Zakupy ────────────────────────────────────────────────────────
     // @anchor realization-export-purchases — arkusz „Zakupy": jeden wiersz na WPIS
-    // realizacji (`LeafActual`), a nie na pozycję, i tylko tam, gdzie się faktycznie
-    // KUPUJE — praca i usługa to wykonanie, nie zakup (ten sam podział co `entryNoun`).
+    // realizacji (`LeafActual`), a nie na pozycję — WSZYSTKIE wpisy, bez względu na typ pozycji:
+    // materiał bywa kupowany i dopinany do pozycji-usługi, a taki zakup też musi być w rozliczeniu.
     // Arkusz „Realizacja" agreguje wpisy do pozycji, więc nie da się z niego wyczytać
     // pojedynczej dostawy: daty, faktury ani ceny konkretnego egzemplarza.
     // Na końcu wpisy pozycji usuniętych z wyceny (`orphanEntries`): nie ma ich w wersji planu,
     // więc nie mają wiersza w tabeli, ale pieniądze wydano i muszą wejść do rozliczenia.
     const zakupy = [];
     for (const { node, card, realization: r } of rows) {
-        if (entryNoun(node.type) !== 'zakup') continue;
         for (const e of r.entries) {
             const { rozl, powod } = rozliczenieOf(node, card, e);
             zakupy.push({ node, card, e, planQty: Number(r.plan) || 0, rozl: rozl === ROZLICZENIE.OFERTA ? ROZL_XLS.OFERTA : rozl === ROZLICZENIE.PROGNOZA ? ROZL_XLS.PROGNOZA : ROZL_XLS.POZA, powod });
@@ -1205,7 +1204,6 @@ export async function eksportRealizacjiXlsx({
     }
     // Sieroty grupowane po id pozycji — plan i Δ stoją w PIERWSZYM wierszu pozycji, więc jej wpisy muszą leżeć razem.
     for (const e of [...orphanEntries].sort((x, y) => String(x.wbsRootId).localeCompare(String(y.wbsRootId)))) {
-        if (entryNoun(e.leafType) !== 'zakup') continue;
         const node = { name: e.leafName || '(pozycja usunięta z planu)', type: e.leafType, path: null, unit: 'szt', sourceWbsNodeId: e.wbsRootId };
         zakupy.push({ node, card: null, e, planQty: 0, rozl: ROZL_XLS.POZA, powod: POWOD_POZA_OFERTA.USUNIETA });
     }
