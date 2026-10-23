@@ -3,6 +3,7 @@ import { ChevronDown, FileSpreadsheet } from 'lucide-react';
 import { STATUS_STYLE, fmtDay, fullName, initials, normTxt, opisDni, todayIso, trainingStatus, trainingsApi } from './trainingsShared';
 import { OrderChip, BTN, INPUT } from './TrainingsUi';
 import OrdersMultiSelect from './OrdersMultiSelect';
+import TrainingsTableView from './TrainingsTableView';
 import { exportTrainingsExcel } from '../../../utils/trainingsExcel';
 
 const FILTRY = [
@@ -41,6 +42,8 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
     const [otwarty, setOtwarty] = useState(null);
     const [wybor, setWybor] = useState(null); // { userId, anchor }
     const [exporting, setExporting] = useState(false);
+    // @anchor trainings-view-mode — 'macierz' (pracownik × typ) albo 'tabela' (wiersz = pracownik × szkolenie)
+    const [widok, setWidok] = useState('macierz');
     // @anchor trainings-last-closed-select — popover zamyka się na `mousedown`; `click` na tej
     // samej komórce, który przychodzi zaraz potem, nie może go od razu otworzyć ponownie.
     const ostatnioZamkniety = useRef({ userId: null, t: 0 });
@@ -98,6 +101,14 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                         </button>
                     ))}
                 </div>
+                <div className="flex overflow-hidden rounded-md border border-white/15 text-[11px]">
+                    {[['macierz', 'Macierz'], ['tabela', 'Tabela']].map(([id, label]) => (
+                        <button key={id} onClick={() => setWidok(id)}
+                            className={`min-h-[36px] px-3 ${widok === id ? 'bg-teal-500/15 text-teal-300' : 'text-gray-400 hover:text-gray-200'}`}>
+                            {label}
+                        </button>
+                    ))}
+                </div>
                 <button onClick={eksport} disabled={exporting || !wiersze.length} title="Eksport wierszy widocznych po filtrach" className={`${BTN} ml-auto flex items-center gap-1.5`}>
                     <FileSpreadsheet size={14} /> {exporting ? 'Eksportuję…' : 'Excel'}
                 </button>
@@ -112,6 +123,9 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                 <span><i className="mr-1 inline-block h-2 w-2 rounded-sm bg-gray-500" />bezterminowe</span>
             </div>
 
+            {widok === 'tabela' ? (
+                <TrainingsTableView wiersze={wiersze} typeById={typeById} ordersById={ordersById} filtr={filtr} onAssign={onAssign} onDelete={onDelete} today={today} />
+            ) : (
             <div className="overflow-auto rounded-lg border border-white/[.07]">
                 <table className="w-full border-collapse text-[12px]">
                     <thead>
@@ -229,6 +243,7 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                     </tbody>
                 </table>
             </div>
+            )}
 
             {wybor && (
                 <OrdersMultiSelect

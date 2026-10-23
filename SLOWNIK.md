@@ -3023,6 +3023,8 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-stala | XL_KOLOR | apps/frontend/src/utils/trainingsExcel.js | @anchor trainings-excel-colors |
 | ui-stan | ostatnioZamkniety | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-last-closed-select |
 | ui-zakladka | TrainingsMatrixTab | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-matrix-tab |
+| ui-tabela | TrainingsTableView | apps/frontend/src/components/shared/trainings/TrainingsTableView.jsx | @anchor trainings-table-view |
+| ui-stan | widok | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-view-mode |
 | ui-modal | Modal | apps/frontend/src/components/shared/trainings/TrainingsUi.jsx | @anchor trainings-modal |
 | back-modul | TrainingsModule | apps/backend/src/trainings/trainings.module.ts | @anchor trainings-module |
 | back-funkcja | orderClosureMap() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-order-closure-map |
