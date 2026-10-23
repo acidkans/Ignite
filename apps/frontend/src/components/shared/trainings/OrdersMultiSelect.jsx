@@ -6,7 +6,7 @@ import { Highlight, BTN_PRIMARY, INPUT } from './TrainingsUi';
 // @anchor orders-multi-select — popover pod komórką „Zamówienia": wyszukiwanie fuzzy, checkboxy,
 // przypisane na górze. Zapis dopiero przy zamknięciu (Gotowe / Esc / klik obok) — jeden PUT
 // zamiast zapisu po każdym kliknięciu. `warnOf(orderId)` zwraca kody brakujących szkoleń.
-export default function OrdersMultiSelect({ orders, selectedIds, anchor, onClose, warnOf }) {
+export default function OrdersMultiSelect({ orders, selectedIds, anchor, onClose, warnOf, label = 'Zamówienia pracownika' }) {
     const [wybrane, setWybrane] = useState(selectedIds || []);
     const [q, setQ] = useState('');
     const [akt, setAkt] = useState(0);
@@ -64,7 +64,7 @@ export default function OrdersMultiSelect({ orders, selectedIds, anchor, onClose
     return createPortal(
         <div ref={boxRef} style={{ left: pos.left, top: pos.top }}
             className="fixed z-[60] w-[min(400px,calc(100vw-16px))] rounded-lg border border-white/15 bg-[#0d1526] shadow-2xl"
-            role="dialog" aria-label="Zamówienia pracownika">
+            role="dialog" aria-label={label}>
             <div className="border-b border-white/[.07] p-2">
                 <input ref={inputRef} value={q} onChange={e => { setQ(e.target.value); setAkt(0); }} onKeyDown={onKey}
                     placeholder="Szukaj zamówienia lub obszaru…" className={INPUT} />

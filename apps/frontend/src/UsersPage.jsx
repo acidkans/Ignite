@@ -410,6 +410,40 @@ export default function UsersPage() {
 
     const [dragOverTeamId, setDragOverTeamId] = useState(null); // null, 'no-team', or team.id
 
+    // @anchor teams-user-query — filtr pracowników (imię, nazwisko, e-mail) we wszystkich kartach zakładki Zespoły
+    const [userQuery, setUserQuery] = useState('');
+    const filteredUsers = useMemo(() => {
+        const norm = (v) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L').toLowerCase();
+        const slowa = norm(userQuery).split(/\s+/).filter(Boolean);
+        if (!slowa.length) return rowData;
+        return rowData.filter(u => { const t = norm(`${u.firstName} ${u.lastName} ${u.email}`); return slowa.every(w => t.includes(w)); });
+    }, [rowData, userQuery]);
+
+    // @anchor teams-card-order — kolejność kart w zakładce Zespoły (przeciąganie za nagłówek);
+    // zapamiętana w localStorage tej przeglądarki, nowe zespoły lądują na końcu
+    const [cardOrder, setCardOrder] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('teamsCardOrder') || '[]'); } catch { return []; }
+    });
+    const [draggedCardId, setDraggedCardId] = useState(null);
+    const orderedCardIds = useMemo(() => {
+        const ids = ['all-users', ...teams.map(t => t.id)];
+        const pos = (id) => { const i = cardOrder.indexOf(id); return i < 0 ? Infinity : i; };
+        return ids.map((id, i) => ({ id, i })).sort((a, b) => (pos(a.id) - pos(b.id)) || (a.i - b.i)).map(x => x.id);
+    }, [teams, cardOrder]);
+    const moveCard = (sourceId, targetId) => {
+        if (!sourceId || sourceId === targetId) return;
+        const next = orderedCardIds.filter(id => id !== sourceId);
+        next.splice(next.indexOf(targetId) + (orderedCardIds.indexOf(sourceId) < orderedCardIds.indexOf(targetId) ? 1 : 0), 0, sourceId);
+        setCardOrder(next);
+        try { localStorage.setItem('teamsCardOrder', JSON.stringify(next)); } catch { /* brak localStorage — kolejność tylko do odświeżenia */ }
+    };
+    const handleCardDragStart = (e, cardId) => {
+        e.dataTransfer.setData('cardId', cardId);
+        e.dataTransfer.effectAllowed = 'move';
+        setDraggedCardId(cardId);
+    };
+    const handleCardDragEnd = () => { setDraggedCardId(null); setDragOverTeamId(null); };
+
     const handleDragStart = (e, userId) => {
         e.dataTransfer.setData("userId", userId);
         e.dataTransfer.effectAllowed = "move";
@@ -429,6 +463,12 @@ export default function UsersPage() {
     const handleDrop = (e, targetTeamId) => {
         e.preventDefault();
         setDragOverTeamId(null);
+        const cardId = e.dataTransfer.getData('cardId');
+        if (cardId) {
+            setDraggedCardId(null);
+            moveCard(cardId, targetTeamId);
+            return;
+        }
         const userId = e.dataTransfer.getData("userId");
         if (!userId) return;
 
@@ -549,19 +589,31 @@ export default function UsersPage() {
                 </div>
             ) : (
                 <div className="flex-1 overflow-auto">
+                    {/* @anchor teams-user-query-input */}
+                    <input
+                        value={userQuery}
+                        onChange={(e) => setUserQuery(e.target.value)}
+                        placeholder="Filtruj pracowników (imię, nazwisko, e-mail)…"
+                        className="mb-4 w-full sm:w-80 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-400"
+                    />
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {/* Karta: Lista wszystkich pracowników */}
+                        {orderedCardIds.map(cardId => {
+                            // Karta: Lista wszystkich pracowników
+                            if (cardId === 'all-users') return (
                         <div
-                            className={`bg-white/5 border ${dragOverTeamId === 'all-users' ? 'border-blue-400 bg-blue-400/10' : 'border-white/10'} rounded-xl p-4 flex flex-col transition-all`}
+                            key="all-users"
+                            className={`${draggedCardId === 'all-users' ? 'opacity-40' : ''} bg-white/5 border ${dragOverTeamId === 'all-users' ? 'border-blue-400 bg-blue-400/10' : 'border-white/10'} rounded-xl p-4 flex flex-col transition-all`}
                             onDragOver={(e) => handleDragOver(e, 'all-users')}
                             onDrop={(e) => handleDrop(e, 'all-users')}
                         >
-                            <div className="flex justify-between items-center mb-4 pb-2 border-b border-white/5">
-                                <h3 className="font-bold text-lg text-gray-300">Lista Pracowników</h3>
-                                <span className="text-xs bg-white/10 px-2 py-1 rounded-full">{rowData.length}</span>
+                            <div draggable="true" onDragStart={(e) => handleCardDragStart(e, 'all-users')} onDragEnd={handleCardDragEnd}
+                                title="Przeciągnij, aby przenieść kartę"
+                                className="flex justify-between items-center mb-4 pb-2 border-b border-white/5 cursor-move">
+                                <h3 className="font-bold text-lg text-gray-300"><span className="mr-1.5 text-gray-600">⠿</span>Lista Pracowników</h3>
+                                <span className="text-xs bg-white/10 px-2 py-1 rounded-full">{userQuery ? `${filteredUsers.length} / ${rowData.length}` : rowData.length}</span>
                             </div>
                             <div className="flex-1 overflow-y-auto space-y-2 max-h-[400px] scrollbar-thin">
-                                {rowData.map(user => (
+                                {filteredUsers.map(user => (
                                     <div
                                         key={user.id}
                                         draggable="true"
@@ -579,23 +631,25 @@ export default function UsersPage() {
                                         </div>
                                     </div>
                                 ))}
-                                {rowData.length === 0 && <div className="text-gray-500 text-sm text-center italic">Brak użytkowników</div>}
+                                {filteredUsers.length === 0 && <div className="text-gray-500 text-sm text-center italic">{userQuery ? 'Brak pasujących pracowników' : 'Brak użytkowników'}</div>}
                             </div>
                             <div className="mt-4 pt-2 border-t border-white/5 text-[10px] text-gray-500 italic">
                                 Przeciągnij pracownika na kartę zespołu, aby go przypisać.
                             </div>
                         </div>
-
-                        {/* Karty Zespołów */}
-                        {teams.map(team => (
+                            );
+                            const team = teams.find(t => t.id === cardId);
+                            return (
                             <div
                                 key={team.id}
-                                className={`bg-white/5 border ${dragOverTeamId === team.id ? 'border-blue-400 bg-blue-400/10' : 'border-white/10'} rounded-xl p-4 flex flex-col transition-all`}
+                                className={`${draggedCardId === team.id ? 'opacity-40' : ''} bg-white/5 border ${dragOverTeamId === team.id ? 'border-blue-400 bg-blue-400/10' : 'border-white/10'} rounded-xl p-4 flex flex-col transition-all`}
                                 onDragOver={(e) => handleDragOver(e, team.id)}
                                 onDrop={(e) => handleDrop(e, team.id)}
                             >
-                                <div className="flex justify-between items-center mb-4 pb-2 border-b border-white/5">
-                                    <h3 className="font-bold text-lg text-blue-300">{team.name}</h3>
+                                <div draggable="true" onDragStart={(e) => handleCardDragStart(e, team.id)} onDragEnd={handleCardDragEnd}
+                                    title="Przeciągnij, aby przenieść kartę"
+                                    className="flex justify-between items-center mb-4 pb-2 border-b border-white/5 cursor-move">
+                                    <h3 className="font-bold text-lg text-blue-300"><span className="mr-1.5 text-gray-600">⠿</span>{team.name}</h3>
                                     <div className="flex items-center gap-2">
                                         <span className="text-xs bg-white/10 px-2 py-1 rounded-full">
                                             {rowData.filter(u => Array.isArray(u.teams) && u.teams.some(t => t.id === team.id)).length}
@@ -610,7 +664,7 @@ export default function UsersPage() {
                                     </div>
                                 </div>
                                 <div className="flex-1 overflow-y-auto space-y-2 max-h-[400px]">
-                                    {rowData.filter(u => Array.isArray(u.teams) && u.teams.some(t => t.id === team.id)).map(user => (
+                                    {filteredUsers.filter(u => Array.isArray(u.teams) && u.teams.some(t => t.id === team.id)).map(user => (
                                         <div
                                             key={user.id}
                                             draggable="false"
@@ -629,12 +683,13 @@ export default function UsersPage() {
                                             </button>
                                         </div>
                                     ))}
-                                    {rowData.filter(u => Array.isArray(u.teams) && u.teams.some(t => t.id === team.id)).length === 0 && (
-                                        <div className="text-gray-500 text-sm text-center italic">Pusty zespół</div>
+                                    {filteredUsers.filter(u => Array.isArray(u.teams) && u.teams.some(t => t.id === team.id)).length === 0 && (
+                                        <div className="text-gray-500 text-sm text-center italic">{userQuery && rowData.some(u => Array.isArray(u.teams) && u.teams.some(t => t.id === team.id)) ? 'Brak pasujących' : 'Pusty zespół'}</div>
                                     )}
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
 
                         {/* Przycisk Dodaj Zespół */}
                         <div

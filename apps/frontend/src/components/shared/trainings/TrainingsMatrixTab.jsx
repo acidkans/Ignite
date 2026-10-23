@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
-import { ChevronDown, FileSpreadsheet } from 'lucide-react';
+import { ChevronDown, FileSpreadsheet, X } from 'lucide-react';
 import { STATUS_STYLE, fmtDay, fullName, initials, normTxt, opisDni, todayIso, trainingStatus, trainingsApi } from './trainingsShared';
 import { OrderChip, BTN, INPUT } from './TrainingsUi';
 import OrdersMultiSelect from './OrdersMultiSelect';
@@ -13,12 +13,14 @@ const FILTRY = [
 ];
 
 // @anchor trainings-visible-rows — jedno źródło dla tabeli i eksportu Excel (ten sam filtr i kolejność).
-// Pracownik bez żadnego szkolenia NIE trafia na listę. Najpilniejsi na górze.
-export function visibleRows(users, types, { query, filtr }, today = todayIso()) {
+// Pracownik bez żadnego szkolenia NIE trafia na listę — chyba że filtrujemy po zamówieniach
+// (`zamIds`): wtedy pokazujemy wszystkich przypisanych, żeby było widać, komu brakuje szkoleń.
+// Najpilniejsi na górze.
+export function visibleRows(users, types, { query, filtr, zamIds = [], ordersById = {} }, today = todayIso()) {
     const q = normTxt(query).trim();
     const typeById = Object.fromEntries(types.map(t => [t.id, t]));
     return users
-        .filter(u => u.trainings.length > 0)
+        .filter(u => (zamIds.length ? u.orderIds.some(id => zamIds.includes(id)) : u.trainings.length > 0))
         .map(u => ({
             u,
             najblizszy: u.trainings.filter(t => t.validUntil).sort((a, b) => a.validUntil.localeCompare(b.validUntil))[0] || null,
@@ -26,7 +28,7 @@ export function visibleRows(users, types, { query, filtr }, today = todayIso()) 
         .filter(({ u }) => {
             if (filtr !== 'wszystkie' && !u.trainings.some(ut => trainingStatus(ut, today) === filtr)) return false;
             if (!q) return true;
-            const tekst = normTxt(`${fullName(u)} ${u.team} ${u.trainings.map(ut => `${typeById[ut.trainingTypeId]?.name} ${typeById[ut.trainingTypeId]?.code}`).join(' ')}`);
+            const tekst = normTxt(`${fullName(u)} ${u.team} ${u.trainings.map(ut => `${typeById[ut.trainingTypeId]?.name} ${typeById[ut.trainingTypeId]?.code}`).join(' ')} ${u.orderIds.map(id => ordersById[id]?.name).join(' ')}`);
             return q.split(/\s+/).every(t => tekst.includes(t));
         })
         .sort((a, b) => (a.najblizszy?.validUntil || '9999').localeCompare(b.najblizszy?.validUntil || '9999')
@@ -44,6 +46,9 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
     const [exporting, setExporting] = useState(false);
     // @anchor trainings-view-mode — 'macierz' (pracownik × typ) albo 'tabela' (wiersz = pracownik × szkolenie)
     const [widok, setWidok] = useState('macierz');
+    // @anchor trainings-order-filter — filtr po zamówieniach (pracownicy przypisani do któregokolwiek z wybranych)
+    const [zamIds, setZamIds] = useState([]);
+    const [filtrZamAnchor, setFiltrZamAnchor] = useState(null);
     // @anchor trainings-last-closed-select — popover zamyka się na `mousedown`; `click` na tej
     // samej komórce, który przychodzi zaraz potem, nie może go od razu otworzyć ponownie.
     const ostatnioZamkniety = useRef({ userId: null, t: 0 });
@@ -51,7 +56,7 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
 
     const ordersById = useMemo(() => Object.fromEntries(orders.map(o => [o.id, o])), [orders]);
     const typeById = useMemo(() => Object.fromEntries(types.map(t => [t.id, t])), [types]);
-    const wiersze = useMemo(() => visibleRows(users, types, { query, filtr }, today), [users, types, query, filtr, today]);
+    const wiersze = useMemo(() => visibleRows(users, types, { query, filtr, zamIds, ordersById }, today), [users, types, query, filtr, zamIds, ordersById, today]);
     const zeSzkoleniami = users.filter(u => u.trainings.length).length;
 
     // @anchor missing-trainings-for-order — kody szkoleń wymaganych przez zamówienie, których
@@ -78,7 +83,8 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
     const eksport = async () => {
         setExporting(true);
         try {
-            const opisFiltra = [filtr !== 'wszystkie' && `status: ${FILTRY.find(f => f.id === filtr).label.toLowerCase()}`, query.trim() && `szukaj: „${query.trim()}”`].filter(Boolean).join(' · ') || 'bez filtrów';
+            const opisFiltra = [filtr !== 'wszystkie' && `status: ${FILTRY.find(f => f.id === filtr).label.toLowerCase()}`, query.trim() && `szukaj: „${query.trim()}”`,
+                zamIds.length && `zamówienia: ${zamIds.map(id => ordersById[id]?.name).filter(Boolean).join(', ')}`].filter(Boolean).join(' · ') || 'bez filtrów';
             await exportTrainingsExcel({ wiersze, types, ordersById, opisFiltra });
             toast(`Wyeksportowano ${wiersze.length} pracowników (${opisFiltra})`);
         } catch (e) { toast(`Eksport nieudany: ${e.message}`, true); }
@@ -92,7 +98,7 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
     return (
         <div>
             <div className="mb-3 flex flex-wrap items-center gap-2">
-                <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Szukaj pracownika lub szkolenia…" className={`${INPUT} w-full sm:w-64`} />
+                <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Szukaj pracownika, szkolenia lub zamówienia…" className={`${INPUT} w-full sm:w-64`} />
                 <div className="flex flex-wrap gap-1">
                     {FILTRY.map(f => (
                         <button key={f.id} onClick={() => setFiltr(f.id)}
@@ -100,6 +106,18 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                             {f.label}
                         </button>
                     ))}
+                </div>
+                <div className="flex items-center gap-1">
+                    <button onClick={e => {
+                        const z = ostatnioZamkniety.current;
+                        if (z.userId === 'filtr-zam' && Date.now() - z.t < 400) return;
+                        setFiltrZamAnchor(e.currentTarget);
+                    }} title={zamIds.map(id => ordersById[id]?.name).filter(Boolean).join('\n')}
+                        className={`flex min-h-[36px] max-w-[260px] items-center gap-1 rounded-full border px-3 text-[11px] ${zamIds.length ? 'border-teal-500 bg-teal-500/10 text-teal-300' : 'border-white/15 text-gray-400 hover:text-gray-200'}`}>
+                        <span className="truncate">{!zamIds.length ? 'Zamówienie: wszystkie' : zamIds.length === 1 ? ordersById[zamIds[0]]?.name : `Zamówienia: ${zamIds.length}`}</span>
+                        <ChevronDown size={12} className="shrink-0" />
+                    </button>
+                    {zamIds.length > 0 && <button onClick={() => setZamIds([])} title="Wyczyść filtr zamówień" className="px-1.5 py-2 text-gray-500 hover:text-gray-200"><X size={13} /></button>}
                 </div>
                 <div className="flex overflow-hidden rounded-md border border-white/15 text-[11px]">
                     {[['macierz', 'Macierz'], ['tabela', 'Tabela']].map(([id, label]) => (
@@ -113,7 +131,9 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                     <FileSpreadsheet size={14} /> {exporting ? 'Eksportuję…' : 'Excel'}
                 </button>
                 <span className="w-full text-[11px] text-gray-500">
-                    pokazano {wiersze.length} z {zeSzkoleniami} · ukryto {users.length - zeSzkoleniami} bez szkoleń
+                    {zamIds.length
+                        ? `pokazano ${wiersze.length} pracowników przypisanych do wybranych zamówień`
+                        : `pokazano ${wiersze.length} z ${zeSzkoleniami} · ukryto ${users.length - zeSzkoleniami} bez szkoleń`}
                 </span>
             </div>
             <div className="mb-2 flex flex-wrap gap-3 text-[11px] text-gray-400">
@@ -144,7 +164,7 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                     <tbody>
                         {!wiersze.length && (
                             <tr><td colSpan={kolumn} className="px-3 py-8 text-center text-gray-500">
-                                {users.some(u => u.trainings.length) ? 'Brak pracowników spełniających kryteria' : 'Nikt nie ma jeszcze przypisanego szkolenia — zacznij od „Przypisz szkolenie”.'}
+                                {zamIds.length || users.some(u => u.trainings.length) ? 'Brak pracowników spełniających kryteria' : 'Nikt nie ma jeszcze przypisanego szkolenia — zacznij od „Przypisz szkolenie”.'}
                             </td></tr>
                         )}
                         {wiersze.map(({ u, najblizszy }) => {
@@ -243,6 +263,20 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                     </tbody>
                 </table>
             </div>
+            )}
+
+            {filtrZamAnchor && (
+                <OrdersMultiSelect
+                    orders={orders}
+                    selectedIds={zamIds}
+                    anchor={filtrZamAnchor}
+                    label="Filtr zamówień"
+                    onClose={ids => {
+                        setFiltrZamAnchor(null);
+                        ostatnioZamkniety.current = { userId: 'filtr-zam', t: Date.now() };
+                        setZamIds(ids);
+                    }}
+                />
             )}
 
             {wybor && (

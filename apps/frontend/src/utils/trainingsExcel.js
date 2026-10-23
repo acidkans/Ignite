@@ -25,7 +25,7 @@ export async function exportTrainingsExcel({ wiersze, types, ordersById, opisFil
 
     const ws = wb.addWorksheet('Szkolenia', { views: [{ state: 'frozen', xSplit: 1, ySplit: 3 }] });
     ws.addRow([`Szkolenia pracowników — stan na ${fmtDay(today)} (${opisFiltra})`]).font = { bold: true, size: 13 };
-    ws.addRow([`Wierszy: ${wiersze.length}. Pracownicy bez szkoleń są pominięci.`]).font = { italic: true, color: { argb: 'FF6B7280' } };
+    ws.addRow([`Wierszy: ${wiersze.length}.${wiersze.every(w => w.u.trainings.length) ? ' Pracownicy bez szkoleń są pominięci.' : ''}`]).font = { italic: true, color: { argb: 'FF6B7280' } };
     const hdr = ws.addRow(['Pracownik', 'Zespół', 'Zamówienia',
         ...types.map(t => `${t.name}\n(${t.validityMonths ? `${t.validityMonths} mies.` : 'bezterm.'})`),
         'Najbliższy termin', 'Szkolenie', 'Dni do terminu']);
