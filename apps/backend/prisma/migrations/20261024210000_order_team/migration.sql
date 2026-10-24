@@ -27,6 +27,12 @@ JOIN (
     JOIN "process_nodes" n ON n.id = p."nodeId" AND n.type = 'order'
     WHERE p."userId" IS NOT NULL
   UNION
+  -- wlasciciel folderu nad zamowieniem widzial wszystko pod spodem (takze w folderze prywatnym)
+  SELECT c."descendantId", a."ownerId" FROM "process_node_closure" c
+    JOIN "process_nodes" d ON d.id = c."descendantId" AND d.type = 'order'
+    JOIN "process_nodes" a ON a.id = c."ancestorId" AND c.depth > 0
+    WHERE a."ownerId" IS NOT NULL
+  UNION
   SELECT c."descendantId", tu."B" FROM "process_node_closure" c
     JOIN "process_nodes" d ON d.id = c."descendantId" AND d.type = 'order'
     JOIN "process_nodes" a ON a.id = c."ancestorId" AND (c.depth = 0 OR a.visibility = 'team')
