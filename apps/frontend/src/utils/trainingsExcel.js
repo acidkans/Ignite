@@ -25,10 +25,15 @@ export async function exportTrainingsExcel({ wiersze, types, ordersById, opisFil
 
     const ws = wb.addWorksheet('Szkolenia', { views: [{ state: 'frozen', xSplit: 1, ySplit: 3 }] });
     ws.addRow([`Szkolenia pracowników — stan na ${fmtDay(today)} (${opisFiltra})`]).font = { bold: true, size: 13 };
-    ws.addRow([`Wierszy: ${wiersze.length}. Pracownicy bez szkoleń są pominięci.`]).font = { italic: true, color: { argb: 'FF6B7280' } };
-    naglowek(ws.addRow(['Pracownik', 'Zespół', 'Zamówienia',
-        ...types.map(t => `${t.code || t.name}\n${t.validityMonths ? `${t.validityMonths} mies.` : 'bezterm.'}`),
-        'Najbliższy termin', 'Szkolenie', 'Dni do terminu']));
+    ws.addRow([`Wierszy: ${wiersze.length}.${wiersze.every(w => w.u.trainings.length) ? ' Pracownicy bez szkoleń są pominięci.' : ''}`]).font = { italic: true, color: { argb: 'FF6B7280' } };
+    const hdr = ws.addRow(['Pracownik', 'Zespół', 'Zamówienia',
+        ...types.map(t => `${t.name}\n(${t.validityMonths ? `${t.validityMonths} mies.` : 'bezterm.'})`),
+        'Najbliższy termin', 'Szkolenie', 'Dni do terminu']);
+    naglowek(hdr);
+    // Pełne nazwy szkoleń zawijają się w kolumnie ~18 znaków — wysokość nagłówka wg najdłuższej.
+    const linieNaglowka = Math.max(2, ...types.map(t => Math.ceil((t.name || '').length / 16) + 1));
+    hdr.height = linieNaglowka * 15;
+    hdr.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
     for (const { u, najblizszy } of wiersze) {
         const r = ws.addRow([
             fullName(u), u.team || '', u.orderIds.map(id => ordersById[id]?.name).filter(Boolean).join('\n'),
@@ -50,7 +55,7 @@ export async function exportTrainingsExcel({ wiersze, types, ordersById, opisFil
         });
         if (najblizszy) r.getCell(4 + nT).fill = fill(XL_KOLOR[trainingStatus(najblizszy, today)]);
     }
-    const szer = [24, 16, 40, ...Array(nT).fill(12), 14, 30, 12];
+    const szer = [24, 16, 40, ...Array(nT).fill(18), 14, 30, 12];
     szer.forEach((w, i) => {
         const c = ws.getColumn(i + 1);
         c.width = w;

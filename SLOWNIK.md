@@ -2654,6 +2654,9 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-modal | ImportUsersModal | apps/frontend/src/components/shared/ImportUsersModal.jsx | @anchor import-users-modal |
 | ui-funkcja | runImport (ImportUsersModal) | apps/frontend/src/components/shared/ImportUsersModal.jsx | @anchor run-users-import |
 | ui-stan | isImportUsersModalOpen | apps/frontend/src/UsersPage.jsx | @anchor users-import-modal-state |
+| ui-stan | userQuery | apps/frontend/src/UsersPage.jsx | @anchor teams-user-query |
+| ui-input | userQuery (pole filtra Zespoły) | apps/frontend/src/UsersPage.jsx | @anchor teams-user-query-input |
+| ui-stan | cardOrder | apps/frontend/src/UsersPage.jsx | @anchor teams-card-order |
 | ui-funkcja | handleExportUsers | apps/frontend/src/UsersPage.jsx | @anchor handle-export-users |
 | ui-przycisk | Eksport tabeli użytkowników | apps/frontend/src/UsersPage.jsx | @anchor users-export-button |
 | ui-przycisk | Import użytkowników | apps/frontend/src/UsersPage.jsx | @anchor users-import-button |
@@ -3074,6 +3077,9 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-stala | XL_KOLOR | apps/frontend/src/utils/trainingsExcel.js | @anchor trainings-excel-colors |
 | ui-stan | ostatnioZamkniety | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-last-closed-select |
 | ui-zakladka | TrainingsMatrixTab | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-matrix-tab |
+| ui-tabela | TrainingsTableView | apps/frontend/src/components/shared/trainings/TrainingsTableView.jsx | @anchor trainings-table-view |
+| ui-stan | widok | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-view-mode |
+| ui-stan | zamIds | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-order-filter |
 | ui-modal | Modal | apps/frontend/src/components/shared/trainings/TrainingsUi.jsx | @anchor trainings-modal |
 | back-modul | TrainingsModule | apps/backend/src/trainings/trainings.module.ts | @anchor trainings-module |
 | back-funkcja | orderClosureMap() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-order-closure-map |
