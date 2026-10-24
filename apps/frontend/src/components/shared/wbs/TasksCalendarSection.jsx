@@ -5,6 +5,7 @@ import { TASK_CATEGORIES } from './wbsConstants';
 import CalendarView from './CalendarView';
 import SubtaskModal from '../SubtaskModal';
 import AllTasksModal from './AllTasksModal';
+import UserTaskEditModal from './UserTaskEditModal';
 
 const CATEGORIES = TASK_CATEGORIES;
 
@@ -18,10 +19,14 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
     const [isModalOpen, setIsModalOpen] = useState(false);
     // @anchor tasks-calendar-user-tasks — zadania węzłów (UserTask) nakładane na kalendarz
     const [userTasks, setUserTasks] = useState([]);
-    // @anchor tasks-calendar-scope — 'project' = zadania tego projektu, 'all' = wszystkie moje
+    // @anchor tasks-calendar-scope — 'project' = zadania wszystkich w tym projekcie, 'mine' = moje w tym projekcie, 'all' = wszystkie moje
     const [taskScope, setTaskScope] = useState('project');
+    // @anchor tasks-calendar-project-tasks — otwarte UserTaski wszystkich osób w projekcie (GET /my-tasks/project/:id)
+    const [projectTasks, setProjectTasks] = useState([]);
     // @anchor tasks-calendar-all-modal
     const [allTasksOpen, setAllTasksOpen] = useState(false);
+    // @anchor tasks-calendar-edit-user-task — zadanie kliknięte w kalendarzu (modal edycji)
+    const [editUserTask, setEditUserTask] = useState(null);
     const latestSubtasksRef = useRef([]);
     const isSavingRef = useRef(false);
     const saveTimeoutRef = useRef(null);
@@ -31,6 +36,7 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
     useEffect(() => { activeVersionRef.current = versionId; }, [versionId]);
 
     const token = () => sessionStorage.getItem('token') || localStorage.getItem('token');
+    const currentUserId = (() => { try { return JSON.parse(atob(token().split('.')[1])).sub; } catch { return null; } })();
 
     const fetchSubtasks = async () => {
         try {
@@ -57,10 +63,25 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
         } catch {}
     };
 
+    // @anchor tasks-calendar-fetch-project-tasks
+    const fetchProjectTasks = async () => {
+        try {
+            const res = await fetch(`${API_URL}/my-tasks/project/${nodeId}`, { headers: { Authorization: `Bearer ${token()}` } });
+            if (res.ok) {
+                const data = await res.json();
+                setProjectTasks(Array.isArray(data) ? data : []);
+            }
+        } catch {}
+    };
+    const refreshUserTasks = () => { fetchUserTasks(); fetchProjectTasks(); };
+    // Przełączenie zakresu odświeża listę — zadania innych osób mogły się zmienić od otwarcia sekcji.
+    useEffect(() => { if (nodeId) refreshUserTasks(); }, [taskScope]);
+
     useEffect(() => {
         if (!nodeId) return;
         fetchSubtasks();
         fetchUserTasks();
+        fetchProjectTasks();
         fetch(`${API_URL}/users/by-role/LOGISTYK`, { headers: { Authorization: `Bearer ${token()}` } })
             .then(r => r.ok ? r.json() : [])
             .then(setLogistykUsers)
@@ -70,20 +91,28 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
     // UserTaski widoczne w kalendarzu wg wybranego zakresu.
     // UserTask.nodeId to id ProcessNode (order) — przycisk „Dodaj zadanie" zawsze
     // zapisuje processNodeId projektu, tożsamy z `nodeId` tego panelu.
+    const personName = (u) => [u?.firstName, u?.lastName].filter(Boolean).join(' ') || u?.email || '';
     const visibleUserTasks = taskScope === 'all'
         ? userTasks
-        : userTasks.filter(t => t.nodeId === nodeId);
+        : taskScope === 'mine'
+            ? userTasks.filter(t => t.nodeId === nodeId)
+            : projectTasks.map(t => ({
+                ...t,
+                _who: personName(t.user),
+                _readOnly: t.userId !== currentUserId && t.createdById !== currentUserId,
+            }));
 
     // @anchor tasks-calendar-user-task-done — oznacz UserTask jako wykonane
     const markUserTaskDone = async (taskId) => {
         setUserTasks(prev => prev.filter(t => t.id !== taskId));
+        setProjectTasks(prev => prev.filter(t => t.id !== taskId));
         try {
             await fetch(`${API_URL}/my-tasks/${taskId}`, {
                 method: 'PATCH',
                 headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: 'DONE' }),
             });
-        } catch { fetchUserTasks(); }
+        } catch { refreshUserTasks(); }
     };
 
     // @anchor tasks-calendar-user-task-reschedule — przełożenie UserTask przez drag na inny dzień
@@ -93,13 +122,14 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
         const d = String(date.getDate()).padStart(2, '0');
         const endStr = `${y}-${m}-${d}T12:00:00`;
         setUserTasks(prev => prev.map(t => t.id === taskId ? { ...t, plannedEnd: endStr } : t));
+        setProjectTasks(prev => prev.map(t => t.id === taskId ? { ...t, plannedEnd: endStr } : t));
         try {
             await fetch(`${API_URL}/my-tasks/${taskId}`, {
                 method: 'PATCH',
                 headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ plannedEnd: new Date(endStr).toISOString() }),
             });
-        } catch { fetchUserTasks(); }
+        } catch { refreshUserTasks(); }
     };
 
     const saveSubtasks = async (tasks, immediate = false) => {
@@ -219,7 +249,11 @@ ${rows}
                     <button
                         onClick={() => setTaskScope('project')}
                         className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${taskScope === 'project' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
-                    >Ten projekt</button>
+                    >Ten projekt — wszyscy</button>
+                    <button
+                        onClick={() => setTaskScope('mine')}
+                        className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${taskScope === 'mine' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+                    >Tylko moje</button>
                     <button
                         onClick={() => setTaskScope('all')}
                         className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${taskScope === 'all' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
@@ -242,6 +276,7 @@ ${rows}
                     userTasks={visibleUserTasks}
                     onUserTaskDone={markUserTaskDone}
                     onUserTaskReschedule={(task, date) => rescheduleUserTask(task.id, date)}
+                    onUserTaskClick={(task) => setEditUserTask(task)}
                     categories={CATEGORIES}
                     onDrop={handleDrop}
                     onDateClick={(date) => {
@@ -276,11 +311,19 @@ ${rows}
                     onSuccess={() => { setIsModalOpen(false); fetchSubtasks(); }}
                 />
             )}
+            {editUserTask && (
+                <UserTaskEditModal
+                    task={editUserTask}
+                    processNodeId={nodeId}
+                    onClose={() => setEditUserTask(null)}
+                    onSaved={() => { setEditUserTask(null); refreshUserTasks(); }}
+                />
+            )}
             {allTasksOpen && (
                 <AllTasksModal
                     nodeId={nodeId}
                     versionId={versionId}
-                    onChanged={() => { fetchUserTasks(); fetchSubtasks(); }}
+                    onChanged={() => { refreshUserTasks(); fetchSubtasks(); }}
                     onClose={() => setAllTasksOpen(false)}
                 />
             )}

@@ -273,6 +273,15 @@ export const DRAWER = {
       title: 'text-blue-300',
       edge: 'rgba(147,197,253,0.45)', fill: '#0c1420',
     },
+    // @anchor drawer-accent-task — szuflada Zadania / Q&A w WBS: mocna (2 px) zielona ramka,
+    // żeby wyraźnie odcinała się od wierszy drzewa i od niebieskiej karty materiałowej.
+    task: {
+      spine: 'border-l-emerald-500', label: 'text-emerald-300/80', cap: 'bg-emerald-500/70',
+      card: 'border-2 border-emerald-400/70 bg-[#05130d] shadow-[0_0_0_1px_rgba(52,211,153,0.12)]',
+      cell: 'border-x-2 border-b-2 border-emerald-400/70 bg-[#0a1c15]',
+      title: 'text-emerald-300',
+      edge: 'rgba(52,211,153,0.7)', fill: '#0a1c15', width: '2px',
+    },
     real: {
       spine: 'border-l-teal-500', label: 'text-teal-300/80', cap: 'bg-teal-500/70',
       card: 'border-teal-300/45 bg-[#061418] shadow-[0_0_0_1px_rgba(94,234,212,0.08)]',

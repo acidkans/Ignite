@@ -1,6 +1,6 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Put, Delete, Param, Body, Query, UseGuards, Req } from '@nestjs/common';
 import { ProcessTreeService } from './process-tree.service';
-import { CreateNodeDto, UpdateNodeDto, MoveNodeDto, UpdateNodePermissionsDto } from './dto/process-tree.dto';
+import { CreateNodeDto, UpdateNodeDto, MoveNodeDto, UpdateNodePermissionsDto, UpdateOrderTeamDto } from './dto/process-tree.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
@@ -90,7 +90,21 @@ export class ProcessTreeController {
         return this.processTreeService.bulkUpdatePermissions(dto);
     }
 
-    // Project contacts (direct user permissions on node)
+    // Zespół zamówienia — jedyne źródło widoczności zamówienia (odczyt: członkowie; zmiana: TREE_EDIT)
+    // @anchor order-team-get-endpoint
+    @Get(':id/team')
+    getOrderTeam(@Param('id') id: string, @Req() req: any) {
+        return this.processTreeService.getOrderTeam(id, req.user);
+    }
+
+    // @anchor order-team-set-endpoint
+    @Permissions('TREE_EDIT')
+    @Put(':id/team')
+    setOrderTeam(@Param('id') id: string, @Body() dto: UpdateOrderTeamDto, @Req() req: any) {
+        return this.processTreeService.setOrderTeam(id, dto, req.user);
+    }
+
+    // Kontakt → konto użytkownika + członek zespołu zamówienia
     @Permissions('TREE_EDIT')
     @Post(':id/contacts')
     addContact(@Param('id') id: string, @Body() dto: any) {

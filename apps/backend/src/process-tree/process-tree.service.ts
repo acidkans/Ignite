@@ -14,14 +14,21 @@ export class ProcessTreeService {
     async create(dto: CreateNodeDto, user?: any) {
         return this.prisma.$transaction(async (tx) => {
             // Create the node
+            const isOrder = dto.type === NodeType.ORDER;
             const node = await tx.processNode.create({
                 data: {
                     name: dto.name,
                     type: dto.type,
                     parentId: dto.parentId || null,
                     ownerId: user?.userId,  // Set ownerId from user
+                    // Zamówienie: widoczność wyłącznie z zespołu zamówienia (albo publiczne).
+                    ...(isOrder ? { visibility: dto.isPublic ? 'public' : 'team', isPublic: !!dto.isPublic } : {}),
                 },
             });
+
+            if (isOrder) {
+                await this.createOrderTeam(tx, node.id, node.name, [user?.userId, ...(dto.teamUserIds || [])]);
+            }
 
             // Default Team Permission if user has a team? 
             // User didn't ask for auto-assign, but manual assignment in settings.
@@ -397,10 +404,15 @@ export class ProcessTreeService {
     private async getNodeWithDescendants(nodeId: string, user?: any, parentVisible: boolean = false) {
         let node;
         try {
-            // If parent is visible, we bypass auth for child (inheritance)
-            node = await this.getNode(nodeId, user, parentVisible);
+            // If parent is visible, we bypass auth for child (inheritance) — z wyjątkiem zamówienia:
+            // jego widoczność bierze się WYŁĄCZNIE z jego zespołu (can-see-order), nie z folderu.
+            node = await this.getNodeForTree(nodeId, user, parentVisible);
         } catch (e) {
-            if (e instanceof ForbiddenException) return null;
+            if (e instanceof ForbiddenException) {
+                // @anchor tree-folder-passthrough — niewidoczny folder i tak pokazuje się jako
+                // ścieżka do zamówień, których zespół obejmuje użytkownika (bez reszty dzieci).
+                return this.getFolderPassthrough(nodeId, user);
+            }
             console.error(`[ProcessTreeService] Error in getNode(${nodeId}):`, e);
             throw e;
         }
@@ -420,8 +432,44 @@ export class ProcessTreeService {
         return node;
     }
 
+    private async getNodeForTree(nodeId: string, user: any, parentVisible: boolean) {
+        const bare = await this.prisma.processNode.findUnique({ where: { id: nodeId }, select: { type: true } });
+        const bypass = parentVisible && bare?.type !== NodeType.ORDER;
+        if (bypass || !user) return this.getNode(nodeId, user, bypass);
+        const node = await this.prisma.processNode.findUnique({
+            where: { id: nodeId },
+            include: { children: true, parent: true, owner: true, permissions: { include: { user: true } } },
+        });
+        if (!node) throw new NotFoundException(`Node ${nodeId} not found`);
+        if (!this.canSee(node, user)) throw new ForbiddenException('You do not have permission to access this node');
+        return node;
+    }
+
+    private async getFolderPassthrough(nodeId: string, user: any) {
+        const node = await this.prisma.processNode.findUnique({
+            where: { id: nodeId },
+            include: { children: true, parent: true, owner: true, permissions: { include: { user: true } } },
+        });
+        if (!node || node.type === NodeType.ORDER || !node.children?.length) return null;
+        const kids = (await Promise.all(node.children.map(c => this.getNodeWithDescendants(c.id, user, false))))
+            .filter(c => c !== null);
+        if (kids.length === 0) return null;
+        return { ...node, children: kids, _passthrough: true };
+    }
+
     private canSee(node: any, user?: { userId: string, roles: string[], teamIds?: string[] }) {
         if (!user) return true; // Internal calls
+
+        // @anchor can-see-order — zamówienie widzi WYŁĄCZNIE: ADMIN, właściciel, członek zespołu
+        // zamówienia (jego jedyne uprawnienie w NodePermission), albo wszyscy gdy publiczne.
+        // Bez dziedziczenia z folderu i bez uprawnień bezpośrednich na osobę.
+        if (node.type === NodeType.ORDER) {
+            if (user.roles?.includes('ADMIN')) return true;
+            if (node.visibility === 'public' || node.isPublic) return true;
+            if (node.ownerId === user.userId) return true;
+            return !!(user.teamIds?.length && node.permissions?.some((p: any) => p.teamId && user.teamIds.includes(p.teamId)));
+        }
+
         if (!node.visibility) return true; // No visibility set = public
 
         // Public nodes visible to all
@@ -448,6 +496,8 @@ export class ProcessTreeService {
         if (!user) return true;
         if (user.roles?.includes('ADMIN')) return true;
         if (node.ownerId === user.userId) return true;
+        // Zamówienie: uprawnienia z zespołu zamówienia — członek edytuje.
+        if (node.type === NodeType.ORDER) return this.canSee(node, user);
 
         // Sprawdź jawne uprawnienia EDIT lub ADMIN w NodePermission
         if (node.permissions && Array.isArray(node.permissions)) {
@@ -513,10 +563,87 @@ export class ProcessTreeService {
             throw new ForbiddenException('You do not have permission to edit this node');
         }
 
-        return this.prisma.processNode.update({
+        const updated = await this.prisma.processNode.update({
             where: { id },
             data: dto,
         });
+        if (node.type === NodeType.ORDER && dto.name && dto.name !== node.name) {
+            const team = await this.prisma.team.findUnique({ where: { orderNodeId: id } });
+            if (team) {
+                await this.prisma.team.update({ where: { id: team.id }, data: { name: await this.uniqueTeamName(this.prisma, dto.name, id, team.id) } });
+            }
+        }
+        return updated;
+    }
+
+    // ── Zespół zamówienia ────────────────────────────────────────────────────
+    // @anchor unique-team-name — Team.name jest unikalne; zamówienia o tej samej nazwie
+    // (albo zespół działowy o tej nazwie) dostają dopisek z początkiem id zamówienia.
+    private async uniqueTeamName(db: any, name: string, orderNodeId: string, excludeTeamId?: string): Promise<string> {
+        const base = (name || 'Zamówienie').trim();
+        const clash = await db.team.findFirst({
+            where: { name: { equals: base, mode: 'insensitive' }, ...(excludeTeamId ? { NOT: { id: excludeTeamId } } : {}) },
+            select: { id: true },
+        });
+        return clash ? `${base} (${orderNodeId.slice(0, 8)})` : base;
+    }
+
+    // @anchor create-order-team — zespół zamówienia + jedyne uprawnienie węzła (VIEW dla zespołu).
+    private async createOrderTeam(db: any, orderNodeId: string, name: string, userIds: (string | undefined)[]) {
+        const ids = [...new Set(userIds.filter(Boolean) as string[])];
+        const team = await db.team.create({
+            data: {
+                name: await this.uniqueTeamName(db, name, orderNodeId),
+                orderNodeId,
+                users: { connect: ids.map(id => ({ id })) },
+            },
+        });
+        await db.nodePermission.create({ data: { nodeId: orderNodeId, teamId: team.id, permission: 'VIEW' } });
+        return team;
+    }
+
+    // @anchor ensure-order-team — zespół zamówienia; brak (np. zamówienie sprzed migracji
+    // utworzone inną drogą) = tworzony z samym właścicielem.
+    async ensureOrderTeam(orderNodeId: string) {
+        const existing = await this.prisma.team.findUnique({ where: { orderNodeId } });
+        if (existing) return existing;
+        const node = await this.prisma.processNode.findUnique({ where: { id: orderNodeId }, select: { id: true, name: true, type: true, ownerId: true } });
+        if (!node || node.type !== NodeType.ORDER) throw new NotFoundException('To nie jest zamówienie');
+        return this.createOrderTeam(this.prisma, node.id, node.name, [node.ownerId || undefined]);
+    }
+
+    private async assertOrderAccess(orderNodeId: string, user: any) {
+        const node = await this.prisma.processNode.findUnique({ where: { id: orderNodeId }, include: { permissions: true } });
+        if (!node) throw new NotFoundException(`Node ${orderNodeId} not found`);
+        if (user && !this.canSee(node, user)) throw new ForbiddenException('Nie należysz do zespołu tego zamówienia');
+        return node;
+    }
+
+    // @anchor get-order-team
+    async getOrderTeam(orderNodeId: string, user?: any) {
+        const node = await this.assertOrderAccess(orderNodeId, user);
+        const team = await this.ensureOrderTeam(orderNodeId);
+        const members = await this.prisma.user.findMany({
+            where: { teams: { some: { id: team.id } } },
+            select: { id: true, email: true, firstName: true, lastName: true, phone: true, company: true, isActive: true },
+            orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+        });
+        return { teamId: team.id, name: team.name, ownerId: node.ownerId, isPublic: node.visibility === 'public' || node.isPublic, members };
+    }
+
+    // @anchor set-order-team — pełna lista członków (właściciel zawsze zostaje) + publiczność.
+    async setOrderTeam(orderNodeId: string, dto: { userIds: string[]; isPublic?: boolean }, user?: any) {
+        const node = await this.assertOrderAccess(orderNodeId, user);
+        const team = await this.ensureOrderTeam(orderNodeId);
+        const ids = [...new Set([...(dto.userIds || []), node.ownerId].filter(Boolean) as string[])];
+        await this.prisma.team.update({ where: { id: team.id }, data: { users: { set: ids.map(id => ({ id })) } } });
+        if (dto.isPublic !== undefined) {
+            await this.prisma.processNode.update({
+                where: { id: orderNodeId },
+                data: { isPublic: dto.isPublic, visibility: dto.isPublic ? 'public' : 'team' },
+            });
+        }
+        return this.getOrderTeam(orderNodeId, user);
     }
 
     /**
@@ -758,11 +885,9 @@ export class ProcessTreeService {
             }
         }
 
-        await this.prisma.nodePermission.upsert({
-            where: { nodeId_userId: { nodeId, userId } },
-            update: { permission: 'VIEW' },
-            create: { nodeId, userId, permission: 'VIEW' },
-        });
+        // „Dodaj do zespołu" = członek zespołu zamówienia (jedyne źródło widoczności).
+        const team = await this.ensureOrderTeam(nodeId);
+        await this.prisma.team.update({ where: { id: team.id }, data: { users: { connect: { id: userId } } } });
 
         return this.prisma.user.findUnique({
             where: { id: userId },
@@ -771,6 +896,11 @@ export class ProcessTreeService {
     }
 
     async removeProjectContact(nodeId: string, userId: string) {
+        const node = await this.prisma.processNode.findUnique({ where: { id: nodeId }, select: { ownerId: true } });
+        if (node?.ownerId === userId) return { ok: false, reason: 'Autora zamówienia nie można usunąć z zespołu' };
+        const team = await this.prisma.team.findUnique({ where: { orderNodeId: nodeId } });
+        if (team) await this.prisma.team.update({ where: { id: team.id }, data: { users: { disconnect: { id: userId } } } });
+        // Stare uprawnienie bezpośrednie (sprzed zespołów zamówień) — sprzątamy przy okazji.
         await this.prisma.nodePermission.deleteMany({ where: { nodeId, userId } });
         return { ok: true };
     }
@@ -789,6 +919,13 @@ export class ProcessTreeService {
                 }
             }
         });
+
+        // Węzeł wewnątrz zamówienia (lokalizacja, dokument): rozstrzyga WYŁĄCZNIE najbliższe
+        // zamówienie nad nim — folder powyżej nie daje dostępu do cudzego zamówienia.
+        const orderAncestor = ancestors
+            .filter(r => r.ancestor.type === NodeType.ORDER)
+            .sort((a, b) => a.depth - b.depth)[0];
+        if (orderAncestor) return this.canSee(orderAncestor.ancestor, user);
 
         // Check if any ancestor grants access
         for (const record of ancestors) {

@@ -84,7 +84,7 @@ export class TrainingsService {
                 where: { isActive: true },
                 select: {
                     id: true, firstName: true, lastName: true, email: true,
-                    teams: { select: { name: true } },
+                    teams: { where: { orderNodeId: null }, select: { name: true } },
                     trainings: { select: { id: true, trainingTypeId: true, completedAt: true, validUntil: true, certificateNo: true } },
                     assignedOrders: { select: { orderId: true } },
                 },

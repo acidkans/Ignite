@@ -348,6 +348,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-relacja | WbsNode.version | apps/backend/prisma/schema.prisma | @anchor wbs-node-version |
 | schema-relacja | WbsNode.materialAllocations | apps/backend/prisma/schema.prisma | @anchor wbs-node-material-allocations |
 | schema-relacja | WbsNode.materialCard | apps/backend/prisma/schema.prisma | @anchor wbs-node-material-card |
+| schema-relacja | WbsNode.userTasks | apps/backend/prisma/schema.prisma | @anchor wbs-node-user-tasks |
 | schema-pole | WbsNodeMaterial.wbsNodeId | apps/backend/prisma/schema.prisma | @anchor wbs-node-material-wbs-node-id |
 | schema-pole | WbsNodeMaterial.materialId | apps/backend/prisma/schema.prisma | @anchor wbs-node-material-material-id |
 | schema-pole | WbsNodeMaterial.quantity | apps/backend/prisma/schema.prisma | @anchor wbs-node-material-quantity |
@@ -503,13 +504,20 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | navRowOrder | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor grid-nav-row-order |
 | ui-stala | GRID_COLUMN_ORDER | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor grid-nav-column-order |
 | ui-funkcja | handleGridKeyDown | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor handle-grid-key-down |
-| ui-modal | QaModal | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-modal |
-| ui-stan | qaModalNode | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-modal-node |
-| ui-stan | qaBranchNode | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-branch-node |
-| ui-modal | QaBranchModal | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-branch-modal |
-| ui-stan | addTaskNode | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor add-task-node-state |
-| ui-modal | AddTaskModal | apps/frontend/src/components/shared/AddTaskModal.jsx | @anchor add-task-modal |
-| ui-funkcja | handleSubmit (AddTaskModal) | apps/frontend/src/components/shared/AddTaskModal.jsx | @anchor add-task-modal-submit |
+| ui-sekcja | QaBranchView | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-branch-view |
+| ui-sekcja | WbsTasksDrawer | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-tasks-drawer |
+| ui-stan | nodeDrawerTab | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor node-drawer-tab |
+| ui-funkcja | toggleDrawerTab | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor toggle-drawer-tab |
+| ui-funkcja | toggleMaterialCard | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor toggle-material-card |
+| ui-stala | DRAWER_STATUS_COLOR / drawerStatusKey / qaSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor drawer-status-color |
+| ui-stan | taskSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-summary |
+| ui-funkcja | loadTaskSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor load-task-summary |
+| ui-stan | assigneeId (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-assignee |
+| ui-stan | team (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-team |
+| ui-stala | OPTION_STYLE | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-option-style |
+| ui-stan | projectTasks | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-project-tasks |
+| ui-funkcja | fetchProjectTasks | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-fetch-project-tasks |
+| ui-sekcja | pasek akcji pod nazwą węzła WBS | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-node-action-bar |
 | ui-funkcja | collectBranchQa | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor collect-branch-qa |
 | ui-funkcja | collectBranchStrategyEntries | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor collect-branch-strategy-entries |
 | ui-funkcja | composeBranchStrategy | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor compose-branch-strategy |
@@ -1182,6 +1190,14 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | TaskSyncService.pushTaskToGraph | apps/backend/src/user-tasks/task-sync.service.ts | @anchor task-sync-push-to-graph |
 | back-funkcja | UserTasksService.listForUser | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-list |
 | back-funkcja | UserTasksService.create | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-create |
+| back-funkcja | UserTasksService.listForWbsNode | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-list-for-wbs-node |
+| back-funkcja | UserTasksService.wbsSummaryForProcessNode | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-wbs-summary |
+| back-funkcja | UserTasksService.listForProject | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-list-for-project |
+| back-funkcja | UserTasksService.wbsPaths | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-wbs-paths |
+| ui-funkcja | grupowanie po gałęziach (AllTasksModal) | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-branch-groups |
+| back-funkcja | UserTasksService.projectTeam | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-project-team |
+| back-funkcja | UserTasksService.resolveAssignee | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-resolve-assignee |
+| back-funkcja | UserTasksService.findEditable | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-find-editable |
 | back-funkcja | UserTasksService.update | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-update |
 | back-funkcja | UserTasksService.softDelete | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-soft-delete |
 | back-funkcja | UserTasksService.cleanupTrash | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-trash-cleanup |
@@ -1191,6 +1207,36 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | UserTasksService.resolveIgniteListId | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-resolve-ignite-list-id |
 | back-endpoint | GET /my-tasks | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-get-endpoint |
 | back-endpoint | POST /my-tasks | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-create-endpoint |
+| back-endpoint | GET /my-tasks/by-wbs-node/:wbsNodeId | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-by-wbs-node-endpoint |
+| back-endpoint | GET /my-tasks/wbs-summary/:processNodeId | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-wbs-summary-endpoint |
+| back-endpoint | GET /my-tasks/project/:processNodeId | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-project-endpoint |
+| back-endpoint | GET /my-tasks/project-team/:processNodeId | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-project-team-endpoint |
+| schema-pole | Team.orderNodeId | apps/backend/prisma/schema.prisma | @anchor team-order-node-id |
+| schema-relacja | Team.orderNode | apps/backend/prisma/schema.prisma | @anchor team-order-node |
+| schema-relacja | ProcessNode.orderTeam | apps/backend/prisma/schema.prisma | @anchor process-node-order-team |
+| back-dto | UpdateOrderTeamDto | apps/backend/src/process-tree/dto/process-tree.dto.ts | @anchor update-order-team-dto |
+| back-funkcja | canSee — gałąź zamówienia | apps/backend/src/process-tree/process-tree.service.ts | @anchor can-see-order |
+| back-funkcja | getFolderPassthrough | apps/backend/src/process-tree/process-tree.service.ts | @anchor tree-folder-passthrough |
+| back-funkcja | uniqueTeamName | apps/backend/src/process-tree/process-tree.service.ts | @anchor unique-team-name |
+| back-funkcja | createOrderTeam | apps/backend/src/process-tree/process-tree.service.ts | @anchor create-order-team |
+| back-funkcja | ensureOrderTeam | apps/backend/src/process-tree/process-tree.service.ts | @anchor ensure-order-team |
+| back-funkcja | getOrderTeam | apps/backend/src/process-tree/process-tree.service.ts | @anchor get-order-team |
+| back-funkcja | setOrderTeam | apps/backend/src/process-tree/process-tree.service.ts | @anchor set-order-team |
+| back-endpoint | GET /process-tree/:id/team | apps/backend/src/process-tree/process-tree.controller.ts | @anchor order-team-get-endpoint |
+| back-endpoint | PUT /process-tree/:id/team | apps/backend/src/process-tree/process-tree.controller.ts | @anchor order-team-set-endpoint |
+| ui-stan | orderTeamMembers | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor wbs-order-team-members |
+| ui-stala | DRAWER.accent.task | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor drawer-accent-task |
+| ui-stan | colWidths (localStorage wbs-hybrid-col-widths) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-col-widths-storage |
+| ui-funkcja | startColResize | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor start-col-resize |
+| ui-modal | UserTaskEditModal | apps/frontend/src/components/shared/wbs/UserTaskEditModal.jsx | @anchor user-task-edit-modal |
+| ui-stan | editUserTask | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-edit-user-task |
+| ui-modal | OrderTeamModal | apps/frontend/src/components/shared/OrderTeamModal.jsx | @anchor order-team-modal |
+| ui-stan | teamStep (AddNodeModal) | apps/frontend/src/components/shared/AddNodeModal.jsx | @anchor add-node-team-step |
+| ui-funkcja | createNode (AddNodeModal) | apps/frontend/src/components/shared/AddNodeModal.jsx | @anchor add-node-create |
+| ui-stan | orderTeam (RequirementsTab) | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-order-team |
+| ui-funkcja | removeFromTeam | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-remove-from-team |
+| ui-funkcja | renderContactTeamStatus | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor contact-team-status |
+| ui-sekcja | pasek zespołu zamówienia w Kontaktach | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor order-team-bar |
 | back-endpoint | PATCH /my-tasks/:id | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-update-endpoint |
 | back-endpoint | DELETE /my-tasks/:id | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-delete-endpoint |
 | back-modul | NotificationCronModule | apps/backend/src/notification-cron/notification-cron.module.ts | @anchor notification-cron-module |
@@ -1241,6 +1287,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | UserTask.id | apps/backend/prisma/schema.prisma | @anchor user-task-id |
 | schema-pole | UserTask.userId | apps/backend/prisma/schema.prisma | @anchor user-task-user-id |
 | schema-pole | UserTask.nodeId | apps/backend/prisma/schema.prisma | @anchor user-task-node-id |
+| schema-pole | UserTask.wbsNodeId | apps/backend/prisma/schema.prisma | @anchor user-task-wbs-node-id |
+| schema-pole | UserTask.createdById | apps/backend/prisma/schema.prisma | @anchor user-task-created-by-id |
 | schema-pole | UserTask.title | apps/backend/prisma/schema.prisma | @anchor user-task-title |
 | schema-pole | UserTask.status | apps/backend/prisma/schema.prisma | @anchor user-task-status |
 | schema-pole | UserTask.plannedStart | apps/backend/prisma/schema.prisma | @anchor user-task-planned-start |
@@ -1252,6 +1300,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | UserTask.deletedAt | apps/backend/prisma/schema.prisma | @anchor user-task-deleted-at |
 | schema-relacja | UserTask.user | apps/backend/prisma/schema.prisma | @anchor user-task-user |
 | schema-relacja | UserTask.node | apps/backend/prisma/schema.prisma | @anchor user-task-node |
+| schema-relacja | UserTask.wbsNode | apps/backend/prisma/schema.prisma | @anchor user-task-wbs-node |
+| schema-relacja | UserTask.createdBy | apps/backend/prisma/schema.prisma | @anchor user-task-created-by |
+| schema-relacja | User.createdUserTasks | apps/backend/prisma/schema.prisma | @anchor user-created-user-tasks |
 | schema-relacja | UserTask.reminders | apps/backend/prisma/schema.prisma | @anchor user-task-reminders |
 | schema-model | TaskReminder | apps/backend/prisma/schema.prisma | @anchor task-reminder |
 | schema-pole | TaskReminder.userTaskId | apps/backend/prisma/schema.prisma | @anchor task-reminder-user-task-id |

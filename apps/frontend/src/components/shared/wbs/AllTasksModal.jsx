@@ -5,9 +5,10 @@ import { API_URL } from '../../../config';
 // Pełna lista wszystkich ustawionych zadań projektu — dwa typy w jednym widoku:
 // Subtaski (harmonogram) + UserTaski (zadania węzłów). Format wzorowany na
 // QaTreeView „Q&A — całe drzewo": grupowane sekcje ze sticky nagłówkami, pasek
-// szukania + filtry (tu po dacie). UserTaski trzymają id ProcessNode projektu
-// (przycisk „Dodaj zadanie" nie zapisuje wiersza WBS), więc nie da się ich
-// rozbić na gałęzie WBS — grupujemy je w jednej sekcji.
+// szukania + filtry (tu po dacie). UserTaski (zadania wszystkich osób w projekcie)
+// grupowane po gałęzi top-level WBS (`wbsPath[0]` z GET /my-tasks/project/:id);
+// zadania bez węzła WBS — sekcja „Bez gałęzi”. Subtaski harmonogramu nie mają
+// powiązania z WBS, więc zostają w osobnej sekcji na końcu.
 
 // Kubełek pilności wg daty terminu
 function dateBucket(dateStr) {
@@ -41,11 +42,10 @@ const SUBTASK_STATUS_META = {
     CANCELLED: { label: 'Anulowany', cls: 'bg-red-500/10 border-red-500/25 text-red-300' },
 };
 
-// Dwie stałe grupy — kolejność wyświetlania
-const GROUPS = [
-    { id: 'users', name: 'Zadania węzłów', path: '📋' },
-    { id: 'subtasks', name: 'Harmonogram — podzadania', path: '⏱' },
-];
+// Sekcje poza gałęziami WBS — zawsze na końcu
+const NO_BRANCH_GROUP = { id: 'nobranch', name: 'Bez gałęzi — cały projekt', path: '📋' };
+const SUBTASK_GROUP = { id: 'subtasks', name: 'Harmonogram — podzadania', path: '⏱' };
+const personName = (u) => [u?.firstName, u?.lastName].filter(Boolean).join(' ') || u?.email || '';
 
 const FILTERS = [
     ['all', 'Wszystkie'],
@@ -76,6 +76,7 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
 
     const showDone = filter === 'done';
     const token = () => sessionStorage.getItem('token') || localStorage.getItem('token');
+    const currentUserId = (() => { try { return JSON.parse(atob(token().split('.')[1])).sub; } catch { return null; } })();
 
     useEffect(() => {
         const onResize = () => setIsMobile(window.innerWidth < 1024);
@@ -91,7 +92,7 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
             .then(r => r.ok ? r.json() : [])
             .then(d => setSubtasks(Array.isArray(d) ? d : []))
             .catch(() => {});
-        fetch(`${API_URL}/my-tasks`, { headers: { Authorization: `Bearer ${token()}` } })
+        fetch(`${API_URL}/my-tasks/project/${nodeId}`, { headers: { Authorization: `Bearer ${token()}` } })
             .then(r => r.ok ? r.json() : [])
             .then(d => setUserTasks(Array.isArray(d) ? d : []))
             .catch(() => {});
@@ -102,11 +103,11 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
     useEffect(() => {
         if (!showDone || doneLoaded) return;
         const token = sessionStorage.getItem('token') || localStorage.getItem('token');
-        fetch(`${API_URL}/my-tasks?status=DONE`, { headers: { Authorization: `Bearer ${token}` } })
+        fetch(`${API_URL}/my-tasks/project/${nodeId}?status=DONE`, { headers: { Authorization: `Bearer ${token}` } })
             .then(r => r.ok ? r.json() : [])
             .then(data => { setDoneUserTasks(Array.isArray(data) ? data : []); setDoneLoaded(true); })
             .catch(() => setDoneLoaded(true));
-    }, [showDone, doneLoaded]);
+    }, [showDone, doneLoaded, nodeId]);
 
     // Ujednolicone pozycje obu typów; w trybie „Wykonane" pokazujemy wykonane Subtaski + wykonane UserTaski
     const items = useMemo(() => {
@@ -123,9 +124,15 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
         const uts = showDone ? doneUserTasks : userTasks.filter(t => !doneIds.has(t.id));
         for (const t of uts) {
             const ref = t.plannedEnd || t.plannedStart;
+            const path = Array.isArray(t.wbsPath) ? t.wbsPath : [];
             out.push({
-                key: `u_${t.id}`, group: 'users', kind: 'user', id: t.id, name: t.title || '(bez nazwy)',
+                key: `u_${t.id}`, group: path[0] ? `b_${path[0].id}` : NO_BRANCH_GROUP.id, groupName: path[0]?.name,
+                kind: 'user', id: t.id, name: t.title || '(bez nazwy)',
                 dateStr: ref, bucket: dateBucket(ref), done: showDone,
+                // Ścieżka pod gałęzią top-level (np. „Koszty ogólne › Zarządzanie projektem”)
+                subPath: path.slice(1).map(n => n.name).join(' › '),
+                who: personName(t.user),
+                readOnly: t.userId !== currentUserId && t.createdById !== currentUserId,
             });
         }
         return out;
@@ -135,10 +142,17 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
     const groups = useMemo(() => {
         const visible = items.filter(it => {
             if (!showDone && filter !== 'all' && it.bucket !== filter) return false;
-            if (q && !`${it.name} ${it.category || ''}`.toLowerCase().includes(q)) return false;
+            if (q && !`${it.name} ${it.category || ''} ${it.groupName || ''} ${it.subPath || ''} ${it.who || ''}`.toLowerCase().includes(q)) return false;
             return true;
         });
-        return GROUPS
+        // @anchor all-tasks-branch-groups — sekcja per gałąź top-level (alfabetycznie), potem bez gałęzi i harmonogram
+        const branches = new Map();
+        for (const it of visible) {
+            if (it.kind !== 'user' || it.group === NO_BRANCH_GROUP.id) continue;
+            if (!branches.has(it.group)) branches.set(it.group, { id: it.group, name: it.groupName || 'Gałąź', path: '🌿' });
+        }
+        const ordered = [...branches.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'));
+        return [...ordered, NO_BRANCH_GROUP, SUBTASK_GROUP]
             .map(g => ({ ...g, rows: visible.filter(it => it.group === g.id) }))
             .filter(g => g.rows.length > 0);
     }, [items, filter, q, showDone]);
@@ -160,7 +174,13 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
     };
 
     // @anchor all-tasks-restore — przywrócenie wykonanego UserTaska do statusu „zaplanowane" (OPEN)
+    // Zadanie odhaczone w tym samym otwarciu modala siedzi w `doneIds`, które ukrywa je na liście
+    // otwartych — bez zdjęcia go stamtąd przywrócone zadanie nie wracało do „Wszystkie” aż do
+    // ponownego otwarcia widoku. Wiersz wraca też od razu lokalnie, zanim dojdzie odświeżenie.
     const handleRestore = async (id) => {
+        const restored = doneUserTasks.find(t => t.id === id);
+        setDoneIds(prev => { if (!prev.has(id)) return prev; const n = new Set(prev); n.delete(id); return n; });
+        if (restored) setUserTasks(prev => prev.some(t => t.id === id) ? prev : [...prev, { ...restored, status: 'OPEN' }]);
         setDoneUserTasks(prev => prev.filter(t => t.id !== id));
         try {
             await fetch(`${API_URL}/my-tasks/${id}`, {
@@ -230,7 +250,7 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
                     </div>
                     <div className="flex-1 min-w-0">
                         <h3 className="font-black text-sm text-white truncate">Wszystkie zadania</h3>
-                        <p className="text-[10px] text-gray-500">{total} zadań · harmonogram + zadania węzłów</p>
+                        <p className="text-[10px] text-gray-500">{total} zadań · zadania gałęzi WBS (wszyscy w projekcie) + harmonogram</p>
                     </div>
                     <button onClick={onClose} className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all flex-shrink-0">
                         <X size={18} />
@@ -291,13 +311,14 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
                                                 />
                                             ) : (
                                                 <p
-                                                    onClick={() => { setEditKey(row.key); setEditDraft(row.name); }}
-                                                    title="Kliknij, aby edytować nazwę"
-                                                    className={`text-sm font-medium truncate cursor-text hover:text-white transition-colors ${row.done ? 'text-gray-400 line-through' : 'text-gray-200'}`}
+                                                    onClick={() => { if (row.readOnly) return; setEditKey(row.key); setEditDraft(row.name); }}
+                                                    title={row.readOnly ? 'Zadanie innej osoby' : 'Kliknij, aby edytować nazwę'}
+                                                    className={`text-sm font-medium truncate transition-colors ${row.readOnly ? '' : 'cursor-text hover:text-white'} ${row.done ? 'text-gray-400 line-through' : 'text-gray-200'}`}
                                                 >
                                                     {row.name}
                                                 </p>
                                             )}
+                                            {row.subPath && <p className="text-[11px] text-gray-500 truncate mt-0.5" title={row.subPath}>{row.subPath}</p>}
                                             <div className="flex items-center gap-2 mt-1 flex-wrap">
                                                 {row.done ? (
                                                     <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[9px] font-medium bg-emerald-500/10 border-emerald-500/25 text-emerald-400">
@@ -308,6 +329,9 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
                                                         {bm.label}{row.dateStr ? ` · ${new Date(row.dateStr).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' })}` : ''}
                                                     </span>
                                                 )}
+                                                {row.who && (
+                                                    <span className="px-1.5 py-0.5 rounded-md bg-white/[0.05] border border-white/10 text-[9px] text-gray-300">{row.who}</span>
+                                                )}
                                                 {row.category && (
                                                     <span className="px-1.5 py-0.5 rounded-md bg-white/[0.05] border border-white/10 text-[9px] text-gray-400">{row.category}</span>
                                                 )}
@@ -316,7 +340,7 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
                                                 )}
                                             </div>
                                         </div>
-                                        {!row.done && (
+                                        {!row.done && !row.readOnly && (
                                             <button
                                                 onClick={() => onDoneRow(row)}
                                                 className="flex-shrink-0 w-6 h-6 rounded-full border border-white/15 hover:border-emerald-400 hover:bg-emerald-400/10 flex items-center justify-center transition-all group/done"
@@ -325,7 +349,7 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
                                                 <Check size={12} className="text-white/25 group-hover/done:text-emerald-400 transition-colors" />
                                             </button>
                                         )}
-                                        {row.done && (
+                                        {row.done && !row.readOnly && (
                                             <button
                                                 onClick={() => onRestoreRow(row)}
                                                 className="flex-shrink-0 flex items-center gap-1 px-2 h-6 rounded-lg border border-white/15 hover:border-blue-400 hover:bg-blue-400/10 text-[10px] font-bold text-gray-400 hover:text-blue-300 transition-all"

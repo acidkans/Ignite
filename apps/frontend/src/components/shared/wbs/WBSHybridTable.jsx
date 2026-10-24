@@ -3,8 +3,7 @@ import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, u
 import AutoResizeTextarea from './AutoResizeTextarea';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
-import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, ArrowRight, ArrowLeft } from 'lucide-react';
-import AddTaskModal from '../AddTaskModal';
+import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, ArrowRight, ArrowLeft, Check, Loader2, Calendar } from 'lucide-react';
 import { useDevice } from '../../../hooks/useDevice';
 
 // ── Q&A cell — zagnieżdżona tabela Pytanie / Odpowiedź per WBS node ───────────
@@ -115,39 +114,6 @@ function QaCell({ pairs, onChange, onPersist }) {
     );
 }
 
-// ── Q&A modal — pełnoekranowy edytor pytań/odpowiedzi (3/8 szerokości) ─────────
-// Wąska kolumna w tabeli zawężała długie pytania do nieczytelności. Badge w
-// kolumnie otwiera ten modal, w którym Pytanie/Odpowiedź mają pełną szerokość.
-// @anchor qa-modal
-function QaModal({ node, onChange, onPersist, onClose }) {
-    useEffect(() => {
-        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-        document.addEventListener('keydown', onKey);
-        return () => document.removeEventListener('keydown', onKey);
-    }, [onClose]);
-    const list = Array.isArray(node?.qa) ? node.qa : [];
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-            <div className="relative bg-gray-950 border border-white/10 rounded-2xl shadow-2xl w-[37.5%] max-h-[85vh] flex flex-col overflow-hidden"
-                onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-                    <div>
-                        <p className="text-[14px] uppercase tracking-widest text-gray-500 font-bold flex items-center gap-1.5">
-                            <HelpCircle size={12} /> Pytania i odpowiedzi
-                        </p>
-                        <h2 className="text-base font-semibold text-white mt-0.5">{node?.name || 'Element WBS'}</h2>
-                    </div>
-                    <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-500 hover:text-white transition-all" title="Zamknij (Esc)">
-                        <X size={14} />
-                    </button>
-                </div>
-                <div className="overflow-y-auto flex-1 p-5">
-                    <QaCell pairs={list} onChange={onChange} onPersist={onPersist} />
-                </div>
-            </div>
-        </div>
-    );
-}
 // ── Q&A gałęzi — read-only agregacja ─────────────────────────────────────────
 // Zbiera (tylko do odczytu) wszystkie niepuste pary Q&A z poddrzewa węzła —
 // wyłącznie dzieci i głębiej, pomijając sam węzeł. Zwraca [{ id, name, depth, pairs }].
@@ -189,59 +155,261 @@ function composeBranchStrategy(node) {
         .join('\n\n');
 }
 
-// Read-only modal pokazujący wszystkie Q&A z gałęzi (dzieci danego węzła), grupowane
-// po węźle. Czysty podgląd — bez textarea/onChange/zapisu (edycja nietknięta gdzie indziej).
-// @anchor qa-branch-modal
-function QaBranchModal({ node, onClose }) {
-    useEffect(() => {
-        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-        document.addEventListener('keydown', onKey);
-        return () => document.removeEventListener('keydown', onKey);
-    }, [onClose]);
-    const groups = collectBranchQa(node);
-    const total = groups.reduce((s, g) => s + g.pairs.length, 0);
+// Wszystkie Q&A z gałęzi (dzieci danego węzła), grupowane po węźle — treść zakładki Q&A
+// w szufladzie węzła top-level. Edytowalne: każda grupa to QaCell na PEŁNEJ liście `qa`
+// danego dziecka (nie na przefiltrowanych parach — indeksy muszą zgadzać się z node.qa).
+// Raz pokazana grupa zostaje do zamknięcia szuflady (`seenIds`), żeby nie znikała w trakcie
+// edycji, gdy ktoś chwilowo wyczyści oba pola jedynej pary.
+// @anchor qa-branch-view
+function QaBranchView({ node, onChangeNode, onPersist }) {
+    const seenIds = useRef(new Set());
+    const groups = [];
+    const walk = (n, depth) => {
+        for (const child of (n?.children || [])) {
+            const list = Array.isArray(child.qa) ? child.qa : [];
+            const filled = list.some(p => (p?.question || '').trim() || (p?.answer || '').trim());
+            if (filled) seenIds.current.add(child.id);
+            if (seenIds.current.has(child.id)) groups.push({ id: child.id, name: child.name || 'Element WBS', depth, qa: list });
+            walk(child, depth + 1);
+        }
+    };
+    walk(node, 0);
+    if (groups.length === 0) {
+        return <p className="text-gray-600 text-[15px] italic">Brak pytań i odpowiedzi w tej gałęzi — dodaj je w szufladzie Q&A konkretnej pozycji.</p>;
+    }
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-            <div className="relative bg-gray-950 border border-white/10 rounded-2xl shadow-2xl w-3/4 max-h-[85vh] flex flex-col overflow-hidden"
-                onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-                    <div>
-                        <p className="text-[14px] uppercase tracking-widest text-gray-500 font-bold flex items-center gap-1.5">
-                            <HelpCircle size={12} /> Q&A gałęzi — podgląd (read-only)
-                        </p>
-                        <h2 className="text-base font-semibold text-white mt-0.5">{node?.name || 'Element WBS'} · {total} {total === 1 ? 'pytanie' : 'pytań'}</h2>
-                    </div>
-                    <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-500 hover:text-white transition-all" title="Zamknij (Esc)">
-                        <X size={14} />
-                    </button>
+        <div className="flex flex-col gap-5">
+            {groups.map(g => (
+                <div key={g.id} style={{ marginLeft: `${g.depth * 16}px` }}>
+                    <p className="text-[14px] font-bold text-blue-300/80 mb-1.5">{g.name}</p>
+                    <QaCell pairs={g.qa} onChange={next => onChangeNode(g.id, next)} onPersist={onPersist} />
                 </div>
-                <div className="overflow-y-auto flex-1 p-5 flex flex-col gap-5">
-                    {groups.length === 0 && (
-                        <p className="text-gray-600 text-[15px] italic">Brak pytań i odpowiedzi w tej gałęzi.</p>
-                    )}
-                    {groups.map(g => (
-                        <div key={g.id} style={{ marginLeft: `${g.depth * 16}px` }}>
-                            <p className="text-[14px] font-bold text-blue-300/80 mb-1.5">{g.name}</p>
-                            <table className="w-full text-[15px] border-collapse">
-                                <thead>
-                                    <tr>
-                                        <th className="text-left font-semibold uppercase tracking-wider text-gray-500 pb-0.5 w-1/2">Pytanie</th>
-                                        <th className="text-left font-semibold uppercase tracking-wider text-gray-500 pb-0.5 w-1/2">Odpowiedź</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {g.pairs.map((p, i) => (
-                                        <tr key={i} className="align-top">
-                                            <td className="pr-2 py-1 border-t border-white/5 text-gray-200 whitespace-pre-wrap break-words">{p.question || '—'}</td>
-                                            <td className="pr-2 py-1 border-t border-white/5 text-gray-300 whitespace-pre-wrap break-words">{p.answer || '—'}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    ))}
-                </div>
-            </div>
+            ))}
+        </div>
+    );
+}
+
+// @anchor drawer-status-color
+// Kolor ikony Zadania/Q&A w pasku akcji: czerwony = coś przeterminowane, pomarańczowy = coś
+// niezamknięte, zielony = wszystko zamknięte, szary = brak wpisów.
+const DRAWER_STATUS_COLOR = {
+    overdue: 'text-red-400 hover:text-red-300',
+    open: 'text-orange-400 hover:text-orange-300',
+    done: 'text-emerald-400 hover:text-emerald-300',
+    none: 'text-gray-500 hover:text-blue-400',
+};
+function drawerStatusKey({ open = 0, overdue = 0, done = 0 } = {}) {
+    if (overdue > 0) return 'overdue';
+    if (open > 0) return 'open';
+    if (done > 0) return 'done';
+    return 'none';
+}
+// Q&A: pytanie bez odpowiedzi = otwarte, z odpowiedzią = zamknięte (Q&A nie ma terminów).
+function qaSummary(pairs) {
+    const filled = (pairs || []).filter(p => (p?.question || '').trim() || (p?.answer || '').trim());
+    const done = filled.filter(p => (p?.answer || '').trim()).length;
+    return { open: filled.length - done, overdue: 0, done, total: filled.length };
+}
+
+// ── Zadania węzła WBS — treść zakładki „Zadania" w szufladzie ────────────────
+// Pokazuje zadania WSZYSTKICH użytkowników przypięte do węzła (GET /my-tasks/by-wbs-node/:id)
+// i pozwala dopisać nowe (POST /my-tasks z wbsNodeId). Odpowiedzialny domyślnie = autor, ale autor
+// może wskazać innego członka zespołu (zadanie trafia do JEGO MS To Do). Odhaczać, przepisywać
+// i usuwać może odpowiedzialny albo autor — backend sprawdza to samo (findEditable).
+// @anchor wbs-task-option-style — natywna lista <select> w Chrome/Windows ma jasne tło, na którym
+// biały tekst ciemnego motywu był nieczytelny; opcje dostają jawne ciemne tło i jasny tekst.
+const OPTION_STYLE = { backgroundColor: '#0f1520', color: '#e5e7eb' };
+
+// @anchor wbs-tasks-drawer
+function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
+    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+    const currentUserId = token ? (() => { try { return JSON.parse(atob(token.split('.')[1])).sub; } catch { return null; } })() : null;
+    const [tasks, setTasks] = useState(null);
+    const [title, setTitle] = useState('');
+    const [plannedEnd, setPlannedEnd] = useState('');
+    // @anchor wbs-task-assignee
+    const [assigneeId, setAssigneeId] = useState(currentUserId || '');
+    // @anchor wbs-task-team — zespół projektowy zamówienia (GET /my-tasks/project-team/:processNodeId)
+    const [team, setTeam] = useState([]);
+    useEffect(() => {
+        if (!processNodeId) return;
+        fetch(`/api/my-tasks/project-team/${processNodeId}`, { headers: { Authorization: `Bearer ${token}` } })
+            .then(r => r.ok ? r.json() : [])
+            .then(d => setTeam(Array.isArray(d) ? d : []))
+            .catch(() => setTeam([]));
+    }, [processNodeId, token]);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState(null);
+
+    const load = useCallback(async () => {
+        try {
+            const res = await fetch(`/api/my-tasks/by-wbs-node/${wbsNodeId}`, { headers: { Authorization: `Bearer ${token}` } });
+            if (!res.ok) throw new Error('Błąd pobierania zadań');
+            setTasks(await res.json());
+        } catch (err) {
+            setError(err.message);
+            setTasks([]);
+        }
+    }, [wbsNodeId, token]);
+    useEffect(() => { load(); }, [load]);
+
+    const add = async (e) => {
+        e.preventDefault();
+        if (!title.trim()) return;
+        setSaving(true);
+        setError(null);
+        try {
+            const body = { title: title.trim(), nodeId: processNodeId || null, wbsNodeId };
+            if (assigneeId && assigneeId !== currentUserId) body.assigneeUserId = assigneeId;
+            if (plannedEnd) body.plannedEnd = new Date(plannedEnd).toISOString();
+            const res = await fetch('/api/my-tasks', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (!res.ok) throw new Error('Błąd zapisu zadania');
+            setTitle('');
+            setPlannedEnd('');
+            await load();
+            onChanged?.();
+        } catch (err) {
+            setError(err.message || 'Błąd zapisu');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const toggleDone = async (t) => {
+        const status = t.status === 'DONE' ? 'OPEN' : 'DONE';
+        setTasks(prev => prev.map(x => x.id === t.id ? { ...x, status } : x));
+        await fetch(`/api/my-tasks/${t.id}`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status }),
+        });
+        onChanged?.();
+    };
+
+    const reassign = async (t, userId) => {
+        if (!userId || userId === t.userId) return;
+        const res = await fetch(`/api/my-tasks/${t.id}`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ assigneeUserId: userId }),
+        });
+        if (!res.ok) setError('Nie udało się zmienić odpowiedzialnego');
+        await load();
+        onChanged?.();
+    };
+
+    const remove = async (t) => {
+        setTasks(prev => prev.filter(x => x.id !== t.id));
+        await fetch(`/api/my-tasks/${t.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+        onChanged?.();
+    };
+
+    const who = (u) => [u?.firstName, u?.lastName].filter(Boolean).join(' ') || u?.email || '—';
+    // Zespół projektowy + ja (autor domyślnie odpowiada) + właściciele istniejących zadań
+    // (żeby select pokazał kogoś, kto wypadł z zespołu) — bez duplikatów.
+    const people = (() => {
+        const map = new Map();
+        for (const u of team) if (u?.id) map.set(u.id, u);
+        for (const t of (tasks || [])) if (t.user?.id && !map.has(t.user.id)) map.set(t.user.id, t.user);
+        if (currentUserId && !map.has(currentUserId)) map.set(currentUserId, { id: currentUserId, firstName: 'Ja' });
+        return [...map.values()].sort((a, b) => who(a).localeCompare(who(b), 'pl'));
+    })();
+    // Dwa konta o tym samym imieniu i nazwisku rozróżnia e-mail.
+    const dupNames = new Set(people.map(who).filter((n, i, arr) => arr.indexOf(n) !== i));
+    const personLabel = (u) => dupNames.has(who(u)) && u.email ? `${who(u)} (${u.email})` : who(u);
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+
+    return (
+        <div className="flex flex-col gap-2">
+            {tasks === null ? (
+                <p className="text-gray-500 text-[14px] flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Wczytywanie…</p>
+            ) : tasks.length === 0 ? (
+                <p className="text-gray-600 text-[14px] italic">Brak zadań przypiętych do tej pozycji.</p>
+            ) : (
+                <ul className="flex flex-col">
+                    {tasks.map(t => {
+                        const mine = t.userId === currentUserId || t.createdById === currentUserId;
+                        const done = t.status === 'DONE';
+                        const overdue = !done && t.plannedEnd && new Date(t.plannedEnd) < new Date();
+                        return (
+                            <li key={t.id} className="flex items-center gap-2 py-1 border-t border-white/5 first:border-t-0 group/task">
+                                <button
+                                    onClick={() => mine && toggleDone(t)}
+                                    disabled={!mine}
+                                    title={mine ? (done ? 'Oznacz jako otwarte' : 'Oznacz jako wykonane') : 'Zadanie innej osoby — zmienić może odpowiedzialny lub zlecający'}
+                                    className={`w-4 h-4 flex-shrink-0 rounded border flex items-center justify-center transition-all ${done ? 'bg-emerald-500/30 border-emerald-400/60 text-emerald-300' : 'border-white/20'} ${mine ? 'hover:border-blue-400' : 'opacity-50 cursor-default'}`}
+                                >
+                                    {done && <Check size={11} />}
+                                </button>
+                                <span className={`flex-1 min-w-0 text-[15px] break-words ${done ? 'line-through text-gray-500' : 'text-gray-200'}`}>{t.title}</span>
+                                {t.plannedEnd && (
+                                    <span className={`text-[13px] flex-shrink-0 ${overdue ? 'text-red-400' : 'text-gray-500'}`}>{fmtDate(t.plannedEnd)}</span>
+                                )}
+                                {t.createdById && t.createdById !== t.userId && (
+                                    <span className="text-[12px] text-gray-600 flex-shrink-0 truncate max-w-[10rem]" title="Zlecający">od: {who(t.createdBy)}</span>
+                                )}
+                                {mine ? (
+                                    <select
+                                        value={t.userId}
+                                        onChange={e => reassign(t, e.target.value)}
+                                        title="Odpowiedzialny — zadanie jest w jego MS To Do"
+                                        className="w-44 flex-shrink-0 px-1.5 py-0.5 rounded bg-black/20 border border-white/10 text-[13px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
+                                    >
+                                        {people.map(u => <option key={u.id} value={u.id} style={OPTION_STYLE}>{personLabel(u)}</option>)}
+                                    </select>
+                                ) : (
+                                    <span className="text-[13px] text-gray-500 flex-shrink-0 w-44 truncate text-right" title={t.user?.email}>{who(t.user)}</span>
+                                )}
+                                {mine ? (
+                                    <button onClick={() => remove(t)} title="Usuń zadanie" className="p-0.5 rounded text-gray-700 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover/task:opacity-100 transition-all">
+                                        <X size={12} />
+                                    </button>
+                                ) : <span className="w-[16px]" />}
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
+            <form onSubmit={add} className="flex items-center gap-2 pt-1">
+                <input
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    placeholder="Nowe zadanie…"
+                    className="flex-1 min-w-0 px-2 py-1 rounded bg-black/20 border border-white/10 text-[15px] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
+                />
+                <select
+                    value={assigneeId}
+                    onChange={e => setAssigneeId(e.target.value)}
+                    title="Odpowiedzialny — zadanie trafi do jego kalendarza i MS To Do"
+                    className="w-44 px-1.5 py-1 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
+                >
+                    {people.map(u => <option key={u.id} value={u.id} style={OPTION_STYLE}>{u.id === currentUserId ? `${personLabel(u)} (ja)` : personLabel(u)}</option>)}
+                </select>
+                <label className="flex items-center gap-1 text-gray-500" title="Termin (opcjonalnie)">
+                    <Calendar size={12} />
+                    <input
+                        type="date"
+                        value={plannedEnd}
+                        onChange={e => setPlannedEnd(e.target.value)}
+                        className="px-1.5 py-1 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
+                    />
+                </label>
+                <button
+                    type="submit"
+                    disabled={saving || !title.trim()}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-blue-600/80 hover:bg-blue-600 disabled:opacity-40 text-white text-[14px] transition-all"
+                >
+                    {saving ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />} Dodaj
+                </button>
+            </form>
+            {team.length === 0 && (
+                <p className="text-[12px] text-gray-600">Zespół projektowy zamówienia jest pusty — zadanie możesz przypisać tylko sobie. Osoby dodasz w uprawnieniach węzła lub przyciskiem „Zapisz do zespołu" przy kontaktach zamówienia.</p>
+            )}
+            {error && <p className="text-[13px] text-red-400">{error}</p>}
         </div>
     );
 }
@@ -251,6 +419,7 @@ import { ProductCard } from './WbsMaterialsPanel';
 import { offerLockInputProps } from '../OfferLockGuard';
 
 const API_URL = '/api';
+const WBS_COL_WIDTHS_KEY = 'wbs-hybrid-col-widths';
 
 // ─── MaterialReqExpandPanel ───────────────────────────────────────────────────
 
@@ -718,9 +887,9 @@ const WBS_BRANCH_CSS = `.wbs-br{background-color:var(--wbs-bg);border-left:var(-
     // w wierszu WBS jest kilkanaście i każda ma własny zestaw klas.
     // `tr.wbs-leaf-open` (0,1,1) bije tailwindowe `.border-b` (0,1,0) z klasy wiersza.
     + `tr.wbs-leaf-open{border-bottom-width:0}`
-    + `.wbs-leaf-open>td{background-color:var(--wbs-drawer-fill);border-top:1px solid var(--wbs-drawer-edge);border-bottom:0}`
-    + `.wbs-leaf-open>td:first-child{border-left:1px solid var(--wbs-drawer-edge)}`
-    + `.wbs-leaf-open>td:last-child{border-right:1px solid var(--wbs-drawer-edge)}`;
+    + `.wbs-leaf-open>td{background-color:var(--wbs-drawer-fill);border-top:var(--wbs-drawer-bw,1px) solid var(--wbs-drawer-edge);border-bottom:0}`
+    + `.wbs-leaf-open>td:first-child{border-left:var(--wbs-drawer-bw,1px) solid var(--wbs-drawer-edge)}`
+    + `.wbs-leaf-open>td:last-child{border-right:var(--wbs-drawer-bw,1px) solid var(--wbs-drawer-edge)}`;
 
 // ── Tag chips ─────────────────────────────────────────────────────────────────
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1047,32 +1216,75 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // Koszyk: id chipa-celu podświetlonego podczas przeciągania innego chipa (scalanie duplikatów).
     const [mergeOverId, setMergeOverId] = useState(null);
     const [copyBuffer, setCopyBuffer] = useState(null); // { node, sourceName }
-    // @anchor add-task-node-state
-    const [addTaskNode, setAddTaskNode] = useState(null); // { id, name } — węzeł dla którego otwarto modal dodawania zadania
-    // @anchor qa-modal-node
-    const [qaModalNode, setQaModalNode] = useState(null); // { id, name } — węzeł z otwartym modalem Q&A
-    // @anchor qa-branch-node
-    const [qaBranchNode, setQaBranchNode] = useState(null); // { id } — węzeł top-level z otwartym read-only podglądem Q&A całej gałęzi
-    const [colWidths, setColWidths] = useState({ nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, narzut: 90, cena_ofert: 110, status: 152, wlasciciel: 128, komentarz: 200, strategia: 220, qa: 140, zalaczniki: 44 });
+    // @anchor node-drawer-tab
+    // { [wbsNodeId]: 'tasks' | 'qa' } — otwarta zakładka szuflady pod wierszem. Jeden węzeł = jedna
+    // szuflada: otwarcie zakładki zamyka kartę materiałową tego węzła i odwrotnie.
+    const [nodeDrawerTab, setNodeDrawerTab] = useState({});
+    // @anchor wbs-task-summary
+    // { [wbsNodeId]: { open, overdue, done } } — z GET /my-tasks/wbs-summary/:processNodeId; koloruje ikonę Zadania.
+    const [taskSummary, setTaskSummary] = useState({});
+    // @anchor load-task-summary
+    const loadTaskSummary = useCallback(async () => {
+        if (!processNodeId) return;
+        try {
+            const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+            const res = await fetch(`${API_URL}/my-tasks/wbs-summary/${processNodeId}`, { headers: { Authorization: `Bearer ${token}` } });
+            if (res.ok) setTaskSummary(await res.json());
+        } catch (e) { console.warn('[WBS] task summary failed', e); }
+    }, [processNodeId]);
+    useEffect(() => { loadTaskSummary(); }, [loadTaskSummary]);
+    // @anchor wbs-col-widths-storage — szerokości kolumn zapamiętane w tej przeglądarce (per urządzenie);
+    // brak/zepsuty wpis albo zablokowany storage = szerokości domyślne.
+    const [colWidths, setColWidths] = useState(() => {
+        const defaults = { nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, narzut: 90, cena_ofert: 110, status: 152, wlasciciel: 128, komentarz: 200, strategia: 220, zalaczniki: 44 };
+        try {
+            const saved = JSON.parse(localStorage.getItem(WBS_COL_WIDTHS_KEY) || 'null');
+            if (saved && typeof saved === 'object') {
+                for (const k of Object.keys(defaults)) if (Number.isFinite(saved[k]) && saved[k] >= 40) defaults[k] = saved[k];
+            }
+        } catch { /* domyślne */ }
+        return defaults;
+    });
     const resizeDrag = useRef(null);
     // @anchor grid-nav-table-ref
     // Kontener tabeli — zawęża zapytania nawigacji klawiaturowej (grid-nav) do tego drzewa,
     // zamiast przeszukiwać cały document (poprzednia wersja gubiła fokus poza tabelą).
     const tableWrapperRef = useRef(null);
 
+    // @anchor start-col-resize — przeciąganie szerokości kolumny: zdarzenia wskaźnika (mysz, palec,
+    // rysik). Uchwyt ma `touch-action: none` i przechwytuje wskaźnik, więc gest palcem nie przewija
+    // tabeli. Szerokość zapisuje się po puszczeniu.
     const startColResize = (col, e) => {
         e.preventDefault();
+        e.stopPropagation();
+        const handle = e.currentTarget;
+        const pointerId = e.pointerId;
+        try { handle.setPointerCapture?.(pointerId); } catch { /* starsze przeglądarki */ }
         const startX = e.clientX;
         const startW = colWidths[col] ?? 120;
-        resizeDrag.current = { col, startX, startW };
+        resizeDrag.current = { col, startX, startW, last: startW };
         const onMove = (ev) => {
-            if (!resizeDrag.current) return;
-            const w = Math.max(60, resizeDrag.current.startW + ev.clientX - resizeDrag.current.startX);
+            if (!resizeDrag.current || ev.pointerId !== pointerId) return;
+            const w = Math.max(60, Math.round(resizeDrag.current.startW + ev.clientX - resizeDrag.current.startX));
+            resizeDrag.current.last = w;
             setColWidths(prev => ({ ...prev, [resizeDrag.current.col]: w }));
         };
-        const onUp = () => { resizeDrag.current = null; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
+        const onUp = (ev) => {
+            if (ev.pointerId !== pointerId) return;
+            const drag = resizeDrag.current;
+            resizeDrag.current = null;
+            handle.removeEventListener('pointermove', onMove);
+            handle.removeEventListener('pointerup', onUp);
+            handle.removeEventListener('pointercancel', onUp);
+            if (drag) setColWidths(prev => {
+                const next = { ...prev, [drag.col]: drag.last };
+                try { localStorage.setItem(WBS_COL_WIDTHS_KEY, JSON.stringify(next)); } catch { /* bez zapamiętania */ }
+                return next;
+            });
+        };
+        handle.addEventListener('pointermove', onMove);
+        handle.addEventListener('pointerup', onUp);
+        handle.addEventListener('pointercancel', onUp);
     };
 
     // @anchor fetch-mat-seq — numer ostatniego fetcha listy wymagań; starsza odpowiedź (kolejny bump
@@ -1590,6 +1802,21 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         }
     }
 
+    // @anchor toggle-drawer-tab
+    const toggleDrawerTab = (id, tab) => {
+        setNodeDrawerTab(prev => {
+            const next = { ...prev };
+            if (next[id] === tab) delete next[id]; else next[id] = tab;
+            return next;
+        });
+        setExpandedMaterialIds(prev => { if (!prev.has(id)) return prev; const n = new Set(prev); n.delete(id); return n; });
+    };
+    // @anchor toggle-material-card
+    const toggleMaterialCard = (id) => {
+        setExpandedMaterialIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+        setNodeDrawerTab(prev => { if (!prev[id]) return prev; const next = { ...prev }; delete next[id]; return next; });
+    };
+
     const rows = [];
     const selectedDepth = selectedNodeId != null ? findDepth(items, selectedNodeId) : null;
 
@@ -1600,11 +1827,11 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // tylko w faktycznie widoczne wiersze.
     const navRowOrder = [];
     // @anchor wbs-total-cols — liczba kolumn <col> tabeli: uchwyt + nazwa/typ/ilosc/jednostka
-    // + (manager: cena_netto/narzut/cena_ofert) + status/wlasciciel/komentarz/strategia/qa/zalaczniki
+    // + (manager: cena_netto/narzut/cena_ofert) + status/wlasciciel/komentarz/strategia/zalaczniki
     // + kolumna domykajaca. Wiersze rozpiete na calej szerokosci (szuflada karty produktu,
     // listwa domykajaca, pusty stan) MUSZA uzywac tej wartosci — zaszyty colSpan=12 obcinal
     // szuflade przed kolumnami Q&A i Attach., przez co karta byla wezsza niz wiersz drzewa.
-    const TOTAL_COLS = isManager ? 15 : 12;
+    const TOTAL_COLS = isManager ? 14 : 11;
     // @anchor grid-nav-column-order
     const GRID_COLUMN_ORDER = ['nazwa', 'typ', 'ilosc', 'jednostka', ...(isManager ? ['cena_netto', 'narzut'] : []), 'status', 'wlasciciel', 'komentarz', 'strategia'];
     // @anchor handle-grid-key-down
@@ -1707,7 +1934,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
-            <td className="px-3 py-3" />
         </tr>
     );
 
@@ -1744,7 +1970,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             fieldClass: 'wbs-field',
         };
         // Rozwinięty liść materiałowy — wiersz staje się górną połową karty z szufladą pod nim.
-        const leafOpen = (node.type === 'material' || node.type === 'equipment') && expandedMaterialIds.has(node.id);
+        const isMaterialLeaf = node.type === 'material' || node.type === 'equipment';
+        const drawerTab = nodeDrawerTab[node.id] || null;
+        const leafOpen = (isMaterialLeaf && expandedMaterialIds.has(node.id)) || !!drawerTab;
         const isDragging = dragId === node.id;
         const overPos = dragOver?.nodeId === node.id ? dragOver.position : null;
         const isEditingTags = editingTagsFor === node.id;
@@ -1764,7 +1992,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 onDragLeave={onDragLeave}
                 onDrop={e => onDrop(e, node.id)}
                 style={leafOpen
-                    ? { ...d.trStyle, '--wbs-drawer-edge': DRAWER.accent.offer.edge, '--wbs-drawer-fill': DRAWER.accent.offer.fill }
+                    ? (drawerTab
+                        ? { ...d.trStyle, '--wbs-drawer-edge': DRAWER.accent.task.edge, '--wbs-drawer-fill': DRAWER.accent.task.fill, '--wbs-drawer-bw': DRAWER.accent.task.width }
+                        : { ...d.trStyle, '--wbs-drawer-edge': DRAWER.accent.offer.edge, '--wbs-drawer-fill': DRAWER.accent.offer.fill })
                     : d.trStyle}
                 className={`border-b border-white/5 cursor-pointer group/node transition-opacity wbs-br ${drawerClass} ${leafOpen ? 'wbs-leaf-open' : ''} ${isDragging ? 'opacity-25' : ''} ${dropBorder} ${reqDropHighlight} ${selectedNodeId === node.id ? 'outline outline-1 outline-blue-500/40 !bg-blue-500/5' : ''}`}
                 onClick={e => { setSelectedNodeId(node.id); hasChildren && toggle(rowId, e); }}
@@ -1832,7 +2062,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 )}
 
                 {/* Nazwa */}
-                <td className="px-3 py-1.5 select-text relative" style={{ paddingLeft: `calc(0.75rem + ${depth * 24}px)`, paddingRight: '7rem' }} onClick={e => e.stopPropagation()}>
+                <td className="px-3 py-1.5 select-text relative" style={{ paddingLeft: `calc(0.75rem + ${depth * 24}px)` }} onClick={e => e.stopPropagation()}>
                     <WbsNameAutocomplete
                         value={node.name || ''}
                         pool={nameSuggestionPool}
@@ -1860,7 +2090,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         data-nav-col="nazwa"
                         onKeyDown={e => handleGridKeyDown(e, node.id, 'nazwa')}
                     />
-                    <div className="absolute top-1/2 -translate-y-1/2 right-1 flex items-center gap-1">
+                    {/* @anchor wbs-node-action-bar — przyciski akcji pod nazwą. Kopiuj/Wklej/Dodaj/Usuń
+                        działają od razu; Karta materiałowa, Zadania i Q&A otwierają szufladę pod
+                        wierszem (jedna na węzeł — ponowne kliknięcie aktywnej zakładki ją zamyka). */}
+                    <div className="flex items-center gap-0.5 mt-0.5 -ml-1">
                         <button
                             onClick={e => { e.stopPropagation(); setCopyBuffer({ node: findNode(items, node.id), sourceName: node.name }); }}
                             title="Kopiuj pozycję"
@@ -1884,31 +2117,54 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 <Clipboard size={14} />
                             </button>
                         )}
-                        {(node.type === 'material' || node.type === 'equipment') && (
+                        {depth < MAX_DEPTH && (
                             <button
-                                onClick={e => { e.stopPropagation(); setExpandedMaterialIds(prev => { const n = new Set(prev); n.has(node.id) ? n.delete(node.id) : n.add(node.id); return n; }); }}
+                                onClick={e => handleAddChild(node.id, e)}
+                                className="p-1 hover:bg-white/10 rounded text-gray-500 hover:text-blue-400 transition-all"
+                                title="Dodaj element podrzędny"
+                            >
+                                <Plus size={15} />
+                            </button>
+                        )}
+                        {isMaterialLeaf && (
+                            <button
+                                onClick={e => { e.stopPropagation(); toggleMaterialCard(node.id); }}
                                 title="Karta materiałowa"
                                 className={`p-1 rounded transition-all ${expandedMaterialIds.has(node.id) ? 'text-amber-400 bg-amber-500/15' : 'text-amber-500/50 hover:text-amber-400 hover:bg-amber-500/10'}`}
                             >
                                 <Package size={14} />
                             </button>
                         )}
-                        {depth < MAX_DEPTH && (
-                            <button
-                                onClick={e => handleAddChild(node.id, e)}
-                                className="p-1.5 hover:bg-white/10 rounded text-gray-500 hover:text-blue-400 transition-all"
-                                title="Dodaj element podrzędny"
-                            >
-                                <Plus size={16} />
-                            </button>
-                        )}
-                        <button
-                            onClick={e => { e.stopPropagation(); setAddTaskNode({ id: processNodeId, name: node.name }); }}
-                            className="p-1 hover:bg-blue-500/10 rounded text-gray-600 hover:text-blue-400 transition-all"
-                            title="Dodaj zadanie do tego węzła"
-                        >
-                            <ListTodo size={13} />
-                        </button>
+                        {(() => {
+                            const ts = taskSummary[node.id];
+                            const key = drawerStatusKey(ts);
+                            const n = ts ? (ts.open || ts.done) : 0;
+                            return (
+                                <button
+                                    onClick={e => { e.stopPropagation(); toggleDrawerTab(node.id, 'tasks'); }}
+                                    className={`flex items-center gap-0.5 p-1 rounded transition-all ${DRAWER_STATUS_COLOR[key]} ${drawerTab === 'tasks' ? 'bg-blue-500/15' : 'hover:bg-white/10'}`}
+                                    title={ts ? `Zadania: ${ts.open} otwarte (${ts.overdue} po terminie), ${ts.done} wykonane` : 'Zadania tej pozycji'}
+                                >
+                                    <ListTodo size={14} />
+                                    {n > 0 && <span className="text-[12px] leading-none">{n}</span>}
+                                </button>
+                            );
+                        })()}
+                        {(() => {
+                            const qs = qaSummary(depth === 0 && hasChildren
+                                ? collectBranchQa(node).flatMap(g => g.pairs)
+                                : (Array.isArray(node.qa) ? node.qa : []));
+                            return (
+                                <button
+                                    onClick={e => { e.stopPropagation(); toggleDrawerTab(node.id, 'qa'); }}
+                                    className={`flex items-center gap-0.5 p-1 rounded transition-all ${DRAWER_STATUS_COLOR[drawerStatusKey(qs)]} ${drawerTab === 'qa' ? 'bg-blue-500/15' : 'hover:bg-white/10'}`}
+                                    title={`${depth === 0 && hasChildren ? 'Q&A całej gałęzi' : 'Pytania i odpowiedzi'}${qs.total ? ` — ${qs.open} bez odpowiedzi, ${qs.done} z odpowiedzią` : ''}`}
+                                >
+                                    <HelpCircle size={14} />
+                                    {qs.total > 0 && <span className="text-[12px] leading-none">{qs.total}</span>}
+                                </button>
+                            );
+                        })()}
                         <button
                             onClick={e => handleDelete(node.id, e)}
                             className="p-1 hover:bg-red-500/10 rounded text-gray-600 hover:text-red-500 transition-all"
@@ -2305,30 +2561,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     )}
                 </td>
 
-                {/* Q&A — na węźle top-level suma Q&A całej gałęzi otwiera read-only podgląd;
-                    na pozostałych badge otwiera edytowalny modal 3/4 ekranu (edycja nietknięta). */}
-                <td className="px-3 py-2.5 min-w-[90px]" onClick={e => e.stopPropagation()}>
-                    {depth === 0 && hasChildren ? (
-                        <button
-                            onClick={() => setQaBranchNode({ id: node.id })}
-                            className="flex items-center gap-1.5 text-[30px] text-gray-500 hover:text-blue-400 transition-all"
-                            title="Podgląd Q&A całej gałęzi (read-only)"
-                        >
-                            <HelpCircle size={30} />
-                            <span>{collectBranchQa(node).reduce((s, g) => s + g.pairs.length, 0) || '0'}</span>
-                        </button>
-                    ) : (
-                        <button
-                            onClick={() => setQaModalNode({ id: node.id, name: node.name })}
-                            className="flex items-center gap-1.5 text-[30px] text-gray-500 hover:text-blue-400 transition-all"
-                            title="Otwórz pytania i odpowiedzi"
-                        >
-                            <HelpCircle size={30} />
-                            <span>{(Array.isArray(node.qa) ? node.qa : []).filter(p => p?.question || p?.answer).length || '+'}</span>
-                        </button>
-                    )}
-                </td>
-
                 {/* Załączniki — miniatury zdjęć z markerów */}
                 <td className="px-2 py-2 overflow-hidden max-w-0" style={{ width: colWidths.zalaczniki }} onClick={e => e.stopPropagation()}>
                     <AttachmentCell
@@ -2395,6 +2627,45 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             );
         }
 
+        if (drawerTab) {
+            rows.push(
+                <tr
+                    key={`drawer-${node.id}`}
+                    className={drawerSpine ? 'wbs-drawer-row' : ''}
+                    style={drawerSpine ? { '--wbs-spine': drawerSpine } : undefined}
+                >
+                    <td colSpan={TOTAL_COLS} className={`px-2 pb-2 ${DRAWER.accent.task.cell}`}>
+                        <div className={`${DRAWER.card} ${DRAWER.accent.task.card}`}>
+                            <div className={`${DRAWER.cardHead} border-b border-emerald-400/20`}>
+                                <span className={`${DRAWER.cardTitle} text-[13px] ${DRAWER.accent.task.title} flex items-center gap-1.5`}>
+                                    {drawerTab === 'tasks'
+                                        ? <><ListTodo size={13} /> Zadania</>
+                                        : <><HelpCircle size={13} /> {depth === 0 && hasChildren ? 'Q&A gałęzi' : 'Pytania i odpowiedzi'}</>}
+                                </span>
+                                <span className="text-[13px] text-gray-500 truncate">{node.name}</span>
+                                <button onClick={() => toggleDrawerTab(node.id, drawerTab)} className="ml-auto p-1 rounded hover:bg-white/10 text-gray-500 hover:text-white transition-all" title="Zamknij">
+                                    <X size={13} />
+                                </button>
+                            </div>
+                            <div className="px-3 pt-2 pb-3">
+                                {drawerTab === 'tasks' ? (
+                                    <WbsTasksDrawer wbsNodeId={node.id} processNodeId={processNodeId} onChanged={loadTaskSummary} />
+                                ) : depth === 0 && hasChildren ? (
+                                    <QaBranchView node={node} onChangeNode={(id, next) => handleField(id, 'qa', next)} onPersist={() => onSave?.()} />
+                                ) : (
+                                    <QaCell
+                                        pairs={node.qa}
+                                        onChange={(next) => handleField(node.id, 'qa', next)}
+                                        onPersist={() => onSave?.()}
+                                    />
+                                )}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            );
+        }
+
         if (searchVisibleIds || isOpen(rowId)) {
             const kids = node.children || [];
             // Akordeon: rodzeństwo jest widoczne jako wiersze, ale tylko rozwinięte dziecko
@@ -2447,12 +2718,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     return (
         <div className="flex flex-col flex-1 min-h-0">
             <style>{WBS_BRANCH_CSS}</style>
-            <AddTaskModal
-                open={!!addTaskNode}
-                onClose={() => setAddTaskNode(null)}
-                nodeId={addTaskNode?.id}
-                nodeName={addTaskNode?.name}
-            />
             {copyBuffer && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-900/30 border-b border-blue-500/20 text-[15px] text-blue-300">
                     <Clipboard size={12} className="flex-shrink-0" />
@@ -2478,17 +2743,22 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         <col style={{ width: colWidths.wlasciciel }} />
                         <col style={{ width: colWidths.komentarz }} />
                         <col style={{ width: colWidths.strategia }} />
-                        <col style={{ width: colWidths.qa }} />
                         <col style={{ width: colWidths.zalaczniki }} />
                         <col style={{ width: 48 }} />
                     </colgroup>
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
                         <tr className="border-b border-white/10">
                             <th className="px-1 py-2.5 text-base font-bold uppercase tracking-widest text-white" />
-                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jednostka','text-left'],...(isManager ? [['cena_netto','Koszt jedn.','text-right'],['narzut','Narzut %','text-right'],['cena_ofert','Cena ofert.','text-right']] : []),['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['strategia','Strategia','text-left'],['qa','Q&A','text-left'],['zalaczniki','Attach.','text-left']].map(([key, label, align]) => (
+                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jedn.','text-left'],...(isManager ? [['cena_netto','Koszt jedn.','text-right'],['narzut','Narzut %','text-right'],['cena_ofert','Cena ofert.','text-right']] : []),['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['strategia','Strategia','text-left'],['zalaczniki','Attach.','text-left']].map(([key, label, align]) => (
                                 <th key={key} className={`px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white ${align} relative select-none`}>
                                     {label}
-                                    <div onMouseDown={e => startColResize(key, e)} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-500/40 transition-colors" />
+                                    {/* Uchwyt szerokości — na dotyku szerszy i widoczny (palcem 6 px nie da się trafić) */}
+                                    <div
+                                        onPointerDown={e => startColResize(key, e)}
+                                        style={{ touchAction: 'none' }}
+                                        title="Przeciągnij, aby zmienić szerokość kolumny"
+                                        className={`absolute right-0 top-0 h-full cursor-col-resize transition-colors ${isTouch ? 'w-4 flex justify-center after:content-[""] after:w-[3px] after:h-1/2 after:self-center after:rounded-full after:bg-white/25 active:bg-blue-500/30' : 'w-1.5 hover:bg-blue-500/40'}`}
+                                    />
                                 </th>
                             ))}
                             <th className="w-12" />
@@ -2577,21 +2847,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 />
             )}
 
-            {qaModalNode && (
-                <QaModal
-                    node={findNode(items, qaModalNode.id) || { name: qaModalNode.name, qa: [] }}
-                    onChange={(next) => handleField(qaModalNode.id, 'qa', next)}
-                    onPersist={() => onSave?.()}
-                    onClose={() => setQaModalNode(null)}
-                />
-            )}
-
-            {qaBranchNode && (
-                <QaBranchModal
-                    node={findNode(items, qaBranchNode.id) || { name: '', children: [] }}
-                    onClose={() => setQaBranchNode(null)}
-                />
-            )}
         </div>
     );
 }

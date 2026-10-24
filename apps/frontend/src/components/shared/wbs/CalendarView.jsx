@@ -146,25 +146,30 @@ export default function CalendarView({ subtasks, userTasks = [], categories, onD
         });
     };
 
-    // @anchor calendar-render-user-task — kafelek zadania węzła: bursztyn, ikona ListTodo, checkbox „zrobione", drag do przełożenia
+    // @anchor calendar-render-user-task — kafelek zadania węzła: bursztyn, ikona ListTodo, checkbox „zrobione", drag do przełożenia.
+    // `_readOnly` (zadanie innej osoby, którego nie zleciłem) = bez checkboxa i bez przeciągania;
+    // `_who` = odpowiedzialny, pokazywany gdy kalendarz zawiera zadania wszystkich.
     const renderUserTask = (task) => (
         <div
             key={`ut_${task.id}`}
-            draggable
-            onDragStart={(e) => e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, _kind: 'user', isMove: true }))}
+            draggable={!task._readOnly}
+            onDragStart={(e) => { if (task._readOnly) return; e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, _kind: 'user', isMove: true })); }}
             onClick={(e) => { e.stopPropagation(); onUserTaskClick && onUserTaskClick(task); }}
-            className="group/ut relative px-2 py-1.5 border border-amber-500/30 bg-amber-500/15 text-amber-100 hover:border-amber-400/60 hover:bg-amber-500/25 rounded-lg text-[10px] font-bold leading-tight transition-all cursor-pointer flex items-center gap-2 pointer-events-auto shadow-sm"
-            title={task.node?.name ? `Zadanie węzła: ${task.node.name}` : 'Zadanie węzła'}
+            className={`group/ut relative px-2 py-1.5 border rounded-lg text-[10px] font-bold leading-tight transition-all flex items-center gap-2 pointer-events-auto shadow-sm ${task._readOnly ? 'border-amber-500/20 bg-amber-500/[0.07] text-amber-100/70 cursor-default' : 'border-amber-500/30 bg-amber-500/15 text-amber-100 hover:border-amber-400/60 hover:bg-amber-500/25 cursor-pointer'}`}
+            title={[task.wbsNode?.name && `Pozycja WBS: ${task.wbsNode.name}`, task.node?.name && `Projekt: ${task.node.name}`, task._who && `Odpowiedzialny: ${task._who}`].filter(Boolean).join('\n') || 'Zadanie węzła'}
         >
-            <button
-                onClick={(e) => { e.stopPropagation(); onUserTaskDone && onUserTaskDone(task.id); }}
-                className="flex-shrink-0 w-3.5 h-3.5 rounded-full border border-amber-400/50 hover:bg-emerald-400/20 hover:border-emerald-400 flex items-center justify-center transition-all"
-                title="Oznacz jako wykonane"
-            >
-                <Check size={8} className="text-amber-300/40 group-hover/ut:text-emerald-300 transition-colors" />
-            </button>
+            {!task._readOnly && (
+                <button
+                    onClick={(e) => { e.stopPropagation(); onUserTaskDone && onUserTaskDone(task.id); }}
+                    className="flex-shrink-0 w-3.5 h-3.5 rounded-full border border-amber-400/50 hover:bg-emerald-400/20 hover:border-emerald-400 flex items-center justify-center transition-all"
+                    title="Oznacz jako wykonane"
+                >
+                    <Check size={8} className="text-amber-300/40 group-hover/ut:text-emerald-300 transition-colors" />
+                </button>
+            )}
             <ListTodo size={10} className="flex-shrink-0 text-amber-400" />
             <span className="truncate flex-1">{task.title}</span>
+            {task._who && <span className="flex-shrink-0 text-[9px] font-semibold text-amber-300/70 truncate max-w-[45%]">{task._who}</span>}
         </div>
     );
 

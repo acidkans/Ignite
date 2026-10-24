@@ -18,6 +18,30 @@ export class UserTasksController {
     return this.userTasks.listForUser(req.user.userId, status);
   }
 
+  // @anchor user-tasks-by-wbs-node-endpoint
+  @Get('by-wbs-node/:wbsNodeId')
+  listForWbsNode(@Param('wbsNodeId') wbsNodeId: string) {
+    return this.userTasks.listForWbsNode(wbsNodeId);
+  }
+
+  // @anchor user-tasks-project-endpoint
+  @Get('project/:processNodeId')
+  listForProject(@Param('processNodeId') processNodeId: string, @Query('status') status?: string) {
+    return this.userTasks.listForProject(processNodeId, status);
+  }
+
+  // @anchor user-tasks-project-team-endpoint
+  @Get('project-team/:processNodeId')
+  projectTeam(@Param('processNodeId') processNodeId: string) {
+    return this.userTasks.projectTeam(processNodeId);
+  }
+
+  // @anchor user-tasks-wbs-summary-endpoint
+  @Get('wbs-summary/:processNodeId')
+  wbsSummary(@Param('processNodeId') processNodeId: string) {
+    return this.userTasks.wbsSummaryForProcessNode(processNodeId);
+  }
+
   // @anchor user-tasks-create-endpoint
   @Post()
   create(@Req() req: any, @Body() dto: CreateUserTaskDto) {

@@ -280,6 +280,18 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const [projectUsers, setProjectUsers] = useState([]);
     const [nodeTeamIds, setNodeTeamIds] = useState([]);
     const [nodeContactUsers, setNodeContactUsers] = useState([]);
+    // @anchor wbs-order-team-members — zespół zamówienia (GET /process-tree/:id/team): jedyne źródło
+    // osób, które widzą zamówienie, więc i listy „Właściciel” w WBS. null = nie wczytano (fallback na stare źródła).
+    const [orderTeamMembers, setOrderTeamMembers] = useState(null);
+    useEffect(() => {
+        if (!nodeId) { setOrderTeamMembers(null); return; }
+        let cancelled = false;
+        fetch(`${API_URL}/process-tree/${nodeId}/team`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
+            .then(r => r.ok ? r.json() : null)
+            .then(d => { if (!cancelled) setOrderTeamMembers(Array.isArray(d?.members) ? d.members : null); })
+            .catch(() => { if (!cancelled) setOrderTeamMembers(null); });
+        return () => { cancelled = true; };
+    }, [nodeId]);
     const [logistykUsers, setLogistykUsers] = useState([]);
     // @anchor project-contacts — kontakty zamówienia (`OrderRequirements.clientContacts`)
     // znormalizowane do kształtu użytkownika. Zasilają listę wyboru w kolumnie „Osoba
@@ -435,6 +447,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const ganttExcelDataRef = useRef(null);
 
     const assignableProjectUsers = useMemo(() => {
+        if (orderTeamMembers) return orderTeamMembers;
         if (!Array.isArray(projectUsers) || projectUsers.length === 0) return [];
         if (!Array.isArray(nodeTeamIds) || nodeTeamIds.length === 0) return projectUsers;
 
@@ -442,7 +455,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         if (usersWithTeams.length === 0) return projectUsers;
 
         return usersWithTeams.filter((u) => u.teams.some((t) => nodeTeamIds.includes(t.id)));
-    }, [projectUsers, nodeTeamIds]);
+    }, [projectUsers, nodeTeamIds, orderTeamMembers]);
 
     const assignableOwnerValues = useMemo(() => {
         const names = assignableProjectUsers
@@ -1213,6 +1226,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     }, [nodeId, versionId, authHeaders, onWbsUpdate, fetchData]);
 
     const assignedUsers = useMemo(() => {
+        if (orderTeamMembers) return orderTeamMembers;
         const teamMembers = (() => {
             if (!Array.isArray(nodeTeamIds) || !nodeTeamIds.length) return [];
             if (!Array.isArray(projectUsers) || !projectUsers.length) return [];
@@ -1222,7 +1236,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         const seen = new Set(teamMembers.map(u => u.id));
         const extras = (nodeContactUsers || []).filter(u => !seen.has(u.id));
         return [...teamMembers, ...extras];
-    }, [projectUsers, nodeTeamIds, nodeContactUsers]);
+    }, [projectUsers, nodeTeamIds, nodeContactUsers, orderTeamMembers]);
 
     const refreshUnified = useCallback(async (listId = null) => {
         await fetchData(listId);
@@ -6709,7 +6723,7 @@ ${ganttSectionHtml}
                     ), null);
                 }
                 if (key === 'tasks') {
-                    return renderSection('tasks', 'Zadania', CalendarDays, 'blue', (
+                    return renderSection('tasks', 'Kalendarz', CalendarDays, 'blue', (
                         <TasksCalendarSection
                             nodeId={nodeId}
                             versionId={versionId}

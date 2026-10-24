@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Clock, Calendar, Target, Package, AlertTriangle, CheckCircle2, Plus, Trash2, GripVertical, Wrench, ClipboardList, ShieldCheck, User, Users, Mail, Phone, PhoneCall, FileDown, UserPlus } from 'lucide-react';
+import { Clock, Calendar, Target, Package, AlertTriangle, CheckCircle2, Plus, Trash2, GripVertical, Wrench, ClipboardList, ShieldCheck, User, Users, Mail, Phone, PhoneCall, FileDown, UserPlus, UserMinus, Eye, EyeOff, Settings2 } from 'lucide-react';
 import { API_URL } from '../../config';
 import { exportProjectPdf } from '../../utils/projectPdfExport';
 import { buildRequirementsArtifact } from '../../utils/requirementsPdfExport';
 import ExportChoiceModal from './ExportChoiceModal';
 import MarkdownEditor from './MarkdownEditor';
+import OrderTeamModal from './OrderTeamModal';
 
 function countWorkingDays(startStr, endStr) {
     if (!startStr || !endStr) return null;
@@ -370,6 +371,9 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
     };
 
     const removeContact = (id) => {
+        const removed = form.clientContacts.find(c => c.id === id);
+        const member = removed && teamMemberFor(removed.email);
+        if (member && member.id !== orderTeam?.ownerId) removeFromTeam(member.id);
         setForm(prev => ({
             ...prev,
             clientContacts: prev.clientContacts.filter(c => c.id !== id)
@@ -420,6 +424,30 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
         return <div className={`text-[11px] mt-1 ml-1 truncate ${kolor}`} title={st.tekst || ''}>{st.stan === 'ladowanie' ? 'Sprawdzam w Białej liście VAT…' : st.tekst}</div>;
     };
 
+    // @anchor requirements-order-team — zespół zamówienia (jedyne źródło widoczności);
+    // przy każdym kontakcie widać, czy jest w zespole (widzi zamówienie), czy jest tylko wpisem.
+    const [orderTeam, setOrderTeam] = useState(null);
+    const [teamModalOpen, setTeamModalOpen] = useState(false);
+    const loadOrderTeam = useCallback(async () => {
+        if (!nodeId) return;
+        try {
+            const res = await fetch(`${API_URL}/process-tree/${nodeId}/team`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
+            setOrderTeam(res.ok ? await res.json() : null);
+        } catch { setOrderTeam(null); }
+    }, [nodeId]);
+    useEffect(() => { loadOrderTeam(); }, [loadOrderTeam]);
+    const teamMemberFor = (email) => {
+        const e = String(email || '').trim().toLowerCase();
+        return e ? (orderTeam?.members || []).find(m => String(m.email || '').toLowerCase() === e) : null;
+    };
+    // @anchor requirements-remove-from-team
+    const removeFromTeam = async (userId) => {
+        await fetch(`${API_URL}/process-tree/${nodeId}/contacts/${userId}`, {
+            method: 'DELETE', headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+        }).catch(() => {});
+        loadOrderTeam();
+    };
+
     const [teamSaving, setTeamSaving] = useState({});
     const addToTeam = async (email, fullName, company, phone) => {
         if (!email && !fullName) return;
@@ -430,16 +458,56 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
         const lastName = parts.slice(1).join(' ') || '';
         try {
             const token = sessionStorage.getItem('token');
-            await fetch(`${API_URL}/process-tree/${nodeId}/contacts`, {
+            const res = await fetch(`${API_URL}/process-tree/${nodeId}/contacts`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ email, firstName, lastName, phone: phone || null, company: company || null }),
             });
+            if (!res.ok) throw new Error('add-to-team');
+            await loadOrderTeam();
             setTeamSaving(p => ({ ...p, [key]: 'done' }));
             setTimeout(() => setTeamSaving(p => { const n = { ...p }; delete n[key]; return n; }), 2500);
         } catch {
             setTeamSaving(p => ({ ...p, [key]: 'error' }));
         }
+    };
+
+    // @anchor contact-team-status — przy kontakcie: „W zespole — widzi zamówienie” + Usuń z zespołu,
+    // albo „Kontakt zewnętrzny — nie widzi” + Dodaj do zespołu (zakłada konto i dopisuje do zespołu).
+    const renderContactTeamStatus = (email, fullName, company, phone) => {
+        const member = teamMemberFor(email);
+        const k = email || fullName;
+        const st = teamSaving[k];
+        if (member) {
+            const isOwner = member.id === orderTeam?.ownerId;
+            return (
+                <div className="mt-2 flex items-center gap-2">
+                    <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg border border-green-500/30 text-green-300 bg-green-500/10">
+                        <Eye size={13} /> W zespole — widzi zamówienie{isOwner ? ' (autor)' : ''}
+                    </span>
+                    {!isOwner && (
+                        <button onClick={() => removeFromTeam(member.id)} title="Odbierz dostęp do zamówienia — zostanie kontaktem zewnętrznym"
+                            className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border border-white/10 text-gray-400 hover:text-red-300 hover:border-red-400/40 hover:bg-red-500/10 transition-all">
+                            <UserMinus size={13} /> Usuń z zespołu
+                        </button>
+                    )}
+                </div>
+            );
+        }
+        return (
+            <div className="mt-2 flex items-center gap-2">
+                <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border border-white/10 text-gray-500 bg-white/[0.03]">
+                    <EyeOff size={13} /> Kontakt zewnętrzny — nie widzi zamówienia
+                </span>
+                <button onClick={() => addToTeam(email, fullName, company, phone)}
+                    disabled={st === 'saving' || !email}
+                    title={email ? 'Załóż konto (jeśli brak) i dodaj do zespołu zamówienia' : 'Do zespołu trzeba podać e-mail'}
+                    className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition-all disabled:opacity-40 border border-green-500/30 text-green-300 hover:bg-green-500/10 bg-green-500/5">
+                    {st === 'saving' ? <div className="w-3 h-3 border-2 border-green-400/30 border-t-green-400 rounded-full animate-spin"/> : <UserPlus size={13}/>}
+                    {st === 'error' ? 'Błąd — spróbuj ponownie' : 'Dodaj do zespołu'}
+                </button>
+            </div>
+        );
     };
 
     const handleContactNameChange = (contactId, value) => {
@@ -721,6 +789,27 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                         return (
                             <section key={panelId} {...panelProps}>
                                 {panelHeader(<Users size={15} className="text-green-400" />, "Kontakty")}
+                                {/* @anchor order-team-bar — kto widzi zamówienie (zespół zamówienia) */}
+                                <div className="mb-3 shrink-0 flex items-start gap-2 px-3 py-2 rounded-lg border border-green-500/20 bg-green-500/[0.04]">
+                                    <Eye size={14} className="text-green-400 mt-0.5 shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                        <span className="text-[12px] font-bold uppercase tracking-widest text-green-300/80">Zespół zamówienia — widzą{orderTeam?.isPublic ? ' (zamówienie publiczne — widzą wszyscy)' : ''}</span>
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                            {(orderTeam?.members || []).map(m => (
+                                                <span key={m.id} title={m.email} className="px-2 py-0.5 rounded-full text-[12px] bg-white/[0.06] border border-white/10 text-gray-300">
+                                                    {[m.firstName, m.lastName].filter(Boolean).join(' ') || m.email}{m.id === orderTeam?.ownerId ? ' · autor' : ''}
+                                                </span>
+                                            ))}
+                                            {!orderTeam && <span className="text-[12px] text-gray-500 italic">Nie udało się wczytać zespołu.</span>}
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setTeamModalOpen(true)} className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border border-white/10 text-gray-300 hover:bg-white/10 transition-all" title="Dodaj lub usuń osoby z zespołu zamówienia">
+                                        <Settings2 size={13} /> Zarządzaj
+                                    </button>
+                                </div>
+                                {teamModalOpen && (
+                                    <OrderTeamModal nodeId={nodeId} orderName={orderTeam?.name} onClose={() => setTeamModalOpen(false)} onSaved={(t) => { setOrderTeam(t); setTeamModalOpen(false); }} />
+                                )}
                                 <div className="mb-4 shrink-0 space-y-3">
                                     <div className="flex items-center gap-2 mb-2">
                                         <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center">
@@ -778,14 +867,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                                             </div>
                                         </div>
                                     </div>
-                                    {(() => { const k = form.clientProjectManagerEmail || form.pmName; const st = teamSaving[k]; return (
-                                        <button onClick={() => addToTeam(form.clientProjectManagerEmail, form.pmName, form.pmCompany, form.clientProjectManagerPhone)}
-                                            disabled={st === 'saving' || (!form.clientProjectManagerEmail && !form.pmName)}
-                                            className="mt-2 self-start flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all disabled:opacity-40 border border-green-500/30 text-green-300 hover:bg-green-500/10 bg-green-500/5">
-                                            {st === 'saving' ? <div className="w-3 h-3 border-2 border-green-400/30 border-t-green-400 rounded-full animate-spin"/> : st === 'done' ? <CheckCircle2 size={13}/> : <UserPlus size={13}/>}
-                                            {st === 'done' ? 'Dodano do zespołu' : 'Zapisz do zespołu'}
-                                        </button>
-                                    ); })()}
+                                    {renderContactTeamStatus(form.clientProjectManagerEmail, form.pmName, form.pmCompany, form.clientProjectManagerPhone)}
                                 </div>
 
                                 <div className="flex-1 flex flex-col min-h-0">
@@ -894,14 +976,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    {(() => { const k = contact.email || contact.name; const st = teamSaving[k]; return (
-                                                        <button onClick={() => addToTeam(contact.email, contact.name, contact.company, contact.phone)}
-                                                            disabled={st === 'saving' || (!contact.email && !contact.name)}
-                                                            className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all disabled:opacity-40 border border-green-500/30 text-green-300 hover:bg-green-500/10 bg-green-500/5">
-                                                            {st === 'saving' ? <div className="w-3 h-3 border-2 border-green-400/30 border-t-green-400 rounded-full animate-spin"/> : st === 'done' ? <CheckCircle2 size={13}/> : <UserPlus size={13}/>}
-                                                            {st === 'done' ? 'Dodano do zespołu' : 'Zapisz do zespołu'}
-                                                        </button>
-                                                    ); })()}
+                                                    {renderContactTeamStatus(contact.email, contact.name, contact.company, contact.phone)}
                                                 </div>
                                             ))
                                         )}

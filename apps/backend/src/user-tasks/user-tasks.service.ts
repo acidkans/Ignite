@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationSettingsService } from '../notification-settings/notification-settings.service';
 import { MsTodoService } from '../ms-todo/ms-todo.service';
@@ -11,6 +11,9 @@ export interface CreateUserTaskDto {
   plannedStart?: Date;
   plannedEnd?: Date;
   nodeId?: string;
+  wbsNodeId?: string;
+  /** Odpowiedzialny — domyślnie autor. */
+  assigneeUserId?: string;
 }
 
 export interface UpdateUserTaskDto {
@@ -20,7 +23,11 @@ export interface UpdateUserTaskDto {
   plannedStart?: Date;
   plannedEnd?: Date;
   nodeId?: string;
+  /** Przepisanie na innego odpowiedzialnego (może właściciel albo autor). */
+  assigneeUserId?: string;
 }
+
+const TASK_PERSON_SELECT = { id: true, firstName: true, lastName: true, email: true } as const;
 
 // @anchor user-tasks-service
 @Injectable()
@@ -52,52 +59,204 @@ export class UserTasksService {
     });
   }
 
+  // @anchor user-tasks-list-for-wbs-node
+  // Zadania WSZYSTKICH użytkowników przypięte do węzła WBS (szuflada „Zadania" w Planowanie/WBS).
+  // Otwarte najpierw (po plannedEnd), potem wykonane. Edycja dalej tylko przez właściciela (update/softDelete filtrują po userId).
+  async listForWbsNode(wbsNodeId: string) {
+    const tasks = await this.prisma.userTask.findMany({
+      where: { wbsNodeId, deletedAt: null },
+      orderBy: [{ status: 'desc' }, { plannedEnd: 'asc' }, { createdAt: 'asc' }],
+      select: {
+        id: true, title: true, status: true, plannedEnd: true, createdAt: true, userId: true, createdById: true,
+        user: { select: TASK_PERSON_SELECT },
+        createdBy: { select: TASK_PERSON_SELECT },
+      },
+    });
+    return tasks;
+  }
+
+  // @anchor user-tasks-list-for-project
+  // Zadania WSZYSTKICH użytkowników w projekcie — kalendarz Planowanie → Zadania i „Wszystkie zadania”
+  // (każdy widzi wszystkie; w MS To Do zadanie ma tylko odpowiedzialny). Domyślnie OPEN; status=DONE → wykonane.
+  // Każde zadanie dostaje `wbsPath` — nazwy gałęzi od top-level do węzła, do grupowania po gałęziach.
+  async listForProject(processNodeId: string, status: string = 'OPEN') {
+    const wanted = status === 'DONE' ? 'DONE' : 'OPEN';
+    const tasks = await this.prisma.userTask.findMany({
+      where: { nodeId: processNodeId, status: wanted, deletedAt: null },
+      orderBy: wanted === 'DONE' ? [{ updatedAt: 'desc' }] : [{ plannedEnd: 'asc' }],
+      include: {
+        node: { select: { id: true, name: true } },
+        wbsNode: { select: { id: true, name: true } },
+        user: { select: TASK_PERSON_SELECT },
+        createdBy: { select: TASK_PERSON_SELECT },
+      },
+    });
+    const paths = await this.wbsPaths(tasks.map(t => t.wbsNodeId).filter(Boolean) as string[]);
+    return tasks.map(t => ({ ...t, wbsPath: t.wbsNodeId ? paths.get(t.wbsNodeId) || [] : [] }));
+  }
+
+  // @anchor user-tasks-wbs-paths
+  // Ścieżki nazw WBS (top-level → węzeł) dla podanych węzłów; rodziców dociąga poziomami.
+  private async wbsPaths(ids: string[]): Promise<Map<string, { id: string; name: string }[]>> {
+    const byId = new Map<string, { id: string; name: string; parentId: string | null }>();
+    let pending = [...new Set(ids)];
+    for (let guard = 0; pending.length && guard < 20; guard++) {
+      const rows = await this.prisma.wbsNode.findMany({
+        where: { id: { in: pending } },
+        select: { id: true, name: true, parentId: true },
+      });
+      rows.forEach(r => byId.set(r.id, r));
+      pending = [...new Set(rows.map(r => r.parentId).filter((p): p is string => !!p && !byId.has(p)))];
+    }
+    const out = new Map<string, { id: string; name: string }[]>();
+    for (const id of new Set(ids)) {
+      const path: { id: string; name: string }[] = [];
+      let cur = byId.get(id);
+      while (cur && path.length < 20) { path.unshift({ id: cur.id, name: cur.name }); cur = cur.parentId ? byId.get(cur.parentId) : undefined; }
+      out.set(id, path);
+    }
+    return out;
+  }
+
+  // @anchor user-tasks-project-team
+  // Zespół zamówienia (Team.orderNodeId) — kogo można wskazać jako odpowiedzialnego za zadanie
+  // z WBS. To samo źródło co widoczność zamówienia; właściciel zawsze na liście. Tylko aktywni.
+  async projectTeam(processNodeId: string) {
+    const [node, team] = await Promise.all([
+      this.prisma.processNode.findUnique({
+        where: { id: processNodeId },
+        select: { owner: { select: { ...TASK_PERSON_SELECT, isActive: true } } },
+      }),
+      this.prisma.team.findUnique({
+        where: { orderNodeId: processNodeId },
+        select: { users: { select: { ...TASK_PERSON_SELECT, isActive: true } } },
+      }),
+    ]);
+    const map = new Map<string, any>();
+    for (const u of [node?.owner, ...(team?.users || [])]) {
+      if (u?.id && u.isActive !== false && !map.has(u.id)) map.set(u.id, u);
+    }
+    return [...map.values()].map(({ isActive, ...u }) => u);
+  }
+
+  // @anchor user-tasks-wbs-summary
+  // Liczniki zadań (wszystkich użytkowników) per węzeł WBS projektu — kolor ikony „Zadania" w tabeli WBS
+  // bez otwierania szuflady. overdue = otwarte z plannedEnd w przeszłości.
+  async wbsSummaryForProcessNode(processNodeId: string) {
+    const tasks = await this.prisma.userTask.findMany({
+      where: { deletedAt: null, wbsNodeId: { not: null }, wbsNode: { nodeId: processNodeId } },
+      select: { wbsNodeId: true, status: true, plannedEnd: true },
+    });
+    const now = new Date();
+    const summary: Record<string, { open: number; overdue: number; done: number }> = {};
+    for (const t of tasks) {
+      const s = (summary[t.wbsNodeId!] ||= { open: 0, overdue: 0, done: 0 });
+      if (t.status === 'DONE') s.done++;
+      else {
+        s.open++;
+        if (t.plannedEnd && t.plannedEnd < now) s.overdue++;
+      }
+    }
+    return summary;
+  }
+
   // @anchor user-tasks-create
+  // `userId` = zalogowany autor; odpowiedzialnym jest `assigneeUserId` (domyślnie autor) —
+  // do jego MS To Do trafia zadanie i jemu odpala się przypomnienie.
   async create(userId: string, dto: CreateUserTaskDto) {
+    const ownerId = await this.resolveAssignee(dto.assigneeUserId, userId);
     const task = await this.prisma.userTask.create({
       data: {
-        userId,
+        userId: ownerId,
+        createdById: userId,
         title: dto.title,
         description: dto.description,
         plannedStart: dto.plannedStart,
         plannedEnd: dto.plannedEnd,
         nodeId: dto.nodeId ?? null,
+        wbsNodeId: dto.wbsNodeId ?? null,
         source: 'IGNITE',
       },
     });
 
-    await this.syncReminderForTask(task.id, userId, task.plannedEnd);
-    await this.pushNewTaskToGraph(userId, task);
+    await this.syncReminderForTask(task.id, ownerId, task.plannedEnd);
+    await this.pushNewTaskToGraph(ownerId, task);
     return task;
   }
 
-  // @anchor user-tasks-update
-  async update(userId: string, taskId: string, dto: UpdateUserTaskDto) {
-    const result = await this.prisma.userTask.updateMany({
-      where: { id: taskId, userId, deletedAt: null },
-      data: dto,
-    });
+  // @anchor user-tasks-resolve-assignee
+  private async resolveAssignee(assigneeUserId: string | undefined, fallback: string): Promise<string> {
+    if (!assigneeUserId || assigneeUserId === fallback) return fallback;
+    const exists = await this.prisma.user.findUnique({ where: { id: assigneeUserId }, select: { id: true } });
+    if (!exists) throw new BadRequestException('Nie znaleziono wybranego użytkownika');
+    return assigneeUserId;
+  }
 
-    if (result.count > 0) {
-      if ('plannedEnd' in dto) {
-        await this.syncReminderForTask(taskId, userId, dto.plannedEnd ?? null);
-      }
-      await this.pushUpdateToGraph(userId, taskId, dto);
+  // @anchor user-tasks-find-editable
+  // Zadanie, które wolno edytować zalogowanemu: odpowiedzialny albo autor.
+  private findEditable(userId: string, taskId: string) {
+    return this.prisma.userTask.findFirst({
+      where: { id: taskId, deletedAt: null, OR: [{ userId }, { createdById: userId }] },
+    });
+  }
+
+  // @anchor user-tasks-update
+  // Edytować może odpowiedzialny albo autor. Zmiana `assigneeUserId` przenosi zadanie: wpis w MS To Do
+  // poprzedniego odpowiedzialnego jest usuwany, nowy powstaje u nowego, przypomnienie przechodzi z nim.
+  async update(userId: string, taskId: string, dto: UpdateUserTaskDto) {
+    const task = await this.findEditable(userId, taskId);
+    if (!task) return { count: 0 };
+
+    const { assigneeUserId, ...rest } = dto;
+    const data: any = {};
+    for (const k of ['title', 'description', 'status', 'plannedStart', 'plannedEnd', 'nodeId'] as const) {
+      if (k in rest) data[k] = (rest as any)[k];
     }
-    return result;
+    // JSON niesie daty jako tekst — syncReminderForTask liczy na Date (getHours), więc zamieniamy tutaj.
+    for (const k of ['plannedStart', 'plannedEnd'] as const) {
+      if (typeof data[k] === 'string') data[k] = data[k] ? new Date(data[k]) : null;
+    }
+
+    const newOwnerId = assigneeUserId ? await this.resolveAssignee(assigneeUserId, task.userId) : task.userId;
+    if (newOwnerId !== task.userId) {
+      if (task.msToDoId && task.msListId) {
+        try {
+          await this.msTodo.deleteTask(task.userId, task.msListId, task.msToDoId);
+        } catch (err: any) {
+          this.logger.warn(`reassign: delete from MS To Do failed for task ${taskId}: ${err?.message}`);
+        }
+      }
+      await this.prisma.taskReminder.deleteMany({ where: { userTaskId: taskId, sentAt: null } });
+      const updated = await this.prisma.userTask.update({
+        where: { id: taskId },
+        data: { ...data, userId: newOwnerId, msToDoId: null, msListId: null, msListName: null, msEtag: null, msLastModified: null },
+      });
+      await this.syncReminderForTask(taskId, newOwnerId, updated.plannedEnd);
+      await this.pushNewTaskToGraph(newOwnerId, updated);
+      return { count: 1 };
+    }
+
+    await this.prisma.userTask.update({ where: { id: taskId }, data });
+    if ('plannedEnd' in data) {
+      await this.syncReminderForTask(taskId, task.userId, data.plannedEnd ?? null);
+    }
+    await this.pushUpdateToGraph(task.userId, taskId, data);
+    return { count: 1 };
   }
 
   // @anchor user-tasks-soft-delete
   async softDelete(userId: string, taskId: string) {
-    const task = await this.prisma.userTask.findFirst({ where: { id: taskId, userId } });
+    const task = await this.findEditable(userId, taskId);
+    if (!task) return { count: 0 };
     const result = await this.prisma.userTask.updateMany({
-      where: { id: taskId, userId },
+      where: { id: taskId },
       data: { deletedAt: new Date() },
     });
 
-    if (task?.msToDoId && task.msListId) {
+    if (task.msToDoId && task.msListId) {
       try {
-        await this.msTodo.updateTask(userId, task.msListId, task.msToDoId, { status: 'completed' });
+        // Token Graph należy do odpowiedzialnego, nie do autora, który usuwa.
+        await this.msTodo.updateTask(task.userId, task.msListId, task.msToDoId, { status: 'completed' });
       } catch (err: any) {
         this.logger.warn(`pushDelete failed for task ${taskId}: ${err?.message}`);
       }

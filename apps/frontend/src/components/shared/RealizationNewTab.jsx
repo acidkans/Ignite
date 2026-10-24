@@ -511,18 +511,13 @@ export default function RealizationNewTab({
             } catch { return null; }
         };
         (async () => {
-            const [users, perms, zamowienie] = await Promise.all([
-                pobierz(`${API_URL}/users`),
-                isManagerOrAdmin ? pobierz(`${API_URL}/process-tree/${nodeId}/permissions`) : Promise.resolve(null),
+            const [zespol, zamowienie] = await Promise.all([
+                pobierz(`${API_URL}/process-tree/${nodeId}/team`),
                 pobierz(`${API_URL}/order-requirements/${nodeId}`),
             ]);
             if (anulowane) return;
-            // Konta z uprawnieniami do węzła (kontakty dodane w zakładce Informacje) dochodzą
-            // do listy z `/users`; duplikaty po id odsiewamy tutaj, resztę robi `buildOwnerOptions`.
-            const zWezla = (perms?.permissions || []).filter(p => p.user && !p.teamId).map(p => p.user);
-            const wszyscy = [...(Array.isArray(users) ? users : []), ...zWezla];
-            const widziane = new Set();
-            setOwnerUsers(wszyscy.filter(u => u?.id && !widziane.has(u.id) && widziane.add(u.id)));
+            // Właściciel pozycji = członek zespołu zamówienia (jedyne źródło widoczności zamówienia).
+            setOwnerUsers(Array.isArray(zespol?.members) ? zespol.members : []);
             // `clientContacts` bywa stringiem JSON albo tablicą — ten sam rozbiór co w
             // `UnifiedWbsPanel.fetchStrategy`, bo obie listy muszą składać te same etykiety.
             let kontakty = [];

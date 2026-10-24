@@ -1,3 +1,88 @@
+## 2026-10-24 — Wszystkie zadania: grupowanie po gałęziach WBS, nazwa gałęzi przy zadaniu (v2026.10.24.1951)
+
+### architektura / API
+- `back-endpoint` `GET /my-tasks/project/:processNodeId` — parametr `status` (OPEN/DONE) i pole `wbsPath` (nazwy od gałęzi top-level do węzła) przy każdym zadaniu
+- `ui-modal` `AllTasksModal` — zadania WSZYSTKICH osób w projekcie (zamiast moich ze wszystkich projektów), sekcje per gałąź top-level, pod nazwą ścieżka w gałęzi i odpowiedzialny; cudze zadania tylko do odczytu; sekcje „Bez gałęzi” i „Harmonogram — podzadania” na końcu
+
+### słownik
+- dodano `UserTasksService.wbsPaths`, `all-tasks-branch-groups`
+
+## 2026-10-24 — Zespół zamówienia jedynym źródłem widoczności zamówienia; kontakty: w zespole / zewnętrzny; modal „kto widzi” przy tworzeniu zamówienia (v2026.10.24.1943)
+
+### schema.prisma
+- dodano `schema-pole` `Team.orderNodeId` (String? @unique, FK → `process_nodes`, ON DELETE CASCADE) — zespół należący do zamówienia
+- dodano `schema-relacja` `Team.orderNode` / `ProcessNode.orderTeam`
+- migracja `20261024210000_order_team`: każde istniejące zamówienie dostaje zespół (nazwa = nazwa zamówienia, przy kolizji dopisek z id); członkowie = wszyscy, którzy dotąd mieli dostęp (właściciel, uprawnienia bezpośrednie, członkowie zespołów z uprawnień zamówienia i folderów `team` nad nim); zamówienia pod publicznym folderem → `public`; pozostałe `visibility = 'team'`; stare `NodePermission` osób/zespołów na zamówieniach zastąpione jednym wpisem VIEW dla zespołu zamówienia
+
+### architektura / API
+- `back-funkcja` `canSee` — zamówienie widzi wyłącznie ADMIN, właściciel, członek zespołu zamówienia albo wszyscy gdy publiczne; bez dziedziczenia z folderu; węzły wewnątrz zamówienia rozstrzyga najbliższe zamówienie; `canEdit` zamówienia = członkostwo
+- drzewo: niewidoczny folder pokazuje się jako ścieżka do zamówień, w których zespole jest użytkownik (`getFolderPassthrough`)
+- `back-endpoint` `POST /process-tree` przyjmuje `teamUserIds`, `isPublic` — zamówienie rodzi się z zespołem (autor zawsze w środku)
+- dodano `back-endpoint` `GET /process-tree/:id/team` (członkowie, autor, publiczność; 403 dla spoza zespołu) i `PUT /process-tree/:id/team` (TREE_EDIT)
+- `back-endpoint` `POST /process-tree/:id/contacts` — konto użytkownika (jeśli brak) + członek zespołu zamówienia zamiast NodePermission; `DELETE /process-tree/:id/contacts/:userId` — usuwa z zespołu (autora nie)
+- zmiana nazwy zamówienia zmienia nazwę zespołu
+- `GET /teams`, lista użytkowników i Szkolenia pomijają zespoły zamówień; edycja użytkownika (`teams.set`) zachowuje jego członkostwa w zespołach zamówień
+- `GET /my-tasks/project-team/:processNodeId` — członkowie zespołu zamówienia (+ właściciel)
+- lista „Właściciel” w WBS (Planowanie) i w Realizacja_new — członkowie zespołu zamówienia (`GET /process-tree/:id/team`) + kontakty zamówienia; wcześniej filtr po zespołach z `/users` po migracji gubił zespół zamówienia
+- `ui-modal` `OrderTeamModal` — krok „kto widzi” przy tworzeniu zamówienia (AddNodeModal) i zamiast modalu uprawnień dla węzłów typu zamówienie
+- `ui-sekcja` Kontakty (Informacje o zamówieniu): pasek zespołu zamówienia z „Zarządzaj”; przy każdym kontakcie „W zespole — widzi zamówienie” + „Usuń z zespołu” albo „Kontakt zewnętrzny — nie widzi” + „Dodaj do zespołu”; usunięcie kontaktu z listy usuwa go też z zespołu
+
+### słownik
+- dodano `Team.orderNodeId`, `Team.orderNode`, `ProcessNode.orderTeam`, `UpdateOrderTeamDto`, `canSee — gałąź zamówienia`, `getFolderPassthrough`, `uniqueTeamName`, `createOrderTeam`, `ensureOrderTeam`, `getOrderTeam`, `setOrderTeam`, `GET /process-tree/:id/team`, `PUT /process-tree/:id/team`, `OrderTeamModal`, `teamStep (AddNodeModal)`, `createNode (AddNodeModal)`, `orderTeam (RequirementsTab)`, `removeFromTeam`, `renderContactTeamStatus`, `pasek zespołu zamówienia w Kontaktach`
+
+### wytyczne
+- `schema-pole` `Team.orderNodeId` — widoczność i uprawnienia zamówienia biorą się WYŁĄCZNIE z zespołu zamówienia; nie dodawać `NodePermission` osób/zespołów na węzłach `order`
+- `back-funkcja` `canSee` — folder nad zamówieniem nie daje dostępu do zamówienia; nowe ścieżki tworzenia zamówień muszą wołać `createOrderTeam`/`ensureOrderTeam`
+- `ui-sekcja` kontakty — kontakt bez członkostwa w zespole to tylko wpis (figurant), nie widzi zamówienia
+
+## 2026-10-24 — Zadania WBS: odpowiedzialny ≠ autor, MS To Do odpowiedzialnego, kalendarz projektu z zadaniami wszystkich (v2026.10.24.1900)
+
+### schema.prisma
+- dodano `schema-pole` `UserTask.createdById` (String?, FK → `users`, ON DELETE SET NULL) — autor/zlecający; `UserTask.userId` = odpowiedzialny
+- dodano `schema-relacja` `UserTask.createdBy` / `User.createdUserTasks`; dotychczasowa relacja `user` nazwana `"UserTaskOwner"`
+- migracja `20261024190000_user_task_created_by` (backfill `createdById = userId`)
+
+### architektura / API
+- `back-endpoint` `POST /my-tasks` przyjmuje `assigneeUserId` — zadanie trafia do MS To Do i przypomnień odpowiedzialnego
+- `back-endpoint` `PATCH /my-tasks/:id` — edytuje odpowiedzialny ALBO autor; `assigneeUserId` przepisuje zadanie (usuwa wpis z To Do poprzedniego, tworzy u nowego, przenosi przypomnienie); pola DTO whitelistowane
+- `back-endpoint` `DELETE /my-tasks/:id` — także autor; oznaczenie w To Do idzie tokenem odpowiedzialnego
+- dodano `back-endpoint` `GET /my-tasks/project/:processNodeId` — otwarte zadania wszystkich osób w projekcie (z osobą i pozycją WBS)
+- dodano `back-endpoint` `GET /my-tasks/project-team/:processNodeId` — zespół projektowy zamówienia: właściciel + użytkownicy i członkowie zespołów z `NodePermission` (aktywni); jedyne źródło listy odpowiedzialnych w szufladzie
+- `ui-sekcja` `WbsTasksDrawer` — wybór odpowiedzialnego przy dodawaniu (domyślnie ja) i zmiana odpowiedzialnego na liście, tylko z zespołu projektowego (+ ja); „od: X” gdy zlecił ktoś inny; ciemne opcje listy (`OPTION_STYLE`), e-mail przy zdublowanych nazwiskach
+- `ui-sekcja` kalendarz Planowanie → Zadania: zakresy „Ten projekt — wszyscy” (domyślny) / „Tylko moje” / „Wszystkie moje”; cudze zadania bez checkboxa i bez przeciągania, z nazwiskiem odpowiedzialnego
+
+### słownik
+- dodano `UserTask.createdById`, `UserTask.createdBy`, `User.createdUserTasks`, `UserTasksService.listForProject`, `resolveAssignee`, `findEditable`, `projectTeam`, `GET /my-tasks/project/:processNodeId`, `GET /my-tasks/project-team/:processNodeId`, `assigneeId`, `team`, `OPTION_STYLE`, `projectTasks`, `fetchProjectTasks`
+
+### wytyczne
+- `schema-pole` `UserTask.userId` — to ODPOWIEDZIALNY (jego To Do, jego przypomnienia, jego token Graph); autor jest w `createdById`. Wywołania Graph zawsze z `task.userId`, nie z id zalogowanego
+- `back-funkcja` `findEditable` — prawo edycji/usunięcia zadania ma odpowiedzialny lub autor; reszta widzi tylko do odczytu
+
+## 2026-10-24 — WBS: przyciski akcji pod nazwą, szuflada Zadania / Q&A zamiast kolumny Q&A (v2026.10.24.1840)
+
+### schema.prisma
+- dodano `schema-pole` `UserTask.wbsNodeId` (String?, FK → `wbs_nodes`, ON DELETE SET NULL, indeks) — zadanie przypięte do liścia/gałęzi WBS
+- dodano `schema-relacja` `UserTask.wbsNode` / `WbsNode.userTasks`
+- migracja `20261024120000_user_task_wbs_node`
+
+### architektura / API
+- dodano `back-endpoint` `GET /my-tasks/by-wbs-node/:wbsNodeId` — zadania WSZYSTKICH użytkowników przypięte do węzła WBS (z imieniem/nazwiskiem autora), otwarte najpierw
+- `back-endpoint` `POST /my-tasks` przyjmuje `wbsNodeId`
+- dodano `back-endpoint` `GET /my-tasks/wbs-summary/:processNodeId` — `{ [wbsNodeId]: { open, overdue, done } }` dla kolorowania ikony Zadania
+- `ui-ikona` Zadania i Q&A w pasku akcji kolorowane stanem: czerwona = coś po terminie, pomarańczowa = coś niezamknięte, zielona = wszystko zamknięte, szara = brak wpisów; Q&A bez odpowiedzi = otwarte (bez terminów, więc nigdy czerwone)
+- `ui-sekcja` pasek akcji (kopiuj/wklej/dodaj/karta materiałowa/zadania/Q&A/usuń) przeniesiony spod prawej krawędzi komórki pod nazwę węzła
+- usunięto kolumnę Q&A z tabeli WBS (`TOTAL_COLS` 15/12 → 14/11); Q&A i Zadania otwierają jedną szufladę pod wierszem (`ui-stan` `nodeDrawerTab`), wykluczającą się z kartą materiałową
+- usunięto `ui-modal` `QaModal`, `QaBranchModal`, `AddTaskModal` (zastąpione szufladą)
+- `ui-sekcja` `QaBranchView` — Q&A gałęzi top-level edytowalne w szufladzie (dotąd podgląd read-only); zapis trafia do `qa` konkretnego dziecka
+
+### słownik
+- dodano `DRAWER_STATUS_COLOR`, `taskSummary`, `loadTaskSummary`, `UserTasksService.wbsSummaryForProcessNode`, `GET /my-tasks/wbs-summary/:processNodeId`, `QaBranchView`, `WbsTasksDrawer`, `nodeDrawerTab`, `toggleDrawerTab`, `toggleMaterialCard`, `wbs-node-action-bar`, `UserTask.wbsNodeId`, `UserTask.wbsNode`, `WbsNode.userTasks`, `UserTasksService.listForWbsNode`, `GET /my-tasks/by-wbs-node/:wbsNodeId`
+- usunięto `QaModal`, `qaModalNode`, `qaBranchNode`, `QaBranchModal`, `addTaskNode`, `AddTaskModal`, `handleSubmit (AddTaskModal)`
+
+### wytyczne
+- `ui-sekcja` `WbsTasksDrawer` — cudze zadania tylko do odczytu; odhaczanie/usuwanie wyłącznie własnych (backend filtruje PATCH/DELETE po userId)
+- `schema-pole` `UserTask.wbsNodeId` — zadania nie są klonowane przy snapshotach wersji; zostają przy węźle wersji roboczej
+
 ## 2026-10-21 — Szkolenia: przypisanie wielu pracowników × wielu typów szkoleń w jednym podejściu (v2026.10.21.2102)
 
 ### architektura / API

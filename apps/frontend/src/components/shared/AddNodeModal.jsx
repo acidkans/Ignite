@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { API_URL } from '../../config';
+import OrderTeamModal from './OrderTeamModal';
 
 export default function AddNodeModal({ parent, onClose, onSuccess }) {
     const [name, setName] = useState('');
     const [type, setType] = useState(parent ? getNextType(parent.type) : 'area');
     const [loading, setLoading] = useState(false);
+    // @anchor add-node-team-step — zamówienie: po „Utwórz” krok wyboru zespołu (kto widzi)
+    const [teamStep, setTeamStep] = useState(false);
 
     function getNextType(parentType) {
         // Modified hierarchy to exclude subtask
@@ -16,7 +19,12 @@ export default function AddNodeModal({ parent, onClose, onSuccess }) {
         e.preventDefault();
 
         if (!name.trim()) return;
+        if (type === 'order') { setTeamStep(true); return; }
+        await createNode();
+    };
 
+    // @anchor add-node-create
+    const createNode = async (team = null) => {
         setLoading(true);
 
         try {
@@ -30,7 +38,8 @@ export default function AddNodeModal({ parent, onClose, onSuccess }) {
                 body: JSON.stringify({
                     name: name.trim(),
                     type,
-                    parentId: parent?.id || null
+                    parentId: parent?.id || null,
+                    ...(team ? { teamUserIds: team.userIds, isPublic: team.isPublic } : {}),
                 })
             });
 
@@ -38,11 +47,23 @@ export default function AddNodeModal({ parent, onClose, onSuccess }) {
 
             onSuccess();
         } catch (err) {
+            if (team) throw err; // krok zespołu pokazuje błąd w swoim modalu
             alert(err.message);
         } finally {
             setLoading(false);
         }
     };
+
+    if (teamStep) {
+        return (
+            <OrderTeamModal
+                orderName={name.trim()}
+                submitLabel="Utwórz zamówienie"
+                onClose={() => setTeamStep(false)}
+                onSubmit={(team) => createNode(team)}
+            />
+        );
+    }
 
     return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">

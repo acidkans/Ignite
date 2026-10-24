@@ -53,7 +53,9 @@ model User {
   pushSubscriptions PushSubscription[]
   notifications     Notification[]
   msToken           UserMsToken?
-  userTasks         UserTask[]
+  userTasks         UserTask[]         @relation("UserTaskOwner")
+  /// @anchor user-created-user-tasks
+  createdUserTasks  UserTask[]         @relation("UserTaskCreatedBy")
   msTodoSyncState   MsTodoSyncState?
   /// @anchor user-leaves
   leaves            Leave[]
@@ -150,6 +152,13 @@ model Team {
   updatedAt       DateTime         @updatedAt
   nodePermissions NodePermission[] @relation("TeamNodePermissions")
   users           User[]           @relation("TeamToUser")
+  /// @anchor team-order-node-id
+  /// Zespół zamówienia — JEDYNE źródło widoczności zamówienia (canSee). Tworzony razem
+  /// z zamówieniem (nazwa = nazwa zamówienia), autor zawsze w środku. Zespoły z tym polem
+  /// nie są pokazywane na listach zespołów działowych (Użytkownicy, uprawnienia folderów).
+  orderNodeId     String?          @unique
+  /// @anchor team-order-node
+  orderNode       ProcessNode?     @relation("OrderTeam", fields: [orderNodeId], references: [id], onDelete: Cascade)
 
   @@map("teams")
 }
@@ -212,6 +221,8 @@ model ProcessNode {
   isPublic                  Boolean                    @default(false)
   ownerId                   String?
   visibility                String                     @default("private")
+  /// @anchor process-node-order-team
+  orderTeam                 Team?                      @relation("OrderTeam")
   address                   String?
   contactPerson             String?
   customTypeLabel           String?
@@ -1332,6 +1343,8 @@ model WbsNode {
   materialAllocations WbsNodeMaterial[]
   /// @anchor wbs-node-material-card
   materialCard        MaterialRequirement? @relation("WbsNodeMaterialCard")
+  /// @anchor wbs-node-user-tasks
+  userTasks           UserTask[]
 
   @@index([nodeId, versionId])
   @@map("wbs_nodes")
@@ -1593,6 +1606,13 @@ model UserTask {
   userId         String
   /// @anchor user-task-node-id
   nodeId         String?
+  /// @anchor user-task-created-by-id
+  /// Kto zlecił zadanie (autor). `userId` = odpowiedzialny: jego kalendarz i jego MS To Do.
+  /// Autor może edytować/przepisać/usunąć zadanie także po przypisaniu komuś innemu.
+  createdById    String?
+  /// @anchor user-task-wbs-node-id
+  /// Liść/gałąź WBS, do której zadanie jest przypięte (szuflada „Zadania" w Planowanie/WBS).
+  wbsNodeId      String?
   /// @anchor user-task-version-id
   versionId      String?
   /// @anchor user-task-title
@@ -1623,14 +1643,19 @@ model UserTask {
   updatedAt      DateTime       @updatedAt
 
   /// @anchor user-task-user
-  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User          @relation("UserTaskOwner", fields: [userId], references: [id], onDelete: Cascade)
+  /// @anchor user-task-created-by
+  createdBy User?         @relation("UserTaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   /// @anchor user-task-node
   node      ProcessNode?  @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+  /// @anchor user-task-wbs-node
+  wbsNode   WbsNode?      @relation(fields: [wbsNodeId], references: [id], onDelete: SetNull)
   /// @anchor user-task-reminders
   reminders TaskReminder[]
 
   @@index([userId, deletedAt])
   @@index([userId, nodeId])
+  @@index([wbsNodeId])
   @@index([msToDoId])
   @@map("user_tasks")
 }

@@ -1,7 +1,16 @@
 import { useState, useEffect } from 'react';
 import { API_URL } from '../../config';
+import OrderTeamModal from './OrderTeamModal';
 
-export default function NodePermissionsModal({ node, onClose, onSuccess }) {
+export default function NodePermissionsModal(props) {
+    // Zamówienie: widoczność wyłącznie z zespołu zamówienia — zamiast poziomów/zespołów działowych.
+    if (props.node?.type === 'order') {
+        return <OrderTeamModal nodeId={props.node.id} orderName={props.node.name} onClose={props.onClose} onSaved={() => props.onSuccess?.()} />;
+    }
+    return <FolderPermissionsModal {...props} />;
+}
+
+function FolderPermissionsModal({ node, onClose, onSuccess }) {
     const [isPublic, setIsPublic] = useState(node.isPublic || false);
     const [visibility, setVisibility] = useState(node.visibility || 'private');
     const [loading, setLoading] = useState(true);

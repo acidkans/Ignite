@@ -11,7 +11,9 @@ export class TeamService {
     }
 
     findAll() {
+        // Zespoły zamówień (orderNodeId) żyją przy zamówieniu — nie mieszamy ich z działowymi.
         return this.prisma.team.findMany({
+            where: { orderNodeId: null },
             include: {
                 users: {
                     select: {

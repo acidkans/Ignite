@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsUUID, IsArray, IsBoolean } from 'class-validator';
 
 export enum NodeType {
     AREA = 'area',
@@ -19,6 +19,28 @@ export class CreateNodeDto {
     @IsOptional()
     @IsUUID()
     parentId?: string;
+
+    /** Zamówienie: kto poza autorem trafia do zespołu zamówienia (= kto widzi zamówienie). */
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    teamUserIds?: string[];
+
+    /** Zamówienie: widoczne dla wszystkich zalogowanych (zespół dalej istnieje — dla zadań i kontaktów). */
+    @IsOptional()
+    @IsBoolean()
+    isPublic?: boolean;
+}
+
+// @anchor update-order-team-dto
+export class UpdateOrderTeamDto {
+    @IsArray()
+    @IsString({ each: true })
+    userIds: string[];
+
+    @IsOptional()
+    @IsBoolean()
+    isPublic?: boolean;
 }
 
 export class UpdateNodeDto {

@@ -123,6 +123,7 @@ export class TaskSyncService {
         const created = await this.prisma.userTask.create({
           data: {
             userId,
+            createdById: userId,
             title: task.title,
             status,
             plannedEnd,

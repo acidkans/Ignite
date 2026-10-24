@@ -107,8 +107,14 @@ export class UsersService {
     // Handle teams update
     if (data.teamIds) {
       console.log(`[USER_UPDATE] Updating teams to:`, data.teamIds);
+      // Formularz użytkownika zna tylko zespoły działowe — członkostwa w zespołach zamówień
+      // (orderNodeId) muszą przetrwać `set`, inaczej zapis profilu odbierałby dostęp do zamówień.
+      const orderTeams = await this.prisma.team.findMany({
+        where: { orderNodeId: { not: null }, users: { some: { id } } },
+        select: { id: true },
+      });
       updateData.teams = {
-        set: (data.teamIds as string[]).map(id => ({ id }))
+        set: [...new Set([...(data.teamIds as string[]), ...orderTeams.map(t => t.id)])].map(tid => ({ id: tid }))
       };
       delete updateData.teamIds;
     }
@@ -245,6 +251,7 @@ export class UsersService {
           }
         },
         teams: {
+          where: { orderNodeId: null },
           select: {
             id: true,
             name: true
