@@ -24,7 +24,26 @@ const fmtDeadline = (d) => {
     return { label: day.toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' }), cls: 'text-gray-400 bg-white/[0.04] border-white/[0.08]' };
 };
 
-export default function MobileUserTasks({ token, isOnline, refreshKey }) {
+// Data lokalna RRRR-MM-DD — termin zapisany jako północ czasu polskiego w UTC wypada dzień wcześniej,
+// więc toISOString() przesunąłby zadanie na poprzedni dzień.
+const localDay = (d) => {
+    const x = new Date(d);
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+};
+
+// @anchor mobile-user-task-on-day
+// Czy zadanie pokazać w wybranym dniu (nawigacja po datach w MobileDashboard): od startu
+// (plannedStart, a bez niego dnia utworzenia) do terminu włącznie. Bez terminu — tylko dziś.
+// Przeterminowane otwarte zadania dochodzą do dzisiejszego dnia, żeby nie zniknęły z oczu.
+export const isUserTaskOnDay = (task, day, today) => {
+    if (!task.plannedEnd) return day === today;
+    const end = localDay(task.plannedEnd);
+    const start = localDay(task.plannedStart || task.createdAt || task.plannedEnd);
+    if (day === today && end < today) return true;
+    return day >= (start < end ? start : end) && day <= end;
+};
+
+export default function MobileUserTasks({ token, isOnline, refreshKey, selectedDate }) {
     const [tasks, setTasks] = useState(null);
 
     const load = useCallback(async () => {
@@ -62,18 +81,20 @@ export default function MobileUserTasks({ token, isOnline, refreshKey }) {
     };
 
     if (tasks === null) return null;
+    const today = localDay(new Date());
+    const visible = selectedDate ? tasks.filter(t => isUserTaskOnDay(t, selectedDate, today)) : tasks;
 
     return (
         <section className="space-y-2">
             <div className="flex items-center gap-2 px-1">
                 <ListTodo size={14} className="text-emerald-400" />
                 <span className="text-[11px] font-black uppercase tracking-widest text-emerald-300">Zadania</span>
-                <span className="text-[10px] text-gray-600 font-bold">{tasks.length}</span>
+                <span className="text-[10px] text-gray-600 font-bold">{visible.length}/{tasks.length}</span>
                 <div className="flex-1 h-px bg-white/5" />
             </div>
-            {tasks.length === 0 ? (
-                <p className="text-xs text-gray-600 px-1">Brak otwartych zadań.</p>
-            ) : tasks.map(task => {
+            {visible.length === 0 ? (
+                <p className="text-xs text-gray-600 px-1">{tasks.length === 0 ? 'Brak otwartych zadań.' : 'Brak zadań na ten dzień.'}</p>
+            ) : visible.map(task => {
                 const dl = fmtDeadline(task.plannedEnd);
                 return (
                     <div key={task.id} className="flex items-start gap-3 bg-gray-900/60 border border-white/5 rounded-2xl p-3.5">

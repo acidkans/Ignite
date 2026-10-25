@@ -372,7 +372,7 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
             <SyncWarningBanner />
 
             <main className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-                <MobileUserTasks token={token} isOnline={isOnline} refreshKey={userTasksRefreshKey} />
+                <MobileUserTasks token={token} isOnline={isOnline} refreshKey={userTasksRefreshKey} selectedDate={selectedDate} />
                 <div className="flex items-center gap-2 px-1 pt-1">
                     <Briefcase size={14} className="text-blue-400" />
                     <span className="text-[11px] font-black uppercase tracking-widest text-blue-300">Harmonogram</span>

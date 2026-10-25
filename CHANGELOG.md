@@ -1,3 +1,11 @@
+## 2026-10-25 — Mobile: zadania filtrowane po wybranym dniu (v2026.10.25.1652)
+
+### słownik
+- dodano `mobile-user-task-on-day`
+
+### wytyczne
+- `ui-funkcja` `isUserTaskOnDay` — zadanie widoczne od `plannedStart` (bez niego od dnia utworzenia) do `plannedEnd` włącznie, daty lokalne (nie `toISOString`, bo termin o północy PL to poprzedni dzień w UTC); bez terminu tylko dziś; przeterminowane otwarte dochodzą do dzisiejszego dnia
+
 ## 2026-10-25 — Mobile: zadania (UserTask) w widoku Moje Zadania obok harmonogramu (v2026.10.25.1548)
 
 ### architektura / API
