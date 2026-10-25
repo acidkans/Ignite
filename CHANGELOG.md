@@ -1,3 +1,17 @@
+## 2026-10-25 — Zadania WBS: komentarz w wierszu zadania i alarm cykliczny (v2026.10.25.0544)
+
+### architektura / API
+- `back-endpoint` `GET /my-tasks/by-wbs-node/:id` — zwraca `description` zadania i `reminders` (aktywna seria alarmu cyklicznego)
+- `ui-sekcja` `WbsTasksDrawer` — przycisk alarmu cyklicznego (`CyclicAlarmEditor` z `MyTasksModal`) przy zadaniach, za które odpowiada zalogowany
+- `ui-sekcja` `WbsTaskComment` — komentarz w wierszu zadania w szufladzie Zadania; zapis na blur przez `PATCH /my-tasks/:id` (`description`)
+
+### słownik
+- dodano `wbs-task-comment`, `wbs-task-save-comment`
+
+### wytyczne
+- `schema-pole` `UserTask.plannedEnd` — zapis alarmu cyklicznego z datą „Do” (`POST /my-tasks/:id/reminders` z `intervalMinutes`) przesuwa termin zadania na tę datę (także w MS To Do)
+- `schema-pole` `UserTask.description` — pełni rolę komentarza zadania (jeden na zadanie); edytuje odpowiedzialny lub zlecający, pozostali widzą tylko do odczytu
+
 ## 2026-10-24 — Wszystkie zadania: grupowanie po gałęziach WBS, nazwa gałęzi przy zadaniu (v2026.10.24.1951)
 
 ### architektura / API

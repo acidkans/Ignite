@@ -3,8 +3,14 @@ import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, u
 import AutoResizeTextarea from './AutoResizeTextarea';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
-import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, ArrowRight, ArrowLeft, Check, Loader2, Calendar } from 'lucide-react';
+import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, ArrowRight, ArrowLeft, Check, Loader2, Calendar, Repeat } from 'lucide-react';
+import { CyclicAlarmEditor, ALARM_INTERVALS, toLocalInput } from '../MyTasksModal';
 import { useDevice } from '../../../hooks/useDevice';
+
+// @anchor normalize-lower-text
+// Tekst Q&A i zadań (tytuł, komentarz) zapisujemy małymi literami — ujednolica wpisy pisane
+// CAPS LOCKIEM. Wołane na blur / przy zapisie, nie przy każdym klawiszu.
+const normalizeLowerText = (s) => String(s || '').trim().toLocaleLowerCase('pl-PL');
 
 // ── Q&A cell — zagnieżdżona tabela Pytanie / Odpowiedź per WBS node ───────────
 function QaPairRow({ p, idx, onUpdate, onRemove, onPersist }) {
@@ -37,7 +43,7 @@ function QaPairRow({ p, idx, onUpdate, onRemove, onPersist }) {
                     rows={1}
                     value={p.question || ''}
                     onChange={e => { onUpdate(idx, 'question', e.target.value); syncHeights(); }}
-                    onBlur={() => onPersist?.()}
+                    onBlur={() => { onUpdate(idx, 'question', normalizeLowerText(p.question)); onPersist?.(); }}
                     onFocus={syncHeights}
                     placeholder="Pytanie…"
                     className="bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[15px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 text-gray-200"
@@ -50,7 +56,7 @@ function QaPairRow({ p, idx, onUpdate, onRemove, onPersist }) {
                     rows={1}
                     value={p.answer || ''}
                     onChange={e => { onUpdate(idx, 'answer', e.target.value); syncHeights(); }}
-                    onBlur={() => onPersist?.()}
+                    onBlur={() => { onUpdate(idx, 'answer', normalizeLowerText(p.answer)); onPersist?.(); }}
                     onFocus={syncHeights}
                     placeholder="Odpowiedź…"
                     className="bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[15px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 text-gray-200"
@@ -220,6 +226,25 @@ function qaSummary(pairs) {
 // biały tekst ciemnego motywu był nieczytelny; opcje dostają jawne ciemne tło i jasny tekst.
 const OPTION_STYLE = { backgroundColor: '#0f1520', color: '#e5e7eb' };
 
+// @anchor wbs-task-comment
+// Komentarz w wierszu zadania — lokalny szkic, zapis na blur. Bez prawa edycji tylko tekst.
+function WbsTaskComment({ task, editable, onSave }) {
+    const [draft, setDraft] = useState(task.description || '');
+    useEffect(() => { setDraft(task.description || ''); }, [task.description]);
+    if (!editable) {
+        return <span className="flex-1 min-w-0 text-[14px] text-gray-400 italic break-words whitespace-pre-wrap">{task.description || ''}</span>;
+    }
+    return (
+        <AutoResizeTextarea
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={() => { const next = normalizeLowerText(draft); setDraft(next); onSave(task, next); }}
+            placeholder="Komentarz…"
+            className="flex-1 min-w-0 px-1.5 py-0.5 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 placeholder-gray-700 focus:outline-none focus:border-blue-500/50"
+        />
+    );
+}
+
 // @anchor wbs-tasks-drawer
 function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
@@ -240,6 +265,14 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
     }, [processNodeId, token]);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
+    // @anchor wbs-task-alarm-task-id — zadanie z otwartym edytorem alarmu cyklicznego (tylko odpowiedzialny)
+    const [alarmTaskId, setAlarmTaskId] = useState(null);
+    // @anchor wbs-new-task-comment — komentarz wpisywany razem z nowym zadaniem (→ description)
+    const [newComment, setNewComment] = useState('');
+    // @anchor wbs-new-task-alarm — alarm cykliczny nowego zadania { start, end, intervalMinutes } | null;
+    // ustawiany po utworzeniu zadania, tylko gdy odpowiedzialnym jest zalogowany (backend: createReminder)
+    const [newAlarm, setNewAlarm] = useState(null);
+    const canSetNewAlarm = !assigneeId || assigneeId === currentUserId;
 
     const load = useCallback(async () => {
         try {
@@ -259,7 +292,9 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
         setSaving(true);
         setError(null);
         try {
-            const body = { title: title.trim(), nodeId: processNodeId || null, wbsNodeId };
+            const body = { title: normalizeLowerText(title), nodeId: processNodeId || null, wbsNodeId };
+            const desc = normalizeLowerText(newComment);
+            if (desc) body.description = desc;
             if (assigneeId && assigneeId !== currentUserId) body.assigneeUserId = assigneeId;
             if (plannedEnd) body.plannedEnd = new Date(plannedEnd).toISOString();
             const res = await fetch('/api/my-tasks', {
@@ -268,7 +303,18 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                 body: JSON.stringify(body),
             });
             if (!res.ok) throw new Error('Błąd zapisu zadania');
+            const created = await res.json();
+            if (newAlarm && canSetNewAlarm && created?.id) {
+                const r = await fetch(`/api/my-tasks/${created.id}/reminders`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ start: new Date(newAlarm.start).toISOString(), end: new Date(newAlarm.end).toISOString(), intervalMinutes: newAlarm.intervalMinutes }),
+                });
+                if (!r.ok) setError('Zadanie dodane, ale nie udało się ustawić alarmu cyklicznego');
+            }
             setTitle('');
+            setNewComment('');
+            setNewAlarm(null);
             setPlannedEnd('');
             await load();
             onChanged?.();
@@ -300,6 +346,21 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
         if (!res.ok) setError('Nie udało się zmienić odpowiedzialnego');
         await load();
         onChanged?.();
+    };
+
+    // @anchor wbs-task-save-comment
+    // Komentarz zadania = UserTask.description (trafia też do notatki w MS To Do). Zapis na blur,
+    // tylko gdy treść się zmieniła względem wczytanej z serwera.
+    const saveComment = async (t, value) => {
+        const next = value.trim() || null;
+        if (next === (t.description || null)) return;
+        const res = await fetch(`/api/my-tasks/${t.id}`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ description: next }),
+        });
+        if (!res.ok) { setError('Nie udało się zapisać komentarza'); return; }
+        setTasks(prev => prev.map(x => x.id === t.id ? { ...x, description: next } : x));
     };
 
     const remove = async (t) => {
@@ -336,7 +397,8 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                         const done = t.status === 'DONE';
                         const overdue = !done && t.plannedEnd && new Date(t.plannedEnd) < new Date();
                         return (
-                            <li key={t.id} className="flex items-center gap-2 py-1 border-t border-white/5 first:border-t-0 group/task">
+                            <li key={t.id} className="py-1 border-t border-white/5 first:border-t-0 group/task">
+                                <div className="flex items-center gap-2">
                                 <button
                                     onClick={() => mine && toggleDone(t)}
                                     disabled={!mine}
@@ -346,6 +408,7 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                                     {done && <Check size={11} />}
                                 </button>
                                 <span className={`flex-1 min-w-0 text-[15px] break-words ${done ? 'line-through text-gray-500' : 'text-gray-200'}`}>{t.title}</span>
+                                <WbsTaskComment task={t} editable={mine} onSave={saveComment} />
                                 {t.plannedEnd && (
                                     <span className={`text-[13px] flex-shrink-0 ${overdue ? 'text-red-400' : 'text-gray-500'}`}>{fmtDate(t.plannedEnd)}</span>
                                 )}
@@ -364,22 +427,44 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                                 ) : (
                                     <span className="text-[13px] text-gray-500 flex-shrink-0 w-44 truncate text-right" title={t.user?.email}>{who(t.user)}</span>
                                 )}
+                                {t.userId === currentUserId ? (
+                                    <button
+                                        onClick={() => setAlarmTaskId(id => id === t.id ? null : t.id)}
+                                        title="Alarm cykliczny"
+                                        className={`flex-shrink-0 w-6 h-6 rounded border flex items-center justify-center transition-all ${alarmTaskId === t.id || t.reminders?.length ? 'bg-indigo-500/15 border-indigo-500/30 text-indigo-300' : 'border-white/10 text-gray-500 hover:text-indigo-300'}`}
+                                    >
+                                        <Repeat size={11} />
+                                    </button>
+                                ) : <span className="w-6 flex-shrink-0" title="Alarm cykliczny ustawia odpowiedzialny" />}
                                 {mine ? (
                                     <button onClick={() => remove(t)} title="Usuń zadanie" className="p-0.5 rounded text-gray-700 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover/task:opacity-100 transition-all">
                                         <X size={12} />
                                     </button>
                                 ) : <span className="w-[16px]" />}
+                                </div>
+                                {alarmTaskId === t.id && (
+                                    <div className="max-w-md ml-6">
+                                        <CyclicAlarmEditor taskId={t.id} onClose={() => { setAlarmTaskId(null); load(); }} />
+                                    </div>
+                                )}
                             </li>
                         );
                     })}
                 </ul>
             )}
-            <form onSubmit={add} className="flex items-center gap-2 pt-1">
+            <form onSubmit={add} className="flex flex-col gap-2 pt-1">
+                <div className="flex items-center gap-2">
                 <input
                     value={title}
                     onChange={e => setTitle(e.target.value)}
                     placeholder="Nowe zadanie…"
                     className="flex-1 min-w-0 px-2 py-1 rounded bg-black/20 border border-white/10 text-[15px] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
+                />
+                <input
+                    value={newComment}
+                    onChange={e => setNewComment(e.target.value)}
+                    placeholder="Komentarz…"
+                    className="flex-1 min-w-0 px-2 py-1 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 placeholder-gray-700 focus:outline-none focus:border-blue-500/50"
                 />
                 <select
                     value={assigneeId}
@@ -399,12 +484,41 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                     />
                 </label>
                 <button
+                    type="button"
+                    disabled={!canSetNewAlarm}
+                    onClick={() => setNewAlarm(a => a ? null : { start: toLocalInput(new Date()), end: toLocalInput(new Date(Date.now() + 86400000)), intervalMinutes: 60 })}
+                    title={canSetNewAlarm ? 'Alarm cykliczny' : 'Alarm cykliczny ustawia odpowiedzialny'}
+                    className={`flex-shrink-0 w-7 h-7 rounded border flex items-center justify-center transition-all disabled:opacity-30 ${newAlarm ? 'bg-indigo-500/15 border-indigo-500/30 text-indigo-300' : 'border-white/10 text-gray-500 hover:text-indigo-300'}`}
+                >
+                    <Repeat size={12} />
+                </button>
+                <button
                     type="submit"
                     disabled={saving || !title.trim()}
                     className="flex items-center gap-1 px-2.5 py-1 rounded bg-blue-600/80 hover:bg-blue-600 disabled:opacity-40 text-white text-[14px] transition-all"
                 >
                     {saving ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />} Dodaj
                 </button>
+                </div>
+                {newAlarm && canSetNewAlarm && (
+                    <div className="flex items-center gap-2 flex-wrap justify-end text-[13px] text-gray-400">
+                        <Repeat size={12} className="text-indigo-300" /> Alarm cykliczny
+                        <label className="flex items-center gap-1">od
+                            <input type="datetime-local" value={newAlarm.start} onChange={e => setNewAlarm(a => ({ ...a, start: e.target.value }))}
+                                className="px-1.5 py-0.5 rounded bg-black/20 border border-white/10 text-[13px] text-gray-300 [color-scheme:dark] focus:outline-none focus:border-indigo-500/50" />
+                        </label>
+                        <label className="flex items-center gap-1">do
+                            <input type="datetime-local" value={newAlarm.end} onChange={e => setNewAlarm(a => ({ ...a, end: e.target.value }))}
+                                className="px-1.5 py-0.5 rounded bg-black/20 border border-white/10 text-[13px] text-gray-300 [color-scheme:dark] focus:outline-none focus:border-indigo-500/50" />
+                        </label>
+                        {ALARM_INTERVALS.map(opt => (
+                            <button key={opt.minutes} type="button" onClick={() => setNewAlarm(a => ({ ...a, intervalMinutes: opt.minutes }))}
+                                className={`px-2 py-0.5 rounded border text-[12px] transition-all ${newAlarm.intervalMinutes === opt.minutes ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-200' : 'border-white/10 text-gray-400 hover:bg-white/[0.08]'}`}>
+                                co {opt.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
             </form>
             {team.length === 0 && (
                 <p className="text-[12px] text-gray-600">Zespół projektowy zamówienia jest pusty — zadanie możesz przypisać tylko sobie. Osoby dodasz w uprawnieniach węzła lub przyciskiem „Zapisz do zespołu" przy kontaktach zamówienia.</p>
@@ -889,7 +1003,11 @@ const WBS_BRANCH_CSS = `.wbs-br{background-color:var(--wbs-bg);border-left:var(-
     + `tr.wbs-leaf-open{border-bottom-width:0}`
     + `.wbs-leaf-open>td{background-color:var(--wbs-drawer-fill);border-top:var(--wbs-drawer-bw,1px) solid var(--wbs-drawer-edge);border-bottom:0}`
     + `.wbs-leaf-open>td:first-child{border-left:var(--wbs-drawer-bw,1px) solid var(--wbs-drawer-edge)}`
-    + `.wbs-leaf-open>td:last-child{border-right:var(--wbs-drawer-bw,1px) solid var(--wbs-drawer-edge)}`;
+    + `.wbs-leaf-open>td:last-child{border-right:var(--wbs-drawer-bw,1px) solid var(--wbs-drawer-edge)}`
+    // @anchor wbs-drawer-focus-css — przy otwartej szufladzie Zadania/Q&A reszta drzewa jest
+    // rozmyta i przygaszona; ostre zostają tylko wiersz węzła i jego szuflada (`wbs-focus-keep`).
+    // Kombinatory `>` — żeby nie rozmyć zagnieżdżonej tabeli Q&A wewnątrz szuflady.
+    + `.wbs-focus>tbody>tr:not(.wbs-focus-keep)>td{filter:blur(2px);opacity:.45;transition:filter .15s,opacity .15s}`;
 
 // ── Tag chips ─────────────────────────────────────────────────────────────────
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1996,7 +2114,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         ? { ...d.trStyle, '--wbs-drawer-edge': DRAWER.accent.task.edge, '--wbs-drawer-fill': DRAWER.accent.task.fill, '--wbs-drawer-bw': DRAWER.accent.task.width }
                         : { ...d.trStyle, '--wbs-drawer-edge': DRAWER.accent.offer.edge, '--wbs-drawer-fill': DRAWER.accent.offer.fill })
                     : d.trStyle}
-                className={`border-b border-white/5 cursor-pointer group/node transition-opacity wbs-br ${drawerClass} ${leafOpen ? 'wbs-leaf-open' : ''} ${isDragging ? 'opacity-25' : ''} ${dropBorder} ${reqDropHighlight} ${selectedNodeId === node.id ? 'outline outline-1 outline-blue-500/40 !bg-blue-500/5' : ''}`}
+                className={`border-b border-white/5 cursor-pointer group/node transition-opacity wbs-br ${drawerClass} ${leafOpen ? 'wbs-leaf-open' : ''} ${drawerTab ? 'wbs-focus-keep' : ''} ${isDragging ? 'opacity-25' : ''} ${dropBorder} ${reqDropHighlight} ${selectedNodeId === node.id ? 'outline outline-1 outline-blue-500/40 !bg-blue-500/5' : ''}`}
                 onClick={e => { setSelectedNodeId(node.id); hasChildren && toggle(rowId, e); }}
             >
                 {/* WBS ID — uchwyt drag (mysz) / pełnokomórkowy przycisk rozwijania (dotyk).
@@ -2631,7 +2749,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             rows.push(
                 <tr
                     key={`drawer-${node.id}`}
-                    className={drawerSpine ? 'wbs-drawer-row' : ''}
+                    className={`wbs-focus-keep ${drawerSpine ? 'wbs-drawer-row' : ''}`}
                     style={drawerSpine ? { '--wbs-spine': drawerSpine } : undefined}
                 >
                     <td colSpan={TOTAL_COLS} className={`px-2 pb-2 ${DRAWER.accent.task.cell}`}>
@@ -2727,7 +2845,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             )}
             <div className="flex-1 min-h-0 overflow-auto overflow-x-auto custom-scrollbar" ref={tableWrapperRef}>
             <div className="w-full">
-                <table className="text-base border-collapse" style={{ tableLayout: 'fixed', width: '100%' }}>
+                <table className={`text-base border-collapse ${Object.values(nodeDrawerTab).some(Boolean) ? 'wbs-focus' : ''}`} style={{ tableLayout: 'fixed', width: '100%' }}>
                     <colgroup>
                         {/* Kolumna uchwytu/rozwijania — na dotyku mieści uchwyt przeniesienia (36 px)
                             i przycisk rozwijania (48 px), oba w rozmiarze pod palec */}

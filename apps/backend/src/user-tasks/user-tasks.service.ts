@@ -67,9 +67,11 @@ export class UserTasksService {
       where: { wbsNodeId, deletedAt: null },
       orderBy: [{ status: 'desc' }, { plannedEnd: 'asc' }, { createdAt: 'asc' }],
       select: {
-        id: true, title: true, status: true, plannedEnd: true, createdAt: true, userId: true, createdById: true,
+        id: true, title: true, description: true, status: true, plannedEnd: true, createdAt: true, userId: true, createdById: true,
         user: { select: TASK_PERSON_SELECT },
         createdBy: { select: TASK_PERSON_SELECT },
+        // aktywna seria alarmu cyklicznego — znacznik na przycisku w szufladzie WBS
+        reminders: { where: { sentAt: null, recurIntervalMinutes: { not: null } }, select: { id: true } },
       },
     });
     return tasks;
@@ -431,7 +433,7 @@ export class UserTasksService {
       });
     }
 
-    return this.prisma.taskReminder.create({
+    const reminder = await this.prisma.taskReminder.create({
       data: {
         userTaskId: taskId,
         userId,
@@ -440,6 +442,16 @@ export class UserTasksService {
         recurEnd: dto.end ? new Date(dto.end) : null,
       },
     });
+
+    // @anchor user-tasks-cyclic-end-as-deadline — seria cykliczna z datą „Do” przesuwa termin zadania
+    // na tę datę (plakietka „Dzisiaj/Przeterminowane”, kalendarz i MS To Do liczą termin z plannedEnd).
+    if (interval != null && dto.end) {
+      const plannedEnd = new Date(dto.end);
+      await this.prisma.userTask.update({ where: { id: taskId }, data: { plannedEnd } });
+      await this.syncReminderForTask(taskId, userId, plannedEnd);
+      await this.pushUpdateToGraph(userId, taskId, { plannedEnd });
+    }
+    return reminder;
   }
 
   // @anchor user-tasks-list-reminders

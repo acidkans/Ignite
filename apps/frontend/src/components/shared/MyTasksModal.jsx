@@ -3,7 +3,7 @@ import { X, Calendar, CheckCircle2, Clock, FolderOpen, Plus, Repeat, Trash2, Loa
 import { API_URL } from '../../config';
 
 // @anchor my-tasks-alarm-interval-options
-const ALARM_INTERVALS = [
+export const ALARM_INTERVALS = [
     { label: '30 min', minutes: 30 },
     { label: '1 godz', minutes: 60 },
     { label: '2 godz', minutes: 120 },
@@ -11,13 +11,14 @@ const ALARM_INTERVALS = [
 ];
 
 // datetime-local (lokalny czas) → wartość inputa; +offset dni od teraz, zaokrąglone do pełnej godziny
-function toLocalInput(date) {
+export function toLocalInput(date) {
     const d = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
     return d.toISOString().slice(0, 16);
 }
 
 // @anchor my-tasks-cyclic-alarm-editor
-function CyclicAlarmEditor({ taskId, onClose }) {
+// Eksportowany — używa go też szuflada Zadania w WBS (WbsTasksDrawer).
+export function CyclicAlarmEditor({ taskId, onClose }) {
     const [existing, setExisting] = useState(null);
     const [start, setStart] = useState(() => toLocalInput(new Date()));
     const [end, setEnd] = useState(() => toLocalInput(new Date(Date.now() + 86400000)));
@@ -104,7 +105,7 @@ function CyclicAlarmEditor({ taskId, onClose }) {
                 ))}
             </div>
             <p className="text-[10px] text-gray-500">
-                {count > 0 ? <>Utworzy <span className="text-indigo-300 font-semibold">{count}</span> {count === 1 ? 'alarm' : 'alarmów'} · <span className="text-gray-400">dismiss wyłącza całą serię</span></> : 'Ustaw datę końca późniejszą niż start'}
+                {count > 0 ? <>Utworzy <span className="text-indigo-300 font-semibold">{count}</span> {count === 1 ? 'alarm' : 'alarmów'} · <span className="text-gray-400">dismiss wyłącza całą serię</span> · termin zadania = data „Do”</> : 'Ustaw datę końca późniejszą niż start'}
             </p>
             <div className="flex items-center gap-2 pt-0.5">
                 <button onClick={() => onClose(false)} className="px-2.5 py-1.5 rounded-md bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-[10px] text-gray-400 transition-all">Anuluj</button>
@@ -142,7 +143,7 @@ function formatDeadline(dateStr) {
 }
 
 // @anchor my-tasks-task-card
-function TaskCard({ task, onDone, onRename }) {
+function TaskCard({ task, onDone, onRename, onAlarmSaved }) {
     const deadline = formatDeadline(task.plannedEnd);
     const [alarmOpen, setAlarmOpen] = useState(false);
     // @anchor my-tasks-title-edit — inline edycja tytułu zadania
@@ -227,7 +228,7 @@ function TaskCard({ task, onDone, onRename }) {
             </div>
 
             {alarmOpen && (
-                <CyclicAlarmEditor taskId={task.id} onClose={() => setAlarmOpen(false)} />
+                <CyclicAlarmEditor taskId={task.id} onClose={(changed) => { setAlarmOpen(false); if (changed) onAlarmSaved?.(); }} />
             )}
         </div>
     );
@@ -239,15 +240,18 @@ export default function MyTasksModal({ open, onClose }) {
     const [loading, setLoading] = useState(false);
 
     // @anchor my-tasks-fetch
-    useEffect(() => {
-        if (!open) return;
-        setLoading(true);
+    // `silent` — przeładowanie bez spinnera (po zapisie alarmu, który przesuwa termin zadania).
+    const loadTasks = (silent = false) => {
+        if (!silent) setLoading(true);
         const token = sessionStorage.getItem('token');
-        fetch(`${API_URL}/my-tasks`, { headers: { Authorization: `Bearer ${token}` } })
+        return fetch(`${API_URL}/my-tasks`, { headers: { Authorization: `Bearer ${token}` } })
             .then(r => r.ok ? r.json() : [])
             .then(data => setTasks(Array.isArray(data) ? data : []))
-            .catch(() => setTasks([]))
+            .catch(() => { if (!silent) setTasks([]); })
             .finally(() => setLoading(false));
+    };
+    useEffect(() => {
+        if (open) loadTasks();
     }, [open]);
 
     // @anchor my-tasks-mark-done
@@ -322,7 +326,7 @@ export default function MyTasksModal({ open, onClose }) {
                         </div>
                     )}
                     {!loading && tasks.map(task => (
-                        <TaskCard key={task.id} task={task} onDone={handleDone} onRename={handleRename} />
+                        <TaskCard key={task.id} task={task} onDone={handleDone} onRename={handleRename} onAlarmSaved={() => loadTasks(true)} />
                     ))}
                 </div>
 

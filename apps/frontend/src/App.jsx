@@ -215,6 +215,9 @@ function App() {
   const handleLogin = (data) => {
     localStorage.setItem('token', data.access_token);
     sessionStorage.setItem('token', data.access_token);
+    // @anchor open-my-tasks-after-login — po zalogowaniu Dashboard startuje z otwartymi „Moimi zadaniami”
+    // (flaga jednorazowa: zwykłe odświeżenie strony jej nie ma, więc modal nie wraca).
+    sessionStorage.setItem('openMyTasksOnLoad', '1');
     setToken(data.access_token);
     navigate('/');
   };

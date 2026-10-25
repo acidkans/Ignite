@@ -513,6 +513,16 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | taskSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-summary |
 | ui-funkcja | loadTaskSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor load-task-summary |
 | ui-stan | assigneeId (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-assignee |
+| ui-sekcja | WbsTaskComment | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-comment |
+| ui-funkcja | saveComment (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-save-comment |
+| ui-funkcja | openDatePicker | apps/frontend/src/components/shared/SubtaskModal.jsx | @anchor open-date-picker |
+| ui-funkcja | normalizeLowerText | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor normalize-lower-text |
+| ui-stan | alarmTaskId (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-alarm-task-id |
+| ui-stan | newComment (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-new-task-comment |
+| ui-stan | newAlarm (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-new-task-alarm |
+| ui-stala | wbs-drawer-focus (WBS_BRANCH_CSS) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-drawer-focus-css |
+| ui-funkcja | openMyTasksOnLoad (App.handleLogin) | apps/frontend/src/App.jsx | @anchor open-my-tasks-after-login |
+| back-funkcja | createReminder — termin = koniec serii | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-cyclic-end-as-deadline |
 | ui-stan | team (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-team |
 | ui-stala | OPTION_STYLE | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-option-style |
 | ui-stan | projectTasks | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-project-tasks |

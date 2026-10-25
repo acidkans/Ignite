@@ -3,6 +3,11 @@ import { X, Save, FileText, ChevronDown, MapPin, Info } from 'lucide-react';
 import { API_URL } from '../../config';
 import SchematicViewer from './SchematicViewer';
 
+// @anchor open-date-picker
+// Klik w dowolne miejsce pola daty otwiera kalendarz (domyślnie tylko ikona go otwiera).
+// showPicker rzuca wyjątek bez gestu użytkownika / w starszych przeglądarkach — wtedy zostaje zwykłe pole.
+const openDatePicker = (e) => { try { e.currentTarget.showPicker?.(); } catch { /* brak wsparcia */ } };
+
 export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSuccess }) {
     const [templates, setTemplates] = useState([]);
     const [users, setUsers] = useState([]);
@@ -221,7 +226,8 @@ export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSu
                                             plannedEnd: prev.plannedEnd && newStart > prev.plannedEnd ? newStart : prev.plannedEnd,
                                         }));
                                     }}
-                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-all font-mono text-sm"
+                                    onClick={openDatePicker}
+                                    className="w-full cursor-pointer [color-scheme:dark] bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-all font-mono text-sm"
                                 />
                             </div>
                             <div>
@@ -230,7 +236,8 @@ export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSu
                                     type="date"
                                     value={formData.plannedEnd}
                                     onChange={e => setFormData({ ...formData, plannedEnd: e.target.value })}
-                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-all font-mono text-sm"
+                                    onClick={openDatePicker}
+                                    className="w-full cursor-pointer [color-scheme:dark] bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-all font-mono text-sm"
                                 />
                             </div>
                         </div>

@@ -136,7 +136,12 @@ export default function DashboardPage() {
     }, []);
 
     // @anchor dashboard-my-tasks-open
-    const [myTasksOpen, setMyTasksOpen] = useState(false);
+    // Po logowaniu startuje otwarty (flaga z App.handleLogin). Czyszczenie w efekcie, nie w
+    // inicjalizatorze — StrictMode woła inicjalizator dwa razy i drugi raz flagi by już nie było.
+    const [myTasksOpen, setMyTasksOpen] = useState(() => {
+        try { return sessionStorage.getItem('openMyTasksOnLoad') === '1'; } catch { return false; }
+    });
+    useEffect(() => { try { sessionStorage.removeItem('openMyTasksOnLoad'); } catch { /* brak storage */ } }, []);
 
     // @anchor dashboard-due-reminders
     const [dueReminders, setDueReminders] = useState([]);

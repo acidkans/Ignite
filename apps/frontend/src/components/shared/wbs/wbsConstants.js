@@ -277,10 +277,11 @@ export const DRAWER = {
     // żeby wyraźnie odcinała się od wierszy drzewa i od niebieskiej karty materiałowej.
     task: {
       spine: 'border-l-emerald-500', label: 'text-emerald-300/80', cap: 'bg-emerald-500/70',
-      card: 'border-2 border-emerald-400/70 bg-[#05130d] shadow-[0_0_0_1px_rgba(52,211,153,0.12)]',
-      cell: 'border-x-2 border-b-2 border-emerald-400/70 bg-[#0a1c15]',
+      // Tło wyraźnie zielone — wcześniejsze #05130d na ekranach tabletów (OLED) wyglądało jak czarne.
+      card: 'border-2 border-emerald-400/70 bg-[#091f17] shadow-[0_0_0_1px_rgba(52,211,153,0.12)]',
+      cell: 'border-x-2 border-b-2 border-emerald-400/70 bg-[#0d291e]',
       title: 'text-emerald-300',
-      edge: 'rgba(52,211,153,0.7)', fill: '#0a1c15', width: '2px',
+      edge: 'rgba(52,211,153,0.7)', fill: '#0d291e', width: '2px',
     },
     real: {
       spine: 'border-l-teal-500', label: 'text-teal-300/80', cap: 'bg-teal-500/70',
