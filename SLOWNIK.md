@@ -2759,6 +2759,7 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-funkcja | syncNode | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-sync-node |
 | back-funkcja | syncBlockedReason | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-sync-blocked-reason |
 | back-stala | ARCHIVE_AREA_NAME | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-sync-archive-area |
+| back-stala | MAX_DOWNLOAD_BYTES | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-max-download-bytes |
 | back-funkcja | resolveFolderKeys | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-resolve-folder-keys |
 | back-funkcja | markDeleted | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-mark-deleted |
 | back-funkcja | processQueue | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-process-queue |

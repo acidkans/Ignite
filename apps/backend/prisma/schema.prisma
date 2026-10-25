@@ -230,7 +230,7 @@ model ProcessNode {
   region                    String?
   storagePath               String?
   mimeType                  String?
-  fileSize                  Int?
+  fileSize                  Float? // Float: pliki > 2 GB nie mieszczą się w INT4
   parsedPositions           String?
   documentCategory          String?
   oneDriveFolderId          String?
@@ -2065,7 +2065,7 @@ model DriveFile {
   folderKey    String? // klucz ORDER_FOLDERS; null = poza strukturą; '__legacy' = stare pliki_finansowe / dokumentacja_projektowa
   name         String
   mimeType     String?
-  size         Int?
+  size         Float? // Float: pliki > 2 GB nie mieszczą się w INT4
   /// @anchor drive-file-c-tag
   cTag         String? // zmienia się tylko przy zmianie treści → ponowne przetworzenie
   lastModified DateTime?

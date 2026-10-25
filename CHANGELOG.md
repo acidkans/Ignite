@@ -1,3 +1,19 @@
+## 2026-10-25 — fix(onedrive): rozmiar pliku jako Float — pliki > 2 GB wywalały sync (INT4 overflow) + limit pobierania 20 MB (v2026.10.25.2048)
+
+### schema.prisma
+- zmieniono typ `schema-pole` `DriveFile.size` Int? → Float? — plik 3 347 592 417 B z OneDrive (projekt Durr) przekraczał INT4, `driveFile.create()` rzucał ConversionError
+- zmieniono typ `schema-pole` `ProcessNode.fileSize` Int? → Float? — ten sam rozmiar trafia do dokumentu przy pobraniu
+- migracja `20261025170000_file_size_float`
+
+### architektura / API
+- sync OneDrive nie pobiera dokumentów > 20 MB (`back-stala` `MAX_DOWNLOAD_BYTES`) — status `skipped` z komunikatem i linkiem do OneDrive
+
+### słownik
+- dodano `onedrive-max-download-bytes`
+
+### wytyczne
+- `schema-pole` rozmiary plików przechowuj jako Float (double, dokładny do 2^53), nie Int ani BigInt — BigInt nie serializuje się do JSON
+
 ## 2026-10-25 — Mobile: zadania filtrowane po wybranym dniu (v2026.10.25.1652)
 
 ### słownik

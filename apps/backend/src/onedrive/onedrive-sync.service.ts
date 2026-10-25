@@ -29,6 +29,11 @@ const ARCHIVE_AREA_NAME = 'Archiwum';
 // Reszta (XLSX, zdjęcia, filmy) jest pobierana i widoczna w aplikacji, ale nie trafia do Qdrant.
 const INDEXABLE_MIME = /^(application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|text\/)/;
 const MAX_INDEX_BYTES = 50 * 1024 * 1024;
+// @anchor onedrive-max-download-bytes
+// Większych plików nie pobieramy na serwer (np. kilkugigabajtowe ZIP-y z CAD) — zostają w rejestrze jako `skipped`
+// z linkiem do OneDrive.
+const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024;
+const tooBigError = (size: number) => `Plik za duży do pobrania (${(size / 1024 / 1024).toFixed(0)} MB, limit ${MAX_DOWNLOAD_BYTES / 1024 / 1024} MB) — dostępny w OneDrive`;
 // Kopia pliku usuniętego z OneDrive (lub z aplikacji) zostaje na serwerze tyle dni — na wypadek pomyłki.
 const KEEP_DELETED_DAYS = 30;
 
@@ -421,6 +426,11 @@ export class OneDriveSyncService implements OnModuleInit {
       }
     }
 
+    if ((f.size ?? 0) > MAX_DOWNLOAD_BYTES) {
+      await this.prisma.driveFile.update({ where: { id: f.id }, data: { status: 'skipped', error: tooBigError(f.size) } });
+      return;
+    }
+
     // @anchor onedrive-attempt-before-processing — numer próby zapisany PRZED pracą. Gdy proces
     // padnie w trakcie (np. zabity za przekroczenie pamięci przy ciężkim PDF), `catch` się nie
     // wykona — bez tego licznik zostawał 0 i po restarcie ten sam plik kładł backend od nowa.
@@ -444,6 +454,10 @@ export class OneDriveSyncService implements OnModuleInit {
       } catch (e: any) {
         if (e?.response?.status === 404) { await this.markDeleted(f); return; }
         throw e;
+      }
+      if ((meta.size ?? 0) > MAX_DOWNLOAD_BYTES) {
+        await this.prisma.driveFile.update({ where: { id: f.id }, data: { status: 'skipped', error: tooBigError(meta.size), size: meta.size } });
+        return;
       }
       const downloadUrl = meta['@microsoft.graph.downloadUrl'];
       if (!downloadUrl) throw new Error('Graph nie zwrócił adresu pobrania');
