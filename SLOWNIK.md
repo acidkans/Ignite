@@ -526,6 +526,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | user-tasks-changed (window.fetch wrapper) | apps/frontend/src/App.jsx | @anchor user-tasks-changed-event |
 | ui-funkcja | alarmEndForDeadline | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor alarm-end-for-deadline |
 | ui-funkcja | buildStrategyTasksQaPdfArtifact | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor build-strategy-tasks-qa-pdf-artifact |
+| ui-input | Nowe pytanie (QaCell) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-new-question |
 | ui-stala | EXTRA_CSS (eksport strategia/zadania/Q&A) | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor strategy-tasks-qa-pdf-css |
 | ui-funkcja | fetchProjectTasks | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor fetch-project-tasks-all |
 | ui-funkcja | strategyTasksQaPdfExport (moduł) | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor strategy-tasks-qa-pdf-export |

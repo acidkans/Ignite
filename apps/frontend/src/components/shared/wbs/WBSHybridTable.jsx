@@ -76,13 +76,23 @@ function QaPairRow({ p, idx, onUpdate, onRemove, onPersist }) {
     );
 }
 
-function QaCell({ pairs, onChange, onPersist }) {
+function QaCell({ pairs, onChange, onPersist, autoFocusNew = false }) {
     const list = Array.isArray(pairs) ? pairs : [];
     const update = (idx, field, value) => {
         onChange(list.map((p, i) => i === idx ? { ...p, [field]: value } : p));
     };
     const remove = (idx) => { onChange(list.filter((_, i) => i !== idx)); onPersist?.(); };
-    const add = () => { onChange([...list, { question: '', answer: '' }]); };
+    // @anchor qa-new-question — stałe pole „Nowe pytanie…" pod listą (jak „Nowe zadanie…" w szufladzie
+    // Zadania). Enter / wyjście z pola dopisuje parę i zapisuje; puste nic nie tworzy, więc w bazie
+    // nie lądują puste pary. `autoFocusNew` — kursor w polu od razu po otwarciu szuflady liścia.
+    const [newQ, setNewQ] = useState('');
+    const commitNew = () => {
+        const q = normalizeLowerText(newQ);
+        if (!q) return;
+        onChange([...list, { question: q, answer: '' }]);
+        setNewQ('');
+        onPersist?.();
+    };
 
     return (
         <div className="flex flex-col gap-1">
@@ -109,13 +119,18 @@ function QaCell({ pairs, onChange, onPersist }) {
                     </tbody>
                 </table>
             )}
-            <button
-                onClick={add}
-                className="self-start flex items-center gap-1 text-[14px] text-gray-600 hover:text-blue-400 transition-all"
-            >
-                <HelpCircle size={9} />
-                <span>+ pytanie</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+                <HelpCircle size={12} className="text-gray-600 flex-shrink-0" />
+                <input
+                    value={newQ}
+                    autoFocus={autoFocusNew}
+                    onChange={e => setNewQ(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitNew(); } }}
+                    onBlur={commitNew}
+                    placeholder="Nowe pytanie…"
+                    className="flex-1 min-w-0 px-2 py-1 rounded bg-black/20 border border-white/10 text-[15px] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
+                />
+            </div>
         </div>
     );
 }
@@ -2786,6 +2801,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                         pairs={node.qa}
                                         onChange={(next) => handleField(node.id, 'qa', next)}
                                         onPersist={() => onSave?.()}
+                                        autoFocusNew
                                     />
                                 )}
                             </div>
