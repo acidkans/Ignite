@@ -100,6 +100,14 @@ window.fetch = async (...args) => {
       window.dispatchEvent(new CustomEvent('auth-expired'));
     }
   }
+  // @anchor user-tasks-changed-event — każda udana zmiana zadań/alarmów (POST/PATCH/DELETE na
+  // /my-tasks…) ogłasza `user-tasks-changed`; widoki z podsumowaniem zadań (kolor ikony w WBS)
+  // przeładowują się same, niezależnie od tego, z którego modala/kalendarza przyszła zmiana.
+  const method = String(args[1]?.method || 'GET').toUpperCase();
+  if (res.ok && method !== 'GET') {
+    const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+    if (url.includes('/my-tasks')) window.dispatchEvent(new CustomEvent('user-tasks-changed'));
+  }
   return res;
 };
 

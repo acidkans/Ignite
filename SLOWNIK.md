@@ -523,6 +523,13 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | wbs-drawer-focus (WBS_BRANCH_CSS) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-drawer-focus-css |
 | ui-funkcja | openMyTasksOnLoad (App.handleLogin) | apps/frontend/src/App.jsx | @anchor open-my-tasks-after-login |
 | back-funkcja | createReminder — termin = koniec serii | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-cyclic-end-as-deadline |
+| ui-funkcja | user-tasks-changed (window.fetch wrapper) | apps/frontend/src/App.jsx | @anchor user-tasks-changed-event |
+| ui-funkcja | alarmEndForDeadline | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor alarm-end-for-deadline |
+| ui-funkcja | buildStrategyTasksQaPdfArtifact | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor build-strategy-tasks-qa-pdf-artifact |
+| ui-stala | EXTRA_CSS (eksport strategia/zadania/Q&A) | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor strategy-tasks-qa-pdf-css |
+| ui-funkcja | fetchProjectTasks | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor fetch-project-tasks-all |
+| ui-funkcja | strategyTasksQaPdfExport (moduł) | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor strategy-tasks-qa-pdf-export |
+| ui-przycisk | Strategia + zadania + Q&A | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor strategy-tasks-qa-pdf-button |
 | ui-stan | team (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-team |
 | ui-stala | OPTION_STYLE | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-option-style |
 | ui-stan | projectTasks | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-project-tasks |

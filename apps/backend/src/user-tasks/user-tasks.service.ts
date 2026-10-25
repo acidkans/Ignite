@@ -415,13 +415,16 @@ export class UserTasksService {
   // @anchor user-tasks-create-reminder
   // Tworzy alarm dla zadania. intervalMinutes ustawione → seria cykliczna (jeden wiersz-reguła),
   // zastępuje istniejącą serię cykliczną tego zadania. Bez intervalMinutes → alarm jednorazowy o `start`.
+  // Ustawić może odpowiedzialny albo zlecający (findEditable), ale alarm zawsze dzwoni u
+  // ODPOWIEDZIALNEGO (`task.userId`) — to jego push, jego MS To Do.
   async createReminder(
     userId: string,
     taskId: string,
     dto: { start?: string | Date; end?: string | Date; intervalMinutes?: number },
   ) {
-    const task = await this.prisma.userTask.findFirst({ where: { id: taskId, userId, deletedAt: null } });
+    const task = await this.findEditable(userId, taskId);
     if (!task) return null;
+    const ownerId = task.userId;
 
     const start = dto.start ? new Date(dto.start) : new Date();
     const interval = dto.intervalMinutes ?? null;
@@ -436,7 +439,7 @@ export class UserTasksService {
     const reminder = await this.prisma.taskReminder.create({
       data: {
         userTaskId: taskId,
-        userId,
+        userId: ownerId,
         remindAt: start,
         recurIntervalMinutes: interval,
         recurEnd: dto.end ? new Date(dto.end) : null,
@@ -448,23 +451,28 @@ export class UserTasksService {
     if (interval != null && dto.end) {
       const plannedEnd = new Date(dto.end);
       await this.prisma.userTask.update({ where: { id: taskId }, data: { plannedEnd } });
-      await this.syncReminderForTask(taskId, userId, plannedEnd);
-      await this.pushUpdateToGraph(userId, taskId, { plannedEnd });
+      await this.syncReminderForTask(taskId, ownerId, plannedEnd);
+      await this.pushUpdateToGraph(ownerId, taskId, { plannedEnd });
     }
     return reminder;
   }
 
   // @anchor user-tasks-list-reminders
+  // Alarmy zadania widzi odpowiedzialny i zlecający (ten sam krąg co edycja zadania).
   async getRemindersForTask(userId: string, taskId: string) {
+    if (!(await this.findEditable(userId, taskId))) return [];
     return this.prisma.taskReminder.findMany({
-      where: { userTaskId: taskId, userId },
+      where: { userTaskId: taskId },
       orderBy: { remindAt: 'asc' },
     });
   }
 
   // @anchor user-tasks-delete-reminder
+  // Usuwa odpowiedzialny (właściciel alarmu) albo zlecający zadania.
   async deleteReminder(userId: string, reminderId: string) {
-    return this.prisma.taskReminder.deleteMany({ where: { id: reminderId, userId } });
+    return this.prisma.taskReminder.deleteMany({
+      where: { id: reminderId, OR: [{ userId }, { userTask: { createdById: userId } }] },
+    });
   }
 
   // @anchor user-tasks-handle-reminder

@@ -10,6 +10,7 @@ import TasksCalendarSection from './TasksCalendarSection';
 import GanttSection from './GanttSection';
 import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, PRICED_LEAF_TYPES, orderDefaultsFrom, leafDefaultsMissing, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes, applyGroupMultipliers, groupQtyFactor } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
+import { buildStrategyTasksQaPdfArtifact } from '../../../utils/strategyTasksQaPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
 import { buildWbsHtmlTable } from '../../../utils/wbsPdfExport';
 import { stripPricesFromWorkbook, stripPricesFromHtml, noPricesFilename, noPricesBannerHtml, stripRevenueFromWorkbook, costsOnlyFilename } from '../../../utils/exportWithoutPrices';
@@ -6563,6 +6564,15 @@ ${ganttSectionHtml}
                                 className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                             >
                                 <FileDown size={11} /> Q&A PDF
+                            </button>
+                        )}
+                        {(key === 'wbs' || key === 'wbs-hybrid') && (
+                            // @anchor strategy-tasks-qa-pdf-button
+                            <button
+                                onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'PDF — strategia, zadania, Q&A', defaultFilename: `${safeFileBase()}_strategia_zadania_QA.pdf`, oneDriveFolderKey: 'reports', makeArtifact: () => buildStrategyTasksQaPdfArtifact({ wbsData, processNodeId: nodeId, orderName: orderName || projectName }) }); }}
+                                className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
+                            >
+                                <FileDown size={11} /> Strategia + zadania + Q&A
                             </button>
                         )}
                         {(key === 'wbs' || key === 'wbs-hybrid' || onExport) && (

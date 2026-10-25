@@ -4,7 +4,7 @@ import AutoResizeTextarea from './AutoResizeTextarea';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
 import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, ArrowRight, ArrowLeft, Check, Loader2, Calendar, Repeat } from 'lucide-react';
-import { CyclicAlarmEditor, ALARM_INTERVALS, toLocalInput } from '../MyTasksModal';
+import { CyclicAlarmEditor, ALARM_INTERVALS, toLocalInput, alarmEndForDeadline } from '../MyTasksModal';
 import { useDevice } from '../../../hooks/useDevice';
 
 // @anchor normalize-lower-text
@@ -270,9 +270,8 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
     // @anchor wbs-new-task-comment — komentarz wpisywany razem z nowym zadaniem (→ description)
     const [newComment, setNewComment] = useState('');
     // @anchor wbs-new-task-alarm — alarm cykliczny nowego zadania { start, end, intervalMinutes } | null;
-    // ustawiany po utworzeniu zadania, tylko gdy odpowiedzialnym jest zalogowany (backend: createReminder)
+    // ustawiany po utworzeniu zadania; może go ustawić autor także dla innego odpowiedzialnego (alarm dzwoni u niego)
     const [newAlarm, setNewAlarm] = useState(null);
-    const canSetNewAlarm = !assigneeId || assigneeId === currentUserId;
 
     const load = useCallback(async () => {
         try {
@@ -304,7 +303,7 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
             });
             if (!res.ok) throw new Error('Błąd zapisu zadania');
             const created = await res.json();
-            if (newAlarm && canSetNewAlarm && created?.id) {
+            if (newAlarm && created?.id) {
                 const r = await fetch(`/api/my-tasks/${created.id}/reminders`, {
                     method: 'POST',
                     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -420,14 +419,14 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                                         value={t.userId}
                                         onChange={e => reassign(t, e.target.value)}
                                         title="Odpowiedzialny — zadanie jest w jego MS To Do"
-                                        className="w-44 flex-shrink-0 px-1.5 py-0.5 rounded bg-black/20 border border-white/10 text-[13px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
+                                        className="w-60 flex-shrink-0 px-1.5 py-0.5 rounded bg-black/20 border border-white/10 text-[13px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
                                     >
                                         {people.map(u => <option key={u.id} value={u.id} style={OPTION_STYLE}>{personLabel(u)}</option>)}
                                     </select>
                                 ) : (
-                                    <span className="text-[13px] text-gray-500 flex-shrink-0 w-44 truncate text-right" title={t.user?.email}>{who(t.user)}</span>
+                                    <span className="text-[13px] text-gray-500 flex-shrink-0 w-60 truncate text-right" title={t.user?.email}>{who(t.user)}</span>
                                 )}
-                                {t.userId === currentUserId ? (
+                                {mine ? (
                                     <button
                                         onClick={() => setAlarmTaskId(id => id === t.id ? null : t.id)}
                                         title="Alarm cykliczny"
@@ -435,7 +434,7 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                                     >
                                         <Repeat size={11} />
                                     </button>
-                                ) : <span className="w-6 flex-shrink-0" title="Alarm cykliczny ustawia odpowiedzialny" />}
+                                ) : <span className="w-6 flex-shrink-0" title="Alarm cykliczny ustawia odpowiedzialny lub zlecający" />}
                                 {mine ? (
                                     <button onClick={() => remove(t)} title="Usuń zadanie" className="p-0.5 rounded text-gray-700 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover/task:opacity-100 transition-all">
                                         <X size={12} />
@@ -444,7 +443,7 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                                 </div>
                                 {alarmTaskId === t.id && (
                                     <div className="max-w-md ml-6">
-                                        <CyclicAlarmEditor taskId={t.id} onClose={() => { setAlarmTaskId(null); load(); }} />
+                                        <CyclicAlarmEditor taskId={t.id} plannedEnd={t.plannedEnd} onClose={() => { setAlarmTaskId(null); load(); }} />
                                     </div>
                                 )}
                             </li>
@@ -470,7 +469,7 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                     value={assigneeId}
                     onChange={e => setAssigneeId(e.target.value)}
                     title="Odpowiedzialny — zadanie trafi do jego kalendarza i MS To Do"
-                    className="w-44 px-1.5 py-1 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
+                    className="w-60 px-1.5 py-1 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
                 >
                     {people.map(u => <option key={u.id} value={u.id} style={OPTION_STYLE}>{u.id === currentUserId ? `${personLabel(u)} (ja)` : personLabel(u)}</option>)}
                 </select>
@@ -479,15 +478,19 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                     <input
                         type="date"
                         value={plannedEnd}
-                        onChange={e => setPlannedEnd(e.target.value)}
+                        onChange={e => {
+                            const v = e.target.value;
+                            setPlannedEnd(v);
+                            // otwarty alarm idzie za terminem — koniec serii = nowa data zadania
+                            if (v) setNewAlarm(a => a ? { ...a, end: alarmEndForDeadline(v) } : a);
+                        }}
                         className="px-1.5 py-1 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
                     />
                 </label>
                 <button
                     type="button"
-                    disabled={!canSetNewAlarm}
-                    onClick={() => setNewAlarm(a => a ? null : { start: toLocalInput(new Date()), end: toLocalInput(new Date(Date.now() + 86400000)), intervalMinutes: 60 })}
-                    title={canSetNewAlarm ? 'Alarm cykliczny' : 'Alarm cykliczny ustawia odpowiedzialny'}
+                    onClick={() => setNewAlarm(a => a ? null : { start: toLocalInput(new Date()), end: alarmEndForDeadline(plannedEnd), intervalMinutes: 60 })}
+                    title="Alarm cykliczny — przypomnienia dostanie odpowiedzialny"
                     className={`flex-shrink-0 w-7 h-7 rounded border flex items-center justify-center transition-all disabled:opacity-30 ${newAlarm ? 'bg-indigo-500/15 border-indigo-500/30 text-indigo-300' : 'border-white/10 text-gray-500 hover:text-indigo-300'}`}
                 >
                     <Repeat size={12} />
@@ -500,7 +503,7 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                     {saving ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />} Dodaj
                 </button>
                 </div>
-                {newAlarm && canSetNewAlarm && (
+                {newAlarm && (
                     <div className="flex items-center gap-2 flex-wrap justify-end text-[13px] text-gray-400">
                         <Repeat size={12} className="text-indigo-300" /> Alarm cykliczny
                         <label className="flex items-center gap-1">od
@@ -1351,6 +1354,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         } catch (e) { console.warn('[WBS] task summary failed', e); }
     }, [processNodeId]);
     useEffect(() => { loadTaskSummary(); }, [loadTaskSummary]);
+    // Zmiana zadania gdziekolwiek (Moje zadania, kalendarz, alarm) → przelicz kolory ikon.
+    // Krótkie opóźnienie zbija serię zapisów (zadanie + alarm) w jedno zapytanie.
+    useEffect(() => {
+        let timer;
+        const onChanged = () => { clearTimeout(timer); timer = setTimeout(loadTaskSummary, 300); };
+        window.addEventListener('user-tasks-changed', onChanged);
+        return () => { clearTimeout(timer); window.removeEventListener('user-tasks-changed', onChanged); };
+    }, [loadTaskSummary]);
     // @anchor wbs-col-widths-storage — szerokości kolumn zapamiętane w tej przeglądarce (per urządzenie);
     // brak/zepsuty wpis albo zablokowany storage = szerokości domyślne.
     const [colWidths, setColWidths] = useState(() => {

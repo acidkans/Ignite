@@ -16,12 +16,22 @@ export function toLocalInput(date) {
     return d.toISOString().slice(0, 16);
 }
 
+// @anchor alarm-end-for-deadline
+// Domyślny koniec serii alarmów = dzień terminu zadania, o tej samej godzinie co start (teraz).
+// `deadline`: 'RRRR-MM-DD' z inputa daty albo data/ISO z plannedEnd. Brak terminu → jutro.
+export function alarmEndForDeadline(deadline) {
+    const now = toLocalInput(new Date());
+    if (!deadline) return toLocalInput(new Date(Date.now() + 86400000));
+    const day = typeof deadline === 'string' && deadline.length === 10 ? deadline : toLocalInput(new Date(deadline)).slice(0, 10);
+    return `${day}T${now.slice(11, 16)}`;
+}
+
 // @anchor my-tasks-cyclic-alarm-editor
 // Eksportowany — używa go też szuflada Zadania w WBS (WbsTasksDrawer).
-export function CyclicAlarmEditor({ taskId, onClose }) {
+export function CyclicAlarmEditor({ taskId, plannedEnd, onClose }) {
     const [existing, setExisting] = useState(null);
     const [start, setStart] = useState(() => toLocalInput(new Date()));
-    const [end, setEnd] = useState(() => toLocalInput(new Date(Date.now() + 86400000)));
+    const [end, setEnd] = useState(() => alarmEndForDeadline(plannedEnd));
     const [intervalMinutes, setIntervalMinutes] = useState(60);
     const [busy, setBusy] = useState(false);
 
@@ -228,7 +238,7 @@ function TaskCard({ task, onDone, onRename, onAlarmSaved }) {
             </div>
 
             {alarmOpen && (
-                <CyclicAlarmEditor taskId={task.id} onClose={(changed) => { setAlarmOpen(false); if (changed) onAlarmSaved?.(); }} />
+                <CyclicAlarmEditor taskId={task.id} plannedEnd={task.plannedEnd} onClose={(changed) => { setAlarmOpen(false); if (changed) onAlarmSaved?.(); }} />
             )}
         </div>
     );

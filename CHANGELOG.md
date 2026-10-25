@@ -1,3 +1,15 @@
+## 2026-10-25 — Eksport PDF: strategia, zadania i Q&A per gałąź główna (v2026.10.25.0729)
+
+### architektura / API
+- `ui-funkcja` `buildStrategyTasksQaPdfArtifact` (nowy `utils/strategyTasksQaPdfExport.js`) — PDF: każda gałąź główna od nowej strony; Strategia (wpisy potomków, czcionka maleje z głębokością, nic większego niż nazwa gałęzi 17 px), Zadania (lista: zadanie + odpowiedzialny, otwarte i wykonane z `GET /my-tasks/project/:processNodeId`), Q&A (pary per pozycja, brak odpowiedzi wyróżniony)
+- `ui-przycisk` „Strategia + zadania + Q&A” w pasku WBS obok „Q&A PDF” — przez `openExport` (pobierz / mail / OneDrive `reports`)
+
+### słownik
+- dodano `build-strategy-tasks-qa-pdf-artifact`, `strategy-tasks-qa-pdf-css`, `fetch-project-tasks-all`, `strategy-tasks-qa-pdf-export`, `strategy-tasks-qa-pdf-button`
+
+### wytyczne
+- `schema-pole` `WbsNode.strategy` gałęzi głównej — to złożenie wpisów dzieci; eksporty pokazują wpisy dzieci, a pole gałęzi tylko gdy dzieci nie mają strategii (inaczej treść dubluje się)
+
 ## 2026-10-25 — Zadania WBS: komentarz w wierszu zadania i alarm cykliczny (v2026.10.25.0544)
 
 ### architektura / API
@@ -9,6 +21,7 @@
 - dodano `wbs-task-comment`, `wbs-task-save-comment`
 
 ### wytyczne
+- `back-serwis` `UserTasksService.createReminder` — alarm (także cykliczny) może ustawić odpowiedzialny lub zlecający; `TaskReminder.userId` = zawsze odpowiedzialny (`UserTask.userId`), u niego dzwoni push i jego MS To Do dostaje termin
 - `schema-pole` `UserTask.plannedEnd` — zapis alarmu cyklicznego z datą „Do” (`POST /my-tasks/:id/reminders` z `intervalMinutes`) przesuwa termin zadania na tę datę (także w MS To Do)
 - `schema-pole` `UserTask.description` — pełni rolę komentarza zadania (jeden na zadanie); edytuje odpowiedzialny lub zlecający, pozostali widzą tylko do odczytu
 
