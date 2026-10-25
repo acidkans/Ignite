@@ -1,3 +1,15 @@
+## 2026-10-25 — Mobile: zadania (UserTask) w widoku Moje Zadania obok harmonogramu (v2026.10.25.1548)
+
+### architektura / API
+- `ui-sekcja` `MobileUserTasks` — mobilny widok „Moje Zadania” pokazuje otwarte zadania zalogowanego (`GET /my-tasks`) nad harmonogramem (`Subtask`); odhaczanie online, kopia offline w IndexedDB per użytkownik (`mobile-user-tasks:<sub>`)
+- `back-endpoint` `GET /my-tasks` — zwraca `wbsNode { id, name }` (kontekst „projekt › pozycja”)
+
+### słownik
+- dodano `mobile-user-tasks`, `mobile-user-tasks-refresh-key`
+
+### wytyczne
+- `ui-widok` mobile „Moje Zadania” — dwa źródła: `UserTask` (zadania z WBS / Moje zadania / kalendarz) i `Subtask` (harmonogram); nowe typy zadań trzeba dopinać do obu widoków, desktopowego i mobilnego
+
 ## 2026-10-25 — Eksport PDF: strategia, zadania i Q&A per gałąź główna (v2026.10.25.0729)
 
 ### architektura / API

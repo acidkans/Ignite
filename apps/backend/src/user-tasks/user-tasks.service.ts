@@ -50,6 +50,8 @@ export class UserTasksService {
       orderBy: wanted === 'DONE' ? [{ updatedAt: 'desc' }] : [{ plannedEnd: 'asc' }],
       include: {
         node: { select: { id: true, name: true } },
+        // pozycja WBS — kontekst zadania w widoku mobilnym („projekt › pozycja”)
+        wbsNode: { select: { id: true, name: true } },
         reminders: {
           where: { sentAt: null },
           orderBy: { remindAt: 'asc' },

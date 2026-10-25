@@ -527,6 +527,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | alarmEndForDeadline | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor alarm-end-for-deadline |
 | ui-funkcja | buildStrategyTasksQaPdfArtifact | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor build-strategy-tasks-qa-pdf-artifact |
 | ui-input | Nowe pytanie (QaCell) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-new-question |
+| ui-sekcja | MobileUserTasks | apps/frontend/src/components/Mobile/MobileUserTasks.jsx | @anchor mobile-user-tasks |
+| ui-stan | userTasksRefreshKey (MobileDashboard) | apps/frontend/src/components/Mobile/MobileDashboard.jsx | @anchor mobile-user-tasks-refresh-key |
 | ui-stala | EXTRA_CSS (eksport strategia/zadania/Q&A) | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor strategy-tasks-qa-pdf-css |
 | ui-funkcja | fetchProjectTasks | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor fetch-project-tasks-all |
 | ui-funkcja | strategyTasksQaPdfExport (moduł) | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor strategy-tasks-qa-pdf-export |

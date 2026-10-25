@@ -8,6 +8,7 @@ import {
 import SchematicViewer from '../shared/SchematicViewer';
 import OrphanAttachmentsPanel from '../shared/OrphanAttachmentsPanel';
 import SyncWarningBanner from '../shared/SyncWarningBanner';
+import MobileUserTasks from './MobileUserTasks';
 import { useCachedSubtasks } from '../../hooks/useCachedSubtasks';
 import { useNetwork } from '../../hooks/useNetwork';
 import { enqueue, countPending, getOrphanedAttachments } from '../../services/repos/outboxRepo';
@@ -30,6 +31,8 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
     const { subtasks, loading, syncing, refresh } = useCachedSubtasks(token);
     const { isOnline } = useNetwork();
     const [lastSync, setLastSync] = useState(null);
+    // @anchor mobile-user-tasks-refresh-key — przycisk odświeżania przeładowuje też zadania (UserTask)
+    const [userTasksRefreshKey, setUserTasksRefreshKey] = useState(0);
     const [pendingCount, setPendingCount] = useState(0);
     // Zdjęcia bez rozwiązywalnego znacznika — czekają na ręczne przypisanie.
     // Liczone osobno od `pendingCount`, bo same z siebie NIGDY nie zejdą z kolejki.
@@ -337,7 +340,7 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
                             </div>
                         )}
                         <button
-                            onClick={refresh}
+                            onClick={() => { refresh(); setUserTasksRefreshKey(k => k + 1); }}
                             disabled={syncing || !isOnline}
                             className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all active:scale-90 ${syncing ? 'text-blue-400' : 'text-gray-600 active:text-gray-300'} disabled:cursor-not-allowed`}
                             title={lastSync ? `Ostatnia sync: ${new Date(lastSync).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}` : 'Odśwież'}
@@ -369,8 +372,14 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
             <SyncWarningBanner />
 
             <main className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                <MobileUserTasks token={token} isOnline={isOnline} refreshKey={userTasksRefreshKey} />
+                <div className="flex items-center gap-2 px-1 pt-1">
+                    <Briefcase size={14} className="text-blue-400" />
+                    <span className="text-[11px] font-black uppercase tracking-widest text-blue-300">Harmonogram</span>
+                    <div className="flex-1 h-px bg-white/5" />
+                </div>
                 {filteredSubtasks.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-64 text-gray-500 space-y-4">
+                    <div className="flex flex-col items-center justify-center h-40 text-gray-500 space-y-4">
                         <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
                             <Briefcase size={32} className="opacity-20 text-blue-400" />
                         </div>
