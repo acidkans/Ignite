@@ -2364,13 +2364,19 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     // (nowe i istniejące pozycje), od razu w tabeli, edytowalne później.
                                     // Jednostka: nazwa kablowa/światłowodowa ma priorytet nad domyślną z modalu.
                                     // Ilość zachowana (nie przekazujemy jej do defaults) — patrz applyLeafDefaults.
-                                    const defs = getLeafDefaultFrom(leafDefaults, newType) || {};
+                                    // Typ usunięty z listy domyślnych (getLeafDefaultFrom → null) — cen nie ruszamy.
+                                    const rawDefs = getLeafDefaultFrom(leafDefaults, newType);
+                                    const defs = rawDefs || {};
                                     const suggestedUnit = suggestDefaultUnit(node.name, newType);
                                     const unitToApply = suggestedUnit || defs.unit;
                                     if (unitToApply != null) handleField(node.id, 'unit', unitToApply);
-                                    if (defs.unitCost != null) handleField(node.id, 'unitCost', defs.unitCost);
-                                    if (defs.margin != null) handleField(node.id, 'margin', defs.margin);
-                                    onApplyLeafDefaults?.(node.id, { unit: unitToApply, unitCost: defs.unitCost, margin: defs.margin });
+                                    if (rawDefs) {
+                                        if (defs.unitCost != null) handleField(node.id, 'unitCost', defs.unitCost);
+                                        if (defs.margin != null) handleField(node.id, 'margin', defs.margin);
+                                        onApplyLeafDefaults?.(node.id, { unit: unitToApply, unitCost: defs.unitCost, margin: defs.margin });
+                                    } else if (unitToApply != null) {
+                                        onNodeFieldSave?.(node.id, 'unit', unitToApply);
+                                    }
                                 }
                                 if (newType === 'work') {
                                     ensureFuelLeaf(node.id);

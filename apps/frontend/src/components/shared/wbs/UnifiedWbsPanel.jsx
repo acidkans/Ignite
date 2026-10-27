@@ -5393,6 +5393,8 @@ ${ganttSectionHtml}
     // wartości domyślnej. Po akceptacji baseline nic nie ruszamy (stawki zamrożone).
     const applyFuelDefaults = useCallback(async (next, prev) => {
         if (offerLocked) return;
+        // Paliwo usunięte z listy domyślnych — istniejących liści nie ruszamy.
+        if (next?.fuel?.excluded) return;
         const defs = getLeafDefaultFrom(next, 'fuel') || {};
         const prevDefs = getLeafDefaultFrom(prev, 'fuel') || {};
         const km = Number(next?.order?.distanceKm);
@@ -7354,19 +7356,36 @@ ${ganttSectionHtml}
 
                         <div className="p-5 overflow-auto max-h-[calc(90vh-140px)] custom-scrollbar">
                             <div className="rounded-xl border border-white/10 overflow-hidden">
-                                <div className="grid grid-cols-[1.4fr,1.2fr,1fr,0.9fr] gap-3 px-4 py-2.5 bg-white/5 text-[10px] uppercase tracking-widest text-gray-400 font-bold">
+                                <div className="grid grid-cols-[1.4fr,1.2fr,1fr,0.9fr,2rem] gap-3 px-4 py-2.5 bg-white/5 text-[10px] uppercase tracking-widest text-gray-400 font-bold">
                                     <div>Typ pozycji</div>
                                     <div>Jednostka</div>
                                     <div>Koszt jedn. (zł)</div>
                                     <div>Narzut (%)</div>
+                                    <div />
                                 </div>
                                 <div className="divide-y divide-white/5">
                                     {/* Materiał i sprzęt wyceniane indywidualnie (wymagania materiałowe) — poza modalem domyślnych */}
                                     {PRICED_LEAF_TYPES.map((t) => {
                                         const row = leafDefaultsDraft[t] || ZERO_LEAF_DEFAULTS[t] || {};
                                         const setField = (field, value) => setLeafDefaultsDraft((prev) => ({ ...prev, [t]: { ...(prev[t] || ZERO_LEAF_DEFAULTS[t] || {}), [field]: value } }));
+                                        // Usunięty typ (`excluded`) nie blokuje zapisu i nie podstawia wartości do nowych pozycji.
+                                        if (row.excluded) {
+                                            return (
+                                                <div key={t} className="grid grid-cols-[1.4fr,1.2fr,1fr,0.9fr,2rem] gap-3 px-4 py-2.5 items-center">
+                                                    <div className="text-sm text-gray-500 font-medium line-through">{TYPE_LABELS[t] || t}</div>
+                                                    <div className="col-span-3 text-[11px] text-gray-500 italic">Usunięto z domyślnych — nowe pozycje tego typu bez podstawionej ceny</div>
+                                                    <button
+                                                        onClick={() => setField('excluded', false)}
+                                                        className="p-1.5 rounded-lg border border-white/10 text-gray-400 hover:text-sky-300 hover:bg-white/10 transition-all"
+                                                        title="Przywróć do domyślnych" aria-label="Przywróć do domyślnych"
+                                                    >
+                                                        <RotateCcw size={13} />
+                                                    </button>
+                                                </div>
+                                            );
+                                        }
                                         return (
-                                            <div key={t} className="grid grid-cols-[1.4fr,1.2fr,1fr,0.9fr] gap-3 px-4 py-2.5 items-center hover:bg-white/[0.02] transition-colors">
+                                            <div key={t} className="grid grid-cols-[1.4fr,1.2fr,1fr,0.9fr,2rem] gap-3 px-4 py-2.5 items-center hover:bg-white/[0.02] transition-colors">
                                                 <div className="text-sm text-white font-medium">{TYPE_LABELS[t] || t}</div>
                                                 <select
                                                     value={row.unit ?? ''}
@@ -7389,6 +7408,13 @@ ${ganttSectionHtml}
                                                     onChange={(e) => setField('margin', e.target.value === '' ? 0 : Number(e.target.value))}
                                                     className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-sky-500"
                                                 />
+                                                <button
+                                                    onClick={() => setField('excluded', true)}
+                                                    className="p-1.5 rounded-lg border border-white/10 text-gray-400 hover:text-red-300 hover:bg-red-500/10 transition-all"
+                                                    title="Usuń z domyślnych" aria-label="Usuń z domyślnych"
+                                                >
+                                                    <Trash2 size={13} />
+                                                </button>
                                             </div>
                                         );
                                     })}

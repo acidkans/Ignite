@@ -1116,20 +1116,24 @@ export function orderDefaultsFrom(defaults) {
 export function leafDefaultsMissing(defaults) {
   const d = mergeLeafDefaults(defaults);
   const missing = [];
+  // Odległość służy tylko do km na Paliwie — usunięte paliwo zdejmuje też ten wymóg.
   const km = d.order.distanceKm;
-  if (km === null || km === undefined || km === '' || !Number.isFinite(Number(km)) || Number(km) < 0) {
+  if (!d.fuel?.excluded && (km === null || km === undefined || km === '' || !Number.isFinite(Number(km)) || Number(km) < 0)) {
     missing.push('Odległość do klienta');
   }
   for (const t of PRICED_LEAF_TYPES) {
+    if (d[t]?.excluded) continue;
     if (!(Number(d[t]?.unitCost) > 0)) missing.push(`Koszt jedn. — ${TYPE_LABELS[t] || t}`);
   }
   return missing;
 }
 
 // @anchor get-leaf-default-from
-// Wartości domyślne dla pojedynczego typu liścia z przekazanego kompletu (null gdy typ nie jest liściem).
+// Wartości domyślne dla pojedynczego typu liścia z przekazanego kompletu (null gdy typ nie jest liściem
+// albo został usunięty z listy domyślnych tego zamówienia — `excluded: true`; wtedy nic nie podstawiamy).
 export function getLeafDefaultFrom(defaults, type) {
   const t = String(type || '').toLowerCase();
   if (!defaults || typeof defaults !== 'object') return ZERO_LEAF_DEFAULTS[t] || null;
+  if (defaults[t]?.excluded) return null;
   return defaults[t] || ZERO_LEAF_DEFAULTS[t] || null;
 }

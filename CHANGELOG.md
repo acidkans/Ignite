@@ -1,3 +1,13 @@
+## 2026-10-27 — feat(wbs): usuwanie typu pozycji z listy domyślnych wartości zamówienia — brak stawki nie blokuje zapisu (v2026.10.27.2018)
+
+### architektura / API
+- `schema-json` `WbsLeafDefaults.data` — nowa flaga `excluded: true` per typ liścia (np. `{ fuel: { excluded: true } }`); backend zapisuje JSON bez zmian
+- `ui-modal` „Domyślne wartości pozycji” — przycisk usuń / przywróć w każdym wierszu typu
+
+### wytyczne
+- `ui-funkcja` `getLeafDefaultFrom()` zwraca `null` dla typu z `excluded` — zmiana typu pozycji nie podstawia wtedy ceny ani narzutu
+- `ui-funkcja` `leafDefaultsMissing()` pomija typy `excluded`; usunięte Paliwo zdejmuje też wymóg odległości do klienta, a `apply-fuel-defaults` nie rusza istniejących liści Paliwo
+
 ## 2026-10-25 — fix(onedrive): rozmiar pliku jako Float — pliki > 2 GB wywalały sync (INT4 overflow) + limit pobierania 20 MB (v2026.10.25.2048)
 
 ### schema.prisma
