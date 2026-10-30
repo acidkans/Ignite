@@ -166,7 +166,8 @@ export class MsTodoService {
   }
 
   // @anchor ms-todo-disconnect
-  async disconnect(userId: string): Promise<void> {
+  async disconnect(userId: string, canManage: boolean): Promise<void> {
+    await this.oneDrive.assertCanDisconnect(userId, canManage);
     await this.prisma.$transaction([
       this.prisma.msTodoSyncState.deleteMany({ where: { userId } }),
       this.prisma.userMsToken.deleteMany({ where: { userId } }),

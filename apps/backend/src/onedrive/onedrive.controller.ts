@@ -6,6 +6,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { OneDriveManagerGuard, canManageOneDrive } from './onedrive-manager.guard';
 import { OneDriveService } from './onedrive.service';
 import { OneDriveSyncService } from './onedrive-sync.service';
 import { OneDriveSharedOffersService } from './onedrive-shared-offers.service';
@@ -48,7 +49,8 @@ export class OneDriveController {
   @Get('status')
   @UseGuards(JwtAuthGuard)
   status(@Req() req: any) {
-    return this.oneDriveService.getStatus(req.user.userId);
+    return this.oneDriveService.getStatus(req.user.userId)
+      .then((st) => ({ ...st, canManage: canManageOneDrive(req.user.email) }));
   }
 
   // @anchor onedrive-browse-endpoint
@@ -59,8 +61,9 @@ export class OneDriveController {
   }
 
   // @anchor onedrive-set-folder-endpoint
+  // Przepięcie folderu zamówienia — tylko adresy z `ONEDRIVE_MANAGER_EMAILS`.
   @Post('set-folder')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, OneDriveManagerGuard)
   setFolder(
     @Req() req: any,
     @Body() body: { nodeId: string; folderId: string; driveId: string; folderName: string },
@@ -85,7 +88,7 @@ export class OneDriveController {
   // @anchor onedrive-structure-endpoint
   // Zakłada brakujące katalogi struktury w folderze zamówienia (np. dla zamówień powiązanych przed zmianą).
   @Post('structure/:nodeId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, OneDriveManagerGuard)
   structure(@Param('nodeId') nodeId: string) {
     return this.oneDriveService.ensureOrderFolders(nodeId);
   }
@@ -217,6 +220,6 @@ export class OneDriveController {
   @Delete('disconnect')
   @UseGuards(JwtAuthGuard)
   disconnect(@Req() req: any) {
-    return this.oneDriveService.disconnect(req.user.userId);
+    return this.oneDriveService.disconnect(req.user.userId, canManageOneDrive(req.user.email));
   }
 }

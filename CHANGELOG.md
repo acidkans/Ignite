@@ -1,3 +1,25 @@
+## 2026-10-30 — feat(onedrive): folder zamówienia i konto wspólne MS tylko dla osób z listy uprawnionych (v2026.10.30.2319)
+
+### architektura / API
+- dodano `back-stala` `ONEDRIVE_MANAGER_EMAILS` (andrzej@gigatel.app, aromanowicz@europrim.com.pl, a.romanowicz@airtel.com.pl), `back-funkcja` `canManageOneDrive` i `back-guard` `OneDriveManagerGuard` (onedrive-manager.guard.ts)
+- `back-endpoint` `POST /onedrive/set-folder` i `POST /onedrive/structure/:nodeId` — `OneDriveManagerGuard`; spoza listy (także admin) dostaje 403
+- `back-endpoint` `DELETE /onedrive/disconnect` i `DELETE /ms-todo/disconnect` — osoba spoza listy nie może odłączyć konta, które jest kontem wspólnym (403); własne konto (MS To Do) odłącza każdy
+- `back-endpoint` `GET /onedrive/status` zwraca dodatkowo `canManage`
+- dodano `back-funkcja` `sharedTokenRecord` (wspólny wybór konta dla `getSharedToken`/`getStatus`/odłączania) i `back-funkcja` `assertCanDisconnect`
+- `ui-dropdown` menu OneDrive w `DashboardPage` — bez `canManage` widać tylko „Otwórz w OneDrive”; klik w przycisk bez przypisanego folderu nic nie robi (`ui-stan` `oneDriveCanManage`)
+- `ui-sekcja` `MsAccountPanel` — pokazuje komunikat, gdy odłączenie zostało odrzucone
+
+### słownik
+- dodano `onedrive-shared-token-record` — `sharedTokenRecord`, onedrive.service.ts
+- dodano `onedrive-assert-can-disconnect` — `assertCanDisconnect`, onedrive.service.ts
+- dodano `onedrive-manager-emails`, `can-manage-onedrive`, `onedrive-manager-guard` — onedrive-manager.guard.ts
+- dodano `onedrive-can-manage` — `oneDriveCanManage`, DashboardPage.jsx
+
+### wytyczne
+- `back-endpoint` odłączanie konta MS — każda nowa droga kasująca `UserMsToken` musi wołać `assertCanDisconnect`, inaczej osoba spoza listy odetnie pliki zamówień wszystkim
+- `back-stala` `ONEDRIVE_MANAGER_EMAILS` — uprawnienia OneDrive zamówień idą po adresie e-mail, nie po roli; frontend nie trzyma kopii listy, bierze `canManage` z `/onedrive/status`
+- `back-guard` `RolesGuard` — role pochodzą z bazy (JwtStrategy.validate), nie z payloadu JWT
+
 ## 2026-10-30 — feat(drzewo): drag&drop w lewej belce — zmiana kolejności węzłów i przenoszenie na najwyższy poziom + przycisk „Moje konto” w belce (v2026.10.30.2147)
 
 ### schema.prisma

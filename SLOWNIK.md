@@ -2748,6 +2748,12 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-funkcja | ensureSubfolder | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-ensure-subfolder |
 | back-serwis | getSharedToken | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-shared-token |
 | back-funkcja | tokenFromRecord | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-token-from-record |
+| back-funkcja | sharedTokenRecord | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-shared-token-record |
+| back-funkcja | assertCanDisconnect | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-assert-can-disconnect |
+| back-stala | ONEDRIVE_MANAGER_EMAILS | apps/backend/src/onedrive/onedrive-manager.guard.ts | @anchor onedrive-manager-emails |
+| back-funkcja | canManageOneDrive | apps/backend/src/onedrive/onedrive-manager.guard.ts | @anchor can-manage-onedrive |
+| back-guard | OneDriveManagerGuard | apps/backend/src/onedrive/onedrive-manager.guard.ts | @anchor onedrive-manager-guard |
+| ui-stan | oneDriveCanManage | apps/frontend/src/DashboardPage.jsx | @anchor onedrive-can-manage |
 | back-funkcja | ensureCategoryFolder | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-ensure-category-folder |
 | back-env | MS_SHARED_ACCOUNT_EMAIL | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-shared-token |
 | back-stala | UPLOADS_ROOT | apps/backend/src/common/uploads.util.ts | @anchor uploads-root |

@@ -14,6 +14,7 @@ export default function MsAccountPanel({ oauthResult = null }) {
   const [msResyncMsg, setMsResyncMsg] = useState(null); // 'ok' | 'error' | null
   // @anchor ms-account-confirm-disconnect — własne TAK/NIE zamiast window.confirm
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [msDisconnectError, setMsDisconnectError] = useState(null); // komunikat 403 — konto wspólne odłącza tylko admin
 
   const fetchMsStatus = async () => {
     try {
@@ -37,7 +38,12 @@ export default function MsAccountPanel({ oauthResult = null }) {
   const handleMsDisconnect = async () => {
     setConfirmDisconnect(false);
     setMsAction('disconnecting');
-    await fetch(`${API_URL}/ms-todo/disconnect`, { method: 'DELETE', headers: authHeaders() });
+    setMsDisconnectError(null);
+    const res = await fetch(`${API_URL}/ms-todo/disconnect`, { method: 'DELETE', headers: authHeaders() });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setMsDisconnectError(body?.message || 'Nie udało się rozłączyć konta.');
+    }
     await fetchMsStatus();
     setMsAction(null);
   };
@@ -149,6 +155,7 @@ export default function MsAccountPanel({ oauthResult = null }) {
               {msResyncMsg === 'ok' ? 'Zlecono — pojawi się po najbliższym cyklu (do 5 min).' : 'Błąd zlecenia synchronizacji.'}
             </span>
           )}
+          {msDisconnectError && <span className="text-[11px] text-red-300">{msDisconnectError}</span>}
         </>
       ) : (
         <div className="flex flex-col gap-3">

@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Delete, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { MsTodoService } from './ms-todo.service';
+import { canManageOneDrive } from '../onedrive/onedrive-manager.guard';
 
 // @anchor ms-todo-controller
 @Controller('ms-todo')
@@ -23,7 +24,7 @@ export class MsTodoController {
   // @anchor ms-todo-disconnect-endpoint
   @Delete('disconnect')
   disconnect(@Req() req: any) {
-    return this.msTodo.disconnect(req.user.userId);
+    return this.msTodo.disconnect(req.user.userId, canManageOneDrive(req.user.email));
   }
 
   // @anchor ms-todo-resync-endpoint

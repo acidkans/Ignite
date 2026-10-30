@@ -1,4 +1,4 @@
-import { Injectable, Logger, PreconditionFailedException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, PreconditionFailedException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
@@ -123,13 +123,19 @@ export class OneDriveService {
   // 412, NIE 401: brak konta Microsoft to brak zależności, a nie wygasła sesja — frontend na
   // każde 401 wylogowuje użytkownika (globalny wrapper fetch w App.jsx).
   async getSharedToken(): Promise<string> {
+    const record = await this.sharedTokenRecord();
+    if (!record) throw new PreconditionFailedException('Konto Microsoft aplikacji nie jest podpięte — połącz OneDrive na koncie usługowym');
+    return this.tokenFromRecord(record);
+  }
+
+  // @anchor onedrive-shared-token-record
+  // Wpis tokenu konta wspólnego: `MS_SHARED_ACCOUNT_EMAIL`, a bez niego najstarszy podpięty token.
+  private async sharedTokenRecord() {
     const email = this.config.get<string>('MS_SHARED_ACCOUNT_EMAIL') || '';
-    const record = (email
+    return (email
       ? await this.prisma.userMsToken.findFirst({ where: { user: { email } } })
       : null)
       || await this.prisma.userMsToken.findFirst({ orderBy: { createdAt: 'asc' } });
-    if (!record) throw new PreconditionFailedException('Konto Microsoft aplikacji nie jest podpięte — połącz OneDrive na koncie usługowym');
-    return this.tokenFromRecord(record);
   }
 
   // @anchor onedrive-get-valid-token
@@ -186,11 +192,7 @@ export class OneDriveService {
   // `own` zostaje osobno dla MS To Do, które synchronizuje prywatne zadania użytkownika.
   async getStatus(userId: string): Promise<{ connected: boolean; msAccountEmail?: string; msDisplayName?: string; shared: boolean; own: boolean }> {
     const wlasny = await this.prisma.userMsToken.findUnique({ where: { userId } });
-    const email = this.config.get<string>('MS_SHARED_ACCOUNT_EMAIL') || '';
-    const wspolny = (email
-      ? await this.prisma.userMsToken.findFirst({ where: { user: { email } } })
-      : null)
-      || await this.prisma.userMsToken.findFirst({ orderBy: { createdAt: 'asc' } });
+    const wspolny = await this.sharedTokenRecord();
     if (!wspolny) return { connected: false, shared: false, own: !!wlasny };
     return {
       connected: true,
@@ -202,8 +204,21 @@ export class OneDriveService {
   }
 
   // @anchor onedrive-disconnect
-  async disconnect(userId: string): Promise<void> {
+  // Własne konto (MS To Do) odłącza każdy. Konto wspólne — tylko uprawniony (`ONEDRIVE_MANAGER_EMAILS`): jego odłączenie
+  // odcina pliki zamówień wszystkim użytkownikom naraz.
+  async disconnect(userId: string, canManage: boolean): Promise<void> {
+    await this.assertCanDisconnect(userId, canManage);
     await this.prisma.userMsToken.deleteMany({ where: { userId } });
+  }
+
+  // @anchor onedrive-assert-can-disconnect
+  // Wspólne dla obu dróg odłączenia (OneDrive i MS To Do) — obie kasują ten sam `UserMsToken`.
+  async assertCanDisconnect(userId: string, canManage: boolean): Promise<void> {
+    if (canManage) return;
+    const wspolny = await this.sharedTokenRecord();
+    if (wspolny?.userId === userId) {
+      throw new ForbiddenException('Konto Microsoft aplikacji może odłączyć tylko osoba uprawniona');
+    }
   }
 
   // @anchor onedrive-set-node-folder

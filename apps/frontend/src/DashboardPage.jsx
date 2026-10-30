@@ -113,6 +113,8 @@ export default function DashboardPage() {
     const [wbsUpdateCount, setWbsUpdateCount] = useState(0);
     const [wbsDataCache, setWbsDataCache] = useState({});
     const [oneDriveMsConnected, setOneDriveMsConnected] = useState(false);
+    // @anchor onedrive-can-manage — z GET /onedrive/status; przypinanie folderu i odłączanie konta wspólnego tylko dla adresów z ONEDRIVE_MANAGER_EMAILS
+    const [oneDriveCanManage, setOneDriveCanManage] = useState(false);
     const [showOneDriveMenu, setShowOneDriveMenu] = useState(false);
     // @anchor onedrive-picker-state — modal własnego przeglądarki folderów (Graph), zastępuje konsumencki picker js.live.net
     // @anchor onedrive-structure-state — wynik zakładania struktury katalogów zamówienia (komunikat w menu OneDrive)
@@ -423,7 +425,7 @@ export default function DashboardPage() {
         if (!token) return;
         fetch(`${API_URL}/onedrive/status`, { headers: { Authorization: `Bearer ${token}` } })
             .then(r => r.json())
-            .then(d => setOneDriveMsConnected(d.connected === true))
+            .then(d => { setOneDriveMsConnected(d.connected === true); setOneDriveCanManage(d.canManage === true); })
             .catch(() => {});
     }, []);
 
@@ -515,6 +517,8 @@ export default function DashboardPage() {
     };
 
     const handleOneDriveClick = async () => {
+        // Podpięcie konta i wybór folderu zamówienia — tylko uprawnieni; reszta tylko otwiera przypisany folder.
+        if (!oneDriveCanManage && (!oneDriveMsConnected || !activeNode?.oneDriveFolderId)) return;
         if (!oneDriveMsConnected) {
             const token = localStorage.getItem('token');
             const res = await fetch(`${API_URL}/onedrive/auth`, { headers: { Authorization: `Bearer ${token}` } });
@@ -843,7 +847,7 @@ export default function DashboardPage() {
                                 <button
                                     onClick={handleOneDriveClick}
                                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all group shrink-0 ${colorCls}`}
-                                    title={folderLinked ? `Folder: ${activeNode.oneDriveFolderName}` : 'Połącz folder OneDrive'}
+                                    title={folderLinked ? `Folder: ${activeNode.oneDriveFolderName}` : (oneDriveCanManage ? 'Połącz folder OneDrive' : 'Folder OneDrive przypisuje osoba uprawniona')}
                                 >
                                     <Cloud size={14} className={`${iconCls} group-hover:scale-110 transition-transform`} />
                                     <span className={`text-[11px] font-bold max-w-[120px] truncate ${textCls}`}>{label}</span>
@@ -857,6 +861,7 @@ export default function DashboardPage() {
                                             <FolderOpen size={13} className="text-green-400" />
                                             Otwórz w OneDrive
                                         </button>
+                                        {oneDriveCanManage && (<>
                                         <button
                                             className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-gray-300 hover:bg-white/5 transition-colors"
                                             onClick={() => { setShowOneDriveMenu(false); openOneDrivePicker(activeNode.id); }}
@@ -886,6 +891,7 @@ export default function DashboardPage() {
                                             <Unlink size={13} />
                                             Odłącz konto MS
                                         </button>
+                                        </>)}
                                     </div>
                                 )}
                             </div>
