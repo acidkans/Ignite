@@ -1,3 +1,20 @@
+## 2026-10-30 — feat(onedrive): „Otwórz w OneDrive” otwiera przeglądarkę folderu zamówienia w modalu (v2026.10.30.2326)
+
+### architektura / API
+- dodano `back-endpoint` `GET /onedrive/items/:nodeId?itemId=` — zawartość folderu zamówienia (foldery, potem pliki); `itemId` spoza folderu → 403
+- `back-endpoint` `GET /onedrive/content/:nodeId` — podgląd pliku tylko w obrębie folderu zamówienia (wcześniej dowolny `itemId` z dysku)
+- dodano `back-funkcja` `listNodeItems` i `back-funkcja` `assertInNodeFolder` (porównanie `parentReference.path` z Graph)
+- dodano `ui-modal` `OneDriveBrowserModal` — breadcrumb od folderu zamówienia bez wyjścia wyżej, podgląd plików w `DocumentViewer`; „Otwórz w OneDrive” w `DashboardPage` otwiera modal zamiast onedrive.live.com
+
+### słownik
+- dodano `onedrive-list-node-items`, `onedrive-assert-in-node-folder` — onedrive.service.ts
+- dodano `onedrive-node-items-endpoint` — onedrive.controller.ts
+- dodano `onedrive-browser-modal`, `onedrive-browser-stack` — OneDriveBrowserModal.jsx
+- dodano `show-onedrive-browser` — DashboardPage.jsx
+
+### wytyczne
+- `back-funkcja` `assertInNodeFolder` — każdy endpoint przyjmujący `itemId` OneDrive dla zamówienia musi go wołać, inaczej da się czytać cały dysk konta wspólnego
+
 ## 2026-10-30 — feat(onedrive): folder zamówienia i konto wspólne MS tylko dla osób z listy uprawnionych (v2026.10.30.2319)
 
 ### architektura / API

@@ -19,6 +19,7 @@ import SnapshotEditGuard from './components/shared/SnapshotEditGuard';
 import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink, Coins, ThumbsUp, Undo2 } from 'lucide-react';
 import { API_URL } from './config';
 import { APP_VERSION } from './version';
+import OneDriveBrowserModal from './components/shared/OneDriveBrowserModal';
 
 function getWeekNumber(date) {
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -115,6 +116,8 @@ export default function DashboardPage() {
     const [oneDriveMsConnected, setOneDriveMsConnected] = useState(false);
     // @anchor onedrive-can-manage — z GET /onedrive/status; przypinanie folderu i odłączanie konta wspólnego tylko dla adresów z ONEDRIVE_MANAGER_EMAILS
     const [oneDriveCanManage, setOneDriveCanManage] = useState(false);
+    // @anchor show-onedrive-browser — modal przeglądarki folderu zamówienia („Otwórz w OneDrive”)
+    const [showOneDriveBrowser, setShowOneDriveBrowser] = useState(false);
     const [showOneDriveMenu, setShowOneDriveMenu] = useState(false);
     // @anchor onedrive-picker-state — modal własnego przeglądarki folderów (Graph), zastępuje konsumencki picker js.live.net
     // @anchor onedrive-structure-state — wynik zakładania struktury katalogów zamówienia (komunikat w menu OneDrive)
@@ -852,11 +855,19 @@ export default function DashboardPage() {
                                     <Cloud size={14} className={`${iconCls} group-hover:scale-110 transition-transform`} />
                                     <span className={`text-[11px] font-bold max-w-[120px] truncate ${textCls}`}>{label}</span>
                                 </button>
+                                {showOneDriveBrowser && folderLinked && (
+                                    <OneDriveBrowserModal
+                                        key={activeNode.id}
+                                        nodeId={activeNode.id}
+                                        folderName={activeNode.oneDriveFolderName}
+                                        onClose={() => setShowOneDriveBrowser(false)}
+                                    />
+                                )}
                                 {showOneDriveMenu && folderLinked && (
                                     <div className="absolute right-0 top-full mt-1 w-64 bg-gray-900 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
                                         <button
                                             className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-gray-300 hover:bg-white/5 transition-colors"
-                                            onClick={() => { window.open(`https://onedrive.live.com/`, '_blank'); setShowOneDriveMenu(false); }}
+                                            onClick={() => { setShowOneDriveBrowser(true); setShowOneDriveMenu(false); }}
                                         >
                                             <FolderOpen size={13} className="text-green-400" />
                                             Otwórz w OneDrive

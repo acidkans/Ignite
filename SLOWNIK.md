@@ -2753,6 +2753,12 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-stala | ONEDRIVE_MANAGER_EMAILS | apps/backend/src/onedrive/onedrive-manager.guard.ts | @anchor onedrive-manager-emails |
 | back-funkcja | canManageOneDrive | apps/backend/src/onedrive/onedrive-manager.guard.ts | @anchor can-manage-onedrive |
 | back-guard | OneDriveManagerGuard | apps/backend/src/onedrive/onedrive-manager.guard.ts | @anchor onedrive-manager-guard |
+| back-funkcja | listNodeItems | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-list-node-items |
+| back-funkcja | assertInNodeFolder | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-assert-in-node-folder |
+| back-endpoint | GET /onedrive/items/:nodeId | apps/backend/src/onedrive/onedrive.controller.ts | @anchor onedrive-node-items-endpoint |
+| ui-modal | OneDriveBrowserModal | apps/frontend/src/components/shared/OneDriveBrowserModal.jsx | @anchor onedrive-browser-modal |
+| ui-stan | stack | apps/frontend/src/components/shared/OneDriveBrowserModal.jsx | @anchor onedrive-browser-stack |
+| ui-stan | showOneDriveBrowser | apps/frontend/src/DashboardPage.jsx | @anchor show-onedrive-browser |
 | ui-stan | oneDriveCanManage | apps/frontend/src/DashboardPage.jsx | @anchor onedrive-can-manage |
 | back-funkcja | ensureCategoryFolder | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-ensure-category-folder |
 | back-env | MS_SHARED_ACCOUNT_EMAIL | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-shared-token |

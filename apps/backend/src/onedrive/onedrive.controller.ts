@@ -173,6 +173,14 @@ export class OneDriveController {
     return this.oneDriveService.listFiles(req.user.userId, nodeId, category);
   }
 
+  // @anchor onedrive-node-items-endpoint
+  // Przeglądarka folderu zamówienia w modalu — tylko w obrębie przypisanego folderu.
+  @Get('items/:nodeId')
+  @UseGuards(JwtAuthGuard)
+  nodeItems(@Param('nodeId') nodeId: string, @Query('itemId') itemId?: string) {
+    return this.oneDriveService.listNodeItems(nodeId, itemId || undefined);
+  }
+
   // @anchor onedrive-content-endpoint
   // Strumieniuje treść pliku OneDrive do przeglądarki (podgląd w apce).
   // Publiczny na poziomie guarda — react-pdf/<img> nie wysyłają nagłówka Authorization,

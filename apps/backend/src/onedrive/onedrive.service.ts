@@ -476,6 +476,7 @@ export class OneDriveService {
 
     const token = await this.getSharedToken();
     const driveId = node.oneDriveDriveId;
+    await this.assertInNodeFolder(token, node, itemId);
     const metaUrl = driveId
       ? `${GRAPH_BASE}/drives/${driveId}/items/${itemId}`
       : `${GRAPH_BASE}/me/drive/items/${itemId}`;
@@ -488,6 +489,60 @@ export class OneDriveService {
     const mimeType = meta.data.file?.mimeType || 'application/octet-stream';
     const fileRes = await axios.get(downloadUrl, { responseType: 'stream' });
     return { stream: fileRes.data, fileName, mimeType };
+  }
+
+  // @anchor onedrive-list-node-items
+  // Zawartość folderu zamówienia (albo jego podfolderu) dla przeglądarki w modalu: foldery
+  // najpierw, potem pliki. `itemId` spoza folderu zamówienia → 403, więc wyżej wyjść się nie da.
+  async listNodeItems(nodeId: string, itemId?: string): Promise<{ atRoot: boolean; items: any[] }> {
+    const node = await this.prisma.processNode.findUnique({ where: { id: nodeId } });
+    if (!node?.oneDriveFolderId) throw new NotFoundException('Folder OneDrive nie jest powiązany z tą gałęzią');
+
+    const token = await this.getSharedToken();
+    const target = itemId || node.oneDriveFolderId;
+    await this.assertInNodeFolder(token, node, target);
+
+    const base = node.oneDriveDriveId ? `${GRAPH_BASE}/drives/${node.oneDriveDriveId}` : `${GRAPH_BASE}/me/drive`;
+    const response = await axios.get(`${base}/items/${target}/children`, {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { $select: 'id,name,size,lastModifiedDateTime,file,folder', $top: 500 },
+    });
+
+    const items = (response.data.value ?? []).map((it: any) => ({
+      id: it.id,
+      name: it.name,
+      isFolder: !!it.folder,
+      childCount: it.folder?.childCount ?? 0,
+      size: it.size ?? 0,
+      lastModified: it.lastModifiedDateTime,
+      mimeType: it.file?.mimeType || '',
+    }));
+    items.sort((a: any, b: any) => (a.isFolder === b.isFolder ? a.name.localeCompare(b.name, 'pl') : a.isFolder ? -1 : 1));
+    return { atRoot: target === node.oneDriveFolderId, items };
+  }
+
+  // @anchor onedrive-assert-in-node-folder
+  // Element musi być folderem zamówienia albo leżeć gdzieś pod nim. Porównujemy ścieżki z Graph
+  // (`parentReference.path`) — oba odczyty z tego samego API, więc kodowanie znaków się zgadza.
+  private async assertInNodeFolder(
+    token: string,
+    node: { oneDriveDriveId: string | null; oneDriveFolderId: string | null },
+    itemId: string,
+  ): Promise<void> {
+    if (!node.oneDriveFolderId || itemId === node.oneDriveFolderId) return;
+    const base = node.oneDriveDriveId ? `${GRAPH_BASE}/drives/${node.oneDriveDriveId}` : `${GRAPH_BASE}/me/drive`;
+    const get = (id: string) => axios.get(`${base}/items/${id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { $select: 'id,name,parentReference' },
+    });
+    const [root, item] = await Promise.all([get(node.oneDriveFolderId), get(itemId)]);
+    const rootParent = root.data.parentReference?.path;
+    if (!rootParent) return; // folder zamówienia = korzeń dysku, wszystko leży pod nim
+    const rootPath = `${rootParent}/${root.data.name}`;
+    const parentPath: string = item.data.parentReference?.path || '';
+    if (parentPath !== rootPath && !parentPath.startsWith(`${rootPath}/`)) {
+      throw new ForbiddenException('Element spoza folderu OneDrive zamówienia');
+    }
   }
 
   // @anchor onedrive-browse-folders
