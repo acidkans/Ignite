@@ -72,7 +72,7 @@ export async function resolveArtifact(artifact) {
 
 // @anchor upload-to-onedrive
 // Wrzuca gotowy plik do katalogu struktury zamówienia na OneDrive (`folderKey` z ORDER_FOLDERS),
-// opcjonalnie do podkatalogu (`subfolder` — protokoły: nazwa gałęzi). Zwraca `{ webUrl, itemId, path }`.
+// opcjonalnie do podkatalogu (`subfolder`). Zwraca `{ webUrl, itemId, path }`.
 // Jedna implementacja dla modala eksportu i dla przycisku „Generuj" w protokole odbioru —
 // przy dwóch kopiach jedna zawsze zostaje bez poprawki.
 export async function uploadToOneDrive({ blob, filename, nodeId, folderKey, subfolder = '' }) {

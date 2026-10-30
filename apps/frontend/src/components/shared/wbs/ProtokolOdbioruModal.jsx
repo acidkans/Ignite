@@ -21,8 +21,8 @@ import { API_URL } from '../../../config';
 // których w bazie nie ma (umowa, wady, uwagi, załączniki, przedstawiciele). Wartości
 // podpowiadają się z wyceny, numer składa się sam i zostaje edytowalny.
 //
-// Gotowy protokół NIE zostaje w bazie — jedynym archiwum jest OneDrive
-// (`pliki_finansowe/<podkatalog>`), dlatego eksport idzie przez `ExportChoiceModal`.
+// Gotowy protokół NIE zostaje w bazie — jedynym archiwum jest OneDrive (katalog protokołów
+// zamówienia, bez podkatalogów), dlatego eksport idzie przez `ExportChoiceModal`.
 
 // @anchor protokol-remembered-fields
 // Pola, które przy każdym protokole wpisywałoby się tak samo, pamiętane w przeglądarce.
@@ -199,8 +199,6 @@ export default function ProtokolOdbioruModal({
         przedstawicielAirtel: pamiec.czytaj('przedstawicielAirtel'),
         przedstawicielPodwykonawcy: '',
         inspektorNadzoru: pamiec.czytaj('inspektorNadzoru'),
-        podkatalog: '',
-        podkatalogRecznie: false,
     }));
 
     const ustaw = (k, v) => setPola((p) => ({ ...p, [k]: v }));
@@ -312,7 +310,6 @@ export default function ProtokolOdbioruModal({
             uwagi: '', zalaczniki: '',
             dataPodpisuAirtel: d, dataPodpisuPodwykonawcy: '', dataPodpisuInspektora: '',
             przedstawicielPodwykonawcy: '',
-            podkatalog: '', podkatalogRecznie: false,
         }));
     }, []);
 
@@ -429,12 +426,11 @@ export default function ProtokolOdbioruModal({
         [wybrane, branchIndex, kwotaOdbioru],
     );
 
-    // @anchor protokol-auto-number — numer i podkatalog przeliczają się przy każdej zmianie
-    // zaznaczenia, DOPÓKI użytkownik ich nie tknie. Po ręcznej edycji przestajemy nadpisywać —
+    // @anchor protokol-auto-number — numer przelicza się przy każdej zmianie
+    // zaznaczenia, DOPÓKI użytkownik go nie tknie. Po ręcznej edycji przestajemy nadpisywać —
     // inaczej dopisanie jednej pozycji kasowałoby wpisany numer.
     useEffect(() => {
         if (!numerRecznie) ustaw('numer', domyslnyNumer(orderName, branches, pola.data));
-        if (!pola.podkatalogRecznie) ustaw('podkatalog', branches[0] || '');
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [branches.join('|'), pola.data, numerRecznie, orderName]);
 
@@ -656,7 +652,7 @@ export default function ProtokolOdbioruModal({
     };
 
     // @anchor protokol-na-onedrive — „Generuj" od razu odkłada dokument w podpiętym folderze
-    // zamówienia: `pliki_finansowe/<nazwa gałęzi>`. Protokół prawie zawsze ma tam trafić, więc
+    // zamówienia (katalog protokołów, bez podkatalogu gałęzi). Protokół prawie zawsze ma tam trafić, więc
     // pytanie „co zrobić z plikiem?" było jednym kliknięciem za dużo; pobranie i mail zostają
     // pod osobnym przyciskiem.
     const naOneDrive = async () => {
@@ -668,7 +664,7 @@ export default function ProtokolOdbioruModal({
             setWysylka('Wgrywam na OneDrive…');
             const { webUrl, path } = await uploadToOneDrive({
                 blob: art.blob, filename: art.filename, nodeId,
-                folderKey: 'protocols', subfolder: pola.podkatalog,
+                folderKey: 'protocols',
             });
             await poEksporcie();
             setWysylka(`Zapisano: ${oneDriveFolderName} → ${path}`);
@@ -1225,16 +1221,6 @@ export default function ProtokolOdbioruModal({
                             ))}
                         </div>
 
-                        <div>
-                            <label className={ETYKIETA}>Podkatalog OneDrive (pliki_finansowe/…)</label>
-                            <input
-                                value={pola.podkatalog}
-                                onChange={(e) => { ustaw('podkatalogRecznie', true); ustaw('podkatalog', e.target.value); }}
-                                placeholder="nazwa gałęzi"
-                                className={POLE}
-                            />
-                        </div>
-
                         {statusBlad && (
                             <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
                                 {statusBlad}
@@ -1289,7 +1275,7 @@ export default function ProtokolOdbioruModal({
                             onClick={naOneDrive}
                             disabled={brakZaznaczenia || !!wysylka || !oneDriveFolderName}
                             title={oneDriveFolderName
-                                ? `Zapisze w: ${oneDriveFolderName} → 01 Dokumenty finansowe → Protokoły odbioru${pola.podkatalog ? ` → ${pola.podkatalog}` : ''}`
+                                ? `Zapisze w: ${oneDriveFolderName} → 01 Dokumenty finansowe → Protokoły odbioru`
                                 : 'Zamówienie nie ma powiązanego folderu OneDrive'}
                             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white disabled:opacity-40 transition-all"
                         >
@@ -1336,7 +1322,6 @@ export default function ProtokolOdbioruModal({
                 makeArtifact={() => (format === 'docx' ? makeProtokolDocx(dane) : makeProtokolPdf(dane))}
                 oneDriveFolderName={oneDriveFolderName}
                 oneDriveFolderKey="protocols"
-                oneDriveSubfolder={pola.podkatalog}
                 onExported={poEksporcie}
                 defaultTo={domyslniOdbiorcy}
                 defaultCc={dakOdbiorcy}
