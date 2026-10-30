@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsOptional, IsUUID, IsArray, IsBoolean } from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsUUID, IsArray, IsBoolean, IsIn } from 'class-validator';
 
 export enum NodeType {
     AREA = 'area',
@@ -79,8 +79,20 @@ export class UpdateNodeDto {
 }
 
 export class MoveNodeDto {
+    // Tryb „do środka”: nowy rodzic (null = najwyższy poziom). Pomijany, gdy podano targetId.
+    @IsOptional()
     @IsUUID()
-    newParentId: string;
+    newParentId?: string | null;
+
+    // @anchor move-node-dto-target-id — węzeł odniesienia przy wstawianiu obok (przed/po)
+    @IsOptional()
+    @IsUUID()
+    targetId?: string;
+
+    // @anchor move-node-dto-position — before/after = rodzeństwo targetId, inside = dziecko targetId
+    @IsOptional()
+    @IsIn(['before', 'after', 'inside'])
+    position?: 'before' | 'after' | 'inside';
 }
 
 export class UpdateNodePermissionsDto {

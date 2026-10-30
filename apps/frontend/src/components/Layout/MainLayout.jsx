@@ -319,6 +319,7 @@ export default function MainLayout({ onLogout }) {
                         userRoles={userRoles}
                         leavesEnabled={leavesEnabled}
                         onReloadTree={fetchTree}
+                        onOpenMyAccount={() => setMyAccount({ oauthResult: null })}
                     />
                 </div>
 

@@ -14,7 +14,7 @@ function filterNode(node, query) {
     return null;
 }
 
-export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, loading, userRoles = [], leavesEnabled = false, onReloadTree }) {
+export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, loading, userRoles = [], leavesEnabled = false, onReloadTree, onOpenMyAccount }) {
     const canManageTree = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
     // @anchor sidebar-is-admin
     /// Pozycje „Użytkownicy" i „Firma" widzi wyłącznie ADMIN — routy i API też tego pilnują.
@@ -28,16 +28,18 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
     const [dragId, setDragId] = useState(null);
     // @anchor sidebar-drag-over-id
     const [dragOverId, setDragOverId] = useState(null);
+    // @anchor sidebar-drag-over-pos — 'before' | 'after' | 'inside': strefa wiersza pod kursorem
+    const [dragOverPos, setDragOverPos] = useState(null);
 
     // @anchor handle-sidebar-move
-    const handleSidebarMove = async (sourceId, targetId) => {
+    const handleSidebarMove = async (sourceId, targetId, position = 'inside') => {
         if (!sourceId || sourceId === targetId) return;
         const token = sessionStorage.getItem('token');
         try {
             const res = await fetch(`${API_URL}/process-tree/${sourceId}/move`, {
                 method: 'PATCH',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ newParentId: targetId }),
+                body: JSON.stringify({ targetId, position }),
             });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
@@ -78,7 +80,8 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
     const isLogistyk = userRoles.includes('LOGISTYK');
 
     const query = filter.trim().toLowerCase();
-    const rootAreas = menuTree.filter(node => node.type === 'area');
+    // Na najwyższym poziomie mogą też leżeć zamówienia przeciągnięte z folderów
+    const rootAreas = menuTree.filter(node => node.type !== 'document');
     const filteredAreas = query
         ? rootAreas.map(a => filterNode(a, query)).filter(Boolean)
         : rootAreas;
@@ -117,6 +120,8 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
                                     setDragId={setDragId}
                                     dragOverId={dragOverId}
                                     setDragOverId={setDragOverId}
+                                    dragOverPos={dragOverPos}
+                                    setDragOverPos={setDragOverPos}
                                     onSidebarMove={handleSidebarMove}
                                 />
                             ))
@@ -129,6 +134,16 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
             <div>
                 <p className="px-2 py-1.5 text-[10px] font-bold text-gray-500 uppercase tracking-widest bg-white/[0.03] border-y border-white/[0.05] mb-1">System</p>
                 <div className="space-y-0.5">
+                    {/* @anchor sidebar-my-account-button — dla każdego: okno „Moje konto” (połączenie z kontem Microsoft) */}
+                    {onOpenMyAccount && (
+                        <button
+                            onClick={onOpenMyAccount}
+                            title="Moje konto — połączenie z kontem Microsoft (To Do, kalendarz Outlook, OneDrive)"
+                            className="w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md text-gray-400 hover:text-gray-200 hover:bg-white/5"
+                        >
+                            Moje konto
+                        </button>
+                    )}
                     {/* @anchor sidebar-users-button — rozwija szufladę z „Lista użytkowników” i „Szkolenia” */}
                     {isAdmin && (
                         <button
@@ -255,7 +270,7 @@ function nodeContainsId(node, id) {
     return (node.children || []).some(c => nodeContainsId(c, id));
 }
 
-function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, level = 0, forceExpanded = false, unreadOrderIds = new Set(), isLogistykArea = false, canManageTree = false, dragId = null, setDragId = () => {}, dragOverId = null, setDragOverId = () => {}, onSidebarMove }) {
+function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, level = 0, forceExpanded = false, unreadOrderIds = new Set(), isLogistykArea = false, canManageTree = false, dragId = null, setDragId = () => {}, dragOverId = null, setDragOverId = () => {}, dragOverPos = null, setDragOverPos = () => {}, onSidebarMove }) {
     const [expanded, setExpanded] = useState(false);
     const [editing, setEditing] = useState(false);
     const [editName, setEditName] = useState(node.name);
@@ -326,7 +341,12 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                         e.preventDefault();
                         e.stopPropagation();
                         e.dataTransfer.dropEffect = 'move';
+                        // Górna/dolna ćwiartka wiersza = wstaw przed/po (zmiana kolejności), środek = do środka
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const y = (e.clientY - rect.top) / rect.height;
+                        const pos = y < 0.25 ? 'before' : y > 0.75 ? 'after' : 'inside';
                         if (dragOverId !== node.id) setDragOverId(node.id);
+                        if (dragOverPos !== pos) setDragOverPos(pos);
                     } : undefined}
                     onDragLeave={canManageTree ? (e) => {
                         if (e.currentTarget.contains(e.relatedTarget)) return;
@@ -336,11 +356,13 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                         e.preventDefault();
                         e.stopPropagation();
                         const src = dragId;
+                        const pos = dragOverPos || 'inside';
                         setDragId(null);
                         setDragOverId(null);
-                        if (src && src !== node.id) onSidebarMove?.(src, node.id);
+                        setDragOverPos(null);
+                        if (src && src !== node.id) onSidebarMove?.(src, node.id, pos);
                     } : undefined}
-                    onDragEnd={canManageTree ? () => { setDragId(null); setDragOverId(null); } : undefined}
+                    onDragEnd={canManageTree ? () => { setDragId(null); setDragOverId(null); setDragOverPos(null); } : undefined}
                     className={`w-full text-left px-2 py-1.5 rounded-md flex items-center gap-1.5 transition-all duration-200 cursor-pointer
                         ${isActive && !editing
                             ? 'bg-blue-600/30 text-white border border-blue-500/40 shadow-lg'
@@ -348,7 +370,11 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                                 ? 'text-amber-500/70 hover:bg-white/5 hover:text-amber-400'
                                 : 'text-gray-400 hover:bg-white/5 hover:text-white'
                         }
-                        ${dragOverId === node.id && dragId && dragId !== node.id ? 'ring-2 ring-blue-400 ring-inset bg-blue-500/10' : ''}
+                        ${dragOverId === node.id && dragId && dragId !== node.id
+                            ? dragOverPos === 'before' ? 'shadow-[inset_0_2px_0_0_#60a5fa]'
+                            : dragOverPos === 'after' ? 'shadow-[inset_0_-2px_0_0_#60a5fa]'
+                            : 'ring-2 ring-blue-400 ring-inset bg-blue-500/10'
+                            : ''}
                         ${dragId === node.id ? 'opacity-40' : ''}
                     `}
                     style={{ paddingLeft: `${level * 10 + 8}px` }}
@@ -425,6 +451,8 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                             setDragId={setDragId}
                             dragOverId={dragOverId}
                             setDragOverId={setDragOverId}
+                            dragOverPos={dragOverPos}
+                            setDragOverPos={setDragOverPos}
                             onSidebarMove={onSidebarMove}
                         />
                     ))}

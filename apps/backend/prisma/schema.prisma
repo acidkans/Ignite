@@ -256,7 +256,9 @@ model ProcessNode {
   acceptedAt                DateTime?
   /// @anchor process-node-accepted-by
   acceptedBy                String?
-  budgetItems               BudgetLineItem[]
+  /// @anchor process-node-sort-order
+  sortOrder                 Int                        @default(0) // kolejność wśród rodzeństwa (drag&drop w belce); remis → createdAt
+  budgetItems             BudgetLineItem[]
   hardware                  Hardware[]
   permissions               NodePermission[]           @relation("NodeACL")
   orderRequirements         OrderRequirements[]

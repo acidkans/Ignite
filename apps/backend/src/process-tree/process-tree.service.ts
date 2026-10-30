@@ -4,6 +4,9 @@ import { CreateNodeDto, UpdateNodeDto, MoveNodeDto, NodeType } from './dto/proce
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 
+// @anchor child-order — kolejność rodzeństwa w drzewie: sortOrder (drag&drop w belce), remis → data utworzenia
+const CHILD_ORDER: { sortOrder?: 'asc'; createdAt?: 'asc' }[] = [{ sortOrder: 'asc' }, { createdAt: 'asc' }];
+
 @Injectable()
 export class ProcessTreeService {
     constructor(private prisma: PrismaService) { }
@@ -330,7 +333,7 @@ export class ProcessTreeService {
                 owner: true,
                 permissions: true,
             },
-            orderBy: { createdAt: 'asc' },
+            orderBy: CHILD_ORDER,
         });
 
         // Load full tree for each root
@@ -371,7 +374,7 @@ export class ProcessTreeService {
         const node = await this.prisma.processNode.findUnique({
             where: { id },
             include: {
-                children: true,
+                children: { orderBy: CHILD_ORDER },
                 parent: true,
                 owner: true,
                 permissions: {
@@ -438,7 +441,7 @@ export class ProcessTreeService {
         if (bypass || !user) return this.getNode(nodeId, user, bypass);
         const node = await this.prisma.processNode.findUnique({
             where: { id: nodeId },
-            include: { children: true, parent: true, owner: true, permissions: { include: { user: true } } },
+            include: { children: { orderBy: CHILD_ORDER }, parent: true, owner: true, permissions: { include: { user: true } } },
         });
         if (!node) throw new NotFoundException(`Node ${nodeId} not found`);
         if (!this.canSee(node, user)) throw new ForbiddenException('You do not have permission to access this node');
@@ -448,7 +451,7 @@ export class ProcessTreeService {
     private async getFolderPassthrough(nodeId: string, user: any) {
         const node = await this.prisma.processNode.findUnique({
             where: { id: nodeId },
-            include: { children: true, parent: true, owner: true, permissions: { include: { user: true } } },
+            include: { children: { orderBy: CHILD_ORDER }, parent: true, owner: true, permissions: { include: { user: true } } },
         });
         if (!node || node.type === NodeType.ORDER || !node.children?.length) return null;
         const kids = (await Promise.all(node.children.map(c => this.getNodeWithDescendants(c.id, user, false))))
@@ -650,7 +653,18 @@ export class ProcessTreeService {
      * Move node to new parent (rebuild closure paths)
      */
     async move(id: string, dto: MoveNodeDto, user?: any) {
-        const { newParentId } = dto;
+        const position = dto.position ?? 'inside';
+        if (dto.targetId === id) {
+            throw new BadRequestException('Cannot move node relative to itself');
+        }
+
+        // Rodzic docelowy: przed/po targetId → rodzic targetId (null = najwyższy poziom)
+        let newParentId: string | null = dto.newParentId ?? null;
+        if (dto.targetId) {
+            const target = await this.prisma.processNode.findUnique({ where: { id: dto.targetId }, select: { id: true, parentId: true } });
+            if (!target) throw new NotFoundException(`Node ${dto.targetId} not found`);
+            newParentId = position === 'inside' ? target.id : target.parentId;
+        }
 
         // Validation: cannot move to self or descendant
         if (id === newParentId) {
@@ -668,18 +682,41 @@ export class ProcessTreeService {
             throw new ForbiddenException('You do not have permission to move this node');
         }
 
-        const isDescendant = await this.prisma.processNodeClosure.findFirst({
-            where: {
-                ancestorId: id,
-                descendantId: newParentId,
-            },
-        });
+        if (newParentId) {
+            const isDescendant = await this.prisma.processNodeClosure.findFirst({
+                where: {
+                    ancestorId: id,
+                    descendantId: newParentId,
+                },
+            });
 
-        if (isDescendant) {
-            throw new BadRequestException('Cannot move node to its own descendant');
+            if (isDescendant) {
+                throw new BadRequestException('Cannot move node to its own descendant');
+            }
         }
 
+        const parentChanged = node.parentId !== newParentId;
+
         return this.prisma.$transaction(async (tx) => {
+            // @anchor move-node-reorder — nowa kolejność rodzeństwa: przenoszony węzeł przed/po targetId,
+            // przy „inside” na koniec listy dzieci
+            const siblings = await tx.processNode.findMany({
+                where: { parentId: newParentId, id: { not: id } },
+                select: { id: true },
+                orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+            });
+            const orderedIds = siblings.map(s => s.id);
+            const targetIdx = dto.targetId && position !== 'inside' ? orderedIds.indexOf(dto.targetId) : -1;
+            if (targetIdx === -1) orderedIds.push(id);
+            else orderedIds.splice(position === 'after' ? targetIdx + 1 : targetIdx, 0, id);
+            for (let i = 0; i < orderedIds.length; i++) {
+                await tx.processNode.update({ where: { id: orderedIds[i] }, data: { sortOrder: i } });
+            }
+
+            if (!parentChanged) {
+                return tx.processNode.findUnique({ where: { id }, include: { parent: true } });
+            }
+
             // Delete old closure paths (except self-loops)
             await tx.$executeRaw`
         DELETE FROM process_node_closure
@@ -702,8 +739,8 @@ export class ProcessTreeService {
                 data: { parentId: newParentId },
             });
 
-            // Rebuild closure paths for new parent
-            await tx.$executeRaw`
+            // Rebuild closure paths for new parent (najwyższy poziom = brak przodków)
+            if (newParentId) await tx.$executeRaw`
         INSERT INTO process_node_closure ("ancestorId", "descendantId", depth)
         SELECT p."ancestorId", c."descendantId", p.depth + c.depth + 1
         FROM process_node_closure p, process_node_closure c

@@ -1,3 +1,18 @@
+## 2026-10-30 — feat(drzewo): drag&drop w lewej belce — zmiana kolejności węzłów i przenoszenie na najwyższy poziom + przycisk „Moje konto” w belce (v2026.10.30.2147)
+
+### schema.prisma
+- dodano `schema-pole` `ProcessNode.sortOrder` (Int, default 0) — kolejność wśród rodzeństwa; remis → `createdAt`
+- migracja `20261030220000_process_node_sort_order`
+
+### architektura / API
+- `back-endpoint` `PATCH /process-tree/:id/move` przyjmuje `targetId` + `position` (`before` | `after` | `inside`); before/after = rodzeństwo targetId (także na najwyższym poziomie, parentId = null), inside = ostatnie dziecko; stare `newParentId` nadal działa
+- `back-stala` `CHILD_ORDER` — drzewo (korzenie i dzieci) sortowane po `sortOrder`, potem `createdAt`
+- `ui-przycisk` „Moje konto” w sekcji System belki (dla każdego) — otwiera okno z połączeniem konta Microsoft, wcześniej dostępne tylko przez klik w „Zalogowany jako”
+- `ui-sekcja` `DynamicSidebar` — górna/dolna ćwiartka wiersza = wstaw przed/po (niebieska linia), środek = do środka (ramka); na najwyższym poziomie widać też zamówienia, nie tylko foldery
+
+### wytyczne
+- `schema-pole` `ProcessNode.sortOrder` — przy pobieraniu dzieci/korzeni drzewa zawsze `orderBy: CHILD_ORDER`, inaczej drag&drop w belce nie ma efektu
+
 ## 2026-10-30 — feat(zadania): godzina zadania i wydarzenie w kalendarzu Outlook odpowiedzialnego + konto Microsoft w „Moje konto” (v2026.10.30.2138)
 
 ### schema.prisma

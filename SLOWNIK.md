@@ -1023,6 +1023,13 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 |-----|-------|------|--------|
 | ui-stan | dragId | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-drag-id |
 | ui-stan | dragOverId | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-drag-over-id |
+| ui-stan | dragOverPos | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-drag-over-pos |
+| schema-pole | ProcessNode.sortOrder | apps/backend/prisma/schema.prisma | @anchor process-node-sort-order |
+| back-stala | CHILD_ORDER | apps/backend/src/process-tree/process-tree.service.ts | @anchor child-order |
+| back-funkcja | move (zmiana kolejności rodzeństwa) | apps/backend/src/process-tree/process-tree.service.ts | @anchor move-node-reorder |
+| back-dto | MoveNodeDto.targetId | apps/backend/src/process-tree/dto/process-tree.dto.ts | @anchor move-node-dto-target-id |
+| back-dto | MoveNodeDto.position | apps/backend/src/process-tree/dto/process-tree.dto.ts | @anchor move-node-dto-position |
+| ui-przycisk | Moje konto (belka System) | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-my-account-button |
 | ui-funkcja | handleSidebarMove | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor handle-sidebar-move |
 | ui-przycisk | sidebar-firma-button | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-firma-button |
 
