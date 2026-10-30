@@ -2,14 +2,31 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationSettingsService } from '../notification-settings/notification-settings.service';
 import { MsTodoService } from '../ms-todo/ms-todo.service';
+import { MsCalendarService, toWarsawLocal } from '../ms-todo/ms-calendar.service';
 
 const IGNITE_LIST_NAME = 'Ignite';
+
+// @anchor to-todo-due
+/// Termin dla MS To Do: To Do trzyma samą datę, więc wysyłamy dzień w czasie polskim o północy.
+/// Pełne ISO w UTC przesuwało dzień dla godzin blisko północy (np. 00:30 PL = 23:30 UTC dnia wcześniej).
+export const toTodoDue = (d: Date) => ({ dateTime: `${toWarsawLocal(d).slice(0, 10)}T00:00:00`, timeZone: 'UTC' });
+
+// @anchor with-warsaw-day
+/// Ta sama godzina (czas polski) przeniesiona na inny dzień 'RRRR-MM-DD' — termin z To Do niesie
+/// tylko datę, a zadanie z godziną (`durationMinutes`) nie może jej przy synchronizacji zgubić.
+export const withWarsawDay = (time: Date, day: string): Date => {
+  const local = toWarsawLocal(time);
+  const offsetMs = Date.parse(`${local}Z`) - time.getTime();
+  return new Date(Date.parse(`${day}T${local.slice(11)}Z`) - offsetMs);
+};
 
 export interface CreateUserTaskDto {
   title: string;
   description?: string;
   plannedStart?: Date;
   plannedEnd?: Date;
+  /** Ustawione = plannedEnd ma godzinę i powstaje wydarzenie w kalendarzu Outlook. */
+  durationMinutes?: number | null;
   nodeId?: string;
   wbsNodeId?: string;
   /** Odpowiedzialny — domyślnie autor. */
@@ -22,6 +39,7 @@ export interface UpdateUserTaskDto {
   status?: 'OPEN' | 'DONE';
   plannedStart?: Date;
   plannedEnd?: Date;
+  durationMinutes?: number | null;
   nodeId?: string;
   /** Przepisanie na innego odpowiedzialnego (może właściciel albo autor). */
   assigneeUserId?: string;
@@ -38,6 +56,7 @@ export class UserTasksService {
     private readonly prisma: PrismaService,
     private readonly notifSettings: NotificationSettingsService,
     private readonly msTodo: MsTodoService,
+    private readonly msCalendar: MsCalendarService,
   ) {}
 
   // @anchor user-tasks-list
@@ -177,6 +196,7 @@ export class UserTasksService {
         description: dto.description,
         plannedStart: dto.plannedStart,
         plannedEnd: dto.plannedEnd,
+        durationMinutes: dto.durationMinutes ?? null,
         nodeId: dto.nodeId ?? null,
         wbsNodeId: dto.wbsNodeId ?? null,
         source: 'IGNITE',
@@ -185,6 +205,7 @@ export class UserTasksService {
 
     await this.syncReminderForTask(task.id, ownerId, task.plannedEnd);
     await this.pushNewTaskToGraph(ownerId, task);
+    await this.syncCalendarEvent(task.id);
     return task;
   }
 
@@ -213,7 +234,7 @@ export class UserTasksService {
 
     const { assigneeUserId, ...rest } = dto;
     const data: any = {};
-    for (const k of ['title', 'description', 'status', 'plannedStart', 'plannedEnd', 'nodeId'] as const) {
+    for (const k of ['title', 'description', 'status', 'plannedStart', 'plannedEnd', 'durationMinutes', 'nodeId'] as const) {
       if (k in rest) data[k] = (rest as any)[k];
     }
     // JSON niesie daty jako tekst — syncReminderForTask liczy na Date (getHours), więc zamieniamy tutaj.
@@ -230,13 +251,15 @@ export class UserTasksService {
           this.logger.warn(`reassign: delete from MS To Do failed for task ${taskId}: ${err?.message}`);
         }
       }
+      await this.deleteCalendarEvent(task);
       await this.prisma.taskReminder.deleteMany({ where: { userTaskId: taskId, sentAt: null } });
       const updated = await this.prisma.userTask.update({
         where: { id: taskId },
-        data: { ...data, userId: newOwnerId, msToDoId: null, msListId: null, msListName: null, msEtag: null, msLastModified: null },
+        data: { ...data, userId: newOwnerId, msToDoId: null, msListId: null, msListName: null, msEtag: null, msLastModified: null, msEventId: null },
       });
       await this.syncReminderForTask(taskId, newOwnerId, updated.plannedEnd);
       await this.pushNewTaskToGraph(newOwnerId, updated);
+      await this.syncCalendarEvent(taskId);
       return { count: 1 };
     }
 
@@ -245,6 +268,9 @@ export class UserTasksService {
       await this.syncReminderForTask(taskId, task.userId, data.plannedEnd ?? null);
     }
     await this.pushUpdateToGraph(task.userId, taskId, data);
+    if (['title', 'description', 'plannedEnd', 'durationMinutes'].some(k => k in data)) {
+      await this.syncCalendarEvent(taskId);
+    }
     return { count: 1 };
   }
 
@@ -265,6 +291,7 @@ export class UserTasksService {
         this.logger.warn(`pushDelete failed for task ${taskId}: ${err?.message}`);
       }
     }
+    await this.deleteCalendarEvent(task);
     return result;
   }
 
@@ -310,7 +337,7 @@ export class UserTasksService {
 
       const payload: any = { title: task.title, status: task.status === 'DONE' ? 'completed' : 'notStarted' };
       if (task.plannedEnd) {
-        payload.dueDateTime = { dateTime: (task.plannedEnd as Date).toISOString(), timeZone: 'UTC' };
+        payload.dueDateTime = toTodoDue(task.plannedEnd as Date);
       }
 
       const created = await this.msTodo.createTask(userId, listId, payload);
@@ -340,7 +367,7 @@ export class UserTasksService {
       if (dto.status !== undefined) patch.status = dto.status === 'DONE' ? 'completed' : 'notStarted';
       if ('plannedEnd' in dto) {
         patch.dueDateTime = task.plannedEnd
-          ? { dateTime: (task.plannedEnd as Date).toISOString(), timeZone: 'UTC' }
+          ? toTodoDue(task.plannedEnd as Date)
           : null;
       }
       if (Object.keys(patch).length === 0) return;
@@ -349,6 +376,44 @@ export class UserTasksService {
     } catch (err: any) {
       this.logger.warn(`pushUpdateToGraph failed for task ${taskId}: ${err?.message}`);
     }
+  }
+
+  // @anchor user-tasks-sync-calendar-event
+  // Best-effort: zadanie z godziną (plannedEnd + durationMinutes) = wydarzenie w kalendarzu Outlook
+  // ODPOWIEDZIALNEGO. Zmiana tytułu/terminu/czasu trwania przesuwa wydarzenie, zdjęcie godziny je usuwa.
+  // Wykonane zadanie zostaje w kalendarzu (ślad, że było zrobione w tym czasie).
+  async syncCalendarEvent(taskId: string): Promise<void> {
+    const task = await this.prisma.userTask.findUnique({ where: { id: taskId } });
+    if (!task) return;
+    try {
+      if (task.deletedAt || !task.plannedEnd || !task.durationMinutes) {
+        await this.deleteCalendarEvent(task);
+        return;
+      }
+      const tokenRecord = await this.prisma.userMsToken.findUnique({ where: { userId: task.userId } });
+      if (!tokenRecord || tokenRecord.needsReauth) return;
+      const settings = await this.notifSettings.getOrCreate();
+      if (!settings.msTodoEnabled) return;
+
+      const input = { subject: task.title, body: task.description, start: task.plannedEnd, durationMinutes: task.durationMinutes };
+      if (task.msEventId && await this.msCalendar.updateEvent(task.userId, task.msEventId, input)) return;
+      const msEventId = await this.msCalendar.createEvent(task.userId, input);
+      await this.prisma.userTask.update({ where: { id: taskId }, data: { msEventId } });
+    } catch (err: any) {
+      this.logger.warn(`syncCalendarEvent failed for task ${taskId}: ${err?.response?.status ?? ''} ${err?.message}`);
+    }
+  }
+
+  // @anchor user-tasks-delete-calendar-event
+  // Usuwa wydarzenie z kalendarza dotychczasowego odpowiedzialnego (jego token) i czyści msEventId.
+  private async deleteCalendarEvent(task: { id: string; userId: string; msEventId: string | null }): Promise<void> {
+    if (!task.msEventId) return;
+    try {
+      await this.msCalendar.deleteEvent(task.userId, task.msEventId);
+    } catch (err: any) {
+      this.logger.warn(`deleteCalendarEvent failed for task ${task.id}: ${err?.message}`);
+    }
+    await this.prisma.userTask.update({ where: { id: task.id }, data: { msEventId: null } });
   }
 
   // @anchor user-tasks-resolve-ignite-list-id
@@ -455,6 +520,7 @@ export class UserTasksService {
       await this.prisma.userTask.update({ where: { id: taskId }, data: { plannedEnd } });
       await this.syncReminderForTask(taskId, ownerId, plannedEnd);
       await this.pushUpdateToGraph(ownerId, taskId, { plannedEnd });
+      await this.syncCalendarEvent(taskId);
     }
     return reminder;
   }

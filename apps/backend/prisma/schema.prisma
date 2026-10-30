@@ -1625,6 +1625,13 @@ model UserTask {
   plannedStart   DateTime?
   /// @anchor user-task-planned-end
   plannedEnd     DateTime?
+  /// @anchor user-task-duration-minutes
+  /// Długość bloku w kalendarzu Outlook. Ustawione = `plannedEnd` niesie konkretną godzinę startu
+  /// i odpowiedzialny ma wydarzenie w kalendarzu; null = zadanie bez godziny, bez wydarzenia.
+  durationMinutes Int?
+  /// @anchor user-task-ms-event-id
+  /// Id wydarzenia w kalendarzu Outlook odpowiedzialnego (Graph /me/events).
+  msEventId      String?
   /// @anchor user-task-ms-todo-id
   msToDoId       String?        @unique
   /// @anchor user-task-ms-list-id

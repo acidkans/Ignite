@@ -1137,3 +1137,9 @@ export function getLeafDefaultFrom(defaults, type) {
   if (defaults[t]?.excluded) return null;
   return defaults[t] || ZERO_LEAF_DEFAULTS[t] || null;
 }
+
+// @anchor task-duration-options — czas trwania wydarzenia w kalendarzu Outlook (minuty)
+export const TASK_DURATION_OPTIONS = [
+    [15, '15 min'], [30, '30 min'], [45, '45 min'], [60, '1 h'], [90, '1,5 h'],
+    [120, '2 h'], [180, '3 h'], [240, '4 h'], [480, '8 h'],
+];

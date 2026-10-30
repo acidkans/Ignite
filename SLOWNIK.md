@@ -520,6 +520,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | alarmTaskId (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-alarm-task-id |
 | ui-stan | newComment (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-new-task-comment |
 | ui-stan | newAlarm (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-new-task-alarm |
+| ui-stan | plannedTime (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-new-task-time |
+| ui-stan | plannedDuration (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-new-task-duration |
 | ui-stala | wbs-drawer-focus (WBS_BRANCH_CSS) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-drawer-focus-css |
 | ui-funkcja | openMyTasksOnLoad (App.handleLogin) | apps/frontend/src/App.jsx | @anchor open-my-tasks-after-login |
 | back-funkcja | createReminder — termin = koniec serii | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-cyclic-end-as-deadline |
@@ -1140,8 +1142,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 
 | Tag | Nazwa | Plik | Anchor |
 |-----|-------|------|--------|
-| ui-stan | ms-todo-connection-state | apps/frontend/src/NotificationSettingsPage.jsx | @anchor ms-todo-connection-state |
-| ui-sekcja | ms-todo-connection-panel | apps/frontend/src/NotificationSettingsPage.jsx | @anchor ms-todo-connection-panel |
+| ui-sekcja | MsAccountPanel | apps/frontend/src/components/shared/MsAccountPanel.jsx | @anchor ms-account-panel |
+| ui-stan | confirmDisconnect (MsAccountPanel) | apps/frontend/src/components/shared/MsAccountPanel.jsx | @anchor ms-account-confirm-disconnect |
+| ui-modal | MyAccountModal | apps/frontend/src/components/shared/MyAccountModal.jsx | @anchor my-account-modal |
+| ui-stan | myAccount (MainLayout) | apps/frontend/src/components/Layout/MainLayout.jsx | @anchor my-account-open |
 
 ### Service Worker REMINDER push (Etap 9)
 
@@ -1225,6 +1229,18 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | UserTasksService.syncReminderForTask | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-sync-reminder |
 | back-funkcja | UserTasksService.pushNewTaskToGraph | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-push-new-to-graph |
 | back-funkcja | UserTasksService.pushUpdateToGraph | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-push-update-to-graph |
+| back-funkcja | UserTasksService.syncCalendarEvent | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-sync-calendar-event |
+| back-funkcja | UserTasksService.deleteCalendarEvent | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-delete-calendar-event |
+| back-funkcja | toTodoDue | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor to-todo-due |
+| back-funkcja | withWarsawDay | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor with-warsaw-day |
+| back-serwis | MsCalendarService | apps/backend/src/ms-todo/ms-calendar.service.ts | @anchor ms-calendar-service |
+| back-typ | MsCalendarEventInput | apps/backend/src/ms-todo/ms-calendar.service.ts | @anchor ms-calendar-event-input |
+| back-funkcja | toWarsawLocal | apps/backend/src/ms-todo/ms-calendar.service.ts | @anchor to-warsaw-local |
+| back-funkcja | MsCalendarService.payload | apps/backend/src/ms-todo/ms-calendar.service.ts | @anchor ms-calendar-payload |
+| back-funkcja | MsCalendarService.createEvent | apps/backend/src/ms-todo/ms-calendar.service.ts | @anchor ms-calendar-create-event |
+| back-funkcja | MsCalendarService.updateEvent | apps/backend/src/ms-todo/ms-calendar.service.ts | @anchor ms-calendar-update-event |
+| back-funkcja | MsCalendarService.deleteEvent | apps/backend/src/ms-todo/ms-calendar.service.ts | @anchor ms-calendar-delete-event |
+| back-stala | REFRESH_SCOPES | apps/backend/src/onedrive/onedrive.service.ts | @anchor onedrive-refresh-scopes |
 | back-funkcja | UserTasksService.resolveIgniteListId | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-resolve-ignite-list-id |
 | back-endpoint | GET /my-tasks | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-get-endpoint |
 | back-endpoint | POST /my-tasks | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-create-endpoint |
@@ -1250,6 +1266,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | colWidths (localStorage wbs-hybrid-col-widths) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-col-widths-storage |
 | ui-funkcja | startColResize | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor start-col-resize |
 | ui-modal | UserTaskEditModal | apps/frontend/src/components/shared/wbs/UserTaskEditModal.jsx | @anchor user-task-edit-modal |
+| ui-stan | time (UserTaskEditModal) | apps/frontend/src/components/shared/wbs/UserTaskEditModal.jsx | @anchor user-task-edit-time |
+| ui-stan | duration (UserTaskEditModal) | apps/frontend/src/components/shared/wbs/UserTaskEditModal.jsx | @anchor user-task-edit-duration |
+| ui-stala | TASK_DURATION_OPTIONS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor task-duration-options |
 | ui-stan | editUserTask | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-edit-user-task |
 | ui-modal | OrderTeamModal | apps/frontend/src/components/shared/OrderTeamModal.jsx | @anchor order-team-modal |
 | ui-stan | teamStep (AddNodeModal) | apps/frontend/src/components/shared/AddNodeModal.jsx | @anchor add-node-team-step |
@@ -1314,6 +1333,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | UserTask.status | apps/backend/prisma/schema.prisma | @anchor user-task-status |
 | schema-pole | UserTask.plannedStart | apps/backend/prisma/schema.prisma | @anchor user-task-planned-start |
 | schema-pole | UserTask.plannedEnd | apps/backend/prisma/schema.prisma | @anchor user-task-planned-end |
+| schema-pole | UserTask.durationMinutes | apps/backend/prisma/schema.prisma | @anchor user-task-duration-minutes |
+| schema-pole | UserTask.msEventId | apps/backend/prisma/schema.prisma | @anchor user-task-ms-event-id |
 | schema-pole | UserTask.msToDoId | apps/backend/prisma/schema.prisma | @anchor user-task-ms-todo-id |
 | schema-pole | UserTask.msListName | apps/backend/prisma/schema.prisma | @anchor user-task-ms-list-name |
 | schema-pole | UserTask.msEtag | apps/backend/prisma/schema.prisma | @anchor user-task-ms-etag |

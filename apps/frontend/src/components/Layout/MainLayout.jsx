@@ -9,6 +9,7 @@ import DocumentViewer from '../shared/DocumentViewer';
 import AddNodeModal from '../shared/AddNodeModal';
 import NodePermissionsModal from '../shared/NodePermissionsModal';
 import NotificationBell from '../shared/NotificationBell';
+import MyAccountModal from '../shared/MyAccountModal';
 import OfferAiToast from '../shared/OfferAiToast';
 import { APP_VERSION } from '../../version';
 
@@ -106,6 +107,15 @@ export default function MainLayout({ onLogout }) {
             }
         }
     }, []);
+
+    // @anchor my-account-open — okno „Moje konto”; po powrocie z logowania Microsoft (?ms=connected|error) otwiera się samo
+    const [myAccount, setMyAccount] = useState(() => {
+        const ms = new URLSearchParams(window.location.search).get('ms');
+        return ms === 'connected' || ms === 'error' ? { oauthResult: ms } : null;
+    });
+    useEffect(() => {
+        if (myAccount?.oauthResult) window.history.replaceState({}, '', window.location.pathname);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     // --- 1b. Dostep do modulu Urlopy (firma usera / ADMIN) ---
     useEffect(() => {
@@ -344,12 +354,20 @@ export default function MainLayout({ onLogout }) {
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0110.5 3h6a2.25 2.25 0 012.25 2.25v13.5A2.25 2.25 0 0116.5 21h-6a2.25 2.25 0 01-2.25-2.25V15M3 12h12.75m0 0l-3-3m3 3l-3 3" />
                             </svg>
                         </button>
-                        <div className="overflow-hidden">
+                        <button
+                            onClick={() => setMyAccount({ oauthResult: null })}
+                            className="overflow-hidden text-left rounded-lg px-1.5 py-1 -mx-1.5 hover:bg-white/10 transition-colors"
+                            title="Moje konto — połączenie z kontem Microsoft"
+                        >
                             <div className="text-[10px] uppercase text-gray-500 font-bold tracking-wider">Zalogowany jako</div>
                             <div className="text-sm font-medium text-gray-200 truncate">{userLabel || '...'}</div>
-                        </div>
+                        </button>
                     </div>
                 </div>
+
+                {myAccount && (
+                    <MyAccountModal userLabel={userLabel} oauthResult={myAccount.oauthResult} onClose={() => setMyAccount(null)} />
+                )}
 
                 {/* Resizer Handle */}
                 {leftVisible && <div

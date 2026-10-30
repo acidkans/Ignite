@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, buildOwnerOptions, defaultLogisticianOwner, isRejectedPlanNode, groupQtyFactor } from './wbsConstants';
+import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, buildOwnerOptions, defaultLogisticianOwner, isRejectedPlanNode, groupQtyFactor, TASK_DURATION_OPTIONS } from './wbsConstants';
 import AutoResizeTextarea from './AutoResizeTextarea';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
@@ -267,6 +267,10 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
     const [tasks, setTasks] = useState(null);
     const [title, setTitle] = useState('');
     const [plannedEnd, setPlannedEnd] = useState('');
+    // @anchor wbs-new-task-time — godzina nowego zadania; ustawiona = wydarzenie w kalendarzu Outlook odpowiedzialnego
+    const [plannedTime, setPlannedTime] = useState('');
+    // @anchor wbs-new-task-duration
+    const [plannedDuration, setPlannedDuration] = useState(60);
     // @anchor wbs-task-assignee
     const [assigneeId, setAssigneeId] = useState(currentUserId || '');
     // @anchor wbs-task-team — zespół projektowy zamówienia (GET /my-tasks/project-team/:processNodeId)
@@ -310,7 +314,8 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
             const desc = normalizeLowerText(newComment);
             if (desc) body.description = desc;
             if (assigneeId && assigneeId !== currentUserId) body.assigneeUserId = assigneeId;
-            if (plannedEnd) body.plannedEnd = new Date(plannedEnd).toISOString();
+            if (plannedEnd) body.plannedEnd = new Date(plannedTime ? `${plannedEnd}T${plannedTime}:00` : plannedEnd).toISOString();
+            if (plannedEnd && plannedTime) body.durationMinutes = Number(plannedDuration);
             const res = await fetch('/api/my-tasks', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -330,6 +335,7 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
             setNewComment('');
             setNewAlarm(null);
             setPlannedEnd('');
+            setPlannedTime('');
             await load();
             onChanged?.();
         } catch (err) {
@@ -502,6 +508,25 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                         className="px-1.5 py-1 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
                     />
                 </label>
+                {plannedEnd && (
+                    <input
+                        type="time"
+                        value={plannedTime}
+                        onChange={e => setPlannedTime(e.target.value)}
+                        title="Godzina (opcjonalnie) — zadanie trafi jako wydarzenie do kalendarza Outlook odpowiedzialnego"
+                        className="px-1.5 py-1 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
+                    />
+                )}
+                {plannedEnd && plannedTime && (
+                    <select
+                        value={plannedDuration}
+                        onChange={e => setPlannedDuration(Number(e.target.value))}
+                        title="Czas trwania wydarzenia w kalendarzu Outlook"
+                        className="px-1.5 py-1 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
+                    >
+                        {TASK_DURATION_OPTIONS.map(([v, l]) => <option key={v} value={v} style={OPTION_STYLE}>{l}</option>)}
+                    </select>
+                )}
                 <button
                     type="button"
                     onClick={() => setNewAlarm(a => a ? null : { start: toLocalInput(new Date()), end: alarmEndForDeadline(plannedEnd), intervalMinutes: 60 })}

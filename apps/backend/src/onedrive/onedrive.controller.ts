@@ -38,9 +38,9 @@ export class OneDriveController {
     const frontendUrl = this.config.get('FRONTEND_URL') || 'http://localhost:5174';
     try {
       await this.oneDriveService.handleCallback(code, userId);
-      res.redirect(`${frontendUrl}/notifications?ms=connected`);
+      res.redirect(`${frontendUrl}/?ms=connected`);
     } catch {
-      res.redirect(`${frontendUrl}/notifications?ms=error`);
+      res.redirect(`${frontendUrl}/?ms=error`);
     }
   }
 

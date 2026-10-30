@@ -7,8 +7,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ORDER_FOLDERS, ORDER_ROOT_FOLDERS, OrderRootKey, orderFolderPath } from './order-folders';
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
-// Tasks.ReadWrite wymagany dla sync z MS To Do / Samsung Reminder
-const SCOPES = 'Files.ReadWrite offline_access User.Read Tasks.ReadWrite';
+// Tasks.ReadWrite wymagany dla sync z MS To Do / Samsung Reminder, Calendars.ReadWrite — zadania z godziną jako wydarzenia Outlook
+const SCOPES = 'Files.ReadWrite offline_access User.Read Tasks.ReadWrite Calendars.ReadWrite';
+// @anchor onedrive-refresh-scopes
+// Odświeżenie tokenu prosi o `.default` = wszystko, na co konto już ma zgodę. Z pełną listą SCOPES
+// refresh wywalałby się (consent_required) każdemu, kto połączył konto przed dodaniem nowego scope'u
+// — padłyby wtedy To Do i OneDrive, a nie tylko nowa funkcja.
+const REFRESH_SCOPES = 'https://graph.microsoft.com/.default offline_access';
 
 // @anchor order-folders-result
 export interface OrderFoldersResult {
@@ -154,7 +159,7 @@ export class OneDriveService {
         refresh_token: refreshToken,
         client_id: this.config.get('MS_CLIENT_ID') || '',
         client_secret: this.config.get('MS_CLIENT_SECRET') || '',
-        scope: SCOPES,
+        scope: REFRESH_SCOPES,
       }),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
     );

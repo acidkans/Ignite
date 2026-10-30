@@ -1,3 +1,28 @@
+## 2026-10-30 — feat(zadania): godzina zadania i wydarzenie w kalendarzu Outlook odpowiedzialnego + konto Microsoft w „Moje konto” (v2026.10.30.2138)
+
+### schema.prisma
+- dodano `schema-pole` `UserTask.durationMinutes` (Int?) — ustawione = `plannedEnd` niesie godzinę startu i zadanie ma wydarzenie w Outlooku
+- dodano `schema-pole` `UserTask.msEventId` (String?) — id wydarzenia w kalendarzu odpowiedzialnego (Graph `/me/events`)
+- migracja `20261030170000_user_task_outlook_event`
+
+### architektura / API
+- `back-endpoint` `POST /my-tasks` i `PATCH /my-tasks/:id` przyjmują `durationMinutes` (null = bez godziny, wydarzenie usuwane)
+- nowy `back-serwis` `MsCalendarService` (moduł ms-todo) — create/update/delete wydarzeń; 401/403 NIE ustawia `needsReauth`
+- `back-funkcja` `syncCalendarEvent` wołane przy tworzeniu, edycji, przepisaniu (usunięcie u starego, nowe u nowego), usunięciu, alarmie cyklicznym z datą „Do” i przy zmianie terminu z To Do
+- `back-stala` `SCOPES` + `Calendars.ReadWrite`; odświeżanie tokenu przez `REFRESH_SCOPES` (`.default`), żeby konta bez nowej zgody nie traciły To Do/OneDrive
+- termin do MS To Do wysyłany jako dzień w czasie polskim (`toTodoDue`) — koniec przesuwania dnia dla godzin przy północy
+- UI: pola Godzina + Czas trwania w `ui-modal` `UserTaskEditModal` i w formularzu nowego zadania `ui-sekcja` `WbsTasksDrawer`
+- połączenie z kontem Microsoft przeniesione ze strony Powiadomienia do `ui-modal` `MyAccountModal` (klik w „Zalogowany jako” w stopce paska bocznego); `back-endpoint` `GET /onedrive/callback` przekierowuje na `/?ms=connected|error` i okno otwiera się samo
+
+### słownik
+- dodano `user-task-duration-minutes`, `user-task-ms-event-id`, `user-tasks-sync-calendar-event`, `user-tasks-delete-calendar-event`, `to-todo-due`, `with-warsaw-day`, `ms-calendar-service`, `ms-calendar-event-input`, `to-warsaw-local`, `ms-calendar-payload`, `ms-calendar-create-event`, `ms-calendar-update-event`, `ms-calendar-delete-event`, `onedrive-refresh-scopes`, `user-task-edit-time`, `user-task-edit-duration`, `task-duration-options`, `wbs-new-task-time`, `wbs-new-task-duration`, `ms-account-panel`, `ms-account-confirm-disconnect`, `my-account-modal`, `my-account-open`
+- usunięto `ms-todo-connection-state`, `ms-todo-connection-panel`
+
+### wytyczne
+- `schema-pole` `UserTask.durationMinutes` — sync z To Do (data bez godziny) nie może nadpisać godziny: `withWarsawDay` zachowuje godzinę, zmienia tylko dzień
+- `back-serwis` `MsCalendarService` — przed deployem dodać w Azure uprawnienie Delegated `Calendars.ReadWrite` + Grant admin consent; bez tego wydarzenia się nie tworzą (tylko warn w logach)
+- wykonane zadanie zostaje w kalendarzu Outlook; usunięcie zadania lub zdjęcie godziny usuwa wydarzenie
+
 ## 2026-10-27 — feat(wbs): usuwanie typu pozycji z listy domyślnych wartości zamówienia — brak stawki nie blokuje zapisu (v2026.10.27.2018)
 
 ### architektura / API

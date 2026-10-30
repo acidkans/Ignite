@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MsTodoService, MsTodoList, MsTodoTask } from '../ms-todo/ms-todo.service';
-import { UserTasksService } from './user-tasks.service';
+import { UserTasksService, toTodoDue, withWarsawDay } from './user-tasks.service';
 
 // @anchor task-sync-service
 @Injectable()
@@ -88,11 +88,15 @@ export class TaskSyncService {
 
       const nodeId = await this.resolveNodeId(task.title, list.displayName);
       const msLastModified = task.lastModifiedDateTime ? new Date(task.lastModifiedDateTime) : null;
-      const plannedEnd = task.dueDateTime?.dateTime ? new Date(task.dueDateTime.dateTime) : null;
+      let plannedEnd = task.dueDateTime?.dateTime ? new Date(task.dueDateTime.dateTime) : null;
       const status = task.status === 'completed' ? 'DONE' : 'OPEN';
       const msEtag = (task as any)['@odata.etag'] ?? null;
 
       const existing = await this.prisma.userTask.findUnique({ where: { msToDoId: task.id } });
+      // To Do zna tylko datę — zadanie z godziną zachowuje swoją godzinę, zmienia się najwyżej dzień.
+      if (existing?.durationMinutes && existing.plannedEnd && plannedEnd) {
+        plannedEnd = withWarsawDay(existing.plannedEnd, task.dueDateTime!.dateTime.slice(0, 10));
+      }
 
       if (existing) {
         // Porównujemy z msLastModified (ostatni znany stan MS), NIE z updatedAt — updatedAt jest
@@ -115,6 +119,10 @@ export class TaskSyncService {
             },
           });
           await this.userTasks.syncReminderForTask(updated.id, userId, updated.plannedEnd);
+          const moved = (existing.plannedEnd?.getTime() ?? null) !== (plannedEnd?.getTime() ?? null) || existing.title !== task.title;
+          if (moved && (existing.msEventId || existing.durationMinutes)) {
+            await this.userTasks.syncCalendarEvent(updated.id);
+          }
         } else if (existing.msListId) {
           // DB wygrywa — pushuj do Graph
           await this.pushTaskToGraph(userId, existing, existing.msListId);
@@ -172,7 +180,7 @@ export class TaskSyncService {
         status: task.status === 'DONE' ? 'completed' : 'notStarted',
       };
       if (task.plannedEnd) {
-        patch.dueDateTime = { dateTime: (task.plannedEnd as Date).toISOString(), timeZone: 'UTC' };
+        patch.dueDateTime = toTodoDue(task.plannedEnd as Date);
       }
       await this.msTodo.updateTask(userId, listId, task.msToDoId, patch);
     } catch (err: any) {

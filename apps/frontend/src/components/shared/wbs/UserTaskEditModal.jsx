@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { X, ListTodo, Calendar, Trash2, Loader2, Check } from 'lucide-react';
+import { X, ListTodo, Calendar, Clock, Trash2, Loader2, Check } from 'lucide-react';
 import { API_URL } from '../../../config';
+import { TASK_DURATION_OPTIONS } from './wbsConstants';
 
 const token = () => sessionStorage.getItem('token') || localStorage.getItem('token');
 const personName = (u) => [u?.firstName, u?.lastName].filter(Boolean).join(' ') || u?.email || '—';
@@ -10,6 +11,10 @@ const toDateInput = (d) => {
     if (!d) return '';
     const x = new Date(d);
     return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+};
+const toTimeInput = (d) => {
+    const x = new Date(d);
+    return `${String(x.getHours()).padStart(2, '0')}:${String(x.getMinutes()).padStart(2, '0')}`;
 };
 
 // @anchor user-task-edit-modal
@@ -21,6 +26,10 @@ export default function UserTaskEditModal({ task, processNodeId, onClose, onSave
     const canEdit = task.userId === currentUserId || task.createdById === currentUserId;
     const [title, setTitle] = useState(task.title || '');
     const [plannedEnd, setPlannedEnd] = useState(toDateInput(task.plannedEnd || task.plannedStart));
+    // @anchor user-task-edit-time — godzina = zadanie ma wydarzenie w kalendarzu Outlook odpowiedzialnego
+    const [time, setTime] = useState(task.durationMinutes && task.plannedEnd ? toTimeInput(task.plannedEnd) : '');
+    // @anchor user-task-edit-duration
+    const [duration, setDuration] = useState(task.durationMinutes || 60);
     const [assigneeId, setAssigneeId] = useState(task.userId || '');
     const [done, setDone] = useState(task.status === 'DONE');
     const [team, setTeam] = useState([]);
@@ -58,7 +67,8 @@ export default function UserTaskEditModal({ task, processNodeId, onClose, onSave
                 title: title.trim(),
                 status: done ? 'DONE' : 'OPEN',
                 // Termin bez godziny = południe, jak przy przeciąganiu w kalendarzu (bez przeskoku dnia przez strefę).
-                plannedEnd: plannedEnd ? new Date(`${plannedEnd}T12:00:00`).toISOString() : null,
+                plannedEnd: plannedEnd ? new Date(`${plannedEnd}T${time || '12:00'}:00`).toISOString() : null,
+                durationMinutes: plannedEnd && time ? Number(duration) : null,
             };
             if (assigneeId && assigneeId !== task.userId) body.assigneeUserId = assigneeId;
             const res = await fetch(`${API_URL}/my-tasks/${task.id}`, {
@@ -121,6 +131,23 @@ export default function UserTaskEditModal({ task, processNodeId, onClose, onSave
                             </select>
                         </label>
                     </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <label className="flex flex-col gap-1.5">
+                            <span className="text-[11px] text-gray-400 font-medium flex items-center gap-1"><Clock size={10} /> Godzina (opcjonalnie)</span>
+                            <input type="time" value={time} onChange={e => setTime(e.target.value)} disabled={!canEdit || !plannedEnd} className={field} title={plannedEnd ? 'Z godziną zadanie trafi jako wydarzenie do kalendarza Outlook odpowiedzialnego' : 'Najpierw ustaw termin'} />
+                        </label>
+                        <label className="flex flex-col gap-1.5">
+                            <span className="text-[11px] text-gray-400 font-medium">Czas trwania</span>
+                            <select value={duration} onChange={e => setDuration(Number(e.target.value))} disabled={!canEdit || !time} className={field}>
+                                {TASK_DURATION_OPTIONS.map(([v, l]) => <option key={v} value={v} style={OPTION_STYLE}>{l}</option>)}
+                            </select>
+                        </label>
+                    </div>
+                    {time && plannedEnd && (
+                        <p className="text-[12px] text-gray-500 -mt-1">
+                            {task.msEventId ? 'W kalendarzu Outlook odpowiedzialnego' : 'Po zapisie trafi do kalendarza Outlook odpowiedzialnego (jeśli ma połączone konto Microsoft)'}
+                        </p>
+                    )}
                     <label className={`flex items-center gap-2 text-sm ${canEdit ? 'text-gray-200 cursor-pointer' : 'text-gray-500'}`}>
                         <span className={`w-4 h-4 rounded border flex items-center justify-center ${done ? 'bg-emerald-500/30 border-emerald-400/60 text-emerald-300' : 'border-white/20'}`}>{done && <Check size={11} />}</span>
                         <input type="checkbox" className="sr-only" checked={done} onChange={e => setDone(e.target.checked)} disabled={!canEdit} />
