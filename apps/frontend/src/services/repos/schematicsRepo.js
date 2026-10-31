@@ -6,9 +6,9 @@ import { db } from '../db';
  * Tu trzymamy tylko metadane + listę markerów (= odpowiedź endpointu listy).
  */
 
-export async function getSchematicsBySubtask(subtaskId) {
-    if (!subtaskId) return [];
-    return db.schematics.where('subtaskId').equals(subtaskId).toArray();
+export async function getSchematicsByUserTask(userTaskId) {
+    if (!userTaskId) return [];
+    return db.schematics.where('userTaskId').equals(userTaskId).toArray();
 }
 
 export async function getSchematicsByNode(nodeId) {
@@ -17,19 +17,19 @@ export async function getSchematicsByNode(nodeId) {
 }
 
 /**
- * Zastępuje schematy przypisane do konkretnego subtaska/węzła.
+ * Zastępuje schematy przypisane do konkretnego zadania (UserTask).
  * Backend zwraca pełną listę (z markerami) — replace, nie merge.
  */
-export async function replaceSchematicsForSubtask(subtaskId, schematics) {
+export async function replaceSchematicsForUserTask(userTaskId, schematics) {
     return db.transaction('rw', db.schematics, async () => {
-        const existing = await db.schematics.where('subtaskId').equals(subtaskId).toArray();
+        const existing = await db.schematics.where('userTaskId').equals(userTaskId).toArray();
         const existingIds = existing.map((s) => s.id);
         if (existingIds.length) await db.schematics.bulkDelete(existingIds);
         if (schematics.length) {
             await db.schematics.bulkPut(
                 schematics.map((s) => ({
                     ...s,
-                    subtaskId,
+                    userTaskId,
                     nodeId: s.nodeId ?? null,
                     updatedAt: s.updatedAt ?? new Date().toISOString(),
                 })),
@@ -40,14 +40,14 @@ export async function replaceSchematicsForSubtask(subtaskId, schematics) {
 
 /**
  * Upsert schematów po pobraniu ich przez SchematicViewer (online flow).
- * Działa zarówno dla list per-subtask, jak i per-node — bez kasowania innych.
+ * Działa zarówno dla list per-zadanie, jak i per-node — bez kasowania innych.
  */
-export async function upsertSchematics(schematics, { subtaskId, nodeId } = {}) {
+export async function upsertSchematics(schematics, { userTaskId, nodeId } = {}) {
     if (!schematics?.length) return;
     return db.schematics.bulkPut(
         schematics.map((s) => ({
             ...s,
-            subtaskId: s.subtaskId ?? subtaskId ?? null,
+            userTaskId: s.userTaskId ?? userTaskId ?? null,
             nodeId: s.nodeId ?? nodeId ?? null,
             updatedAt: s.updatedAt ?? new Date().toISOString(),
         })),

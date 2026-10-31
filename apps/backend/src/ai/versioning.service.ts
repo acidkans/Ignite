@@ -100,7 +100,7 @@ export class VersioningService {
     }
 
     // @anchor clone-version-data
-    // Klonuje pełny "freeze" danych (subtaski, WBS, budżet, materiały, wymagania,
+    // Klonuje pełny "freeze" danych (WBS, budżet, materiały, wymagania,
     // order requirements) ze źródła (sourceVId; null = baseline) do wersji docelowej
     // targetVersionId. Wydzielone z createVersion, aby móc zmaterializować baseline
     // jako "pierwszy" i zaraz potem sklonować właściwą nową wersję w jednej transakcji.
@@ -122,46 +122,9 @@ export class VersioningService {
             return findMany({ versionId: null });
         };
 
-        // 4. Clone Subtasks (WBS) with ID mapping
-        const subtasks = await loadSourceRows((extra) => tx.subtask.findMany({
-            where: { nodeId, ...extra }
-        }));
-
-        const subtaskIdMap = new Map<string, string>();
-
-        for (const subtask of subtasks) {
-            const newSubtask = await tx.subtask.create({
-                data: {
-                    nodeId,
-                    versionId: targetVersionId,
-                    name: subtask.name,
-                    description: subtask.description,
-                    plannedStart: subtask.plannedStart,
-                    plannedEnd: subtask.plannedEnd,
-                    assignedUserId: subtask.assignedUserId,
-                    status: subtask.status,
-                    visibilityType: subtask.visibilityType,
-                    category: subtask.category,
-                    phase: subtask.phase,
-                    requirementItemId: subtask.requirementItemId,
-                    isAiGenerated: subtask.isAiGenerated,
-                    isApproved: subtask.isApproved,
-                }
-            });
-            subtaskIdMap.set(subtask.id, newSubtask.id);
-        }
-
-        // 4b. Clone SubtaskMarkerLinks dla sklonowanych subtasków
-        for (const [oldSubtaskId, newSubtaskId] of subtaskIdMap.entries()) {
-            const links = await tx.subtaskMarkerLink.findMany({ where: { subtaskId: oldSubtaskId } });
-            for (const link of links) {
-                await tx.subtaskMarkerLink.upsert({
-                    where: { subtaskId_markerId: { subtaskId: newSubtaskId, markerId: link.markerId } },
-                    update: {},
-                    create: { subtaskId: newSubtaskId, markerId: link.markerId },
-                });
-            }
-        }
+        // Zadania (UserTask) NIE są klonowane z wersją — żyją w MS To Do / Outlooku, klon dałby duplikaty
+        // (decyzja 1 planu ujednolicenia). Nowa / przełączona wersja przepina je przez `moveTasksToVersion`;
+        // pozycje budżetu i materiały wskazują dalej te same zadania.
 
         // 5. Clone WBS Nodes with ID mapping (must happen before BudgetLineItem
         //    so wbsNodeId can be remapped to the new tree)
@@ -234,7 +197,7 @@ export class VersioningService {
             }
         }
 
-        // 6. Clone Budget Line Items (with subtaskId + wbsNodeId remap)
+        // 6. Clone Budget Line Items (with wbsNodeId remap; userTaskId bez zmian — zadania nie mają wersji)
         const budgetItems = await loadSourceRows((extra) => tx.budgetLineItem.findMany({
             where: { nodeId, ...extra }
         }));
@@ -244,7 +207,7 @@ export class VersioningService {
                 data: {
                     nodeId,
                     versionId: targetVersionId,
-                    subtaskId: item.subtaskId ? subtaskIdMap.get(item.subtaskId) || null : null,
+                    userTaskId: item.userTaskId,
                     wbsNodeId: item.wbsNodeId ? wbsIdMap.get(item.wbsNodeId) || null : null,
                     type: item.type,
                     description: item.description,
@@ -299,7 +262,7 @@ export class VersioningService {
             }
         }
 
-        // 9. Clone Material Requirements (with wbsNodeId + subtaskId remap)
+        // 9. Clone Material Requirements (with wbsNodeId remap)
         const matReqs = await loadSourceRows((extra) => tx.materialRequirement.findMany({
             where: { nodeId, ...extra }
         }));
@@ -311,7 +274,6 @@ export class VersioningService {
             const newId = require('crypto').randomUUID();
             matReqIdMap.set(mr.id, newId);
             const newWbsNodeId = mr.wbsNodeId ? (wbsIdMap.get(mr.wbsNodeId) ?? null) : null;
-            const newSubtaskId = mr.assignedSubtaskId ? (subtaskIdMap.get(mr.assignedSubtaskId) ?? null) : null;
             await tx.materialRequirement.create({
                 data: {
                     id: newId,
@@ -327,7 +289,7 @@ export class VersioningService {
                     wbsNodeIds: mr.wbsNodeIds,
                     wbsNodeAllocations: mr.wbsNodeAllocations,
                     wbsNodeId: newWbsNodeId,
-                    assignedSubtaskId: newSubtaskId,
+                    assignedUserTaskId: mr.assignedUserTaskId,
                     isAiAssigned: mr.isAiAssigned,
                     aiConfidence: mr.aiConfidence,
                     status: mr.status,

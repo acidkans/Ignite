@@ -260,6 +260,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | getAllMarkersFlat | apps/backend/src/schematics/schematics.service.ts | @anchor all-markers-flat |
 | ui-stala | OUTBOX_RETRY_INTERVAL_MS | apps/frontend/src/hooks/useSyncOutbox.js | @anchor outbox-retry-interval-ms |
 | ui-stala | markerIdMap | apps/frontend/src/services/db.js | @anchor marker-id-map |
+| ui-stala | userTasks (Dexie v5) | apps/frontend/src/services/db.js | @anchor dexie-user-tasks |
 | ui-funkcja | rememberMarkerId | apps/frontend/src/services/db.js | @anchor remember-marker-id |
 | ui-funkcja | resolveMarkerId | apps/frontend/src/services/db.js | @anchor resolve-marker-id |
 | ui-funkcja | getOrphanedAttachments | apps/frontend/src/services/repos/outboxRepo.js | @anchor get-orphaned-attachments |
@@ -299,6 +300,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | enqueueWbsQa | apps/frontend/src/services/repos/outboxRepo.js | @anchor enqueue-wbs-qa |
 | ui-funkcja | getPendingByType | apps/frontend/src/services/repos/outboxRepo.js | @anchor get-pending-by-type |
 | ui-stala | WBS_QA | apps/frontend/src/services/sync/syncOutbox.js | @anchor wbs-qa-outbox-type |
+| ui-stala | USER_TASK_STATUS | apps/frontend/src/services/sync/syncOutbox.js | @anchor outbox-user-task-status |
 | ui-stan | qaTreeOpen (SchematTab) | apps/frontend/src/components/shared/SchematTab.jsx | @anchor schemat-qa-tree-open |
 | ui-stan | qaTreeOpen (UnifiedWbsPanel) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor wbs-qa-tree-open |
 | ui-funkcja | resolveOfferTokens | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor resolve-offer-tokens |
@@ -524,9 +526,11 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | alarmEndForDeadline | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor alarm-end-for-deadline |
 | ui-funkcja | buildStrategyTasksQaPdfArtifact | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor build-strategy-tasks-qa-pdf-artifact |
 | ui-input | Nowe pytanie (QaCell) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-new-question |
-| ui-sekcja | MobileUserTasks | apps/frontend/src/components/Mobile/MobileUserTasks.jsx | @anchor mobile-user-tasks |
-| ui-funkcja | isUserTaskOnDay | apps/frontend/src/components/Mobile/MobileUserTasks.jsx | @anchor mobile-user-task-on-day |
-| ui-stan | userTasksRefreshKey (MobileDashboard) | apps/frontend/src/components/Mobile/MobileDashboard.jsx | @anchor mobile-user-tasks-refresh-key |
+| ui-funkcja | isUserTaskOnDay | apps/frontend/src/components/Mobile/MobileDashboard.jsx | @anchor mobile-user-task-on-day |
+| ui-funkcja | handleStatusChange (MobileDashboard) | apps/frontend/src/components/Mobile/MobileDashboard.jsx | @anchor mobile-task-status-change |
+| ui-hook | useCachedUserTasks | apps/frontend/src/hooks/useCachedUserTasks.js | @anchor use-cached-user-tasks |
+| ui-funkcja | replaceMyUserTasks | apps/frontend/src/services/repos/userTasksRepo.js | @anchor replace-my-user-tasks |
+| ui-funkcja | getAllUserTasks | apps/frontend/src/services/repos/userTasksRepo.js | @anchor get-all-user-tasks |
 | ui-stala | EXTRA_CSS (eksport strategia/zadania/Q&A) | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor strategy-tasks-qa-pdf-css |
 | ui-funkcja | fetchProjectTasks | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor fetch-project-tasks-all |
 | ui-funkcja | strategyTasksQaPdfExport (moduł) | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor strategy-tasks-qa-pdf-export |
@@ -2196,6 +2200,8 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-funkcja | getUserTasksForDate | apps/frontend/src/components/shared/wbs/CalendarView.jsx | @anchor calendar-user-tasks-for-date |
 | ui-funkcja | renderUserTask | apps/frontend/src/components/shared/wbs/CalendarView.jsx | @anchor calendar-render-user-task |
 | ui-stala | TASK_TILE_STYLE | apps/frontend/src/components/shared/wbs/CalendarView.jsx | @anchor task-tile-style |
+| back-endpoint | GET /schematics/user-task/:userTaskId | apps/backend/src/schematics/schematics.controller.ts | @anchor schematics-by-user-task-endpoint |
+| back-endpoint | GET /schematics/user-task/:userTaskId/markers | apps/backend/src/schematics/schematics.controller.ts | @anchor markers-by-user-task-endpoint |
 | ui-stan | userTasks (TasksCalendarSection) | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-user-tasks |
 | ui-stan | taskScope | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-scope |
 | ui-stan | allTasksOpen | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-all-modal |
@@ -2210,7 +2216,6 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-funkcja | AllTasksModal.renameRow | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-rename |
 | ui-stan | allTasksOpen (UnifiedWbsPanel) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor unified-all-tasks-open |
 | ui-funkcja | handleRestore (AllTasksModal) | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-restore |
-| ui-funkcja | setSubtaskStatus (AllTasksModal) | apps/frontend/src/components/shared/wbs/AllTasksModal.jsx | @anchor all-tasks-subtask-status |
 | ui-panel | DueTasksBell | apps/frontend/src/components/shared/DueTasksBell.jsx | @anchor due-tasks-bell |
 | ui-funkcja | markDone (DueTasksBell) | apps/frontend/src/components/shared/DueTasksBell.jsx | @anchor due-tasks-bell-done |
 | ui-funkcja | snooze (DueTasksBell) | apps/frontend/src/components/shared/DueTasksBell.jsx | @anchor due-tasks-bell-snooze |

@@ -122,7 +122,7 @@ export default function OrphanAttachmentsPanel({ onClose, onAssigned }) {
         setAssigning(orphan.outboxRowId);
         try {
             await reassignOrphanedAttachment(orphan.outboxRowId, marker.id, {
-                subtaskId: marker.subtaskId,
+                userTaskId: marker.userTaskId,
                 nodeId: marker.nodeId,
             });
             const token = sessionStorage.getItem('token');

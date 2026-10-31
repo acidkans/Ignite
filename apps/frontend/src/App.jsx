@@ -185,7 +185,7 @@ function App() {
   }, [token]);
 
   // Prefetch danych mobilnych po loginie + na powrót sieci.
-  // Idempotentny — useCachedSubtasks też woła prefetch, inflight guard zapobiega duplikatom.
+  // Idempotentny — useCachedUserTasks też woła prefetch, inflight guard zapobiega duplikatom.
   useEffect(() => {
     if (!token) return;
     prefetchMobileData(token);

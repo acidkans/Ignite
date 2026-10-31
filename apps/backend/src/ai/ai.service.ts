@@ -209,7 +209,7 @@ export class AiService implements OnModuleInit {
     /**
      * Zapisuje wygenerowaną estymację do bazy danych.
      */
-    async applyEstimation(nodeId: string, versionId: string, data: any) {
+    async applyEstimation(nodeId: string, versionId: string, data: any, userId?: string) {
         this.logger.log(`Applying AI estimation to version ${versionId}`);
         const vId = (versionId === 'null' || versionId === 'undefined' || !versionId) ? null : versionId;
 
@@ -218,8 +218,9 @@ export class AiService implements OnModuleInit {
             await this.prisma.budgetLineItem.deleteMany({
                 where: { nodeId, versionId: vId }
             });
-            await this.prisma.subtask.deleteMany({
-                where: { nodeId, versionId: vId }
+            // Zadania nie mają wersji — usuwamy tylko poprzednie, niezatwierdzone propozycje AI.
+            await this.prisma.userTask.deleteMany({
+                where: { nodeId, isAiGenerated: true, isApproved: false, msToDoId: null, msEventId: null }
             });
             this.logger.log(`Wyczyszczono poprzednie pozycje WBS i budżetowe dla węzła ${nodeId}`);
         } catch (e) {
@@ -227,15 +228,19 @@ export class AiService implements OnModuleInit {
         }
 
         // 1. Dodaj zadania (WBS)
-        if (data.tasks && Array.isArray(data.tasks)) {
+        if (userId && data.tasks && Array.isArray(data.tasks)) {
             for (const task of data.tasks) {
-                await this.prisma.subtask.create({
+                await this.prisma.userTask.create({
                     data: {
+                        userId,
+                        createdById: userId,
                         nodeId,
-                        versionId: vId,
-                        name: task.name,
+                        title: task.name,
                         description: task.description,
-                        status: 'NEW',
+                        status: 'TO_DO',
+                        source: 'IGNITE',
+                        isAiGenerated: true,
+                        isApproved: false,
                     }
                 });
             }
@@ -473,14 +478,17 @@ ${strategyLines || '(brak strategii)'}`;
 
     async analyzePlan(nodeId: string, versionId: string) {
         // Pobierz obecny WBS i Budżet
-        const subtasks = await this.prisma.subtask.findMany({ where: { nodeId, versionId } });
+        const tasks = await this.prisma.userTask.findMany({
+            where: { nodeId, deletedAt: null },
+            select: { title: true, description: true, status: true, plannedStart: true, plannedEnd: true },
+        });
         const budget = await this.prisma.budgetLineItem.findMany({ where: { versionId } });
 
         const prompt = `
       Przeanalizuj poniższy plan projektu i budżet pod kątem braków, ryzyk i błędów w estymacji kosztów.
       
       ZADANIA (WBS):
-      ${JSON.stringify(subtasks, null, 2)}
+      ${JSON.stringify(tasks, null, 2)}
 
       BUDŻET:
       ${JSON.stringify(budget, null, 2)}

@@ -56,27 +56,31 @@ export class ProcessTreeService {
         `;
             }
 
-            // Auto-create "Wizja lokalna" subtask for every new order
+            // Auto-create "Wizja lokalna" task (UserTask) for every new order
             if (dto.type === NodeType.ORDER) {
                 // Eager: każde zamówienie rodzi się z realną wersją "pierwszy" (aktywną).
-                // Cała treść (WBS, subtaski) idzie na tę wersję zamiast na baseline null.
+                // Cała treść (WBS) idzie na tę wersję zamiast na baseline null.
                 // OrderRequirements pozostaje globalny (versionId=null) — pola wspólne dla
                 // wszystkich wersji (offerStatus, projectGoal, projectItems, clientContacts).
                 const firstVersion = await tx.projectVersion.create({
                     data: { nodeId: node.id, label: 'pierwszy', isActive: true },
                 });
                 const versionId = firstVersion.id;
-                await tx.subtask.create({
-                    data: {
-                        nodeId: node.id,
-                        versionId: versionId,
-                        name: 'Wizja lokalna',
-                        assignedUserId: node.ownerId || null,
-                        plannedStart: node.createdAt,
-                        plannedEnd: node.createdAt,
-                        status: 'NEW',
-                    },
-                });
+                // Odpowiedzialny = zakładający zamówienie. Bez syncu do MS przy tworzeniu (zapis w transakcji) —
+                // trafi do To Do / Outlooka przy pierwszej edycji.
+                if (node.ownerId) {
+                    await tx.userTask.create({
+                        data: {
+                            userId: node.ownerId,
+                            createdById: node.ownerId,
+                            nodeId: node.id,
+                            title: 'Wizja lokalna',
+                            plannedEnd: node.createdAt,
+                            status: 'TO_DO',
+                            source: 'IGNITE',
+                        },
+                    });
+                }
                 const pytaniaNode = await tx.wbsNode.create({
                     data: {
                         nodeId: node.id,
@@ -997,7 +1001,7 @@ export class ProcessTreeService {
     async takeSnapshot() {
         console.log('[Snapshot] Starting database snapshot...');
         
-        const [users, roles, userRoles, nodes, closure, requirements, budgetItems, versions, subtasks, teams, nodePermissions] = await Promise.all([
+        const [users, roles, userRoles, nodes, closure, requirements, budgetItems, versions, userTasks, teams, nodePermissions] = await Promise.all([
             this.prisma.user.findMany(),
             this.prisma.role.findMany(),
             this.prisma.userRole.findMany(),
@@ -1006,7 +1010,7 @@ export class ProcessTreeService {
             this.prisma.orderRequirements.findMany(),
             this.prisma.budgetLineItem.findMany(),
             this.prisma.projectVersion.findMany(),
-            this.prisma.subtask.findMany(),
+            this.prisma.userTask.findMany(),
             this.prisma.team.findMany(),
             this.prisma.nodePermission.findMany(),
         ]);
@@ -1105,12 +1109,12 @@ async function main() {
     }
     console.log('Budget items restored.');
 
-    // 11. Subtasks
-    const subtasks = ${JSON.stringify(subtasks, null, 8)};
-    for (const item of subtasks) {
-        await prisma.subtask.upsert({ where: { id: item.id }, update: item, create: item });
+    // 11. User tasks (zadania)
+    const userTasks = ${JSON.stringify(userTasks, null, 8)};
+    for (const item of userTasks) {
+        await prisma.userTask.upsert({ where: { id: item.id }, update: item, create: item });
     }
-    console.log('Subtasks restored.');
+    console.log('User tasks restored.');
 
     console.log('Database restoration complete!');
 }

@@ -1,7 +1,7 @@
 import { API_URL } from '../../config';
 import { setMeta } from '../db';
-import { replaceAssignedSubtasks } from '../repos/subtasksRepo';
-import { replaceSchematicsForSubtask } from '../repos/schematicsRepo';
+import { replaceMyUserTasks } from '../repos/userTasksRepo';
+import { replaceSchematicsForUserTask } from '../repos/schematicsRepo';
 
 /**
  * Hurtowy pull danych mobilnych z backendu do IDB.
@@ -23,22 +23,22 @@ export async function prefetchMobileData(token) {
 
     inflight = (async () => {
         try {
-            const subtasks = await fetchAssignedSubtasks(token);
-            if (!subtasks) return { ok: false, reason: 'subtasks-fetch-failed' };
+            const tasks = await fetchMyUserTasks(token);
+            if (!tasks) return { ok: false, reason: 'user-tasks-fetch-failed' };
 
-            await replaceAssignedSubtasks(subtasks);
+            await replaceMyUserTasks(tasks);
 
-            // Prefetch schematów — najpierw per subtask, fallback per node (jak SchematicViewer online).
+            // Prefetch schematów — najpierw per zadanie, fallback per node (jak SchematicViewer online).
             // Bez node-fallbacku schematy przypisane do węzła nie trafiają do IDB.
             const seenNodeIds = new Set();
-            await runWithConcurrency(subtasks, 4, async (task) => {
-                let schematics = await fetchSchematicsFor(token, 'subtask', task.id);
+            await runWithConcurrency(tasks.filter(t => t.nodeId), 4, async (task) => {
+                let schematics = await fetchSchematicsFor(token, 'user-task', task.id);
                 if ((!schematics || schematics.length === 0) && task.nodeId && !seenNodeIds.has(task.nodeId)) {
                     seenNodeIds.add(task.nodeId);
                     schematics = await fetchSchematicsFor(token, 'node', task.nodeId);
                 }
                 if (schematics?.length) {
-                    await replaceSchematicsForSubtask(task.id, schematics);
+                    await replaceSchematicsForUserTask(task.id, schematics);
                     for (const s of schematics) {
                         if (s.fileUrl) {
                             fetch(`${API_URL}/schematics/file/${s.fileUrl}`, {
@@ -51,7 +51,7 @@ export async function prefetchMobileData(token) {
             });
 
             await setMeta('lastPrefetchAt', new Date().toISOString());
-            return { ok: true, count: subtasks.length };
+            return { ok: true, count: tasks.length };
         } catch (err) {
             console.warn('[prefetch] błąd:', err);
             return { ok: false, reason: String(err) };
@@ -63,9 +63,10 @@ export async function prefetchMobileData(token) {
     return inflight;
 }
 
-async function fetchAssignedSubtasks(token) {
+// Otwarte zadania zalogowanego (odpowiedzialny) — GET /my-tasks.
+async function fetchMyUserTasks(token) {
     try {
-        const res = await fetch(`${API_URL}/subtasks/assigned/me`, {
+        const res = await fetch(`${API_URL}/my-tasks`, {
             headers: { Authorization: `Bearer ${token}` },
             cache: 'no-store',
         });

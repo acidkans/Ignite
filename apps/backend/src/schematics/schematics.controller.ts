@@ -14,11 +14,11 @@ export class SchematicsController {
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
     @Body('nodeId') nodeId: string,
-    @Body('subtaskId') subtaskId?: string,
+    @Body('userTaskId') userTaskId?: string,
   ) {
     if (!file) throw new BadRequestException('Brak pliku');
     if (!nodeId) throw new BadRequestException('Brak nodeId');
-    return this.schematicsService.uploadSchematic(file, nodeId, subtaskId);
+    return this.schematicsService.uploadSchematic(file, nodeId, userTaskId);
   }
 
   @Get('node/:nodeId')
@@ -26,14 +26,16 @@ export class SchematicsController {
     return this.schematicsService.getSchematicsByNode(nodeId);
   }
 
-  @Get('subtask/:subtaskId')
-  async getSchematicsBySubtask(@Param('subtaskId') subtaskId: string) {
-    return this.schematicsService.getSchematicsBySubtask(subtaskId);
+  // @anchor schematics-by-user-task-endpoint
+  @Get('user-task/:userTaskId')
+  async getSchematicsByUserTask(@Param('userTaskId') userTaskId: string) {
+    return this.schematicsService.getSchematicsByUserTask(userTaskId);
   }
 
-  @Get('subtask/:subtaskId/markers')
-  async getMarkersBySubtask(@Param('subtaskId') subtaskId: string) {
-    return this.schematicsService.getMarkersBySubtask(subtaskId);
+  // @anchor markers-by-user-task-endpoint
+  @Get('user-task/:userTaskId/markers')
+  async getMarkersByUserTask(@Param('userTaskId') userTaskId: string) {
+    return this.schematicsService.getMarkersByUserTask(userTaskId);
   }
 
   @Get(':id')
@@ -64,7 +66,7 @@ export class SchematicsController {
   @Patch('markers/:markerId')
   async updateMarker(
     @Param('markerId') markerId: string,
-    @Body() data: { type?: string; x?: number; y?: number; x2?: number; y2?: number; pageNumber?: number; note?: string; name?: string; subtaskId?: string | null }
+    @Body() data: { type?: string; x?: number; y?: number; x2?: number; y2?: number; pageNumber?: number; note?: string; name?: string; userTaskId?: string | null }
   ) {
     return this.schematicsService.updateMarker(markerId, data);
   }

@@ -1,3 +1,27 @@
+## 2026-10-31 — feat(zadania): etap 8 ujednolicenia - pozostali konsumenci Subtask na UserTask (schemat, mobile offline, AI, budzet, materialy, wersje), migracja roznic
+
+### schema.prisma
+- migracja `20261031180000_subtasks_to_user_tasks_delta` — dogrywa Subtaski założone / zmienione po deployu etapów 2–7 (idempotentnie po `schema-pole` `UserTask.legacySubtaskId`), od razu w formacie Od–Do; FK przepina tylko tam, gdzie wiersz nie wskazuje jeszcze zadania
+
+### architektura / API
+- `back-endpoint` `GET /schematics/subtask/:subtaskId` → `GET /schematics/user-task/:userTaskId`, `GET /schematics/subtask/:subtaskId/markers` → `GET /schematics/user-task/:userTaskId/markers` (po `UserTaskMarkerLink`)
+- `back-endpoint` `POST /schematics/upload` — pole `userTaskId` zamiast `subtaskId`; `PATCH /schematics/markers/:id` — `userTaskId` (link `UserTaskMarkerLink`); odpowiedzi schematów niosą `userTask { id, title }` zamiast `subtask { id, name }`
+- `back-serwis` budżet / materiały: `userTask` / `assignedUserTask { id, title }`; ekstrakcja AI materiałów proponuje `assignedUserTaskId` z zadań zamówienia; indeks wektorowy: źródło `user_task` zamiast `subtask`
+- `back-funkcja` `cloneVersionData` — nie klonuje zadań (decyzja 1); budżet i materiały w klonie wskazują te same zadania
+- nowe zamówienie: „Wizja lokalna” jako `UserTask` (odpowiedzialny = zakładający); DOCX wersji i analiza planu AI biorą zadania zamówienia
+- `order-requirements`: zmiana nazwy pozycji projektu zmienia tytuł powiązanych zadań; usunięcie pozycji NIE kasuje zadań (tylko `requirementItemId = null`)
+- `ui-modal` `AllTasksModal` — tylko UserTaski, etykieta statusu EXEC, przywrócenie = `TO_DO`
+- mobile: `ui-widok` `MobileDashboard` — lista i szczegóły zadań (UserTask) z cache offline (`ui-hook` `useCachedUserTasks`, Dexie v5 `userTasks`), statusy EXEC, szybkie odhaczanie; zmiana statusu offline w outboxie `USER_TASK_STATUS`; sekcja `MobileUserTasks` wchłonięta przez dashboard
+- schemat (desktop i mobile), kolejka uploadów, osierocone załączniki: `userTaskId` zamiast `subtaskId`
+
+### słownik
+- dodano `dexie-user-tasks`, `outbox-user-task-status`, `use-cached-user-tasks`, `replace-my-user-tasks`, `get-all-user-tasks`, `mobile-task-status-change`, `schematics-by-user-task-endpoint`, `markers-by-user-task-endpoint`
+- zmieniono `mobile-user-task-on-day` — przeniesione do MobileDashboard.jsx
+- usunięto `all-tasks-subtask-status`, `mobile-user-tasks`, `mobile-user-tasks-refresh-key`
+
+### wytyczne
+- `ui-stala` `SUBTASK_STATUS` (outbox) — gałąź tylko dla wpisów sprzed ujednolicenia; usunąć w etapie 9 razem z endpointem `/subtasks`
+
 ## 2026-10-31 — fix(zadania): etap 7 ujednolicenia - lista zadan wezla WBS zwraca Od (plannedStart) i respektuje widocznosc
 
 ### architektura / API

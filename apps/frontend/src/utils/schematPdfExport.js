@@ -163,7 +163,7 @@ export async function loadSchematicsForExcel({ nodeId, token }) {
             num: ++num,
             schematicName: sch.fileName,
             page: m.pageNumber || 1,
-            przedmiot: childLink?.wbsParentName || rootLink?.wbsNodeName || m.subtask?.name || '',
+            przedmiot: childLink?.wbsParentName || rootLink?.wbsNodeName || m.userTask?.title || '',
             wymaganie: childLink?.wbsNodeName || '',
             name: m.name || '',
             note: m.note || '',
@@ -245,7 +245,7 @@ export async function buildSchematSectionHtml({ nodeId, wbsData = [], orderName 
         const links = m.wbsLinks || [];
         const childLink = links.find(l => l.wbsParentName && l.wbsNodeName);
         const rootLink = links.find(l => !l.wbsParentName && l.wbsNodeName);
-        const przedmiot = childLink?.wbsParentName || rootLink?.wbsNodeName || (m.subtask?.name || '—');
+        const przedmiot = childLink?.wbsParentName || rootLink?.wbsNodeName || (m.userTask?.title || '—');
         const wymaganie = childLink?.wbsNodeName || '—';
         const images = (m.attachments || []).filter(a => a.fileType === 'IMAGE' && a._b64);
         rowNum++;

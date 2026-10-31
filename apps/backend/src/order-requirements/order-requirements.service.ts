@@ -124,48 +124,37 @@ export class OrderRequirementsService {
                     for (const item of newItemsList) {
                         const oldName = oldItemsMap.get(item.id);
                         if (oldName && oldName !== item.name) {
-                            // 1. Sync all subtasks named after this item or linked via requirementItemId
-                            // Update by requirementItemId is most reliable
-                            await tx.subtask.updateMany({
-                                where: { nodeId: effectiveNodeId, requirementItemId: item.id },
-                                data: { name: item.name }
+                            // Zadania powiązane z pozycją (requirementItemId) dostają nową nazwę
+                            // (do MS To Do trafi przy ich następnej edycji) …
+                            await tx.userTask.updateMany({
+                                where: { nodeId: effectiveNodeId, requirementItemId: item.id, deletedAt: null },
+                                data: { title: item.name }
                             });
-
-                            // 2. Sync subtasks that might match the old name exactly but lack the ID (legacy)
-                            await tx.subtask.updateMany({
-                                where: { nodeId: effectiveNodeId, name: oldName, requirementItemId: null },
-                                data: { name: item.name }
-                            });
-
-                            // 3. Sync Budget Items linked to these subtasks
-                            // Find all subtasks for this item ID across all versions
-                            const relatedSubtasks = await tx.subtask.findMany({
+                            // … a pozycje budżetu tych zadań — nową nazwę, jeśli nosiły starą.
+                            const relatedTasks = await tx.userTask.findMany({
                                 where: { nodeId: effectiveNodeId, requirementItemId: item.id },
                                 select: { id: true }
                             });
-
-                            const subtaskIds = relatedSubtasks.map(s => s.id);
-
-                            if (subtaskIds.length > 0) {
-                                // Update budget items that match the old description exactly
+                            const taskIds = relatedTasks.map(t => t.id);
+                            if (taskIds.length > 0) {
                                 await tx.budgetLineItem.updateMany({
-                                    where: { subtaskId: { in: subtaskIds }, description: oldName },
+                                    where: { userTaskId: { in: taskIds }, description: oldName },
                                     data: { description: item.name }
                                 });
                             }
                         }
                     }
 
-                    // Handle Deletions: if an item was in oldItemsMap but is NOT in newItemsList, delete its Subtasks
+                    // Usunięta pozycja projektu: zadania zostają (są w kalendarzach i MS To Do osób),
+                    // tracą tylko powiązanie z pozycją.
                     const newItemsIds = new Set(newItemsList.map(item => item.id));
                     const deletedItemIds = Array.from(oldItemsMap.keys()).filter(id => !newItemsIds.has(id));
 
                     if (deletedItemIds.length > 0) {
-                        // Thanks to onDelete: Cascade on schema, deleting Subtasks will automatically delete BudgetLineItems
-                        await tx.subtask.deleteMany({
-                            where: { nodeId: effectiveNodeId, requirementItemId: { in: deletedItemIds } }
+                        await tx.userTask.updateMany({
+                            where: { nodeId: effectiveNodeId, requirementItemId: { in: deletedItemIds } },
+                            data: { requirementItemId: null }
                         });
-                        console.log(`Usunięto osierocone Subtaski dla usuniętych z listy przedmiotów projektu.`);
                     }
 
                 } catch (e) {

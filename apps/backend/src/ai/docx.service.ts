@@ -16,12 +16,16 @@ export class DocxService {
             include: {
                 node: { include: { parent: true } },
                 requirements: { orderBy: { createdAt: 'desc' }, take: 1 },
-                subtasks: { orderBy: { name: 'asc' } },
                 budgetItems: { orderBy: { description: 'asc' } }
             }
         });
 
         if (!version) throw new Error('Version not found');
+        // Zadania nie mają wersji — tabela WBS bierze zadania zamówienia.
+        const tasks = await this.prisma.userTask.findMany({
+            where: { nodeId: version.nodeId, deletedAt: null },
+            orderBy: { title: 'asc' },
+        });
 
         const doc = new Document({
             sections: [{
@@ -44,7 +48,7 @@ export class DocxService {
 
                     // 2. Harmonogram WBS
                     new Paragraph({ text: "2. Planowanie (WBS)", heading: HeadingLevel.HEADING_2, spacing: { before: 400 } }),
-                    this.createWbsTable(version.subtasks),
+                    this.createWbsTable(tasks),
 
                     // 3. Budżet
                     new Paragraph({ text: "3. Budżet i wycena", heading: HeadingLevel.HEADING_2, spacing: { before: 400 } }),
@@ -87,8 +91,8 @@ export class DocxService {
         ];
     }
 
-    private createWbsTable(subtasks: any[]) {
-        if (subtasks.length === 0) return new Paragraph("Brak zdefiniowanych zadań WBS.");
+    private createWbsTable(tasks: any[]) {
+        if (tasks.length === 0) return new Paragraph("Brak zdefiniowanych zadań WBS.");
 
         const rows = [
             new TableRow({
@@ -99,9 +103,9 @@ export class DocxService {
                     this.headerCell("Koniec"),
                 ],
             }),
-            ...subtasks.map(s => new TableRow({
+            ...tasks.map(s => new TableRow({
                 children: [
-                    this.textCell(s.name),
+                    this.textCell(s.title),
                     this.textCell(s.status),
                     this.textCell(s.plannedStart?.toLocaleDateString('pl-PL') || "—"),
                     this.textCell(s.plannedEnd?.toLocaleDateString('pl-PL') || "—"),

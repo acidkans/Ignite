@@ -247,7 +247,7 @@ export class MaterialRequirementsService {
                 // w Realizacja_new pokazuje go jako tekst, a samo `supplierId` kazałoby jej
                 // dociągać rejestr dostawców tylko po to, żeby zamienić UUID na nazwę.
                 supplier: { select: { id: true, name: true } },
-                assignedSubtask: { select: { id: true, name: true } },
+                assignedUserTask: { select: { id: true, title: true } },
                 material: { select: { id: true, productName: true, manufacturer: true, model: true, dataSheetUrl: true, dataSheetName: true, complianceUrl: true, imageUrl: true, priceNetto: true, productUrl: true, seller: true, ean: true } },
             },
             orderBy: { createdAt: 'asc' },
@@ -363,7 +363,7 @@ export class MaterialRequirementsService {
                     unit: r.unit,
                     technicalSpec: r.technicalSpec,
                     sourceDocument: r.sourceDocument,
-                    assignedSubtaskId: r.assignedSubtaskId,
+                    assignedUserTaskId: r.assignedUserTaskId,
                     isAiAssigned: r.isAiAssigned,
                     // Klon listy tworzy NOWE wiersze i celowo nie kopiuje statusu źródła —
                     // startują jak każda świeżo utworzona pozycja.
@@ -381,7 +381,7 @@ export class MaterialRequirementsService {
             include: {
                 proposals: { include: { supplier: true } },
                 supplier: { select: { id: true, name: true } },
-                assignedSubtask: { select: { id: true, name: true } },
+                assignedUserTask: { select: { id: true, title: true } },
                 material: { select: { id: true, productName: true, manufacturer: true, model: true, dataSheetUrl: true, dataSheetName: true, complianceUrl: true, complianceName: true, imageUrl: true, priceNetto: true, productUrl: true, seller: true, ean: true } },
             },
         });
@@ -537,7 +537,7 @@ export class MaterialRequirementsService {
         quantity: number;
         unit: string;
         technicalSpec: string;
-        assignedSubtaskId: string | null;
+        assignedUserTaskId: string | null;
         wbsNodeId: string | null;
         wbsNodeIds: string | null;
         wbsNodeAllocations: string | null;
@@ -1107,7 +1107,7 @@ export class MaterialRequirementsService {
 
         const allChunks = await this.vectorService.scrollAllChunksByNodes(
             allNodeIds,
-            ['budget_item', 'subtask', 'node', 'order_requirement', 'hardware'],
+            ['budget_item', 'user_task', 'node', 'order_requirement', 'hardware'],
         );
         const docChunks = allChunks;
 
@@ -1117,14 +1117,14 @@ export class MaterialRequirementsService {
             return { extracted: 0, items: [] };
         }
 
-        // 2. Pobierz istniejące subtaski dla propozycji przypisań
-        const subtasks = await this.prisma.subtask.findMany({
-            where: { nodeId },
-            select: { id: true, name: true, category: true },
+        // 2. Pobierz istniejące zadania zamówienia dla propozycji przypisań
+        const tasks = await this.prisma.userTask.findMany({
+            where: { nodeId, deletedAt: null },
+            select: { id: true, title: true, category: true },
         });
 
-        const subtasksContext = subtasks.length > 0
-            ? `\n\nDostępne podzadania WBS (do przypisania):\n${subtasks.map(s => `- ID: ${s.id} | Nazwa: ${s.name} | Kategoria: ${s.category || '—'}`).join('\n')}`
+        const tasksContext = tasks.length > 0
+            ? `\n\nDostępne zadania (do przypisania):\n${tasks.map(s => `- ID: ${s.id} | Nazwa: ${s.title} | Kategoria: ${s.category || '—'}`).join('\n')}`
             : '';
 
         // Dozwolone typy pozycji — dynamicznie z drzewa WBS (single source of truth: wbs_nodes)
@@ -1161,7 +1161,7 @@ ZASADY (obowiązkowe):
 - Nie wymyślaj danych — używaj tylko tego co jest w tekście.
 - technicalSpec: WYMAGANE pole — przepisz PEŁNE parametry techniczne / opis wymagań z dokumentu (specyfikacja, parametry, wymagania jakościowe). Nie skracaj. Nie zostawiaj pustego — jeśli brak parametrów technicznych, przepisz fragment opisujący pozycję (kontekst z dokumentu wokół nazwy).
 - Pole "type": użyj DOKŁADNIE jednej z wartości (typy z drzewa WBS): ${wbsTypesStr}. Dobierz najbliższy pasujący typ — NIE twórz własnych typów spoza tej listy.
-- Dla pola "assignedSubtaskId": jeśli nie jesteś pewny — wstaw null.
+- Dla pola "assignedUserTaskId": jeśli nie jesteś pewny — wstaw null.
 
 FORMAT (tylko surowy JSON, bez markdown, bez komentarzy):
 [
@@ -1172,11 +1172,11 @@ FORMAT (tylko surowy JSON, bez markdown, bez komentarzy):
     "unit": "szt|m|kg|kpl|mb|par",
     "technicalSpec": "WYMAGANE — pełne wymagania techniczne / opis wymagań z dokumentu (nigdy pusty string)",
     "sourceDocument": "nazwa pliku źródłowego",
-    "assignedSubtaskId": null,
+    "assignedUserTaskId": null,
     "aiConfidence": 0.0
   }
 ]
-${subtasksContext}
+${tasksContext}
 
 FRAGMENTY DOKUMENTÓW DO PRZEANALIZOWANIA (partia ${batchIdx + 1}/${batches.length}):
 ${context}`;
@@ -1229,7 +1229,7 @@ ${context}`;
                         unit: item.unit || 'sztuki',
                         technicalSpec: item.technicalSpec || null,
                         sourceDocument: item.sourceDocument || null,
-                        assignedSubtaskId: item.assignedSubtaskId || null,
+                        assignedUserTaskId: item.assignedUserTaskId || null,
                         isAiAssigned: true,
                         aiConfidence: item.aiConfidence || null,
                         status: 'NEW',
@@ -1314,7 +1314,7 @@ Oceń na podstawie typowych parametrów znanych produktów. Jeśli nie możesz o
         return this.prisma.materialRequirement.update({
             where: { id },
             data: { complianceData: JSON.stringify(complianceData) },
-            include: { proposals: true, assignedSubtask: { select: { id: true, name: true } } },
+            include: { proposals: true, assignedUserTask: { select: { id: true, title: true } } },
         });
     }
 
@@ -2602,9 +2602,9 @@ UWAGA — supplier to WYSTAWCA oferty (sprzedawca/dostawca, zwykle w nagłówku/
                 unit: String(item.unit || 'sztuki').slice(0, 20),
                 technicalSpec: specCandidate && String(specCandidate).trim() ? String(specCandidate).slice(0, 2000) : null,
                 sourceDocument: item.sourceDocument ? String(item.sourceDocument).slice(0, 300) : null,
-                assignedSubtaskId: typeof item.assignedSubtaskId === 'string'
-                    && /^[0-9a-f-]{36}$/.test(item.assignedSubtaskId)
-                    ? item.assignedSubtaskId : null,
+                assignedUserTaskId: typeof item.assignedUserTaskId === 'string'
+                    && /^[0-9a-f-]{36}$/.test(item.assignedUserTaskId)
+                    ? item.assignedUserTaskId : null,
                 aiConfidence: typeof item.aiConfidence === 'number'
                     ? Math.min(1, Math.max(0, item.aiConfidence)) : null,
                 };

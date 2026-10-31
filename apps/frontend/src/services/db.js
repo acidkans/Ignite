@@ -5,6 +5,7 @@ import Dexie from 'dexie';
  *
  * Etap 1: meta + outbox (szkielet).
  * Etap 2: subtasks, nodes, schematics — lustro encji potrzebnych mobilnie.
+ * v5: zadania to `userTasks` (UserTask) — stary harmonogram `subtasks` usunięty.
  *
  * Reguła: NIGDY nie modyfikujemy istniejącej `version(n)` po release —
  * dodajemy `version(n+1)` z nowym schematem żeby Dexie zrobił migrację.
@@ -46,6 +47,20 @@ db.version(4).stores({
     // załącznik zakolejkowany JUŻ PO zsynchronizowaniu markera zostaje z
     // martwym temp_ id i leci w nieskończoność w FK violation (HTTP 500).
     // @anchor marker-id-map
+    markerIdMap: '&tempId, realId, createdAt',
+});
+
+// @anchor dexie-user-tasks
+// Ujednolicenie zadań: lustro „moich” zadań (UserTask, GET /my-tasks) zamiast Subtasków;
+// schematy indeksowane po zadaniu (`userTaskId`). `null` = Dexie kasuje starą tabelę.
+db.version(5).stores({
+    meta: '&key',
+    outbox: '++id, clientUuid, type, createdAt',
+    subtasks: null,
+    userTasks: 'id, status, plannedStart, plannedEnd, nodeId, updatedAt',
+    nodes: 'id',
+    schematics: 'id, userTaskId, nodeId, updatedAt',
+    attachmentDrafts: '++id, outboxId, createdAt',
     markerIdMap: '&tempId, realId, createdAt',
 });
 

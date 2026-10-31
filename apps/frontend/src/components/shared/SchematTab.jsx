@@ -739,7 +739,7 @@ export default function SchematTab({ nodeId, versionId, wbsData: externalWbsData
                 const links = m.wbsLinks || [];
                 const childLink = links.find(l => l.wbsParentName && l.wbsNodeName);
                 const rootLink = links.find(l => !l.wbsParentName && l.wbsNodeName);
-                const przedmiot = childLink?.wbsParentName || rootLink?.wbsNodeName || (m.subtask?.name || '—');
+                const przedmiot = childLink?.wbsParentName || rootLink?.wbsNodeName || (m.userTask?.title || '—');
                 const wymaganie = childLink?.wbsNodeName || '—';
                 const images = (m.attachments || []).filter(a => a.fileType === 'IMAGE' && a._b64);
                 rowNum++;
@@ -1633,8 +1633,6 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
     const [isCameraActive, setIsCameraActive] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     const [mediaRecorder, setMediaRecorder] = useState(null);
-    const [subtasks, setSubtasks] = useState([]);
-    const [selectedSubtaskId, setSelectedSubtaskId] = useState(marker.subtaskId || '');
     const [editingAttNotes, setEditingAttNotes] = useState({});
     const [wbsNodes, setWbsNodes] = useState([]);
     const [wbsLinks, setWbsLinks] = useState([]);
@@ -1648,17 +1646,6 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
     const addWbsInputRef = useRef(null);
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
-
-    useEffect(() => {
-        if (!nodeId) return;
-        const token = sessionStorage.getItem('token');
-        const url = versionId
-            ? `${API_URL}/subtasks/node/${nodeId}?versionId=${versionId}`
-            : `${API_URL}/subtasks/node/${nodeId}`;
-        fetch(url, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        }).then(r => r.json()).then(data => setSubtasks(Array.isArray(data) ? data : [])).catch(() => {});
-    }, [nodeId, versionId]);
 
     const fetchWbsLinks = useCallback(async () => {
         const token = sessionStorage.getItem('token');
@@ -1840,18 +1827,6 @@ function MarkerDetailsPanel({ marker, onClose, onRefresh, onMarkerUpdated, onLig
         } finally {
             setAddWbsSaving(false);
         }
-    };
-
-    const handleSubtaskChange = async (e) => {
-        const val = e.target.value || null;
-        setSelectedSubtaskId(val || '');
-        const token = sessionStorage.getItem('token');
-        await fetch(`${API_URL}/schematics/markers/${marker.id}`, {
-            method: 'PATCH',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ subtaskId: val })
-        });
-        onMarkerUpdated?.({ id: marker.id, subtaskId: val });
     };
 
     const startRecording = async () => {

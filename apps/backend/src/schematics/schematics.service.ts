@@ -23,7 +23,7 @@ export class SchematicsService {
         return 'FILE';
     }
 
-    async uploadSchematic(file: Express.Multer.File, nodeId: string, subtaskId?: string) {
+    async uploadSchematic(file: Express.Multer.File, nodeId: string, userTaskId?: string) {
         // Plik jest już na dysku — zapisał go strumieniowo multer (diskStorage,
         // patrz upload.storage.ts). Nie przepisujemy go przez pamięć procesu.
         const fileName = file.filename;
@@ -31,13 +31,13 @@ export class SchematicsService {
         const schematic = await this.prisma.schematicDocument.create({
             data: {
                 nodeId,
-                subtaskId: subtaskId || null,
+                userTaskId: userTaskId || null,
                 fileUrl: fileName,
                 fileName: Buffer.from(file.originalname, 'latin1').toString('utf8'),
             },
             include: {
                 markers: {
-                    include: { attachments: true, subtask: { select: { id: true, name: true } } }
+                    include: { attachments: true, userTask: { select: { id: true, title: true } } }
                 }
             }
         });
@@ -52,7 +52,7 @@ export class SchematicsService {
                 markers: {
                     include: {
                         attachments: true,
-                        subtask: { select: { id: true, name: true } },
+                        userTask: { select: { id: true, title: true } },
                         wbsLinks: { select: { id: true, wbsNodeId: true } },
                     }
                 }
@@ -89,12 +89,12 @@ export class SchematicsService {
         }));
     }
 
-    async getSchematicsBySubtask(subtaskId: string) {
+    async getSchematicsByUserTask(userTaskId: string) {
         return this.prisma.schematicDocument.findMany({
-            where: { subtaskId },
+            where: { userTaskId },
             include: {
                 markers: {
-                    include: { attachments: true, subtask: { select: { id: true, name: true } } }
+                    include: { attachments: true, userTask: { select: { id: true, title: true } } }
                 }
             },
             orderBy: { createdAt: 'desc' }
@@ -106,7 +106,7 @@ export class SchematicsService {
             where: { id },
             include: {
                 markers: {
-                    include: { attachments: true, subtask: { select: { id: true, name: true } } }
+                    include: { attachments: true, userTask: { select: { id: true, title: true } } }
                 }
             }
         });
@@ -131,7 +131,7 @@ export class SchematicsService {
             data: { fileName: name },
             include: {
                 markers: {
-                    include: { attachments: true, subtask: { select: { id: true, name: true } } }
+                    include: { attachments: true, userTask: { select: { id: true, title: true } } }
                 }
             }
         });
@@ -159,7 +159,7 @@ export class SchematicsService {
         // lepiej usunąć też fizyczne pliki załączników!
         const markers = await this.prisma.schematicMarker.findMany({
              where: { schematicId: id },
-             include: { attachments: true, subtask: { select: { id: true, name: true } } }
+             include: { attachments: true, userTask: { select: { id: true, title: true } } }
         });
 
         markers.forEach(marker => {
@@ -187,35 +187,35 @@ export class SchematicsService {
                 note: data.note || null,
                 name: data.name || null,
             },
-            include: { attachments: true, subtask: { select: { id: true, name: true } } }
+            include: { attachments: true, userTask: { select: { id: true, title: true } } }
         });
     }
 
-    async updateMarker(markerId: string, data: { type?: string; x?: number; y?: number; x2?: number; y2?: number; pageNumber?: number; note?: string; name?: string; question?: string | null; subtaskId?: string | null }) {
-        const { subtaskId, ...rest } = data;
+    async updateMarker(markerId: string, data: { type?: string; x?: number; y?: number; x2?: number; y2?: number; pageNumber?: number; note?: string; name?: string; question?: string | null; userTaskId?: string | null }) {
+        const { userTaskId, ...rest } = data;
 
-        if (subtaskId !== undefined) {
-            await this.prisma.subtaskMarkerLink.deleteMany({ where: { markerId } });
-            if (subtaskId) {
-                await this.prisma.subtaskMarkerLink.create({ data: { markerId, subtaskId } });
+        if (userTaskId !== undefined) {
+            await this.prisma.userTaskMarkerLink.deleteMany({ where: { markerId } });
+            if (userTaskId) {
+                await this.prisma.userTaskMarkerLink.create({ data: { markerId, userTaskId } });
             }
         }
 
         return this.prisma.schematicMarker.update({
             where: { id: markerId },
-            data: { ...rest, subtaskId },
-            include: { attachments: true, subtask: { select: { id: true, name: true } } }
+            data: { ...rest, userTaskId },
+            include: { attachments: true, userTask: { select: { id: true, title: true } } }
         });
     }
 
-    async getMarkersBySubtask(subtaskId: string) {
-        const links = await this.prisma.subtaskMarkerLink.findMany({
-            where: { subtaskId },
+    async getMarkersByUserTask(userTaskId: string) {
+        const links = await this.prisma.userTaskMarkerLink.findMany({
+            where: { userTaskId },
             include: {
                 marker: {
                     include: {
                         attachments: true,
-                        subtask: { select: { id: true, name: true } },
+                        userTask: { select: { id: true, title: true } },
                         schematic: { select: { id: true, fileName: true, fileUrl: true } },
                     }
                 }
@@ -227,7 +227,7 @@ export class SchematicsService {
     async deleteMarker(markerId: string) {
         const marker = await this.prisma.schematicMarker.findUnique({
              where: { id: markerId },
-             include: { attachments: true, subtask: { select: { id: true, name: true } } }
+             include: { attachments: true, userTask: { select: { id: true, title: true } } }
         });
 
         if (marker) {
@@ -344,7 +344,7 @@ export class SchematicsService {
                 id: true,
                 name: true,
                 note: true,
-                subtaskId: true,
+                userTaskId: true,
                 createdAt: true,
                 schematic: {
                     select: {
@@ -363,7 +363,7 @@ export class SchematicsService {
             id: m.id,
             name: m.name || null,
             note: m.note || null,
-            subtaskId: m.subtaskId,
+            userTaskId: m.userTaskId,
             nodeId: m.schematic.nodeId,
             orderId: m.schematic.node?.id || null,
             orderName: m.schematic.node?.name || '(bez zamówienia)',

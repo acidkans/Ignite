@@ -10,7 +10,7 @@ export class BudgetService {
     async getBudget(versionId: string) {
         return this.prisma.budgetLineItem.findMany({
             where: { versionId },
-            include: { subtask: { select: { id: true, name: true } } }
+            include: { userTask: { select: { id: true, title: true } } }
         });
     }
 
@@ -31,7 +31,7 @@ export class BudgetService {
                 margin: data.margin,
                 unitPrice,
                 totalPrice,
-                subtaskId: data.subtaskId,
+                userTaskId: data.userTaskId ?? null,
                 comment: data.comment
             } as any
         });

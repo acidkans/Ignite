@@ -103,7 +103,7 @@ export async function markOrphaned(id) {
 
 // Ręczne przypisanie osieroconego załącznika do wskazanego (realnego) markera.
 // @anchor reassign-orphaned-attachment
-export async function reassignOrphanedAttachment(id, markerId, { subtaskId, nodeId } = {}) {
+export async function reassignOrphanedAttachment(id, markerId, { userTaskId, nodeId } = {}) {
     const item = await db.outbox.get(id);
     if (!item) return;
     await db.outbox.update(id, {
@@ -111,7 +111,7 @@ export async function reassignOrphanedAttachment(id, markerId, { subtaskId, node
         payload: {
             ...item.payload,
             markerId,
-            subtaskId: subtaskId ?? item.payload?.subtaskId ?? null,
+            userTaskId: userTaskId ?? item.payload?.userTaskId ?? null,
             nodeId: nodeId ?? item.payload?.nodeId ?? null,
         },
     });

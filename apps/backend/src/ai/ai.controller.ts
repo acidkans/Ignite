@@ -240,8 +240,8 @@ export class AiController {
     }
 
     @Post('apply-estimation/:nodeId/:versionId')
-    async applyEstimation(@Param('nodeId') nodeId: string, @Param('versionId') versionId: string, @Body() data: any) {
-        return this.aiService.applyEstimation(nodeId, versionId, data);
+    async applyEstimation(@Req() req: any, @Param('nodeId') nodeId: string, @Param('versionId') versionId: string, @Body() data: any) {
+        return this.aiService.applyEstimation(nodeId, versionId, data, req.user?.userId);
     }
 
     /**

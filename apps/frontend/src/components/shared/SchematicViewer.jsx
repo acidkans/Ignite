@@ -10,7 +10,7 @@ import MarkerDetailsPanel from './MarkerDetailsPanel';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import {
-    getSchematicsBySubtask,
+    getSchematicsByUserTask,
     getSchematicsByNode,
     upsertSchematics,
 } from '../../services/repos/schematicsRepo';
@@ -30,7 +30,7 @@ const pdfOptions = {
     stopAtErrors: false,
 };
 
-export default function SchematicViewer({ nodeId, subtaskId, initialSchematics = [], nodeName, onClose }) {
+export default function SchematicViewer({ nodeId, userTaskId, initialSchematics = [], nodeName, onClose }) {
     const { isOnline } = useNetwork();
     const [schematics, setSchematics] = useState(initialSchematics);
     const [loading, setLoading] = useState(false);
@@ -98,11 +98,11 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
     // Cache-first: czytaj z IDB natychmiast, w tle odśwież z sieci.
     // Bez tego offline = pusta lista, mimo że PDF/obrazy są w SW cache.
     useEffect(() => {
-        if (!nodeId && !subtaskId) return;
+        if (!nodeId && !userTaskId) return;
         let cancelled = false;
         (async () => {
             let cached = [];
-            if (subtaskId) cached = await getSchematicsBySubtask(subtaskId);
+            if (userTaskId) cached = await getSchematicsByUserTask(userTaskId);
             if (cached.length === 0 && nodeId) cached = await getSchematicsByNode(nodeId);
             if (!cancelled && cached.length > 0) {
                 setSchematics(cached);
@@ -111,7 +111,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
         })();
         fetchSchematics(true).catch(() => {});
         return () => { cancelled = true; };
-    }, [nodeId, subtaskId]);
+    }, [nodeId, userTaskId]);
 
     // Po reloadzie karty mobilnej (np. powrót z pickera plików) — doślij zaległy upload
     // pliku schematu z IndexedDB. Dzięki temu upload przerwany reloadem nie ginie.
@@ -154,9 +154,9 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
     // Po syncu outboxa: zastąp temp markery prawdziwymi bez zamykania zakładki
     useEffect(() => {
         const handler = (e) => {
-            const { subtaskId: sid, nodeId: nid, schematics: fresh, tempId, realId } = e.detail || {};
+            const { userTaskId: sid, nodeId: nid, schematics: fresh, tempId, realId } = e.detail || {};
             if (!fresh?.length) return;
-            const matches = (subtaskId && sid === subtaskId) || (nodeId && nid === nodeId);
+            const matches = (userTaskId && sid === userTaskId) || (nodeId && nid === nodeId);
             if (!matches) return;
             setSchematics(fresh);
             setSelectedSchematic(prev => {
@@ -181,7 +181,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
         };
         window.addEventListener('schematic-synced', handler);
         return () => window.removeEventListener('schematic-synced', handler);
-    }, [subtaskId, nodeId]);
+    }, [userTaskId, nodeId]);
 
     // Otwarcie panelu znacznika — od razu pokazuje to co mamy, a w tle odświeża
     // (inny user mógł usunąć załącznik/znacznik zanim otworzyliśmy panel).
@@ -216,8 +216,8 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
             const token = sessionStorage.getItem('token');
             let data = [];
             
-            if (subtaskId) {
-                const res = await fetch(`${API_URL}/schematics/subtask/${subtaskId}`, {
+            if (userTaskId) {
+                const res = await fetch(`${API_URL}/schematics/user-task/${userTaskId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) data = await res.json();
@@ -232,7 +232,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
 
             if (data.length > 0) {
                 // Zapis do IDB — żeby kolejne otwarcie offline miało listę z markerami.
-                upsertSchematics(data, { subtaskId, nodeId }).catch(() => {});
+                upsertSchematics(data, { userTaskId, nodeId }).catch(() => {});
                 setSchematics(data);
                 if (selectedSchematic) {
                     const updated = data.find(s => s.id === selectedSchematic.id);
@@ -266,7 +266,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
         let queueId = null;
         try {
             queueId = await enqueueSchematicUpload({
-                nodeId, subtaskId, fileName: file.name, fileType: file.type, blob: file,
+                nodeId, userTaskId, fileName: file.name, fileType: file.type, blob: file,
             });
         } catch (qe) {
             console.warn('[UploadQueue] Nie udało się zapisać pliku schematu do kolejki:', qe);
@@ -275,7 +275,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
         const formData = new FormData();
         formData.append('file', file);
         formData.append('nodeId', nodeId);
-        if (subtaskId) formData.append('subtaskId', subtaskId);
+        if (userTaskId) formData.append('userTaskId', userTaskId);
         try {
             const token = sessionStorage.getItem('token');
             const res = await fetch(`${API_URL}/schematics/upload`, {
@@ -295,7 +295,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                 setSelectedSchematic(created);
                 setPageNumber(1);
                 setShowTable(false);
-                upsertSchematics([created], { subtaskId, nodeId }).catch(() => {});
+                upsertSchematics([created], { userTaskId, nodeId }).catch(() => {});
             } else {
                 await fetchSchematics();
             }
@@ -407,7 +407,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
             await enqueue('ADD_MARKER', {
                 schematicId: selectedSchematic.id,
                 marker: newMarkerData,
-                subtaskId,
+                userTaskId,
                 nodeId,
                 tempId,
             });
@@ -874,7 +874,7 @@ export default function SchematicViewer({ nodeId, subtaskId, initialSchematics =
                     onClose={() => { setSelectedMarker(null); setIsNewMarker(false); }}
                     onRefresh={fetchSchematics}
                     nodeId={nodeId}
-                    subtaskId={subtaskId}
+                    userTaskId={userTaskId}
                     isNew={isNewMarker}
                 />
             )}

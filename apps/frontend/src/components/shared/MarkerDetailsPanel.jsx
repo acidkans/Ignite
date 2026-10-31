@@ -79,7 +79,7 @@ function flattenWbsNodes(nodes, prefix = '', depth = 0, parentId = null) {
     return result;
 }
 
-export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId, subtaskId, versionId, isNew = false }) {
+export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId, userTaskId, versionId, isNew = false }) {
     const { isOnline } = useNetwork();
     const [uploading, setUploading] = useState(false);
     // Komunikat o pliku odrzuconym lokalnie (za duży). Świadomie NIE alert():
@@ -494,7 +494,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         await enqueue('ADD_ATTACHMENT', {
             markerId: marker.id, outboxId,
             fileName: file.name, fileType: file.type,
-            subtaskId, nodeId,
+            userTaskId, nodeId,
         });
         // Optimistyczny podgląd — blob URL jako tymczasowy preview
         const blobUrl = URL.createObjectURL(new Blob([arrayBuffer], { type: file.type }));
@@ -555,7 +555,7 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         setReassigning(true);
         try {
             for (const o of orphanDrafts) {
-                await reassignOrphanedAttachment(o.outboxRowId, marker.id, { subtaskId, nodeId });
+                await reassignOrphanedAttachment(o.outboxRowId, marker.id, { userTaskId, nodeId });
             }
             const token = sessionStorage.getItem('token');
             if (token) await syncOutbox(token);

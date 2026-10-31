@@ -64,6 +64,20 @@ async function processItem(item, token) {
         Authorization: `Bearer ${token}`,
     };
 
+    // @anchor outbox-user-task-status — zmiana statusu zadania (UserTask) z telefonu offline
+    if (item.type === 'USER_TASK_STATUS') {
+        const { userTaskId, status } = item.payload;
+        const res = await fetch(`${API_URL}/my-tasks/${userTaskId}`, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ status }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        await db.userTasks.update(userTaskId, { status, updatedAt: new Date().toISOString() });
+    }
+
+    // Wpisy sprzed ujednolicenia zadań (stary harmonogram). Endpoint `/subtasks` znika w etapie 9 —
+    // wtedy usunąć tę gałąź razem z nim.
     if (item.type === 'SUBTASK_STATUS') {
         const { subtaskId, status } = item.payload;
         const res = await fetch(`${API_URL}/subtasks/${subtaskId}`, {
@@ -72,12 +86,10 @@ async function processItem(item, token) {
             body: JSON.stringify({ status }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        await db.subtasks.put({ ...data, updatedAt: data.updatedAt ?? new Date().toISOString() });
     }
 
     if (item.type === 'ADD_MARKER') {
-        const { schematicId, marker, subtaskId, nodeId, tempId } = item.payload;
+        const { schematicId, marker, userTaskId, nodeId, tempId } = item.payload;
         const res = await fetch(`${API_URL}/schematics/${schematicId}/markers`, {
             method: 'POST',
             headers,
@@ -99,25 +111,25 @@ async function processItem(item, token) {
             }
         }
         // Refresh schematics in IDB so markers are current after sync
-        const url = subtaskId
-            ? `${API_URL}/schematics/subtask/${subtaskId}`
+        const url = userTaskId
+            ? `${API_URL}/schematics/user-task/${userTaskId}`
             : `${API_URL}/schematics/node/${nodeId}`;
         const schRes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
         if (schRes.ok) {
             const data = await schRes.json();
             const { upsertSchematics } = await import('../repos/schematicsRepo');
-            await upsertSchematics(data, { subtaskId, nodeId });
+            await upsertSchematics(data, { userTaskId, nodeId });
             // Powiadom SchematicViewer żeby odświeżył stan (zastąpi temp marker
             // prawdziwym). tempId+realId pozwalają przepiąć TAKŻE otwarty panel
             // znacznika — bez tego zostaje on z martwym temp_ id.
             window.dispatchEvent(new CustomEvent('schematic-synced', {
-                detail: { subtaskId, nodeId, schematics: data, tempId, realId: realMarker?.id || null },
+                detail: { userTaskId, nodeId, schematics: data, tempId, realId: realMarker?.id || null },
             }));
         }
     }
 
     if (item.type === 'ADD_ATTACHMENT') {
-        const { markerId, outboxId, fileName, fileType, subtaskId, nodeId } = item.payload;
+        const { markerId, outboxId, fileName, fileType, userTaskId, nodeId } = item.payload;
         const draft = await db.attachmentDrafts.where('outboxId').equals(outboxId).first();
         if (!draft) {
             // Blob zniknął (wyczyszczony storage / ręczne usunięcie) — pliku nie
@@ -182,16 +194,16 @@ async function processItem(item, token) {
         }
         await db.attachmentDrafts.where('outboxId').equals(outboxId).delete();
         // Odśwież schematy w IDB i powiadom SchematicViewer
-        const schUrl = subtaskId
-            ? `${API_URL}/schematics/subtask/${subtaskId}`
+        const schUrl = userTaskId
+            ? `${API_URL}/schematics/user-task/${userTaskId}`
             : nodeId ? `${API_URL}/schematics/node/${nodeId}` : null;
         if (schUrl) {
             const schRes = await fetch(schUrl, { headers: { Authorization: `Bearer ${token}` } });
             if (schRes.ok) {
                 const data = await schRes.json();
                 const { upsertSchematics } = await import('../repos/schematicsRepo');
-                await upsertSchematics(data, { subtaskId, nodeId });
-                window.dispatchEvent(new CustomEvent('schematic-synced', { detail: { subtaskId, nodeId, schematics: data } }));
+                await upsertSchematics(data, { userTaskId, nodeId });
+                window.dispatchEvent(new CustomEvent('schematic-synced', { detail: { userTaskId, nodeId, schematics: data } }));
             }
         }
         window.dispatchEvent(new CustomEvent('attachment-synced', { detail: { markerId: targetMarkerId } }));

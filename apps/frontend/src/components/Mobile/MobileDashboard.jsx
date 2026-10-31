@@ -3,22 +3,39 @@ import {
     Clock, CheckCircle, AlertCircle, ChevronRight,
     LogOut, Briefcase, ChevronLeft, Info, Map as MapIcon,
     Calendar, User, FileText, ExternalLink, MapPin, Play, Flag, PauseCircle,
-    RefreshCw, UploadCloud, Home, AlertTriangle
+    RefreshCw, UploadCloud, Home, AlertTriangle, Check
 } from 'lucide-react';
 import SchematicViewer from '../shared/SchematicViewer';
 import OrphanAttachmentsPanel from '../shared/OrphanAttachmentsPanel';
 import SyncWarningBanner from '../shared/SyncWarningBanner';
-import MobileUserTasks from './MobileUserTasks';
-import { useCachedSubtasks } from '../../hooks/useCachedSubtasks';
+import { useCachedUserTasks } from '../../hooks/useCachedUserTasks';
 import { useNetwork } from '../../hooks/useNetwork';
 import { enqueue, countPending, getOrphanedAttachments } from '../../services/repos/outboxRepo';
 import { db, getMeta } from '../../services/db';
 import { API_URL } from '../../config';
+import { EXEC_STATUS_META, isTaskClosed } from '../shared/wbs/wbsConstants';
 
-const toDateStr = (d) => d.toISOString().slice(0, 10);
+// Data lokalna RRRR-MM-DD — termin zapisany jako północ czasu polskiego w UTC wypada dzień wcześniej,
+// więc toISOString() przesunąłby zadanie na poprzedni dzień.
+const toDateStr = (d) => {
+    const x = new Date(d);
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+};
+
+// @anchor mobile-user-task-on-day
+// Czy zadanie pokazać w wybranym dniu (nawigacja po datach): od Od (plannedStart, a bez niego dnia
+// utworzenia) do terminu włącznie. Bez terminu — tylko dziś. Przeterminowane otwarte zadania
+// dochodzą do dzisiejszego dnia, żeby nie zniknęły z oczu.
+const isUserTaskOnDay = (task, day, today) => {
+    if (!task.plannedEnd) return day === today;
+    const end = toDateStr(task.plannedEnd);
+    const start = toDateStr(task.plannedStart || task.createdAt || task.plannedEnd);
+    if (day === today && end < today && !isTaskClosed(task.status)) return true;
+    return day >= (start < end ? start : end) && day <= end;
+};
 
 export default function MobileDashboard({ onLogout, onGoHome }) {
-    const [selectedSubtask, setSelectedSubtask] = useState(null);
+    const [selectedTask, setSelectedTask] = useState(null);
     const [activeTab, setActiveTab] = useState('details');
     const [selectedDate, setSelectedDate] = useState(toDateStr(new Date()));
 
@@ -28,11 +45,9 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
     const token = typeof window !== 'undefined'
         ? (sessionStorage.getItem('token') || localStorage.getItem('token'))
         : null;
-    const { subtasks, loading, syncing, refresh } = useCachedSubtasks(token);
+    const { tasks, loading, syncing, refresh } = useCachedUserTasks(token);
     const { isOnline } = useNetwork();
     const [lastSync, setLastSync] = useState(null);
-    // @anchor mobile-user-tasks-refresh-key — przycisk odświeżania przeładowuje też zadania (UserTask)
-    const [userTasksRefreshKey, setUserTasksRefreshKey] = useState(0);
     const [pendingCount, setPendingCount] = useState(0);
     // Zdjęcia bez rozwiązywalnego znacznika — czekają na ręczne przypisanie.
     // Liczone osobno od `pendingCount`, bo same z siebie NIGDY nie zejdą z kolejki.
@@ -60,32 +75,25 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
         };
     }, []);
 
-    const handleStatusChange = async (subtask, newStatus) => {
+    // @anchor mobile-task-status-change — zmiana statusu zadania: od razu w IDB, potem PATCH /my-tasks;
+    // bez sieci (albo przy błędzie) zmiana czeka w outboxie (`USER_TASK_STATUS`).
+    const handleStatusChange = async (task, newStatus) => {
         const updatedAt = new Date().toISOString();
         // Optimistic update — IDB liveQuery auto-refreshes list
-        await db.subtasks.update(subtask.id, { status: newStatus, updatedAt });
-        setSelectedSubtask(prev => prev?.id === subtask.id ? { ...prev, status: newStatus, updatedAt } : prev);
+        await db.userTasks.update(task.id, { status: newStatus, updatedAt });
+        setSelectedTask(prev => prev?.id === task.id ? { ...prev, status: newStatus, updatedAt } : prev);
 
-        if (isOnline) {
-            try {
-                const t = localStorage.getItem('token');
-                const res = await fetch(`${API_URL}/subtasks/${subtask.id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
-                    body: JSON.stringify({ status: newStatus }),
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    await db.subtasks.put({ ...data, updatedAt: data.updatedAt ?? updatedAt });
-                    setSelectedSubtask(prev => prev?.id === subtask.id ? { ...prev, ...data } : prev);
-                } else {
-                    await enqueue('SUBTASK_STATUS', { subtaskId: subtask.id, status: newStatus });
-                }
-            } catch {
-                await enqueue('SUBTASK_STATUS', { subtaskId: subtask.id, status: newStatus });
-            }
-        } else {
-            await enqueue('SUBTASK_STATUS', { subtaskId: subtask.id, status: newStatus });
+        const queue = () => enqueue('USER_TASK_STATUS', { userTaskId: task.id, status: newStatus });
+        if (!isOnline) { await queue(); return; }
+        try {
+            const res = await fetch(`${API_URL}/my-tasks/${task.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ status: newStatus }),
+            });
+            if (!res.ok) await queue();
+        } catch {
+            await queue();
         }
     };
 
@@ -98,18 +106,14 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
         onLogout?.();
     };
 
-    const filteredSubtasks = useMemo(() => {
-        if (!selectedDate) return subtasks;
-        return subtasks.filter(t => {
-            const start = t.plannedStart ? toDateStr(new Date(t.plannedStart)) : null;
-            const end = t.plannedEnd ? toDateStr(new Date(t.plannedEnd)) : null;
-            if (!start) return true; // brak daty → zawsze widoczne
-            return selectedDate >= start && selectedDate <= (end || start);
-        });
-    }, [subtasks, selectedDate]);
+    const filteredTasks = useMemo(() => {
+        const today = toDateStr(new Date());
+        const list = selectedDate ? tasks.filter(t => isUserTaskOnDay(t, selectedDate, today)) : tasks;
+        return [...list].sort((a, b) => String(a.plannedStart || a.plannedEnd || '').localeCompare(String(b.plannedStart || b.plannedEnd || '')));
+    }, [tasks, selectedDate]);
 
     const shiftDate = (days) => {
-        const d = new Date(selectedDate);
+        const d = new Date(selectedDate + 'T12:00:00');
         d.setDate(d.getDate() + days);
         setSelectedDate(toDateStr(d));
     };
@@ -119,8 +123,8 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
 
     const getStatusIcon = (status) => {
         switch (status) {
-            case 'FINISHED': case 'DONE': return <CheckCircle size={18} className="text-emerald-400" />;
-            case 'STARTED': case 'IN_PROGRESS': return <Clock size={18} className="text-blue-400" />;
+            case 'DONE': return <CheckCircle size={18} className="text-emerald-400" />;
+            case 'IN_PROGRESS': return <Clock size={18} className="text-blue-400" />;
             case 'ON_HOLD': return <PauseCircle size={18} className="text-amber-400" />;
             default: return <AlertCircle size={18} className="text-gray-400" />;
         }
@@ -128,19 +132,15 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
 
     const getStatusColor = (status) => {
         switch (status) {
-            case 'FINISHED': case 'DONE': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-            case 'STARTED': case 'IN_PROGRESS': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+            case 'DONE': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+            case 'IN_PROGRESS': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
             case 'ON_HOLD': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
             case 'CANCELLED': return 'bg-red-500/10 text-red-400 border-red-500/20';
             default: return 'bg-gray-500/10 text-gray-400 border-gray-500/20';
         }
     };
 
-    const STATUS_LABEL = {
-        NEW: 'Nowe', PLANNED: 'Planowane', STARTED: 'W realizacji',
-        FINISHED: 'Zakończone', ON_HOLD: 'Wstrzymane', CANCELLED: 'Anulowane',
-        DONE: 'Zakończone', IN_PROGRESS: 'W realizacji',
-    };
+    const statusLabel = (status) => EXEC_STATUS_META[status]?.label ?? status;
 
     if (loading) {
         return (
@@ -151,21 +151,21 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
     }
 
     // --- Detail View Rendering ---
-    if (selectedSubtask) {
+    if (selectedTask) {
         return (
             <div className="flex flex-col h-full bg-gray-950 text-white animate-in fade-in slide-in-from-right-4 duration-300">
                 {/* Header with Back Button + inline tabs */}
                 <header className="px-2 py-1.5 flex items-center gap-2 border-b border-white/5 bg-gray-900/80 backdrop-blur-xl sticky top-0 z-30 flex-shrink-0">
                     <button
                         onClick={() => {
-                            setSelectedSubtask(null);
+                            setSelectedTask(null);
                             setActiveTab('details');
                         }}
                         className="p-1.5 rounded-full hover:bg-white/5 text-gray-400 active:scale-90 transition-transform flex-shrink-0"
                     >
                         <ChevronLeft size={22} />
                     </button>
-                    <h1 className="flex-1 min-w-0 font-bold text-sm truncate text-gray-100">{selectedSubtask.name}</h1>
+                    <h1 className="flex-1 min-w-0 font-bold text-sm truncate text-gray-100">{selectedTask.title}</h1>
                     <div className="flex p-0.5 bg-white/5 rounded-lg border border-white/5 flex-shrink-0 gap-0.5">
                         <button
                             onClick={() => setActiveTab('details')}
@@ -190,12 +190,12 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
                             <div className="bg-gray-900/50 border border-white/5 rounded-2xl p-4 shadow-xl space-y-3">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
-                                        <div className={`p-2 rounded-xl ${getStatusColor(selectedSubtask.status)} font-bold`}>
-                                            {getStatusIcon(selectedSubtask.status)}
+                                        <div className={`p-2 rounded-xl ${getStatusColor(selectedTask.status)} font-bold`}>
+                                            {getStatusIcon(selectedTask.status)}
                                         </div>
                                         <div>
                                             <div className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Status</div>
-                                            <div className="text-sm font-bold">{STATUS_LABEL[selectedSubtask.status] ?? selectedSubtask.status}</div>
+                                            <div className="text-sm font-bold">{statusLabel(selectedTask.status)}</div>
                                         </div>
                                     </div>
                                     {!isOnline && (
@@ -204,40 +204,40 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
                                 </div>
                                 {/* Status action buttons */}
                                 <div className="flex gap-2">
-                                    {['NEW', 'PLANNED', 'ON_HOLD'].includes(selectedSubtask.status) && (
+                                    {['TO_DO', 'ON_HOLD'].includes(selectedTask.status) && (
                                         <button
-                                            onClick={() => handleStatusChange(selectedSubtask, 'STARTED')}
+                                            onClick={() => handleStatusChange(selectedTask, 'IN_PROGRESS')}
                                             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600/80 text-white text-xs font-black uppercase tracking-widest active:scale-95 transition-transform"
                                         >
                                             <Play size={13} /> Rozpocznij
                                         </button>
                                     )}
-                                    {selectedSubtask.status === 'STARTED' && (<>
+                                    {selectedTask.status === 'IN_PROGRESS' && (<>
                                         <button
-                                            onClick={() => handleStatusChange(selectedSubtask, 'FINISHED')}
+                                            onClick={() => handleStatusChange(selectedTask, 'DONE')}
                                             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600/80 text-white text-xs font-black uppercase tracking-widest active:scale-95 transition-transform"
                                         >
                                             <Flag size={13} /> Zakończ
                                         </button>
                                         <button
-                                            onClick={() => handleStatusChange(selectedSubtask, 'ON_HOLD')}
+                                            onClick={() => handleStatusChange(selectedTask, 'ON_HOLD')}
                                             className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-amber-600/20 text-amber-400 border border-amber-500/30 text-xs font-black uppercase tracking-widest active:scale-95 transition-transform"
                                         >
                                             <PauseCircle size={13} /> Wstrzymaj
                                         </button>
                                     </>)}
-                                    {selectedSubtask.status === 'FINISHED' && (
+                                    {isTaskClosed(selectedTask.status) && (
                                         <button
-                                            onClick={() => handleStatusChange(selectedSubtask, 'STARTED')}
+                                            onClick={() => handleStatusChange(selectedTask, 'IN_PROGRESS')}
                                             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 text-xs font-black uppercase tracking-widest active:scale-95 transition-transform"
                                         >
                                             <Play size={13} /> Wznów
                                         </button>
                                     )}
                                 </div>
-                                {selectedSubtask.geoCoords && (
+                                {selectedTask.geoCoords && (
                                     <a
-                                        href={`https://www.google.com/maps/search/?api=1&query=${selectedSubtask.geoCoords.lat},${selectedSubtask.geoCoords.lng}`}
+                                        href={`https://www.google.com/maps/search/?api=1&query=${selectedTask.geoCoords.lat},${selectedTask.geoCoords.lng}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 active:scale-95 transition-transform"
@@ -255,7 +255,7 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
                                     <span className="text-[10px] font-bold uppercase tracking-widest">Opis Zadania</span>
                                 </div>
                                 <div className="bg-white/5 border border-white/5 rounded-2xl p-4 text-xs text-gray-300 leading-relaxed shadow-inner">
-                                    {selectedSubtask.description || 'Brak opisu dla tego zadania.'}
+                                    {selectedTask.description || 'Brak opisu dla tego zadania.'}
                                 </div>
                             </div>
 
@@ -267,8 +267,8 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
                                 </div>
                                 <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between active:bg-white/10 transition-colors">
                                     <div className="flex flex-col">
-                                        <span className="text-xs font-bold text-blue-400">{selectedSubtask.node?.name || '---'}</span>
-                                        <span className="text-[10px] text-gray-500">{selectedSubtask.node?.customTypeLabel || selectedSubtask.node?.type}</span>
+                                        <span className="text-xs font-bold text-blue-400">{selectedTask.node?.name || '---'}</span>
+                                        {selectedTask.wbsNode?.name && <span className="text-[10px] text-gray-500">{selectedTask.wbsNode.name}</span>}
                                     </div>
                                     <ExternalLink size={14} className="text-gray-600" />
                                 </div>
@@ -280,7 +280,7 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
                                     <Calendar size={14} className="text-gray-600 mb-1" />
                                     <div className="text-[9px] text-gray-500 uppercase font-bold pr-1">Utworzono</div>
                                     <div className="text-[11px] font-medium truncate">
-                                        {new Date(selectedSubtask.createdAt).toLocaleDateString('pl-PL')}
+                                        {new Date(selectedTask.createdAt).toLocaleDateString('pl-PL')}
                                     </div>
                                 </div>
                                 <div className="bg-white/2 p-3 rounded-2xl border border-white/5">
@@ -293,8 +293,8 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
                     ) : (
                         <div className="flex-1 min-h-0 w-full bg-gray-900 rounded-3xl overflow-hidden animate-in zoom-in-95 duration-300 shadow-2xl border border-white/5">
                             <SchematicViewer
-                                subtaskId={selectedSubtask.id}
-                                nodeId={selectedSubtask.nodeId}
+                                userTaskId={selectedTask.id}
+                                nodeId={selectedTask.nodeId}
                             />
                         </div>
                     )}
@@ -340,7 +340,7 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
                             </div>
                         )}
                         <button
-                            onClick={() => { refresh(); setUserTasksRefreshKey(k => k + 1); }}
+                            onClick={refresh}
                             disabled={syncing || !isOnline}
                             className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all active:scale-90 ${syncing ? 'text-blue-400' : 'text-gray-600 active:text-gray-300'} disabled:cursor-not-allowed`}
                             title={lastSync ? `Ostatnia sync: ${new Date(lastSync).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}` : 'Odśwież'}
@@ -350,7 +350,7 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
                                 <span className="text-[9px]">{new Date(lastSync).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}</span>
                             )}
                         </button>
-                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{filteredSubtasks.length}/{subtasks.length}</span>
+                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{filteredTasks.length}/{tasks.length}</span>
                     </div>
                 </div>
                 {/* Date navigation */}
@@ -372,25 +372,19 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
             <SyncWarningBanner />
 
             <main className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-                <MobileUserTasks token={token} isOnline={isOnline} refreshKey={userTasksRefreshKey} selectedDate={selectedDate} />
-                <div className="flex items-center gap-2 px-1 pt-1">
-                    <Briefcase size={14} className="text-blue-400" />
-                    <span className="text-[11px] font-black uppercase tracking-widest text-blue-300">Harmonogram</span>
-                    <div className="flex-1 h-px bg-white/5" />
-                </div>
-                {filteredSubtasks.length === 0 ? (
+                {filteredTasks.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-40 text-gray-500 space-y-4">
                         <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
                             <Briefcase size={32} className="opacity-20 text-blue-400" />
                         </div>
-                        <p className="font-medium text-sm">{subtasks.length === 0 ? 'Brak przypisanych zadań' : 'Brak zadań na ten dzień'}</p>
+                        <p className="font-medium text-sm">{tasks.length === 0 ? 'Brak otwartych zadań' : 'Brak zadań na ten dzień'}</p>
                     </div>
                 ) : (
-                    filteredSubtasks.map((task, idx) => (
+                    filteredTasks.map((task, idx) => (
                         <div
                             key={task.id}
                             style={{ animationDelay: `${idx * 50}ms` }}
-                            onClick={() => setSelectedSubtask(task)}
+                            onClick={() => setSelectedTask(task)}
                             className="bg-gray-900/60 border border-white/5 rounded-3xl p-5 active:scale-[0.97] transition-all shadow-xl hover:bg-gray-900/80 active:bg-blue-600/5 cursor-pointer relative overflow-hidden group animate-in slide-in-from-bottom-4 duration-500"
                         >
                             {/* Decorative gradient overlay */}
@@ -398,10 +392,15 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
 
                             <div className="flex justify-between items-start mb-3 relative z-10">
                                 <div className="flex items-center gap-3 pr-2">
-                                    <div className={`p-2 rounded-xl ${getStatusColor(task.status)}`}>
-                                        {getStatusIcon(task.status)}
-                                    </div>
-                                    <span className="font-bold text-sm text-gray-100 group-active:text-blue-400 transition-colors leading-tight">{task.name}</span>
+                                    {/* Szybkie odhaczenie bez wchodzenia w szczegóły (działa też offline — outbox) */}
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleStatusChange(task, isTaskClosed(task.status) ? 'TO_DO' : 'DONE'); }}
+                                        title={isTaskClosed(task.status) ? 'Przywróć do wykonania' : 'Oznacz jako wykonane'}
+                                        className={`p-2 rounded-xl border active:scale-90 transition-transform ${isTaskClosed(task.status) ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400' : 'border-white/15 text-white/25'}`}
+                                    >
+                                        <Check size={18} />
+                                    </button>
+                                    <span className={`font-bold text-sm group-active:text-blue-400 transition-colors leading-tight ${isTaskClosed(task.status) ? 'text-gray-500 line-through' : 'text-gray-100'}`}>{task.title}</span>
                                 </div>
                                 <ChevronRight size={18} className="text-gray-700 group-active:translate-x-1 transition-transform" />
                             </div>
@@ -413,10 +412,10 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
                             <div className="flex items-center justify-between pt-4 border-t border-white/5 relative z-10">
                                 <div className="flex flex-col">
                                     <span className="text-[9px] text-gray-600 uppercase font-black tracking-widest mb-0.5">Projekt</span>
-                                    <span className="text-xs text-blue-400/80 font-bold">{task.node?.name || '---'}</span>
+                                    <span className="text-xs text-blue-400/80 font-bold">{task.node?.name || '---'}{task.wbsNode?.name ? ` › ${task.wbsNode.name}` : ''}</span>
                                 </div>
                                 <div className={`text-[9px] px-2.5 py-1 rounded-lg border font-black tracking-tighter ${getStatusColor(task.status)}`}>
-                                    {task.status}
+                                    {statusLabel(task.status)}
                                 </div>
                             </div>
                             {task.geoCoords && (

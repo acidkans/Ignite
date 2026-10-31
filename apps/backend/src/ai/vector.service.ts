@@ -750,41 +750,40 @@ export class VectorService implements OnModuleInit {
             this.logger.error(`[Sync] Error in hardware phase: ${e.message}`);
         }
 
-        // 5. Subtasks
+        // 5. Zadania (UserTask)
         try {
-            const subtasks = await this.prisma.subtask.findMany({
+            const tasks = await this.prisma.userTask.findMany({
+                where: { deletedAt: null, nodeId: { not: null } },
                 include: {
-                    assignedUser: { select: { firstName: true, lastName: true, email: true } },
+                    user: { select: { firstName: true, lastName: true, email: true } },
                     node: { select: { name: true } },
-                    version: { select: { label: true } }
+                    wbsNode: { select: { name: true } },
                 }
             });
-            this.logger.log(`[Sync] Found ${subtasks.length} subtasks`);
-            for (const s of subtasks) {
+            this.logger.log(`[Sync] Found ${tasks.length} tasks`);
+            for (const t of tasks) {
                 const text = [
-                    `Podzadanie: ${s.name}`,
-                    s.version ? `Wersja: ${s.version.label}` : '',
-                    s.description ? `Opis: ${s.description}` : '',
-                    `Status: ${s.status}`,
-                    `Węzeł (lokalizacja): ${s.node?.name}`,
-                    s.assignedUser ? `Przypisany: ${s.assignedUser.firstName} ${s.assignedUser.lastName}` : 'Nieprzypisane',
+                    `Zadanie: ${t.title}`,
+                    t.description ? `Opis: ${t.description}` : '',
+                    `Status: ${t.status}`,
+                    `Węzeł (lokalizacja): ${t.node?.name}`,
+                    t.wbsNode ? `Pozycja WBS: ${t.wbsNode.name}` : '',
+                    t.user ? `Odpowiedzialny: ${t.user.firstName} ${t.user.lastName}` : '',
                 ].filter(Boolean).join('\n');
                 items.push({
-                    id: makeUUID('subtask', s.id),
+                    id: makeUUID('user_task', t.id),
                     text,
                     metadata: {
-                        nodeId: s.nodeId,
-                        versionId: s.versionId,
-                        versionLabel: s.version?.label,
-                        fileName: `[Podzadanie] ${s.name}`,
+                        nodeId: t.nodeId,
+                        fileName: `[Zadanie] ${t.title}`,
                         chunkIndex: 0,
-                        sourceType: 'subtask',
-                        subtaskId: s.id,
+                        sourceType: 'user_task',
+                        userTaskId: t.id,
                     }
                 });
             }
         } catch (e) {
-            this.logger.error(`[Sync] Error in subtasks phase: ${e.message}`);
+            this.logger.error(`[Sync] Error in tasks phase: ${e.message}`);
         }
 
         // 7. Budget Items
@@ -792,7 +791,7 @@ export class VectorService implements OnModuleInit {
             const budgetItems = await this.prisma.budgetLineItem.findMany({
                 include: {
                     version: { select: { label: true, nodeId: true } },
-                    subtask: { select: { name: true } }
+                    userTask: { select: { title: true } }
                 }
             });
             this.logger.log(`[Sync] Found ${budgetItems.length} budget items`);

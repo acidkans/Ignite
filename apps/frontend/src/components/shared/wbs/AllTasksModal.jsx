@@ -1,14 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, LayoutList, Search, Clock, ListTodo, Check, CheckCircle2, RotateCcw } from 'lucide-react';
+import { X, LayoutList, Search, ListTodo, Check, CheckCircle2, RotateCcw } from 'lucide-react';
 import { API_URL } from '../../../config';
+import { EXEC_STATUS_META } from './wbsConstants';
 
-// Pełna lista wszystkich ustawionych zadań projektu — dwa typy w jednym widoku:
-// Subtaski (harmonogram) + UserTaski (zadania węzłów). Format wzorowany na
+// Pełna lista wszystkich zadań (UserTask) zamówienia. Format wzorowany na
 // QaTreeView „Q&A — całe drzewo": grupowane sekcje ze sticky nagłówkami, pasek
-// szukania + filtry (tu po dacie). UserTaski (zadania wszystkich osób w projekcie)
-// grupowane po gałęzi top-level WBS (`wbsPath[0]` z GET /my-tasks/project/:id);
-// zadania bez węzła WBS — sekcja „Bez gałęzi”. Subtaski harmonogramu nie mają
-// powiązania z WBS, więc zostają w osobnej sekcji na końcu.
+// szukania + filtry (tu po dacie). Zadania wszystkich osób w projekcie grupowane
+// po gałęzi top-level WBS (`wbsPath[0]` z GET /my-tasks/project/:id);
+// zadania bez węzła WBS — sekcja „Bez gałęzi”.
 
 // Kubełek pilności wg daty terminu
 function dateBucket(dateStr) {
@@ -32,19 +31,8 @@ const BUCKET_META = {
     nodate: { label: 'Bez terminu', color: 'text-gray-500', bg: 'bg-white/[0.03] border-white/[0.06]' },
 };
 
-// Statusy Subtaska (harmonogram) — etykieta PL + kolor chipa
-const SUBTASK_STATUS_META = {
-    NEW: { label: 'Nowy', cls: 'bg-white/[0.06] border-white/15 text-gray-300' },
-    PLANNED: { label: 'Zaplanowany', cls: 'bg-sky-500/10 border-sky-500/25 text-sky-300' },
-    STARTED: { label: 'W trakcie', cls: 'bg-amber-500/10 border-amber-500/25 text-amber-300' },
-    FINISHED: { label: 'Zakończony', cls: 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300' },
-    ON_HOLD: { label: 'Wstrzymany', cls: 'bg-orange-500/10 border-orange-500/25 text-orange-300' },
-    CANCELLED: { label: 'Anulowany', cls: 'bg-red-500/10 border-red-500/25 text-red-300' },
-};
-
-// Sekcje poza gałęziami WBS — zawsze na końcu
+// Sekcja zadań bez gałęzi WBS — zawsze na końcu
 const NO_BRANCH_GROUP = { id: 'nobranch', name: 'Bez gałęzi — cały projekt', path: '📋' };
-const SUBTASK_GROUP = { id: 'subtasks', name: 'Harmonogram — podzadania', path: '⏱' };
 const personName = (u) => [u?.firstName, u?.lastName].filter(Boolean).join(' ') || u?.email || '';
 
 const FILTERS = [
@@ -65,7 +53,6 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
     const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
     const [doneIds, setDoneIds] = useState(() => new Set());
     // Otwarte zadania (dane własne modala)
-    const [subtasks, setSubtasks] = useState([]);
     const [userTasks, setUserTasks] = useState([]);
     // Wykonane UserTaski dociągane leniwie z API (backend domyślnie zwraca tylko OPEN)
     const [doneUserTasks, setDoneUserTasks] = useState([]);
@@ -84,14 +71,9 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
         return () => window.removeEventListener('resize', onResize);
     }, []);
 
-    // @anchor all-tasks-fetch-open — pobranie otwartych subtasków (order+wersja) i UserTasków
+    // @anchor all-tasks-fetch-open — pobranie otwartych UserTasków zamówienia
     const fetchOpen = () => {
         if (!nodeId) return;
-        const url = versionId ? `${API_URL}/subtasks/node/${nodeId}?versionId=${versionId}` : `${API_URL}/subtasks/node/${nodeId}`;
-        fetch(url, { headers: { Authorization: `Bearer ${token()}` } })
-            .then(r => r.ok ? r.json() : [])
-            .then(d => setSubtasks(Array.isArray(d) ? d : []))
-            .catch(() => {});
         fetch(`${API_URL}/my-tasks/project/${nodeId}`, { headers: { Authorization: `Bearer ${token()}` } })
             .then(r => r.ok ? r.json() : [])
             .then(d => setUserTasks(Array.isArray(d) ? d : []))
@@ -109,26 +91,17 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
             .catch(() => setDoneLoaded(true));
     }, [showDone, doneLoaded, nodeId]);
 
-    // Ujednolicone pozycje obu typów; w trybie „Wykonane" pokazujemy wykonane Subtaski + wykonane UserTaski
+    // Pozycje listy; w trybie „Wykonane" — zadania zamknięte (wykonane i odwołane)
     const items = useMemo(() => {
         const out = [];
-        const subs = showDone ? subtasks.filter(s => s.status === 'FINISHED') : subtasks.filter(s => s.status !== 'FINISHED');
-        for (const s of subs) {
-            const ref = s.plannedEnd || s.plannedStart;
-            out.push({
-                key: `s_${s.id}`, group: 'subtasks', kind: 'subtask', id: s.id, name: s.name || '(bez nazwy)',
-                dateStr: ref, bucket: dateBucket(ref), category: s.category, status: s.status,
-                assignedToId: s.assignedToId, done: showDone,
-            });
-        }
         const uts = showDone ? doneUserTasks : userTasks.filter(t => !doneIds.has(t.id));
         for (const t of uts) {
             const ref = t.plannedEnd || t.plannedStart;
             const path = Array.isArray(t.wbsPath) ? t.wbsPath : [];
             out.push({
                 key: `u_${t.id}`, group: path[0] ? `b_${path[0].id}` : NO_BRANCH_GROUP.id, groupName: path[0]?.name,
-                kind: 'user', id: t.id, name: t.title || '(bez nazwy)',
-                dateStr: ref, bucket: dateBucket(ref), done: showDone,
+                id: t.id, name: t.title || '(bez nazwy)',
+                dateStr: ref, bucket: dateBucket(ref), done: showDone, status: t.status, category: t.category,
                 // Ścieżka pod gałęzią top-level (np. „Koszty ogólne › Zarządzanie projektem”)
                 subPath: path.slice(1).map(n => n.name).join(' › '),
                 who: personName(t.user),
@@ -136,7 +109,7 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
             });
         }
         return out;
-    }, [subtasks, userTasks, doneUserTasks, doneIds, showDone]);
+    }, [userTasks, doneUserTasks, doneIds, showDone]);
 
     const q = search.trim().toLowerCase();
     const groups = useMemo(() => {
@@ -145,14 +118,14 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
             if (q && !`${it.name} ${it.category || ''} ${it.groupName || ''} ${it.subPath || ''} ${it.who || ''}`.toLowerCase().includes(q)) return false;
             return true;
         });
-        // @anchor all-tasks-branch-groups — sekcja per gałąź top-level (alfabetycznie), potem bez gałęzi i harmonogram
+        // @anchor all-tasks-branch-groups — sekcja per gałąź top-level (alfabetycznie), potem bez gałęzi
         const branches = new Map();
         for (const it of visible) {
-            if (it.kind !== 'user' || it.group === NO_BRANCH_GROUP.id) continue;
+            if (it.group === NO_BRANCH_GROUP.id) continue;
             if (!branches.has(it.group)) branches.set(it.group, { id: it.group, name: it.groupName || 'Gałąź', path: '🌿' });
         }
         const ordered = [...branches.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'));
-        return [...ordered, NO_BRANCH_GROUP, SUBTASK_GROUP]
+        return [...ordered, NO_BRANCH_GROUP]
             .map(g => ({ ...g, rows: visible.filter(it => it.group === g.id) }))
             .filter(g => g.rows.length > 0);
     }, [items, filter, q, showDone]);
@@ -173,70 +146,42 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
         onChanged && onChanged();
     };
 
-    // @anchor all-tasks-restore — przywrócenie wykonanego UserTaska do statusu „zaplanowane" (OPEN)
+    // @anchor all-tasks-restore — przywrócenie zamkniętego zadania do statusu „Do wykonania" (TO_DO)
     // Zadanie odhaczone w tym samym otwarciu modala siedzi w `doneIds`, które ukrywa je na liście
     // otwartych — bez zdjęcia go stamtąd przywrócone zadanie nie wracało do „Wszystkie” aż do
     // ponownego otwarcia widoku. Wiersz wraca też od razu lokalnie, zanim dojdzie odświeżenie.
     const handleRestore = async (id) => {
         const restored = doneUserTasks.find(t => t.id === id);
         setDoneIds(prev => { if (!prev.has(id)) return prev; const n = new Set(prev); n.delete(id); return n; });
-        if (restored) setUserTasks(prev => prev.some(t => t.id === id) ? prev : [...prev, { ...restored, status: 'OPEN' }]);
+        if (restored) setUserTasks(prev => prev.some(t => t.id === id) ? prev : [...prev, { ...restored, status: 'TO_DO' }]);
         setDoneUserTasks(prev => prev.filter(t => t.id !== id));
         try {
             await fetch(`${API_URL}/my-tasks/${id}`, {
                 method: 'PATCH',
                 headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'OPEN' }),
+                body: JSON.stringify({ status: 'TO_DO' }),
             });
         } catch {}
         fetchOpen(); // przywrócone zadanie wraca do otwartych
         onChanged && onChanged();
     };
 
-    // @anchor all-tasks-rename — zmiana nazwy wiersza: UserTask → PATCH /my-tasks {title}, Subtask → PATCH /subtasks {name}
+    // @anchor all-tasks-rename — zmiana nazwy wiersza: PATCH /my-tasks {title}
     const renameRow = async (row, newName) => {
         const v = (newName || '').trim();
         setEditKey(null);
         if (!v || v === row.name) return;
-        if (row.kind === 'user') {
-            setUserTasks(prev => prev.map(t => t.id === row.id ? { ...t, title: v } : t));
-            setDoneUserTasks(prev => prev.map(t => t.id === row.id ? { ...t, title: v } : t));
-            try {
-                await fetch(`${API_URL}/my-tasks/${row.id}`, {
-                    method: 'PATCH',
-                    headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title: v }),
-                });
-            } catch {}
-        } else {
-            setSubtasks(prev => prev.map(s => s.id === row.id ? { ...s, name: v } : s));
-            try {
-                await fetch(`${API_URL}/subtasks/${row.id}`, {
-                    method: 'PATCH',
-                    headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: v }),
-                });
-            } catch {}
-        }
-        onChanged && onChanged();
-    };
-
-    // @anchor all-tasks-subtask-status — zmiana statusu subtaska (harmonogram): odznaczenie → FINISHED, przywrócenie → NEW
-    const setSubtaskStatus = async (id, status) => {
-        setSubtasks(prev => prev.map(s => s.id === id ? { ...s, status } : s));
+        setUserTasks(prev => prev.map(t => t.id === row.id ? { ...t, title: v } : t));
+        setDoneUserTasks(prev => prev.map(t => t.id === row.id ? { ...t, title: v } : t));
         try {
-            await fetch(`${API_URL}/subtasks/${id}`, {
+            await fetch(`${API_URL}/my-tasks/${row.id}`, {
                 method: 'PATCH',
                 headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status }),
+                body: JSON.stringify({ title: v }),
             });
         } catch {}
         onChanged && onChanged();
     };
-
-    // Dispatch akcji „odznacz"/„przywróć" wg typu pozycji
-    const onDoneRow = (row) => row.kind === 'user' ? handleDone(row.id) : setSubtaskStatus(row.id, 'FINISHED');
-    const onRestoreRow = (row) => row.kind === 'user' ? handleRestore(row.id) : setSubtaskStatus(row.id, 'NEW');
 
     return (
         <div className="fixed inset-0 z-[10050] flex items-center justify-center">
@@ -250,7 +195,7 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
                     </div>
                     <div className="flex-1 min-w-0">
                         <h3 className="font-black text-sm text-white truncate">Wszystkie zadania</h3>
-                        <p className="text-[10px] text-gray-500">{total} zadań · zadania gałęzi WBS (wszyscy w projekcie) + harmonogram</p>
+                        <p className="text-[10px] text-gray-500">{total} zadań · wszyscy w projekcie, pogrupowane po gałęziach WBS</p>
                     </div>
                     <button onClick={onClose} className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all flex-shrink-0">
                         <X size={18} />
@@ -293,9 +238,7 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
                                 const bm = BUCKET_META[row.bucket];
                                 return (
                                     <div key={row.key} className="flex items-center gap-3 rounded-2xl bg-white/[0.03] border border-white/5 px-3 py-2.5">
-                                        {row.kind === 'user'
-                                            ? <ListTodo size={13} className="text-amber-400 flex-shrink-0" />
-                                            : <Clock size={13} className="text-blue-400 flex-shrink-0" />}
+                                        <ListTodo size={13} className="text-amber-400 flex-shrink-0" />
                                         <div className="flex-1 min-w-0">
                                             {editKey === row.key ? (
                                                 <input
@@ -335,14 +278,14 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
                                                 {row.category && (
                                                     <span className="px-1.5 py-0.5 rounded-md bg-white/[0.05] border border-white/10 text-[9px] text-gray-400">{row.category}</span>
                                                 )}
-                                                {row.kind === 'subtask' && !row.done && SUBTASK_STATUS_META[row.status] && (
-                                                    <span className={`px-1.5 py-0.5 rounded-md border text-[9px] font-medium ${SUBTASK_STATUS_META[row.status].cls}`}>{SUBTASK_STATUS_META[row.status].label}</span>
+                                                {row.status && row.status !== 'TO_DO' && EXEC_STATUS_META[row.status] && (
+                                                    <span className={`px-1.5 py-0.5 rounded-md bg-white/[0.05] border border-white/10 text-[9px] font-medium ${EXEC_STATUS_META[row.status].color}`}>{EXEC_STATUS_META[row.status].label}</span>
                                                 )}
                                             </div>
                                         </div>
                                         {!row.done && !row.readOnly && (
                                             <button
-                                                onClick={() => onDoneRow(row)}
+                                                onClick={() => handleDone(row.id)}
                                                 className="flex-shrink-0 w-6 h-6 rounded-full border border-white/15 hover:border-emerald-400 hover:bg-emerald-400/10 flex items-center justify-center transition-all group/done"
                                                 title="Oznacz jako wykonane"
                                             >
@@ -351,9 +294,9 @@ export default function AllTasksModal({ nodeId, versionId, onChanged, onClose })
                                         )}
                                         {row.done && !row.readOnly && (
                                             <button
-                                                onClick={() => onRestoreRow(row)}
+                                                onClick={() => handleRestore(row.id)}
                                                 className="flex-shrink-0 flex items-center gap-1 px-2 h-6 rounded-lg border border-white/15 hover:border-blue-400 hover:bg-blue-400/10 text-[10px] font-bold text-gray-400 hover:text-blue-300 transition-all"
-                                                title="Przywróć do zaplanowanych"
+                                                title="Przywróć do wykonania"
                                             >
                                                 <RotateCcw size={11} /> Zaplanuj
                                             </button>

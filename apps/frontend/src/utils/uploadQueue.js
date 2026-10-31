@@ -2,7 +2,7 @@
 // Survives page reloads / mobile camera returns / powrót z pickera plików.
 // Obsługuje dwa typy (kind):
 //   'attachment' — załącznik markera  → POST /schematics/markers/:markerId/attachments
-//   'schematic'  — plik schematu PDF/JPG → POST /schematics/upload (nodeId + opcj. subtaskId)
+//   'schematic'  — plik schematu PDF/JPG → POST /schematics/upload (nodeId + opcj. userTaskId)
 // Wsteczna zgodność: stare wpisy bez `kind` traktujemy jak 'attachment'.
 
 const DB_NAME = 'erp_upload_queue';
@@ -49,13 +49,13 @@ export async function enqueueUpload({ markerId, fileName, fileType, blob }) {
     });
 }
 
-export async function enqueueSchematicUpload({ nodeId, subtaskId, fileName, fileType, blob }) {
+export async function enqueueSchematicUpload({ nodeId, userTaskId, fileName, fileType, blob }) {
     const data = await blob.arrayBuffer();
     return putItem({
         id: genId(`schematic_${nodeId}`),
         kind: 'schematic',
         nodeId,
-        subtaskId: subtaskId || null,
+        userTaskId: userTaskId || null,
         fileName,
         fileType,
         data,
@@ -106,7 +106,7 @@ export async function flushPendingUploads(apiUrl, onUploaded) {
             let url;
             if (item.kind === 'schematic') {
                 formData.append('nodeId', item.nodeId);
-                if (item.subtaskId) formData.append('subtaskId', item.subtaskId);
+                if (item.userTaskId) formData.append('userTaskId', item.userTaskId);
                 url = `${apiUrl}/schematics/upload`;
             } else {
                 // 'attachment' (lub stary wpis bez kind)
