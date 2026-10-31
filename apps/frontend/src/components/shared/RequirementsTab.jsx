@@ -6,6 +6,7 @@ import { buildRequirementsArtifact } from '../../utils/requirementsPdfExport';
 import ExportChoiceModal from './ExportChoiceModal';
 import MarkdownEditor from './MarkdownEditor';
 import OrderTeamModal from './OrderTeamModal';
+import { shortCompanyName } from './wbs/realizationShared';
 
 function countWorkingDays(startStr, endStr) {
     if (!startStr || !endStr) return null;
@@ -409,7 +410,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
             }
             const firma = await res.json();
             ustawFirme(firma);
-            setNipStan(p => ({ ...p, [klucz]: { stan: 'ok', tekst: [firma?.name, firma?.vatStatus && `VAT: ${firma.vatStatus}`].filter(Boolean).join(' · ') } }));
+            setNipStan(p => ({ ...p, [klucz]: { stan: 'ok', pelnaNazwa: firma?.name, tekst: [shortCompanyName(firma?.name), firma?.vatStatus && `VAT: ${firma.vatStatus}`].filter(Boolean).join(' · ') } }));
         } catch {
             setNipStan(p => ({ ...p, [klucz]: { stan: 'blad', tekst: 'Biała lista VAT niedostępna' } }));
         }
@@ -421,7 +422,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
         const st = nipStan[klucz];
         if (!st) return null;
         const kolor = st.stan === 'blad' ? 'text-red-400' : st.stan === 'ok' ? 'text-green-400' : 'text-gray-500';
-        return <div className={`text-[11px] mt-1 ml-1 truncate ${kolor}`} title={st.tekst || ''}>{st.stan === 'ladowanie' ? 'Sprawdzam w Białej liście VAT…' : st.tekst}</div>;
+        return <div className={`text-[11px] mt-1 ml-1 truncate ${kolor}`} title={st.pelnaNazwa || st.tekst || ''}>{st.stan === 'ladowanie' ? 'Sprawdzam w Białej liście VAT…' : st.tekst}</div>;
     };
 
     // @anchor requirements-order-team — zespół zamówienia (jedyne źródło widoczności);
@@ -842,7 +843,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                                                     await pobierzFirmePoNip('pm', e.target.value, (firma) => setForm(prev => ({
                                                         ...prev,
                                                         pmNip: firma?.nip || prev.pmNip,
-                                                        pmCompany: prev.pmCompany || firma?.name || '',
+                                                        pmCompany: prev.pmCompany || shortCompanyName(firma?.name) || '',
                                                     })));
                                                     handleSave();
                                                 }}
@@ -950,7 +951,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                                                                     await pobierzFirmePoNip(contact.id, e.target.value, (firma) => setForm(prev => ({
                                                                         ...prev,
                                                                         clientContacts: prev.clientContacts.map(c => c.id === contact.id
-                                                                            ? { ...c, nip: firma?.nip || c.nip, company: c.company || firma?.name || '' }
+                                                                            ? { ...c, nip: firma?.nip || c.nip, company: c.company || shortCompanyName(firma?.name) || '' }
                                                                             : c),
                                                                     })));
                                                                     handleSave();
