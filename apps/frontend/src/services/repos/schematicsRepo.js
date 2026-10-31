@@ -38,6 +38,29 @@ export async function replaceSchematicsForUserTask(userTaskId, schematics) {
     });
 }
 
+// @anchor replace-schematics-for-node
+/**
+ * Zastępuje schematy węzła odpowiedzią serwera (także pustą) — bez tego schemat
+ * usunięty na desktopie zostawał w IDB telefonu na zawsze.
+ */
+export async function replaceSchematicsForNode(nodeId, schematics) {
+    return db.transaction('rw', db.schematics, async () => {
+        const existing = await db.schematics.where('nodeId').equals(nodeId).toArray();
+        const existingIds = existing.map((s) => s.id);
+        if (existingIds.length) await db.schematics.bulkDelete(existingIds);
+        if (schematics.length) {
+            await db.schematics.bulkPut(
+                schematics.map((s) => ({
+                    ...s,
+                    userTaskId: s.userTaskId ?? null,
+                    nodeId,
+                    updatedAt: s.updatedAt ?? new Date().toISOString(),
+                })),
+            );
+        }
+    });
+}
+
 /**
  * Upsert schematów po pobraniu ich przez SchematicViewer (online flow).
  * Działa zarówno dla list per-zadanie, jak i per-node — bez kasowania innych.

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronRight, ChevronDown, ArrowLeft, Network, X } from 'lucide-react';
 import SchematicViewer from '../shared/SchematicViewer';
+import MobileDocumentsList from './MobileDocumentsList';
 import { API_URL } from '../../config';
 
 const NODE_ICONS = { area: '📁', field: '📂', order: '📋', site: '📍', subtask: '✅' };
@@ -46,6 +47,8 @@ export default function MobileOrdersTree({ onBack }) {
     const [tree, setTree] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedNode, setSelectedNode] = useState(null);
+    // @anchor mobile-tree-tab
+    const [mobileTreeTab, setMobileTreeTab] = useState('schematics'); // 'schematics' | 'documents'
 
     useEffect(() => {
         const token = sessionStorage.getItem('token') || localStorage.getItem('token');
@@ -83,7 +86,7 @@ export default function MobileOrdersTree({ onBack }) {
                 ) : (
                     <div className="space-y-0.5">
                         {rootAreas.map(area => (
-                            <TreeNode key={area.id} node={area} onSelectNode={setSelectedNode} level={0} />
+                            <TreeNode key={area.id} node={area} onSelectNode={(n) => { setMobileTreeTab('schematics'); setSelectedNode(n); }} level={0} />
                         ))}
                     </div>
                 )}
@@ -103,8 +106,21 @@ export default function MobileOrdersTree({ onBack }) {
                     <div className="fixed inset-0 bg-black/80 z-[99]" onClick={() => setSelectedNode(null)} />
                     <div className="fixed inset-0 bg-gray-950 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] flex flex-col z-[100] overflow-hidden">
                         {/* Nazwa węzła + zamknięcie są teraz w pasku SchematicViewer — bez osobnego nagłówka, max miejsca na PDF */}
+                        <div className="flex gap-1 p-1.5 border-b border-white/5 bg-gray-900/80 shrink-0">
+                            {[['schematics', 'Schematy'], ['documents', 'Dokumentacja']].map(([key, label]) => (
+                                <button
+                                    key={key}
+                                    onClick={() => setMobileTreeTab(key)}
+                                    className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase tracking-wider transition-colors ${mobileTreeTab === key ? 'bg-teal-600/30 text-teal-300' : 'text-gray-500 active:bg-white/5'}`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
                         <div className="flex-1 min-h-0">
-                            <SchematicViewer nodeId={selectedNode.id} nodeName={selectedNode.name} onClose={() => setSelectedNode(null)} />
+                            {mobileTreeTab === 'documents'
+                                ? <MobileDocumentsList nodeId={selectedNode.id} nodeName={selectedNode.name} onClose={() => setSelectedNode(null)} />
+                                : <SchematicViewer nodeId={selectedNode.id} nodeName={selectedNode.name} onClose={() => setSelectedNode(null)} />}
                         </div>
                     </div>
                 </>

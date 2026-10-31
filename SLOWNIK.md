@@ -542,6 +542,12 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | markReadByWbsNode | apps/backend/src/comments/comments.service.ts | @anchor mark-read-by-wbs-node |
 | back-funkcja | getWbsChatSummary | apps/backend/src/comments/comments.service.ts | @anchor get-wbs-chat-summary |
 | back-endpoint | GET /comments/order/:orderId/wbs-summary | apps/backend/src/comments/comments.controller.ts | @anchor get-wbs-chat-summary-endpoint |
+| back-funkcja | getMyWbsChatThreads | apps/backend/src/comments/comments.service.ts | @anchor get-my-wbs-chat-threads |
+| back-endpoint | GET /comments/my-threads | apps/backend/src/comments/comments.controller.ts | @anchor get-my-wbs-chat-threads-endpoint |
+| back-funkcja | getMyChatOrders | apps/backend/src/comments/comments.service.ts | @anchor get-my-chat-orders |
+| back-endpoint | GET /comments/my-orders | apps/backend/src/comments/comments.controller.ts | @anchor get-my-chat-orders-endpoint |
+| back-funkcja | getChatNodes | apps/backend/src/comments/comments.service.ts | @anchor get-chat-nodes |
+| back-endpoint | GET /comments/order/:orderId/chat-nodes | apps/backend/src/comments/comments.controller.ts | @anchor get-chat-nodes-endpoint |
 | back-stala | CHAT_IMAGE_DIR | apps/backend/src/comments/chat-image.storage.ts | @anchor chat-image-dir |
 | back-stala | CHAT_IMAGE_MAX_BYTES | apps/backend/src/comments/chat-image.storage.ts | @anchor chat-image-max-bytes |
 | back-stala | CHAT_IMAGE_NAME_RE | apps/backend/src/comments/chat-image.storage.ts | @anchor chat-image-name-re |
@@ -1048,9 +1054,22 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-widok | MobileHome | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor mobile-home |
 | ui-przycisk | mobile-home-tile-tasks | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor mobile-home-tile-tasks |
 | ui-przycisk | mobile-home-tile-tree | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor mobile-home-tile-tree |
+| ui-przycisk | mobile-home-tile-chat | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor mobile-home-tile-chat |
+| ui-przycisk | mobile-home-logout | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor mobile-home-logout |
+| ui-przycisk | mobile-tasks-back | apps/frontend/src/components/Mobile/MobileDashboard.jsx | @anchor mobile-tasks-back |
+| ui-stan | chatUnread (MobileHome) | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor home-chat-unread |
+| ui-widok | MobileChat | apps/frontend/src/components/Mobile/MobileChat.jsx | @anchor mobile-chat |
+| ui-sekcja | MobileChatConversation | apps/frontend/src/components/Mobile/MobileChat.jsx | @anchor mobile-chat-conversation |
+| ui-funkcja | MobileChatImage | apps/frontend/src/components/Mobile/MobileChat.jsx | @anchor mobile-chat-image |
+| ui-sekcja | MobileChatNewThread | apps/frontend/src/components/Mobile/MobileChat.jsx | @anchor mobile-chat-new-thread |
+| ui-input | mobile-chat-photo-source | apps/frontend/src/components/Mobile/MobileChat.jsx | @anchor mobile-chat-photo-source |
+| ui-input | mobile-chat-node-filter | apps/frontend/src/components/Mobile/MobileChat.jsx | @anchor mobile-chat-node-filter |
 | ui-widok | MobileOrdersTree | apps/frontend/src/components/Mobile/MobileOrdersTree.jsx | @anchor mobile-orders-tree |
 | ui-sekcja | TreeNode | apps/frontend/src/components/Mobile/MobileOrdersTree.jsx | @anchor mobile-tree-node |
 | ui-panel | mobile-tree-schematic-panel | apps/frontend/src/components/Mobile/MobileOrdersTree.jsx | @anchor mobile-tree-schematic-panel |
+| ui-stan | mobileTreeTab | apps/frontend/src/components/Mobile/MobileOrdersTree.jsx | @anchor mobile-tree-tab |
+| ui-lista | MobileDocumentsList | apps/frontend/src/components/Mobile/MobileDocumentsList.jsx | @anchor mobile-documents-list |
+| ui-funkcja | replaceSchematicsForNode | apps/frontend/src/services/repos/schematicsRepo.js | @anchor replace-schematics-for-node |
 
 ### Moduł Layout — DynamicSidebar (`apps/frontend/src/components/Layout/DynamicSidebar.jsx`)
 
@@ -3167,6 +3186,7 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-funkcja | brakujace() | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor missing-trainings-for-order |
 | ui-przycisk | kafel Szkolenia (MobileHome, ADMIN) | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor mobile-home-tile-trainings |
 | ui-widok | mobileView 'trainings' | apps/frontend/src/App.jsx | @anchor mobile-view-trainings |
+| ui-widok | mobileView 'chat' | apps/frontend/src/App.jsx | @anchor mobile-view-chat |
 | schema-pole | SystemNotificationSettings.trainingAlertHour | apps/backend/prisma/schema.prisma | @anchor notif-settings-training-alert-hour |
 | schema-pole | SystemNotificationSettings.trainingAlertIncludeMissing | apps/backend/prisma/schema.prisma | @anchor notif-settings-training-alert-include-missing |
 | schema-pole | SystemNotificationSettings.trainingAlertMode | apps/backend/prisma/schema.prisma | @anchor notif-settings-training-alert-mode |

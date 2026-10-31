@@ -13,6 +13,8 @@ import {
     getSchematicsByUserTask,
     getSchematicsByNode,
     upsertSchematics,
+    replaceSchematicsForUserTask,
+    replaceSchematicsForNode,
 } from '../../services/repos/schematicsRepo';
 import { useNetwork } from '../../hooks/useNetwork';
 import { enqueue } from '../../services/repos/outboxRepo';
@@ -215,34 +217,48 @@ export default function SchematicViewer({ nodeId, userTaskId, initialSchematics 
             if (!silent) setLoading(true);
             const token = sessionStorage.getItem('token');
             let data = [];
-            
+            let answered = false; // serwer odpowiedział (także pustą listą) — wtedy jego lista zastępuje cache
+
+            // Zapis do IDB metodą replace — żeby kolejne otwarcie offline miało listę z markerami,
+            // a schematy usunięte na serwerze znikały też z telefonu.
             if (userTaskId) {
                 const res = await fetch(`${API_URL}/schematics/user-task/${userTaskId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                if (res.ok) data = await res.json();
+                if (res.ok) {
+                    data = await res.json();
+                    answered = true;
+                    await replaceSchematicsForUserTask(userTaskId, data).catch(() => {});
+                }
             }
 
             if (data.length === 0 && nodeId) {
                 const res = await fetch(`${API_URL}/schematics/node/${nodeId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                if (res.ok) data = await res.json();
+                if (res.ok) {
+                    data = await res.json();
+                    answered = true;
+                    await replaceSchematicsForNode(nodeId, data).catch(() => {});
+                }
             }
 
-            if (data.length > 0) {
-                // Zapis do IDB — żeby kolejne otwarcie offline miało listę z markerami.
-                upsertSchematics(data, { userTaskId, nodeId }).catch(() => {});
+            if (answered) {
                 setSchematics(data);
-                if (selectedSchematic) {
-                    const updated = data.find(s => s.id === selectedSchematic.id);
+                if (data.length === 0) {
+                    setSelectedSchematic(null);
+                    setSelectedMarker(null);
+                } else {
+                    const updated = selectedSchematic && data.find(s => s.id === selectedSchematic.id);
                     if (updated) {
                         setSelectedSchematic(updated);
                         setSelectedMarker(prev => prev ? (updated.markers.find(m => m.id === prev.id) || prev) : null);
+                    } else {
+                        // Brak wybranego albo wybrany zniknął z serwera (stary wpis z cache)
+                        setSelectedSchematic(data[0]);
+                        setSelectedMarker(null);
+                        setPageNumber(1);
                     }
-                } else {
-                    setSelectedSchematic(data[0]);
-                    setPageNumber(1);
                 }
             }
             return data;

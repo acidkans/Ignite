@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
     Clock, CheckCircle, AlertCircle, ChevronRight,
-    LogOut, Briefcase, ChevronLeft, Info, Map as MapIcon,
+    ArrowLeft, Briefcase, ChevronLeft, Info, Map as MapIcon,
     Calendar, User, FileText, ExternalLink, MapPin, Play, Flag, PauseCircle,
     RefreshCw, UploadCloud, Home, AlertTriangle, Check
 } from 'lucide-react';
@@ -34,7 +34,7 @@ const isUserTaskOnDay = (task, day, today) => {
     return day >= (start < end ? start : end) && day <= end;
 };
 
-export default function MobileDashboard({ onLogout, onGoHome }) {
+export default function MobileDashboard({ onGoHome }) {
     const [selectedTask, setSelectedTask] = useState(null);
     const [activeTab, setActiveTab] = useState('details');
     const [selectedDate, setSelectedDate] = useState(toDateStr(new Date()));
@@ -95,15 +95,6 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
         } catch {
             await queue();
         }
-    };
-
-    const handleLogoutClick = () => {
-        // Logout offline by zostawiał pracownika bez dostępu do appki — wymagamy online.
-        if (!isOnline) {
-            alert('Wylogowanie wymaga połączenia z siecią. Następne logowanie też wymaga połączenia.');
-            return;
-        }
-        onLogout?.();
     };
 
     const filteredTasks = useMemo(() => {
@@ -309,12 +300,13 @@ export default function MobileDashboard({ onLogout, onGoHome }) {
             {/* Header */}
             <header className="px-4 py-3 border-b border-white/5 bg-gray-900/50 backdrop-blur-xl sticky top-0 z-10 shadow-lg">
                 <div className="flex items-center gap-3 mb-3">
+                    {/* @anchor mobile-tasks-back — powrót do menu; wylogowanie jest tylko na ekranie głównym (MobileHome) */}
                     <button
-                        onClick={handleLogoutClick}
-                        title={isOnline ? 'Wyloguj' : 'Wylogowanie wymaga połączenia'}
-                        className={`p-2 rounded-full bg-white/5 active:scale-90 transition-all flex-shrink-0 ${isOnline ? 'text-gray-400 hover:text-red-400' : 'text-gray-700 cursor-not-allowed'}`}
+                        onClick={onGoHome}
+                        title="Wróć do menu"
+                        className="p-2 rounded-xl bg-white/5 active:scale-90 transition-transform flex-shrink-0"
                     >
-                        <LogOut size={18} className="scale-x-[-1]" />
+                        <ArrowLeft size={18} className="text-gray-400" />
                     </button>
                     <div className="flex items-center gap-2 flex-1">
                         <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center font-black shadow-lg shadow-blue-500/20">

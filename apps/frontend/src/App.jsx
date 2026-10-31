@@ -13,6 +13,8 @@ import MainLayout from './components/Layout/MainLayout';
 import MobileDashboard from './components/Mobile/MobileDashboard';
 import MobileHome from './components/Mobile/MobileHome';
 import MobileOrdersTree from './components/Mobile/MobileOrdersTree';
+import { ArrowLeft } from 'lucide-react';
+import MobileChat from './components/Mobile/MobileChat';
 import OfflineBanner from './components/shared/OfflineBanner';
 import { useDevice } from './hooks/useDevice';
 import { useNetwork } from './hooks/useNetwork';
@@ -242,15 +244,20 @@ function App() {
       <div className="flex flex-col h-[100dvh]">
         <OfflineBanner />
         <div className="flex-1 min-h-0">
-          {mobileView === 'home' && <MobileHome onNavigate={setMobileView} showTrainings={tokenRoles().includes('ADMIN')} />}
-          {mobileView === 'tasks' && <MobileDashboard onLogout={handleLogout} onGoHome={() => setMobileView('home')} />}
+          {mobileView === 'home' && <MobileHome onNavigate={setMobileView} onLogout={handleLogout} showTrainings={tokenRoles().includes('ADMIN')} />}
+          {mobileView === 'tasks' && <MobileDashboard onGoHome={() => setMobileView('home')} />}
           {mobileView === 'tree' && <MobileOrdersTree onBack={() => setMobileView('home')} />}
+          {/* @anchor mobile-view-chat */}
+          {mobileView === 'chat' && <MobileChat onBack={() => setMobileView('home')} />}
           {/* @anchor mobile-view-trainings — ten sam widok co /szkolenia, z paskiem powrotu zamiast menu bocznego */}
           {mobileView === 'trainings' && tokenRoles().includes('ADMIN') && (
             <div className="flex h-full flex-col bg-gray-950 text-white">
-              <button onClick={() => setMobileView('home')} className="flex min-h-[44px] items-center gap-2 border-b border-white/5 bg-gray-900/50 px-4 text-sm text-gray-300">
-                ‹ Wybierz widok
-              </button>
+              <div className="flex items-center gap-3 border-b border-white/5 bg-gray-900/50 px-4 py-3">
+                <button onClick={() => setMobileView('home')} className="p-2 rounded-xl bg-white/5 active:scale-90 transition-transform flex-shrink-0">
+                  <ArrowLeft size={18} className="text-gray-400" />
+                </button>
+                <span className="font-bold text-sm">Szkolenia</span>
+              </div>
               <div className="min-h-0 flex-1"><TrainingsPage /></div>
             </div>
           )}
