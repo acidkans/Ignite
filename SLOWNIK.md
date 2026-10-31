@@ -1237,6 +1237,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | withWarsawDay | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor with-warsaw-day |
 | back-funkcja | toTodoBody | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor to-todo-body |
 | back-stala | TASK_STATUSES | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor task-statuses |
+| back-funkcja | taskStart | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor task-start |
+| back-funkcja | toTodoReminder | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor to-todo-reminder |
 | back-stala | OPEN_TASK_STATUSES | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor open-task-statuses |
 | back-stala | CLOSED_TASK_STATUSES | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor closed-task-statuses |
 | back-funkcja | normalizeTaskStatus | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor normalize-task-status |
@@ -1288,7 +1290,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-modal | TaskModal | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-modal |
 | ui-funkcja | people (TaskModal) | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-modal-people |
 | ui-funkcja | initialWhen (TaskModal) | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-modal-initial-when |
-| ui-funkcja | wbsNodeOptions | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor wbs-node-options |
+| ui-stan | startDate / startTime (TaskModal) | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-modal-start |
+| ui-stan | endDate / endTime (TaskModal) | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-modal-end |
+| ui-dropdown | WbsNodeTreePicker | apps/frontend/src/components/shared/wbs/WbsNodeTreePicker.jsx | @anchor wbs-node-tree-picker |
+| ui-stan | expanded (WbsNodeTreePicker) | apps/frontend/src/components/shared/wbs/WbsNodeTreePicker.jsx | @anchor wbs-node-tree-expanded |
 | ui-stala | TASK_VISIBILITY_OPTIONS | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-visibility-options |
 | ui-stan | description (TaskModal) | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-modal-description |
 | ui-stan | wbsNodeId (TaskModal) | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-modal-wbs-node-id |

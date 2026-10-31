@@ -136,13 +136,16 @@ export default function CalendarView({ subtasks, userTasks = [], categories, onD
         );
     };
 
-    // @anchor calendar-user-tasks-for-date — UserTaski (zadania węzła) na dany dzień; termin = plannedEnd, fallback plannedStart
+    // @anchor calendar-user-tasks-for-date — UserTaski na dany dzień: każdy dzień od Od (plannedStart) do Do
+    // (plannedEnd) w czasie lokalnym; zadanie bez Od — tylko dzień terminu.
     const getUserTasksForDate = (date) => {
         const targetStr = formatDateToYYYYMMDD(date);
         return userTasks.filter(t => {
-            const ref = t.plannedEnd || t.plannedStart;
-            if (!ref) return false;
-            return ref.split('T')[0] === targetStr;
+            const endRef = t.plannedEnd || t.plannedStart;
+            if (!endRef) return false;
+            const endStr = formatDateToYYYYMMDD(new Date(endRef));
+            const startStr = t.plannedStart ? formatDateToYYYYMMDD(new Date(t.plannedStart)) : endStr;
+            return targetStr >= startStr && targetStr <= endStr;
         });
     };
 

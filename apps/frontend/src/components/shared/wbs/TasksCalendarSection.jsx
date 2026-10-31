@@ -118,25 +118,31 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
     };
 
     // @anchor tasks-calendar-user-task-reschedule — przełożenie UserTask przez drag na inny dzień.
-    // Zadanie z godziną (durationMinutes) zachowuje godzinę — inaczej wydarzenie w Outlooku skakałoby na 12:00.
+    // Zadanie z godziną (durationMinutes) przesuwa Od i Do o tyle samo dni — godziny i długość zostają
+    // (inaczej wydarzenie w Outlooku skakałoby na 12:00). Bez godziny: sam termin, południe.
     const rescheduleUserTask = async (taskId, date) => {
         const y = date.getFullYear();
         const m = String(date.getMonth() + 1).padStart(2, '0');
         const d = String(date.getDate()).padStart(2, '0');
         const task = [...userTasks, ...projectTasks].find(t => t.id === taskId);
-        let hhmm = '12:00';
+        let patch;
         if (task?.durationMinutes && task.plannedEnd) {
-            const prev = new Date(task.plannedEnd);
-            hhmm = `${String(prev.getHours()).padStart(2, '0')}:${String(prev.getMinutes()).padStart(2, '0')}`;
+            const start = new Date(task.plannedStart || task.plannedEnd);
+            const end = new Date(task.plannedEnd);
+            const newStart = new Date(start);
+            newStart.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+            const shift = newStart - start;
+            patch = { plannedStart: newStart.toISOString(), plannedEnd: new Date(end.getTime() + shift).toISOString() };
+        } else {
+            patch = { plannedEnd: new Date(`${y}-${m}-${d}T12:00:00`).toISOString() };
         }
-        const endStr = `${y}-${m}-${d}T${hhmm}:00`;
-        setUserTasks(prev => prev.map(t => t.id === taskId ? { ...t, plannedEnd: endStr } : t));
-        setProjectTasks(prev => prev.map(t => t.id === taskId ? { ...t, plannedEnd: endStr } : t));
+        setUserTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...patch } : t));
+        setProjectTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...patch } : t));
         try {
             await fetch(`${API_URL}/my-tasks/${taskId}`, {
                 method: 'PATCH',
                 headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ plannedEnd: new Date(endStr).toISOString() }),
+                body: JSON.stringify(patch),
             });
         } catch { refreshUserTasks(); }
     };

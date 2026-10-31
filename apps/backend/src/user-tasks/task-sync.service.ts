@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MsTodoService, MsTodoList, MsTodoTask } from '../ms-todo/ms-todo.service';
-import { UserTasksService, toTodoDue, toTodoBody, toTodoStatus, withWarsawDay, OPEN_TASK_STATUSES, CLOSED_TASK_STATUSES } from './user-tasks.service';
+import { UserTasksService, taskStart, toTodoReminder, toTodoDue, toTodoBody, toTodoStatus, withWarsawDay, OPEN_TASK_STATUSES, CLOSED_TASK_STATUSES } from './user-tasks.service';
 
 // @anchor from-todo-status
 /// Status z MS To Do → kod EXEC. To Do zna tylko notStarted / completed, więc nie może zgubić stanu,
@@ -104,8 +104,11 @@ export class TaskSyncService {
       const existing = await this.prisma.userTask.findUnique({ where: { msToDoId: task.id } });
       const status = fromTodoStatus(task.status, existing?.status);
       // To Do zna tylko datę — zadanie z godziną zachowuje swoją godzinę, zmienia się najwyżej dzień.
+      // Termin (Do) przesunięty w To Do przesuwa o tyle samo początek (Od) — zadanie kilkudniowe trzyma długość.
+      let plannedStart = existing?.plannedStart ?? null;
       if (existing?.durationMinutes && existing.plannedEnd && plannedEnd) {
         plannedEnd = withWarsawDay(existing.plannedEnd, task.dueDateTime!.dateTime.slice(0, 10));
+        if (plannedStart) plannedStart = new Date(plannedStart.getTime() + (plannedEnd.getTime() - existing.plannedEnd.getTime()));
       }
 
       if (existing) {
@@ -120,6 +123,7 @@ export class TaskSyncService {
               title: task.title,
               description,
               status,
+              plannedStart,
               plannedEnd,
               msEtag,
               msLastModified,
@@ -129,7 +133,7 @@ export class TaskSyncService {
               deletedAt: null,
             },
           });
-          await this.userTasks.syncReminderForTask(updated.id, userId, updated.plannedEnd);
+          await this.userTasks.syncReminderForTask(updated.id, userId, taskStart(updated));
           const moved = (existing.plannedEnd?.getTime() ?? null) !== (plannedEnd?.getTime() ?? null) || existing.title !== task.title || (existing.description ?? null) !== description;
           if (moved && (existing.msEventId || existing.durationMinutes)) {
             await this.userTasks.syncCalendarEvent(updated.id);
@@ -195,6 +199,7 @@ export class TaskSyncService {
       if (task.plannedEnd) {
         patch.dueDateTime = toTodoDue(task.plannedEnd as Date);
       }
+      Object.assign(patch, toTodoReminder(task));
       await this.msTodo.updateTask(userId, listId, task.msToDoId, patch);
     } catch (err: any) {
       this.logger.warn(`pushToGraph failed for task ${task.id}: ${err?.message}`);

@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, ListTodo, Calendar, Clock, Trash2, Loader2, GitBranch } from 'lucide-react';
+import { X, ListTodo, Calendar, Trash2, Loader2, GitBranch } from 'lucide-react';
 import { API_URL } from '../../../config';
-import { TASK_DURATION_OPTIONS, TASK_CATEGORIES, TASK_STATUS_CODES, EXEC_STATUS_META } from './wbsConstants';
+import { TASK_CATEGORIES, TASK_STATUS_CODES, EXEC_STATUS_META } from './wbsConstants';
 import TaskTimePicker, { DEFAULT_TASK_TIME, snapTaskTime } from './TaskTimePicker';
 import AutoResizeTextarea from './AutoResizeTextarea';
+import WbsNodeTreePicker from './WbsNodeTreePicker';
 
 const token = () => sessionStorage.getItem('token') || localStorage.getItem('token');
 const authHeaders = () => ({ Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' });
@@ -25,29 +26,26 @@ export const TASK_VISIBILITY_OPTIONS = [
 ];
 
 // @anchor task-modal-initial-when
-// Termin zadania → { date, time }. Zadanie bez godziny (durationMinutes = null, np. z MS To Do)
-// albo nowe dostaje domyślne 8:00 — w tym modalu każde zadanie ma godzinę.
+// Od–Do zadania → { startDate, startTime, endDate, endTime }. Zadanie z godziną: Od = plannedStart (starsze bez
+// niego — plannedEnd), Do = plannedEnd. Zadanie bez godziny (np. z MS To Do) albo nowe: Od = dzień 8:00,
+// Do = ten sam dzień 9:00 — w tym modalu każde zadanie ma godziny.
+const DEFAULT_LENGTH_MIN = 60;
+const splitLocal = (d) => ({ date: toDateInput(d), time: snapTaskTime(`${pad2(d.getHours())}:${pad2(d.getMinutes())}`) });
+const joinLocal = (date, time) => new Date(`${date}T${time}:00`);
 const initialWhen = (task, defaults) => {
-    const src = task?.plannedEnd || task?.plannedStart;
-    if (src) {
-        const d = new Date(src);
-        const time = task.durationMinutes ? snapTaskTime(`${pad2(d.getHours())}:${pad2(d.getMinutes())}`) : DEFAULT_TASK_TIME;
-        return { date: toDateInput(d), time };
+    let start;
+    let end;
+    if (task?.durationMinutes && (task.plannedStart || task.plannedEnd)) {
+        start = new Date(task.plannedStart || task.plannedEnd);
+        end = task.plannedStart && task.plannedEnd ? new Date(task.plannedEnd) : new Date(start.getTime() + task.durationMinutes * 60000);
+    } else {
+        const day = task?.plannedEnd || task?.plannedStart || defaults?.date || new Date();
+        start = joinLocal(toDateInput(day), DEFAULT_TASK_TIME);
+        end = new Date(start.getTime() + DEFAULT_LENGTH_MIN * 60000);
     }
-    return { date: defaults?.date ? toDateInput(defaults.date) : toDateInput(new Date()), time: DEFAULT_TASK_TIME };
-};
-
-// @anchor wbs-node-options
-// Płaska lista węzłów WBS zamówienia z pełną ścieżką „gałąź › pozycja” (GET /wbs-nodes/unified/:nodeId,
-// aktywna wersja) — do wyboru węzła zadania.
-const wbsNodeOptions = (items) => {
-    const byId = new Map(items.map(n => [n.id, n]));
-    const path = (n) => {
-        const names = [];
-        for (let cur = n, guard = 0; cur && guard < 20; cur = byId.get(cur.parentId), guard++) names.unshift(cur.name || '—');
-        return names.join(' › ');
-    };
-    return items.map(n => ({ id: n.id, label: path(n) })).sort((a, b) => a.label.localeCompare(b.label, 'pl'));
+    const s = splitLocal(start);
+    const e = splitLocal(end);
+    return { startDate: s.date, startTime: s.time, endDate: e.date, endTime: e.time };
 };
 
 // @anchor task-modal
@@ -71,9 +69,12 @@ export default function TaskModal({ task = null, processNodeId, defaults = {}, l
     const [wbsNodeId, setWbsNodeId] = useState(task?.wbsNodeId || defaults.wbsNodeId || '');
     const [status, setStatus] = useState(task?.status === 'OPEN' || !task?.status ? 'TO_DO' : task.status);
     const [visibilityType, setVisibilityType] = useState(task?.visibilityType || 'ALL');
-    const [date, setDate] = useState(when.date);
-    const [time, setTime] = useState(when.time);
-    const [duration, setDuration] = useState(task?.durationMinutes || 60);
+    // @anchor task-modal-start — Od: data + godzina (początek, wydarzenie w Outlooku, przypomnienie)
+    const [startDate, setStartDate] = useState(when.startDate);
+    const [startTime, setStartTime] = useState(when.startTime);
+    // @anchor task-modal-end — Do: data + godzina (termin w MS To Do; inny dzień = zadanie kilkudniowe)
+    const [endDate, setEndDate] = useState(when.endDate);
+    const [endTime, setEndTime] = useState(when.endTime);
     const [assigneeId, setAssigneeId] = useState(task?.userId || currentUserId || '');
     const [category, setCategory] = useState(task?.category || '');
     const [phase, setPhase] = useState(task?.phase || '');
@@ -116,18 +117,25 @@ export default function TaskModal({ task = null, processNodeId, defaults = {}, l
         setAssigneeId(prev => (people.some(u => u.id === prev) ? prev : ''));
     }, [people, isEdit, team.length]);
 
-    const nodeOptions = useMemo(() => {
-        const opts = wbsNodeOptions(wbsItems);
-        // Węzeł spoza aktywnej wersji (zadanie z innej wersji) dalej musi dać się pokazać.
-        if (wbsNodeId && !opts.some(o => o.id === wbsNodeId)) {
-            opts.unshift({ id: wbsNodeId, label: task?.wbsPath?.map(n => n.name).join(' › ') || task?.wbsNode?.name || 'Węzeł spoza aktywnej wersji' });
-        }
-        return opts;
-    }, [wbsItems, wbsNodeId, task]);
-
     const nodeMissing = !!nodeId && !wbsNodeId;
     const assigneeMissing = !assigneeId || (assigneeId !== task?.userId && !people.some(u => u.id === assigneeId));
-    const canSave = canEdit && title.trim() && date && time && !nodeMissing && !assigneeMissing && !saving;
+    const start = startDate && startTime ? joinLocal(startDate, startTime) : null;
+    const end = endDate && endTime ? joinLocal(endDate, endTime) : null;
+    const rangeInvalid = !start || !end || end <= start;
+    const canSave = canEdit && title.trim() && !rangeInvalid && !nodeMissing && !assigneeMissing && !saving;
+
+    // Przesunięcie Od przesuwa Do o tyle samo (długość zadania zostaje) — jak w kalendarzach.
+    const moveStart = (date, time) => {
+        const prevStart = start;
+        const lengthMs = prevStart && end && end > prevStart ? end - prevStart : DEFAULT_LENGTH_MIN * 60000;
+        setStartDate(date);
+        setStartTime(time);
+        if (date && time) {
+            const e = splitLocal(new Date(joinLocal(date, time).getTime() + lengthMs));
+            setEndDate(e.date);
+            setEndTime(e.time);
+        }
+    };
 
     const save = async () => {
         if (!canSave) return;
@@ -142,8 +150,9 @@ export default function TaskModal({ task = null, processNodeId, defaults = {}, l
                 category: category || null,
                 phase: phase.trim() || null,
                 wbsNodeId: wbsNodeId || null,
-                plannedEnd: new Date(`${date}T${time}:00`).toISOString(),
-                durationMinutes: Number(duration),
+                plannedStart: start.toISOString(),
+                plannedEnd: end.toISOString(),
+                durationMinutes: Math.round((end - start) / 60000),
             };
             let res;
             if (isEdit) {
@@ -224,14 +233,18 @@ export default function TaskModal({ task = null, processNodeId, defaults = {}, l
                         <input autoFocus={canEdit} value={title} onChange={e => setTitle(e.target.value)} disabled={!canEdit} className={field} />
                     </label>
                     {nodeId && (
-                        <label className="flex flex-col gap-1.5">
+                        <div className="flex flex-col gap-1.5">
                             <span className={`${label} flex items-center gap-1`}><GitBranch size={10} /> Węzeł WBS</span>
-                            <select value={wbsNodeId} onChange={e => setWbsNodeId(e.target.value)} disabled={!canEdit || lockNode} className={`${field} ${nodeMissing ? 'border-amber-500/60' : ''}`}>
-                                <option value="" style={OPTION_STYLE}>— wybierz węzeł —</option>
-                                {nodeOptions.map(o => <option key={o.id} value={o.id} style={OPTION_STYLE}>{o.label}</option>)}
-                            </select>
+                            <WbsNodeTreePicker
+                                items={wbsItems}
+                                value={wbsNodeId}
+                                onChange={setWbsNodeId}
+                                disabled={!canEdit || lockNode}
+                                invalid={nodeMissing && canEdit}
+                                fallbackLabel={task?.wbsPath?.map(n => n.name).join(' › ') || task?.wbsNode?.name}
+                            />
                             {nodeMissing && canEdit && <span className="text-[12px] text-amber-400">Wybierz węzeł, do którego należy zadanie.</span>}
-                        </label>
+                        </div>
                     )}
                     <label className="flex flex-col gap-1.5">
                         <span className={label}>Komentarz</span>
@@ -254,22 +267,19 @@ export default function TaskModal({ task = null, processNodeId, defaults = {}, l
                             {nodeId && team.length === 0 && canEdit && <span className="text-[12px] text-amber-400">Zespół zamówienia jest pusty — dodaj osoby w „Zespół zamówienia”.</span>}
                         </label>
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
-                        <label className="flex flex-col gap-1.5">
-                            <span className={`${label} flex items-center gap-1`}><Calendar size={10} /> Termin</span>
-                            <input type="date" value={date} onChange={e => setDate(e.target.value)} disabled={!canEdit} className={field} />
-                        </label>
-                        <label className="flex flex-col gap-1.5">
-                            <span className={`${label} flex items-center gap-1`}><Clock size={10} /> Godzina</span>
-                            <TaskTimePicker value={time} onChange={setTime} allowEmpty={false} disabled={!canEdit} className={`${field} flex-1`} optionStyle={OPTION_STYLE} />
-                        </label>
-                        <label className="flex flex-col gap-1.5">
-                            <span className={label}>Czas trwania</span>
-                            <select value={duration} onChange={e => setDuration(Number(e.target.value))} disabled={!canEdit} className={field}>
-                                {TASK_DURATION_OPTIONS.map(([v, l]) => <option key={v} value={v} style={OPTION_STYLE}>{l}</option>)}
-                            </select>
-                        </label>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="flex flex-col gap-1.5">
+                            <span className={`${label} flex items-center gap-1`}><Calendar size={10} /> Od</span>
+                            <input type="date" value={startDate} onChange={e => moveStart(e.target.value, startTime)} disabled={!canEdit} className={field} />
+                            <TaskTimePicker value={startTime} onChange={v => moveStart(startDate, v)} allowEmpty={false} disabled={!canEdit} className={`${field} flex-1`} optionStyle={OPTION_STYLE} />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <span className={`${label} flex items-center gap-1`}><Calendar size={10} /> Do</span>
+                            <input type="date" value={endDate} min={startDate} onChange={e => setEndDate(e.target.value)} disabled={!canEdit} className={`${field} ${rangeInvalid && canEdit ? 'border-amber-500/60' : ''}`} />
+                            <TaskTimePicker value={endTime} onChange={setEndTime} allowEmpty={false} disabled={!canEdit} className={`${field} flex-1 ${rangeInvalid && canEdit ? 'border-amber-500/60' : ''}`} optionStyle={OPTION_STYLE} />
+                        </div>
                     </div>
+                    {rangeInvalid && canEdit && <p className="text-[12px] text-amber-400 -mt-1">Koniec musi być po początku.</p>}
                     <div className="grid grid-cols-3 gap-3">
                         <label className="flex flex-col gap-1.5">
                             <span className={label}>Widoczność</span>

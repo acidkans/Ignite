@@ -17,6 +17,7 @@ export interface MsTodoTask {
   title: string;
   status: string; // 'notStarted' | 'completed'
   importance: string;
+  isReminderOn?: boolean;
   reminderDateTime?: { dateTime: string; timeZone: string };
   dueDateTime?: { dateTime: string; timeZone: string };
   body?: { content: string; contentType: string };

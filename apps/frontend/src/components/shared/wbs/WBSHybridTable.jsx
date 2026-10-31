@@ -280,11 +280,17 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
     };
 
     const who = (u) => [u?.firstName, u?.lastName].filter(Boolean).join(' ') || u?.email || '—';
+    // Od–Do: ten sam dzień „07.11.2026 08:00–09:00”, kilka dni „07.11 08:00 – 09.11.2026 16:00”; bez godziny sam termin.
     const fmtWhen = (t) => {
         if (!t.plannedEnd) return '';
-        const d = new Date(t.plannedEnd);
-        const day = d.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        return t.durationMinutes ? `${day} ${d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}` : day;
+        const end = new Date(t.plannedEnd);
+        const day = (d, year = true) => d.toLocaleDateString('pl-PL', year ? { day: '2-digit', month: '2-digit', year: 'numeric' } : { day: '2-digit', month: '2-digit' });
+        const hm = (d) => d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+        if (!t.durationMinutes) return day(end);
+        const start = new Date(t.plannedStart || t.plannedEnd);
+        return start.toDateString() === end.toDateString()
+            ? `${day(end)} ${hm(start)}–${hm(end)}`
+            : `${day(start, false)} ${hm(start)} – ${day(end)} ${hm(end)}`;
     };
 
     return (

@@ -1,3 +1,24 @@
+## 2026-10-31 — feat(zadania): zadanie Od–Do (data + godzina, także kilkudniowe) i wybór węzła WBS z drzewa
+
+### schema.prisma
+- zmieniono znaczenie `schema-pole` `UserTask.plannedStart` / `UserTask.plannedEnd` / `UserTask.durationMinutes`: `plannedStart` = Od (początek wydarzenia w Outlooku, przypomnienie), `plannedEnd` = Do (termin w MS To Do, przeterminowanie), `durationMinutes` = minuty od Od do Do (ustawione = zadanie ma godzinę). Dotąd `plannedEnd` niósł początek wydarzenia, a `durationMinutes` jego długość
+- migracja `20261031150000_user_task_start_end`: zmigrowane Subtaski — Od = pierwszy dzień 8:00, Do = ostatni dzień 9:00; pozostałe zadania z godziną — `plannedStart := plannedEnd`, `plannedEnd += durationMinutes`
+
+### architektura / API
+- dodano `back-funkcja` `taskStart` — `plannedStart ?? plannedEnd`; od niego startuje wydarzenie Outlook (`syncCalendarEvent`) i przypomnienie (`syncReminderForTask`)
+- MS To Do: przesunięcie terminu w To Do przesuwa o tyle samo `plannedStart` (zadanie kilkudniowe zachowuje długość)
+- MS To Do: zadanie z godziną dostaje przypomnienie `reminderDateTime` = Od (czas polski, `isReminderOn: true`) — przy utworzeniu, zmianie Od/Do i pushu z synchronizacji; bez godziny `isReminderOn: false` (`back-funkcja` `toTodoReminder`)
+- `ui-modal` `TaskModal` — pola Od i Do (data + godzina, co 30 min) zamiast terminu + czasu trwania; przesunięcie Od przesuwa Do o tyle samo; koniec musi być po początku
+- dodano `ui-dropdown` `WbsNodeTreePicker` — wybór węzła z rozwijanego drzewa z wyszukiwarką (klik w nazwę przypisuje), zamiast `<select>` z pełnymi ścieżkami
+- kalendarz zamówienia: zadanie widoczne w każdym dniu od Od do Do; przeciągnięcie przesuwa Od i Do razem; szuflada WBS pokazuje „Od–Do”
+
+### słownik
+- dodano `task-start`, `to-todo-reminder` — user-tasks.service.ts; `task-modal-start`, `task-modal-end` — TaskModal.jsx; `wbs-node-tree-picker`, `wbs-node-tree-expanded` — WbsNodeTreePicker.jsx
+- usunięto `wbs-node-options`
+
+### wytyczne
+- `schema-pole` `UserTask.plannedEnd` — to KONIEC zadania (termin); początek zawsze przez `taskStart()` / `plannedStart`, nigdy `plannedEnd`
+
 ## 2026-10-31 — feat(zadania): etap 5 ujednolicenia — jeden modal zadania (TaskModal) w kalendarzu i w WBS (v2026.10.31.1005)
 
 ### architektura / API
