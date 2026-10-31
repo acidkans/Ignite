@@ -1,3 +1,25 @@
+## 2026-10-31 — feat(zadania): etap 5 ujednolicenia — jeden modal zadania (TaskModal) w kalendarzu i w WBS (v2026.10.31.1005)
+
+### architektura / API
+- dodano `ui-modal` `TaskModal` (TaskModal.jsx) — tworzenie i edycja UserTask: tytuł, węzeł WBS (wymagany dla zadania z zamówieniem), komentarz, status z `EXEC_STATUS_META`, odpowiedzialny, termin + godzina (`TaskTimePicker`, domyślnie 8:00, bez opcji „bez godziny”) + czas trwania, widoczność, kategoria, faza, szablony
+- kalendarz zamówienia (`ui-sekcja` `TasksCalendarSection`): klik w dzień i klik w kafelek zadania otwierają `TaskModal`; usunięto `ui-modal` `UserTaskEditModal`
+- szuflada „Zadania” węzła WBS (`ui-sekcja` `WbsTasksDrawer`): lista zadań (status, termin z godziną, odpowiedzialny) + „Dodaj zadanie” otwierający `TaskModal` z węzłem tego wiersza; usunięto inline formularz, edycję komentarza i zmianę odpowiedzialnego w wierszu (są w modalu)
+- dodano `back-endpoint` `GET /my-tasks/templates` i `POST /my-tasks/templates` (upsert po nazwie) — szablony zadań (`SubtaskTemplate`) dostępne bez modułu `subtasks`
+- `back-endpoint` `GET /my-tasks/by-wbs-node/:wbsNodeId` zwraca też `nodeId`, `wbsNodeId`, `durationMinutes`, `msEventId`, `visibilityType`, `category`, `phase`, `wbsNode` (edycja w modalu)
+- `ui-dropdown` `TaskTimePicker` — prop `allowEmpty` (domyślnie true)
+- odpowiedzialny tylko z zespołu zamówienia: `ui-dropdown` w `TaskModal` pokazuje wyłącznie `GET /my-tasks/project-team/:id` (dotychczasowy odpowiedzialny spoza zespołu — widoczny, nie do wybrania); `back-endpoint` `POST /my-tasks` i `PATCH /my-tasks/:id` odrzucają osobę spoza zespołu (400), `POST` sprawdza też autora wskazanego jako odpowiedzialny
+
+### słownik
+- dodano `task-modal`, `task-modal-people`, `task-modal-initial-when`, `wbs-node-options`, `task-visibility-options`, `task-modal-description`, `task-modal-wbs-node-id`, `task-modal-save-as-template` — TaskModal.jsx
+- dodano `task-status-codes`, `closed-task-status-codes`, `is-task-closed` — wbsConstants.js
+- dodano `tasks-calendar-new-task-date` — TasksCalendarSection.jsx; `wbs-task-modal` — WBSHybridTable.jsx
+- dodano `user-tasks-templates`, `user-tasks-save-template`, `user-tasks-templates-endpoint`, `user-tasks-save-template-endpoint`
+- usunięto `user-task-edit-modal`, `user-task-edit-time`, `user-task-edit-description`, `user-task-edit-duration`, `wbs-task-assignee`, `wbs-task-comment`, `wbs-task-save-comment`, `wbs-new-task-comment`, `wbs-new-task-alarm`, `wbs-new-task-time`, `wbs-new-task-duration`, `wbs-task-team`, `wbs-task-option-style`
+
+### wytyczne
+- `ui-modal` `TaskModal` — jedyny formularz zadania; nowe miejsca tworzenia/edycji zadań używają go zamiast własnych formularzy
+- `back-funkcja` `resolveAssignee` — zadanie z zamówieniem można powierzyć tylko osobie z `projectTeam` (właściciel + `Team.orderNodeId`)
+
 ## 2026-10-31 — feat(zadania): etap 4 ujednolicenia — backend UserTask ze statusami EXEC, polami harmonogramu i widocznością
 
 ### architektura / API

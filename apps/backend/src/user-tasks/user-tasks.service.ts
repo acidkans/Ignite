@@ -162,6 +162,9 @@ export class UserTasksService {
       orderBy: [{ status: 'desc' }, { plannedEnd: 'asc' }, { createdAt: 'asc' }],
       select: {
         id: true, title: true, description: true, status: true, plannedEnd: true, createdAt: true, userId: true, createdById: true,
+        // pola wspólnego TaskModal (edycja z listy zadań węzła)
+        nodeId: true, wbsNodeId: true, durationMinutes: true, msEventId: true, visibilityType: true, category: true, phase: true,
+        wbsNode: { select: { id: true, name: true } },
         user: { select: TASK_PERSON_SELECT },
         createdBy: { select: TASK_PERSON_SELECT },
         // aktywna seria alarmu cyklicznego — znacznik na przycisku w szufladzie WBS
@@ -260,7 +263,8 @@ export class UserTasksService {
   // `userId` = zalogowany autor; odpowiedzialnym jest `assigneeUserId` (domyślnie autor) —
   // do jego MS To Do trafia zadanie i jemu odpala się przypomnienie.
   async create(userId: string, dto: CreateUserTaskDto) {
-    const ownerId = await this.resolveAssignee(dto.assigneeUserId, userId);
+    // Wskazany odpowiedzialny (także autor sam sobie) musi być w zespole zamówienia; bez wskazania = autor.
+    const ownerId = dto.assigneeUserId ? await this.resolveAssignee(dto.assigneeUserId, '', dto.nodeId) : userId;
     const task = await this.prisma.userTask.create({
       data: {
         userId: ownerId,
@@ -285,10 +289,17 @@ export class UserTasksService {
   }
 
   // @anchor user-tasks-resolve-assignee
-  private async resolveAssignee(assigneeUserId: string | undefined, fallback: string): Promise<string> {
+  // Zadanie z zamówieniem (`processNodeId`) można powierzyć tylko komuś z zespołu zamówienia (`projectTeam`).
+  private async resolveAssignee(assigneeUserId: string | undefined, fallback: string, processNodeId?: string | null): Promise<string> {
     if (!assigneeUserId || assigneeUserId === fallback) return fallback;
     const exists = await this.prisma.user.findUnique({ where: { id: assigneeUserId }, select: { id: true } });
     if (!exists) throw new BadRequestException('Nie znaleziono wybranego użytkownika');
+    if (processNodeId) {
+      const team = await this.projectTeam(processNodeId);
+      if (!team.some(u => u.id === assigneeUserId)) {
+        throw new BadRequestException('Odpowiedzialnym może być tylko osoba z zespołu zamówienia');
+      }
+    }
     return assigneeUserId;
   }
 
@@ -320,13 +331,13 @@ export class UserTasksService {
     }
 
     if (task.source === 'SUBTASK_MIGRATION') {
-      const ownerId = assigneeUserId ? await this.resolveAssignee(assigneeUserId, task.userId) : task.userId;
+      const ownerId = assigneeUserId ? await this.resolveAssignee(assigneeUserId, task.userId, data.nodeId ?? task.nodeId) : task.userId;
       await this.prisma.userTask.update({ where: { id: taskId }, data: { ...data, userId: ownerId, source: 'IGNITE' } });
       await this.activateMigratedTask(taskId);
       return { count: 1 };
     }
 
-    const newOwnerId = assigneeUserId ? await this.resolveAssignee(assigneeUserId, task.userId) : task.userId;
+    const newOwnerId = assigneeUserId ? await this.resolveAssignee(assigneeUserId, task.userId, data.nodeId ?? task.nodeId) : task.userId;
     if (newOwnerId !== task.userId) {
       if (task.msToDoId && task.msListId) {
         try {
@@ -672,6 +683,23 @@ export class UserTasksService {
         });
       }
     }
+  }
+
+  // @anchor user-tasks-templates
+  // Szablony zadań (tytuł + komentarz) — model `SubtaskTemplate`, przejęty z modułu `subtasks`.
+  listTemplates() {
+    return this.prisma.subtaskTemplate.findMany({ orderBy: { name: 'asc' } });
+  }
+
+  // @anchor user-tasks-save-template — upsert po nazwie (nazwa szablonu jest unikalna)
+  saveTemplate(dto: { name: string; description?: string | null }) {
+    const name = (dto.name || '').trim();
+    if (!name) throw new BadRequestException('Szablon wymaga nazwy');
+    return this.prisma.subtaskTemplate.upsert({
+      where: { name },
+      update: { description: dto.description ?? null },
+      create: { name, description: dto.description ?? null },
+    });
   }
 
   // @anchor user-tasks-trash-cleanup

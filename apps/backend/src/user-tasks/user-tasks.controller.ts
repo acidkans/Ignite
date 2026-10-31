@@ -42,6 +42,18 @@ export class UserTasksController {
     return this.userTasks.wbsSummaryForProcessNode(processNodeId);
   }
 
+  // @anchor user-tasks-templates-endpoint
+  @Get('templates')
+  listTemplates() {
+    return this.userTasks.listTemplates();
+  }
+
+  // @anchor user-tasks-save-template-endpoint
+  @Post('templates')
+  saveTemplate(@Body() body: { name: string; description?: string | null }) {
+    return this.userTasks.saveTemplate(body);
+  }
+
   // @anchor user-tasks-create-endpoint
   @Post()
   create(@Req() req: any, @Body() dto: CreateUserTaskDto) {

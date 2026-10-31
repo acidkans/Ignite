@@ -14,8 +14,9 @@ export const snapTaskTime = (hhmm) => {
 
 // @anchor task-time-picker
 // Godzina zadania jako dwie listy: godzina 00–23 + minuty 00/30. Zastępuje <input type="time">,
-// który w Chrome nie ogranicza minut. Pusta godzina („—”) = zadanie bez godziny, bez wydarzenia w Outlooku.
-export default function TaskTimePicker({ value, onChange, disabled, className = '', optionStyle, title }) {
+// który w Chrome nie ogranicza minut. Pusta godzina („—”) = zadanie bez godziny, bez wydarzenia w Outlooku;
+// `allowEmpty={false}` jej nie pokazuje (TaskModal: każde zadanie ma godzinę).
+export default function TaskTimePicker({ value, onChange, disabled, className = '', optionStyle, title, allowEmpty = true }) {
     const [h = '', m = '00'] = (value || '').split(':');
     return (
         <span className="flex gap-1" title={title}>
@@ -26,7 +27,7 @@ export default function TaskTimePicker({ value, onChange, disabled, className = 
                 className={className}
                 aria-label="Godzina"
             >
-                <option value="" style={optionStyle}>—</option>
+                {allowEmpty && <option value="" style={optionStyle}>—</option>}
                 {HOURS.map(x => <option key={x} value={x} style={optionStyle}>{x}</option>)}
             </select>
             <select

@@ -5,7 +5,7 @@ import { TASK_CATEGORIES } from './wbsConstants';
 import CalendarView from './CalendarView';
 import SubtaskModal from '../SubtaskModal';
 import AllTasksModal from './AllTasksModal';
-import UserTaskEditModal from './UserTaskEditModal';
+import TaskModal from './TaskModal';
 
 const CATEGORIES = TASK_CATEGORIES;
 
@@ -27,6 +27,8 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
     const [allTasksOpen, setAllTasksOpen] = useState(false);
     // @anchor tasks-calendar-edit-user-task — zadanie kliknięte w kalendarzu (modal edycji)
     const [editUserTask, setEditUserTask] = useState(null);
+    // @anchor tasks-calendar-new-task-date — dzień kliknięty w kalendarzu → nowe zadanie (TaskModal) na ten dzień, 8:00
+    const [newTaskDate, setNewTaskDate] = useState(null);
     const latestSubtasksRef = useRef([]);
     const isSavingRef = useRef(false);
     const saveTimeoutRef = useRef(null);
@@ -286,15 +288,7 @@ ${rows}
                     onUserTaskClick={(task) => setEditUserTask(task)}
                     categories={CATEGORIES}
                     onDrop={handleDrop}
-                    onDateClick={(date) => {
-                        setSelectedTask({
-                            name: '',
-                            plannedStart: date.toISOString(),
-                            plannedEnd: date.toISOString(),
-                            status: 'NEW',
-                        });
-                        setIsModalOpen(true);
-                    }}
+                    onDateClick={(date) => setNewTaskDate(date)}
                     onTaskClick={(task) => {
                         setSelectedTask(task);
                         setIsModalOpen(true);
@@ -318,12 +312,13 @@ ${rows}
                     onSuccess={() => { setIsModalOpen(false); fetchSubtasks(); }}
                 />
             )}
-            {editUserTask && (
-                <UserTaskEditModal
+            {(editUserTask || newTaskDate) && (
+                <TaskModal
                     task={editUserTask}
                     processNodeId={nodeId}
-                    onClose={() => setEditUserTask(null)}
-                    onSaved={() => { setEditUserTask(null); refreshUserTasks(); }}
+                    defaults={{ date: newTaskDate }}
+                    onClose={() => { setEditUserTask(null); setNewTaskDate(null); }}
+                    onSaved={() => { setEditUserTask(null); setNewTaskDate(null); refreshUserTasks(); }}
                 />
             )}
             {allTasksOpen && (

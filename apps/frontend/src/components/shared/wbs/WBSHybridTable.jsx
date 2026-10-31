@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, buildOwnerOptions, defaultLogisticianOwner, isRejectedPlanNode, groupQtyFactor, TASK_DURATION_OPTIONS } from './wbsConstants';
+import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, buildOwnerOptions, defaultLogisticianOwner, isRejectedPlanNode, groupQtyFactor, EXEC_STATUS_META, isTaskClosed } from './wbsConstants';
 import AutoResizeTextarea from './AutoResizeTextarea';
-import TaskTimePicker, { DEFAULT_TASK_TIME } from './TaskTimePicker';
+import TaskModal from './TaskModal';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
 import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, ArrowRight, ArrowLeft, Check, Loader2, Calendar, Repeat } from 'lucide-react';
-import { CyclicAlarmEditor, ALARM_INTERVALS, toLocalInput, alarmEndForDeadline } from '../MyTasksModal';
+import { CyclicAlarmEditor } from '../MyTasksModal';
 import { useDevice } from '../../../hooks/useDevice';
 
 // @anchor normalize-lower-text
@@ -234,64 +234,21 @@ function qaSummary(pairs) {
 }
 
 // ── Zadania węzła WBS — treść zakładki „Zadania" w szufladzie ────────────────
-// Pokazuje zadania WSZYSTKICH użytkowników przypięte do węzła (GET /my-tasks/by-wbs-node/:id)
-// i pozwala dopisać nowe (POST /my-tasks z wbsNodeId). Odpowiedzialny domyślnie = autor, ale autor
-// może wskazać innego członka zespołu (zadanie trafia do JEGO MS To Do). Odhaczać, przepisywać
-// i usuwać może odpowiedzialny albo autor — backend sprawdza to samo (findEditable).
-// @anchor wbs-task-option-style — natywna lista <select> w Chrome/Windows ma jasne tło, na którym
-// biały tekst ciemnego motywu był nieczytelny; opcje dostają jawne ciemne tło i jasny tekst.
-const OPTION_STYLE = { backgroundColor: '#0f1520', color: '#e5e7eb' };
-
-// @anchor wbs-task-comment
-// Komentarz w wierszu zadania — lokalny szkic, zapis na blur. Bez prawa edycji tylko tekst.
-function WbsTaskComment({ task, editable, onSave }) {
-    const [draft, setDraft] = useState(task.description || '');
-    useEffect(() => { setDraft(task.description || ''); }, [task.description]);
-    if (!editable) {
-        return <span className="flex-1 min-w-0 text-[14px] text-gray-400 italic break-words whitespace-pre-wrap">{task.description || ''}</span>;
-    }
-    return (
-        <AutoResizeTextarea
-            value={draft}
-            onChange={e => setDraft(e.target.value)}
-            onBlur={() => { const next = normalizeLowerText(draft); setDraft(next); onSave(task, next); }}
-            placeholder="Komentarz…"
-            className="flex-1 min-w-0 px-1.5 py-0.5 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 placeholder-gray-700 focus:outline-none focus:border-blue-500/50"
-        />
-    );
-}
+// Pokazuje zadania WSZYSTKICH użytkowników przypięte do węzła (GET /my-tasks/by-wbs-node/:id).
+// „Dodaj zadanie” i klik w zadanie otwierają wspólny TaskModal (ten sam co w kalendarzu zamówienia)
+// z węzłem ustawionym na ten wiersz. Odhaczać, ustawiać alarm i usuwać może odpowiedzialny albo autor —
+// backend sprawdza to samo (findEditable).
 
 // @anchor wbs-tasks-drawer
 function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     const currentUserId = token ? (() => { try { return JSON.parse(atob(token.split('.')[1])).sub; } catch { return null; } })() : null;
     const [tasks, setTasks] = useState(null);
-    const [title, setTitle] = useState('');
-    const [plannedEnd, setPlannedEnd] = useState('');
-    // @anchor wbs-new-task-time — godzina nowego zadania; ustawiona = wydarzenie w kalendarzu Outlook odpowiedzialnego
-    const [plannedTime, setPlannedTime] = useState(DEFAULT_TASK_TIME);
-    // @anchor wbs-new-task-duration
-    const [plannedDuration, setPlannedDuration] = useState(60);
-    // @anchor wbs-task-assignee
-    const [assigneeId, setAssigneeId] = useState(currentUserId || '');
-    // @anchor wbs-task-team — zespół projektowy zamówienia (GET /my-tasks/project-team/:processNodeId)
-    const [team, setTeam] = useState([]);
-    useEffect(() => {
-        if (!processNodeId) return;
-        fetch(`/api/my-tasks/project-team/${processNodeId}`, { headers: { Authorization: `Bearer ${token}` } })
-            .then(r => r.ok ? r.json() : [])
-            .then(d => setTeam(Array.isArray(d) ? d : []))
-            .catch(() => setTeam([]));
-    }, [processNodeId, token]);
-    const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
     // @anchor wbs-task-alarm-task-id — zadanie z otwartym edytorem alarmu cyklicznego (tylko odpowiedzialny)
     const [alarmTaskId, setAlarmTaskId] = useState(null);
-    // @anchor wbs-new-task-comment — komentarz wpisywany razem z nowym zadaniem (→ description)
-    const [newComment, setNewComment] = useState('');
-    // @anchor wbs-new-task-alarm — alarm cykliczny nowego zadania { start, end, intervalMinutes } | null;
-    // ustawiany po utworzeniu zadania; może go ustawić autor także dla innego odpowiedzialnego (alarm dzwoni u niego)
-    const [newAlarm, setNewAlarm] = useState(null);
+    // @anchor wbs-task-modal — { task } edycja albo { task: null } nowe zadanie tego węzła
+    const [modal, setModal] = useState(null);
 
     const load = useCallback(async () => {
         try {
@@ -305,49 +262,8 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
     }, [wbsNodeId, token]);
     useEffect(() => { load(); }, [load]);
 
-    const add = async (e) => {
-        e.preventDefault();
-        if (!title.trim()) return;
-        setSaving(true);
-        setError(null);
-        try {
-            const body = { title: normalizeLowerText(title), nodeId: processNodeId || null, wbsNodeId };
-            const desc = normalizeLowerText(newComment);
-            if (desc) body.description = desc;
-            if (assigneeId && assigneeId !== currentUserId) body.assigneeUserId = assigneeId;
-            if (plannedEnd) body.plannedEnd = new Date(plannedTime ? `${plannedEnd}T${plannedTime}:00` : plannedEnd).toISOString();
-            if (plannedEnd && plannedTime) body.durationMinutes = Number(plannedDuration);
-            const res = await fetch('/api/my-tasks', {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-            if (!res.ok) throw new Error('Błąd zapisu zadania');
-            const created = await res.json();
-            if (newAlarm && created?.id) {
-                const r = await fetch(`/api/my-tasks/${created.id}/reminders`, {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ start: new Date(newAlarm.start).toISOString(), end: new Date(newAlarm.end).toISOString(), intervalMinutes: newAlarm.intervalMinutes }),
-                });
-                if (!r.ok) setError('Zadanie dodane, ale nie udało się ustawić alarmu cyklicznego');
-            }
-            setTitle('');
-            setNewComment('');
-            setNewAlarm(null);
-            setPlannedEnd('');
-            setPlannedTime(DEFAULT_TASK_TIME);
-            await load();
-            onChanged?.();
-        } catch (err) {
-            setError(err.message || 'Błąd zapisu');
-        } finally {
-            setSaving(false);
-        }
-    };
-
     const toggleDone = async (t) => {
-        const status = t.status === 'DONE' ? 'OPEN' : 'DONE';
+        const status = isTaskClosed(t.status) ? 'TO_DO' : 'DONE';
         setTasks(prev => prev.map(x => x.id === t.id ? { ...x, status } : x));
         await fetch(`/api/my-tasks/${t.id}`, {
             method: 'PATCH',
@@ -357,33 +273,6 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
         onChanged?.();
     };
 
-    const reassign = async (t, userId) => {
-        if (!userId || userId === t.userId) return;
-        const res = await fetch(`/api/my-tasks/${t.id}`, {
-            method: 'PATCH',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ assigneeUserId: userId }),
-        });
-        if (!res.ok) setError('Nie udało się zmienić odpowiedzialnego');
-        await load();
-        onChanged?.();
-    };
-
-    // @anchor wbs-task-save-comment
-    // Komentarz zadania = UserTask.description (trafia też do notatki w MS To Do). Zapis na blur,
-    // tylko gdy treść się zmieniła względem wczytanej z serwera.
-    const saveComment = async (t, value) => {
-        const next = value.trim() || null;
-        if (next === (t.description || null)) return;
-        const res = await fetch(`/api/my-tasks/${t.id}`, {
-            method: 'PATCH',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ description: next }),
-        });
-        if (!res.ok) { setError('Nie udało się zapisać komentarza'); return; }
-        setTasks(prev => prev.map(x => x.id === t.id ? { ...x, description: next } : x));
-    };
-
     const remove = async (t) => {
         setTasks(prev => prev.filter(x => x.id !== t.id));
         await fetch(`/api/my-tasks/${t.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
@@ -391,19 +280,12 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
     };
 
     const who = (u) => [u?.firstName, u?.lastName].filter(Boolean).join(' ') || u?.email || '—';
-    // Zespół projektowy + ja (autor domyślnie odpowiada) + właściciele istniejących zadań
-    // (żeby select pokazał kogoś, kto wypadł z zespołu) — bez duplikatów.
-    const people = (() => {
-        const map = new Map();
-        for (const u of team) if (u?.id) map.set(u.id, u);
-        for (const t of (tasks || [])) if (t.user?.id && !map.has(t.user.id)) map.set(t.user.id, t.user);
-        if (currentUserId && !map.has(currentUserId)) map.set(currentUserId, { id: currentUserId, firstName: 'Ja' });
-        return [...map.values()].sort((a, b) => who(a).localeCompare(who(b), 'pl'));
-    })();
-    // Dwa konta o tym samym imieniu i nazwisku rozróżnia e-mail.
-    const dupNames = new Set(people.map(who).filter((n, i, arr) => arr.indexOf(n) !== i));
-    const personLabel = (u) => dupNames.has(who(u)) && u.email ? `${who(u)} (${u.email})` : who(u);
-    const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+    const fmtWhen = (t) => {
+        if (!t.plannedEnd) return '';
+        const d = new Date(t.plannedEnd);
+        const day = d.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        return t.durationMinutes ? `${day} ${d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}` : day;
+    };
 
     return (
         <div className="flex flex-col gap-2">
@@ -415,39 +297,33 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                 <ul className="flex flex-col">
                     {tasks.map(t => {
                         const mine = t.userId === currentUserId || t.createdById === currentUserId;
-                        const done = t.status === 'DONE';
+                        const done = isTaskClosed(t.status);
                         const overdue = !done && t.plannedEnd && new Date(t.plannedEnd) < new Date();
+                        const meta = EXEC_STATUS_META[t.status === 'OPEN' ? 'TO_DO' : t.status];
                         return (
                             <li key={t.id} className="py-1 border-t border-white/5 first:border-t-0 group/task">
                                 <div className="flex items-center gap-2">
                                 <button
                                     onClick={() => mine && toggleDone(t)}
                                     disabled={!mine}
-                                    title={mine ? (done ? 'Oznacz jako otwarte' : 'Oznacz jako wykonane') : 'Zadanie innej osoby — zmienić może odpowiedzialny lub zlecający'}
+                                    title={mine ? (done ? 'Oznacz jako do wykonania' : 'Oznacz jako wykonane') : 'Zadanie innej osoby — zmienić może odpowiedzialny lub zlecający'}
                                     className={`w-4 h-4 flex-shrink-0 rounded border flex items-center justify-center transition-all ${done ? 'bg-emerald-500/30 border-emerald-400/60 text-emerald-300' : 'border-white/20'} ${mine ? 'hover:border-blue-400' : 'opacity-50 cursor-default'}`}
                                 >
                                     {done && <Check size={11} />}
                                 </button>
-                                <span className={`flex-1 min-w-0 text-[15px] break-words ${done ? 'line-through text-gray-500' : 'text-gray-200'}`}>{t.title}</span>
-                                <WbsTaskComment task={t} editable={mine} onSave={saveComment} />
+                                <button
+                                    onClick={() => setModal({ task: t })}
+                                    title="Otwórz zadanie"
+                                    className={`flex-1 min-w-0 text-left text-[15px] break-words hover:underline ${done ? 'line-through text-gray-500' : 'text-gray-200'}`}
+                                >
+                                    {t.title}
+                                    {t.description && <span className="block text-[13px] text-gray-500 italic whitespace-pre-wrap no-underline">{t.description}</span>}
+                                </button>
+                                {meta && <span className={`text-[12px] flex-shrink-0 ${meta.color}`}>{meta.label}</span>}
                                 {t.plannedEnd && (
-                                    <span className={`text-[13px] flex-shrink-0 ${overdue ? 'text-red-400' : 'text-gray-500'}`}>{fmtDate(t.plannedEnd)}</span>
+                                    <span className={`text-[13px] flex-shrink-0 ${overdue ? 'text-red-400' : 'text-gray-500'}`}>{fmtWhen(t)}</span>
                                 )}
-                                {t.createdById && t.createdById !== t.userId && (
-                                    <span className="text-[12px] text-gray-600 flex-shrink-0 truncate max-w-[10rem]" title="Zlecający">od: {who(t.createdBy)}</span>
-                                )}
-                                {mine ? (
-                                    <select
-                                        value={t.userId}
-                                        onChange={e => reassign(t, e.target.value)}
-                                        title="Odpowiedzialny — zadanie jest w jego MS To Do"
-                                        className="w-60 flex-shrink-0 px-1.5 py-0.5 rounded bg-black/20 border border-white/10 text-[13px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
-                                    >
-                                        {people.map(u => <option key={u.id} value={u.id} style={OPTION_STYLE}>{personLabel(u)}</option>)}
-                                    </select>
-                                ) : (
-                                    <span className="text-[13px] text-gray-500 flex-shrink-0 w-60 truncate text-right" title={t.user?.email}>{who(t.user)}</span>
-                                )}
+                                <span className="text-[13px] text-gray-500 flex-shrink-0 w-48 truncate text-right" title={t.createdById && t.createdById !== t.userId ? `Zlecił: ${who(t.createdBy)}` : t.user?.email}>{who(t.user)}</span>
                                 {mine ? (
                                     <button
                                         onClick={() => setAlarmTaskId(id => id === t.id ? null : t.id)}
@@ -473,102 +349,25 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                     })}
                 </ul>
             )}
-            <form onSubmit={add} className="flex flex-col gap-2 pt-1">
-                <div className="flex items-center gap-2">
-                <input
-                    value={title}
-                    onChange={e => setTitle(e.target.value)}
-                    placeholder="Nowe zadanie…"
-                    className="flex-1 min-w-0 px-2 py-1 rounded bg-black/20 border border-white/10 text-[15px] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
-                />
-                <AutoResizeTextarea
-                    value={newComment}
-                    onChange={e => setNewComment(e.target.value)}
-                    rows={1}
-                    placeholder="Komentarz… (Enter = nowa linia, np. lista „- punkt”)"
-                    className="flex-1 min-w-0 px-2 py-1 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 placeholder-gray-700 focus:outline-none focus:border-blue-500/50"
-                />
-                <select
-                    value={assigneeId}
-                    onChange={e => setAssigneeId(e.target.value)}
-                    title="Odpowiedzialny — zadanie trafi do jego kalendarza i MS To Do"
-                    className="w-60 px-1.5 py-1 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
-                >
-                    {people.map(u => <option key={u.id} value={u.id} style={OPTION_STYLE}>{u.id === currentUserId ? `${personLabel(u)} (ja)` : personLabel(u)}</option>)}
-                </select>
-                <label className="flex items-center gap-1 text-gray-500" title="Termin (opcjonalnie)">
-                    <Calendar size={12} />
-                    <input
-                        type="date"
-                        value={plannedEnd}
-                        onChange={e => {
-                            const v = e.target.value;
-                            setPlannedEnd(v);
-                            // otwarty alarm idzie za terminem — koniec serii = nowa data zadania
-                            if (v) setNewAlarm(a => a ? { ...a, end: alarmEndForDeadline(v) } : a);
-                        }}
-                        className="px-1.5 py-1 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
-                    />
-                </label>
-                {plannedEnd && (
-                    <TaskTimePicker
-                        value={plannedTime}
-                        onChange={setPlannedTime}
-                        optionStyle={OPTION_STYLE}
-                        title="Godzina (opcjonalnie) — zadanie trafi jako wydarzenie do kalendarza Outlook odpowiedzialnego"
-                        className="px-1.5 py-1 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
-                    />
-                )}
-                {plannedEnd && plannedTime && (
-                    <select
-                        value={plannedDuration}
-                        onChange={e => setPlannedDuration(Number(e.target.value))}
-                        title="Czas trwania wydarzenia w kalendarzu Outlook"
-                        className="px-1.5 py-1 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
-                    >
-                        {TASK_DURATION_OPTIONS.map(([v, l]) => <option key={v} value={v} style={OPTION_STYLE}>{l}</option>)}
-                    </select>
-                )}
+            <div className="pt-1">
                 <button
-                    type="button"
-                    onClick={() => setNewAlarm(a => a ? null : { start: toLocalInput(new Date()), end: alarmEndForDeadline(plannedEnd), intervalMinutes: 60 })}
-                    title="Alarm cykliczny — przypomnienia dostanie odpowiedzialny"
-                    className={`flex-shrink-0 w-7 h-7 rounded border flex items-center justify-center transition-all disabled:opacity-30 ${newAlarm ? 'bg-indigo-500/15 border-indigo-500/30 text-indigo-300' : 'border-white/10 text-gray-500 hover:text-indigo-300'}`}
+                    onClick={() => setModal({ task: null })}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-blue-600/80 hover:bg-blue-600 text-white text-[14px] transition-all"
                 >
-                    <Repeat size={12} />
+                    <Plus size={12} /> Dodaj zadanie
                 </button>
-                <button
-                    type="submit"
-                    disabled={saving || !title.trim()}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-blue-600/80 hover:bg-blue-600 disabled:opacity-40 text-white text-[14px] transition-all"
-                >
-                    {saving ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />} Dodaj
-                </button>
-                </div>
-                {newAlarm && (
-                    <div className="flex items-center gap-2 flex-wrap justify-end text-[13px] text-gray-400">
-                        <Repeat size={12} className="text-indigo-300" /> Alarm cykliczny
-                        <label className="flex items-center gap-1">od
-                            <input type="datetime-local" value={newAlarm.start} onChange={e => setNewAlarm(a => ({ ...a, start: e.target.value }))}
-                                className="px-1.5 py-0.5 rounded bg-black/20 border border-white/10 text-[13px] text-gray-300 [color-scheme:dark] focus:outline-none focus:border-indigo-500/50" />
-                        </label>
-                        <label className="flex items-center gap-1">do
-                            <input type="datetime-local" value={newAlarm.end} onChange={e => setNewAlarm(a => ({ ...a, end: e.target.value }))}
-                                className="px-1.5 py-0.5 rounded bg-black/20 border border-white/10 text-[13px] text-gray-300 [color-scheme:dark] focus:outline-none focus:border-indigo-500/50" />
-                        </label>
-                        {ALARM_INTERVALS.map(opt => (
-                            <button key={opt.minutes} type="button" onClick={() => setNewAlarm(a => ({ ...a, intervalMinutes: opt.minutes }))}
-                                className={`px-2 py-0.5 rounded border text-[12px] transition-all ${newAlarm.intervalMinutes === opt.minutes ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-200' : 'border-white/10 text-gray-400 hover:bg-white/[0.08]'}`}>
-                                co {opt.label}
-                            </button>
-                        ))}
-                    </div>
-                )}
-            </form>
-            {team.length === 0 && (
-                <p className="text-[12px] text-gray-600">Zespół projektowy zamówienia jest pusty — zadanie możesz przypisać tylko sobie. Osoby dodasz w uprawnieniach węzła lub przyciskiem „Zapisz do zespołu" przy kontaktach zamówienia.</p>
-            )}
+            </div>
             {error && <p className="text-[13px] text-red-400">{error}</p>}
+            {modal && (
+                <TaskModal
+                    task={modal.task}
+                    processNodeId={processNodeId}
+                    defaults={{ wbsNodeId }}
+                    lockNode={!modal.task}
+                    onClose={() => setModal(null)}
+                    onSaved={() => { setModal(null); load(); onChanged?.(); }}
+                />
+            )}
         </div>
     );
 }

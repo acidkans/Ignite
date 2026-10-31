@@ -513,16 +513,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | DRAWER_STATUS_COLOR / drawerStatusKey / qaSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor drawer-status-color |
 | ui-stan | taskSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-summary |
 | ui-funkcja | loadTaskSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor load-task-summary |
-| ui-stan | assigneeId (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-assignee |
-| ui-sekcja | WbsTaskComment | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-comment |
-| ui-funkcja | saveComment (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-save-comment |
 | ui-funkcja | openDatePicker | apps/frontend/src/components/shared/SubtaskModal.jsx | @anchor open-date-picker |
 | ui-funkcja | normalizeLowerText | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor normalize-lower-text |
 | ui-stan | alarmTaskId (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-alarm-task-id |
-| ui-stan | newComment (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-new-task-comment |
-| ui-stan | newAlarm (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-new-task-alarm |
-| ui-stan | plannedTime (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-new-task-time |
-| ui-stan | plannedDuration (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-new-task-duration |
+| ui-stan | modal (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-modal |
 | ui-stala | wbs-drawer-focus (WBS_BRANCH_CSS) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-drawer-focus-css |
 | ui-funkcja | openMyTasksOnLoad (App.handleLogin) | apps/frontend/src/App.jsx | @anchor open-my-tasks-after-login |
 | back-funkcja | createReminder — termin = koniec serii | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-cyclic-end-as-deadline |
@@ -537,8 +531,6 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | fetchProjectTasks | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor fetch-project-tasks-all |
 | ui-funkcja | strategyTasksQaPdfExport (moduł) | apps/frontend/src/utils/strategyTasksQaPdfExport.js | @anchor strategy-tasks-qa-pdf-export |
 | ui-przycisk | Strategia + zadania + Q&A | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor strategy-tasks-qa-pdf-button |
-| ui-stan | team (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-team |
-| ui-stala | OPTION_STYLE | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-option-style |
 | ui-stan | projectTasks | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-project-tasks |
 | ui-funkcja | fetchProjectTasks | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-fetch-project-tasks |
 | ui-sekcja | pasek akcji pod nazwą węzła WBS | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-node-action-bar |
@@ -1256,6 +1248,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | scheduleData | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor schedule-data |
 | back-funkcja | UserTasksService.activateMigratedTask | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-activate-migrated-task |
 | back-funkcja | fromTodoStatus | apps/backend/src/user-tasks/task-sync.service.ts | @anchor from-todo-status |
+| back-funkcja | UserTasksService.listTemplates | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-templates |
+| back-funkcja | UserTasksService.saveTemplate | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-save-template |
+| back-endpoint | GET /my-tasks/templates | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-templates-endpoint |
+| back-endpoint | POST /my-tasks/templates | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-save-template-endpoint |
 | back-serwis | MsCalendarService | apps/backend/src/ms-todo/ms-calendar.service.ts | @anchor ms-calendar-service |
 | back-typ | MsCalendarEventInput | apps/backend/src/ms-todo/ms-calendar.service.ts | @anchor ms-calendar-event-input |
 | back-funkcja | toWarsawLocal | apps/backend/src/ms-todo/ms-calendar.service.ts | @anchor to-warsaw-local |
@@ -1288,11 +1284,18 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | DRAWER.accent.task | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor drawer-accent-task |
 | ui-stan | colWidths (localStorage wbs-hybrid-col-widths) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-col-widths-storage |
 | ui-funkcja | startColResize | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor start-col-resize |
-| ui-modal | UserTaskEditModal | apps/frontend/src/components/shared/wbs/UserTaskEditModal.jsx | @anchor user-task-edit-modal |
-| ui-stan | time (UserTaskEditModal) | apps/frontend/src/components/shared/wbs/UserTaskEditModal.jsx | @anchor user-task-edit-time |
-| ui-stan | description (UserTaskEditModal) | apps/frontend/src/components/shared/wbs/UserTaskEditModal.jsx | @anchor user-task-edit-description |
-| ui-stan | duration (UserTaskEditModal) | apps/frontend/src/components/shared/wbs/UserTaskEditModal.jsx | @anchor user-task-edit-duration |
 | ui-dropdown | TaskTimePicker | apps/frontend/src/components/shared/wbs/TaskTimePicker.jsx | @anchor task-time-picker |
+| ui-modal | TaskModal | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-modal |
+| ui-funkcja | people (TaskModal) | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-modal-people |
+| ui-funkcja | initialWhen (TaskModal) | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-modal-initial-when |
+| ui-funkcja | wbsNodeOptions | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor wbs-node-options |
+| ui-stala | TASK_VISIBILITY_OPTIONS | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-visibility-options |
+| ui-stan | description (TaskModal) | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-modal-description |
+| ui-stan | wbsNodeId (TaskModal) | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-modal-wbs-node-id |
+| ui-stan | saveAsTemplate (TaskModal) | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-modal-save-as-template |
+| ui-stala | TASK_STATUS_CODES | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor task-status-codes |
+| ui-stala | CLOSED_TASK_STATUS_CODES | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor closed-task-status-codes |
+| ui-funkcja | isTaskClosed | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor is-task-closed |
 | ui-stala | DEFAULT_TASK_TIME | apps/frontend/src/components/shared/wbs/TaskTimePicker.jsx | @anchor default-task-time |
 | ui-funkcja | snapTaskTime | apps/frontend/src/components/shared/wbs/TaskTimePicker.jsx | @anchor snap-task-time |
 | ui-funkcja | splitDateTime (SubtaskModal) | apps/frontend/src/components/shared/SubtaskModal.jsx | @anchor subtask-split-date-time |
@@ -1301,6 +1304,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | formData.endTime (SubtaskModal) | apps/frontend/src/components/shared/SubtaskModal.jsx | @anchor subtask-end-time |
 | ui-stala | TASK_DURATION_OPTIONS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor task-duration-options |
 | ui-stan | editUserTask | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-edit-user-task |
+| ui-stan | newTaskDate | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-new-task-date |
 | ui-modal | OrderTeamModal | apps/frontend/src/components/shared/OrderTeamModal.jsx | @anchor order-team-modal |
 | ui-stan | teamStep (AddNodeModal) | apps/frontend/src/components/shared/AddNodeModal.jsx | @anchor add-node-team-step |
 | ui-funkcja | createNode (AddNodeModal) | apps/frontend/src/components/shared/AddNodeModal.jsx | @anchor add-node-create |

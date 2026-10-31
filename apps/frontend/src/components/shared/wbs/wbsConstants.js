@@ -644,6 +644,14 @@ export const EXEC_STATUS_META = {
   CANCELLED:   { label: 'Odwołane',     montaz: 'Montaż odwołany', color: 'text-red-400' },
 };
 
+// @anchor task-status-codes — statusy zadania (UserTask): podzbiór osi wykonania, te same etykiety
+// i kolory co `EXEC_STATUS_META`. Musi się zgadzać z `TASK_STATUSES` w user-tasks.service.ts.
+export const TASK_STATUS_CODES = ['TO_DO', 'IN_PROGRESS', 'ON_HOLD', 'DONE', 'CANCELLED'];
+// @anchor closed-task-status-codes — zamknięte = wykonane albo odwołane (nie liczą się jako przeterminowane)
+export const CLOSED_TASK_STATUS_CODES = ['DONE', 'CANCELLED'];
+// @anchor is-task-closed — `OPEN` to stary kod otwartego zadania (dane offline sprzed migracji)
+export const isTaskClosed = (status) => CLOSED_TASK_STATUS_CODES.includes(status);
+
 // @anchor purchase-leaf-types — liście, które mają DROGĘ TOWARU: zamawia się je, przyjeżdżają,
 // wydaje się je z magazynu i fakturuje. Wyłącznie materiał i sprzęt — bo tylko tam „kupione"
 // jest innym stanem niż „zużyte" i po drodze jest co śledzić.
