@@ -188,14 +188,14 @@ export class UserTasksService {
   }
 
   // @anchor user-tasks-list-for-wbs-node
-  // Zadania WSZYSTKICH użytkowników przypięte do węzła WBS (szuflada „Zadania" w Planowanie/WBS).
-  // Otwarte najpierw (po plannedEnd), potem wykonane. Edycja dalej tylko przez właściciela (update/softDelete filtrują po userId).
-  async listForWbsNode(wbsNodeId: string) {
+  // Zadania przypięte do węzła WBS (szuflada „Zadania" w Planowanie/WBS), widoczne wg `visibilityWhere` oglądającego.
+  // Otwarte najpierw, w grupie wg Od; `plannedStart` potrzebny szufladzie (Od–Do) i TaskModal przy edycji z listy.
+  async listForWbsNode(wbsNodeId: string, viewer?: TaskViewer) {
     const tasks = await this.prisma.userTask.findMany({
-      where: { wbsNodeId, deletedAt: null },
-      orderBy: [{ status: 'desc' }, { plannedEnd: 'asc' }, { createdAt: 'asc' }],
+      where: { wbsNodeId, deletedAt: null, ...visibilityWhere(viewer) },
+      orderBy: [{ plannedEnd: 'asc' }, { createdAt: 'asc' }],
       select: {
-        id: true, title: true, description: true, status: true, plannedEnd: true, createdAt: true, userId: true, createdById: true,
+        id: true, title: true, description: true, status: true, plannedStart: true, plannedEnd: true, createdAt: true, userId: true, createdById: true,
         // pola wspólnego TaskModal (edycja z listy zadań węzła)
         nodeId: true, wbsNodeId: true, durationMinutes: true, msEventId: true, visibilityType: true, category: true, phase: true,
         wbsNode: { select: { id: true, name: true } },
@@ -205,7 +205,9 @@ export class UserTasksService {
         reminders: { where: { sentAt: null, recurIntervalMinutes: { not: null } }, select: { id: true } },
       },
     });
-    return tasks;
+    // otwarte najpierw, w każdej grupie wg Od (taskStart)
+    const closed = (t: { status: string }) => (CLOSED_TASK_STATUSES as string[]).includes(t.status) ? 1 : 0;
+    return tasks.sort((a, b) => closed(a) - closed(b) || (taskStart(a)?.getTime() ?? 0) - (taskStart(b)?.getTime() ?? 0));
   }
 
   // @anchor user-tasks-list-for-project
@@ -275,9 +277,9 @@ export class UserTasksService {
   // @anchor user-tasks-wbs-summary
   // Liczniki zadań (wszystkich użytkowników) per węzeł WBS projektu — kolor ikony „Zadania" w tabeli WBS
   // bez otwierania szuflady. overdue = otwarte z plannedEnd w przeszłości.
-  async wbsSummaryForProcessNode(processNodeId: string) {
+  async wbsSummaryForProcessNode(processNodeId: string, viewer?: TaskViewer) {
     const tasks = await this.prisma.userTask.findMany({
-      where: { deletedAt: null, wbsNodeId: { not: null }, wbsNode: { nodeId: processNodeId } },
+      where: { deletedAt: null, wbsNodeId: { not: null }, wbsNode: { nodeId: processNodeId }, ...visibilityWhere(viewer) },
       select: { wbsNodeId: true, status: true, plannedEnd: true },
     });
     const now = new Date();

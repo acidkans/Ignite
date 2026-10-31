@@ -20,8 +20,8 @@ export class UserTasksController {
 
   // @anchor user-tasks-by-wbs-node-endpoint
   @Get('by-wbs-node/:wbsNodeId')
-  listForWbsNode(@Param('wbsNodeId') wbsNodeId: string) {
-    return this.userTasks.listForWbsNode(wbsNodeId);
+  listForWbsNode(@Req() req: any, @Param('wbsNodeId') wbsNodeId: string) {
+    return this.userTasks.listForWbsNode(wbsNodeId, req.user);
   }
 
   // @anchor user-tasks-project-endpoint
@@ -38,8 +38,8 @@ export class UserTasksController {
 
   // @anchor user-tasks-wbs-summary-endpoint
   @Get('wbs-summary/:processNodeId')
-  wbsSummary(@Param('processNodeId') processNodeId: string) {
-    return this.userTasks.wbsSummaryForProcessNode(processNodeId);
+  wbsSummary(@Req() req: any, @Param('processNodeId') processNodeId: string) {
+    return this.userTasks.wbsSummaryForProcessNode(processNodeId, req.user);
   }
 
   // @anchor user-tasks-templates-endpoint

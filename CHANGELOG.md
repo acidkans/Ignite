@@ -1,3 +1,9 @@
+## 2026-10-31 — fix(zadania): etap 7 ujednolicenia - lista zadan wezla WBS zwraca Od (plannedStart) i respektuje widocznosc
+
+### architektura / API
+- `back-endpoint` `GET /my-tasks/by-wbs-node/:wbsNodeId` — zwraca `plannedStart` (bez niego szuflada pokazywała złe Od–Do, a TaskModal otwarty z listy brał Do jako Od i zapis przesuwał zadanie); filtr widoczności `visibilityWhere` jak w kalendarzu; sortowanie: otwarte najpierw, potem wg Od
+- `back-endpoint` `GET /my-tasks/wbs-summary/:processNodeId` — liczniki na ikonie Zadania też wg widoczności oglądającego
+
 ## 2026-10-31 — feat(zadania): etap 6 ujednolicenia - kalendarz zamówienia tylko z UserTask, wszystkie statusy, kolor wg statusu, godzina na kafelku
 
 ### architektura / API
