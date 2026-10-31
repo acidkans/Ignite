@@ -1240,6 +1240,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | UserTasksService.deleteCalendarEvent | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-delete-calendar-event |
 | back-funkcja | toTodoDue | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor to-todo-due |
 | back-funkcja | withWarsawDay | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor with-warsaw-day |
+| back-funkcja | toTodoBody | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor to-todo-body |
 | back-serwis | MsCalendarService | apps/backend/src/ms-todo/ms-calendar.service.ts | @anchor ms-calendar-service |
 | back-typ | MsCalendarEventInput | apps/backend/src/ms-todo/ms-calendar.service.ts | @anchor ms-calendar-event-input |
 | back-funkcja | toWarsawLocal | apps/backend/src/ms-todo/ms-calendar.service.ts | @anchor to-warsaw-local |
@@ -1274,7 +1275,15 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | startColResize | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor start-col-resize |
 | ui-modal | UserTaskEditModal | apps/frontend/src/components/shared/wbs/UserTaskEditModal.jsx | @anchor user-task-edit-modal |
 | ui-stan | time (UserTaskEditModal) | apps/frontend/src/components/shared/wbs/UserTaskEditModal.jsx | @anchor user-task-edit-time |
+| ui-stan | description (UserTaskEditModal) | apps/frontend/src/components/shared/wbs/UserTaskEditModal.jsx | @anchor user-task-edit-description |
 | ui-stan | duration (UserTaskEditModal) | apps/frontend/src/components/shared/wbs/UserTaskEditModal.jsx | @anchor user-task-edit-duration |
+| ui-dropdown | TaskTimePicker | apps/frontend/src/components/shared/wbs/TaskTimePicker.jsx | @anchor task-time-picker |
+| ui-stala | DEFAULT_TASK_TIME | apps/frontend/src/components/shared/wbs/TaskTimePicker.jsx | @anchor default-task-time |
+| ui-funkcja | snapTaskTime | apps/frontend/src/components/shared/wbs/TaskTimePicker.jsx | @anchor snap-task-time |
+| ui-funkcja | splitDateTime (SubtaskModal) | apps/frontend/src/components/shared/SubtaskModal.jsx | @anchor subtask-split-date-time |
+| ui-funkcja | joinDateTime (SubtaskModal) | apps/frontend/src/components/shared/SubtaskModal.jsx | @anchor subtask-join-date-time |
+| ui-stan | formData.startTime (SubtaskModal) | apps/frontend/src/components/shared/SubtaskModal.jsx | @anchor subtask-start-time |
+| ui-stan | formData.endTime (SubtaskModal) | apps/frontend/src/components/shared/SubtaskModal.jsx | @anchor subtask-end-time |
 | ui-stala | TASK_DURATION_OPTIONS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor task-duration-options |
 | ui-stan | editUserTask | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-edit-user-task |
 | ui-modal | OrderTeamModal | apps/frontend/src/components/shared/OrderTeamModal.jsx | @anchor order-team-modal |

@@ -19,6 +19,7 @@ export interface MsTodoTask {
   importance: string;
   reminderDateTime?: { dateTime: string; timeZone: string };
   dueDateTime?: { dateTime: string; timeZone: string };
+  body?: { content: string; contentType: string };
   createdDateTime: string;
   lastModifiedDateTime: string;
   '@odata.etag'?: string;

@@ -2,6 +2,28 @@ import { useState, useEffect } from 'react';
 import { X, Save, FileText, ChevronDown, MapPin, Info } from 'lucide-react';
 import { API_URL } from '../../config';
 import SchematicViewer from './SchematicViewer';
+import TaskTimePicker, { DEFAULT_TASK_TIME, snapTaskTime } from './wbs/TaskTimePicker';
+
+const SUBTASK_OPTION_STYLE = { backgroundColor: '#0f1520', color: '#e5e7eb' };
+const pad2 = (n) => String(n).padStart(2, '0');
+
+// @anchor subtask-split-date-time
+// Termin podzadania → { date, time } w czasie lokalnym. Stare podzadania zapisywane jako sama data
+// mają północ UTC, a klik w dzień kalendarza daje północ lokalną — obie traktujemy jako „bez godziny”
+// i proponujemy domyślne 8:00.
+const splitDateTime = (iso) => {
+    if (!iso) return { date: '', time: DEFAULT_TASK_TIME };
+    const d = new Date(iso);
+    if (String(iso).length <= 10 || d.toISOString().endsWith('T00:00:00.000Z')) {
+        return { date: new Date(iso).toISOString().slice(0, 10), time: DEFAULT_TASK_TIME };
+    }
+    const date = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    if (d.getHours() === 0 && d.getMinutes() === 0) return { date, time: DEFAULT_TASK_TIME };
+    return { date, time: snapTaskTime(`${pad2(d.getHours())}:${pad2(d.getMinutes())}`) };
+};
+
+// @anchor subtask-join-date-time — data + godzina → ISO; bez godziny zostaje sama data jak dotąd
+const joinDateTime = (date, time) => (date ? (time ? new Date(`${date}T${time}:00`).toISOString() : date) : '');
 
 // @anchor open-date-picker
 // Klik w dowolne miejsce pola daty otwiera kalendarz (domyślnie tylko ikona go otwiera).
@@ -19,8 +41,12 @@ export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSu
         status: subtask?.status || 'NEW',
         visibilityType: subtask?.visibilityType || 'ALL',
         assignedUserId: subtask?.assignedUserId || '',
-        plannedStart: subtask?.plannedStart ? new Date(subtask.plannedStart).toISOString().split('T')[0] : '',
-        plannedEnd: subtask?.plannedEnd ? new Date(subtask.plannedEnd).toISOString().split('T')[0] : '',
+        plannedStart: splitDateTime(subtask?.plannedStart).date,
+        plannedEnd: splitDateTime(subtask?.plannedEnd).date,
+        // @anchor subtask-start-time — godzina rozpoczęcia (domyślnie 8:00, co 30 min)
+        startTime: splitDateTime(subtask?.plannedStart).time,
+        // @anchor subtask-end-time
+        endTime: splitDateTime(subtask?.plannedEnd).time,
         saveAsTemplate: false
     });
 
@@ -65,7 +91,8 @@ export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSu
             const url = isEdit ? `${API_URL}/subtasks/${subtask.id}` : `${API_URL}/subtasks`;
             const method = isEdit ? 'PATCH' : 'POST';
 
-            const payload = { ...formData, nodeId, versionId };
+            const { startTime, endTime, ...rest } = formData;
+            const payload = { ...rest, plannedStart: joinDateTime(rest.plannedStart, startTime), plannedEnd: joinDateTime(rest.plannedEnd, endTime), nodeId, versionId };
             if (!payload.assignedUserId) payload.assignedUserId = null;
             if (isEdit) {
                 delete payload.saveAsTemplate;
@@ -172,12 +199,12 @@ export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSu
                         </div>
 
                         <div className="px-4 py-4 bg-white/[0.05] border-b border-white/5">
-                            <label className="block text-xs font-bold text-gray-400 mb-2 uppercase tracking-tight">Opis (opcjonalnie)</label>
+                            <label className="block text-xs font-bold text-gray-400 mb-2 uppercase tracking-tight">Komentarz (opcjonalnie)</label>
                             <textarea
                                 value={formData.description}
                                 onChange={e => setFormData({ ...formData, description: e.target.value })}
                                 className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-all min-h-[100px] resize-none"
-                                placeholder="Dodaj więcej szczegółów..."
+                                placeholder="Np. lista: - punkt (Enter = nowa linia)"
                             />
                         </div>
 
@@ -229,6 +256,10 @@ export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSu
                                     onClick={openDatePicker}
                                     className="w-full cursor-pointer [color-scheme:dark] bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-all font-mono text-sm"
                                 />
+                                <div className="mt-2 flex items-center gap-2">
+                                    <span className="text-[11px] text-gray-500 uppercase tracking-tight">Godzina</span>
+                                    <TaskTimePicker value={formData.startTime} onChange={v => setFormData(prev => ({ ...prev, startTime: v }))} disabled={!formData.plannedStart} optionStyle={SUBTASK_OPTION_STYLE} className="flex-1 [color-scheme:dark] bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500 transition-all font-mono text-sm" />
+                                </div>
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-gray-400 mb-2 uppercase tracking-tight">Data zakończenia</label>
@@ -239,6 +270,10 @@ export default function SubtaskModal({ nodeId, versionId, subtask, onClose, onSu
                                     onClick={openDatePicker}
                                     className="w-full cursor-pointer [color-scheme:dark] bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-all font-mono text-sm"
                                 />
+                                <div className="mt-2 flex items-center gap-2">
+                                    <span className="text-[11px] text-gray-500 uppercase tracking-tight">Godzina</span>
+                                    <TaskTimePicker value={formData.endTime} onChange={v => setFormData(prev => ({ ...prev, endTime: v }))} disabled={!formData.plannedEnd} optionStyle={SUBTASK_OPTION_STYLE} className="flex-1 [color-scheme:dark] bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500 transition-all font-mono text-sm" />
+                                </div>
                             </div>
                         </div>
 

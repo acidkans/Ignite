@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MsTodoService, MsTodoList, MsTodoTask } from '../ms-todo/ms-todo.service';
-import { UserTasksService, toTodoDue, withWarsawDay } from './user-tasks.service';
+import { UserTasksService, toTodoDue, toTodoBody, withWarsawDay } from './user-tasks.service';
 
 // @anchor task-sync-service
 @Injectable()
@@ -91,6 +91,8 @@ export class TaskSyncService {
       let plannedEnd = task.dueDateTime?.dateTime ? new Date(task.dueDateTime.dateTime) : null;
       const status = task.status === 'completed' ? 'DONE' : 'OPEN';
       const msEtag = (task as any)['@odata.etag'] ?? null;
+      // Notatka z To Do = komentarz zadania (nowe linie zostają, CRLF z aplikacji To Do → LF).
+      const description = task.body?.content?.replace(/\r\n/g, '\n').trim() || null;
 
       const existing = await this.prisma.userTask.findUnique({ where: { msToDoId: task.id } });
       // To Do zna tylko datę — zadanie z godziną zachowuje swoją godzinę, zmienia się najwyżej dzień.
@@ -108,6 +110,7 @@ export class TaskSyncService {
             where: { id: existing.id },
             data: {
               title: task.title,
+              description,
               status,
               plannedEnd,
               msEtag,
@@ -119,7 +122,7 @@ export class TaskSyncService {
             },
           });
           await this.userTasks.syncReminderForTask(updated.id, userId, updated.plannedEnd);
-          const moved = (existing.plannedEnd?.getTime() ?? null) !== (plannedEnd?.getTime() ?? null) || existing.title !== task.title;
+          const moved = (existing.plannedEnd?.getTime() ?? null) !== (plannedEnd?.getTime() ?? null) || existing.title !== task.title || (existing.description ?? null) !== description;
           if (moved && (existing.msEventId || existing.durationMinutes)) {
             await this.userTasks.syncCalendarEvent(updated.id);
           }
@@ -133,6 +136,7 @@ export class TaskSyncService {
             userId,
             createdById: userId,
             title: task.title,
+            description,
             status,
             plannedEnd,
             msToDoId: task.id,
@@ -178,6 +182,7 @@ export class TaskSyncService {
       const patch: any = {
         title: task.title,
         status: task.status === 'DONE' ? 'completed' : 'notStarted',
+        body: toTodoBody(task.description),
       };
       if (task.plannedEnd) {
         patch.dueDateTime = toTodoDue(task.plannedEnd as Date);

@@ -115,12 +115,19 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
         } catch { refreshUserTasks(); }
     };
 
-    // @anchor tasks-calendar-user-task-reschedule — przełożenie UserTask przez drag na inny dzień
+    // @anchor tasks-calendar-user-task-reschedule — przełożenie UserTask przez drag na inny dzień.
+    // Zadanie z godziną (durationMinutes) zachowuje godzinę — inaczej wydarzenie w Outlooku skakałoby na 12:00.
     const rescheduleUserTask = async (taskId, date) => {
         const y = date.getFullYear();
         const m = String(date.getMonth() + 1).padStart(2, '0');
         const d = String(date.getDate()).padStart(2, '0');
-        const endStr = `${y}-${m}-${d}T12:00:00`;
+        const task = [...userTasks, ...projectTasks].find(t => t.id === taskId);
+        let hhmm = '12:00';
+        if (task?.durationMinutes && task.plannedEnd) {
+            const prev = new Date(task.plannedEnd);
+            hhmm = `${String(prev.getHours()).padStart(2, '0')}:${String(prev.getMinutes()).padStart(2, '0')}`;
+        }
+        const endStr = `${y}-${m}-${d}T${hhmm}:00`;
         setUserTasks(prev => prev.map(t => t.id === taskId ? { ...t, plannedEnd: endStr } : t));
         setProjectTasks(prev => prev.map(t => t.id === taskId ? { ...t, plannedEnd: endStr } : t));
         try {

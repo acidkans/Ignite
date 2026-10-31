@@ -11,6 +11,11 @@ const IGNITE_LIST_NAME = 'Ignite';
 /// Pełne ISO w UTC przesuwało dzień dla godzin blisko północy (np. 00:30 PL = 23:30 UTC dnia wcześniej).
 export const toTodoDue = (d: Date) => ({ dateTime: `${toWarsawLocal(d).slice(0, 10)}T00:00:00`, timeZone: 'UTC' });
 
+// @anchor to-todo-body
+/// Komentarz zadania (`description`) jako notatka w MS To Do — zwykły tekst, więc nowe linie i punktatory
+/// („•", „-") przechodzą 1:1. Pusty komentarz czyści notatkę.
+export const toTodoBody = (description: string | null | undefined) => ({ content: description || '', contentType: 'text' });
+
 // @anchor with-warsaw-day
 /// Ta sama godzina (czas polski) przeniesiona na inny dzień 'RRRR-MM-DD' — termin z To Do niesie
 /// tylko datę, a zadanie z godziną (`durationMinutes`) nie może jej przy synchronizacji zgubić.
@@ -336,6 +341,7 @@ export class UserTasksService {
       if (!listId) return;
 
       const payload: any = { title: task.title, status: task.status === 'DONE' ? 'completed' : 'notStarted' };
+      if (task.description) payload.body = toTodoBody(task.description);
       if (task.plannedEnd) {
         payload.dueDateTime = toTodoDue(task.plannedEnd as Date);
       }
@@ -364,6 +370,7 @@ export class UserTasksService {
 
       const patch: any = {};
       if (dto.title !== undefined) patch.title = dto.title;
+      if (dto.description !== undefined) patch.body = toTodoBody(task.description);
       if (dto.status !== undefined) patch.status = dto.status === 'DONE' ? 'completed' : 'notStarted';
       if ('plannedEnd' in dto) {
         patch.dueDateTime = task.plannedEnd

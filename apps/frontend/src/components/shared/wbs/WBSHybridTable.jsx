@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, buildOwnerOptions, defaultLogisticianOwner, isRejectedPlanNode, groupQtyFactor, TASK_DURATION_OPTIONS } from './wbsConstants';
 import AutoResizeTextarea from './AutoResizeTextarea';
+import TaskTimePicker, { DEFAULT_TASK_TIME } from './TaskTimePicker';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
 import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, ArrowRight, ArrowLeft, Check, Loader2, Calendar, Repeat } from 'lucide-react';
@@ -268,7 +269,7 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
     const [title, setTitle] = useState('');
     const [plannedEnd, setPlannedEnd] = useState('');
     // @anchor wbs-new-task-time — godzina nowego zadania; ustawiona = wydarzenie w kalendarzu Outlook odpowiedzialnego
-    const [plannedTime, setPlannedTime] = useState('');
+    const [plannedTime, setPlannedTime] = useState(DEFAULT_TASK_TIME);
     // @anchor wbs-new-task-duration
     const [plannedDuration, setPlannedDuration] = useState(60);
     // @anchor wbs-task-assignee
@@ -335,7 +336,7 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
             setNewComment('');
             setNewAlarm(null);
             setPlannedEnd('');
-            setPlannedTime('');
+            setPlannedTime(DEFAULT_TASK_TIME);
             await load();
             onChanged?.();
         } catch (err) {
@@ -480,10 +481,11 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                     placeholder="Nowe zadanie…"
                     className="flex-1 min-w-0 px-2 py-1 rounded bg-black/20 border border-white/10 text-[15px] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50"
                 />
-                <input
+                <AutoResizeTextarea
                     value={newComment}
                     onChange={e => setNewComment(e.target.value)}
-                    placeholder="Komentarz…"
+                    rows={1}
+                    placeholder="Komentarz… (Enter = nowa linia, np. lista „- punkt”)"
                     className="flex-1 min-w-0 px-2 py-1 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 placeholder-gray-700 focus:outline-none focus:border-blue-500/50"
                 />
                 <select
@@ -509,10 +511,10 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                     />
                 </label>
                 {plannedEnd && (
-                    <input
-                        type="time"
+                    <TaskTimePicker
                         value={plannedTime}
-                        onChange={e => setPlannedTime(e.target.value)}
+                        onChange={setPlannedTime}
+                        optionStyle={OPTION_STYLE}
                         title="Godzina (opcjonalnie) — zadanie trafi jako wydarzenie do kalendarza Outlook odpowiedzialnego"
                         className="px-1.5 py-1 rounded bg-black/20 border border-white/10 text-[14px] text-gray-300 focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
                     />

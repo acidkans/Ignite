@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { X, ListTodo, Calendar, Clock, Trash2, Loader2, Check } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { TASK_DURATION_OPTIONS } from './wbsConstants';
+import TaskTimePicker, { DEFAULT_TASK_TIME, snapTaskTime } from './TaskTimePicker';
+import AutoResizeTextarea from './AutoResizeTextarea';
 
 const token = () => sessionStorage.getItem('token') || localStorage.getItem('token');
 const personName = (u) => [u?.firstName, u?.lastName].filter(Boolean).join(' ') || u?.email || '—';
@@ -25,9 +27,11 @@ export default function UserTaskEditModal({ task, processNodeId, onClose, onSave
     const currentUserId = (() => { try { return JSON.parse(atob(token().split('.')[1])).sub; } catch { return null; } })();
     const canEdit = task.userId === currentUserId || task.createdById === currentUserId;
     const [title, setTitle] = useState(task.title || '');
+    // @anchor user-task-edit-description — komentarz wieloliniowy (lista „- punkt”), trafia do notatki MS To Do i treści wydarzenia Outlook
+    const [description, setDescription] = useState(task.description || '');
     const [plannedEnd, setPlannedEnd] = useState(toDateInput(task.plannedEnd || task.plannedStart));
     // @anchor user-task-edit-time — godzina = zadanie ma wydarzenie w kalendarzu Outlook odpowiedzialnego
-    const [time, setTime] = useState(task.durationMinutes && task.plannedEnd ? toTimeInput(task.plannedEnd) : '');
+    const [time, setTime] = useState(task.durationMinutes && task.plannedEnd ? snapTaskTime(toTimeInput(task.plannedEnd)) : DEFAULT_TASK_TIME);
     // @anchor user-task-edit-duration
     const [duration, setDuration] = useState(task.durationMinutes || 60);
     const [assigneeId, setAssigneeId] = useState(task.userId || '');
@@ -65,6 +69,7 @@ export default function UserTaskEditModal({ task, processNodeId, onClose, onSave
         try {
             const body = {
                 title: title.trim(),
+                description: description.trim() || null,
                 status: done ? 'DONE' : 'OPEN',
                 // Termin bez godziny = południe, jak przy przeciąganiu w kalendarzu (bez przeskoku dnia przez strefę).
                 plannedEnd: plannedEnd ? new Date(`${plannedEnd}T${time || '12:00'}:00`).toISOString() : null,
@@ -119,6 +124,10 @@ export default function UserTaskEditModal({ task, processNodeId, onClose, onSave
                         <span className="text-[11px] text-gray-400 font-medium">Tytuł</span>
                         <input autoFocus={canEdit} value={title} onChange={e => setTitle(e.target.value)} disabled={!canEdit} className={field} />
                     </label>
+                    <label className="flex flex-col gap-1.5">
+                        <span className="text-[11px] text-gray-400 font-medium">Komentarz</span>
+                        <AutoResizeTextarea value={description} onChange={e => setDescription(e.target.value)} disabled={!canEdit} rows={2} placeholder="Np. lista: - punkt (Enter = nowa linia)" className={`${field} resize-none`} />
+                    </label>
                     <div className="grid grid-cols-2 gap-3">
                         <label className="flex flex-col gap-1.5">
                             <span className="text-[11px] text-gray-400 font-medium flex items-center gap-1"><Calendar size={10} /> Termin</span>
@@ -134,7 +143,7 @@ export default function UserTaskEditModal({ task, processNodeId, onClose, onSave
                     <div className="grid grid-cols-2 gap-3">
                         <label className="flex flex-col gap-1.5">
                             <span className="text-[11px] text-gray-400 font-medium flex items-center gap-1"><Clock size={10} /> Godzina (opcjonalnie)</span>
-                            <input type="time" value={time} onChange={e => setTime(e.target.value)} disabled={!canEdit || !plannedEnd} className={field} title={plannedEnd ? 'Z godziną zadanie trafi jako wydarzenie do kalendarza Outlook odpowiedzialnego' : 'Najpierw ustaw termin'} />
+                            <TaskTimePicker value={time} onChange={setTime} disabled={!canEdit || !plannedEnd} className={`${field} flex-1`} optionStyle={OPTION_STYLE} title={plannedEnd ? 'Z godziną zadanie trafi jako wydarzenie do kalendarza Outlook odpowiedzialnego' : 'Najpierw ustaw termin'} />
                         </label>
                         <label className="flex flex-col gap-1.5">
                             <span className="text-[11px] text-gray-400 font-medium">Czas trwania</span>
