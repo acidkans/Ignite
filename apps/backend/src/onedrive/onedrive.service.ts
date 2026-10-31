@@ -7,8 +7,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ORDER_FOLDERS, ORDER_ROOT_FOLDERS, OrderRootKey, orderFolderPath } from './order-folders';
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
-// Tasks.ReadWrite wymagany dla sync z MS To Do / Samsung Reminder, Calendars.ReadWrite — zadania z godziną jako wydarzenia Outlook
-const SCOPES = 'Files.ReadWrite offline_access User.Read Tasks.ReadWrite Calendars.ReadWrite';
+// Tasks.ReadWrite wymagany dla sync z MS To Do / Samsung Reminder.
+// Calendars.ReadWrite (zadania z godziną jako wydarzenia Outlook) TYMCZASOWO wyłączony: tenant AIRTEL
+// wymaga na niego zgody administratora, a bez niej nie da się połączyć konta wcale (pada też OneDrive i To Do).
+// Po „Grant admin consent” w Entra dopisz go z powrotem i połącz konto ponownie.
+const SCOPES = 'Files.ReadWrite offline_access User.Read Tasks.ReadWrite';
 // @anchor onedrive-refresh-scopes
 // Odświeżenie tokenu prosi o `.default` = wszystko, na co konto już ma zgodę. Z pełną listą SCOPES
 // refresh wywalałby się (consent_required) każdemu, kto połączył konto przed dodaniem nowego scope'u
