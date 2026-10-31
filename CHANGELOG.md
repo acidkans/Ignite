@@ -1,3 +1,26 @@
+## 2026-10-31 — feat(mobile): czat gałęzi WBS na telefonie — kafelek Czat z licznikiem nieprzeczytanych, lista wątków ze wszystkich zamówień użytkownika, nowy wątek, rozmowa ze zdjęciami z aparatu/galerii, zamykanie/wznawianie wątku
+
+### architektura / API
+- dodano `back-endpoint` `GET /comments/my-threads` (`back-funkcja` `getMyWbsChatThreads`) — wątki czatu gałęzi WBS ze wszystkich zamówień, w których użytkownik jest w zespole (`Team.orderNodeId`) albo sam pisał; każdy wątek: `orderId`, `orderName`, `wbsNodeId`, `wbsNodeName`, `wbsParentName`, `total`, `unread`, `status`, `last { text, images, at, author, mine }`; sortowane od najświeższej wiadomości. Poza ADMIN/MANAGER wątki liści finansowych (bez dzieci) wypadają, wątki węzłów usuniętych z WBS też
+- dodano `ui-widok` `MobileChat` (mobileView `'chat'`) — lista wątków z czerwoną plakietką nieprzeczytanych, przełącznik Archiwum (zamknięte wątki), odświeżanie co 15 s
+- dodano `ui-sekcja` `MobileChatConversation` — rozmowa jednego wątku (`GET /comments/order/:orderId?wbsNodeId=`), oznaczanie jako przeczytane przy otwarciu i odświeżeniu, wysyłka tekstu i zdjęć (aparat/galeria przez `POST /comments/order/:orderId/images`), Zamknij/Otwórz wątek (`PATCH /comments/order/:orderId/threads/:wbsNodeId`)
+- dodano `back-endpoint` `GET /comments/my-orders` (`back-funkcja` `getMyChatOrders`) — zamówienia z zespołów użytkownika `[{ id, name }]`, pierwszy krok nowego wątku
+- dodano `back-endpoint` `GET /comments/order/:orderId/chat-nodes` (`back-funkcja` `getChatNodes`) — węzły WBS aktywnej wersji zamówienia (fallback: baseline) w kolejności drzewa `[{ id, name, parentId, depth, hasChildren }]`; reguła ról jak w czacie gałęzi
+- dodano `ui-sekcja` `MobileChatNewThread` — przycisk „Nowy” w widoku Czat: wybór zamówienia → elementu WBS; węzeł z istniejącą rozmową otwiera ją (z archiwum wznawia), nowy wątek powstaje z pierwszą wiadomością
+- `ui-sekcja` `MobileChatNewThread` — gdy użytkownik ma dostęp tylko do jednego zamówienia, krok wyboru zamówienia jest pomijany i od razu widać gałęzie WBS (strzałka wstecz wraca do listy wątków)
+- `ui-input` `mobile-chat-node-filter` — pole „Szukaj elementu WBS…” w kroku wyboru węzła; dopasowanie bez wielkości liter i polskich znaków, wyniki płasko z nazwą rodzica
+- `ui-input` `mobile-chat-photo-source` — w rozmowie osobno „Zrób zdjęcie” (`capture="environment"`) i „Wybierz z galerii” (wiele naraz); przycisk Zamknij ukryty w pustym wątku
+- `ui-widok` `MobileHome` — nowy kafelek „Czat” z sumą nieprzeczytanych (`ui-stan` `chatUnread`, odświeżanie co 30 s)
+
+### słownik
+- dodano `get-my-wbs-chat-threads` — comments.service.ts; `get-my-wbs-chat-threads-endpoint` — comments.controller.ts
+- dodano `mobile-chat`, `mobile-chat-conversation`, `mobile-chat-image`, `mobile-chat-new-thread`, `mobile-chat-photo-source`, `mobile-chat-node-filter` — Mobile/MobileChat.jsx
+- dodano `get-my-chat-orders`, `get-chat-nodes` — comments.service.ts; `get-my-chat-orders-endpoint`, `get-chat-nodes-endpoint` — comments.controller.ts
+- dodano `mobile-home-tile-chat`, `home-chat-unread` — Mobile/MobileHome.jsx; `mobile-view-chat` — App.jsx
+
+### wytyczne
+- `back-endpoint` `GET /comments/order/:orderId/chat-nodes` — id węzłów z aktywnej wersji WBS, tej samej którą desktop otwiera domyślnie; inaczej wątek z telefonu nie pojawi się przy dymku na desktopie
+
 ## 2026-10-31 — feat(wbs): czat gałęzi WBS — dymek pod nazwą węzła, szuflada czatu z czerwoną belką, powiadomienia dla zespołu zamówienia, obrazki w wiadomościach, gałąź główna zbiera czat podgałęzi, status wątku aktywny/zamknięty z archiwum; usunięta kolumna Attach.
 
 ### schema.prisma

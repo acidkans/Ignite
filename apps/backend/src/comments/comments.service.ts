@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { isClosedLeafType, isManagerRoles } from '../common/leaf-types.util';
+import { resolveVersionId } from '../common/version.util';
 
 @Injectable()
 export class CommentsService {
@@ -123,6 +124,135 @@ export class CommentsService {
             create: { orderId, wbsNodeId, ...data },
             update: data,
         });
+    }
+
+    // @anchor get-my-wbs-chat-threads
+    // Wątki czatu gałęzi WBS ze WSZYSTKICH zamówień użytkownika (zespół zamówienia albo własny wpis w wątku) —
+    // lista „Czat” na telefonie. Ostatnia wiadomość, liczniki, status; ta sama reguła ról co getBranchNodeNames:
+    // poza ADMIN/MANAGER wątki liści finansowych wypadają.
+    async getMyWbsChatThreads(userId: string, roles?: string[]) {
+        const teams = await this.prisma.team.findMany({
+            where: { orderNodeId: { not: null }, users: { some: { id: userId } } },
+            select: { orderNodeId: true },
+        });
+        const teamOrderIds = teams.map(t => t.orderNodeId as string);
+        const rows = await this.prisma.comment.findMany({
+            where: {
+                wbsNodeId: { not: null },
+                OR: [{ orderId: { in: teamOrderIds } }, { userId }],
+            },
+            orderBy: { createdAt: 'asc' },
+            select: {
+                orderId: true, wbsNodeId: true, userId: true, text: true, images: true, createdAt: true,
+                user: { select: { firstName: true, lastName: true } },
+                reads: { where: { userId }, select: { id: true } },
+            },
+        });
+        const byKey = new Map<string, any>();
+        for (const r of rows) {
+            const key = `${r.orderId}|${r.wbsNodeId}`;
+            const t = byKey.get(key) ?? { orderId: r.orderId, wbsNodeId: r.wbsNodeId, total: 0, unread: 0 };
+            t.total++;
+            if (r.userId !== userId && r.reads.length === 0) t.unread++;
+            t.last = {
+                text: r.text,
+                images: r.images.length,
+                at: r.createdAt,
+                author: [r.user?.firstName, r.user?.lastName].filter(Boolean).join(' '),
+                mine: r.userId === userId,
+            };
+            byKey.set(key, t);
+        }
+        if (!byKey.size) return [];
+
+        const threads = [...byKey.values()];
+        const nodeIds = [...new Set(threads.map(t => t.wbsNodeId))];
+        const orderIds = [...new Set(threads.map(t => t.orderId))];
+        const [nodes, children, orders, statuses] = await Promise.all([
+            this.prisma.wbsNode.findMany({ where: { id: { in: nodeIds } }, select: { id: true, name: true, type: true, parentId: true } }),
+            this.prisma.wbsNode.groupBy({ by: ['parentId'], where: { parentId: { in: nodeIds } }, _count: { _all: true } }),
+            this.prisma.processNode.findMany({ where: { id: { in: orderIds } }, select: { id: true, name: true } }),
+            this.prisma.wbsChatThread.findMany({ where: { orderId: { in: orderIds }, wbsNodeId: { in: nodeIds } } }),
+        ]);
+        const parentIds = [...new Set(nodes.map(n => n.parentId).filter(Boolean))] as string[];
+        const parents = parentIds.length
+            ? await this.prisma.wbsNode.findMany({ where: { id: { in: parentIds } }, select: { id: true, name: true } })
+            : [];
+        const nodeMap = new Map(nodes.map(n => [n.id, n]));
+        const hasChildren = new Set(children.map(c => c.parentId));
+        const parentName = new Map(parents.map(p => [p.id, p.name]));
+        const orderName = new Map(orders.map(o => [o.id, o.name]));
+        const statusMap = new Map(statuses.map(s => [`${s.orderId}|${s.wbsNodeId}`, s.status]));
+        const manager = isManagerRoles(roles);
+
+        return threads
+            .filter(t => {
+                const n = nodeMap.get(t.wbsNodeId);
+                if (!n) return false; // węzeł usunięty z WBS — wątek osierocony
+                return manager || !isClosedLeafType(n.type) || hasChildren.has(n.id);
+            })
+            .map(t => {
+                const n = nodeMap.get(t.wbsNodeId)!;
+                return {
+                    ...t,
+                    orderName: orderName.get(t.orderId) ?? 'Zamówienie',
+                    wbsNodeName: n.name || 'Element WBS',
+                    wbsParentName: n.parentId ? parentName.get(n.parentId) ?? null : null,
+                    status: statusMap.get(`${t.orderId}|${t.wbsNodeId}`) ?? 'ACTIVE',
+                };
+            })
+            .sort((a, b) => +new Date(b.last.at) - +new Date(a.last.at));
+    }
+
+    // @anchor get-my-chat-orders
+    // Zamówienia, w których zespole jest użytkownik — pierwszy krok „Nowy wątek” na telefonie.
+    async getMyChatOrders(userId: string) {
+        const teams = await this.prisma.team.findMany({
+            where: { orderNodeId: { not: null }, users: { some: { id: userId } } },
+            select: { orderNode: { select: { id: true, name: true } } },
+        });
+        return teams
+            .map(t => t.orderNode)
+            .filter(Boolean)
+            .sort((a, b) => a!.name.localeCompare(b!.name, 'pl'));
+    }
+
+    // @anchor get-chat-nodes
+    // Węzły WBS aktywnej wersji zamówienia do wyboru wątku ({ id, name, parentId, depth }) — te same id,
+    // na których desktop wiesza czat w domyślnie otwartej wersji. Reguła ról jak w getBranchNodeNames.
+    async getChatNodes(orderId: string, roles?: string[]) {
+        const versionId = await resolveVersionId(this.prisma, orderId);
+        let rows = versionId
+            ? await this.prisma.wbsNode.findMany({ where: { nodeId: orderId, versionId }, orderBy: { sortOrder: 'asc' }, select: { id: true, name: true, type: true, parentId: true } })
+            : [];
+        if (!rows.length) {
+            rows = await this.prisma.wbsNode.findMany({ where: { nodeId: orderId, versionId: null }, orderBy: { sortOrder: 'asc' }, select: { id: true, name: true, type: true, parentId: true } });
+        }
+        if (!isManagerRoles(roles)) {
+            for (;;) {
+                const parents = new Set(rows.map(n => n.parentId).filter(Boolean) as string[]);
+                const next = rows.filter(n => !isClosedLeafType(n.type) || parents.has(n.id));
+                if (next.length === rows.length) break;
+                rows = next;
+            }
+        }
+        // Kolejność drzewa (rodzic, potem jego dzieci) z głębokością — telefon rysuje listę z wcięciami.
+        const ids = new Set(rows.map(n => n.id));
+        const children = new Map<string | null, typeof rows>();
+        for (const n of rows) {
+            const p = n.parentId && ids.has(n.parentId) ? n.parentId : null;
+            if (!children.has(p)) children.set(p, []);
+            children.get(p)!.push(n);
+        }
+        const out: { id: string; name: string; parentId: string | null; depth: number; hasChildren: boolean }[] = [];
+        const walk = (parentId: string | null, depth: number) => {
+            for (const n of children.get(parentId) ?? []) {
+                out.push({ id: n.id, name: n.name || 'Element WBS', parentId: n.parentId, depth, hasChildren: children.has(n.id) });
+                walk(n.id, depth + 1);
+            }
+        };
+        walk(null, 0);
+        return out;
     }
 
     // @anchor get-wbs-chat-summary

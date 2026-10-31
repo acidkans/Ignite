@@ -1,11 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Briefcase, Network, AlertTriangle, GraduationCap } from 'lucide-react';
+import { Briefcase, Network, AlertTriangle, GraduationCap, MessageCircle, LogOut } from 'lucide-react';
+import { useNetwork } from '../../hooks/useNetwork';
+import { API_URL } from '../../config';
 import { getOrphanedAttachments } from '../../services/repos/outboxRepo';
 import OrphanAttachmentsPanel from '../shared/OrphanAttachmentsPanel';
 import SyncWarningBanner from '../shared/SyncWarningBanner';
 
 // @anchor mobile-home
-export default function MobileHome({ onNavigate, showTrainings = false }) {
+export default function MobileHome({ onNavigate, onLogout, showTrainings = false }) {
+    const { isOnline } = useNetwork();
+    // @anchor mobile-home-logout — jedyne miejsce wylogowania w widoku mobilnym; pozostałe widoki mają strzałkę powrotu do menu.
+    const handleLogoutClick = () => {
+        // Logout offline by zostawiał pracownika bez dostępu do appki — wymagamy online.
+        if (!isOnline) {
+            alert('Wylogowanie wymaga połączenia z siecią. Następne logowanie też wymaga połączenia.');
+            return;
+        }
+        onLogout?.();
+    };
+
     // Zdjęcia bez rozwiązywalnego znacznika. Kafelek stoi TUTAJ, na ekranie
     // wejściowym, bo przypisywanie zdjęć nie należy do żadnego z dwóch widoków
     // niżej — a zaległości trzeba zobaczyć od razu, nie po wejściu w zadania.
@@ -26,6 +39,23 @@ export default function MobileHome({ onNavigate, showTrainings = false }) {
         };
     }, []);
 
+    // @anchor home-chat-unread — suma nieprzeczytanych wiadomości we wszystkich wątkach czatu gałęzi
+    const [chatUnread, setChatUnread] = useState(0);
+    useEffect(() => {
+        const refresh = async () => {
+            try {
+                const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+                const res = await fetch(`${API_URL}/comments/my-threads`, { headers: { Authorization: `Bearer ${token}` } });
+                if (!res.ok) return;
+                const threads = await res.json();
+                setChatUnread(threads.filter(t => t.status !== 'CLOSED').reduce((n, t) => n + (t.unread || 0), 0));
+            } catch { /* offline — zostaje ostatnia wartość */ }
+        };
+        refresh();
+        const interval = setInterval(refresh, 30000);
+        return () => clearInterval(interval);
+    }, []);
+
     return (
         <div className="flex flex-col h-full bg-gray-950 text-white">
             <header className="px-4 py-4 border-b border-white/5 bg-gray-900/50 backdrop-blur-xl">
@@ -33,10 +63,20 @@ export default function MobileHome({ onNavigate, showTrainings = false }) {
                     <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center font-black shadow-lg shadow-blue-500/20">
                         <span className="text-[10px]">ERP</span>
                     </div>
-                    <div>
+                    <div className="flex-1">
                         <h1 className="font-bold text-sm">Gigatel ERP</h1>
                         <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Wybierz widok</p>
                     </div>
+                    {onLogout && (
+                        <button
+                            onClick={handleLogoutClick}
+                            title={isOnline ? 'Wyloguj' : 'Wylogowanie wymaga połączenia'}
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 active:scale-90 transition-all text-[11px] font-bold ${isOnline ? 'text-gray-400 active:text-red-400' : 'text-gray-700'}`}
+                        >
+                            <LogOut size={16} />
+                            Wyloguj
+                        </button>
+                    )}
                 </div>
             </header>
 
@@ -73,6 +113,28 @@ export default function MobileHome({ onNavigate, showTrainings = false }) {
                         <div>
                             <h2 className="font-bold text-base text-gray-100 group-active:text-teal-400 transition-colors">Drzewo Zamówień</h2>
                             <p className="text-[11px] text-gray-500 mt-0.5">Przeglądaj schematy zamówień</p>
+                        </div>
+                    </div>
+                </button>
+
+                {/* @anchor mobile-home-tile-chat */}
+                <button
+                    onClick={() => onNavigate('chat')}
+                    className="bg-gray-900/60 border border-white/5 rounded-3xl p-6 active:scale-[0.97] transition-all shadow-xl hover:bg-gray-900/80 active:bg-indigo-600/5 text-left relative overflow-hidden group"
+                >
+                    <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-500/5 rounded-full blur-3xl -mr-10 -mt-10" />
+                    <div className="flex items-center gap-4 relative z-10">
+                        <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex-shrink-0 relative">
+                            <MessageCircle size={26} className="text-indigo-400" />
+                            {chatUnread > 0 && (
+                                <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">
+                                    {chatUnread}
+                                </span>
+                            )}
+                        </div>
+                        <div>
+                            <h2 className="font-bold text-base text-gray-100 group-active:text-indigo-400 transition-colors">Czat</h2>
+                            <p className="text-[11px] text-gray-500 mt-0.5">Rozmowy w gałęziach WBS Twoich zamówień</p>
                         </div>
                     </div>
                 </button>

@@ -25,6 +25,27 @@ export class CommentsController {
         return this.comments.getByOrder(orderId, wbsNodeId || undefined, branchOf || undefined, req.user?.roles);
     }
 
+    // @anchor get-my-wbs-chat-threads-endpoint
+    // Lista wątków czatu gałęzi ze wszystkich zamówień użytkownika (widok „Czat” na telefonie).
+    @Get('my-threads')
+    getMyThreads(@Request() req) {
+        return this.comments.getMyWbsChatThreads(req.user.userId, req.user?.roles);
+    }
+
+    // @anchor get-my-chat-orders-endpoint
+    // Zamówienia użytkownika (zespół zamówienia) do założenia nowego wątku na telefonie.
+    @Get('my-orders')
+    getMyChatOrders(@Request() req) {
+        return this.comments.getMyChatOrders(req.user.userId);
+    }
+
+    // @anchor get-chat-nodes-endpoint
+    // Węzły WBS aktywnej wersji zamówienia (płasko, z depth) — wybór gałęzi dla nowego wątku.
+    @Get('order/:orderId/chat-nodes')
+    getChatNodes(@Param('orderId') orderId: string, @Request() req) {
+        return this.comments.getChatNodes(orderId, req.user?.roles);
+    }
+
     // @anchor get-wbs-chat-summary-endpoint
     @Get('order/:orderId/wbs-summary')
     getWbsSummary(@Param('orderId') orderId: string, @Request() req) {
