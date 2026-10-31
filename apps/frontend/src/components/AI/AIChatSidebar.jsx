@@ -138,9 +138,26 @@ export default function AIChatSidebar({ nodeId, nodes, onClose }) {
                 })
             });
 
-            const data = await response.json();
+            const data = await response.json().catch(() => ({}));
 
             console.log('[AI Chat] Response:', data);
+
+            // Błąd z backendu — pokaż przyczynę zamiast ogólnego komunikatu
+            if (!response.ok) {
+                const raw = Array.isArray(data.message) ? data.message.join(', ') : (data.message || '');
+                let reason = raw || `HTTP ${response.status}`;
+                if (/402|credits are depleted|quota/i.test(raw)) {
+                    reason = 'Skończyły się środki na koncie dostawcy AI (Google Gemini). Administrator musi doładować konto w Google AI Studio.';
+                } else if (/429|rate limit/i.test(raw)) {
+                    reason = 'Przekroczono limit zapytań do dostawcy AI. Spróbuj ponownie za chwilę.';
+                }
+                setMessages(prev => [...prev, {
+                    role: 'assistant',
+                    content: `Błąd serwera (${response.status}): ${reason}`,
+                    sources: []
+                }]);
+                return;
+            }
 
             // Sprawdź czy odpowiedź nie jest pusta
             if (!data.answer || data.answer.trim().length === 0) {

@@ -6548,8 +6548,9 @@ ${ganttSectionHtml}
                             <button
                                 onClick={(e) => { e.stopPropagation(); setAllTasksOpen(true); }}
                                 className="flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 rounded-lg text-blue-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
+                                title="Pokaż zadania"
                             >
-                                <LayoutList size={11} /> Pokaż zadania
+                                <LayoutList size={11} /> Zadania
                             </button>
                         )}
                         {(key === 'wbs' || key === 'wbs-hybrid') && (
@@ -6573,16 +6574,18 @@ ${ganttSectionHtml}
                             <button
                                 onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'PDF — strategia, zadania, Q&A', defaultFilename: `${safeFileBase()}_strategia_zadania_QA.pdf`, oneDriveFolderKey: 'reports', makeArtifact: () => buildStrategyTasksQaPdfArtifact({ wbsData, processNodeId: nodeId, orderName: orderName || projectName }) }); }}
                                 className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
+                                title="PDF: strategia + zadania + Q&A"
                             >
-                                <FileDown size={11} /> Strategia + zadania + Q&A
+                                <FileDown size={11} /> Strategia PDF
                             </button>
                         )}
                         {(key === 'wbs' || key === 'wbs-hybrid' || onExport) && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'PDF — wszystkie sekcje', defaultFilename: `${safeFileBase()}_projekt.pdf`, oneDriveFolderKey: 'reports', makeArtifact: () => buildProjectPdfArtifact({ nodeId, versionId, projectName, orderName, ganttHtml: ganttGetHtmlRef.current?.() || null }) }); }}
                                 className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
+                                title="PDF — wszystkie sekcje"
                             >
-                                <FileDown size={11} /> PDF wszystkie sekcje
+                                <FileDown size={11} /> PDF całość
                             </button>
                         )}
                         {onExport && (
@@ -6801,13 +6804,14 @@ ${ganttSectionHtml}
                             <button
                                 onClick={(e) => { e.stopPropagation(); handleWbsExtract(); }}
                                 disabled={extractingForWbs}
-                                className={`flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 ${extractingForWbs ? 'opacity-50 pointer-events-none' : ''}`}
+                                className={`flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-emerald-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap ${extractingForWbs ? 'opacity-50 pointer-events-none' : ''}`}
+                                title="Wyciągnij z dokumentów"
                             >
                                 {extractingForWbs ? <div className="w-3 h-3 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" /> : <Sparkles size={11} />}
-                                Wyciągnij z dokumentów
+                                Z dokumentów
                             </button>
-                            <button onClick={(e) => { e.stopPropagation(); setLeafDefaultsDraft(mergeLeafDefaults(leafDefaults)); setLeafDefaultsOpen(true); }} className="flex items-center gap-1.5 px-3 py-1 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-lg text-sky-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0">
-                                <SlidersHorizontal size={11} /> Domyślne wartości
+                            <button onClick={(e) => { e.stopPropagation(); setLeafDefaultsDraft(mergeLeafDefaults(leafDefaults)); setLeafDefaultsOpen(true); }} className="flex items-center gap-1.5 px-3 py-1 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-lg text-sky-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap" title="Domyślne wartości">
+                                <SlidersHorizontal size={11} /> Domyślne
                             </button>
                         </div>
                     ) : null);
