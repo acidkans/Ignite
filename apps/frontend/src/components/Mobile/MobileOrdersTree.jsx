@@ -105,8 +105,12 @@ export default function MobileOrdersTree({ onBack }) {
                 <>
                     <div className="fixed inset-0 bg-black/80 z-[99]" onClick={() => setSelectedNode(null)} />
                     <div className="fixed inset-0 bg-gray-950 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] flex flex-col z-[100] overflow-hidden">
-                        {/* Nazwa węzła + zamknięcie są teraz w pasku SchematicViewer — bez osobnego nagłówka, max miejsca na PDF */}
-                        <div className="flex gap-1 p-1.5 border-b border-white/5 bg-gray-900/80 shrink-0">
+                        {/* @anchor mobile-tree-panel-back — strzałka powrotu w pasku zakładek, zawsze widoczna:
+                            SchematicViewer od 1024 px (tablet poziomo) ma układ desktopowy bez przycisku zamknięcia. */}
+                        <div className="flex items-center gap-1 p-1.5 border-b border-white/5 bg-gray-900/80 shrink-0">
+                            <button onClick={() => setSelectedNode(null)} title="Wróć do drzewa" className="p-2 rounded-lg bg-white/5 active:scale-90 transition-transform shrink-0">
+                                <ArrowLeft size={16} className="text-gray-400" />
+                            </button>
                             {[['schematics', 'Schematy'], ['documents', 'Dokumentacja']].map(([key, label]) => (
                                 <button
                                     key={key}
@@ -119,8 +123,8 @@ export default function MobileOrdersTree({ onBack }) {
                         </div>
                         <div className="flex-1 min-h-0">
                             {mobileTreeTab === 'documents'
-                                ? <MobileDocumentsList nodeId={selectedNode.id} nodeName={selectedNode.name} onClose={() => setSelectedNode(null)} />
-                                : <SchematicViewer nodeId={selectedNode.id} nodeName={selectedNode.name} onClose={() => setSelectedNode(null)} />}
+                                ? <MobileDocumentsList nodeId={selectedNode.id} nodeName={selectedNode.name} />
+                                : <SchematicViewer nodeId={selectedNode.id} nodeName={selectedNode.name} />}
                         </div>
                     </div>
                 </>

@@ -2270,18 +2270,33 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     </td>
                 ) : (
                     <td
-                        className="px-2 py-2.5 cursor-grab min-w-[96px] w-[96px]"
-                        draggable
-                        onDragStart={e => onDragStart(e, node.id)}
-                        onDragEnd={onDragEnd}
+                        className="px-2 py-2.5 min-w-[96px] w-[96px]"
+                        onClick={e => { e.stopPropagation(); setSelectedNodeId(node.id); }}
                     >
+                        {/* Kropki = tylko przeniesienie, żółta strzałka = tylko rozwinięcie. */}
                         <div className="relative flex items-center gap-1.5">
-                            <GripVertical
-                                size={11}
-                                className={`flex-shrink-0 ${selectedDepth != null && depth === selectedDepth + 1 ? 'text-amber-400' : 'text-gray-700 group-hover/node:text-gray-500'}`}
-                            />
+                            <span
+                                draggable
+                                onDragStart={e => onDragStart(e, node.id)}
+                                onDragEnd={onDragEnd}
+                                title="Przeciągnij, aby przenieść"
+                                className="flex-shrink-0 cursor-grab p-0.5"
+                            >
+                                <GripVertical
+                                    size={11}
+                                    className={selectedDepth != null && depth === selectedDepth + 1 ? 'text-amber-400' : 'text-gray-700 group-hover/node:text-gray-500'}
+                                />
+                            </span>
                             {hasChildren
-                                ? <ChevronRight size={18} className={`text-yellow-400 cursor-pointer transition-transform flex-shrink-0 ${isOpen(rowId) ? 'rotate-90' : ''}`} />
+                                ? <button
+                                    type="button"
+                                    onClick={e => { e.stopPropagation(); setSelectedNodeId(node.id); toggle(rowId, e); }}
+                                    aria-expanded={isOpen(rowId)}
+                                    title={isOpen(rowId) ? 'Zwiń' : 'Rozwiń'}
+                                    className="flex-shrink-0 cursor-pointer"
+                                >
+                                    <ChevronRight size={18} className={`text-yellow-400 transition-transform ${isOpen(rowId) ? 'rotate-90' : ''}`} />
+                                </button>
                                 : <span className="w-[18px] flex-shrink-0" />
                             }
                         </div>
