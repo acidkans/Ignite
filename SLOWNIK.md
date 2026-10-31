@@ -97,7 +97,7 @@ Modele na produkcji: `AI_MODEL=gemini-2.5-flash`, `EMBEDDING_MODEL=gemini-embedd
 | AI_KARTA_KATALOGOWA | Parsowanie karty katalogowej | AI_MODEL | Użytkownik | `material-requirements.service.ts` → `parseDatasheetDocument()` |
 | AI_OFERTA_DOSTAWCY | Parsowanie oferty dostawcy (PDF / Excel) | AI_MODEL | Użytkownik | `material-requirements.service.ts` → `parseOfferDocument()`, `parseExcelOffer()` |
 | AI_CZAT | Czat AI (odpowiedź) + embedding pytania | AI_MODEL + EMBEDDING | Użytkownik: `AIChatSidebar` → `POST /ai/chat` | `ai.controller.ts` → `hybridSearch()` + `askGemini()` |
-| AI_SYNC_CZATU | Embeddingi ~400 rekordów bazy (węzły, sprzęt, podzadania, budżet, wymagania) do Qdrant | EMBEDDING | 1× dziennie przy pierwszym pytaniu do czatu (`ensureDailyDbSync`) lub ręcznie `POST /ai/sync-db` | `vector.service.ts` → `syncDatabaseToVector()` |
+| AI_SYNC_CZATU | Embeddingi ~400 rekordów bazy (węzły, sprzęt, zadania, budżet, wymagania) do Qdrant | EMBEDDING | 1× dziennie przy pierwszym pytaniu do czatu (`ensureDailyDbSync`) lub ręcznie `POST /ai/sync-db` | `vector.service.ts` → `syncDatabaseToVector()` |
 | AI_INDEKS_DOK | Embeddingi chunków wgranego dokumentu | EMBEDDING | Wgranie / reindeks dokumentu; `reindexAll()` przy nowej kolekcji Qdrant | `documents.service.ts` → `processDocument()`, `reindexDocument()` |
 | AI_ESTYMACJA | Estymacja, analiza planu, propozycja WBS | AI_MODEL + EMBEDDING | Użytkownik | `ai.service.ts` → `estimateProject()`, `analyzePlan()`, `proposeWbs()` |
 | AI_AUTO_WBS | Auto-generowanie WBS z OPZ/SWZ | AI_MODEL | Użytkownik: `POST /ai/workflow/auto-generate` | `ai.service.ts` → `runAutoDeployWorkflow()` |
@@ -515,7 +515,6 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | DRAWER_STATUS_COLOR / drawerStatusKey / qaSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor drawer-status-color |
 | ui-stan | taskSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-summary |
 | ui-funkcja | loadTaskSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor load-task-summary |
-| ui-funkcja | openDatePicker | apps/frontend/src/components/shared/SubtaskModal.jsx | @anchor open-date-picker |
 | ui-funkcja | normalizeLowerText | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor normalize-lower-text |
 | ui-stan | alarmTaskId (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-alarm-task-id |
 | ui-stan | modal (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-modal |
@@ -842,7 +841,6 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | MaterialRequirement.unit | apps/backend/prisma/schema.prisma | @anchor mat-req-unit |
 | schema-pole | MaterialRequirement.technicalSpec | apps/backend/prisma/schema.prisma | @anchor mat-req-technical-spec |
 | schema-pole | MaterialRequirement.sourceDocument | apps/backend/prisma/schema.prisma | @anchor mat-req-source-document |
-| schema-pole | MaterialRequirement.assignedSubtaskId | apps/backend/prisma/schema.prisma | @anchor mat-req-assigned-subtask-id |
 | schema-pole | MaterialRequirement.wbsNodeId | apps/backend/prisma/schema.prisma | @anchor mat-req-wbs-node-id |
 | schema-pole | MaterialRequirement.wbsNodeIds | apps/backend/prisma/schema.prisma | @anchor mat-req-wbs-node-ids |
 | schema-pole | MaterialRequirement.wbsNodeAllocations | apps/backend/prisma/schema.prisma | @anchor mat-req-wbs-node-allocations |
@@ -862,7 +860,6 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-relacja | MaterialRequirement.node | apps/backend/prisma/schema.prisma | @anchor mat-req-node |
 | schema-relacja | MaterialRequirement.version | apps/backend/prisma/schema.prisma | @anchor mat-req-version |
 | schema-relacja | MaterialRequirement.list | apps/backend/prisma/schema.prisma | @anchor mat-req-list |
-| schema-relacja | MaterialRequirement.assignedSubtask | apps/backend/prisma/schema.prisma | @anchor mat-req-assigned-subtask |
 | schema-pole | MaterialRequirement.assignedUserTaskId | apps/backend/prisma/schema.prisma | @anchor mat-req-assigned-user-task-id |
 | schema-relacja | MaterialRequirement.assignedUserTask | apps/backend/prisma/schema.prisma | @anchor mat-req-assigned-user-task |
 | schema-relacja | MaterialRequirement.wbsNode | apps/backend/prisma/schema.prisma | @anchor mat-req-wbs-node |
@@ -1308,10 +1305,6 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | isTaskClosed | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor is-task-closed |
 | ui-stala | DEFAULT_TASK_TIME | apps/frontend/src/components/shared/wbs/TaskTimePicker.jsx | @anchor default-task-time |
 | ui-funkcja | snapTaskTime | apps/frontend/src/components/shared/wbs/TaskTimePicker.jsx | @anchor snap-task-time |
-| ui-funkcja | splitDateTime (SubtaskModal) | apps/frontend/src/components/shared/SubtaskModal.jsx | @anchor subtask-split-date-time |
-| ui-funkcja | joinDateTime (SubtaskModal) | apps/frontend/src/components/shared/SubtaskModal.jsx | @anchor subtask-join-date-time |
-| ui-stan | formData.startTime (SubtaskModal) | apps/frontend/src/components/shared/SubtaskModal.jsx | @anchor subtask-start-time |
-| ui-stan | formData.endTime (SubtaskModal) | apps/frontend/src/components/shared/SubtaskModal.jsx | @anchor subtask-end-time |
 | ui-stala | TASK_DURATION_OPTIONS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor task-duration-options |
 | ui-stan | editUserTask | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-edit-user-task |
 | ui-stan | newTaskDate | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-new-task-date |
@@ -3242,7 +3235,6 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 - offers (apps/backend/src/offers/)
 - order-requirements (apps/backend/src/order-requirements/)
 - process-tree (apps/backend/src/process-tree/)
-- subtasks (apps/backend/src/subtasks/)
 - frontend pages (LoginPage, Dashboard, itd.)
 - frontend tabs (RequirementsTab, OffersTab, NodeInfoTab)
 - utils/wbsPdfExport.js (buildPdfDocument, openPdfBlob, fetchLogoDataUrl, buildWbsHtmlTable, PDF_BASE_CSS)

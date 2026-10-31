@@ -47,22 +47,6 @@ async function main() {
     });
     console.log('Requirements restored.');
 
-    // 3. Subtasks
-    const subtasks = [
-        { id: "task-01", name: "Montaż okablowania", desc: "Ułożenie rur i kabli" },
-        { id: "task-02", name: "Montaż kamer", desc: "Instalacja 8 kamer Hikvision" },
-        { id: "task-03", name: "Konfiguracja serwera", desc: "Uruchomienie zapisu i analizy" }
-    ];
-
-    for (const t of subtasks) {
-        await prisma.subtask.upsert({
-            where: { id: t.id },
-            update: { name: t.name, description: t.desc, status: 'FINISHED' },
-            create: { id: t.id, nodeId: orderId, versionId: null, name: t.name, description: t.desc, status: 'FINISHED' }
-        });
-    }
-    console.log('Subtasks restored.');
-
     console.log('Restoration complete!');
 }
 

@@ -34,7 +34,7 @@ async function main() {
     let migrated = 0;
     let skippedHasVersion = 0;
     let createdEmpty = 0;
-    const totals = { wbs: 0, sub: 0, bud: 0, mat: 0 };
+    const totals = { wbs: 0, bud: 0, mat: 0 };
 
     for (const order of orders) {
         const versionCount = await prisma.projectVersion.count({ where: { nodeId: order.id } });
@@ -45,15 +45,14 @@ async function main() {
 
         const counts = {
             wbs: await prisma.wbsNode.count({ where: { nodeId: order.id, versionId: null } }),
-            sub: await prisma.subtask.count({ where: { nodeId: order.id, versionId: null } }),
             bud: await prisma.budgetLineItem.count({ where: { nodeId: order.id, versionId: null } }),
             mat: await prisma.materialRequirement.count({ where: { nodeId: order.id, versionId: null } }),
         };
-        const total = counts.wbs + counts.sub + counts.bud + counts.mat;
+        const total = counts.wbs + counts.bud + counts.mat;
         if (total === 0) createdEmpty++;
 
         console.log(
-            `→ "${order.name}" (${order.id.slice(0, 8)}) — WBS:${counts.wbs} Subtask:${counts.sub} Budget:${counts.bud} Material:${counts.mat}`
+            `→ "${order.name}" (${order.id.slice(0, 8)}) — WBS:${counts.wbs} Budget:${counts.bud} Material:${counts.mat}`
         );
 
         if (DRY) continue;
@@ -63,14 +62,12 @@ async function main() {
                 data: { nodeId: order.id, label: 'pierwszy', isActive: true },
             });
             await tx.wbsNode.updateMany({ where: { nodeId: order.id, versionId: null }, data: { versionId: fv.id } });
-            await tx.subtask.updateMany({ where: { nodeId: order.id, versionId: null }, data: { versionId: fv.id } });
             await tx.budgetLineItem.updateMany({ where: { nodeId: order.id, versionId: null }, data: { versionId: fv.id } });
             await tx.materialRequirement.updateMany({ where: { nodeId: order.id, versionId: null }, data: { versionId: fv.id } });
         });
 
         migrated++;
         totals.wbs += counts.wbs;
-        totals.sub += counts.sub;
         totals.bud += counts.bud;
         totals.mat += counts.mat;
     }
@@ -82,7 +79,7 @@ async function main() {
         console.log(`\n(DRY RUN — nic nie zapisano. Uruchom bez --dry, aby wykonać.)`);
     } else {
         console.log(`Zmigrowano (zamówień):           ${migrated}  (w tym pustych: ${createdEmpty})`);
-        console.log(`Przepisano wierszy → "pierwszy": WBS:${totals.wbs} Subtask:${totals.sub} Budget:${totals.bud} Material:${totals.mat}`);
+        console.log(`Przepisano wierszy → "pierwszy": WBS:${totals.wbs} Budget:${totals.bud} Material:${totals.mat}`);
     }
     console.log(``);
 }

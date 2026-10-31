@@ -18,7 +18,6 @@ import { HardwareModule } from './hardware/hardware.module';
 import { SiteModule } from './site/site.module';
 import { CompanyModule } from './company/company.module';
 import { TeamModule } from './team/team.module';
-import { SubtasksModule } from './subtasks/subtasks.module';
 import { OrderRequirementsModule } from './order-requirements/order-requirements.module';
 import { SchematicsModule } from './schematics/schematics.module';
 import { MaterialRequirementsModule } from './material-requirements/material-requirements.module';
@@ -72,7 +71,6 @@ import { TrainingsModule } from './trainings/trainings.module';
     SiteModule,
     CompanyModule,
     TeamModule,
-    SubtasksModule,
     OrderRequirementsModule,
     SchematicsModule,
     MaterialRequirementsModule,

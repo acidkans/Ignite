@@ -1,3 +1,23 @@
+## 2026-10-31 — feat(zadania): etap 9 ujednolicenia - usuniecie modelu Subtask, modulu subtasks i SubtaskModal
+
+### schema.prisma
+- usunięto `schema-model` `Subtask`, `SubtaskFile`, `SubtaskMarkerLink` (tabele `subtasks`, `subtask_files`, `subtask_marker_links`) — jedynym modelem zadania jest `UserTask`
+- usunięto `schema-pole` `BudgetLineItem.subtaskId`, `SchematicDocument.subtaskId`, `SchematicMarker.subtaskId`, `MaterialRequirement.assignedSubtaskId` i ich relacje (`User.assignedSubtasks`, `ProcessNode.subtasks`, `ProjectVersion.subtasks`, `SchematicMarker.subtaskLinks`)
+- migracja `20261031190000_drop_subtasks` — najpierw FK i kolumny, potem DROP TABLE; bez DELETE, więc kaskady z budżetu / schematów nie odpalają
+- `SubtaskTemplate` zostaje (szablony zadań w `TaskModal`)
+
+### architektura / API
+- usunięto `back-modul` `SubtasksModule` (endpointy `/subtasks/*`) i `ui-modal` `SubtaskModal`
+- outbox mobile: stare wpisy `SUBTASK_STATUS` schodzą z kolejki bez akcji
+- skrypty jednorazowe (`check-counts.js`, `seed-restore.js`, `migrate-baseline-to-first-version.js`) bez Subtasków; `check-chars.js` usunięty
+
+### słownik
+- usunięto `open-date-picker`, `subtask-split-date-time`, `subtask-join-date-time`, `subtask-start-time`, `subtask-end-time` (SubtaskModal), `mat-req-assigned-subtask-id`, `mat-req-assigned-subtask`
+
+### wytyczne
+- `schema-model` `UserTask` — jedyny model zadania (kalendarz, WBS, mobile, schemat, budżet, materiały); nowe powiązania z zadaniem zawsze przez `userTaskId`
+- `schema-pole` `UserTask.legacySubtaskId` — tylko ślad migracji; nie używać w nowej logice
+
 ## 2026-10-31 — feat(zadania): etap 8 ujednolicenia - pozostali konsumenci Subtask na UserTask (schemat, mobile offline, AI, budzet, materialy, wersje), migracja roznic
 
 ### schema.prisma

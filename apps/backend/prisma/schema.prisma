@@ -42,7 +42,6 @@ model User {
   auditLogs         AuditLog[]
   nodePermissions   NodePermission[]   @relation("UserNodePermissions")
   ownedNodes        ProcessNode[]      @relation("OwnedProcessNodes")
-  assignedSubtasks  Subtask[]          @relation("AssignedSubtasks")
   userEntityConfigs UserEntityConfig[]
   userRoles         UserRole[]
   supervisor        User?              @relation("UserSupervisor", fields: [supervisorId], references: [id])
@@ -269,7 +268,6 @@ model ProcessNode {
   children                  ProcessNode[]              @relation("NodeParent")
   versions                  ProjectVersion[]
   site                      Site?
-  subtasks                  Subtask[]
   schematicDocuments        SchematicDocument[]
   materialRequirements      MaterialRequirement[]
   materialDataSheets        Material[] @relation("MaterialDataSheet")
@@ -327,7 +325,6 @@ model ProjectVersion {
   budgetItems          BudgetLineItem[]
   requirements         OrderRequirements[]
   node                 ProcessNode           @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  subtasks             Subtask[]
   materialRequirements MaterialRequirement[]
   wbsNodes             WbsNode[]
   /// @anchor project-version-accepted-for-nodes
@@ -371,41 +368,9 @@ model OrderRequirements {
   @@map("order_requirements")
 }
 
-model Subtask {
-  id                   String                @id @default(uuid())
-  nodeId               String
-  versionId            String?
-  name                 String
-  description          String?
-  plannedStart         DateTime?
-  plannedEnd           DateTime?
-  assignedUserId       String?
-  status               String                @default("NEW")
-  visibilityType       String                @default("ALL")
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
-  category             String?
-  phase                String?
-  requirementItemId    String?
-  isAiGenerated        Boolean               @default(false)
-  isApproved           Boolean               @default(true)
-  budgetItems          BudgetLineItem[]
-  files                SubtaskFile[]
-  assignedUser         User?                 @relation("AssignedSubtasks", fields: [assignedUserId], references: [id])
-  node                 ProcessNode           @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  version              ProjectVersion?       @relation(fields: [versionId], references: [id], onDelete: Cascade)
-  schematicDocuments   SchematicDocument[]
-  schematicMarkers     SchematicMarker[]
-  materialRequirements MaterialRequirement[]
-  markerLinks          SubtaskMarkerLink[]
-
-  @@map("subtasks")
-}
-
 model BudgetLineItem {
   id          String          @id @default(uuid())
   versionId   String?
-  subtaskId   String?
   wbsNodeId   String? // UUID węzła WBS (JSON tree, nie FK)
   type        String
   description String
@@ -422,29 +387,15 @@ model BudgetLineItem {
   updatedAt   DateTime        @updatedAt
   nodeId      String
   /// @anchor budget-line-item-user-task-id
-  /// Zadanie, z którego pochodzi pozycja (następca `subtaskId`). SetNull — usunięcie zadania nie kasuje budżetu.
+  /// Zadanie, z którego pochodzi pozycja. SetNull — usunięcie zadania nie kasuje budżetu.
   userTaskId  String?
   node        ProcessNode     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  subtask     Subtask?        @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
   /// @anchor budget-line-item-user-task
   userTask    UserTask?       @relation(fields: [userTaskId], references: [id], onDelete: SetNull)
   version     ProjectVersion? @relation(fields: [versionId], references: [id], onDelete: Cascade)
 
   @@index([userTaskId])
   @@map("budget_line_items")
-}
-
-model SubtaskFile {
-  id        String   @id @default(uuid())
-  subtaskId String
-  name      String
-  path      String
-  size      Int
-  mimeType  String
-  createdAt DateTime @default(now())
-  subtask   Subtask  @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
-
-  @@map("subtask_files")
 }
 
 model SubtaskTemplate {
@@ -651,13 +602,11 @@ model UserEntityConfig {
 model SchematicDocument {
   id        String            @id @default(uuid())
   nodeId    String
-  subtaskId String?
   fileUrl   String
   fileName  String
   createdAt DateTime          @default(now())
   markers   SchematicMarker[]
   node      ProcessNode       @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  subtask   Subtask?          @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
   /// @anchor schematic-document-user-task-id
   userTaskId String?
   /// @anchor schematic-document-user-task
@@ -669,7 +618,6 @@ model SchematicDocument {
 model SchematicMarker {
   id          String             @id @default(uuid())
   schematicId String
-  subtaskId   String?
   type        String             @default("POINT") // "POINT" lub "LINE"
   x           Float
   y           Float
@@ -681,35 +629,20 @@ model SchematicMarker {
   question    String?
   createdAt   DateTime           @default(now())
   schematic   SchematicDocument  @relation(fields: [schematicId], references: [id], onDelete: Cascade)
-  subtask     Subtask?           @relation(fields: [subtaskId], references: [id], onDelete: SetNull)
   /// @anchor schematic-marker-user-task-id
   userTaskId    String?
   /// @anchor schematic-marker-user-task
   userTask      UserTask?            @relation(fields: [userTaskId], references: [id], onDelete: SetNull)
   attachments   MarkerAttachment[]
   wbsLinks      WbsMarkerLink[]
-  subtaskLinks  SubtaskMarkerLink[]
   /// @anchor schematic-marker-user-task-links
   userTaskLinks UserTaskMarkerLink[]
 
   @@map("schematic_markers")
 }
 
-model SubtaskMarkerLink {
-  id        String          @id @default(uuid())
-  subtaskId String
-  markerId  String
-  createdAt DateTime        @default(now())
-  subtask   Subtask         @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
-  marker    SchematicMarker @relation(fields: [markerId], references: [id], onDelete: Cascade)
-
-  @@unique([subtaskId, markerId])
-  @@index([subtaskId])
-  @@map("subtask_marker_links")
-}
-
 /// @anchor user-task-marker-link
-/// Powiązanie zadania ze znacznikiem na schemacie (następca `SubtaskMarkerLink`).
+/// Powiązanie zadania ze znacznikiem na schemacie.
 model UserTaskMarkerLink {
   id         String          @id @default(uuid())
   /// @anchor user-task-marker-link-user-task-id
@@ -902,8 +835,6 @@ model MaterialRequirement {
   sourceDocument String? // nazwa pliku PDF źródłowego
 
   // Przypisanie do WBS
-  /// @anchor mat-req-assigned-subtask-id
-  assignedSubtaskId  String?
   /// @anchor mat-req-assigned-user-task-id
   assignedUserTaskId String?
   /// @anchor mat-req-wbs-node-id
@@ -986,8 +917,6 @@ model MaterialRequirement {
   version         ProjectVersion?           @relation(fields: [versionId], references: [id], onDelete: Cascade)
   /// @anchor mat-req-list
   list            MaterialRequirementsList? @relation(fields: [listId], references: [id], onDelete: SetNull)
-  /// @anchor mat-req-assigned-subtask
-  assignedSubtask Subtask?                  @relation(fields: [assignedSubtaskId], references: [id], onDelete: SetNull)
   /// @anchor mat-req-assigned-user-task
   assignedUserTask UserTask?                      @relation(fields: [assignedUserTaskId], references: [id], onDelete: SetNull)
   /// @anchor mat-req-wbs-node

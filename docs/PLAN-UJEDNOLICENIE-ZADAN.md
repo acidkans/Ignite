@@ -130,3 +130,10 @@ nie dostaje następcy, znika w etapie 9. `BudgetLineItem.subtaskId` ma `onDelete
 - Nowa kolumna z `versionId` → `cloneVersionData`.
 - Po zmianie backendu na dev: `docker restart erp-backend`.
 - Bez commitów, merge i deployu bez zgody użytkownika; testy w Chrome.
+
+## Status (2026-10-31)
+
+Etapy 1–9 zrobione. Na produkcji: etapy 2–7 (v2026.10.31.1559). Etapy 8–9 czekają na deploy — w jednym
+deployu idą migracje `20261031180000_subtasks_to_user_tasks_delta` (dograne różnice) i
+`20261031190000_drop_subtasks` (usunięcie tabel), w tej kolejności. Przed deployem: backup i próba obu
+migracji na prod w transakcji z ROLLBACK.

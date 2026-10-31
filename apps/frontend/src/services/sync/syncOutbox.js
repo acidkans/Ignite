@@ -76,17 +76,9 @@ async function processItem(item, token) {
         await db.userTasks.update(userTaskId, { status, updatedAt: new Date().toISOString() });
     }
 
-    // Wpisy sprzed ujednolicenia zadań (stary harmonogram). Endpoint `/subtasks` znika w etapie 9 —
-    // wtedy usunąć tę gałąź razem z nim.
-    if (item.type === 'SUBTASK_STATUS') {
-        const { subtaskId, status } = item.payload;
-        const res = await fetch(`${API_URL}/subtasks/${subtaskId}`, {
-            method: 'PATCH',
-            headers,
-            body: JSON.stringify({ status }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    }
+    // Wpis sprzed ujednolicenia zadań (stary harmonogram `SUBTASK_STATUS`) — Subtaski już nie istnieją,
+    // więc nie ma dokąd go wysłać; schodzi z kolejki bez akcji zamiast wisieć w niej jako błąd.
+    if (item.type === 'SUBTASK_STATUS') return;
 
     if (item.type === 'ADD_MARKER') {
         const { schematicId, marker, userTaskId, nodeId, tempId } = item.payload;
