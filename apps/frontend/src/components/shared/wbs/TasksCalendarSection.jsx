@@ -1,22 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
-import { Save, CheckCircle, FileDown, Clock, ListTodo, LayoutList } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { LayoutList } from 'lucide-react';
 import { API_URL } from '../../../config';
-import { TASK_CATEGORIES } from './wbsConstants';
-import CalendarView from './CalendarView';
-import SubtaskModal from '../SubtaskModal';
+import { TASK_STATUS_CODES, EXEC_STATUS_META, isTaskClosed } from './wbsConstants';
+import CalendarView, { TASK_TILE_STYLE } from './CalendarView';
 import AllTasksModal from './AllTasksModal';
 import TaskModal from './TaskModal';
 
-const CATEGORIES = TASK_CATEGORIES;
-
 // @anchor tasks-calendar-section
-export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWbsUpdate }) {
-    const [subtasks, setSubtasks] = useState([]);
-    const [logistykUsers, setLogistykUsers] = useState([]);
-    const [saving, setSaving] = useState(false);
-    const [saved, setSaved] = useState(false);
-    const [selectedTask, setSelectedTask] = useState(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
+export default function TasksCalendarSection({ nodeId, versionId }) {
     // @anchor tasks-calendar-user-tasks — zadania węzłów (UserTask) nakładane na kalendarz
     const [userTasks, setUserTasks] = useState([]);
     // @anchor tasks-calendar-scope — 'project' = zadania wszystkich w tym projekcie, 'mine' = moje w tym projekcie, 'all' = wszystkie moje
@@ -29,35 +20,14 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
     const [editUserTask, setEditUserTask] = useState(null);
     // @anchor tasks-calendar-new-task-date — dzień kliknięty w kalendarzu → nowe zadanie (TaskModal) na ten dzień, 8:00
     const [newTaskDate, setNewTaskDate] = useState(null);
-    const latestSubtasksRef = useRef([]);
-    const isSavingRef = useRef(false);
-    const saveTimeoutRef = useRef(null);
-    const activeVersionRef = useRef(versionId);
-
-    useEffect(() => { latestSubtasksRef.current = subtasks; }, [subtasks]);
-    useEffect(() => { activeVersionRef.current = versionId; }, [versionId]);
 
     const token = () => sessionStorage.getItem('token') || localStorage.getItem('token');
     const currentUserId = (() => { try { return JSON.parse(atob(token().split('.')[1])).sub; } catch { return null; } })();
 
-    const fetchSubtasks = async () => {
-        try {
-            const url = versionId
-                ? `${API_URL}/subtasks/node/${nodeId}?versionId=${versionId}`
-                : `${API_URL}/subtasks/node/${nodeId}`;
-            const res = await fetch(url, { headers: { Authorization: `Bearer ${token()}` } });
-            if (res.ok) {
-                const data = await res.json();
-                setSubtasks(data || []);
-                latestSubtasksRef.current = data || [];
-            }
-        } catch {}
-    };
-
-    // @anchor tasks-calendar-fetch-user-tasks — wszystkie moje UserTaski (filtr zakresu po stronie klienta)
+    // @anchor tasks-calendar-fetch-user-tasks — wszystkie moje UserTaski, także zamknięte (filtr zakresu po stronie klienta)
     const fetchUserTasks = async () => {
         try {
-            const res = await fetch(`${API_URL}/my-tasks`, { headers: { Authorization: `Bearer ${token()}` } });
+            const res = await fetch(`${API_URL}/my-tasks?status=ALL`, { headers: { Authorization: `Bearer ${token()}` } });
             if (res.ok) {
                 const data = await res.json();
                 setUserTasks(Array.isArray(data) ? data : []);
@@ -68,7 +38,7 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
     // @anchor tasks-calendar-fetch-project-tasks
     const fetchProjectTasks = async () => {
         try {
-            const res = await fetch(`${API_URL}/my-tasks/project/${nodeId}`, { headers: { Authorization: `Bearer ${token()}` } });
+            const res = await fetch(`${API_URL}/my-tasks/project/${nodeId}?status=ALL`, { headers: { Authorization: `Bearer ${token()}` } });
             if (res.ok) {
                 const data = await res.json();
                 setProjectTasks(Array.isArray(data) ? data : []);
@@ -81,13 +51,8 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
 
     useEffect(() => {
         if (!nodeId) return;
-        fetchSubtasks();
         fetchUserTasks();
         fetchProjectTasks();
-        fetch(`${API_URL}/users/by-role/LOGISTYK`, { headers: { Authorization: `Bearer ${token()}` } })
-            .then(r => r.ok ? r.json() : [])
-            .then(setLogistykUsers)
-            .catch(() => {});
     }, [nodeId, versionId]);
 
     // UserTaski widoczne w kalendarzu wg wybranego zakresu.
@@ -104,35 +69,39 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
                 _readOnly: t.userId !== currentUserId && t.createdById !== currentUserId,
             }));
 
-    // @anchor tasks-calendar-user-task-done — oznacz UserTask jako wykonane
+    // @anchor tasks-calendar-user-task-done — checkbox na kafelku: otwarte → DONE, zamknięte → z powrotem TO_DO
+    // (kalendarz pokazuje też zamknięte, więc odhaczenie musi dać się cofnąć).
     const markUserTaskDone = async (taskId) => {
-        setUserTasks(prev => prev.filter(t => t.id !== taskId));
-        setProjectTasks(prev => prev.filter(t => t.id !== taskId));
+        const task = [...userTasks, ...projectTasks].find(t => t.id === taskId);
+        const status = isTaskClosed(task?.status) ? 'TO_DO' : 'DONE';
+        setUserTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
+        setProjectTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
         try {
-            await fetch(`${API_URL}/my-tasks/${taskId}`, {
+            const res = await fetch(`${API_URL}/my-tasks/${taskId}`, {
                 method: 'PATCH',
                 headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'DONE' }),
+                body: JSON.stringify({ status }),
             });
+            if (!res.ok) refreshUserTasks();
         } catch { refreshUserTasks(); }
     };
 
     // @anchor tasks-calendar-user-task-reschedule — przełożenie UserTask przez drag na inny dzień.
-    // Zadanie z godziną (durationMinutes) przesuwa Od i Do o tyle samo dni — godziny i długość zostają
-    // (inaczej wydarzenie w Outlooku skakałoby na 12:00). Bez godziny: sam termin, południe.
+    // Od i Do przesuwają się o tyle samo dni — godziny i długość zostają (inaczej wydarzenie w Outlooku
+    // skakałoby na 12:00). Zadanie bez terminu dostaje termin w południe wybranego dnia.
     const rescheduleUserTask = async (taskId, date) => {
         const y = date.getFullYear();
         const m = String(date.getMonth() + 1).padStart(2, '0');
         const d = String(date.getDate()).padStart(2, '0');
         const task = [...userTasks, ...projectTasks].find(t => t.id === taskId);
         let patch;
-        if (task?.durationMinutes && task.plannedEnd) {
+        if (task?.plannedEnd) {
             const start = new Date(task.plannedStart || task.plannedEnd);
-            const end = new Date(task.plannedEnd);
             const newStart = new Date(start);
             newStart.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
             const shift = newStart - start;
-            patch = { plannedStart: newStart.toISOString(), plannedEnd: new Date(end.getTime() + shift).toISOString() };
+            patch = { plannedEnd: new Date(new Date(task.plannedEnd).getTime() + shift).toISOString() };
+            if (task.plannedStart) patch.plannedStart = newStart.toISOString();
         } else {
             patch = { plannedEnd: new Date(`${y}-${m}-${d}T12:00:00`).toISOString() };
         }
@@ -147,118 +116,17 @@ export default function TasksCalendarSection({ nodeId, versionId, nodeName, onWb
         } catch { refreshUserTasks(); }
     };
 
-    const saveSubtasks = async (tasks, immediate = false) => {
-        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-        const saveVersionId = versionId;
-        const perform = async () => {
-            if (isSavingRef.current) { saveTimeoutRef.current = setTimeout(perform, 250); return; }
-            isSavingRef.current = true;
-            setSaving(true);
-            try {
-                const res = await fetch(`${API_URL}/subtasks/batch/${nodeId}?versionId=${versionId || ''}`, {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify(
-                        (Array.isArray(tasks) ? tasks : latestSubtasksRef.current).map(s => ({
-                            ...s,
-                            id: typeof s.id === 'string' && s.id.startsWith('temp_') ? null : s.id,
-                            isApproved: true,
-                        }))
-                    ),
-                });
-                if (res.ok) {
-                    const saved = await res.json();
-                    if (saveVersionId === activeVersionRef.current) {
-                        setSubtasks(saved || []);
-                        latestSubtasksRef.current = saved || [];
-                    }
-                    setSaved(true);
-                    onWbsUpdate?.();
-                    setTimeout(() => setSaved(false), 2000);
-                }
-            } finally {
-                isSavingRef.current = false;
-                setSaving(false);
-            }
-        };
-        if (immediate) perform();
-        else saveTimeoutRef.current = setTimeout(perform, 400);
-    };
-
     const handleDrop = (e, date) => {
         e.preventDefault();
         try {
             const data = JSON.parse(e.dataTransfer.getData('application/json'));
-            if (data._kind === 'user' && data.id) { rescheduleUserTask(data.id, date); return; }
-            const y = date.getFullYear();
-            const m = String(date.getMonth() + 1).padStart(2, '0');
-            const d = String(date.getDate()).padStart(2, '0');
-            const dateStr = `${y}-${m}-${d}T12:00:00`;
-            setSubtasks(prev => {
-                let next;
-                if (data.isMove && data.id) {
-                    const endStr = `${y}-${m}-${d}T23:59:59`;
-                    next = prev.map(s => String(s.id) === String(data.id)
-                        ? { ...s, plannedStart: dateStr, plannedEnd: endStr } : s);
-                    latestSubtasksRef.current = next;
-                    saveSubtasks(next, true);
-                } else {
-                    const newTask = {
-                        id: `temp_${Date.now()}`,
-                        requirementItemId: data.id,
-                        name: data.name,
-                        category: data.catLabel,
-                        phase: 'INSTAL',
-                        status: 'NEW',
-                        plannedStart: dateStr,
-                        plannedEnd: dateStr,
-                        isAiGenerated: false,
-                        isApproved: true,
-                    };
-                    next = [...prev, newTask];
-                    latestSubtasksRef.current = next;
-                    saveSubtasks(next);
-                }
-                return next;
-            });
+            if (data._kind === 'user' && data.id) rescheduleUserTask(data.id, date);
         } catch {}
-    };
-
-    const removeTask = (requirementItemId, phaseId, subtaskId = null) => {
-        setSubtasks(prev => {
-            const next = prev.filter(s => {
-                if (subtaskId && String(s.id) === String(subtaskId)) return false;
-                if (!subtaskId && s.requirementItemId === requirementItemId && s.phase === phaseId) return false;
-                return true;
-            });
-            latestSubtasksRef.current = next;
-            saveSubtasks(next, true);
-            return next;
-        });
-    };
-
-    const handleExportPDF = () => {
-        const title = nodeName || 'Projekt';
-        const rows = subtasks.map(s => `<tr>
-            <td style="padding:4px 8px;border-bottom:1px solid #e5e7eb">${s.name || '—'}</td>
-            <td style="padding:4px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280">${s.category || '—'}</td>
-            <td style="padding:4px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280">${s.plannedStart ? new Date(s.plannedStart).toLocaleDateString('pl-PL') : '—'}</td>
-            <td style="padding:4px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280">${s.plannedEnd ? new Date(s.plannedEnd).toLocaleDateString('pl-PL') : '—'}</td>
-            <td style="padding:4px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280">${s.status || '—'}</td>
-        </tr>`).join('');
-        const html = `<!DOCTYPE html><html lang="pl"><head><meta charset="UTF-8"><title>Harmonogram – ${title}</title>
-<style>body{font-family:Arial,sans-serif;max-width:1000px;margin:40px auto;color:#1a1a1a;font-size:13px}h1{font-size:20px;border-bottom:2px solid #7c3aed;padding-bottom:8px;color:#1e3a5f;break-after:avoid;page-break-after:avoid;break-inside:avoid;page-break-inside:avoid}h2,h3,h4,h5,h6{break-after:avoid;page-break-after:avoid;break-inside:avoid;page-break-inside:avoid}p{orphans:3;widows:3}table{width:100%;border-collapse:collapse}th{background:#f3f4f6;padding:6px 8px;text-align:left;font-size:11px;text-transform:uppercase;color:#374151}tr{break-inside:avoid;page-break-inside:avoid}thead{display:table-header-group}@page{margin:20mm 14mm}@media print{body{max-width:none;margin:0}}</style>
-</head><body><h1>Harmonogram: ${title}</h1>
-<table><thead><tr><th>Zadanie</th><th>Kategoria</th><th>Start</th><th>Koniec</th><th>Status</th></tr></thead><tbody>
-${rows}
-</tbody></table></body></html>`;
-        const w = window.open('', '_blank', 'width=1000,height=700');
-        w.document.write(html); w.document.close(); w.onload = () => w.print();
     };
 
     return (
         <div className="flex flex-col gap-3 px-5 pb-5 flex-1 overflow-y-auto">
-            {/* @anchor tasks-calendar-toolbar — zakres UserTasków, legenda typów, pełna lista */}
+            {/* @anchor tasks-calendar-toolbar — zakres UserTasków, legenda statusów, pełna lista */}
             <div className="flex items-center gap-3 flex-wrap flex-shrink-0">
                 <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
                     <button
@@ -274,9 +142,10 @@ ${rows}
                         className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${taskScope === 'all' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
                     >Wszystkie moje</button>
                 </div>
-                <div className="flex items-center gap-3 text-[10px] text-gray-500">
-                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-blue-500/40 border border-blue-500/50" /><Clock size={10} className="text-blue-400" /> Harmonogram</span>
-                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-amber-500/40 border border-amber-500/50" /><ListTodo size={10} className="text-amber-400" /> Zadania węzłów</span>
+                <div className="flex items-center gap-3 text-[10px] text-gray-500 flex-wrap">
+                    {TASK_STATUS_CODES.map(code => (
+                        <span key={code} className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded border ${TASK_TILE_STYLE[code].swatch}`} />{EXEC_STATUS_META[code].label}</span>
+                    ))}
                 </div>
                 <button
                     onClick={() => setAllTasksOpen(true)}
@@ -287,37 +156,13 @@ ${rows}
             </div>
             <div className="flex-1 flex flex-col min-h-[420px]">
                 <CalendarView
-                    subtasks={subtasks}
                     userTasks={visibleUserTasks}
                     onUserTaskDone={markUserTaskDone}
-                    onUserTaskReschedule={(task, date) => rescheduleUserTask(task.id, date)}
                     onUserTaskClick={(task) => setEditUserTask(task)}
-                    categories={CATEGORIES}
                     onDrop={handleDrop}
                     onDateClick={(date) => setNewTaskDate(date)}
-                    onTaskClick={(task) => {
-                        setSelectedTask(task);
-                        setIsModalOpen(true);
-                    }}
-                    onRemoveTask={removeTask}
-                    onUpdateTask={(updatedTask) => {
-                        setSubtasks(prev => {
-                            const next = prev.map(s => s.id === updatedTask.id ? updatedTask : s);
-                            setTimeout(() => saveSubtasks(next), 0);
-                            return next;
-                        });
-                    }}
                 />
             </div>
-            {isModalOpen && (
-                <SubtaskModal
-                    nodeId={nodeId}
-                    versionId={versionId}
-                    subtask={selectedTask}
-                    onClose={() => setIsModalOpen(false)}
-                    onSuccess={() => { setIsModalOpen(false); fetchSubtasks(); }}
-                />
-            )}
             {(editUserTask || newTaskDate) && (
                 <TaskModal
                     task={editUserTask}
@@ -331,7 +176,7 @@ ${rows}
                 <AllTasksModal
                     nodeId={nodeId}
                     versionId={versionId}
-                    onChanged={() => { refreshUserTasks(); fetchSubtasks(); }}
+                    onChanged={refreshUserTasks}
                     onClose={() => setAllTasksOpen(false)}
                 />
             )}

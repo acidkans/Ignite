@@ -1,3 +1,15 @@
+## 2026-10-31 — feat(zadania): etap 6 ujednolicenia - kalendarz zamówienia tylko z UserTask, wszystkie statusy, kolor wg statusu, godzina na kafelku
+
+### architektura / API
+- `ui-sekcja` `TasksCalendarSection` — usunięto warstwę Subtasków (pobieranie `/subtasks/node`, zapis `/subtasks/batch`, `SubtaskModal`, drop pozycji projektu); zmigrowane zadania nie są już pokazywane podwójnie
+- kalendarz pobiera `GET /my-tasks?status=ALL` i `GET /my-tasks/project/:id?status=ALL` — widać też zadania wykonane i odwołane (przekreślone)
+- `ui-funkcja` `markUserTaskDone` — checkbox przełącza otwarte → DONE, zamknięte → TO_DO (zamiast chować zadanie)
+- `ui-funkcja` `rescheduleUserTask` — przeciągnięcie zawsze przesuwa Od i Do o tyle samo dni, godzina zostaje
+- `ui-widok` `CalendarView` — tylko UserTaski; kafelek w kolorze statusu, godzina Od w dniu startu, legenda statusów w pasku
+
+### słownik
+- dodano `task-tile-style` — `TASK_TILE_STYLE`, CalendarView.jsx
+
 ## 2026-10-31 — fix(przypomnienia): push dla serii cyklicznych co interwał, push nie gasi przypomnienia, tylko otwarte zadania
 
 ### schema.prisma

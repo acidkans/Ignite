@@ -1,11 +1,21 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, X, ListTodo, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Check } from 'lucide-react';
+import { EXEC_STATUS_META, isTaskClosed } from './wbsConstants';
+
+// @anchor task-tile-style — kolor kafelka zadania wg statusu (te same barwy co `EXEC_STATUS_META.color`);
+// pełne nazwy klas, bo Tailwind nie widzi klas składanych w locie. `swatch` = kwadracik w legendzie.
+export const TASK_TILE_STYLE = {
+    TO_DO:       { tile: 'border-slate-400/30 bg-slate-500/15 text-slate-100 hover:border-slate-300/60', swatch: 'bg-slate-500/40 border-slate-400/50' },
+    IN_PROGRESS: { tile: 'border-blue-500/30 bg-blue-500/15 text-blue-100 hover:border-blue-400/60',     swatch: 'bg-blue-500/40 border-blue-500/50' },
+    ON_HOLD:     { tile: 'border-amber-500/30 bg-amber-500/15 text-amber-100 hover:border-amber-400/60', swatch: 'bg-amber-500/40 border-amber-500/50' },
+    DONE:        { tile: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200/70 hover:border-emerald-400/50', swatch: 'bg-emerald-500/40 border-emerald-500/50' },
+    CANCELLED:   { tile: 'border-red-500/25 bg-red-500/10 text-red-200/60 hover:border-red-400/50',     swatch: 'bg-red-500/40 border-red-500/50' },
+};
 
 // @anchor calendar-view
-export default function CalendarView({ subtasks, userTasks = [], categories, onDrop, onDateClick, onTaskClick, onRemoveTask, onUpdateTask, onUserTaskReschedule, onUserTaskDone, onUserTaskClick }) {
+export default function CalendarView({ userTasks = [], onDrop, onDateClick, onUserTaskDone, onUserTaskClick }) {
     const [viewDate, setViewDate] = useState(new Date());
     const [viewMode, setViewMode] = useState('month'); // 'month' | 'week'
-    const [resizingTask, setResizingTask] = useState(null);
 
     const weekDates = useMemo(() => {
         const d = new Date(viewDate);
@@ -55,87 +65,6 @@ export default function CalendarView({ subtasks, userTasks = [], categories, onD
         return `${y}-${m}-${d}`;
     };
 
-    const getTasksForDate = (date) => {
-        const targetStr = formatDateToYYYYMMDD(date);
-        return subtasks.map(s => resizingTask && resizingTask.id === s.id ? { ...s, plannedEnd: resizingTask.newEnd } : s)
-            .filter(s => {
-                if (!s.plannedStart) return false;
-                const datePart = s.plannedStart.split('T')[0];
-                const endPart = (s.plannedEnd || s.plannedStart).split('T')[0];
-                return targetStr >= datePart && targetStr <= endPart;
-            });
-    };
-
-    const getTaskStyle = (task, date) => {
-        const cat = categories?.find(c => c.label === task.category);
-        const color = cat?.color || 'blue';
-        const isStart = task.plannedStart.startsWith(formatDateToYYYYMMDD(date));
-        const isEnd = (task.plannedEnd || task.plannedStart).startsWith(formatDateToYYYYMMDD(date));
-        const base = task.status === 'FINISHED'
-            ? `bg-${color}-500/10 border-${color}-500/30 text-${color}-400 opacity-60`
-            : `bg-${color}-500/20 border-${color}-500/30 text-${color}-100 hover:border-${color}-400/60 hover:bg-${color}-500/30 shadow-sm`;
-        const borderRadius = `${isStart ? 'rounded-l-lg' : 'rounded-l-none'} ${isEnd ? 'rounded-r-lg' : 'rounded-r-none'}`;
-        return `${base} ${borderRadius}`;
-    };
-
-    const handleResizeStart = (e, task) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setResizingTask({ id: task.id, newEnd: task.plannedEnd || task.plannedStart });
-        const onMouseUp = () => {
-            setResizingTask(current => {
-                if (current && onUpdateTask) {
-                    const original = subtasks.find(s => s.id === current.id);
-                    if (original && original.plannedEnd !== current.newEnd) onUpdateTask({ ...original, plannedEnd: current.newEnd });
-                }
-                return null;
-            });
-            window.removeEventListener('mouseup', onMouseUp);
-        };
-        window.addEventListener('mouseup', onMouseUp);
-    };
-
-    const handleCellMouseEnter = (date) => {
-        if (resizingTask) {
-            const dateStr = formatDateToYYYYMMDD(date) + "T23:59:59";
-            const task = subtasks.find(s => s.id === resizingTask.id);
-            if (task && dateStr >= task.plannedStart) setResizingTask(prev => ({ ...prev, newEnd: dateStr }));
-        }
-    };
-
-    const renderTask = (task, date) => {
-        const cat = categories?.find(c => c.label === task.category);
-        const color = cat?.color || 'blue';
-        const dateStr = formatDateToYYYYMMDD(date);
-        const isEnd = (task.plannedEnd || task.plannedStart).startsWith(dateStr);
-        return (
-            <div
-                key={`${task.id}_${task.plannedStart}`}
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, isMove: true, requirementItemId: task.requirementItemId, phase: task.phase }))}
-                onClick={(e) => { e.stopPropagation(); onTaskClick(task); }}
-                className={`group/task relative px-2 py-1.5 border text-[10px] font-bold leading-tight transition-all cursor-pointer flex items-center gap-2 pointer-events-auto ${getTaskStyle(task, date)} ${resizingTask?.id === task.id ? 'ring-2 ring-blue-500/50 scale-[1.02] z-50' : ''}`}
-            >
-                <div className="flex-shrink-0"><Clock size={10} /></div>
-                <span className="truncate flex-1">{task.name}</span>
-                {isEnd && (
-                    <div
-                        onMouseDown={(e) => handleResizeStart(e, task)}
-                        className={`absolute right-0 top-0 bottom-0 w-2.5 cursor-ew-resize hover:bg-${color}-400/20 rounded-r-lg flex items-center justify-center group-hover/task:bg-white/5`}
-                    >
-                        <div className="w-0.5 h-3 bg-white/20 rounded-full" />
-                    </div>
-                )}
-                <button
-                    onClick={(e) => { e.stopPropagation(); onRemoveTask(task.requirementItemId, task.phase, task.id); }}
-                    className="opacity-0 group-hover/task:opacity-100 p-0.5 hover:bg-red-500/20 rounded text-red-400 transition-all z-10"
-                >
-                    <X size={10} />
-                </button>
-            </div>
-        );
-    };
-
     // @anchor calendar-user-tasks-for-date — UserTaski na dany dzień: każdy dzień od Od (plannedStart) do Do
     // (plannedEnd) w czasie lokalnym; zadanie bez Od — tylko dzień terminu.
     const getUserTasksForDate = (date) => {
@@ -149,32 +78,40 @@ export default function CalendarView({ subtasks, userTasks = [], categories, onD
         });
     };
 
-    // @anchor calendar-render-user-task — kafelek zadania węzła: bursztyn, ikona ListTodo, checkbox „zrobione", drag do przełożenia.
+    // @anchor calendar-render-user-task — kafelek zadania: kolor wg statusu (`TASK_TILE_STYLE`), godzina Od w dniu
+    // startu zadania z godziną, checkbox „zrobione / przywróć", drag do przełożenia. Zamknięte — przekreślone.
     // `_readOnly` (zadanie innej osoby, którego nie zleciłem) = bez checkboxa i bez przeciągania;
     // `_who` = odpowiedzialny, pokazywany gdy kalendarz zawiera zadania wszystkich.
-    const renderUserTask = (task) => (
-        <div
-            key={`ut_${task.id}`}
-            draggable={!task._readOnly}
-            onDragStart={(e) => { if (task._readOnly) return; e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, _kind: 'user', isMove: true })); }}
-            onClick={(e) => { e.stopPropagation(); onUserTaskClick && onUserTaskClick(task); }}
-            className={`group/ut relative px-2 py-1.5 border rounded-lg text-[10px] font-bold leading-tight transition-all flex items-center gap-2 pointer-events-auto shadow-sm ${task._readOnly ? 'border-amber-500/20 bg-amber-500/[0.07] text-amber-100/70 cursor-default' : 'border-amber-500/30 bg-amber-500/15 text-amber-100 hover:border-amber-400/60 hover:bg-amber-500/25 cursor-pointer'}`}
-            title={[task.wbsNode?.name && `Pozycja WBS: ${task.wbsNode.name}`, task.node?.name && `Projekt: ${task.node.name}`, task._who && `Odpowiedzialny: ${task._who}`].filter(Boolean).join('\n') || 'Zadanie węzła'}
-        >
-            {!task._readOnly && (
-                <button
-                    onClick={(e) => { e.stopPropagation(); onUserTaskDone && onUserTaskDone(task.id); }}
-                    className="flex-shrink-0 w-3.5 h-3.5 rounded-full border border-amber-400/50 hover:bg-emerald-400/20 hover:border-emerald-400 flex items-center justify-center transition-all"
-                    title="Oznacz jako wykonane"
-                >
-                    <Check size={8} className="text-amber-300/40 group-hover/ut:text-emerald-300 transition-colors" />
-                </button>
-            )}
-            <ListTodo size={10} className="flex-shrink-0 text-amber-400" />
-            <span className="truncate flex-1">{task.title}</span>
-            {task._who && <span className="flex-shrink-0 text-[9px] font-semibold text-amber-300/70 truncate max-w-[45%]">{task._who}</span>}
-        </div>
-    );
+    const renderUserTask = (task, date) => {
+        const style = TASK_TILE_STYLE[task.status] || TASK_TILE_STYLE.TO_DO;
+        const closed = isTaskClosed(task.status);
+        const start = new Date(task.plannedStart || task.plannedEnd);
+        const time = task.durationMinutes && formatDateToYYYYMMDD(start) === formatDateToYYYYMMDD(date)
+            ? start.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : null;
+        return (
+            <div
+                key={`ut_${task.id}`}
+                draggable={!task._readOnly}
+                onDragStart={(e) => { if (task._readOnly) return; e.dataTransfer.setData('application/json', JSON.stringify({ id: task.id, _kind: 'user', isMove: true })); }}
+                onClick={(e) => { e.stopPropagation(); onUserTaskClick && onUserTaskClick(task); }}
+                className={`group/ut relative px-2 py-1.5 border rounded-lg text-[10px] font-bold leading-tight transition-all flex items-center gap-2 pointer-events-auto shadow-sm cursor-pointer ${style.tile} ${task._readOnly ? 'opacity-70' : ''}`}
+                title={[task.title, EXEC_STATUS_META[task.status]?.label && `Status: ${EXEC_STATUS_META[task.status].label}`, task.wbsNode?.name && `Pozycja WBS: ${task.wbsNode.name}`, task.node?.name && `Projekt: ${task.node.name}`, task._who && `Odpowiedzialny: ${task._who}`].filter(Boolean).join('\n')}
+            >
+                {!task._readOnly && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onUserTaskDone && onUserTaskDone(task.id); }}
+                        className={`flex-shrink-0 w-3.5 h-3.5 rounded-full border flex items-center justify-center transition-all ${closed ? 'border-emerald-400/60 bg-emerald-400/20 hover:bg-transparent' : 'border-white/30 hover:bg-emerald-400/20 hover:border-emerald-400'}`}
+                        title={closed ? 'Przywróć do wykonania' : 'Oznacz jako wykonane'}
+                    >
+                        <Check size={8} className={closed ? 'text-emerald-300' : 'text-white/30 group-hover/ut:text-emerald-300 transition-colors'} />
+                    </button>
+                )}
+                {time && <span className="flex-shrink-0 font-mono text-[9px] opacity-80">{time}</span>}
+                <span className={`truncate flex-1 ${closed ? 'line-through' : ''}`}>{task.title}</span>
+                {task._who && <span className="flex-shrink-0 text-[9px] font-semibold opacity-70 truncate max-w-[45%]">{task._who}</span>}
+            </div>
+        );
+    };
 
     const weekRangeLabel = (() => {
         const s = weekDates[0], e = weekDates[6];
@@ -240,15 +177,13 @@ export default function CalendarView({ subtasks, userTasks = [], categories, onD
             {viewMode === 'month' ? (
                 <div className="flex-1 grid grid-cols-7 grid-rows-6 auto-rows-fr overflow-hidden bg-black/10">
                     {daysInMonth.map((day, i) => {
-                        const dateTasks = getTasksForDate(day.date);
                         const isTodayFlag = isToday(day.date);
                         return (
                             <div
                                 key={i}
                                 onDragOver={(e) => e.preventDefault()}
                                 onDrop={(e) => onDrop(e, day.date)}
-                                onClick={() => !resizingTask && onDateClick && onDateClick(day.date)}
-                                onMouseEnter={() => handleCellMouseEnter(day.date)}
+                                onClick={() => onDateClick && onDateClick(day.date)}
                                 className={`relative min-h-[80px] border-r border-b border-white/[0.05] flex flex-col group transition-all ${!day.isCurrentMonth ? 'bg-black/40 opacity-20' : 'bg-transparent'} hover:bg-white/[0.05] active:bg-white/[0.08] cursor-pointer`}
                             >
                                 <div className="p-2 flex justify-between items-start pointer-events-none">
@@ -257,8 +192,7 @@ export default function CalendarView({ subtasks, userTasks = [], categories, onD
                                     </span>
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5 scrollbar-hide pointer-events-none">
-                                    {dateTasks.map((task) => renderTask(task, day.date))}
-                                    {getUserTasksForDate(day.date).map((task) => renderUserTask(task))}
+                                    {getUserTasksForDate(day.date).map((task) => renderUserTask(task, day.date))}
                                 </div>
                                 <div className="absolute inset-0 border-2 border-transparent group-hover:border-blue-500/40 pointer-events-none transition-all" />
                             </div>
@@ -268,20 +202,18 @@ export default function CalendarView({ subtasks, userTasks = [], categories, onD
             ) : (
                 <div className="flex-1 grid grid-cols-7 overflow-y-auto bg-black/10">
                     {weekDates.map((date, i) => {
-                        const dateTasks = getTasksForDate(date);
+                        const dateTasks = getUserTasksForDate(date);
                         return (
                             <div
                                 key={i}
                                 onDragOver={(e) => e.preventDefault()}
                                 onDrop={(e) => onDrop(e, date)}
-                                onClick={() => !resizingTask && onDateClick && onDateClick(date)}
-                                onMouseEnter={() => handleCellMouseEnter(date)}
+                                onClick={() => onDateClick && onDateClick(date)}
                                 className="relative border-r border-white/[0.05] flex flex-col group transition-all hover:bg-white/[0.05] cursor-pointer min-h-[300px]"
                             >
                                 <div className="flex-1 p-1.5 space-y-1.5">
-                                    {dateTasks.map((task) => renderTask(task, date))}
-                                    {getUserTasksForDate(date).map((task) => renderUserTask(task))}
-                                    {dateTasks.length === 0 && getUserTasksForDate(date).length === 0 && (
+                                    {dateTasks.map((task) => renderUserTask(task, date))}
+                                    {dateTasks.length === 0 && (
                                         <div className="h-8 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
                                             <span className="text-[9px] text-gray-600">+ dodaj</span>
                                         </div>
