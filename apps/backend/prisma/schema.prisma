@@ -1660,7 +1660,9 @@ model UserTask {
   /// @anchor user-task-description
   description    String?
   /// @anchor user-task-status
-  status         String         @default("OPEN")
+  /// Kody `EXEC_STATUS_META` (wbsConstants.js): TO_DO / IN_PROGRESS / ON_HOLD / DONE / CANCELLED.
+  /// Osobny od `WbsNode.execStatus` — bez automatycznej propagacji na węzeł.
+  status         String         @default("TO_DO")
   /// @anchor user-task-planned-start
   plannedStart   DateTime?
   /// @anchor user-task-planned-end

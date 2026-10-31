@@ -1,3 +1,14 @@
+## 2026-10-31 — feat(zadania): etap 3 ujednolicenia — migracja danych subtasks → user_tasks
+
+### schema.prisma
+- zmieniono `schema-pole` `UserTask.status` — domyślnie `TO_DO` zamiast `OPEN`; kody z `EXEC_STATUS_META` (TO_DO / IN_PROGRESS / ON_HOLD / DONE / CANCELLED)
+- migracja `20261031130000_subtasks_to_user_tasks`: OPEN → TO_DO w istniejących zadaniach; Subtaski z wersji aktywnej (albo baseline) → `UserTask` z `source = SUBTASK_MIGRATION`, `legacySubtaskId`, terminem 8:00 / 60 min, bez osoby → andrzej@gigatel.app, `wbsNodeId = NULL`; przepięcie `userTaskId` w budżecie, schematach, znacznikach, materiałach i linkach znaczników
+- podgląd bez zapisu: `test/migracja-zadan-dryrun.sql`
+
+### wytyczne
+- `schema-pole` `UserTask.source` = `SUBTASK_MIGRATION` — zadanie bez syncu do MS To Do / Outlooka i bez przypomnień, dopóki ktoś go nie edytuje; `DONE` / `CANCELLED` nigdy nie trafiają do MS
+- `schema-pole` `UserTask.status` — backend wdrażany RAZEM z tą migracją (stary kod filtruje po `OPEN`); przed deployem `/srv/apps/erp/backup-db.sh`
+
 ## 2026-10-31 — feat(zadania): etap 2 ujednolicenia Subtask → UserTask — pola harmonogramu w UserTask i FK userTaskId
 
 ### schema.prisma
