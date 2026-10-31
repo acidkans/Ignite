@@ -265,6 +265,9 @@ export const DRAWER = {
   cardHead: 'flex items-center gap-3 px-3 py-1.5',
   cardTitle: 'font-bold uppercase tracking-widest',
   cardCell: 'border-x border-b px-2 pb-2',
+  // @anchor drawer-chat-bar — szuflada czatu gałęzi: karta jak Zadania / Q&A, ale z grubą
+  // czerwoną belką po lewej, żeby czat od razu odróżniał się od pozostałych zakładek.
+  chatBar: '!border-l-[6px] !border-l-red-500',
   accent: {
     offer: {
       spine: 'border-l-blue-500', label: 'text-blue-300/80', cap: 'bg-blue-500/70',

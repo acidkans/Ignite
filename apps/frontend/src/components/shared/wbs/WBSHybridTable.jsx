@@ -4,7 +4,7 @@ import AutoResizeTextarea from './AutoResizeTextarea';
 import TaskModal from './TaskModal';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
-import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Paperclip, Image, FileText, Volume2, Link, Unlink, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, ArrowRight, ArrowLeft, Check, Loader2, Calendar, Repeat } from 'lucide-react';
+import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Link, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, MessageCircle, Send, ArrowRight, ArrowLeft, Check, Loader2, Calendar, Repeat, ImagePlus, Archive, RotateCcw } from 'lucide-react';
 import { CyclicAlarmEditor } from '../MyTasksModal';
 import { useDevice } from '../../../hooks/useDevice';
 
@@ -150,6 +150,16 @@ function collectBranchQa(node, depth = 0, acc = []) {
     return acc;
 }
 
+// { [id]: nazwa } wszystkich potomków węzła (bez niego samego) — czat gałęzi głównej.
+// @anchor collect-branch-names
+function collectBranchNames(node, acc = {}) {
+    for (const child of (node?.children || [])) {
+        acc[child.id] = child.name || 'Element WBS';
+        collectBranchNames(child, acc);
+    }
+    return acc;
+}
+
 // Zbiera wypełnione komórki strategii potomków (liście + węzły pośrednie) jako
 // [{ id, name, strategy }]. Węzeł top-level sam się pomija. Baza dla renderu (bold nazwa)
 // i dla złożenia utrwalanego na top-level.
@@ -238,6 +248,452 @@ function qaSummary(pairs) {
 // „Dodaj zadanie” i klik w zadanie otwierają wspólny TaskModal (ten sam co w kalendarzu zamówienia)
 // z węzłem ustawionym na ten wiersz. Odhaczać, ustawiać alarm i usuwać może odpowiedzialny albo autor —
 // backend sprawdza to samo (findEditable).
+
+// @anchor chat-image-max-bytes-front — zgodne z CHAT_IMAGE_MAX_BYTES w backendzie (comments/chat-image.storage.ts).
+const CHAT_IMAGE_MAX_BYTES = 15 * 1024 * 1024;
+// @anchor chat-image-cache — { nazwa pliku → blob URL }; czat odświeża się co 15 s, obrazki pobieramy raz na sesję.
+const chatImageCache = new Map();
+
+// @anchor chat-image
+// Miniatura obrazka z czatu. Endpoint jest za JWT, więc pobieramy blob fetch-em zamiast <img src>.
+function ChatImage({ fileName, onOpen }) {
+    const [url, setUrl] = useState(() => chatImageCache.get(fileName) || null);
+    const [failed, setFailed] = useState(false);
+    useEffect(() => {
+        if (url) return;
+        let cancelled = false;
+        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+        fetch(`${API_URL}/comments/images/${encodeURIComponent(fileName)}`, { headers: { Authorization: `Bearer ${token}` } })
+            .then(r => (r.ok ? r.blob() : Promise.reject(r.status)))
+            .then(b => { const u = URL.createObjectURL(b); chatImageCache.set(fileName, u); if (!cancelled) setUrl(u); })
+            .catch(() => { if (!cancelled) setFailed(true); });
+        return () => { cancelled = true; };
+    }, [fileName, url]);
+    if (failed) return <span className="text-[12px] text-gray-500 italic">obrazek niedostępny</span>;
+    if (!url) return <span className="h-24 w-24 rounded bg-white/5 flex items-center justify-center"><Loader2 size={14} className="animate-spin text-gray-500" /></span>;
+    return (
+        <button onClick={() => onOpen?.(url)} className="block" title="Powiększ">
+            <img src={url} alt="" className="max-h-40 max-w-[240px] rounded border border-white/10 object-contain bg-black/20" />
+        </button>
+    );
+}
+
+const fmtChatTime = (d) => new Date(d).toLocaleString('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+// @anchor group-chat-threads
+// Dzieli wiadomości gałęzi głównej na wątki per węzeł ({ id, messages }), wiadomości w wątku chronologicznie.
+// Wątki rosnąco po ostatniej wiadomości — najświeższy ląduje na dole, przy polu wpisywania.
+function groupChatThreads(messages, ownId) {
+    const byNode = new Map();
+    for (const m of messages) {
+        const id = m.wbsNodeId || ownId;
+        if (!byNode.has(id)) byNode.set(id, []);
+        byNode.get(id).push(m);
+    }
+    const lastAt = (g) => new Date(g.messages[g.messages.length - 1].createdAt).getTime();
+    return [...byNode].map(([id, msgs]) => ({ id, messages: msgs })).sort((a, b) => lastAt(a) - lastAt(b));
+}
+
+// @anchor wbs-chat-drawer
+// Czat gałęzi WBS — treść zakładki „Czat" w szufladzie. Wpisy to Comment z wbsNodeId
+// (GET/POST /comments/order/:processNodeId?wbsNodeId=), więc trafiają też do ogólnego czatu
+// zamówienia. Wysłanie powiadamia cały zespół zamówienia (backend). Otwarta szuflada oznacza
+// cudze wpisy jako przeczytane i odświeża się co 15 s.
+// `branchNames` ({ [id]: nazwa } potomków) — tylko dla gałęzi głównej: czat pokazuje wtedy też
+// wiadomości z podgałęzi (z ich nazwą), jak Q&A gałęzi; nowa wiadomość idzie do gałęzi głównej.
+function WbsChatDrawer({ wbsNodeId, processNodeId, onChanged, branchNames, nodeName }) {
+    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+    const currentUserId = token ? (() => { try { return JSON.parse(atob(token.split('.')[1])).sub; } catch { return null; } })() : null;
+    const [messages, setMessages] = useState(null);
+    // @anchor wbs-chat-unread-threads — gałąź główna: wątki, które przy otwarciu miały nieprzeczytane (kropka na liście).
+    const [unreadThreads, setUnreadThreads] = useState(() => new Set());
+    // Wątek wybrany ręcznie — od tej chwili auto-wybór najnowszego nieprzeczytanego już go nie przestawia.
+    const userPickedRef = useRef(false);
+    // @anchor wbs-chat-reply-to — gałąź główna: wątek (id liścia), do którego idzie wiadomość; null = sama gałąź główna.
+    const [replyTo, setReplyTo] = useState(null);
+    const [newThreadOpen, setNewThreadOpen] = useState(false);
+    // @anchor wbs-chat-thread-statuses — { [wbsNodeId]: { status, closedAt, closedBy } }; brak wpisu = aktywny.
+    const [threadStatuses, setThreadStatuses] = useState({});
+    // @anchor wbs-chat-show-archived — filtr „Pokaż archiwalne”: zamknięte wątki domyślnie ukryte.
+    const [showArchived, setShowArchived] = useState(false);
+    const [text, setText] = useState('');
+    const [sending, setSending] = useState(false);
+    const bottomRef = useRef(null);
+    const auth = { Authorization: `Bearer ${token}` };
+    const base = `${API_URL}/comments/order/${processNodeId}`;
+    const q = `?wbsNodeId=${encodeURIComponent(wbsNodeId)}`;
+    const branchNamesRef = useRef(branchNames);
+    branchNamesRef.current = branchNames;
+    const isBranch = !!branchNames;
+
+    const load = useCallback(async () => {
+        if (!processNodeId) return;
+        try {
+            const names = branchNamesRef.current;
+            const stRes = await fetch(`${base}/threads`, { headers: auth });
+            const statuses = stRes.ok ? await stRes.json() : {};
+            setThreadStatuses(statuses);
+            if (names) {
+                // Gałąź główna: węzeł + WSZYSCY potomkowie wg bazy (?branchOf=), nie tylko liście widoczne w tabeli —
+                // tabela chowa pozycje wg roli, a każdy z zespołu ma widzieć te same wątki. Każdy wpis niesie `wbsNodeName`.
+                const res = await fetch(`${base}?branchOf=${encodeURIComponent(wbsNodeId)}`, { headers: auth });
+                if (!res.ok) return;
+                const list = await res.json();
+                setMessages(list);
+                // Przeczytane oznaczamy per węzeł: własny zawsze, potomkowie tylko z cudzymi nieprzeczytanymi.
+                const unreadIds = new Set([wbsNodeId]);
+                const unreadThreads = new Set();
+                for (const m of list) {
+                    if (m.user?.id !== currentUserId && !(m.reads || []).some(r => r.userId === currentUserId)) {
+                        unreadIds.add(m.wbsNodeId);
+                        unreadThreads.add(m.wbsNodeId || wbsNodeId);
+                    }
+                }
+                // Lista pobrana PRZED mark-read, więc widać tu, co było nieprzeczytane — te wątki dostają kropkę.
+                // Dokładamy, nie nadpisujemy: kolejne odświeżenie (już przeczytane) nie może jej zgasić.
+                if (unreadThreads.size) setUnreadThreads(prev => new Set([...prev, ...unreadThreads]));
+                // Dopóki nikt nie wybrał wątku, po prawej otwiera się najnowszy nieprzeczytany
+                // (a bez nieprzeczytanych — najnowszy w ogóle).
+                if (!userPickedRef.current) {
+                    const threads = groupChatThreads(list, wbsNodeId);
+                    // Zamknięte (archiwum) pomijamy — otwierają się tylko z włączonym filtrem.
+                    const open = [...threads].reverse().filter(t => statuses[t.id]?.status !== 'CLOSED');
+                    const pick = open.find(t => unreadThreads.has(t.id)) || open[0];
+                    if (pick) setReplyTo(pick.id === wbsNodeId ? null : pick.id);
+                }
+                await Promise.all([...unreadIds].map(id => fetch(`${base}/mark-read?wbsNodeId=${encodeURIComponent(id)}`, { method: 'POST', headers: auth })));
+            } else {
+                const res = await fetch(`${base}${q}`, { headers: auth });
+                if (res.ok) setMessages(await res.json());
+                await fetch(`${base}/mark-read${q}`, { method: 'POST', headers: auth });
+            }
+            onChanged?.();
+        } catch (e) { console.warn('[WBS] chat load failed', e); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [processNodeId, wbsNodeId, isBranch]);
+    useEffect(() => {
+        load();
+        const iv = setInterval(load, 15000);
+        return () => clearInterval(iv);
+    }, [load]);
+    useEffect(() => { bottomRef.current?.scrollIntoView({ block: 'nearest' }); }, [messages?.length, replyTo]);
+
+    // Obrazki czekające na wysłanie: już wgrane na serwer, w wiadomości idą jako nazwy plików.
+    const [pending, setPending] = useState([]);
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState('');
+    const [preview, setPreview] = useState(null);
+    const inputRef = useRef(null);
+    const selectThread = (id) => {
+        userPickedRef.current = true;
+        setReplyTo(id === wbsNodeId ? null : id);
+        setUnreadThreads(prev => { if (!prev.has(id)) return prev; const n = new Set(prev); n.delete(id); return n; });
+        inputRef.current?.focus();
+    };
+    const fileInputRef = useRef(null);
+
+    // @anchor upload-chat-images
+    const uploadImages = async (files) => {
+        const imgs = [...files].filter(f => f.type.startsWith('image/'));
+        if (!imgs.length) return;
+        setUploadError('');
+        setUploading(true);
+        try {
+            for (const f of imgs) {
+                if (f.size > CHAT_IMAGE_MAX_BYTES) { setUploadError(`${f.name || 'Obrazek'} — za duży (max 15 MB)`); continue; }
+                const fd = new FormData();
+                fd.append('file', f, f.name || 'obrazek.png');
+                const res = await fetch(`${base}/images`, { method: 'POST', headers: auth, body: fd });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    setUploadError(err.message || `Nie udało się wysłać obrazka (HTTP ${res.status})`);
+                    continue;
+                }
+                const { fileName } = await res.json();
+                setPending(prev => [...prev, { fileName, url: URL.createObjectURL(f) }]);
+            }
+        } finally { setUploading(false); }
+    };
+
+    const send = async () => {
+        const body = text.trim();
+        if ((!body && !pending.length) || sending || uploading) return;
+        setSending(true);
+        try {
+            const res = await fetch(base, {
+                method: 'POST',
+                headers: { ...auth, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: body, wbsNodeId: replyTo || wbsNodeId, images: pending.map(p => p.fileName) }),
+            });
+            if (res.ok) {
+                // Podgląd lokalny przechodzi do cache, żeby świeżo wysłany obrazek nie pobierał się drugi raz.
+                pending.forEach(p => chatImageCache.set(p.fileName, p.url));
+                setText(''); setPending([]); await load();
+            }
+        } finally { setSending(false); }
+    };
+
+    if (messages === null) return <p className="text-gray-600 text-[15px] italic">Ładowanie…</p>;
+
+    const renderMessage = (m) => {
+        const mine = m.user?.id === currentUserId;
+        const who = [m.user?.firstName, m.user?.lastName].filter(Boolean).join(' ') || 'Użytkownik';
+        return (
+            <div key={m.id} className={`flex flex-col max-w-[85%] ${mine ? 'self-end items-end' : 'self-start items-start'}`}>
+                <span className="text-[12px] text-gray-500">{who} · {fmtChatTime(m.createdAt)}</span>
+                {m.text && (
+                    <span className={`px-2.5 py-1.5 rounded-lg text-[15px] whitespace-pre-wrap break-words ${mine ? 'bg-blue-500/20 text-blue-100' : 'bg-white/5 text-gray-200'}`}>
+                        {m.text}
+                    </span>
+                )}
+                {m.images?.length > 0 && (
+                    <div className={`flex flex-wrap gap-1.5 mt-1 ${mine ? 'justify-end' : ''}`}>
+                        {m.images.map(name => <ChatImage key={name} fileName={name} onOpen={setPreview} />)}
+                    </div>
+                )}
+            </div>
+        );
+    };
+    const composer = (
+        <>
+            {(pending.length > 0 || uploading || uploadError) && (
+                <div className="flex flex-wrap items-center gap-2">
+                    {pending.map(p => (
+                        <div key={p.fileName} className="relative">
+                            <img src={p.url} alt="" className="h-16 w-16 object-cover rounded border border-white/10" />
+                            <button
+                                onClick={() => setPending(prev => prev.filter(x => x.fileName !== p.fileName))}
+                                className="absolute -top-1.5 -right-1.5 p-0.5 rounded-full bg-gray-900 border border-white/20 text-gray-300 hover:text-white"
+                                title="Usuń obrazek"
+                            >
+                                <X size={11} />
+                            </button>
+                        </div>
+                    ))}
+                    {uploading && <Loader2 size={16} className="animate-spin text-gray-400" />}
+                    {uploadError && <span className="text-[12px] text-red-300">{uploadError}</span>}
+                </div>
+            )}
+            <div className="flex items-end gap-2">
+                <input
+                    ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple className="hidden"
+                    onChange={e => { uploadImages(e.target.files); e.target.value = ''; }}
+                />
+                <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="p-1.5 rounded border border-white/10 text-gray-400 hover:text-gray-200 hover:bg-white/10 disabled:opacity-40"
+                    title="Załącz obrazek (można też wkleić Ctrl+V)"
+                >
+                    <ImagePlus size={16} />
+                </button>
+                <AutoResizeTextarea
+                    value={text}
+                    onChange={e => setText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+                    onPaste={e => {
+                        const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));
+                        if (files.length) { e.preventDefault(); uploadImages(files); }
+                    }}
+                    inputRef={inputRef}
+                    placeholder="Napisz do zespołu… (Enter wysyła, Shift+Enter nowa linia, Ctrl+V wkleja obrazek)"
+                    className="flex-1 min-w-0 px-2 py-1.5 rounded bg-black/20 border border-white/10 text-[15px] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-red-400/50"
+                />
+                <button
+                    onClick={send}
+                    disabled={sending || uploading || (!text.trim() && !pending.length)}
+                    className="px-3 py-1.5 rounded bg-red-500/20 border border-red-400/40 text-red-200 text-[14px] hover:bg-red-500/30 disabled:opacity-40 flex items-center gap-1"
+                >
+                    {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Wyślij
+                </button>
+            </div>
+        </>
+    );
+
+    // Nazwa liścia: z drzewa w tabeli, a dla liści ukrytych przed tą rolą — z `wbsNodeName` od backendu.
+    const threadLabel = (id) => (id === wbsNodeId
+        ? (nodeName || 'Ta gałąź')
+        : (branchNames?.[id] || messages.find(m => m.wbsNodeId === id)?.wbsNodeName || 'Podgałąź'));
+    const selectedId = replyTo || wbsNodeId;
+    const threads = branchNames ? groupChatThreads(messages, wbsNodeId) : [];
+    // Gałąź główna jest na liście zawsze (nawet bez wiadomości), żeby było gdzie zacząć rozmowę.
+    if (branchNames && !threads.some(t => t.id === wbsNodeId)) threads.unshift({ id: wbsNodeId, messages: [] });
+    // Wybrany liść bez wiadomości („Nowy wątek w…”) też trafia na listę, dopóki nikt w nim nie napisze.
+    if (branchNames && !threads.some(t => t.id === selectedId)) threads.push({ id: selectedId, messages: [] });
+    const selectedMessages = branchNames ? messages.filter(m => (m.wbsNodeId || wbsNodeId) === selectedId) : messages;
+    const isClosed = (id) => threadStatuses[id]?.status === 'CLOSED';
+    const archivedCount = threads.filter(t => isClosed(t.id)).length;
+    // Zamknięte wątki ukryte (archiwum), chyba że włączony filtr „Pokaż archiwalne”.
+    const visibleThreads = threads.filter(t => showArchived || !isClosed(t.id));
+    const selectedVisible = visibleThreads.some(t => t.id === selectedId);
+    // „Nowy wątek w…”: gałąź główna i liście bez widocznego wątku — także te z wątkiem w archiwum
+    // (wybranie takiego wznawia go, bo pisać da się tylko w aktywnym).
+    const freeLeaves = branchNames
+        ? [wbsNodeId, ...Object.keys(branchNames)].filter(id => !visibleThreads.some(t => t.id === id))
+        : [];
+    const startThread = (id) => {
+        setNewThreadOpen(false);
+        if (isClosed(id)) setThreadStatus(id, 'ACTIVE');
+        selectThread(id);
+    };
+
+    // @anchor set-thread-status — zamknij (do archiwum) / otwórz ponownie wątek; od razu w UI, potem PATCH.
+    const setThreadStatus = async (id, status) => {
+        setThreadStatuses(prev => ({ ...prev, [id]: { ...(prev[id] || {}), status, closedAt: status === 'CLOSED' ? new Date().toISOString() : null, closedBy: status === 'CLOSED' ? 'Ty' : null } }));
+        try {
+            await fetch(`${base}/threads/${encodeURIComponent(id)}`, {
+                method: 'PATCH', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
+            });
+        } catch (e) { console.warn('[WBS] thread status failed', e); }
+        load();
+    };
+
+    // @anchor wbs-chat-thread-header — nazwa wątku, status Aktywny/Zamknięty i przycisk zamknij / otwórz ponownie.
+    const threadHeader = (id) => {
+        const closed = isClosed(id);
+        const st = threadStatuses[id];
+        return (
+            <div className="flex items-center gap-2 pb-1.5 border-b border-white/10">
+                <span className={`text-[12px] font-bold uppercase tracking-wider truncate ${id === wbsNodeId ? 'text-sky-300' : 'text-emerald-300'}`}>{threadLabel(id)}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${closed ? 'border-gray-500/40 text-gray-400 bg-white/5' : 'border-emerald-400/40 text-emerald-300 bg-emerald-500/10'}`}>
+                    {closed ? 'Zamknięty' : 'Aktywny'}
+                </span>
+                {closed && st?.closedAt && (
+                    <span className="text-[11px] text-gray-500 truncate">{fmtChatTime(st.closedAt)}{st.closedBy ? ` · ${st.closedBy}` : ''}</span>
+                )}
+                <button
+                    onClick={() => setThreadStatus(id, closed ? 'ACTIVE' : 'CLOSED')}
+                    className={`ml-auto flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] transition-all ${closed ? 'border-emerald-400/30 text-emerald-300 hover:bg-emerald-500/10' : 'border-white/15 text-gray-400 hover:text-gray-200 hover:bg-white/10'}`}
+                    title={closed ? 'Przywróć wątek z archiwum' : 'Zamknij wątek i przenieś do archiwum'}
+                >
+                    {closed ? <><RotateCcw size={11} /> Otwórz ponownie</> : <><Archive size={11} /> Zamknij wątek</>}
+                </button>
+            </div>
+        );
+    };
+    // Zamknięty wątek jest tylko do odczytu — zamiast pola wpisywania informacja, jak go wznowić.
+    const composerFor = (id) => (isClosed(id)
+        ? <p className="text-[12px] text-gray-500 italic border-t border-white/10 pt-2">Wątek zamknięty (archiwum) — otwórz go ponownie, żeby pisać.</p>
+        : composer);
+
+    const messagesPane = (list, emptyText) => (
+        list.length === 0
+            ? <p className="flex-1 min-h-0 text-gray-600 text-[15px] italic">{emptyText}</p>
+            : (
+                <div className="flex-1 min-h-0 flex flex-col gap-1.5 overflow-y-auto pr-1">
+                    {list.map(renderMessage)}
+                    <div ref={bottomRef} />
+                </div>
+            )
+    );
+
+    return (
+        // @anchor wbs-chat-drawer-height — stała wysokość szuflady (pół ekranu); rozmowa przewija się w środku,
+        // pole wpisywania zawsze przyklejone na dole.
+        <div className={branchNames ? 'grid grid-cols-1 md:grid-cols-2 gap-3 w-full md:h-[50vh] md:min-h-[320px]' : 'flex flex-col gap-2 w-full md:w-1/2 h-[50vh] min-h-[320px]'}>
+            {branchNames ? (
+                <>
+                    {/* @anchor wbs-chat-thread-list — lewa połowa: wątki gałęzi (gałąź główna + liście z wiadomościami),
+                        najświeższy na górze; kropka = nieprzeczytane przy otwarciu szuflady. Klik wybiera wątek po prawej. */}
+                    <div className="flex flex-col gap-1.5 min-h-0 max-h-[30vh] md:max-h-none overflow-y-auto pr-1">
+                        {archivedCount > 0 && (
+                            <label className="shrink-0 flex items-center gap-2 px-1 pb-0.5 text-[12px] text-gray-400 cursor-pointer select-none">
+                                <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} className="accent-emerald-500" />
+                                Pokaż archiwalne ({archivedCount})
+                            </label>
+                        )}
+                        {[...visibleThreads].reverse().map(g => {
+                            const own = g.id === wbsNodeId;
+                            const active = g.id === selectedId;
+                            const last = g.messages[g.messages.length - 1];
+                            const unread = unreadThreads.has(g.id) && !active;
+                            const closed = isClosed(g.id);
+                            return (
+                                <button
+                                    key={g.id}
+                                    onClick={() => selectThread(g.id)}
+                                    className={`shrink-0 text-left rounded-lg border px-3 py-2 transition-all ${closed ? 'border-white/10 bg-white/[0.02] opacity-60' : own ? 'border-sky-400/25 bg-sky-500/[0.04]' : 'border-emerald-400/25 bg-emerald-500/[0.03]'} ${active ? 'ring-2 ring-amber-400/60' : 'hover:border-white/30'}`}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        {unread && <span className="h-2 w-2 rounded-full bg-red-500 flex-shrink-0" title="Nieprzeczytane" />}
+                                        <span className={`text-[12px] font-bold uppercase tracking-wider truncate ${own ? 'text-sky-300' : 'text-emerald-300'}`}>{threadLabel(g.id)}</span>
+                                        {closed && <span className="px-1 rounded text-[9px] font-bold uppercase tracking-wider border border-gray-500/40 text-gray-400">Zamknięty</span>}
+                                        <span className="ml-auto text-[11px] text-gray-500 whitespace-nowrap">
+                                            {last ? `${g.messages.length} · ${fmtChatTime(last.createdAt)}` : 'brak wiadomości'}
+                                        </span>
+                                    </div>
+                                    {last && (
+                                        <div className={`mt-0.5 text-[12px] truncate ${unread ? 'text-gray-200' : 'text-gray-500'}`}>
+                                            {last.user?.firstName || 'Użytkownik'}: {last.text || (last.images?.length ? '📷 obrazek' : '')}
+                                        </div>
+                                    )}
+                                </button>
+                            );
+                        })}
+                        {freeLeaves.length > 0 && (
+                            // @anchor wbs-chat-new-thread-picker — własna lista zamiast <select>: natywnych opcji
+                            // nie da się ostylować, odstawały od szuflady. Rozwija się w miejscu (lista wątków przewija się,
+                            // więc pływające menu by się ucinało).
+                            <div className="mt-1 shrink-0 rounded-lg border border-dashed border-emerald-400/25 overflow-hidden">
+                                <button
+                                    onClick={() => setNewThreadOpen(o => !o)}
+                                    className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[12px] text-gray-400 hover:text-emerald-200 hover:bg-emerald-500/[0.06] transition-all"
+                                >
+                                    <Plus size={13} /> Nowy wątek w…
+                                    {newThreadOpen ? <ChevronDown size={13} className="ml-auto" /> : <ChevronRight size={13} className="ml-auto" />}
+                                </button>
+                                {newThreadOpen && (
+                                    <div className="flex flex-col gap-0.5 p-1 border-t border-emerald-400/15 bg-black/20">
+                                        {freeLeaves.map(id => (
+                                            <button
+                                                key={id}
+                                                onClick={() => startThread(id)}
+                                                className="flex items-center gap-2 text-left px-2.5 py-1.5 rounded-md text-[12px] font-semibold uppercase tracking-wider text-emerald-300/80 hover:text-emerald-200 hover:bg-emerald-500/10 transition-all"
+                                            >
+                                                <span className="truncate">{threadLabel(id)}</span>
+                                                {isClosed(id) && <span className="ml-auto text-[10px] font-normal normal-case tracking-normal text-gray-500 whitespace-nowrap">w archiwum — wznowi</span>}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    {/* Prawa połowa: rozmowa wybranego wątku i pole wpisywania (wiadomość idzie do tego wątku). */}
+                    <div className="flex flex-col gap-2 min-w-0 min-h-0 rounded-lg border border-amber-400/30 bg-black/10 p-2.5">
+                        {selectedVisible ? (
+                            <>
+                                {threadHeader(selectedId)}
+                                {messagesPane(selectedMessages, 'Brak wiadomości w tym wątku — napisz pierwszą, dostanie ją cały zespół zamówienia.')}
+                                {composerFor(selectedId)}
+                            </>
+                        ) : (
+                            // Wybrany wątek poszedł do archiwum (albo wszystkie są zamknięte) — nic nie pokazujemy na siłę.
+                            <p className="flex-1 flex items-center justify-center text-center text-[13px] text-gray-500 italic px-4">
+                                Brak aktywnego wątku — wybierz wątek z listy albo zacznij nowy przez „Nowy wątek w…”.
+                            </p>
+                        )}
+                    </div>
+                </>
+            ) : (
+                <>
+                    {threadHeader(wbsNodeId)}
+                    {messagesPane(messages, 'Brak wiadomości — napisz pierwszą, dostanie ją cały zespół zamówienia.')}
+                    {composerFor(wbsNodeId)}
+                </>
+            )}
+            {/* Podgląd w DOM szuflady — klik w niego nie liczy się jako „poza czatem” i nie zamyka czatu. */}
+            {preview && (
+                <div className="fixed inset-0 z-[200] bg-black/85 flex items-center justify-center p-6 cursor-zoom-out" onClick={() => setPreview(null)}>
+                    <img src={preview} alt="" className="max-h-full max-w-full rounded shadow-2xl" />
+                    <button onClick={() => setPreview(null)} className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20" title="Zamknij">
+                        <X size={18} />
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
 
 // @anchor wbs-tasks-drawer
 function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
@@ -894,232 +1350,6 @@ function TagChips({ tags = [], tagColor, onRemove, onTagClick }) {
     );
 }
 
-// ── Attachment thumbnail ──────────────────────────────────────────────────────
-function AttachmentThumb({ att, onClick }) {
-    const url = `${API_URL}/schematics/file/${att.fileUrl}`;
-    if (att.fileType === 'IMAGE') {
-        return (
-            <button onClick={e => { e.stopPropagation(); onClick(att); }} title={att.fileName}
-                className="w-8 h-8 rounded overflow-hidden border border-white/10 hover:border-blue-500/60 transition-all flex-shrink-0 bg-black/20">
-                <img src={url} alt={att.fileName} className="w-full h-full object-cover"
-                    onError={e => { e.target.style.display = 'none'; }} />
-            </button>
-        );
-    }
-    const Icon = att.fileType === 'AUDIO' ? Volume2 : FileText;
-    return (
-        <button onClick={e => { e.stopPropagation(); onClick(att); }} title={att.fileName}
-            className="w-8 h-8 rounded border border-white/10 hover:border-blue-500/60 transition-all flex-shrink-0 flex items-center justify-center bg-white/5">
-            <Icon size={14} className="text-gray-400" />
-        </button>
-    );
-}
-
-// ── Marker Attachments Modal ──────────────────────────────────────────────────
-function MarkerAttachmentsModal({ wbsNodeId, wbsNodeName, processNodeId, onClose }) {
-    const [links, setLinks] = useState([]);
-    const [allSchematics, setAllSchematics] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [loadingPicker, setLoadingPicker] = useState(false);
-    const [showPicker, setShowPicker] = useState(false);
-    const [previewAtt, setPreviewAtt] = useState(null);
-
-    const fetchLinks = useCallback(async () => {
-        const res = await fetch(`${API_URL}/schematics/wbs-node-markers/${wbsNodeId}`);
-        if (res.ok) setLinks(await res.json());
-    }, [wbsNodeId]);
-
-    useEffect(() => {
-        setLoading(true);
-        fetchLinks().finally(() => setLoading(false));
-    }, [fetchLinks]);
-
-    const openPicker = async () => {
-        setShowPicker(true);
-        setLoadingPicker(true);
-        const res = await fetch(`${API_URL}/schematics/process-node-markers/${processNodeId}`);
-        if (res.ok) setAllSchematics(await res.json());
-        setLoadingPicker(false);
-    };
-
-    const assign = async (markerId) => {
-        await fetch(`${API_URL}/schematics/wbs-node-markers`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wbsNodeId, markerId }),
-        });
-        await fetchLinks();
-    };
-
-    const unlink = async (linkId) => {
-        await fetch(`${API_URL}/schematics/wbs-node-markers/${linkId}`, { method: 'DELETE' });
-        setLinks(prev => prev.filter(l => l.id !== linkId));
-    };
-
-    const linkedMarkerIds = new Set(links.map(l => l.markerId));
-    const allMarkers = allSchematics.flatMap(s => (s.markers || []).map(m => ({ ...m, schematicName: s.fileName })));
-
-    return (
-        <>
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-            <div className="relative bg-gray-950 border border-white/10 rounded-2xl shadow-2xl w-[680px] max-h-[80vh] flex flex-col overflow-hidden"
-                onClick={e => e.stopPropagation()}>
-
-                {/* Header */}
-                <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-                    <div>
-                        <p className="text-[14px] uppercase tracking-widest text-gray-500 font-bold">Znaczniki WBS</p>
-                        <h2 className="text-base font-semibold text-white mt-0.5">{wbsNodeName || 'Element WBS'}</h2>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button onClick={openPicker}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-[15px] font-medium transition-all">
-                            <Link size={11} /> Przypisz znacznik
-                        </button>
-                        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-500 hover:text-white transition-all">
-                            <X size={14} />
-                        </button>
-                    </div>
-                </div>
-
-                <div className="overflow-y-auto flex-1 p-5 space-y-4">
-                    {/* Picker */}
-                    {showPicker && (
-                        <div className="border border-white/10 rounded-xl bg-white/[0.02] p-4">
-                            <p className="text-[14px] uppercase tracking-widest text-gray-500 font-bold mb-3">Dostępne znaczniki schematu</p>
-                            {loadingPicker && <p className="text-base text-gray-600">Ładowanie...</p>}
-                            {!loadingPicker && allMarkers.length === 0 && (
-                                <p className="text-base text-gray-600 italic">Brak znaczników w schematach tego węzła</p>
-                            )}
-                            <div className="space-y-2">
-                                {allMarkers.map(m => {
-                                    const isLinked = linkedMarkerIds.has(m.id);
-                                    return (
-                                        <div key={m.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/[0.03] border border-white/5">
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-base text-white font-medium truncate">{m.name || m.note || `Znacznik (${m.type})`}</p>
-                                                <p className="text-[14px] text-gray-600 truncate">{m.schematicName} · str. {m.pageNumber}</p>
-                                            </div>
-                                            <div className="flex gap-1">
-                                                {(m.attachments || []).slice(0, 3).map(att => (
-                                                    <AttachmentThumb key={att.id} att={att} onClick={setPreviewAtt} />
-                                                ))}
-                                            </div>
-                                            <button
-                                                onClick={() => isLinked ? null : assign(m.id)}
-                                                disabled={isLinked}
-                                                className={`px-2 py-1 rounded-lg text-[14px] font-medium transition-all flex items-center gap-1 ${
-                                                    isLinked
-                                                        ? 'bg-green-500/10 text-green-400 border border-green-500/20 cursor-default'
-                                                        : 'bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30'
-                                                }`}
-                                            >
-                                                <Link size={9} /> {isLinked ? 'Przypisany' : 'Przypisz'}
-                                            </button>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Current links */}
-                    {loading && <p className="text-base text-gray-600">Ładowanie...</p>}
-                    {!loading && links.length === 0 && !showPicker && (
-                        <p className="text-base text-gray-600 italic text-center py-6">
-                            Brak przypisanych znaczników. Kliknij „Przypisz znacznik" aby dodać.
-                        </p>
-                    )}
-                    {links.map(link => {
-                        const m = link.marker;
-                        const atts = m?.attachments || [];
-                        return (
-                            <div key={link.id} className="border border-white/10 rounded-xl bg-white/[0.02] p-4">
-                                <div className="flex items-start justify-between gap-3 mb-3">
-                                    <div>
-                                        <p className="text-base font-semibold text-white">{m?.name || m?.note || `Znacznik (${m?.type})`}</p>
-                                        <p className="text-[14px] text-gray-500 mt-0.5">{m?.schematic?.fileName} · str. {m?.pageNumber}</p>
-                                    </div>
-                                    <button onClick={() => unlink(link.id)}
-                                        className="p-1 rounded hover:bg-red-500/10 text-gray-600 hover:text-red-400 transition-all flex-shrink-0" title="Odepnij">
-                                        <Unlink size={12} />
-                                    </button>
-                                </div>
-                                {atts.length === 0 && (
-                                    <p className="text-[14px] text-gray-700 italic">Brak załączników do tego znacznika</p>
-                                )}
-                                <div className="flex flex-wrap gap-2">
-                                    {atts.map(att => (
-                                        <div key={att.id} className="flex flex-col items-center gap-1">
-                                            <AttachmentThumb att={att} onClick={setPreviewAtt} />
-                                            <span className="text-[9px] text-gray-600 max-w-[32px] truncate">{att.fileName}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-
-        </div>
-
-        {/* Full-screen attachment preview — poza modalem, żeby nie być ograniczonym jego stacking context */}
-        {previewAtt && (
-            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95"
-                onClick={() => setPreviewAtt(null)}>
-                <div className="relative w-full h-full flex items-center justify-center p-6" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => setPreviewAtt(null)}
-                        className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white z-10 transition-all">
-                        <X size={20} />
-                    </button>
-                    {previewAtt.fileType === 'IMAGE' ? (
-                        <img src={`${API_URL}/schematics/file/${previewAtt.fileUrl}`}
-                            alt={previewAtt.fileName}
-                            className="max-w-full max-h-full rounded-xl object-contain" />
-                    ) : previewAtt.fileType === 'AUDIO' ? (
-                        <audio controls src={`${API_URL}/schematics/file/${previewAtt.fileUrl}`} />
-                    ) : (
-                        <div className="bg-gray-900 rounded-xl p-10 text-center">
-                            <FileText size={56} className="text-gray-500 mx-auto mb-4" />
-                            <p className="text-white text-base">{previewAtt.fileName}</p>
-                            <a href={`${API_URL}/schematics/file/${previewAtt.fileUrl}`} target="_blank" rel="noreferrer"
-                                className="mt-3 inline-block text-blue-400 text-base hover:underline">Otwórz plik</a>
-                        </div>
-                    )}
-                    {previewAtt.note && (
-                        <p className="absolute bottom-6 left-0 right-0 text-base text-gray-400 text-center">{previewAtt.note}</p>
-                    )}
-                </div>
-            </div>
-        )}
-        </>
-    );
-}
-
-// ── Attachment preview cell ───────────────────────────────────────────────────
-function AttachmentCell({ wbsNodeId, nodeName, markerLinksCache, onOpenModal }) {
-    const links = markerLinksCache[wbsNodeId] || [];
-
-    const allAtts = links.flatMap(l => (l.marker?.attachments || []));
-    if (allAtts.length === 0) return null;
-
-    const open = (e) => { e?.stopPropagation?.(); onOpenModal({ wbsNodeId, wbsNodeName: nodeName }); };
-    const hasImg = allAtts.some(a => a.fileType === 'IMAGE');
-    const hasAudio = allAtts.some(a => a.fileType === 'AUDIO');
-    const Icon = hasImg ? Image : hasAudio ? Volume2 : Paperclip;
-
-    return (
-        <button
-            onClick={open}
-            title={`${allAtts.length} załącznik(ów) — kliknij aby otworzyć`}
-            className="p-1.5 rounded hover:bg-white/10 text-gray-500 hover:text-blue-400 transition-all"
-        >
-            <Icon size={18} />
-        </button>
-    );
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 // @anchor wbs-hybrid-table
 export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null, onApplyLeafDefaults = null, leafDefaults = null, offerLocked = false }) {
@@ -1151,8 +1381,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const setDragOver = (val) => { dragOverRef.current = val; setDragOverState(val); };
     const [editingTagsFor, setEditingTagsFor] = useState(null);
     const [tagInput, setTagInput] = useState('');
-    const [markerLinksCache, setMarkerLinksCache] = useState({});
-    const [attachmentModal, setAttachmentModal] = useState(null); // { wbsNodeId, wbsNodeName }
     const tagInputRef = useRef(null);
     const [materialStatuses, setMaterialStatuses] = useState({});
     // @anchor mat-req-by-wbs-id
@@ -1185,7 +1413,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [mergeOverId, setMergeOverId] = useState(null);
     const [copyBuffer, setCopyBuffer] = useState(null); // { node, sourceName }
     // @anchor node-drawer-tab
-    // { [wbsNodeId]: 'tasks' | 'qa' } — otwarta zakładka szuflady pod wierszem. Jeden węzeł = jedna
+    // { [wbsNodeId]: 'tasks' | 'qa' | 'chat' } — otwarta zakładka szuflady pod wierszem. Jeden węzeł = jedna
     // szuflada: otwarcie zakładki zamyka kartę materiałową tego węzła i odwrotnie.
     const [nodeDrawerTab, setNodeDrawerTab] = useState({});
     // @anchor wbs-task-summary
@@ -1209,6 +1437,24 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         window.addEventListener('user-tasks-changed', onChanged);
         return () => { clearTimeout(timer); window.removeEventListener('user-tasks-changed', onChanged); };
     }, [loadTaskSummary]);
+    // @anchor wbs-chat-summary
+    // { [wbsNodeId]: { total, unread } } — z GET /comments/order/:processNodeId/wbs-summary; koloruje ikonę czatu.
+    const [chatSummary, setChatSummary] = useState({});
+    // @anchor load-chat-summary
+    const loadChatSummary = useCallback(async () => {
+        if (!processNodeId) return;
+        try {
+            const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+            const res = await fetch(`${API_URL}/comments/order/${processNodeId}/wbs-summary`, { headers: { Authorization: `Bearer ${token}` } });
+            if (res.ok) setChatSummary(await res.json());
+        } catch (e) { console.warn('[WBS] chat summary failed', e); }
+    }, [processNodeId]);
+    // Nowe wiadomości od innych pojawiają się bez przeładowania — odpytywanie co 30 s.
+    useEffect(() => {
+        loadChatSummary();
+        const iv = setInterval(loadChatSummary, 30000);
+        return () => clearInterval(iv);
+    }, [loadChatSummary]);
     // @anchor wbs-col-widths-storage — szerokości kolumn zapamiętane w tej przeglądarce (per urządzenie);
     // brak/zepsuty wpis albo zablokowany storage = szerokości domyślne.
     const [colWidths, setColWidths] = useState(() => {
@@ -1309,35 +1555,21 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // Memo po `items`, więc przelicza się przy każdej zmianie drzewa — zmierzone 1,5 ms
     // dla 2751 węzłów (test/test-name-autocomplete.mjs), czyli bez wpływu na pisanie.
     const nameSuggestionPool = React.useMemo(() => buildNameSuggestionPool(items), [items]);
+    // @anchor branch-chat-unread
+    // { [wbsNodeId]: liczba nieprzeczytanych wiadomości czatu w POTOMKACH węzła (bez niego samego).
+    // Zwinięta gałąź pokazuje ją przy swoim dymku — inaczej wiadomość w ukrytym liściu nie była widoczna.
+    const branchChatUnread = React.useMemo(() => {
+        const out = {};
+        const walk = (n) => {
+            let u = 0;
+            for (const c of n.children || []) u += (chatSummary[c.id]?.unread || 0) + walk(c);
+            out[n.id] = u;
+            return u;
+        };
+        items.forEach(walk);
+        return out;
+    }, [items, chatSummary]);
 
-    // Pre-fetch marker links for all WBS nodes (+ periodic refresh) — jedno zapytanie batch
-    // zamiast N (po jednym na węzeł), inaczej drzewo 200 węzłów robiło 200 fetchy co 30s.
-    const fetchMarkerLinks = useCallback(async () => {
-        if (!processNodeId) return;
-        const allIds = [];
-        const collectAllIds = (nodes) => nodes.forEach(n => { allIds.push(n.id); collectAllIds(n.children || []); });
-        collectAllIds(items);
-        if (!allIds.length) return;
-        try {
-            const res = await fetch(`${API_URL}/schematics/wbs-node-markers/batch`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ wbsNodeIds: allIds }),
-            });
-            if (res.ok) {
-                const byNode = await res.json();
-                setMarkerLinksCache(byNode);
-            }
-        } catch (e) { console.warn('[WBS] fetchMarkerLinks failed', e); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [processNodeId, items.length]);
-
-    useEffect(() => {
-        fetchMarkerLinks();
-        const iv = setInterval(fetchMarkerLinks, 30000);
-        window.addEventListener('wbs-link-changed', fetchMarkerLinks);
-        return () => { clearInterval(iv); window.removeEventListener('wbs-link-changed', fetchMarkerLinks); };
-    }, [fetchMarkerLinks]);
 
     // Zwraca listę id węzłów będących rodzeństwem targetId (na tym samym poziomie w drzewie)
     const findSiblingIds = (nodes, targetId) => {
@@ -1778,6 +2010,26 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         }
     }
 
+    // Klik poza otwartym czatem gałęzi zamyka go. Własny przycisk czatu pomijamy — on sam przełącza.
+    useEffect(() => {
+        const chatIds = Object.keys(nodeDrawerTab).filter(id => nodeDrawerTab[id] === 'chat');
+        if (!chatIds.length) return;
+        const onDown = (e) => {
+            const t = e.target;
+            if (!(t instanceof Element)) return;
+            const toClose = chatIds.filter(id =>
+                !t.closest(`[data-chat-drawer="${id}"]`) && !t.closest(`[data-chat-toggle="${id}"]`));
+            if (!toClose.length) return;
+            setNodeDrawerTab(prev => {
+                const next = { ...prev };
+                toClose.forEach(id => { if (next[id] === 'chat') delete next[id]; });
+                return next;
+            });
+        };
+        document.addEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
+    }, [nodeDrawerTab]);
+
     // @anchor toggle-drawer-tab
     const toggleDrawerTab = (id, tab) => {
         setNodeDrawerTab(prev => {
@@ -1803,11 +2055,11 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // tylko w faktycznie widoczne wiersze.
     const navRowOrder = [];
     // @anchor wbs-total-cols — liczba kolumn <col> tabeli: uchwyt + nazwa/typ/ilosc/jednostka
-    // + (manager: cena_netto/narzut/cena_ofert) + status/wlasciciel/komentarz/strategia/zalaczniki
+    // + (manager: cena_netto/narzut/cena_ofert) + status/wlasciciel/komentarz/strategia
     // + kolumna domykajaca. Wiersze rozpiete na calej szerokosci (szuflada karty produktu,
     // listwa domykajaca, pusty stan) MUSZA uzywac tej wartosci — zaszyty colSpan=12 obcinal
-    // szuflade przed kolumnami Q&A i Attach., przez co karta byla wezsza niz wiersz drzewa.
-    const TOTAL_COLS = isManager ? 14 : 11;
+    // szuflade przed ostatnimi kolumnami, przez co karta byla wezsza niz wiersz drzewa.
+    const TOTAL_COLS = isManager ? 13 : 10;
     // @anchor grid-nav-column-order
     const GRID_COLUMN_ORDER = ['nazwa', 'typ', 'ilosc', 'jednostka', ...(isManager ? ['cena_netto', 'narzut'] : []), 'status', 'wlasciciel', 'komentarz', 'strategia'];
     // @anchor handle-grid-key-down
@@ -1880,7 +2132,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     rows.push(
         <tr key="root" className="border-b border-white/5 bg-slate-900/50 hover:bg-slate-900/70 cursor-pointer select-none" onClick={e => toggle('root', e)} style={{ touchAction: 'manipulation' }}>
             <td className={isTouch ? 'p-0 text-center' : 'px-3 py-3'}>
-                <ChevronRight size={isTouch ? 20 : 14} className={`inline-block text-gray-400 transition-transform ${isOpen('root') ? 'rotate-90' : ''}`} />
+                <ChevronRight size={isTouch ? 20 : 18} className={`inline-block text-yellow-400 transition-transform ${isOpen('root') ? 'rotate-90' : ''}`} />
             </td>
             <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center gap-2">
@@ -1904,7 +2156,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     {fmtPLN(items.reduce((a, n) => a + sumChildrenOfferPrice(n), 0))}
                 </td>
             )}
-            <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
@@ -2012,7 +2263,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     style={{ touchAction: 'manipulation' }}
                                     className="flex-1 flex items-center justify-center text-gray-300 active:bg-blue-500/25 active:text-blue-300 transition-colors"
                                 >
-                                    <ChevronRight size={20} className={`transition-transform ${isOpen(rowId) ? 'rotate-90' : ''}`} />
+                                    <ChevronRight size={20} className={`text-yellow-400 transition-transform ${isOpen(rowId) ? 'rotate-90' : ''}`} />
                                 </button>
                             ) : <span className="flex-1" />}
                         </div>
@@ -2030,8 +2281,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 className={`flex-shrink-0 ${selectedDepth != null && depth === selectedDepth + 1 ? 'text-amber-400' : 'text-gray-700 group-hover/node:text-gray-500'}`}
                             />
                             {hasChildren
-                                ? <ChevronRight size={12} className={`text-gray-400 transition-transform flex-shrink-0 ${isOpen(rowId) ? 'rotate-90' : ''}`} />
-                                : <span className="w-[12px] flex-shrink-0" />
+                                ? <ChevronRight size={18} className={`text-yellow-400 cursor-pointer transition-transform flex-shrink-0 ${isOpen(rowId) ? 'rotate-90' : ''}`} />
+                                : <span className="w-[18px] flex-shrink-0" />
                             }
                         </div>
                     </td>
@@ -2075,7 +2326,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             title="Kopiuj pozycję"
                             className="p-1 rounded text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 transition-all"
                         >
-                            <Copy size={14} />
+                            <Copy size={19} />
                         </button>
                         {copyBuffer && !subtreeContains(copyBuffer.node, node.id) && copyBuffer.node.id !== node.id && (
                             <button
@@ -2090,7 +2341,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 title={`Wklej „${copyBuffer.sourceName}" jako dziecko (z wymaganiami technicznymi, typem i statusem)`}
                                 className="p-1 rounded text-emerald-500/60 hover:text-emerald-300 hover:bg-emerald-500/10 transition-all"
                             >
-                                <Clipboard size={14} />
+                                <Clipboard size={19} />
                             </button>
                         )}
                         {depth < MAX_DEPTH && (
@@ -2099,7 +2350,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 className="p-1 hover:bg-white/10 rounded text-gray-500 hover:text-blue-400 transition-all"
                                 title="Dodaj element podrzędny"
                             >
-                                <Plus size={15} />
+                                <Plus size={20} />
                             </button>
                         )}
                         {isMaterialLeaf && (
@@ -2108,7 +2359,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 title="Karta materiałowa"
                                 className={`p-1 rounded transition-all ${expandedMaterialIds.has(node.id) ? 'text-amber-400 bg-amber-500/15' : 'text-amber-500/50 hover:text-amber-400 hover:bg-amber-500/10'}`}
                             >
-                                <Package size={14} />
+                                <Package size={19} />
                             </button>
                         )}
                         {(() => {
@@ -2121,7 +2372,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     className={`flex items-center gap-0.5 p-1 rounded transition-all ${DRAWER_STATUS_COLOR[key]} ${drawerTab === 'tasks' ? 'bg-blue-500/15' : 'hover:bg-white/10'}`}
                                     title={ts ? `Zadania: ${ts.open} otwarte (${ts.overdue} po terminie), ${ts.done} wykonane` : 'Zadania tej pozycji'}
                                 >
-                                    <ListTodo size={14} />
+                                    <ListTodo size={19} />
                                     {n > 0 && <span className="text-[12px] leading-none">{n}</span>}
                                 </button>
                             );
@@ -2136,8 +2387,36 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     className={`flex items-center gap-0.5 p-1 rounded transition-all ${DRAWER_STATUS_COLOR[drawerStatusKey(qs)]} ${drawerTab === 'qa' ? 'bg-blue-500/15' : 'hover:bg-white/10'}`}
                                     title={`${depth === 0 && hasChildren ? 'Q&A całej gałęzi' : 'Pytania i odpowiedzi'}${qs.total ? ` — ${qs.open} bez odpowiedzi, ${qs.done} z odpowiedzią` : ''}`}
                                 >
-                                    <HelpCircle size={14} />
+                                    <HelpCircle size={19} />
                                     {qs.total > 0 && <span className="text-[12px] leading-none">{qs.total}</span>}
+                                </button>
+                            );
+                        })()}
+                        {(() => {
+                            // @anchor wbs-chat-icon — szary = brak wiadomości, szary z liczbą = wszystko
+                            // przeczytane, niebieski z czerwoną plakietką = nieprzeczytane od innych.
+                            const cs = chatSummary[node.id];
+                            const unread = cs?.unread || 0;
+                            const below = branchChatUnread[node.id] || 0;
+                            const color = unread > 0 || below > 0 ? 'text-blue-400 hover:text-blue-300'
+                                : cs?.total ? 'text-gray-400 hover:text-gray-200' : DRAWER_STATUS_COLOR.none;
+                            return (
+                                <button
+                                    data-chat-toggle={node.id}
+                                    onClick={e => { e.stopPropagation(); toggleDrawerTab(node.id, 'chat'); }}
+                                    className={`relative flex items-center gap-0.5 p-1 rounded transition-all ${color} ${drawerTab === 'chat' ? 'bg-red-500/15' : 'hover:bg-white/10'}`}
+                                    title={`${cs?.total ? `Czat gałęzi — ${cs.total} wiadomości${unread ? `, ${unread} nieprzeczytane` : ''}` : 'Czat gałęzi'}${below ? ` · ${below} nieprzeczytane niżej w gałęzi — rozwiń, żeby znaleźć` : ''}`}
+                                >
+                                    <MessageCircle size={19} />
+                                    {unread > 0
+                                        ? <span className="min-w-[16px] px-1 rounded-full bg-red-500 text-white text-[11px] leading-[16px] text-center">{unread}</span>
+                                        : cs?.total > 0 && <span className="text-[12px] leading-none">{cs.total}</span>}
+                                    {/* Nieprzeczytane w potomkach — obrys zamiast pełnej plakietki, żeby odróżnić „tu” od „niżej” */}
+                                    {below > 0 && (
+                                        <span className="min-w-[16px] px-1 rounded-full border border-red-500 text-red-400 text-[11px] leading-[14px] text-center" title={`${below} nieprzeczytane niżej w gałęzi`}>
+                                            ↓{below}
+                                        </span>
+                                    )}
                                 </button>
                             );
                         })()}
@@ -2146,7 +2425,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             className="p-1 hover:bg-red-500/10 rounded text-gray-600 hover:text-red-500 transition-all"
                             title="Usuń"
                         >
-                            <Trash2 size={13} />
+                            <Trash2 size={17} />
                         </button>
                     </div>
                 </td>
@@ -2543,16 +2822,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     )}
                 </td>
 
-                {/* Załączniki — miniatury zdjęć z markerów */}
-                <td className="px-2 py-2 overflow-hidden max-w-0" style={{ width: colWidths.zalaczniki }} onClick={e => e.stopPropagation()}>
-                    <AttachmentCell
-                        wbsNodeId={node.id}
-                        nodeName={node.name}
-                        markerLinksCache={markerLinksCache}
-                        onOpenModal={setAttachmentModal}
-                    />
-                </td>
-
                 {/* (delete przeniesiony do komórki nazwy) */}
                 <td />
             </tr>
@@ -2617,11 +2886,13 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     style={drawerSpine ? { '--wbs-spine': drawerSpine } : undefined}
                 >
                     <td colSpan={TOTAL_COLS} className={`px-2 pb-2 ${DRAWER.accent.task.cell}`}>
-                        <div className={`${DRAWER.card} ${DRAWER.accent.task.card}`}>
+                        <div data-chat-drawer={drawerTab === 'chat' ? node.id : undefined} className={`${DRAWER.card} ${DRAWER.accent.task.card} ${drawerTab === 'chat' ? DRAWER.chatBar : ''}`}>
                             <div className={`${DRAWER.cardHead} border-b border-emerald-400/20`}>
                                 <span className={`${DRAWER.cardTitle} text-[13px] ${DRAWER.accent.task.title} flex items-center gap-1.5`}>
                                     {drawerTab === 'tasks'
                                         ? <><ListTodo size={13} /> Zadania</>
+                                        : drawerTab === 'chat'
+                                        ? <><MessageCircle size={13} /> Czat gałęzi</>
                                         : <><HelpCircle size={13} /> {depth === 0 && hasChildren ? 'Q&A gałęzi' : 'Pytania i odpowiedzi'}</>}
                                 </span>
                                 <span className="text-[13px] text-gray-500 truncate">{node.name}</span>
@@ -2632,6 +2903,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             <div className="px-3 pt-2 pb-3">
                                 {drawerTab === 'tasks' ? (
                                     <WbsTasksDrawer wbsNodeId={node.id} processNodeId={processNodeId} onChanged={loadTaskSummary} />
+                                ) : drawerTab === 'chat' ? (
+                                    <WbsChatDrawer
+                                        wbsNodeId={node.id} processNodeId={processNodeId} onChanged={loadChatSummary}
+                                        branchNames={depth === 0 && hasChildren ? collectBranchNames(node) : undefined}
+                                        nodeName={node.name}
+                                    />
                                 ) : depth === 0 && hasChildren ? (
                                     <QaBranchView node={node} onChangeNode={(id, next) => handleField(id, 'qa', next)} onPersist={() => onSave?.()} />
                                 ) : (
@@ -2686,18 +2963,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         });
     }
 
-    const closeAttachmentModal = async () => {
-        const id = attachmentModal?.wbsNodeId;
-        setAttachmentModal(null);
-        if (id) {
-            const res = await fetch(`${API_URL}/schematics/wbs-node-markers/${id}`);
-            if (res.ok) {
-                const data = await res.json();
-                setMarkerLinksCache(prev => ({ ...prev, [id]: data }));
-            }
-        }
-    };
-
     return (
         <div className="flex flex-col flex-1 min-h-0">
             <style>{WBS_BRANCH_CSS}</style>
@@ -2726,13 +2991,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         <col style={{ width: colWidths.wlasciciel }} />
                         <col style={{ width: colWidths.komentarz }} />
                         <col style={{ width: colWidths.strategia }} />
-                        <col style={{ width: colWidths.zalaczniki }} />
                         <col style={{ width: 48 }} />
                     </colgroup>
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
                         <tr className="border-b border-white/10">
                             <th className="px-1 py-2.5 text-base font-bold uppercase tracking-widest text-white" />
-                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jedn.','text-left'],...(isManager ? [['cena_netto','Koszt jedn.','text-right'],['narzut','Narzut %','text-right'],['cena_ofert','Cena ofert.','text-right']] : []),['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['strategia','Strategia','text-left'],['zalaczniki','Attach.','text-left']].map(([key, label, align]) => (
+                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jedn.','text-left'],...(isManager ? [['cena_netto','Koszt jedn.','text-right'],['narzut','Narzut %','text-right'],['cena_ofert','Cena ofert.','text-right']] : []),['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['strategia','Strategia','text-left']].map(([key, label, align]) => (
                                 <th key={key} className={`px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white ${align} relative select-none`}>
                                     {label}
                                     {/* Uchwyt szerokości — na dotyku szerszy i widoczny (palcem 6 px nie da się trafić) */}
@@ -2821,14 +3085,6 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 </div>
             )}
 
-            {attachmentModal && (
-                <MarkerAttachmentsModal
-                    wbsNodeId={attachmentModal.wbsNodeId}
-                    wbsNodeName={attachmentModal.wbsNodeName}
-                    processNodeId={processNodeId}
-                    onClose={closeAttachmentModal}
-                />
-            )}
 
         </div>
     );
