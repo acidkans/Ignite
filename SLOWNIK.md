@@ -1068,6 +1068,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-sekcja | TreeNode | apps/frontend/src/components/Mobile/MobileOrdersTree.jsx | @anchor mobile-tree-node |
 | ui-panel | mobile-tree-schematic-panel | apps/frontend/src/components/Mobile/MobileOrdersTree.jsx | @anchor mobile-tree-schematic-panel |
 | ui-stan | mobileTreeTab | apps/frontend/src/components/Mobile/MobileOrdersTree.jsx | @anchor mobile-tree-tab |
+| ui-przycisk | mobile-tree-panel-back | apps/frontend/src/components/Mobile/MobileOrdersTree.jsx | @anchor mobile-tree-panel-back |
 | ui-lista | MobileDocumentsList | apps/frontend/src/components/Mobile/MobileDocumentsList.jsx | @anchor mobile-documents-list |
 | ui-funkcja | replaceSchematicsForNode | apps/frontend/src/services/repos/schematicsRepo.js | @anchor replace-schematics-for-node |
 
