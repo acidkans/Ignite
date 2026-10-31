@@ -1758,6 +1758,8 @@ model TaskReminder {
   recurEnd    DateTime? // koniec okna serii cyklicznej; po tej dacie alarm nie odpala
   /// @anchor task-reminder-last-fired-at
   lastFiredAt DateTime? // ostatnie wyświetlone wystąpienie serii — kursor „już pokazane"
+  /// @anchor task-reminder-last-pushed-at
+  lastPushedAt DateTime? // ostatnie wystąpienie wysłane pushem — osobny kursor, żeby push i okienko w aplikacji nie zjadały sobie wystąpień
   createdAt   DateTime  @default(now())
 
   /// @anchor task-reminder-user-task

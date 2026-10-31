@@ -41,6 +41,24 @@ export const toTodoReminder = (t: { plannedStart?: Date | null; plannedEnd?: Dat
     : { isReminderOn: false };
 };
 
+// @anchor reminder-occurrence
+/// Bieżące wystąpienie przypomnienia na chwilę `now` albo null, gdy nic nie powinno teraz dzwonić.
+/// Jednorazowe: `remindAt`, gdy już minął. Cykliczne (`recurIntervalMinutes`): ostatni punkt siatki
+/// remindAt + k·interwał, który minął — o ile seria ruszyła i nie skończyła się (`recurEnd`).
+/// Wspólne dla okienka w aplikacji (`getDueReminders`) i pushy (`notification-cron`).
+export const reminderOccurrence = (
+  r: { remindAt: Date; recurIntervalMinutes: number | null; recurEnd: Date | null },
+  now: Date = new Date(),
+): Date | null => {
+  const start = r.remindAt.getTime();
+  if (start > now.getTime()) return null;
+  if (r.recurIntervalMinutes == null) return r.remindAt;
+  if (r.recurEnd && now.getTime() > r.recurEnd.getTime()) return null;
+  const intervalMs = r.recurIntervalMinutes * 60000;
+  const occ = new Date(start + Math.floor((now.getTime() - start) / intervalMs) * intervalMs);
+  return r.recurEnd && occ.getTime() > r.recurEnd.getTime() ? null : occ;
+};
+
 // @anchor task-statuses
 /// Statusy zadania = kody `EXEC_STATUS_META` z frontu (wbsConstants.js), podzbiór sensowny dla zadania.
 export const TASK_STATUSES = ['TO_DO', 'IN_PROGRESS', 'ON_HOLD', 'DONE', 'CANCELLED'] as const;
@@ -579,18 +597,9 @@ export class UserTasksService {
     const toAdvance: { id: string; at: Date }[] = [];
 
     for (const r of rows) {
-      if (r.recurIntervalMinutes == null) {
-        if (r.remindAt.getTime() <= now.getTime()) due.push(r);
-        continue;
-      }
-      // cykliczny: policz bieżące wystąpienie z siatki start + interwał·k
-      const start = r.remindAt.getTime();
-      if (start > now.getTime()) continue; // seria jeszcze nie ruszyła
-      if (r.recurEnd && now.getTime() > r.recurEnd.getTime()) continue; // seria zakończona
-      const intervalMs = r.recurIntervalMinutes * 60000;
-      const idx = Math.floor((now.getTime() - start) / intervalMs);
-      const currentOcc = new Date(start + idx * intervalMs);
-      if (r.recurEnd && currentOcc.getTime() > r.recurEnd.getTime()) continue;
+      const currentOcc = reminderOccurrence(r, now);
+      if (!currentOcc) continue; // jeszcze nie pora / seria zakończona
+      if (r.recurIntervalMinutes == null) { due.push(r); continue; }
       if (!r.lastFiredAt || currentOcc.getTime() > r.lastFiredAt.getTime()) {
         due.push(r);
         toAdvance.push({ id: r.id, at: currentOcc });
@@ -688,10 +697,11 @@ export class UserTasksService {
       });
     } else if (action === 'snooze' && minutes) {
       if (reminder.recurIntervalMinutes != null) {
-        // cykliczny: nie ruszaj startu serii, tylko przesuń kursor „pokazane" w przyszłość
+        // cykliczny: nie ruszaj startu serii, tylko przesuń kursory „pokazane" i „wysłane pushem" w przyszłość
+        const until = new Date(Date.now() + minutes * 60000);
         await this.prisma.taskReminder.update({
           where: { id: reminderId },
-          data: { lastFiredAt: new Date(Date.now() + minutes * 60000) },
+          data: { lastFiredAt: until, lastPushedAt: until },
         });
       } else {
         await this.prisma.taskReminder.update({

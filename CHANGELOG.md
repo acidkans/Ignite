@@ -1,3 +1,19 @@
+## 2026-10-31 — fix(przypomnienia): push dla serii cyklicznych co interwał, push nie gasi przypomnienia, tylko otwarte zadania
+
+### schema.prisma
+- dodano `schema-pole` `TaskReminder.lastPushedAt` — ostatnie wystąpienie wysłane pushem (osobny kursor od `lastFiredAt` okienka w aplikacji); migracja `20261031160000_task_reminder_last_pushed_at`
+
+### architektura / API
+- `back-funkcja` `dispatchReminders` (notification-cron, co minutę): push dla bieżącego wystąpienia (`reminderOccurrence`) nowszego niż `lastPushedAt`; seria cykliczna — push co interwał aż do `recurEnd`; jednorazowe — raz i ponownie po odłożeniu. Push NIE ustawia już `sentAt` (wcześniej pierwszy push gasił całą serię cykliczną i chował przypomnienie z okienka w aplikacji). Pomija zadania zamknięte (DONE / CANCELLED) i usunięte
+- dodano `back-funkcja` `reminderOccurrence` — wspólne liczenie wystąpienia dla pushy i `getDueReminders`
+- odłożenie serii cyklicznej (snooze) przesuwa też `lastPushedAt` — push milknie na ten sam czas co okienko
+
+### słownik
+- dodano `task-reminder-last-pushed-at` — schema.prisma; `reminder-occurrence` — user-tasks.service.ts
+
+### wytyczne
+- `schema-pole` `TaskReminder.sentAt` — ustawia WYŁĄCZNIE „Zamknij” (dismiss) użytkownika; wysyłka push przesuwa tylko `lastPushedAt`
+
 ## 2026-10-31 — feat(zadania): zadanie Od–Do (data + godzina, także kilkudniowe) i wybór węzła WBS z drzewa
 
 ### schema.prisma

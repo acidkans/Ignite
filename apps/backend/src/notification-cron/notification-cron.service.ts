@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { TaskSyncService } from '../user-tasks/task-sync.service';
-import { UserTasksService } from '../user-tasks/user-tasks.service';
+import { UserTasksService, OPEN_TASK_STATUSES, reminderOccurrence } from '../user-tasks/user-tasks.service';
 import { PushService } from '../push/push.service';
 import { NotificationSettingsService } from '../notification-settings/notification-settings.service';
 
@@ -56,35 +56,40 @@ export class NotificationCronService {
   }
 
   // @anchor notification-cron-reminder-dispatch
-  // Co minutę: sprawdź przeterminowane alerty i wyślij push notification
+  // Co minutę: push dla przypomnień, których bieżące wystąpienie (`reminderOccurrence`) nie było jeszcze
+  // wysłane (kursor `lastPushedAt`). Jednorazowe — raz, i ponownie po odłożeniu (nowy remindAt); cykliczne —
+  // raz na interwał, aż do `recurEnd`. Push NIE ustawia `sentAt` — gasi je dopiero „Zamknij” (dismiss),
+  // więc okienko w aplikacji dalej pokazuje przypomnienie. Tylko otwarte, nieusunięte zadania.
   @Cron(CronExpression.EVERY_MINUTE)
   async dispatchReminders(): Promise<void> {
     const settings = await this.notifSettings.getOrCreate();
     if (!settings.webPushEnabled) return;
 
-    const due = await this.prisma.taskReminder.findMany({
-      where: { remindAt: { lte: new Date() }, sentAt: null },
+    const now = new Date();
+    const candidates = await this.prisma.taskReminder.findMany({
+      where: { remindAt: { lte: now }, sentAt: null, userTask: { status: { in: OPEN_TASK_STATUSES }, deletedAt: null } },
       include: { userTask: { select: { title: true, userId: true } } },
     });
 
-    for (const reminder of due) {
+    let sent = 0;
+    for (const reminder of candidates) {
+      const occ = reminderOccurrence(reminder, now);
+      if (!occ || (reminder.lastPushedAt && reminder.lastPushedAt.getTime() >= occ.getTime())) continue;
       const { title, userId } = reminder.userTask;
       try {
         await this.push.sendToUser(userId, '🔔 Przypomnienie', title, undefined, {
           type: 'REMINDER',
           reminderId: reminder.id,
         });
-        await this.prisma.taskReminder.update({
-          where: { id: reminder.id },
-          data: { sentAt: new Date() },
-        });
+        await this.prisma.taskReminder.update({ where: { id: reminder.id }, data: { lastPushedAt: occ } });
+        sent++;
       } catch (err: any) {
         this.logger.warn(`[Reminder] push failed for ${reminder.id}: ${err?.message}`);
       }
     }
 
-    if (due.length > 0) {
-      this.logger.log(`[Reminder] dispatched ${due.length} reminders`);
+    if (sent > 0) {
+      this.logger.log(`[Reminder] dispatched ${sent} reminders`);
     }
   }
 

@@ -1238,6 +1238,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | toTodoBody | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor to-todo-body |
 | back-stala | TASK_STATUSES | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor task-statuses |
 | back-funkcja | taskStart | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor task-start |
+| back-funkcja | reminderOccurrence | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor reminder-occurrence |
 | back-funkcja | toTodoReminder | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor to-todo-reminder |
 | back-stala | OPEN_TASK_STATUSES | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor open-task-statuses |
 | back-stala | CLOSED_TASK_STATUSES | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor closed-task-statuses |
@@ -1417,6 +1418,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | schema-pole | TaskReminder.recurIntervalMinutes | apps/backend/prisma/schema.prisma | @anchor task-reminder-recur-interval-minutes |
 | schema-pole | TaskReminder.recurEnd | apps/backend/prisma/schema.prisma | @anchor task-reminder-recur-end |
 | schema-pole | TaskReminder.lastFiredAt | apps/backend/prisma/schema.prisma | @anchor task-reminder-last-fired-at |
+| schema-pole | TaskReminder.lastPushedAt | apps/backend/prisma/schema.prisma | @anchor task-reminder-last-pushed-at |
 | schema-model | MsTodoSyncState | apps/backend/prisma/schema.prisma | @anchor ms-todo-sync-state |
 | schema-pole | MsTodoSyncState.deltaLink | apps/backend/prisma/schema.prisma | @anchor ms-todo-sync-state-delta-link |
 | schema-pole | MsTodoSyncState.lastSyncAt | apps/backend/prisma/schema.prisma | @anchor ms-todo-sync-state-last-sync-at |
