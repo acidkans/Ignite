@@ -56,7 +56,7 @@ export class ProcessTreeService {
         `;
             }
 
-            // Auto-create "Wizja lokalna" task (UserTask) for every new order
+            // Domyślna struktura WBS dla każdego nowego zamówienia
             if (dto.type === NodeType.ORDER) {
                 // Eager: każde zamówienie rodzi się z realną wersją "pierwszy" (aktywną).
                 // Cała treść (WBS) idzie na tę wersję zamiast na baseline null.
@@ -66,21 +66,6 @@ export class ProcessTreeService {
                     data: { nodeId: node.id, label: 'pierwszy', isActive: true },
                 });
                 const versionId = firstVersion.id;
-                // Odpowiedzialny = zakładający zamówienie. Bez syncu do MS przy tworzeniu (zapis w transakcji) —
-                // trafi do To Do / Outlooka przy pierwszej edycji.
-                if (node.ownerId) {
-                    await tx.userTask.create({
-                        data: {
-                            userId: node.ownerId,
-                            createdById: node.ownerId,
-                            nodeId: node.id,
-                            title: 'Wizja lokalna',
-                            plannedEnd: node.createdAt,
-                            status: 'TO_DO',
-                            source: 'IGNITE',
-                        },
-                    });
-                }
                 const pytaniaNode = await tx.wbsNode.create({
                     data: {
                         nodeId: node.id,
