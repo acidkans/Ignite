@@ -512,6 +512,44 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | DRAWER_STATUS_COLOR / drawerStatusKey / qaSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor drawer-status-color |
 | ui-stan | taskSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-summary |
 | ui-funkcja | loadTaskSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor load-task-summary |
+| ui-stan | chatSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-summary |
+| ui-funkcja | loadChatSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor load-chat-summary |
+| ui-stan | branchChatUnread | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor branch-chat-unread |
+| ui-ikona | ikona czatu gałęzi (MessageCircle) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-icon |
+| ui-zakladka | WbsChatDrawer | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-drawer |
+| ui-stala | CHAT_IMAGE_MAX_BYTES (front) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor chat-image-max-bytes-front |
+| ui-stala | chatImageCache | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor chat-image-cache |
+| ui-funkcja | ChatImage | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor chat-image |
+| ui-funkcja | uploadImages | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor upload-chat-images |
+| ui-funkcja | groupChatThreads | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor group-chat-threads |
+| ui-stan | replyTo (WbsChatDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-reply-to |
+| ui-stan | unreadThreads (WbsChatDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-unread-threads |
+| ui-lista | lista wątków czatu (gałąź główna) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-thread-list |
+| ui-dropdown | „Nowy wątek w…” (WbsChatDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-new-thread-picker |
+| ui-stala | wysokość szuflady czatu (50vh) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-drawer-height |
+| ui-stan | threadStatuses (WbsChatDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-thread-statuses |
+| ui-stan | showArchived (WbsChatDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-show-archived |
+| ui-funkcja | setThreadStatus (WbsChatDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor set-thread-status |
+| ui-sekcja | nagłówek wątku czatu (status + zamknij/otwórz) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-thread-header |
+| ui-stala | DRAWER.chatBar | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor drawer-chat-bar |
+| schema-pole | Comment.wbsNodeId | apps/backend/prisma/schema.prisma | @anchor comment-wbs-node-id |
+| schema-pole | Comment.images | apps/backend/prisma/schema.prisma | @anchor comment-images |
+| schema-model | WbsChatThread | apps/backend/prisma/schema.prisma | @anchor wbs-chat-thread |
+| schema-pole | WbsChatThread.status | apps/backend/prisma/schema.prisma | @anchor wbs-chat-thread-status |
+| back-funkcja | markReadByWbsNode | apps/backend/src/comments/comments.service.ts | @anchor mark-read-by-wbs-node |
+| back-funkcja | getWbsChatSummary | apps/backend/src/comments/comments.service.ts | @anchor get-wbs-chat-summary |
+| back-endpoint | GET /comments/order/:orderId/wbs-summary | apps/backend/src/comments/comments.controller.ts | @anchor get-wbs-chat-summary-endpoint |
+| back-stala | CHAT_IMAGE_DIR | apps/backend/src/comments/chat-image.storage.ts | @anchor chat-image-dir |
+| back-stala | CHAT_IMAGE_MAX_BYTES | apps/backend/src/comments/chat-image.storage.ts | @anchor chat-image-max-bytes |
+| back-stala | CHAT_IMAGE_NAME_RE | apps/backend/src/comments/chat-image.storage.ts | @anchor chat-image-name-re |
+| back-stala | chatImageUploadOptions | apps/backend/src/comments/chat-image.storage.ts | @anchor chat-image-upload-options |
+| back-endpoint | POST /comments/order/:orderId/images | apps/backend/src/comments/comments.controller.ts | @anchor upload-chat-image-endpoint |
+| back-endpoint | GET /comments/images/:fileName | apps/backend/src/comments/comments.controller.ts | @anchor get-chat-image-endpoint |
+| back-funkcja | getBranchNodeNames | apps/backend/src/comments/comments.service.ts | @anchor get-branch-node-names |
+| back-funkcja | getWbsChatThreads | apps/backend/src/comments/comments.service.ts | @anchor get-wbs-chat-threads |
+| back-funkcja | setWbsChatThreadStatus | apps/backend/src/comments/comments.service.ts | @anchor set-wbs-chat-thread-status |
+| back-endpoint | GET /comments/order/:orderId/threads | apps/backend/src/comments/comments.controller.ts | @anchor get-wbs-chat-threads-endpoint |
+| back-endpoint | PATCH /comments/order/:orderId/threads/:wbsNodeId | apps/backend/src/comments/comments.controller.ts | @anchor set-wbs-chat-thread-status-endpoint |
 | ui-stan | assigneeId (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-assignee |
 | ui-sekcja | WbsTaskComment | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-comment |
 | ui-funkcja | saveComment (WbsTasksDrawer) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-save-comment |
@@ -542,6 +580,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-funkcja | fetchProjectTasks | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-fetch-project-tasks |
 | ui-sekcja | pasek akcji pod nazwą węzła WBS | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-node-action-bar |
 | ui-funkcja | collectBranchQa | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor collect-branch-qa |
+| ui-funkcja | collectBranchNames | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor collect-branch-names |
 | ui-funkcja | collectBranchStrategyEntries | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor collect-branch-strategy-entries |
 | ui-funkcja | composeBranchStrategy | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor compose-branch-strategy |
 | ui-funkcja | saveLeafStrategy | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor save-leaf-strategy |

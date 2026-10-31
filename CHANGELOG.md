@@ -1,3 +1,47 @@
+## 2026-10-31 — feat(wbs): czat gałęzi WBS — dymek pod nazwą węzła, szuflada czatu z czerwoną belką, powiadomienia dla zespołu zamówienia, obrazki w wiadomościach, gałąź główna zbiera czat podgałęzi, status wątku aktywny/zamknięty z archiwum; usunięta kolumna Attach.
+
+### schema.prisma
+- dodano pole `wbsNodeId String?` w modelu `Comment` (+ indeks `[orderId, wbsNodeId]`) — wpis czatu przypięty do węzła WBS; NULL = ogólny czat zamówienia. Migracja `20261031210000_comment_wbs_node`
+- dodano pole `images String[]` w modelu `Comment` — nazwy plików obrazków wiadomości w `uploads/chat/`. Migracja `20261031220000_comment_images`
+- dodano model `WbsChatThread` (`orderId`, `wbsNodeId`, `status` ACTIVE|CLOSED, `closedAt`, `closedById`; unikalne `[orderId, wbsNodeId]`) — status wątku czatu gałęzi; brak wiersza = aktywny. Migracja `20261031230000_wbs_chat_threads`
+
+### architektura / API
+- `back-endpoint` `GET /comments/order/:orderId` — opcjonalny `?wbsNodeId=` zawęża do czatu jednej gałęzi; `?branchOf=` zwraca węzeł + wszystkich potomków wg tabeli `wbs_nodes` (z `wbsNodeName`), z tą samą regułą ról co drzewo WBS — pracownik nie dostaje wątków liści finansowych
+- `back-endpoint` `POST /comments/order/:orderId` — przyjmuje `wbsNodeId`; wpis gałęzi powiadamia cały zespół zamówienia (`Team.orderNodeId`) + @oznaczonych, poza autorem
+- `back-endpoint` `POST /comments/order/:orderId/mark-read` — opcjonalny `?wbsNodeId=` oznacza przeczytane tylko w tej gałęzi
+- dodano `back-endpoint` `GET /comments/order/:orderId/wbs-summary` — `{ [wbsNodeId]: { total, unread } }` dla zalogowanego
+- `ui-tabela` `WBSHybridTable` — `ui-ikona` dymku pod nazwą węzła (szary / szary z liczbą / niebieski z czerwoną plakietką nieprzeczytanych), `ui-zakladka` `WbsChatDrawer` w szufladzie pod wierszem (karta jak Q&A + `DRAWER.chatBar`); nieprzeczytane w potomkach widać przy dymku rodzica jako czerwony obrys „↓N” (`ui-stan` `branchChatUnread`)
+- `ui-kolumna` „Attach.” usunięta z tabeli WBS razem z `AttachmentCell`, `MarkerAttachmentsModal` i odpytywaniem `/schematics/wbs-node-markers/batch` co 30 s
+- dodano `back-endpoint` `POST /comments/order/:orderId/images` — upload jednego obrazka (PNG/JPG/GIF/WEBP, max 15 MB, diskStorage do `uploads/chat/`), zwraca `{ fileName }`
+- dodano `back-endpoint` `GET /comments/images/:fileName` — obrazek czatu za JWT; nazwa tylko w formacie uuid.ext
+- dodano `back-endpoint` `GET /comments/order/:orderId/threads` — `{ [wbsNodeId]: { status, closedAt, closedBy } }`
+- dodano `back-endpoint` `PATCH /comments/order/:orderId/threads/:wbsNodeId` — `{ status: ACTIVE | CLOSED }`; zamknięcie = archiwum
+- `back-endpoint` `POST /comments/order/:orderId` — przyjmuje `images: string[]`; wiadomość może być bez tekstu, gdy ma obrazki (powiadomienie „📷 obrazek”)
+- `ui-zakladka` `WbsChatDrawer` — przycisk „załącz obrazek”, wklejanie Ctrl+V, miniatury przed wysłaniem, miniatury w wiadomościach (`ui-funkcja` `ChatImage`, blob przez fetch z tokenem) i podgląd pełnoekranowy
+- `ui-zakladka` `WbsChatDrawer` gałęzi głównej (depth 0 z dziećmi) — dwie połowy: po lewej lista wątków (gałąź główna + liście z wiadomościami, nazwa wersalikami, liczba i godzina ostatniej, podgląd ostatniej wiadomości, czerwona kropka = nieprzeczytane, „+ Nowy wątek w…” dla liści bez rozmowy), po prawej rozmowa wybranego wątku z polem wpisywania — wiadomość idzie do tego wątku; domyślnie otwiera się najnowszy nieprzeczytany wątek; oznacza wiadomości całej gałęzi jako przeczytane; szuflada czatu ma stałą wysokość pół ekranu, pole wpisywania zawsze na dole
+- `ui-sekcja` nagłówek wątku czatu: status Aktywny/Zamknięty, „Zamknij wątek” / „Otwórz ponownie”; zamknięty wątek tylko do odczytu, znika z listy (archiwum) — checkbox „Pokaż archiwalne (N)” nad listą wątków; gdy wybrany wątek jest w archiwum, po prawej pusty stan zamiast wątku na siłę; „Nowy wątek w…” obejmuje też gałąź główną i liście z wątkiem w archiwum (wybranie wznawia wątek)
+- klik poza otwartym czatem gałęzi zamyka go
+
+### słownik
+- dodano `wbs-chat-summary`, `load-chat-summary`, `branch-chat-unread`, `wbs-chat-icon`, `wbs-chat-drawer` — WBSHybridTable.jsx
+- dodano `drawer-chat-bar` — wbsConstants.js
+- dodano `comment-wbs-node-id` — schema.prisma
+- dodano `mark-read-by-wbs-node`, `get-wbs-chat-summary` — comments.service.ts
+- dodano `get-wbs-chat-summary-endpoint` — comments.controller.ts
+- dodano `comment-images` — schema.prisma
+- dodano `chat-image-dir`, `chat-image-max-bytes`, `chat-image-name-re`, `chat-image-upload-options` — comments/chat-image.storage.ts
+- dodano `upload-chat-image-endpoint`, `get-chat-image-endpoint` — comments.controller.ts
+- dodano `wbs-chat-thread`, `wbs-chat-thread-status` — schema.prisma
+- dodano `get-branch-node-names`, `get-wbs-chat-threads`, `set-wbs-chat-thread-status` — comments.service.ts; `get-wbs-chat-threads-endpoint`, `set-wbs-chat-thread-status-endpoint` — comments.controller.ts
+- dodano `wbs-chat-thread-statuses`, `wbs-chat-show-archived`, `set-thread-status`, `wbs-chat-thread-header` — WBSHybridTable.jsx
+- dodano `collect-branch-names`, `group-chat-threads`, `wbs-chat-thread-list`, `wbs-chat-new-thread-picker`, `wbs-chat-drawer-height`, `wbs-chat-reply-to`, `wbs-chat-unread-threads`, `chat-image-max-bytes-front`, `chat-image-cache`, `chat-image`, `upload-chat-images` — WBSHybridTable.jsx
+
+### wytyczne
+- `schema-pole` `Comment.wbsNodeId` — UUID węzła z JSON tree, nie FK; węzły każdej wersji WBS mają własne id, więc czat jest per wersja (jak `UserTask.wbsNodeId`)
+- `back-endpoint` `POST /comments/order/:orderId` z `wbsNodeId` — powiadomienia idą do zespołu zamówienia, nie do wszystkich użytkowników; ogólny czat bez zmian
+- `schema-pole` `Comment.images` — tylko nazwy nadane przez upload (`CHAT_IMAGE_NAME_RE`); obrazki leżą w `UPLOADS_ROOT/chat/`, na produkcji w katalogu backendu podmontowanym z hosta
+- `schema-model` `WbsChatThread` — wiersz powstaje dopiero przy pierwszej zmianie statusu; brak wiersza traktuj jak ACTIVE
+
 ## 2026-10-30 — feat(onedrive): „Otwórz w OneDrive” otwiera przeglądarkę folderu zamówienia w modalu (v2026.10.30.2326)
 
 ### architektura / API

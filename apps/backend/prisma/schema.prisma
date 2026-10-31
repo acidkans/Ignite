@@ -86,10 +86,16 @@ model Comment {
   id               String   @id @default(uuid())
   orderId          String
   requirementId    String? // opcjonalne #oznaczenie wymagania
+  /// @anchor comment-wbs-node-id
+  /// Czat gałęzi WBS — UUID węzła (JSON tree, nie FK). NULL = wpis ogólnego czatu zamówienia.
+  wbsNodeId        String?
   userId           String
   text             String
   type             String   @default("NOTE") // NOTE | QUESTION | RESOLVED | URGENT
   mentionedUserIds String[] @default([])
+  /// @anchor comment-images
+  /// Obrazki wiadomości — nazwy plików w `UPLOADS_ROOT/chat/` (wysyłane przez POST /comments/order/:orderId/images).
+  images           String[] @default([])
   replyToId        String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -99,6 +105,7 @@ model Comment {
   replies Comment[] @relation("CommentReplies")
   reads   CommentRead[]
 
+  @@index([orderId, wbsNodeId])
   @@map("comments")
 }
 
@@ -114,6 +121,25 @@ model CommentRead {
   @@unique([commentId, userId])
   @@index([userId])
   @@map("comment_reads")
+}
+
+/// @anchor wbs-chat-thread
+/// Status wątku czatu gałęzi WBS (wątek = wiadomości jednego węzła w zamówieniu). Brak wiersza = wątek aktywny.
+/// Zamknięty wątek trafia do archiwum: znika z listy, póki ktoś nie włączy „Pokaż archiwalne”.
+model WbsChatThread {
+  id         String    @id @default(uuid())
+  orderId    String
+  /// UUID węzła z JSON tree (jak `Comment.wbsNodeId`), nie FK.
+  wbsNodeId  String
+  /// @anchor wbs-chat-thread-status
+  status     String    @default("ACTIVE") // ACTIVE | CLOSED
+  closedAt   DateTime?
+  /// Kto zamknął — id użytkownika (bez relacji, tylko do wyświetlenia).
+  closedById String?
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([orderId, wbsNodeId])
+  @@map("wbs_chat_threads")
 }
 
 model PushSubscription {
