@@ -1,3 +1,20 @@
+## 2026-10-31 — feat(zadania): etap 2 ujednolicenia Subtask → UserTask — pola harmonogramu w UserTask i FK userTaskId
+
+### schema.prisma
+- dodano pola `schema-pole` `UserTask.visibilityType` (domyślnie ALL), `UserTask.category`, `UserTask.phase`, `UserTask.requirementItemId`, `UserTask.isAiGenerated`, `UserTask.isApproved` — przejmują formanty `Subtask`
+- dodano `schema-pole` `UserTask.legacySubtaskId` (unique) — id źródłowego wiersza `subtasks` przy migracji danych (etap 3)
+- dodano `schema-pole` `BudgetLineItem.userTaskId`, `SchematicDocument.userTaskId`, `SchematicMarker.userTaskId`, `MaterialRequirement.assignedUserTaskId` — następcy FK do `Subtask`, wszystkie `onDelete: SetNull`
+- dodano `schema-model` `UserTaskMarkerLink` (`user_task_marker_links`) — następca `SubtaskMarkerLink`
+- stare kolumny `subtaskId` / `assignedSubtaskId` i model `Subtask` zostają do etapu 9
+- migracja `20261031120000_user_task_subtask_fields`
+
+### słownik
+- dodano anchory pól i relacji `user-task-*`, `user-task-marker-link*`, `budget-line-item-user-task*`, `schematic-document-user-task*`, `schematic-marker-user-task*`, `mat-req-assigned-user-task*`
+
+### wytyczne
+- `schema-model` `UserTask` — NIE jest klonowany z wersją projektu; nowa aktywna wersja przepina `wbsNodeId` zadań na sklonowane węzły (plan: docs/PLAN-UJEDNOLICENIE-ZADAN.md, decyzja 1)
+- `schema-pole` `BudgetLineItem.userTaskId` — `SetNull`, nie `Cascade` jak przy `subtaskId`: usunięcie zadania nie może kasować pozycji budżetu
+
 ## 2026-10-30 — feat(onedrive): „Otwórz w OneDrive” otwiera przeglądarkę folderu zamówienia w modalu (v2026.10.30.2326)
 
 ### architektura / API

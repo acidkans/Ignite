@@ -295,6 +295,7 @@ model ProcessNode {
   requiredTrainings         TrainingTypeOrder[]
   /// @anchor process-node-assigned-users
   assignedUsers             UserOrder[]
+
   @@map("process_nodes")
 }
 
@@ -420,10 +421,16 @@ model BudgetLineItem {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   nodeId      String
+  /// @anchor budget-line-item-user-task-id
+  /// Zadanie, z którego pochodzi pozycja (następca `subtaskId`). SetNull — usunięcie zadania nie kasuje budżetu.
+  userTaskId  String?
   node        ProcessNode     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
   subtask     Subtask?        @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
+  /// @anchor budget-line-item-user-task
+  userTask    UserTask?       @relation(fields: [userTaskId], references: [id], onDelete: SetNull)
   version     ProjectVersion? @relation(fields: [versionId], references: [id], onDelete: Cascade)
 
+  @@index([userTaskId])
   @@map("budget_line_items")
 }
 
@@ -651,6 +658,10 @@ model SchematicDocument {
   markers   SchematicMarker[]
   node      ProcessNode       @relation(fields: [nodeId], references: [id], onDelete: Cascade)
   subtask   Subtask?          @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
+  /// @anchor schematic-document-user-task-id
+  userTaskId String?
+  /// @anchor schematic-document-user-task
+  userTask   UserTask?         @relation(fields: [userTaskId], references: [id], onDelete: SetNull)
 
   @@map("schematic_documents")
 }
@@ -671,9 +682,15 @@ model SchematicMarker {
   createdAt   DateTime           @default(now())
   schematic   SchematicDocument  @relation(fields: [schematicId], references: [id], onDelete: Cascade)
   subtask     Subtask?           @relation(fields: [subtaskId], references: [id], onDelete: SetNull)
+  /// @anchor schematic-marker-user-task-id
+  userTaskId    String?
+  /// @anchor schematic-marker-user-task
+  userTask      UserTask?            @relation(fields: [userTaskId], references: [id], onDelete: SetNull)
   attachments   MarkerAttachment[]
   wbsLinks      WbsMarkerLink[]
   subtaskLinks  SubtaskMarkerLink[]
+  /// @anchor schematic-marker-user-task-links
+  userTaskLinks UserTaskMarkerLink[]
 
   @@map("schematic_markers")
 }
@@ -689,6 +706,23 @@ model SubtaskMarkerLink {
   @@unique([subtaskId, markerId])
   @@index([subtaskId])
   @@map("subtask_marker_links")
+}
+
+/// @anchor user-task-marker-link
+/// Powiązanie zadania ze znacznikiem na schemacie (następca `SubtaskMarkerLink`).
+model UserTaskMarkerLink {
+  id         String          @id @default(uuid())
+  /// @anchor user-task-marker-link-user-task-id
+  userTaskId String
+  /// @anchor user-task-marker-link-marker-id
+  markerId   String
+  createdAt  DateTime        @default(now())
+  userTask   UserTask        @relation(fields: [userTaskId], references: [id], onDelete: Cascade)
+  marker     SchematicMarker @relation(fields: [markerId], references: [id], onDelete: Cascade)
+
+  @@unique([userTaskId, markerId])
+  @@index([userTaskId])
+  @@map("user_task_marker_links")
 }
 
 model WbsMarkerLink {
@@ -870,6 +904,8 @@ model MaterialRequirement {
   // Przypisanie do WBS
   /// @anchor mat-req-assigned-subtask-id
   assignedSubtaskId  String?
+  /// @anchor mat-req-assigned-user-task-id
+  assignedUserTaskId String?
   /// @anchor mat-req-wbs-node-id
   wbsNodeId          String? @unique // FK do wbs_nodes — karta produktowa przypisana do węzła WBS (1:1)
   /// @anchor mat-req-wbs-node-ids
@@ -952,6 +988,8 @@ model MaterialRequirement {
   list            MaterialRequirementsList? @relation(fields: [listId], references: [id], onDelete: SetNull)
   /// @anchor mat-req-assigned-subtask
   assignedSubtask Subtask?                  @relation(fields: [assignedSubtaskId], references: [id], onDelete: SetNull)
+  /// @anchor mat-req-assigned-user-task
+  assignedUserTask UserTask?                      @relation(fields: [assignedUserTaskId], references: [id], onDelete: SetNull)
   /// @anchor mat-req-wbs-node
   wbsNode         WbsNode?                  @relation("WbsNodeMaterialCard", fields: [wbsNodeId], references: [id], onDelete: Cascade)
   /// @anchor mat-req-supplier
@@ -1645,7 +1683,25 @@ model UserTask {
   /// @anchor user-task-ms-last-modified
   msLastModified DateTime?
   /// @anchor user-task-source
+  /// IGNITE / MS_TODO / SUBTASK_MIGRATION (zmigrowane z `subtasks` — bez syncu do MS do pierwszej edycji).
   source         String         @default("IGNITE")
+  /// @anchor user-task-visibility-type
+  /// ALL / MANAGER_ONLY / LOGISTYK_ONLY / MANAGER_LOGISTYK — jak dawne `Subtask.visibilityType`.
+  visibilityType    String    @default("ALL")
+  /// @anchor user-task-category
+  category          String?
+  /// @anchor user-task-phase
+  phase             String?
+  /// @anchor user-task-requirement-item-id
+  /// Id pozycji z JSON-a `OrderRequirement` (nie FK) — zmiana nazwy pozycji przemianowuje zadanie.
+  requirementItemId String?
+  /// @anchor user-task-is-ai-generated
+  isAiGenerated     Boolean   @default(false)
+  /// @anchor user-task-is-approved
+  isApproved        Boolean   @default(true)
+  /// @anchor user-task-legacy-subtask-id
+  /// Id źródłowego wiersza `subtasks` przy migracji — do przepięcia FK i audytu.
+  legacySubtaskId   String?   @unique
   /// @anchor user-task-deleted-at
   deletedAt      DateTime?
   createdAt      DateTime       @default(now())
@@ -1661,6 +1717,16 @@ model UserTask {
   wbsNode   WbsNode?      @relation(fields: [wbsNodeId], references: [id], onDelete: SetNull)
   /// @anchor user-task-reminders
   reminders TaskReminder[]
+  /// @anchor user-task-budget-items
+  budgetItems          BudgetLineItem[]
+  /// @anchor user-task-schematic-documents
+  schematicDocuments   SchematicDocument[]
+  /// @anchor user-task-schematic-markers
+  schematicMarkers     SchematicMarker[]
+  /// @anchor user-task-marker-links
+  markerLinks          UserTaskMarkerLink[]
+  /// @anchor user-task-material-requirements
+  materialRequirements MaterialRequirement[]
 
   @@index([userId, deletedAt])
   @@index([userId, nodeId])
