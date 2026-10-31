@@ -25,9 +25,50 @@ export const withWarsawDay = (time: Date, day: string): Date => {
   return new Date(Date.parse(`${day}T${local.slice(11)}Z`) - offsetMs);
 };
 
-export interface CreateUserTaskDto {
+// @anchor task-statuses
+/// Statusy zadania = kody `EXEC_STATUS_META` z frontu (wbsConstants.js), podzbiór sensowny dla zadania.
+export const TASK_STATUSES = ['TO_DO', 'IN_PROGRESS', 'ON_HOLD', 'DONE', 'CANCELLED'] as const;
+export type TaskStatus = typeof TASK_STATUSES[number];
+// @anchor open-task-statuses
+/// Zadanie „otwarte” — lista „Do zrobienia”, przypomnienia, przeterminowane.
+export const OPEN_TASK_STATUSES: TaskStatus[] = ['TO_DO', 'IN_PROGRESS', 'ON_HOLD'];
+// @anchor closed-task-statuses
+export const CLOSED_TASK_STATUSES: TaskStatus[] = ['DONE', 'CANCELLED'];
+
+// @anchor normalize-task-status
+/// Status z requestu → kod EXEC. `OPEN` to stary kod UserTask (stare klienty, offline outbox) = `TO_DO`.
+export const normalizeTaskStatus = (status: string): TaskStatus => {
+  if (status === 'OPEN') return 'TO_DO';
+  if ((TASK_STATUSES as readonly string[]).includes(status)) return status as TaskStatus;
+  throw new BadRequestException(`Nieznany status zadania: ${status}`);
+};
+
+// @anchor to-todo-status
+/// MS To Do zna tylko notStarted / completed — zamknięte zadanie (wykonane albo odwołane) = completed.
+export const toTodoStatus = (status: string) => (CLOSED_TASK_STATUSES as string[]).includes(status) ? 'completed' : 'notStarted';
+
+// @anchor status-filter
+/// Filtr listy: OPEN (domyślnie) = otwarte, DONE = zamknięte, ALL = wszystkie (kalendarz zamówienia).
+const statusFilter = (status: string | undefined) =>
+  status === 'ALL' ? undefined : { in: status === 'DONE' ? CLOSED_TASK_STATUSES : OPEN_TASK_STATUSES };
+
+// @anchor task-visibility-types
+export const TASK_VISIBILITY_TYPES = ['ALL', 'MANAGER_ONLY', 'LOGISTYK_ONLY', 'MANAGER_LOGISTYK'] as const;
+
+/** Pola harmonogramu przejęte z dawnego `Subtask`. */
+interface TaskScheduleFields {
+  visibilityType?: string;
+  category?: string | null;
+  phase?: string | null;
+  requirementItemId?: string | null;
+  isAiGenerated?: boolean;
+  isApproved?: boolean;
+}
+
+export interface CreateUserTaskDto extends TaskScheduleFields {
   title: string;
   description?: string;
+  status?: string;
   plannedStart?: Date;
   plannedEnd?: Date;
   /** Ustawione = plannedEnd ma godzinę i powstaje wydarzenie w kalendarzu Outlook. */
@@ -38,17 +79,45 @@ export interface CreateUserTaskDto {
   assigneeUserId?: string;
 }
 
-export interface UpdateUserTaskDto {
+export interface UpdateUserTaskDto extends TaskScheduleFields {
   title?: string;
   description?: string;
-  status?: 'OPEN' | 'DONE';
+  status?: string;
   plannedStart?: Date;
   plannedEnd?: Date;
   durationMinutes?: number | null;
   nodeId?: string;
+  wbsNodeId?: string | null;
   /** Przepisanie na innego odpowiedzialnego (może właściciel albo autor). */
   assigneeUserId?: string;
 }
+
+// @anchor task-viewer
+/// Kto ogląda listę zamówienia — do filtra `visibilityType` (jak dawniej przy Subtaskach).
+export interface TaskViewer { userId: string; roles?: string[] }
+
+// @anchor visibility-where
+/// ADMIN / MANAGER widzą wszystko; LOGISTYK dodatkowo zadania „logistyk”; reszta tylko ALL.
+/// Własne zadania (odpowiedzialny / autor) widać zawsze.
+const visibilityWhere = (viewer?: TaskViewer) => {
+  if (!viewer) return {};
+  const roles = viewer.roles || [];
+  if (roles.some(r => r === 'ADMIN' || r === 'MANAGER')) return {};
+  const allowed = roles.includes('LOGISTYK') ? ['ALL', 'LOGISTYK_ONLY', 'MANAGER_LOGISTYK'] : ['ALL'];
+  return { OR: [{ visibilityType: { in: allowed } }, { userId: viewer.userId }, { createdById: viewer.userId }] };
+};
+
+const SCHEDULE_KEYS = ['visibilityType', 'category', 'phase', 'requirementItemId', 'isAiGenerated', 'isApproved'] as const;
+
+// @anchor schedule-data
+const scheduleData = (dto: TaskScheduleFields) => {
+  const data: any = {};
+  for (const k of SCHEDULE_KEYS) if (k in dto) data[k] = (dto as any)[k];
+  if (data.visibilityType !== undefined && !(TASK_VISIBILITY_TYPES as readonly string[]).includes(data.visibilityType)) {
+    throw new BadRequestException(`Nieznana widoczność zadania: ${data.visibilityType}`);
+  }
+  return data;
+};
 
 const TASK_PERSON_SELECT = { id: true, firstName: true, lastName: true, email: true } as const;
 
@@ -65,13 +134,12 @@ export class UserTasksService {
   ) {}
 
   // @anchor user-tasks-list
-  // Domyślnie OPEN i nie-usunięte, sortowane po plannedEnd ASC (null na końcu).
-  // status='DONE' → wykonane (najświeższe pierwsze) do podglądu w filtrze „Wykonane".
+  // Domyślnie otwarte (OPEN_TASK_STATUSES) i nie-usunięte, sortowane po plannedEnd ASC (null na końcu).
+  // status='DONE' → zamknięte (najświeższe pierwsze) do podglądu w filtrze „Wykonane".
   async listForUser(userId: string, status: string = 'OPEN') {
-    const wanted = status === 'DONE' ? 'DONE' : 'OPEN';
     return this.prisma.userTask.findMany({
-      where: { userId, status: wanted, deletedAt: null },
-      orderBy: wanted === 'DONE' ? [{ updatedAt: 'desc' }] : [{ plannedEnd: 'asc' }],
+      where: { userId, status: statusFilter(status), deletedAt: null },
+      orderBy: status === 'DONE' ? [{ updatedAt: 'desc' }] : [{ plannedEnd: 'asc' }],
       include: {
         node: { select: { id: true, name: true } },
         // pozycja WBS — kontekst zadania w widoku mobilnym („projekt › pozycja”)
@@ -105,13 +173,13 @@ export class UserTasksService {
 
   // @anchor user-tasks-list-for-project
   // Zadania WSZYSTKICH użytkowników w projekcie — kalendarz Planowanie → Zadania i „Wszystkie zadania”
-  // (każdy widzi wszystkie; w MS To Do zadanie ma tylko odpowiedzialny). Domyślnie OPEN; status=DONE → wykonane.
+  // (w MS To Do zadanie ma tylko odpowiedzialny). Domyślnie otwarte; status=DONE → zamknięte; status=ALL → wszystkie
+  // (kalendarz zamówienia, kolor wg statusu). Widoczność wg `visibilityType` i ról oglądającego.
   // Każde zadanie dostaje `wbsPath` — nazwy gałęzi od top-level do węzła, do grupowania po gałęziach.
-  async listForProject(processNodeId: string, status: string = 'OPEN') {
-    const wanted = status === 'DONE' ? 'DONE' : 'OPEN';
+  async listForProject(processNodeId: string, status: string = 'OPEN', viewer?: TaskViewer) {
     const tasks = await this.prisma.userTask.findMany({
-      where: { nodeId: processNodeId, status: wanted, deletedAt: null },
-      orderBy: wanted === 'DONE' ? [{ updatedAt: 'desc' }] : [{ plannedEnd: 'asc' }],
+      where: { nodeId: processNodeId, status: statusFilter(status), deletedAt: null, ...visibilityWhere(viewer) },
+      orderBy: status === 'DONE' ? [{ updatedAt: 'desc' }] : [{ plannedEnd: 'asc' }],
       include: {
         node: { select: { id: true, name: true } },
         wbsNode: { select: { id: true, name: true } },
@@ -179,7 +247,7 @@ export class UserTasksService {
     const summary: Record<string, { open: number; overdue: number; done: number }> = {};
     for (const t of tasks) {
       const s = (summary[t.wbsNodeId!] ||= { open: 0, overdue: 0, done: 0 });
-      if (t.status === 'DONE') s.done++;
+      if ((CLOSED_TASK_STATUSES as string[]).includes(t.status)) s.done++;
       else {
         s.open++;
         if (t.plannedEnd && t.plannedEnd < now) s.overdue++;
@@ -199,6 +267,8 @@ export class UserTasksService {
         createdById: userId,
         title: dto.title,
         description: dto.description,
+        status: dto.status ? normalizeTaskStatus(dto.status) : 'TO_DO',
+        ...scheduleData(dto),
         plannedStart: dto.plannedStart,
         plannedEnd: dto.plannedEnd,
         durationMinutes: dto.durationMinutes ?? null,
@@ -233,18 +303,27 @@ export class UserTasksService {
   // @anchor user-tasks-update
   // Edytować może odpowiedzialny albo autor. Zmiana `assigneeUserId` przenosi zadanie: wpis w MS To Do
   // poprzedniego odpowiedzialnego jest usuwany, nowy powstaje u nowego, przypomnienie przechodzi z nim.
+  // Pierwsza edycja zadania zmigrowanego z `subtasks` uruchamia jego sync (`activateMigratedTask`).
   async update(userId: string, taskId: string, dto: UpdateUserTaskDto) {
     const task = await this.findEditable(userId, taskId);
     if (!task) return { count: 0 };
 
     const { assigneeUserId, ...rest } = dto;
-    const data: any = {};
-    for (const k of ['title', 'description', 'status', 'plannedStart', 'plannedEnd', 'durationMinutes', 'nodeId'] as const) {
+    const data: any = scheduleData(rest);
+    for (const k of ['title', 'description', 'status', 'plannedStart', 'plannedEnd', 'durationMinutes', 'nodeId', 'wbsNodeId'] as const) {
       if (k in rest) data[k] = (rest as any)[k];
     }
+    if (data.status !== undefined) data.status = normalizeTaskStatus(data.status);
     // JSON niesie daty jako tekst — syncReminderForTask liczy na Date (getHours), więc zamieniamy tutaj.
     for (const k of ['plannedStart', 'plannedEnd'] as const) {
       if (typeof data[k] === 'string') data[k] = data[k] ? new Date(data[k]) : null;
+    }
+
+    if (task.source === 'SUBTASK_MIGRATION') {
+      const ownerId = assigneeUserId ? await this.resolveAssignee(assigneeUserId, task.userId) : task.userId;
+      await this.prisma.userTask.update({ where: { id: taskId }, data: { ...data, userId: ownerId, source: 'IGNITE' } });
+      await this.activateMigratedTask(taskId);
+      return { count: 1 };
     }
 
     const newOwnerId = assigneeUserId ? await this.resolveAssignee(assigneeUserId, task.userId) : task.userId;
@@ -277,6 +356,17 @@ export class UserTasksService {
       await this.syncCalendarEvent(taskId);
     }
     return { count: 1 };
+  }
+
+  // @anchor user-tasks-activate-migrated-task
+  // Zadanie z migracji `subtasks` startuje bez MS i bez przypomnień (decyzja 5 planu). Przy pierwszej
+  // edycji dostaje to, co każde nowe zadanie — o ile jest otwarte: zamknięte nigdy nie idzie do MS.
+  private async activateMigratedTask(taskId: string): Promise<void> {
+    const task = await this.prisma.userTask.findUnique({ where: { id: taskId } });
+    if (!task || (CLOSED_TASK_STATUSES as string[]).includes(task.status)) return;
+    await this.syncReminderForTask(task.id, task.userId, task.plannedEnd);
+    await this.pushNewTaskToGraph(task.userId, task);
+    await this.syncCalendarEvent(task.id);
   }
 
   // @anchor user-tasks-soft-delete
@@ -340,7 +430,7 @@ export class UserTasksService {
       const listId = await this.resolveIgniteListId(userId);
       if (!listId) return;
 
-      const payload: any = { title: task.title, status: task.status === 'DONE' ? 'completed' : 'notStarted' };
+      const payload: any = { title: task.title, status: toTodoStatus(task.status) };
       if (task.description) payload.body = toTodoBody(task.description);
       if (task.plannedEnd) {
         payload.dueDateTime = toTodoDue(task.plannedEnd as Date);
@@ -371,7 +461,7 @@ export class UserTasksService {
       const patch: any = {};
       if (dto.title !== undefined) patch.title = dto.title;
       if (dto.description !== undefined) patch.body = toTodoBody(task.description);
-      if (dto.status !== undefined) patch.status = dto.status === 'DONE' ? 'completed' : 'notStarted';
+      if (dto.status !== undefined) patch.status = toTodoStatus(task.status);
       if ('plannedEnd' in dto) {
         patch.dueDateTime = task.plannedEnd
           ? toTodoDue(task.plannedEnd as Date)
@@ -391,7 +481,7 @@ export class UserTasksService {
   // Wykonane zadanie zostaje w kalendarzu (ślad, że było zrobione w tym czasie).
   async syncCalendarEvent(taskId: string): Promise<void> {
     const task = await this.prisma.userTask.findUnique({ where: { id: taskId } });
-    if (!task) return;
+    if (!task || task.source === 'SUBTASK_MIGRATION') return;
     try {
       if (task.deletedAt || !task.plannedEnd || !task.durationMinutes) {
         await this.deleteCalendarEvent(task);
@@ -448,7 +538,7 @@ export class UserTasksService {
       where: {
         userId,
         sentAt: null,
-        userTask: { status: 'OPEN', deletedAt: null },
+        userTask: { status: { in: OPEN_TASK_STATUSES }, deletedAt: null },
       },
       include: { userTask: { select: { id: true, title: true, plannedEnd: true } } },
       orderBy: { remindAt: 'asc' },

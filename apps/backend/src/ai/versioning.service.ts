@@ -59,6 +59,7 @@ export class VersioningService {
 
             // 4-10. Klonowanie pełnego freeze danych ze źródła do nowej wersji
             await this.cloneVersionData(tx, nodeId, sourceVId, newVersion.id);
+            await this.moveTasksToVersion(tx, nodeId, newVersion.id);
 
             // 11. Deactivate other versions
             await tx.projectVersion.updateMany({
@@ -465,6 +466,24 @@ export class VersioningService {
         }
     }
 
+    // @anchor move-tasks-to-version
+    // Zadania (UserTask) NIE są klonowane z wersją — kopia dawałaby duplikaty w MS To Do i Outlooku.
+    // Nowa AKTYWNA wersja przejmuje je: `wbsNodeId` przechodzi na węzeł nowej wersji z tym samym
+    // korzeniem klonu (`sourceWbsNodeId ?? id`) — działa też, gdy wersję sklonowano z innej niż aktywna.
+    // Zadanie na węźle, którego nowa wersja nie ma, zostaje na starym. Zamrożone kopie zadań nie dostają.
+    private async moveTasksToVersion(tx: Prisma.TransactionClient, nodeId: string, versionId: string) {
+        const fresh = await tx.wbsNode.findMany({ where: { nodeId, versionId }, select: { id: true, sourceWbsNodeId: true } });
+        const byRoot = new Map(fresh.map(n => [n.sourceWbsNodeId ?? n.id, n.id]));
+        const tasks = await tx.userTask.findMany({
+            where: { nodeId, deletedAt: null, wbsNode: { versionId: { not: versionId } } },
+            select: { id: true, wbsNode: { select: { id: true, sourceWbsNodeId: true } } },
+        });
+        for (const t of tasks) {
+            const target = t.wbsNode && byRoot.get(t.wbsNode.sourceWbsNodeId ?? t.wbsNode.id);
+            if (target) await tx.userTask.update({ where: { id: t.id }, data: { wbsNodeId: target } });
+        }
+    }
+
     async getVersions(nodeId: string) {
         return this.prisma.projectVersion.findMany({
             where: { nodeId },
@@ -476,16 +495,18 @@ export class VersioningService {
         const version = await this.prisma.projectVersion.findUnique({ where: { id: versionId } });
         if (!version) throw new NotFoundException('Version not found');
 
-        await this.prisma.$transaction([
-            this.prisma.projectVersion.updateMany({
+        await this.prisma.$transaction(async (tx) => {
+            await tx.projectVersion.updateMany({
                 where: { nodeId: version.nodeId },
                 data: { isActive: false }
-            }),
-            this.prisma.projectVersion.update({
+            });
+            await tx.projectVersion.update({
                 where: { id: versionId },
                 data: { isActive: true }
-            })
-        ]);
+            });
+            // Zadania idą za aktywną wersją — także przy powrocie do starszej.
+            await this.moveTasksToVersion(tx, version.nodeId, versionId);
+        });
 
         return version;
     }

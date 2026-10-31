@@ -1,3 +1,21 @@
+## 2026-10-31 — feat(zadania): etap 4 ujednolicenia — backend UserTask ze statusami EXEC, polami harmonogramu i widocznością
+
+### architektura / API
+- `back-endpoint` `GET /my-tasks/project/:processNodeId?status=` — dodano `status=ALL` (kalendarz zamówienia: wszystkie zadania, kolor wg statusu); `OPEN` = TO_DO / IN_PROGRESS / ON_HOLD, `DONE` = DONE / CANCELLED; lista filtrowana wg `UserTask.visibilityType` i ról oglądającego (`back-funkcja` `visibilityWhere`)
+- `back-endpoint` `POST /my-tasks` i `PATCH /my-tasks/:id` — przyjmują `status` (kody EXEC; stary `OPEN` = `TO_DO`, nieznany → 400), `visibilityType`, `category`, `phase`, `requirementItemId`, `isAiGenerated`, `isApproved`; PATCH także `wbsNodeId` (wybór węzła w modalu)
+- `GET /my-tasks` i przypomnienia (`getDueReminders`) — „otwarte” = `OPEN_TASK_STATUSES` zamiast `status = 'OPEN'`
+- MS To Do: `back-funkcja` `toTodoStatus` (DONE / CANCELLED → completed), `back-funkcja` `fromTodoStatus` (notStarted nie nadpisuje IN_PROGRESS / ON_HOLD, completed nie nadpisuje CANCELLED)
+- zadanie `source = SUBTASK_MIGRATION`: bez wydarzenia w Outlooku; pierwsza edycja zmienia `source` na IGNITE i — gdy zadanie otwarte — tworzy przypomnienie, wpis w MS To Do i wydarzenie (`back-funkcja` `activateMigratedTask`)
+- wersjonowanie: `createVersion` i `setActiveVersion` przepinają `UserTask.wbsNodeId` na węzły aktywnej wersji po korzeniu klonu (`back-funkcja` `moveTasksToVersion`); zadania nie są klonowane
+
+### słownik
+- dodano `task-statuses`, `open-task-statuses`, `closed-task-statuses`, `normalize-task-status`, `to-todo-status`, `status-filter`, `task-visibility-types`, `task-viewer`, `visibility-where`, `schedule-data`, `user-tasks-activate-migrated-task` — user-tasks.service.ts
+- dodano `from-todo-status` — task-sync.service.ts
+- dodano `move-tasks-to-version` — versioning.service.ts
+
+### wytyczne
+- `back-stala` `TASK_STATUSES` — jedyne dozwolone statusy zadania; porównania „otwarte / zamknięte” zawsze przez `OPEN_TASK_STATUSES` / `CLOSED_TASK_STATUSES`, nigdy `status === 'OPEN'`
+
 ## 2026-10-31 — feat(zadania): etap 3 ujednolicenia — migracja danych subtasks → user_tasks
 
 ### schema.prisma

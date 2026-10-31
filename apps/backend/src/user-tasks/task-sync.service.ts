@@ -1,7 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MsTodoService, MsTodoList, MsTodoTask } from '../ms-todo/ms-todo.service';
-import { UserTasksService, toTodoDue, toTodoBody, withWarsawDay } from './user-tasks.service';
+import { UserTasksService, toTodoDue, toTodoBody, toTodoStatus, withWarsawDay, OPEN_TASK_STATUSES, CLOSED_TASK_STATUSES } from './user-tasks.service';
+
+// @anchor from-todo-status
+/// Status z MS To Do → kod EXEC. To Do zna tylko notStarted / completed, więc nie może zgubić stanu,
+/// którego nie wyraża: notStarted nie nadpisuje IN_PROGRESS / ON_HOLD, completed nie nadpisuje CANCELLED.
+const fromTodoStatus = (msStatus: string, current?: string): string => {
+  if (msStatus === 'completed') return current && (CLOSED_TASK_STATUSES as string[]).includes(current) ? current : 'DONE';
+  return current && (OPEN_TASK_STATUSES as string[]).includes(current) ? current : 'TO_DO';
+};
 
 // @anchor task-sync-service
 @Injectable()
@@ -89,12 +97,12 @@ export class TaskSyncService {
       const nodeId = await this.resolveNodeId(task.title, list.displayName);
       const msLastModified = task.lastModifiedDateTime ? new Date(task.lastModifiedDateTime) : null;
       let plannedEnd = task.dueDateTime?.dateTime ? new Date(task.dueDateTime.dateTime) : null;
-      const status = task.status === 'completed' ? 'DONE' : 'OPEN';
       const msEtag = (task as any)['@odata.etag'] ?? null;
       // Notatka z To Do = komentarz zadania (nowe linie zostają, CRLF z aplikacji To Do → LF).
       const description = task.body?.content?.replace(/\r\n/g, '\n').trim() || null;
 
       const existing = await this.prisma.userTask.findUnique({ where: { msToDoId: task.id } });
+      const status = fromTodoStatus(task.status, existing?.status);
       // To Do zna tylko datę — zadanie z godziną zachowuje swoją godzinę, zmienia się najwyżej dzień.
       if (existing?.durationMinutes && existing.plannedEnd && plannedEnd) {
         plannedEnd = withWarsawDay(existing.plannedEnd, task.dueDateTime!.dateTime.slice(0, 10));
@@ -181,7 +189,7 @@ export class TaskSyncService {
     try {
       const patch: any = {
         title: task.title,
-        status: task.status === 'DONE' ? 'completed' : 'notStarted',
+        status: toTodoStatus(task.status),
         body: toTodoBody(task.description),
       };
       if (task.plannedEnd) {

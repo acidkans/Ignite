@@ -26,8 +26,8 @@ export class UserTasksController {
 
   // @anchor user-tasks-project-endpoint
   @Get('project/:processNodeId')
-  listForProject(@Param('processNodeId') processNodeId: string, @Query('status') status?: string) {
-    return this.userTasks.listForProject(processNodeId, status);
+  listForProject(@Req() req: any, @Param('processNodeId') processNodeId: string, @Query('status') status?: string) {
+    return this.userTasks.listForProject(processNodeId, status, req.user);
   }
 
   // @anchor user-tasks-project-team-endpoint

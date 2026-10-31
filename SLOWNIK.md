@@ -415,6 +415,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | normalizeVersionId | apps/backend/src/common/version.util.ts | @anchor normalize-version-id |
 | back-funkcja | resolveVersionId | apps/backend/src/common/version.util.ts | @anchor resolve-version-id |
 | back-funkcja | cloneVersionData | apps/backend/src/ai/versioning.service.ts | @anchor clone-version-data |
+| back-funkcja | VersioningService.moveTasksToVersion | apps/backend/src/ai/versioning.service.ts | @anchor move-tasks-to-version |
 
 #### Frontend — komponenty (`apps/frontend/src/components/shared/wbs/`)
 
@@ -1243,6 +1244,18 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | toTodoDue | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor to-todo-due |
 | back-funkcja | withWarsawDay | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor with-warsaw-day |
 | back-funkcja | toTodoBody | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor to-todo-body |
+| back-stala | TASK_STATUSES | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor task-statuses |
+| back-stala | OPEN_TASK_STATUSES | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor open-task-statuses |
+| back-stala | CLOSED_TASK_STATUSES | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor closed-task-statuses |
+| back-funkcja | normalizeTaskStatus | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor normalize-task-status |
+| back-funkcja | toTodoStatus | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor to-todo-status |
+| back-funkcja | statusFilter | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor status-filter |
+| back-stala | TASK_VISIBILITY_TYPES | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor task-visibility-types |
+| back-typ | TaskViewer | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor task-viewer |
+| back-funkcja | visibilityWhere | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor visibility-where |
+| back-funkcja | scheduleData | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor schedule-data |
+| back-funkcja | UserTasksService.activateMigratedTask | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-activate-migrated-task |
+| back-funkcja | fromTodoStatus | apps/backend/src/user-tasks/task-sync.service.ts | @anchor from-todo-status |
 | back-serwis | MsCalendarService | apps/backend/src/ms-todo/ms-calendar.service.ts | @anchor ms-calendar-service |
 | back-typ | MsCalendarEventInput | apps/backend/src/ms-todo/ms-calendar.service.ts | @anchor ms-calendar-event-input |
 | back-funkcja | toWarsawLocal | apps/backend/src/ms-todo/ms-calendar.service.ts | @anchor to-warsaw-local |
