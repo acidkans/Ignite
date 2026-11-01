@@ -1,3 +1,36 @@
+## 2026-11-01 — feat(poczta): domeny pocztowe firm (Airtel, Europrim…), skrzynki firmowe użytkowników z testem SMTP/IMAP i domena nadawcy w „Informacjach o zamówieniu”
+
+### schema.prisma
+- dodano `schema-model` `MailDomain` (tabela `mail_domains`) — domena firmy (`domain`, `label`) z serwerem SMTP (`smtpHost`, `smtpPort`, `smtpSecure`) i IMAP (`imapHost`, `imapPort`, `imapSecure`) wspólnym dla wszystkich skrzynek domeny, `isActive`
+- dodano `schema-model` `UserMailbox` (tabela `user_mailboxes`) — skrzynka użytkownika w domenie: `email`, `displayName`, `username`, `password` (zaszyfrowane), `sentFolder` (wykryty folder „Wysłane”), `verifiedAt`, `lastError`, `imapLastUid` / `imapUidValidity` (pod odbiór odpowiedzi); unikalna para (`userId`, `domainId`)
+- dodano `schema-relacja` `User.mailboxes`, `MailDomain.mailboxes`, `MailDomain.orderRequirements`
+- dodano pole `schema-pole` `OrderRequirements.mailDomainId` (+ `schema-relacja` `OrderRequirements.mailDomain`, SetNull) — domena, z której wychodzą maile zamówienia
+- migracja `20261101120000_mail_domains_mailboxes`
+
+### architektura / API
+- dodano `back-modul` `MailboxesModule` z `back-serwis` `MailboxesService`
+- dodano `back-endpoint` `GET /mail-domains` (każdy zalogowany; `?all=true` z nieaktywnymi), `GET /mail-domains/:id/coverage` (kto ma skrzynkę w domenie), `POST /mail-domains`, `PATCH /mail-domains/:id`, `DELETE /mail-domains/:id` (ADMIN)
+- dodano `back-endpoint` `GET/POST /mailboxes/me`, `PATCH/DELETE /mailboxes/me/:id`, `POST /mailboxes/me/:id/test` — skrzynki zalogowanego użytkownika; test loguje się do SMTP (`verify`) i IMAP (`imapflow`), wykrywa folder „Wysłane” po fladze `\Sent` lub nazwie
+- `back-dto` `UpsertOrderRequirementsDto.mailDomainId` — zapis domeny w `POST /order-requirements` (pusty string = wyczyść)
+- dodano `back-funkcja` `encryptSecret` / `decryptSecret` (`common/secret-crypto.util.ts`) — AES-256-CBC, klucz `MAILBOX_ENCRYPTION_KEY` z fallbackiem na `MS_TOKEN_ENCRYPTION_KEY`
+- nowa zależność backendu `imapflow@1.7.8` (ostatnia linia 1.x — kontener ma Node 18, a 2.x wymaga Node 20)
+- `ui-sekcja` `MailDomainsPanel` na stronie „Poczta SMTP” (ADMIN), `ui-panel` `MyMailboxesPanel` w oknie „Moje konto”, `ui-dropdown` „Maile zamówienia wychodzą z domeny” w panelu Kontakty „Informacji o zamówieniu” z listą osób z zespołu bez skrzynki w tej domenie
+
+### słownik
+- dodano anchory `mail-domain*`, `user-mailbox*`, `user-mailboxes`, `order-requirements-mail-domain*` — schema.prisma
+- dodano `mailboxes-service`, `mailboxes-*` (funkcje serwisu), `normalize-mail-domain` — mailboxes/mailboxes.service.ts
+- dodano `mail-domains-controller`, `mailboxes-controller` i endpointy `get-mail-domains`, `get-mail-domain-coverage`, `post-mail-domains`, `patch-mail-domain`, `delete-mail-domain`, `get-my-mailboxes`, `post-my-mailbox`, `patch-my-mailbox`, `delete-my-mailbox`, `post-my-mailbox-test` — mailboxes/mailboxes.controller.ts
+- dodano `mailboxes-module`, `secret-crypto-key`, `encrypt-secret`, `decrypt-secret`, `upsert-order-requirements-mail-domain-id`
+- dodano `mail-domains-panel`, `mail-domains-save`, `my-mailboxes-panel`, `my-mailboxes-test`, `my-mailboxes-save`, `requirements-mail-domains`, `requirements-mail-coverage`, `requirements-mail-domain-bar`
+
+### wytyczne
+- `schema-pole` `OrderRequirements.mailDomainId` — pole globalne (wiersz baseline `versionId = null`); kopiowane w `cloneVersionData`
+- `schema-pole` `UserMailbox.password` — tylko przez `encryptSecret`; nigdy nie wraca do frontu (API zwraca `hasPassword`); puste hasło przy zapisie = bez zmiany
+- `schema-model` `UserMailbox` — jedna skrzynka na (użytkownik, domena): domena zamówienia jednoznacznie wskazuje adres nadawcy; adres musi kończyć się na `@<MailDomain.domain>`
+- `back-funkcja` `MailboxesService.updateMine` — zmiana adresu, loginu lub hasła zeruje `verifiedAt`, `sentFolder` i stan odczytu IMAP (trzeba przetestować ponownie)
+- `schema-pole` `MailDomain.domain` — nie zmieniamy nazwy domeny, w której są skrzynki (adresy przestałyby pasować)
+- `back-kontener` `erp-backend` — nowe paczki npm trzeba doinstalować też w kontenerze (`docker exec erp-backend npm install … --ignore-scripts`), bo `node_modules` to osobny wolumen
+
 ## 2026-11-01 — fix(mobile): wyszukiwarka gałęzi w nowym wątku czatu pomija zamówienia z obszaru Archiwum
 
 ### architektura / API

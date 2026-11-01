@@ -92,6 +92,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
         clientContacts: [],
         offerStatus: '',
         offerStatusComment: '',
+        mailDomainId: '',
     });
 
     // Przedmioty wg kategorii
@@ -292,6 +293,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                             })) : [],
                             offerStatus: data.offerStatus || '',
                             offerStatusComment: data.offerStatusComment || '',
+                            mailDomainId: data.mailDomainId || '',
                         });
                         setItems(parseItems(data.projectItems));
                     }
@@ -336,6 +338,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                 projectItems: JSON.stringify(dataItems),
                 offerStatus: form.offerStatus || null,
                 offerStatusComment: form.offerStatusComment || null,
+                mailDomainId: form.mailDomainId || '',
             };
             const res = await fetch(`${API_URL}/order-requirements`, {
                 method: 'POST',
@@ -437,6 +440,20 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
         } catch { setOrderTeam(null); }
     }, [nodeId]);
     useEffect(() => { loadOrderTeam(); }, [loadOrderTeam]);
+
+    // @anchor requirements-mail-domains — domeny pocztowe do wyboru (z których wychodzą maile zamówienia)
+    const [mailDomains, setMailDomains] = useState([]);
+    useEffect(() => {
+        fetch(`${API_URL}/mail-domains`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
+            .then(r => r.ok ? r.json() : []).then(d => setMailDomains(Array.isArray(d) ? d : [])).catch(() => {});
+    }, []);
+    // @anchor requirements-mail-coverage — kto z zespołu ma skrzynkę w domenie zamówienia
+    const [mailCoverage, setMailCoverage] = useState(null);
+    useEffect(() => {
+        if (!form.mailDomainId) { setMailCoverage(null); return; }
+        fetch(`${API_URL}/mail-domains/${form.mailDomainId}/coverage`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } })
+            .then(r => r.ok ? r.json() : null).then(setMailCoverage).catch(() => setMailCoverage(null));
+    }, [form.mailDomainId]);
     const teamMemberFor = (email) => {
         const e = String(email || '').trim().toLowerCase();
         return e ? (orderTeam?.members || []).find(m => String(m.email || '').toLowerCase() === e) : null;
@@ -807,6 +824,34 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                                     <button onClick={() => setTeamModalOpen(true)} className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border border-white/10 text-gray-300 hover:bg-white/10 transition-all" title="Dodaj lub usuń osoby z zespołu zamówienia">
                                         <Settings2 size={13} /> Zarządzaj
                                     </button>
+                                </div>
+                                {/* @anchor requirements-mail-domain-bar — domena nadawcy maili zamówienia */}
+                                <div className="mb-3 shrink-0 flex items-start gap-2 px-3 py-2 rounded-lg border border-teal-500/20 bg-teal-500/[0.04]">
+                                    <Mail size={14} className="text-teal-400 mt-1 shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-[12px] font-bold uppercase tracking-widest text-teal-300/80">Maile zamówienia wychodzą z domeny</span>
+                                            <select
+                                                value={form.mailDomainId}
+                                                onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, mailDomainId: v })); }}
+                                                onBlur={() => handleSave()}
+                                                className="bg-black/40 border border-white/10 rounded px-2 py-1 text-[13px] text-gray-200 focus:outline-none focus:border-teal-500/40"
+                                            >
+                                                <option value="">— nie ustawiono —</option>
+                                                {mailDomains.map(d => <option key={d.id} value={d.id}>@{d.domain}{d.label ? ` (${d.label})` : ''}</option>)}
+                                                {form.mailDomainId && !mailDomains.some(d => d.id === form.mailDomainId) && <option value={form.mailDomainId}>(domena nieaktywna)</option>}
+                                            </select>
+                                        </div>
+                                        {form.mailDomainId && mailCoverage && orderTeam?.members?.length > 0 && (() => {
+                                            const domain = mailDomains.find(d => d.id === form.mailDomainId)?.domain;
+                                            const missing = orderTeam.members.filter(m => !mailCoverage.some(c => c.userId === m.id));
+                                            return missing.length ? (
+                                                <p className="text-[12px] text-amber-300/80 mt-1">
+                                                    Bez skrzynki @{domain} (nie wyślą maili z tego zamówienia): {missing.map(m => [m.firstName, m.lastName].filter(Boolean).join(' ') || m.email).join(', ')}. Skrzynkę dodaje się w „Moje konto”.
+                                                </p>
+                                            ) : <p className="text-[12px] text-teal-300/60 mt-1">Każdy z zespołu ma skrzynkę @{domain}.</p>;
+                                        })()}
+                                    </div>
                                 </div>
                                 {teamModalOpen && (
                                     <OrderTeamModal nodeId={nodeId} orderName={orderTeam?.name} onClose={() => setTeamModalOpen(false)} onSaved={(t) => { setOrderTeam(t); setTeamModalOpen(false); }} />

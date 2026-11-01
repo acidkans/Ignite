@@ -423,6 +423,7 @@ export class VersioningService {
                     offerStatus: sourceReq.offerStatus,
                     offerStatusComment: sourceReq.offerStatusComment,
                     offerText: sourceReq.offerText,
+                    mailDomainId: sourceReq.mailDomainId ?? null,
                 }
             });
         }
