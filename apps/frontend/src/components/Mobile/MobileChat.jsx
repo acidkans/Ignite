@@ -309,8 +309,15 @@ function MobileChatNewThread({ threads, onPick, onBack }) {
     const filtering = nodeFilter.trim().length > 0;
     const shownNodes = !nodes ? [] : filtering ? nodes.filter(n => norm(n.name).includes(norm(nodeFilter.trim()))) : nodes;
     const globalFiltering = !order && globalFilter.trim().length > 0;
+    // Słowa frazy szukane w nazwie zamówienia i elementu — „durr” pokaże zamówienie DURR,
+    // „durr wozek” wózki w DURR. Element musi trafić choć jednym słowem we własną nazwę.
+    const tokens = norm(globalFilter).split(/\s+/).filter(Boolean);
+    const orderHits = globalFiltering ? orders.filter(o => tokens.every(t => norm(o.name).includes(t))) : [];
     const globalHits = globalFiltering && Array.isArray(allNodes)
-        ? allNodes.filter(n => norm(n.name).includes(norm(globalFilter.trim())))
+        ? allNodes.filter(n => {
+            const nn = norm(n.name), on = norm(n.orderName);
+            return tokens.every(t => nn.includes(t) || on.includes(t)) && tokens.some(t => nn.includes(t));
+        })
         : [];
 
     // n: węzeł z kroku 2 (order z kontekstu) albo trafienie wyszukiwarki globalnej (orderId/orderName/parentName w węźle)
@@ -380,14 +387,15 @@ function MobileChatNewThread({ threads, onPick, onBack }) {
                     <div className="space-y-1">
                         {/* @anchor mobile-chat-global-node-filter — szukanie gałęzi/liścia we wszystkich zamówieniach od razu, przed wyborem zamówienia */}
                         {searchBox(globalFilter, setGlobalFilter, 'Szukaj gałęzi lub elementu WBS…')}
-                        {!globalFiltering ? orders.map(o => (
+                        {(globalFiltering ? orderHits : orders).map(o => (
                             <button key={o.id} onClick={() => setOrder(o)} className="w-full flex items-center gap-2 px-3 py-3 rounded-xl bg-white/[0.03] border border-white/5 active:bg-white/10 text-left">
                                 <span className="text-[13px] font-bold flex-1 min-w-0 truncate">{o.name}</span>
                                 <ChevronRight size={16} className="text-gray-600 shrink-0" />
                             </button>
-                        )) : !Array.isArray(allNodes) ? (
+                        ))}
+                        {!globalFiltering ? null : !Array.isArray(allNodes) ? (
                             <div className="flex justify-center mt-6"><Loader2 size={20} className="animate-spin text-gray-500" /></div>
-                        ) : globalHits.length === 0 ? (
+                        ) : globalHits.length === 0 ? (orderHits.length > 0 ? null :
                             <p className="text-center text-gray-600 text-sm mt-6">Brak elementów pasujących do „{globalFilter.trim()}”</p>
                         ) : globalHits.map(n => (
                             <button
