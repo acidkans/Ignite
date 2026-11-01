@@ -296,6 +296,9 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | qaFilter | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor qa-tree-filter |
 | ui-stan | queuedIds | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor qa-queued-ids |
 | ui-funkcja | persistNodeQa | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor persist-node-qa |
+| ui-stan | mailQuestions | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor qa-tree-mail-questions |
+| ui-funkcja | openMail | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor open-qa-tree-mail |
+| ui-funkcja | applyMailSent | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor apply-qa-tree-mail-sent |
 | ui-input | GrowingTextarea | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor growing-textarea |
 | ui-funkcja | enqueueWbsQa | apps/frontend/src/services/repos/outboxRepo.js | @anchor enqueue-wbs-qa |
 | ui-funkcja | getPendingByType | apps/frontend/src/services/repos/outboxRepo.js | @anchor get-pending-by-type |
