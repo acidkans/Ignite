@@ -1350,6 +1350,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | DRAWER.accent.task | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor drawer-accent-task |
 | ui-stan | colWidths (localStorage wbs-hybrid-col-widths) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-col-widths-storage |
 | ui-funkcja | --wbs-view-w (ResizeObserver szerokości obszaru tabeli) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-view-width |
+| ui-funkcja | widok startowy DURR → Planowanie → Zadania | apps/frontend/src/components/Layout/MainLayout.jsx | @anchor default-start-view |
 | ui-funkcja | startColResize | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor start-col-resize |
 | ui-dropdown | TaskTimePicker | apps/frontend/src/components/shared/wbs/TaskTimePicker.jsx | @anchor task-time-picker |
 | ui-modal | TaskModal | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-modal |
@@ -1974,7 +1975,6 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | Tag | Nazwa | Ścieżka | Anchor |
 |-----|-------|---------|--------|
 | ui-zakladka | RealizationTab | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-tab |
-| ui-zakladka | zakładka „Realizacja" w TAB_META | apps/frontend/src/DashboardPage.jsx | @anchor tab-realization |
 | ui-zakladka | kolory zakładek wg etapu (po akceptacji baseline) | apps/frontend/src/DashboardPage.jsx | @anchor tab-stage-colors |
 | ui-stala | COL_DEFS (kolumny tabeli realizacji) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-col-defs |
 | ui-kolumna | Koszt całkowity (wycena / zakup / Δ) | apps/frontend/src/components/shared/RealizationTab.jsx | @anchor realization-total-col |
