@@ -1,3 +1,61 @@
+## 2026-11-01 — feat(wbs): pytania do klienta w strategii elementu WBS — znacznik {{q:id}} uzupełnia się odpowiedzią z Q&A albo z czatu, zadanie „Wyjaśnić czy…” zamyka się samo
+
+### schema.prisma
+- `schema-json` `WbsNode.qa` — para dostaje `id` (stały cel znacznika w strategii) oraz opcjonalnie `taskId` (zadanie „Wyjaśnić czy…”), `chatMessageId` (wiadomość czatu z odpowiedzią), `askedMessageId` (wiadomość czatu, która zadała pytanie), `answerSource` (`chat`); bez zmiany kolumny
+
+### architektura / API
+- `back-funkcja` `cleanQaPair` — odczyt i zapis `qa` (PATCH /wbs-nodes/:id, drzewo) zachowuje `id`/`taskId`/`chatMessageId`/`answerSource` (wcześniej obcinane do pytanie/odpowiedź) i dopisuje `id` parom bez niego
+- `back-funkcja` `resolveStrategyTokens` (`common/strategy-tokens.util.ts`) — opis zakresu (ScopeDocument) dostaje strategie ze znacznikami zamienionymi na odpowiedzi / „[do ustalenia z klientem: …]”
+- `ui-sekcja` `LeafStrategyCell` — komórka Strategii liścia: przycisk „?” dopisuje pytanie w nowym wierszu na końcu strategii (para w Q&A + opcjonalne zadanie dla mnie); ze znacznikami podgląd ⏳/odpowiedź i licznik „czeka na odpowiedź” / „czeka na N odpowiedzi”, klik → edycja surowego tekstu
+- złożenie strategii gałęzi (`compose-branch-strategy`) zapisuje tekst z rozwiązanymi znacznikami; odpowiedź w Q&A lub z czatu przelicza złożenie (`recompose-root-strategy-for-qa`)
+- szuflada Czat — przy wiadomości „↳ to odpowiedź na pytanie…” wpisuje jej treść jako odpowiedź; wiadomość przypisana pokazuje „↳ odpowiedź na: …”
+- szuflada Czat — przycisk „?” przy polu wiadomości: „Nowe pytanie” (wiadomość typu `QUESTION` dopisuje parę do Q&A węzła wątku) albo wysłanie istniejącego pytania z Q&A; wiadomość-pytanie pokazuje „❓ pytanie · czeka na odpowiedź / odpowiedź: …”
+- eksporty PDF (Planowanie, „Strategia, zadania, Q&A”), arkusz Excel „Strategia” i analiza AI oferty dostają strategie liści z rozwiązanymi znacznikami
+
+### słownik
+- dodano `strategy-token-re`, `new-qa-id`, `ensure-qa-ids`, `strategy-has-tokens`, `strategy-token-ids`, `build-qa-index`, `resolve-strategy-text`, `pending-strategy-questions`, `split-strategy-tokens` — wbs/strategyQuestions.js
+- dodano `wbs-chat-ask-mode`, `wbs-chat-ask-button`, `ask-question-from-chat` — wbs/WBSHybridTable.jsx
+- dodano `strategy-tokens`, `leaf-strategy-cell`, `strategy-add-question-button`, `wbs-chat-answering`, `recompose-root-strategy-for-qa`, `handle-qa-change`, `add-strategy-question`, `answer-question-from-chat` — wbs/WBSHybridTable.jsx
+- dodano `clean-qa-pair` — wbs-nodes.service.ts; `build-qa-index-from-rows`, `resolve-strategy-tokens` — common/strategy-tokens.util.ts
+
+### wytyczne
+- `schema-pole` `WbsNode.strategy` — może zawierać `{{q:<id>}}` wskazujące parę z `WbsNode.qa` tego węzła; każdy NOWY odczyt strategii do eksportu/AI/dokumentu przepuszczać przez `resolveStrategyText` (front) / `resolveStrategyTokens` (backend), edycja zawsze na surowym tekście
+- `schema-json` `WbsNode.qa` — nie przebudowywać par bez zachowania `id` (spread `{...p}`), inaczej znaczniki w strategii tracą cel
+- `ui-funkcja` `handleQaChange` — para z `taskId`, która zyskała/straciła odpowiedź, ustawia zadanie DONE/TO_DO
+
+## 2026-11-01 — feat(poczta): domeny pocztowe firm (Airtel, Europrim…), skrzynki firmowe użytkowników z testem SMTP/IMAP i domena nadawcy w „Informacjach o zamówieniu”
+
+### schema.prisma
+- dodano `schema-model` `MailDomain` (tabela `mail_domains`) — domena firmy (`domain`, `label`) z serwerem SMTP (`smtpHost`, `smtpPort`, `smtpSecure`) i IMAP (`imapHost`, `imapPort`, `imapSecure`) wspólnym dla wszystkich skrzynek domeny, `isActive`
+- dodano `schema-model` `UserMailbox` (tabela `user_mailboxes`) — skrzynka użytkownika w domenie: `email`, `displayName`, `username`, `password` (zaszyfrowane), `sentFolder` (wykryty folder „Wysłane”), `verifiedAt`, `lastError`, `imapLastUid` / `imapUidValidity` (pod odbiór odpowiedzi); unikalna para (`userId`, `domainId`)
+- dodano `schema-relacja` `User.mailboxes`, `MailDomain.mailboxes`, `MailDomain.orderRequirements`
+- dodano pole `schema-pole` `OrderRequirements.mailDomainId` (+ `schema-relacja` `OrderRequirements.mailDomain`, SetNull) — domena, z której wychodzą maile zamówienia
+- migracja `20261101120000_mail_domains_mailboxes`
+
+### architektura / API
+- dodano `back-modul` `MailboxesModule` z `back-serwis` `MailboxesService`
+- dodano `back-endpoint` `GET /mail-domains` (każdy zalogowany; `?all=true` z nieaktywnymi), `GET /mail-domains/:id/coverage` (kto ma skrzynkę w domenie), `POST /mail-domains`, `PATCH /mail-domains/:id`, `DELETE /mail-domains/:id` (ADMIN)
+- dodano `back-endpoint` `GET/POST /mailboxes/me`, `PATCH/DELETE /mailboxes/me/:id`, `POST /mailboxes/me/:id/test` — skrzynki zalogowanego użytkownika; test loguje się do SMTP (`verify`) i IMAP (`imapflow`), wykrywa folder „Wysłane” po fladze `\Sent` lub nazwie
+- `back-dto` `UpsertOrderRequirementsDto.mailDomainId` — zapis domeny w `POST /order-requirements` (pusty string = wyczyść)
+- dodano `back-funkcja` `encryptSecret` / `decryptSecret` (`common/secret-crypto.util.ts`) — AES-256-CBC, klucz `MAILBOX_ENCRYPTION_KEY` z fallbackiem na `MS_TOKEN_ENCRYPTION_KEY`
+- nowa zależność backendu `imapflow@1.7.8` (ostatnia linia 1.x — kontener ma Node 18, a 2.x wymaga Node 20)
+- `ui-sekcja` `MailDomainsPanel` na stronie „Poczta SMTP” (ADMIN), `ui-panel` `MyMailboxesPanel` w oknie „Moje konto”, `ui-dropdown` „Maile zamówienia wychodzą z domeny” w panelu Kontakty „Informacji o zamówieniu” z listą osób z zespołu bez skrzynki w tej domenie
+
+### słownik
+- dodano anchory `mail-domain*`, `user-mailbox*`, `user-mailboxes`, `order-requirements-mail-domain*` — schema.prisma
+- dodano `mailboxes-service`, `mailboxes-*` (funkcje serwisu), `normalize-mail-domain` — mailboxes/mailboxes.service.ts
+- dodano `mail-domains-controller`, `mailboxes-controller` i endpointy `get-mail-domains`, `get-mail-domain-coverage`, `post-mail-domains`, `patch-mail-domain`, `delete-mail-domain`, `get-my-mailboxes`, `post-my-mailbox`, `patch-my-mailbox`, `delete-my-mailbox`, `post-my-mailbox-test` — mailboxes/mailboxes.controller.ts
+- dodano `mailboxes-module`, `secret-crypto-key`, `encrypt-secret`, `decrypt-secret`, `upsert-order-requirements-mail-domain-id`
+- dodano `mail-domains-panel`, `mail-domains-save`, `my-mailboxes-panel`, `my-mailboxes-test`, `my-mailboxes-save`, `requirements-mail-domains`, `requirements-mail-coverage`, `requirements-mail-domain-bar`
+
+### wytyczne
+- `schema-pole` `OrderRequirements.mailDomainId` — pole globalne (wiersz baseline `versionId = null`); kopiowane w `cloneVersionData`
+- `schema-pole` `UserMailbox.password` — tylko przez `encryptSecret`; nigdy nie wraca do frontu (API zwraca `hasPassword`); puste hasło przy zapisie = bez zmiany
+- `schema-model` `UserMailbox` — jedna skrzynka na (użytkownik, domena): domena zamówienia jednoznacznie wskazuje adres nadawcy; adres musi kończyć się na `@<MailDomain.domain>`
+- `back-funkcja` `MailboxesService.updateMine` — zmiana adresu, loginu lub hasła zeruje `verifiedAt`, `sentFolder` i stan odczytu IMAP (trzeba przetestować ponownie)
+- `schema-pole` `MailDomain.domain` — nie zmieniamy nazwy domeny, w której są skrzynki (adresy przestałyby pasować)
+- `back-kontener` `erp-backend` — nowe paczki npm trzeba doinstalować też w kontenerze (`docker exec erp-backend npm install … --ignore-scripts`), bo `node_modules` to osobny wolumen
+
 ## 2026-11-01 — fix(mobile): wyszukiwarka gałęzi w nowym wątku czatu pomija zamówienia z obszaru Archiwum
 
 ### architektura / API

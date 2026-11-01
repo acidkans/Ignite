@@ -26,6 +26,7 @@ import QaTreeView from './QaTreeView';
 import AllTasksModal from './AllTasksModal';
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
 import OfferLockGuard, { guardOfferEdit, useOfferLock } from '../OfferLockGuard';
+import { buildQaIndex, resolveStrategyText } from './strategyQuestions';
 
 
 const VIEWS = {
@@ -1678,6 +1679,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             // Odtwarza wpisy liści gałęzi (nazwa liścia + jego strategia) z płaskiej listy wbsData,
             // tak jak WBSHybridTable składa strategię na węźle top-level. Dzięki temu w PDF nazwa
             // liścia jest pogrubiona (jak w widoku na stronie), a nie wtopiona w tekst strategii.
+            const pdfQaIndex = buildQaIndex(wbsData || []);
             const collectLeafStrategyEntries = (rootId) => {
                 const entries = [];
                 const walk = (pid) => {
@@ -1685,7 +1687,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                         .filter(c => String(c.parentId) === String(pid))
                         .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
                         .forEach(child => {
-                            const s = String(child.strategy || '').trim();
+                            const s = resolveStrategyText(child.strategy, pdfQaIndex).trim();
                             if (s) entries.push({ name: (child.name || 'Element WBS').trim(), strategy: s });
                             walk(child.id);
                         });
@@ -2258,7 +2260,8 @@ ${ganttSectionHtml}
             (byParent[key] = byParent[key] || []).push(n);
         }
         Object.values(byParent).forEach(list => list.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)));
-        const strategyOf = (n) => String(n.strategy || '').trim();
+        const sheetQaIndex = buildQaIndex(budgetScopeData);
+        const strategyOf = (n) => resolveStrategyText(n.strategy, sheetQaIndex).trim();
         const nameOf = (n) => String(n.name || '').trim() || '(bez nazwy)';
         const hasDescStrategy = (id) => (byParent[id] || []).some(c => strategyOf(c) || hasDescStrategy(c.id));
 
@@ -2550,6 +2553,7 @@ ${ganttSectionHtml}
     // Agent dostaje strukturę, a nie płaską listę — musi wiedzieć, której gałęzi
     // dotyczy pozycja.
     const buildOfferAiPayload = () => {
+        const aiQaIndex = buildQaIndex(budgetScopeData);
         const byParent = {};
         for (const n of budgetScopeData) (byParent[n.parentId || '__root__'] = byParent[n.parentId || '__root__'] || []).push(n);
         Object.values(byParent).forEach(list => list.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)));
@@ -2576,7 +2580,7 @@ ${ganttSectionHtml}
                 const entry = {
                     id: n.id, depth, name, type: TYPE_LABELS[n.type] || n.type || '', isBranch, path,
                     quantity: q, unit: n.unit || '', unitCost: uc, margin: m,
-                    comment: String(n.comment || '').trim(), strategy: String(n.strategy || '').trim(),
+                    comment: String(n.comment || '').trim(), strategy: resolveStrategyText(n.strategy, aiQaIndex).trim(),
                     totalCost: ownCost, offerPrice: ownPrice,
                     // Pakiet: ilość gałęzi grupującej = mnożnik poddrzewa. Pozycja: ilość `q` jest już
                     // łączna (× pakiety), `ownQuantity`/`groupMult` mówią, ile to na jeden pakiet.

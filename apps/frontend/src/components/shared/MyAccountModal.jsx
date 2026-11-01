@@ -2,10 +2,11 @@ import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, UserCircle } from 'lucide-react';
 import MsAccountPanel from './MsAccountPanel';
+import MyMailboxesPanel from './MyMailboxesPanel';
 
 // @anchor my-account-modal
 // „Moje konto" — otwierane kliknięciem w „Zalogowany jako" w stopce paska bocznego.
-// Na razie: kto jest zalogowany + połączenie z kontem Microsoft. Portal do body — pasek boczny
+// Kto jest zalogowany, połączenie z kontem Microsoft i skrzynki firmowe (maile zamówień). Portal do body — pasek boczny
 // tworzy własny kontekst pozycjonowania, w którym `fixed inset-0` ściskał okno do jego szerokości.
 export default function MyAccountModal({ userLabel, oauthResult, onClose }) {
     useEffect(() => {
@@ -16,7 +17,7 @@ export default function MyAccountModal({ userLabel, oauthResult, onClose }) {
 
     return createPortal(
         <div className="fixed inset-0 z-[10060] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-            <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0b1119] shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#0b1119] shadow-2xl" onClick={e => e.stopPropagation()}>
                 <div className="flex items-start justify-between px-5 py-4 border-b border-white/10">
                     <div className="flex items-center gap-2 min-w-0">
                         <UserCircle size={18} className="text-gray-400 shrink-0" />
@@ -29,6 +30,9 @@ export default function MyAccountModal({ userLabel, oauthResult, onClose }) {
                 </div>
                 <div className="px-5 py-4">
                     <MsAccountPanel oauthResult={oauthResult} />
+                </div>
+                <div className="px-5 py-4 border-t border-white/10">
+                    <MyMailboxesPanel />
                 </div>
             </div>
         </div>,

@@ -3304,6 +3304,95 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-dto | BulkUserTrainingDto | apps/backend/src/trainings/trainings.service.ts | @anchor bulk-user-training-dto |
 | back-endpoint | PUT /trainings/user-trainings/bulk | apps/backend/src/trainings/trainings.controller.ts | @anchor trainings-bulk-endpoint |
 | back-funkcja | bulkUpsertUserTrainings() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-bulk-user-trainings |
+| schema-model | MailDomain | apps/backend/prisma/schema.prisma | @anchor mail-domain |
+| schema-pole | MailDomain.id | apps/backend/prisma/schema.prisma | @anchor mail-domain-id |
+| schema-pole | MailDomain.domain | apps/backend/prisma/schema.prisma | @anchor mail-domain-domain |
+| schema-pole | MailDomain.label | apps/backend/prisma/schema.prisma | @anchor mail-domain-label |
+| schema-pole | MailDomain.smtpHost | apps/backend/prisma/schema.prisma | @anchor mail-domain-smtp-host |
+| schema-pole | MailDomain.smtpPort | apps/backend/prisma/schema.prisma | @anchor mail-domain-smtp-port |
+| schema-pole | MailDomain.smtpSecure | apps/backend/prisma/schema.prisma | @anchor mail-domain-smtp-secure |
+| schema-pole | MailDomain.imapHost | apps/backend/prisma/schema.prisma | @anchor mail-domain-imap-host |
+| schema-pole | MailDomain.imapPort | apps/backend/prisma/schema.prisma | @anchor mail-domain-imap-port |
+| schema-pole | MailDomain.imapSecure | apps/backend/prisma/schema.prisma | @anchor mail-domain-imap-secure |
+| schema-pole | MailDomain.isActive | apps/backend/prisma/schema.prisma | @anchor mail-domain-is-active |
+| schema-relacja | MailDomain.mailboxes | apps/backend/prisma/schema.prisma | @anchor mail-domain-mailboxes |
+| schema-relacja | MailDomain.orderRequirements | apps/backend/prisma/schema.prisma | @anchor mail-domain-order-requirements |
+| schema-model | UserMailbox | apps/backend/prisma/schema.prisma | @anchor user-mailbox |
+| schema-pole | UserMailbox.id | apps/backend/prisma/schema.prisma | @anchor user-mailbox-id |
+| schema-pole | UserMailbox.userId | apps/backend/prisma/schema.prisma | @anchor user-mailbox-user-id |
+| schema-pole | UserMailbox.domainId | apps/backend/prisma/schema.prisma | @anchor user-mailbox-domain-id |
+| schema-pole | UserMailbox.email | apps/backend/prisma/schema.prisma | @anchor user-mailbox-email |
+| schema-pole | UserMailbox.displayName | apps/backend/prisma/schema.prisma | @anchor user-mailbox-display-name |
+| schema-pole | UserMailbox.username | apps/backend/prisma/schema.prisma | @anchor user-mailbox-username |
+| schema-pole | UserMailbox.password | apps/backend/prisma/schema.prisma | @anchor user-mailbox-password |
+| schema-pole | UserMailbox.sentFolder | apps/backend/prisma/schema.prisma | @anchor user-mailbox-sent-folder |
+| schema-pole | UserMailbox.verifiedAt | apps/backend/prisma/schema.prisma | @anchor user-mailbox-verified-at |
+| schema-pole | UserMailbox.lastError | apps/backend/prisma/schema.prisma | @anchor user-mailbox-last-error |
+| schema-pole | UserMailbox.imapLastUid | apps/backend/prisma/schema.prisma | @anchor user-mailbox-imap-last-uid |
+| schema-pole | UserMailbox.imapUidValidity | apps/backend/prisma/schema.prisma | @anchor user-mailbox-imap-uid-validity |
+| schema-relacja | User.mailboxes | apps/backend/prisma/schema.prisma | @anchor user-mailboxes |
+| schema-pole | OrderRequirements.mailDomainId | apps/backend/prisma/schema.prisma | @anchor order-requirements-mail-domain-id |
+| schema-relacja | OrderRequirements.mailDomain | apps/backend/prisma/schema.prisma | @anchor order-requirements-mail-domain |
+| back-stala | secretKey | apps/backend/src/common/secret-crypto.util.ts | @anchor secret-crypto-key |
+| back-funkcja | encryptSecret | apps/backend/src/common/secret-crypto.util.ts | @anchor encrypt-secret |
+| back-funkcja | decryptSecret | apps/backend/src/common/secret-crypto.util.ts | @anchor decrypt-secret |
+| back-funkcja | normalizeMailDomain | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor normalize-mail-domain |
+| back-serwis | MailboxesService | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-service |
+| back-funkcja | MailboxesService.listDomains | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-list-domains |
+| back-funkcja | MailboxesService.createDomain | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-create-domain |
+| back-funkcja | MailboxesService.updateDomain | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-update-domain |
+| back-funkcja | MailboxesService.deleteDomain | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-delete-domain |
+| back-funkcja | MailboxesService.listMine | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-list-mine |
+| back-funkcja | MailboxesService.createMine | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-create-mine |
+| back-funkcja | MailboxesService.updateMine | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-update-mine |
+| back-funkcja | MailboxesService.deleteMine | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-delete-mine |
+| back-funkcja | MailboxesService.coverage | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-coverage |
+| back-funkcja | MailboxesService.testMine | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-test-mine |
+| back-controller | MailDomainsController | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor mail-domains-controller |
+| back-endpoint | GET /mail-domains | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor get-mail-domains |
+| back-endpoint | GET /mail-domains/:id/coverage | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor get-mail-domain-coverage |
+| back-endpoint | POST /mail-domains | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor post-mail-domains |
+| back-endpoint | PATCH /mail-domains/:id | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor patch-mail-domain |
+| back-endpoint | DELETE /mail-domains/:id | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor delete-mail-domain |
+| back-controller | MailboxesController | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor mailboxes-controller |
+| back-endpoint | GET /mailboxes/me | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor get-my-mailboxes |
+| back-endpoint | POST /mailboxes/me | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor post-my-mailbox |
+| back-endpoint | PATCH /mailboxes/me/:id | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor patch-my-mailbox |
+| back-endpoint | DELETE /mailboxes/me/:id | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor delete-my-mailbox |
+| back-endpoint | POST /mailboxes/me/:id/test | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor post-my-mailbox-test |
+| back-modul | MailboxesModule | apps/backend/src/mailboxes/mailboxes.module.ts | @anchor mailboxes-module |
+| back-dto | UpsertOrderRequirementsDto.mailDomainId | apps/backend/src/order-requirements/dto/order-requirements.dto.ts | @anchor upsert-order-requirements-mail-domain-id |
+| ui-sekcja | MailDomainsPanel | apps/frontend/src/components/shared/MailDomainsPanel.jsx | @anchor mail-domains-panel |
+| ui-funkcja | MailDomainsPanel.save | apps/frontend/src/components/shared/MailDomainsPanel.jsx | @anchor mail-domains-save |
+| ui-panel | MyMailboxesPanel | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor my-mailboxes-panel |
+| ui-funkcja | MyMailboxesPanel.test | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor my-mailboxes-test |
+| ui-funkcja | MyMailboxesPanel.save | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor my-mailboxes-save |
+| ui-stan | mailDomains | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-domains |
+| ui-stan | mailCoverage | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-coverage |
+| ui-dropdown | requirements-mail-domain-bar | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-domain-bar |
+| ui-stala | STRATEGY_TOKEN_RE | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor strategy-token-re |
+| ui-funkcja | newQaId | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor new-qa-id |
+| ui-funkcja | ensureQaIds | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor ensure-qa-ids |
+| ui-funkcja | strategyHasTokens | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor strategy-has-tokens |
+| ui-funkcja | strategyTokenIds | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor strategy-token-ids |
+| ui-funkcja | buildQaIndex | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor build-qa-index |
+| ui-funkcja | resolveStrategyText | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor resolve-strategy-text |
+| ui-funkcja | pendingStrategyQuestions | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor pending-strategy-questions |
+| ui-funkcja | splitStrategyTokens | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor split-strategy-tokens |
+| ui-sekcja | StrategyTokens | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor strategy-tokens |
+| ui-sekcja | LeafStrategyCell | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor leaf-strategy-cell |
+| ui-przycisk | strategy-add-question-button | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor strategy-add-question-button |
+| ui-stan | answering | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-answering |
+| ui-funkcja | recomposeRootFor | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor recompose-root-strategy-for-qa |
+| ui-funkcja | handleQaChange | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor handle-qa-change |
+| ui-funkcja | addStrategyQuestion | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor add-strategy-question |
+| ui-funkcja | answerQuestionFromChat | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor answer-question-from-chat |
+| ui-stan | askMode | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-ask-mode |
+| ui-przycisk | wbs-chat-ask-button | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-ask-button |
+| ui-funkcja | askQuestionFromChat | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor ask-question-from-chat |
+| back-funkcja | cleanQaPair | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor clean-qa-pair |
+| back-funkcja | buildQaIndexFromRows | apps/backend/src/common/strategy-tokens.util.ts | @anchor build-qa-index-from-rows |
+| back-funkcja | resolveStrategyTokens | apps/backend/src/common/strategy-tokens.util.ts | @anchor resolve-strategy-tokens |
 
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)

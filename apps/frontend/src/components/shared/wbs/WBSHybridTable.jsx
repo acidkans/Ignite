@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, buildOwnerOptions, defaultLogisticianOwner, isRejectedPlanNode, groupQtyFactor, EXEC_STATUS_META, isTaskClosed } from './wbsConstants';
 import AutoResizeTextarea from './AutoResizeTextarea';
+import { newQaId, ensureQaIds, strategyHasTokens, strategyTokenIds, buildQaIndex, resolveStrategyText, pendingStrategyQuestions, splitStrategyTokens } from './strategyQuestions';
 import TaskModal from './TaskModal';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
@@ -14,7 +15,7 @@ import { useDevice } from '../../../hooks/useDevice';
 const normalizeLowerText = (s) => String(s || '').trim().toLocaleLowerCase('pl-PL');
 
 // ── Q&A cell — zagnieżdżona tabela Pytanie / Odpowiedź per WBS node ───────────
-function QaPairRow({ p, idx, onUpdate, onRemove, onPersist }) {
+function QaPairRow({ p, idx, onUpdate, onRemove, onPersist, linked = false }) {
     const qRef = useRef(null);
     const aRef = useRef(null);
     const syncHeights = useCallback(() => {
@@ -47,7 +48,8 @@ function QaPairRow({ p, idx, onUpdate, onRemove, onPersist }) {
                     onBlur={() => { onUpdate(idx, 'question', normalizeLowerText(p.question)); onPersist?.(); }}
                     onFocus={syncHeights}
                     placeholder="Pytanie…"
-                    className="bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[15px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 text-gray-200"
+                    title={linked ? 'Pytanie wstawione w strategię — odpowiedź uzupełni strategię' : undefined}
+                    className={`bg-black/20 border ${linked ? 'border-amber-400/50' : 'border-white/10'} rounded px-1.5 py-0.5 text-[15px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 text-gray-200`}
                     style={{ overflow: 'hidden', minHeight: '1.4em', resize: 'none' }}
                 />
             </td>
@@ -77,7 +79,8 @@ function QaPairRow({ p, idx, onUpdate, onRemove, onPersist }) {
     );
 }
 
-function QaCell({ pairs, onChange, onPersist, autoFocusNew = false }) {
+// `linkedIds` — id par użytych w strategii węzła (`{{q:id}}`), dostają obwódkę.
+function QaCell({ pairs, onChange, onPersist, autoFocusNew = false, linkedIds = null }) {
     const list = Array.isArray(pairs) ? pairs : [];
     const update = (idx, field, value) => {
         onChange(list.map((p, i) => i === idx ? { ...p, [field]: value } : p));
@@ -90,7 +93,7 @@ function QaCell({ pairs, onChange, onPersist, autoFocusNew = false }) {
     const commitNew = () => {
         const q = normalizeLowerText(newQ);
         if (!q) return;
-        onChange([...list, { question: q, answer: '' }]);
+        onChange([...list, { id: newQaId(), question: q, answer: '' }]);
         setNewQ('');
         onPersist?.();
     };
@@ -115,6 +118,7 @@ function QaCell({ pairs, onChange, onPersist, autoFocusNew = false }) {
                                 onUpdate={update}
                                 onRemove={remove}
                                 onPersist={onPersist}
+                                linked={!!(p.id && linkedIds?.has(p.id))}
                             />
                         ))}
                     </tbody>
@@ -181,10 +185,118 @@ function collectBranchStrategyEntries(node) {
 // eksporty PDF/Excel). Format: `nazwa:` a strategia od nowego wiersza; wpisy rozdzielone
 // pustą linią.
 // @anchor compose-branch-strategy
+// Pytania do klienta (`{{q:id}}`) w złożeniu są rozwiązane: odpowiedź albo „[do ustalenia z klientem: …]”.
 function composeBranchStrategy(node) {
+    const qaIndex = buildQaIndex(node);
     return collectBranchStrategyEntries(node)
-        .map(e => `${e.name}:\n${e.strategy}`)
+        .map(e => `${e.name}:\n${resolveStrategyText(e.strategy, qaIndex)}`)
         .join('\n\n');
+}
+
+// @anchor strategy-tokens
+// Strategia z pytaniami do klienta w UI: odpowiedź (turkus) albo „⏳ pytanie” (bursztyn, klik → Q&A węzła).
+function StrategyTokens({ text, qaIndex, onOpenQuestion }) {
+    return splitStrategyTokens(text, qaIndex).map((part, i) => {
+        if (part.text != null) return <React.Fragment key={i}>{part.text}</React.Fragment>;
+        const p = part.qa;
+        if (!p) return <span key={i} className="px-1 rounded bg-red-500/15 text-red-300 text-[12px]" title="Pytanie usunięte z Pytań i odpowiedzi">brak pytania</span>;
+        if (String(p.answer || '').trim()) {
+            return <span key={i} title={`Odpowiedź klienta na: ${p.question}`} className="text-teal-300 border-b border-dashed border-teal-400/50">{p.answer}</span>;
+        }
+        return (
+            <span
+                key={i}
+                onMouseDown={e => { if (!onOpenQuestion) return; e.preventDefault(); e.stopPropagation(); onOpenQuestion(p); }}
+                title="Czeka na odpowiedź klienta — kliknij, aby otworzyć Pytania i odpowiedzi"
+                className="inline px-1.5 rounded border border-dashed border-amber-400/60 bg-amber-500/10 text-amber-300 text-[14px] cursor-pointer hover:bg-amber-500/20"
+            >⏳ {p.question}</span>
+        );
+    });
+}
+
+// @anchor leaf-strategy-cell
+// Komórka Strategii liścia / węzła pośredniego. Bez znaczników — zwykła textarea jak dotąd.
+// Ze znacznikami `{{q:id}}` — podgląd z odpowiedziami; klik/fokus przełącza w edycję surowego tekstu.
+// „?” dopisuje nowe pytanie w nowym wierszu na końcu strategii.
+function LeafStrategyCell({ node, qaIndex, fieldClass, onChange, onSave, onAddQuestion, onOpenQuestion, onKeyDown }) {
+    const value = node.strategy || '';
+    const hasTokens = strategyHasTokens(value);
+    const [editing, setEditing] = useState(false);
+    const [asking, setAsking] = useState(false);
+    const [question, setQuestion] = useState('');
+    const [withTask, setWithTask] = useState(true);
+    const [busy, setBusy] = useState(false);
+    const pending = hasTokens ? pendingStrategyQuestions(value, qaIndex).length : 0;
+
+    const submit = async () => {
+        const q = normalizeLowerText(question);
+        if (!q || busy) return;
+        setBusy(true);
+        try { await onAddQuestion(q, withTask); } finally { setBusy(false); }
+        setQuestion('');
+        setAsking(false);
+    };
+
+    return (
+        <div className="group/strat relative pr-5">
+            {hasTokens && !editing ? (
+                <div
+                    tabIndex={0}
+                    data-nav-row={node.id}
+                    data-nav-col="strategia"
+                    onFocus={() => setEditing(true)}
+                    className={`whitespace-pre-wrap text-base leading-snug text-gray-300 cursor-text min-h-[1.5em] focus:outline-none ${fieldClass}`}
+                >
+                    <StrategyTokens text={value} qaIndex={qaIndex} onOpenQuestion={onOpenQuestion} />
+                </div>
+            ) : (
+                <AutoResizeTextarea
+                    autoFocus={editing}
+                    value={value}
+                    onChange={onChange}
+                    onBlur={e => { onSave(e.target.value); setEditing(false); }}
+                    placeholder="Strategia elementu…"
+                    className={`bg-transparent border-none resize-none focus:outline-none text-base w-full placeholder-gray-700 leading-snug ${fieldClass}`}
+                    data-nav-row={node.id}
+                    data-nav-col="strategia"
+                    onKeyDown={onKeyDown}
+                />
+            )}
+            {pending > 0 && !editing && (
+                <div className="mt-0.5 text-[12px] text-amber-300/80">{pending === 1 ? 'czeka na odpowiedź' : `czeka na ${pending} odpowiedzi`}</div>
+            )}
+            {/* @anchor strategy-add-question-button */}
+            <button
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => setAsking(a => !a)}
+                title="Wstaw pytanie do klienta — odpowiedź uzupełni strategię"
+                className={`absolute top-0 right-0 p-0.5 rounded text-amber-300/80 hover:text-amber-200 hover:bg-amber-500/15 transition-opacity ${asking ? 'opacity-100' : 'opacity-0 group-hover/strat:opacity-100 focus:opacity-100'}`}
+            >
+                <HelpCircle size={13} />
+            </button>
+            {asking && (
+                <div className="mt-1 flex flex-col gap-1 p-1.5 rounded border border-amber-400/40 bg-amber-500/[0.06]">
+                    <input
+                        autoFocus
+                        value={question}
+                        disabled={busy}
+                        onChange={e => setQuestion(e.target.value)}
+                        onKeyDown={e => {
+                            e.stopPropagation();
+                            if (e.key === 'Enter') { e.preventDefault(); submit(); }
+                            if (e.key === 'Escape') { setAsking(false); setQuestion(''); }
+                        }}
+                        placeholder="Pytanie… (Enter)"
+                        className="w-full px-2 py-1 rounded bg-black/30 border border-white/10 text-[14px] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-amber-400/50"
+                    />
+                    <label className="flex items-center gap-1.5 text-[12px] text-gray-400 cursor-pointer select-none">
+                        <input type="checkbox" checked={withTask} onChange={e => setWithTask(e.target.checked)} className="accent-amber-500" />
+                        zadanie „Wyjaśnić czy…” dla mnie
+                    </label>
+                </div>
+            )}
+        </div>
+    );
 }
 
 // Wszystkie Q&A z gałęzi (dzieci danego węzła), grupowane po węźle — treść zakładki Q&A
@@ -205,6 +317,10 @@ function QaBranchView({ node, onChangeNode, onPersist }) {
             walk(child, depth + 1);
         }
     };
+    // Własne pytania gałęzi głównej (np. zadane w czacie gałęzi) — pierwsza grupa, przed elementami.
+    const own = Array.isArray(node?.qa) ? node.qa : [];
+    if (own.some(p => (p?.question || '').trim() || (p?.answer || '').trim())) seenIds.current.add(node.id);
+    if (seenIds.current.has(node.id)) groups.push({ id: node.id, name: node.name || 'Gałąź', depth: 0, qa: own });
     walk(node, 0);
     if (groups.length === 0) {
         return <p className="text-gray-600 text-[15px] italic">Brak pytań i odpowiedzi w tej gałęzi — dodaj je w szufladzie Q&A konkretnej pozycji.</p>;
@@ -301,7 +417,11 @@ function groupChatThreads(messages, ownId) {
 // cudze wpisy jako przeczytane i odświeża się co 15 s.
 // `branchNames` ({ [id]: nazwa } potomków) — tylko dla gałęzi głównej: czat pokazuje wtedy też
 // wiadomości z podgałęzi (z ich nazwą), jak Q&A gałęzi; nowa wiadomość idzie do gałęzi głównej.
-function WbsChatDrawer({ wbsNodeId, processNodeId, onChanged, branchNames, nodeName }) {
+// `questionsFor(wbsNodeId)` — otwarte pytania węzła wątku; `onAnswerQuestion(wbsNodeId, qaId, text, messageId)`
+// wpisuje treść wiadomości jako odpowiedź; `answerFor(messageId)` — pytanie, na które wiadomość już odpowiada.
+// `onAskQuestion(wbsNodeId, text, messageId, qaId)` — wiadomość wysłana jako pytanie (nowe albo istniejące z Q&A);
+// `askedBy(messageId)` — para Q&A, którą ta wiadomość zadała.
+function WbsChatDrawer({ wbsNodeId, processNodeId, onChanged, branchNames, nodeName, questionsFor, onAnswerQuestion, answerFor, onAskQuestion, askedBy }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     const currentUserId = token ? (() => { try { return JSON.parse(atob(token.split('.')[1])).sub; } catch { return null; } })() : null;
     const [messages, setMessages] = useState(null);
@@ -318,6 +438,11 @@ function WbsChatDrawer({ wbsNodeId, processNodeId, onChanged, branchNames, nodeN
     const [showArchived, setShowArchived] = useState(false);
     const [text, setText] = useState('');
     const [sending, setSending] = useState(false);
+    // @anchor wbs-chat-answering — { messageId, qaId } wiadomość przypisywana jako odpowiedź na pytanie
+    const [answering, setAnswering] = useState(null);
+    // @anchor wbs-chat-ask-mode — null | 'new' (wiadomość = nowe pytanie) | id pary Q&A wysyłanej do czatu
+    const [askMode, setAskMode] = useState(null);
+    const [askMenuOpen, setAskMenuOpen] = useState(false);
     const bottomRef = useRef(null);
     const auth = { Authorization: `Bearer ${token}` };
     const base = `${API_URL}/comments/order/${processNodeId}`;
@@ -420,12 +545,18 @@ function WbsChatDrawer({ wbsNodeId, processNodeId, onChanged, branchNames, nodeN
         if ((!body && !pending.length) || sending || uploading) return;
         setSending(true);
         try {
+            const thread = replyTo || wbsNodeId;
             const res = await fetch(base, {
                 method: 'POST',
                 headers: { ...auth, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: body, wbsNodeId: replyTo || wbsNodeId, images: pending.map(p => p.fileName) }),
+                body: JSON.stringify({ text: body, wbsNodeId: thread, images: pending.map(p => p.fileName), ...(askMode && body ? { type: 'QUESTION' } : {}) }),
             });
             if (res.ok) {
+                if (askMode && body) {
+                    const created = await res.clone().json().catch(() => null);
+                    if (created?.id) onAskQuestion?.(thread, body, created.id, askMode === 'new' ? null : askMode);
+                    setAskMode(null);
+                }
                 // Podgląd lokalny przechodzi do cache, żeby świeżo wysłany obrazek nie pobierał się drugi raz.
                 pending.forEach(p => chatImageCache.set(p.fileName, p.url));
                 setText(''); setPending([]); await load();
@@ -446,6 +577,47 @@ function WbsChatDrawer({ wbsNodeId, processNodeId, onChanged, branchNames, nodeN
                         {m.text}
                     </span>
                 )}
+                {m.text && (() => {
+                    const asked = askedBy?.(m.id);
+                    if (asked) {
+                        const done = !!String(asked.answer || '').trim();
+                        return (
+                            <span className={`mt-0.5 text-[11px] ${done ? 'text-teal-300/80' : 'text-amber-300/80'}`}>
+                                ❓ pytanie · {done ? `odpowiedź: ${asked.answer}` : 'czeka na odpowiedź'}
+                            </span>
+                        );
+                    }
+                    const linked = answerFor?.(m.id);
+                    if (linked) return <span className="mt-0.5 text-[11px] text-teal-300/80">↳ odpowiedź na: {linked}</span>;
+                    const thread = m.wbsNodeId || wbsNodeId;
+                    const open = questionsFor?.(thread) || [];
+                    if (!open.length) return null;
+                    if (answering?.messageId !== m.id) {
+                        return (
+                            <button
+                                onClick={() => setAnswering({ messageId: m.id, qaId: open[0].id })}
+                                className="mt-0.5 text-[11px] text-amber-300/70 hover:text-amber-200"
+                                title="Wpisz treść tej wiadomości jako odpowiedź na pytanie do klienta"
+                            >↳ to odpowiedź na pytanie…</button>
+                        );
+                    }
+                    return (
+                        <div className="mt-1 flex items-center gap-1.5 max-w-full">
+                            <select
+                                value={answering.qaId}
+                                onChange={e => setAnswering(a => ({ ...a, qaId: e.target.value }))}
+                                className="min-w-0 max-w-[260px] bg-black/40 border border-white/10 rounded px-1.5 py-0.5 text-[12px] text-gray-200"
+                            >
+                                {open.map(p => <option key={p.id} value={p.id}>{p.question}</option>)}
+                            </select>
+                            <button
+                                onClick={() => { onAnswerQuestion?.(thread, answering.qaId, m.text, m.id); setAnswering(null); }}
+                                className="px-2 py-0.5 rounded border border-teal-400/40 text-[12px] text-teal-200 hover:bg-teal-500/15"
+                            >Przypisz</button>
+                            <button onClick={() => setAnswering(null)} className="p-0.5 text-gray-500 hover:text-white" title="Anuluj"><X size={11} /></button>
+                        </div>
+                    );
+                })()}
                 {m.images?.length > 0 && (
                     <div className={`flex flex-wrap gap-1.5 mt-1 ${mine ? 'justify-end' : ''}`}>
                         {m.images.map(name => <ChatImage key={name} fileName={name} onOpen={setPreview} />)}
@@ -487,6 +659,37 @@ function WbsChatDrawer({ wbsNodeId, processNodeId, onChanged, branchNames, nodeN
                 >
                     <ImagePlus size={16} />
                 </button>
+                {onAskQuestion && (() => {
+                    // @anchor wbs-chat-ask-button — „?”: wiadomość jako nowe pytanie albo wysłanie pytania z Q&A węzła
+                    const open = (questionsFor?.(replyTo || wbsNodeId) || []).filter(p => !p.askedMessageId);
+                    return (
+                        <div className="relative">
+                            <button
+                                onClick={() => (askMode ? (setAskMode(null), setAskMenuOpen(false)) : setAskMenuOpen(o => !o))}
+                                className={`p-1.5 rounded border ${askMode ? 'border-amber-400/60 bg-amber-500/20 text-amber-200' : 'border-white/10 text-gray-400 hover:text-gray-200 hover:bg-white/10'}`}
+                                title={askMode ? 'Wyłącz tryb pytania' : 'Zadaj pytanie — trafi do Pytań i odpowiedzi tego elementu'}
+                            >
+                                <HelpCircle size={16} />
+                            </button>
+                            {askMenuOpen && !askMode && (
+                                <div className="absolute bottom-full left-0 mb-1 z-20 w-72 max-h-64 overflow-y-auto rounded-lg border border-white/15 bg-[#0b1119] shadow-xl p-1 flex flex-col">
+                                    <button
+                                        onClick={() => { setAskMode('new'); setAskMenuOpen(false); inputRef.current?.focus(); }}
+                                        className="text-left px-2.5 py-1.5 rounded text-[13px] text-amber-200 hover:bg-amber-500/10"
+                                    >+ Nowe pytanie (wpisz je w polu wiadomości)</button>
+                                    {open.length > 0 && <div className="px-2.5 pt-1.5 pb-0.5 text-[10px] uppercase tracking-widest text-gray-500">Wyślij pytanie z Q&amp;A</div>}
+                                    {open.map(p => (
+                                        <button
+                                            key={p.id}
+                                            onClick={() => { setAskMode(p.id); setText(p.question); setAskMenuOpen(false); inputRef.current?.focus(); }}
+                                            className="text-left px-2.5 py-1.5 rounded text-[13px] text-gray-200 hover:bg-white/10"
+                                        >{p.question}</button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
                 <AutoResizeTextarea
                     value={text}
                     onChange={e => setText(e.target.value)}
@@ -496,8 +699,8 @@ function WbsChatDrawer({ wbsNodeId, processNodeId, onChanged, branchNames, nodeN
                         if (files.length) { e.preventDefault(); uploadImages(files); }
                     }}
                     inputRef={inputRef}
-                    placeholder="Napisz do zespołu… (Enter wysyła, Shift+Enter nowa linia, Ctrl+V wkleja obrazek)"
-                    className="flex-1 min-w-0 px-2 py-1.5 rounded bg-black/20 border border-white/10 text-[15px] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-red-400/50"
+                    placeholder={askMode ? 'Pytanie… (Enter wysyła i dopisuje je do Pytań i odpowiedzi)' : 'Napisz do zespołu… (Enter wysyła, Shift+Enter nowa linia, Ctrl+V wkleja obrazek)'}
+                    className={`flex-1 min-w-0 px-2 py-1.5 rounded bg-black/20 border ${askMode ? 'border-amber-400/60' : 'border-white/10'} text-[15px] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-red-400/50`}
                 />
                 <button
                     onClick={send}
@@ -1648,9 +1851,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // po czym przelicza złożenie całej gałęzi i utrwala je na węźle top-level (depth 0).
     // Puste złożenie NIE nadpisuje istniejącej strategii top-level (ochrona starych danych).
     // @anchor save-leaf-strategy
-    const saveLeafStrategy = (nodeId, value) => {
+    const saveLeafStrategy = (nodeId, value, itemsOverride = null) => {
         onNodeFieldSave?.(nodeId, 'strategy', value);
-        const nextItems = updateField(items, nodeId, 'strategy', value);
+        const nextItems = updateField(itemsOverride || items, nodeId, 'strategy', value);
         const root = nextItems.find(r => subtreeContains(r, nodeId));
         if (!root) return;
         const composed = composeBranchStrategy(root);
@@ -1659,6 +1862,110 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             onNodeFieldSave?.(root.id, 'strategy', composed);
         }
     };
+
+    // ── Pytania do klienta w strategii (`{{q:id}}`) ─────────────────────────────
+    const qaIndexAll = buildQaIndex(items);
+    const authJson = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token') || localStorage.getItem('token')}`, 'Content-Type': 'application/json' });
+    const persistQa = (nodeId, next) => {
+        if (onNodeFieldSave) onNodeFieldSave(nodeId, 'qa', next);
+        else setTimeout(() => onSave?.(), 0);
+    };
+
+    // @anchor recompose-root-strategy-for-qa
+    // Odpowiedź zmienia tekst złożenia gałęzi (top-level), gdy któraś strategia w gałęzi ma znaczniki.
+    const recomposeRootFor = (nodeId, itemsNow) => {
+        const root = itemsNow.find(r => subtreeContains(r, nodeId));
+        if (!root) return;
+        let tokens = false;
+        const walk = n => { if (strategyHasTokens(n?.strategy)) tokens = true; (n?.children || []).forEach(walk); };
+        (root.children || []).forEach(walk);
+        if (!tokens) return;
+        const composed = composeBranchStrategy(root);
+        if (composed && composed !== (root.strategy || '')) {
+            handleField(root.id, 'strategy', composed);
+            onNodeFieldSave?.(root.id, 'strategy', composed);
+        }
+    };
+
+    // @anchor handle-qa-change
+    // Zmiana listy Q&A węzła. Para z `taskId`, która zyskała/straciła odpowiedź, zamyka/otwiera
+    // swoje zadanie „Wyjaśnić czy…”.
+    const handleQaChange = (nodeId, next) => {
+        const prev = findNode(items, nodeId)?.qa || [];
+        const flips = [];
+        for (const p of next) {
+            if (!p?.taskId) continue;
+            const was = !!String(prev.find(x => x.id === p.id)?.answer || '').trim();
+            const now = !!String(p.answer || '').trim();
+            if (was !== now) flips.push({ taskId: p.taskId, status: now ? 'DONE' : 'TO_DO' });
+        }
+        handleField(nodeId, 'qa', next);
+        if (flips.length) {
+            Promise.all(flips.map(f => fetch(`${API_URL}/my-tasks/${f.taskId}`, { method: 'PATCH', headers: authJson(), body: JSON.stringify({ status: f.status }) }).catch(() => {})))
+                .then(() => loadTaskSummary());
+        }
+        return updateField(items, nodeId, 'qa', next);
+    };
+
+    // @anchor add-strategy-question
+    // Nowe pytanie do klienta z komórki Strategii: para w Q&A węzła (+ opcjonalnie zadanie dla mnie)
+    // i znacznik `{{q:id}}` w nowym wierszu na końcu strategii.
+    const addStrategyQuestion = async (node, question, withTask) => {
+        const id = newQaId();
+        let taskId = null;
+        if (withTask && processNodeId) {
+            try {
+                const res = await fetch(`${API_URL}/my-tasks`, {
+                    method: 'POST', headers: authJson(),
+                    body: JSON.stringify({ title: `Wyjaśnić czy ${question.replace(/^czy\s+/i, '')}`, nodeId: processNodeId, wbsNodeId: node.id }),
+                });
+                if (res.ok) taskId = (await res.json())?.id || null;
+                loadTaskSummary();
+            } catch { /* pytanie powstaje i bez zadania */ }
+        }
+        const fresh = findNode(items, node.id) || node;
+        const nextQa = [...ensureQaIds(fresh.qa), { id, question, answer: '', ...(taskId ? { taskId } : {}) }];
+        const cur = fresh.strategy || '';
+        // Pytanie zawsze w nowym wierszu na końcu strategii.
+        const body = cur.replace(/\s+$/, '');
+        const nextStrategy = `${body}${body ? '\n' : ''}{{q:${id}}}`;
+        handleField(node.id, 'qa', nextQa);
+        handleField(node.id, 'strategy', nextStrategy);
+        persistQa(node.id, nextQa);
+        saveLeafStrategy(node.id, nextStrategy, updateField(items, node.id, 'qa', nextQa));
+    };
+
+    // @anchor answer-question-from-chat
+    const answerQuestionFromChat = (threadNodeId, qaId, text, messageId) => {
+        const n = findNode(items, threadNodeId);
+        if (!n) return;
+        const nextQa = (n.qa || []).map(p => p.id === qaId ? { ...p, answer: normalizeLowerText(text), chatMessageId: messageId, answerSource: 'chat' } : p);
+        const nextItems = handleQaChange(n.id, nextQa);
+        persistQa(n.id, nextQa);
+        recomposeRootFor(n.id, nextItems);
+    };
+    // @anchor ask-question-from-chat
+    // Wiadomość wysłana w czacie jako pytanie: nowa para w Q&A węzła wątku albo oznaczenie istniejącej.
+    const askQuestionFromChat = (threadNodeId, text, messageId, qaId) => {
+        const n = findNode(items, threadNodeId);
+        if (!n) return;
+        const nextQa = qaId
+            ? (n.qa || []).map(p => p.id === qaId ? { ...p, askedMessageId: messageId } : p)
+            : [...ensureQaIds(n.qa), { id: newQaId(), question: normalizeLowerText(text), answer: '', askedMessageId: messageId }];
+        handleQaChange(n.id, nextQa);
+        persistQa(n.id, nextQa);
+    };
+    const askedByMessage = (messageId) => {
+        for (const p of qaIndexAll.values()) if (p.askedMessageId === messageId) return p;
+        return null;
+    };
+    const openQuestionsFor = (nodeId) => (findNode(items, nodeId)?.qa || [])
+        .filter(p => p?.id && String(p.question || '').trim() && !String(p.answer || '').trim());
+    const answeredByMessage = (messageId) => {
+        for (const p of qaIndexAll.values()) if (p.chatMessageId === messageId) return p.question;
+        return null;
+    };
+    const openQaDrawer = (nodeId) => setNodeDrawerTab(prev => ({ ...prev, [nodeId]: 'qa' }));
 
     // @anchor copy-comment-strategy
     // Kopiowanie między kolumnami Komentarz ↔ Strategia (ikonki na styku kolumn). Pusty cel =
@@ -2436,7 +2743,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         })()}
                         {(() => {
                             const qs = qaSummary(depth === 0 && hasChildren
-                                ? collectBranchQa(node).flatMap(g => g.pairs)
+                                ? [...(Array.isArray(node.qa) ? node.qa : []), ...collectBranchQa(node).flatMap(g => g.pairs)]
                                 : (Array.isArray(node.qa) ? node.qa : []));
                             return (
                                 <button
@@ -2868,6 +3175,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 <td className="px-3 py-2.5 min-w-[180px] align-top" onClick={e => e.stopPropagation()}>
                     {depth === 0 ? (() => {
                         const entries = collectBranchStrategyEntries(node);
+                        const branchQa = buildQaIndex(node);
                         if (entries.length) {
                             return (
                                 <div
@@ -2877,7 +3185,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     {entries.map(e => (
                                         <div key={e.id} className="mb-1.5 last:mb-0">
                                             <span className="font-bold text-gray-200">{e.name}</span>
-                                            <div className="whitespace-pre-wrap">{e.strategy}</div>
+                                            <div className="whitespace-pre-wrap"><StrategyTokens text={e.strategy} qaIndex={branchQa} onOpenQuestion={p => openQaDrawer(p.nodeId)} /></div>
                                         </div>
                                     ))}
                                 </div>
@@ -2887,14 +3195,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             ? <div className={`max-h-24 overflow-y-auto pr-1 whitespace-pre-wrap text-base leading-snug text-gray-300 select-text ${d.fieldClass}`}>{node.strategy}</div>
                             : <span className="text-gray-700 text-base select-none">—</span>;
                     })() : (
-                        <AutoResizeTextarea
-                            value={node.strategy || ''}
+                        <LeafStrategyCell
+                            node={node}
+                            qaIndex={qaIndexAll}
+                            fieldClass={d.fieldClass}
                             onChange={e => handleField(node.id, 'strategy', e.target.value)}
-                            onBlur={e => saveLeafStrategy(node.id, e.target.value)}
-                            placeholder="Strategia elementu…"
-                            className={`bg-transparent border-none resize-none focus:outline-none text-base w-full placeholder-gray-700 leading-snug ${d.fieldClass}`}
-                            data-nav-row={node.id}
-                            data-nav-col="strategia"
+                            onSave={value => saveLeafStrategy(node.id, value)}
+                            onAddQuestion={(q, withTask) => addStrategyQuestion(node, q, withTask)}
+                            onOpenQuestion={() => openQaDrawer(node.id)}
                             onKeyDown={e => handleGridKeyDown(e, node.id, 'strategia')}
                         />
                     )}
@@ -2995,15 +3303,21 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                         wbsNodeId={node.id} processNodeId={processNodeId} onChanged={loadChatSummary}
                                         branchNames={depth === 0 && hasChildren ? collectBranchNames(node) : undefined}
                                         nodeName={node.name}
+                                        questionsFor={openQuestionsFor}
+                                        onAnswerQuestion={answerQuestionFromChat}
+                                        answerFor={answeredByMessage}
+                                        onAskQuestion={askQuestionFromChat}
+                                        askedBy={askedByMessage}
                                     />
                                 ) : depth === 0 && hasChildren ? (
-                                    <QaBranchView node={node} onChangeNode={(id, next) => handleField(id, 'qa', next)} onPersist={() => onSave?.()} />
+                                    <QaBranchView node={node} onChangeNode={(id, next) => handleQaChange(id, next)} onPersist={() => { onSave?.(); recomposeRootFor(node.id, items); }} />
                                 ) : (
                                     <QaCell
                                         pairs={node.qa}
-                                        onChange={(next) => handleField(node.id, 'qa', next)}
-                                        onPersist={() => onSave?.()}
+                                        onChange={(next) => handleQaChange(node.id, next)}
+                                        onPersist={() => { onSave?.(); recomposeRootFor(node.id, items); }}
                                         autoFocusNew
+                                        linkedIds={new Set(strategyTokenIds(node.strategy))}
                                     />
                                 )}
                             </div>

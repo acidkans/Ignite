@@ -60,6 +60,8 @@ model User {
   leaves            Leave[]
   /// @anchor user-leave-requests
   leaveRequests     LeaveRequest[]
+  /// @anchor user-mailboxes
+  mailboxes         UserMailbox[]
   /// @anchor user-dependents
   dependents        Dependent[]
   /// @anchor user-leave-balances
@@ -387,6 +389,12 @@ model OrderRequirements {
   clientProjectManagerPhone   String?
   offerStatus               String?
   offerStatusComment        String?
+  /// @anchor order-requirements-mail-domain-id
+  /// Domena, z której wychodzą maile zamówienia (pytania do klienta). Każdy użytkownik wysyła
+  /// ze swojej skrzynki w tej domenie (`UserMailbox`). Pole globalne — żyje w wierszu baseline.
+  mailDomainId              String?
+  /// @anchor order-requirements-mail-domain
+  mailDomain                MailDomain?     @relation(fields: [mailDomainId], references: [id], onDelete: SetNull)
   node                      ProcessNode     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
   version                   ProjectVersion? @relation(fields: [versionId], references: [id], onDelete: Cascade)
 
@@ -583,6 +591,79 @@ model Company {
   contactPhone     String?
 
   @@map("companies")
+}
+
+/// @anchor mail-domain
+/// Domena pocztowa firmy (np. airtel.pl, europrim.pl) z ustawieniami serwera wspólnymi dla
+/// wszystkich skrzynek tej domeny. Konfiguruje ADMIN; użytkownik dopisuje tylko swój adres i hasło.
+model MailDomain {
+  /// @anchor mail-domain-id
+  id               String              @id @default(uuid())
+  /// @anchor mail-domain-domain
+  domain           String              @unique // małymi literami, bez „@”
+  /// @anchor mail-domain-label
+  label            String? // nazwa firmy do list, np. „Airtel”
+  /// @anchor mail-domain-smtp-host
+  smtpHost         String?
+  /// @anchor mail-domain-smtp-port
+  smtpPort         Int?                @default(587)
+  /// @anchor mail-domain-smtp-secure
+  smtpSecure       Boolean             @default(false)
+  /// @anchor mail-domain-imap-host
+  imapHost         String?
+  /// @anchor mail-domain-imap-port
+  imapPort         Int?                @default(993)
+  /// @anchor mail-domain-imap-secure
+  imapSecure       Boolean             @default(true)
+  /// @anchor mail-domain-is-active
+  isActive         Boolean             @default(true)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  /// @anchor mail-domain-mailboxes
+  mailboxes        UserMailbox[]
+  /// @anchor mail-domain-order-requirements
+  orderRequirements OrderRequirements[]
+
+  @@map("mail_domains")
+}
+
+/// @anchor user-mailbox
+/// Skrzynka firmowa użytkownika w danej domenie — jedna na (użytkownik, domena).
+/// Z niej idą maile zamówień z `OrderRequirements.mailDomainId` = ta domena; przez IMAP Ignite
+/// odkłada kopię do „Wysłanych” i czyta odpowiedzi. Hasło szyfrowane (`secret-crypto.util`).
+model UserMailbox {
+  /// @anchor user-mailbox-id
+  id              String     @id @default(uuid())
+  /// @anchor user-mailbox-user-id
+  userId          String
+  /// @anchor user-mailbox-domain-id
+  domainId        String
+  /// @anchor user-mailbox-email
+  email           String // pełny adres; musi kończyć się na @<domena>
+  /// @anchor user-mailbox-display-name
+  displayName     String? // nazwa nadawcy w „Od:”; puste = imię i nazwisko użytkownika
+  /// @anchor user-mailbox-username
+  username        String? // login SMTP/IMAP; puste = adres e-mail
+  /// @anchor user-mailbox-password
+  password        String? // zaszyfrowane AES-256-CBC, nigdy nie wraca do frontu
+  /// @anchor user-mailbox-sent-folder
+  sentFolder      String? // folder „Wysłane” wykryty testem IMAP (Sent / Wysłane / INBOX.Sent)
+  /// @anchor user-mailbox-verified-at
+  verifiedAt      DateTime? // ostatni udany test SMTP + IMAP
+  /// @anchor user-mailbox-last-error
+  lastError       String?
+  /// @anchor user-mailbox-imap-last-uid
+  imapLastUid     Int? // ostatni przeczytany UID skrzynki odbiorczej (odbiór odpowiedzi)
+  /// @anchor user-mailbox-imap-uid-validity
+  imapUidValidity String? // UIDVALIDITY jako tekst — zmiana = trzeba czytać od nowa
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  domain          MailDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, domainId])
+  @@index([domainId])
+  @@map("user_mailboxes")
 }
 
 /// Konfiguracja serwerów poczty wychodzącej (SMTP) — jeden wiersz na profil.

@@ -5,6 +5,7 @@
 // Zwraca { html, filename } — PDF renderuje backend (resolveArtifact → /pdf/render).
 import { API_URL } from '../config';
 import { esc, buildPdfDocument, fetchLogoDataUrl } from './wbsPdfExport';
+import { buildQaIndex, resolveStrategyText } from '../components/shared/wbs/strategyQuestions';
 
 // @anchor strategy-tasks-qa-pdf-css
 const EXTRA_CSS = `
@@ -87,6 +88,8 @@ export async function buildStrategyTasksQaPdfArtifact({ wbsData, processNodeId, 
         processNodeId ? fetchProjectTasks(processNodeId) : Promise.resolve([]),
         fetchLogoDataUrl(),
     ]);
+    // Pytania do klienta w strategii (`{{q:id}}`) → odpowiedź albo „do ustalenia z klientem”.
+    const qaIndex = buildQaIndex(flat.map(n => ({ id: n.id, qa: parseQa(n.qa) })));
     const tasksByNode = new Map();
     for (const t of tasks) {
         if (!t.wbsNodeId) continue;
@@ -118,7 +121,7 @@ export async function buildStrategyTasksQaPdfArtifact({ wbsData, processNodeId, 
             // pośrednie; wpis bezpośrednio pod gałęzią nie ma ścieżki wcale.
             ? strat.map(s => `<div class="stq-entry d${Math.min(s.depth, 3)}">
                 ${s.path.length > 1 ? `<div class="path">${esc(s.path.slice(1).join(' › '))}</div>` : ''}
-                <h3>${esc(s.node.name)}</h3>${paragraphs(s.node.strategy)}</div>`).join('')
+                <h3>${esc(s.node.name)}</h3>${paragraphs(resolveStrategyText(s.node.strategy, qaIndex))}</div>`).join('')
             : '<div class="stq-empty">Strategia dla tej gałęzi nie została jeszcze opisana.</div>';
 
         const tasksHtml = branchTasks.length
