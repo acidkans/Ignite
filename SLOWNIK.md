@@ -1350,6 +1350,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | DRAWER.accent.task | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor drawer-accent-task |
 | ui-stan | colWidths (localStorage wbs-hybrid-col-widths) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-col-widths-storage |
 | ui-funkcja | --wbs-view-w (ResizeObserver szerokości obszaru tabeli) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-view-width |
+| ui-stan | hiddenCols (localStorage wbs-hybrid-hidden-cols) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hidden-cols |
+| ui-stala | DATA_COLUMNS | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-data-columns |
+| ui-kolumna | Koszt całk. (ilość × koszt jedn.) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-total-cost-cell |
+| ui-dropdown | menu Pokaż / ukryj kolumny | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-cols-menu |
 | ui-funkcja | widok startowy DURR → Planowanie → Zadania | apps/frontend/src/components/Layout/MainLayout.jsx | @anchor default-start-view |
 | ui-funkcja | startColResize | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor start-col-resize |
 | ui-dropdown | TaskTimePicker | apps/frontend/src/components/shared/wbs/TaskTimePicker.jsx | @anchor task-time-picker |
