@@ -95,8 +95,9 @@ export class QaMailRepliesService {
             for await (const msg of client.fetch(range, { uid: true, envelope: true, headers: ['in-reply-to', 'references'] }, { uid: true })) {
               if (!fresh && msg.uid <= m.imapLastUid!) continue; // „N:*” zwraca ostatni mail, gdy nowszych nie ma
               maxUid = Math.max(maxUid, msg.uid);
-              const from = msg.envelope?.from?.[0]?.address?.toLowerCase() || '';
-              if (from === m.email.toLowerCase()) continue;
+              // Pomijamy tylko sam wysłany oryginał (np. kopia do siebie w DW) — odpowiedź z tego
+              // samego adresu (test, kolega na wspólnej skrzynce) też jest odpowiedzią.
+              if (byMsgId.has(stripId(msg.envelope?.messageId))) continue;
               const ids = headerIds(msg.headers?.toString() || '');
               const byHeader = ids.map(id => byMsgId.get(id)).find(Boolean);
               const key = String(msg.envelope?.subject || '').match(KEY_RE)?.[0];
