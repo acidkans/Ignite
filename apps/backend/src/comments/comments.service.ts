@@ -255,6 +255,31 @@ export class CommentsService {
         return out;
     }
 
+    // @anchor get-my-chat-nodes
+    // Węzły WBS ze wszystkich zamówień użytkownika jednym strzałem — wyszukiwarka gałęzi na pierwszym
+    // kroku „Nowy wątek” (telefon). Płasko, z nazwą zamówienia i rodzica; reguła ról jak w getChatNodes.
+    // Zamówienia pod obszarem „Archiwum” (zamknięte) są pomijane — jak w synchronizacji OneDrive.
+    async getMyChatNodes(userId: string, roles?: string[]) {
+        const all = await this.getMyChatOrders(userId);
+        const archived = await this.prisma.processNodeClosure.findMany({
+            where: { descendantId: { in: all.map(o => o!.id) }, depth: { gt: 0 }, ancestor: { name: 'Archiwum', type: 'area' } },
+            select: { descendantId: true },
+        });
+        const archivedIds = new Set(archived.map(a => a.descendantId));
+        const orders = all.filter(o => !archivedIds.has(o!.id));
+        const perOrder = await Promise.all(orders.map(async o => {
+            const nodes = await this.getChatNodes(o!.id, roles);
+            const nameOf = new Map(nodes.map(n => [n.id, n.name]));
+            return nodes.map(n => ({
+                ...n,
+                orderId: o!.id,
+                orderName: o!.name,
+                parentName: n.parentId ? nameOf.get(n.parentId) ?? null : null,
+            }));
+        }));
+        return perOrder.flat();
+    }
+
     // @anchor get-wbs-chat-summary
     // { [wbsNodeId]: { total, unread } } dla zalogowanego — koloruje ikonę czatu w wierszach WBS.
     // unread = cudze wpisy bez CommentRead tego użytkownika.

@@ -1,3 +1,21 @@
+## 2026-11-01 — fix(mobile): wyszukiwarka gałęzi w nowym wątku czatu pomija zamówienia z obszaru Archiwum
+
+### architektura / API
+- `back-endpoint` `GET /comments/my-chat-nodes` (`back-funkcja` `getMyChatNodes`) — pomija węzły zamówień leżących pod obszarem `Archiwum` (`ProcessNode.type = 'area'`, przez `ProcessNodeClosure`), tak jak synchronizacja OneDrive
+
+### wytyczne
+- `back-funkcja` `getMyChatNodes` — zamówienie zamknięte = pod obszarem „Archiwum” w drzewie; rozpoznawane po nazwie obszaru, nie po polu w modelu
+
+## 2026-11-01 — feat(mobile): nowy wątek czatu — wyszukiwarka gałęzi i liści WBS ze wszystkich zamówień od razu, przed wyborem zamówienia
+
+### architektura / API
+- dodano `back-endpoint` `GET /comments/my-chat-nodes` (`back-funkcja` `getMyChatNodes`) — węzły WBS ze wszystkich zamówień z zespołów użytkownika jednym zapytaniem `[{ id, name, parentId, depth, hasChildren, orderId, orderName, parentName }]`; reguła ról jak w `getChatNodes`
+- `ui-input` `mobile-chat-global-node-filter` — pole „Szukaj gałęzi lub elementu WBS…” na pierwszym kroku „Nowy wątek”; węzły dociągane przy pierwszej frazie, wyniki płasko z „zamówienie › rodzic”, kliknięcie otwiera/zakłada wątek bez wyboru zamówienia
+
+### słownik
+- dodano `get-my-chat-nodes` — comments.service.ts; `get-my-chat-nodes-endpoint` — comments.controller.ts
+- dodano `mobile-chat-global-node-filter` — Mobile/MobileChat.jsx
+
 ## 2026-10-31 — feat(mobile): czat gałęzi WBS na telefonie — kafelek Czat z licznikiem nieprzeczytanych, lista wątków ze wszystkich zamówień użytkownika, nowy wątek, rozmowa ze zdjęciami z aparatu/galerii, zamykanie/wznawianie wątku
 
 ### architektura / API

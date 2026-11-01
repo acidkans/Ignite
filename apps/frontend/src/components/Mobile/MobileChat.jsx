@@ -266,6 +266,9 @@ function MobileChatNewThread({ threads, onPick, onBack }) {
     const [order, setOrder] = useState(null);
     const [nodes, setNodes] = useState(null);
     const [nodeFilter, setNodeFilter] = useState('');
+    const [globalFilter, setGlobalFilter] = useState('');
+    // null = nie pobrano, undefined = w trakcie, [] = wynik
+    const [allNodes, setAllNodes] = useState(null);
     const [error, setError] = useState('');
 
     useEffect(() => {
@@ -288,25 +291,68 @@ function MobileChatNewThread({ threads, onPick, onBack }) {
             .catch(() => { setNodes([]); setError('Nie udało się pobrać elementów WBS'); });
     }, [order]);
 
-    const existing = (wbsNodeId) => threads.find(t => t.orderId === order?.id && t.wbsNodeId === wbsNodeId);
+    // Węzły ze wszystkich zamówień — dociągane przy pierwszym wpisaniu frazy w kroku 1.
+    useEffect(() => {
+        if (order || allNodes !== null || !globalFilter.trim()) return;
+        setAllNodes(undefined);
+        fetch(`${API_URL}/comments/my-chat-nodes`, { headers: authHeaders() })
+            .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
+            .then(setAllNodes)
+            .catch(() => { setAllNodes([]); setError('Nie udało się pobrać elementów WBS'); });
+    }, [order, allNodes, globalFilter]);
+
+    const existing = (orderId, wbsNodeId) => threads.find(t => t.orderId === orderId && t.wbsNodeId === wbsNodeId);
     const nameOf = (id) => nodes?.find(n => n.id === id)?.name || null;
 
     // Bez polskich znaków i wielkości liter — „wozek” znajdzie „WÓZEK WIDŁOWY”.
     const norm = (v) => String(v || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l');
     const filtering = nodeFilter.trim().length > 0;
     const shownNodes = !nodes ? [] : filtering ? nodes.filter(n => norm(n.name).includes(norm(nodeFilter.trim()))) : nodes;
+    const globalFiltering = !order && globalFilter.trim().length > 0;
+    const globalHits = globalFiltering && Array.isArray(allNodes)
+        ? allNodes.filter(n => norm(n.name).includes(norm(globalFilter.trim())))
+        : [];
 
+    // n: węzeł z kroku 2 (order z kontekstu) albo trafienie wyszukiwarki globalnej (orderId/orderName/parentName w węźle)
     const pick = (n) => {
-        const ex = existing(n.id);
+        const orderId = n.orderId ?? order.id;
+        const ex = existing(orderId, n.id);
         onPick(ex || {
-            orderId: order.id,
-            orderName: order.name,
+            orderId,
+            orderName: n.orderName ?? order.name,
             wbsNodeId: n.id,
             wbsNodeName: n.name,
-            wbsParentName: n.parentId ? nameOf(n.parentId) : null,
+            wbsParentName: n.orderId ? n.parentName : n.parentId ? nameOf(n.parentId) : null,
             status: 'ACTIVE',
         });
     };
+
+    const searchBox = (value, setValue, placeholder) => (
+        <div className="sticky top-0 z-10 bg-gray-950 pb-2 -mx-2 px-2 pt-0.5">
+            <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                <input
+                    type="text"
+                    enterKeyHint="search"
+                    value={value}
+                    onChange={e => setValue(e.target.value)}
+                    placeholder={placeholder}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-9 py-2.5 text-[16px] text-gray-100 placeholder-gray-600 focus:outline-none focus:border-blue-500/40"
+                />
+                {value && (
+                    <button onClick={() => setValue('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-500">
+                        <X size={14} />
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+
+    const badge = (ex) => ex && (
+        <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded ${ex.status === 'CLOSED' ? 'text-gray-500 bg-white/5' : 'text-blue-300 bg-blue-500/10'}`}>
+            {ex.status === 'CLOSED' ? 'archiwum' : `${ex.total} wiad.`}
+        </span>
+    );
 
     const list = order ? nodes : orders;
 
@@ -332,38 +378,39 @@ function MobileChatNewThread({ threads, onPick, onBack }) {
                     </p>
                 ) : !order ? (
                     <div className="space-y-1">
-                        {orders.map(o => (
+                        {/* @anchor mobile-chat-global-node-filter — szukanie gałęzi/liścia we wszystkich zamówieniach od razu, przed wyborem zamówienia */}
+                        {searchBox(globalFilter, setGlobalFilter, 'Szukaj gałęzi lub elementu WBS…')}
+                        {!globalFiltering ? orders.map(o => (
                             <button key={o.id} onClick={() => setOrder(o)} className="w-full flex items-center gap-2 px-3 py-3 rounded-xl bg-white/[0.03] border border-white/5 active:bg-white/10 text-left">
                                 <span className="text-[13px] font-bold flex-1 min-w-0 truncate">{o.name}</span>
                                 <ChevronRight size={16} className="text-gray-600 shrink-0" />
+                            </button>
+                        )) : !Array.isArray(allNodes) ? (
+                            <div className="flex justify-center mt-6"><Loader2 size={20} className="animate-spin text-gray-500" /></div>
+                        ) : globalHits.length === 0 ? (
+                            <p className="text-center text-gray-600 text-sm mt-6">Brak elementów pasujących do „{globalFilter.trim()}”</p>
+                        ) : globalHits.map(n => (
+                            <button
+                                key={`${n.orderId}|${n.id}`}
+                                onClick={() => pick(n)}
+                                className="w-full flex items-center gap-2 py-2.5 px-3 rounded-xl active:bg-white/10 text-left"
+                            >
+                                <span className="flex-1 min-w-0">
+                                    <span className={`block text-[13px] uppercase break-words ${n.hasChildren ? 'font-bold text-gray-200' : 'text-gray-300'}`}>{n.name}</span>
+                                    <span className="block text-[10px] text-gray-600 truncate">{[n.orderName, n.parentName].filter(Boolean).join(' › ')}</span>
+                                </span>
+                                {badge(existing(n.orderId, n.id))}
                             </button>
                         ))}
                     </div>
                 ) : (
                     <div className="space-y-0.5">
                         {/* @anchor mobile-chat-node-filter — filtr po nazwie elementu WBS; przy filtrze lista płaska z nazwą rodzica */}
-                        <div className="sticky top-0 z-10 bg-gray-950 pb-2 -mx-2 px-2 pt-0.5">
-                            <div className="relative">
-                                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                                <input
-                                    type="text"
-                                    enterKeyHint="search"
-                                    value={nodeFilter}
-                                    onChange={e => setNodeFilter(e.target.value)}
-                                    placeholder="Szukaj elementu WBS…"
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-9 py-2.5 text-[16px] text-gray-100 placeholder-gray-600 focus:outline-none focus:border-blue-500/40"
-                                />
-                                {nodeFilter && (
-                                    <button onClick={() => setNodeFilter('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-500">
-                                        <X size={14} />
-                                    </button>
-                                )}
-                            </div>
-                        </div>
+                        {searchBox(nodeFilter, setNodeFilter, 'Szukaj elementu WBS…')}
                         {!filtering && <p className="text-[11px] text-gray-500 px-2 pb-2">Wybierz element WBS, którego dotyczy rozmowa</p>}
                         {filtering && shownNodes.length === 0 && <p className="text-center text-gray-600 text-sm mt-6">Brak elementów pasujących do „{nodeFilter.trim()}”</p>}
                         {shownNodes.map(n => {
-                            const ex = existing(n.id);
+                            const ex = existing(order.id, n.id);
                             const parent = filtering && n.parentId ? nameOf(n.parentId) : null;
                             return (
                                 <button
@@ -376,11 +423,7 @@ function MobileChatNewThread({ threads, onPick, onBack }) {
                                         <span className={`block text-[13px] uppercase break-words ${n.depth === 0 ? 'font-black text-gray-100' : n.hasChildren ? 'font-bold text-gray-300' : 'text-gray-400'}`}>{n.name}</span>
                                         {parent && <span className="block text-[10px] text-gray-600 truncate">{parent}</span>}
                                     </span>
-                                    {ex && (
-                                        <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded ${ex.status === 'CLOSED' ? 'text-gray-500 bg-white/5' : 'text-blue-300 bg-blue-500/10'}`}>
-                                            {ex.status === 'CLOSED' ? 'archiwum' : `${ex.total} wiad.`}
-                                        </span>
-                                    )}
+                                    {badge(ex)}
                                 </button>
                             );
                         })}
