@@ -1,3 +1,11 @@
+## 2026-11-01 — fix(mobile): wyszukiwarka gałęzi w nowym wątku czatu pomija zamówienia z obszaru Archiwum
+
+### architektura / API
+- `back-endpoint` `GET /comments/my-chat-nodes` (`back-funkcja` `getMyChatNodes`) — pomija węzły zamówień leżących pod obszarem `Archiwum` (`ProcessNode.type = 'area'`, przez `ProcessNodeClosure`), tak jak synchronizacja OneDrive
+
+### wytyczne
+- `back-funkcja` `getMyChatNodes` — zamówienie zamknięte = pod obszarem „Archiwum” w drzewie; rozpoznawane po nazwie obszaru, nie po polu w modelu
+
 ## 2026-11-01 — feat(mobile): nowy wątek czatu — wyszukiwarka gałęzi i liści WBS ze wszystkich zamówień od razu, przed wyborem zamówienia
 
 ### architektura / API
