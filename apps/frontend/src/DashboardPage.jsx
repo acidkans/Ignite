@@ -589,6 +589,15 @@ export default function DashboardPage() {
             ? `Plan z baselinu: ${realizationVersion.label || 'zaakceptowana wersja'}`
             : `Brak baselinu — plan z aktywnego snapszotu: ${realizationVersion.label || 'aktywna wersja'}`)
         : '';
+    // @anchor realization-for-wbs — to samo źródło planu co zakładka Realizacja, podane do Struktury
+    // projektu: kilof w wierszu WBS otwiera szufladę realizacji (`wbs-realization-drawer`). Tylko zamówienie.
+    const realizationForWbs = useMemo(() => (isOrder ? {
+        versionId: realizationVersionId,
+        acceptedAt: realizationVersion?.source === 'baseline' ? (acceptance?.acceptedAt ?? null) : null,
+        planLabel: realizationPlanLabel,
+        userRoles: currentRoles,
+        orderName: activeNode?.name || '',
+    } : null), [isOrder, realizationVersionId, realizationVersion?.source, acceptance?.acceptedAt, realizationPlanLabel, currentRoles, activeNode?.name]);
     // @anchor is-inactive-snapshot — czy oglądany snapszot NIE jest aktywny (blokada edycji z ostrzeżeniem)
     const isInactiveSnapshot = !!currentVersion && currentVersion.isActive === false;
     // @anchor dashboard-content-ref — kontener treści zakładek, do capture-guardu edycji snapszota
@@ -1134,6 +1143,7 @@ export default function DashboardPage() {
                                     setLeftVisible={setLeftVisible}
                                     setAiVisible={setAiVisible}
                                     oneDriveFolderName={activeNode?.oneDriveFolderName || null}
+                                    realization={realizationForWbs}
                                 />
                             </div>
                         )}

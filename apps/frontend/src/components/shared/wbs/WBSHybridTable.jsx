@@ -836,6 +836,7 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
 
 import { UNIT_OPTIONS, sanitizeQtyInput, evalQtyFormula, suggestDefaultUnit, getLeafDefaultFrom, DRAWER } from './wbsConstants';
 import { ProductCard } from './WbsMaterialsPanel';
+import WbsRealizationDrawer, { PickaxeIcon } from './WbsRealizationDrawer';
 import { offerLockInputProps } from '../OfferLockGuard';
 
 const API_URL = '/api';
@@ -1353,7 +1354,7 @@ function TagChips({ tags = [], tagColor, onRemove, onTagClick }) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 // @anchor wbs-hybrid-table
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null, onApplyLeafDefaults = null, leafDefaults = null, offerLocked = false }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null, onApplyLeafDefaults = null, leafDefaults = null, offerLocked = false, realization = null }) {
     // @anchor wbs-hybrid-offer-lock — po akceptacji baseline kolumny Ilość / Koszt jedn. / Narzut %
     // przestają przyjmować wpis (każdy typ liścia); kliknięcie otwiera modal `OfferLockGuard`.
     const offerLockProps = offerLockInputProps(offerLocked);
@@ -2476,6 +2477,17 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 </button>
                             );
                         })()}
+                        {/* @anchor wbs-realization-icon — kilof: szuflada realizacji (zakupy i wykonanie) tej
+                            pozycji albo całej gałęzi; tylko w zamówieniu (`realization` z DashboardPage). */}
+                        {realization && (
+                            <button
+                                onClick={e => { e.stopPropagation(); toggleDrawerTab(node.id, 'real'); }}
+                                className={`p-1 rounded transition-all ${drawerTab === 'real' ? 'text-teal-300 bg-teal-500/15' : 'text-teal-500/50 hover:text-teal-300 hover:bg-white/10'}`}
+                                title={hasChildren ? 'Realizacja gałęzi — zakupy i wykonanie pozycji' : 'Realizacja — zakupy i wykonanie'}
+                            >
+                                <PickaxeIcon size={19} />
+                            </button>
+                        )}
                         <button
                             onClick={e => handleDelete(node.id, e)}
                             className="p-1 hover:bg-red-500/10 rounded text-gray-600 hover:text-red-500 transition-all"
@@ -2964,6 +2976,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                         ? <><ListTodo size={13} /> Zadania</>
                                         : drawerTab === 'chat'
                                         ? <><MessageCircle size={13} /> Czat gałęzi</>
+                                        : drawerTab === 'real'
+                                        ? <><PickaxeIcon size={13} /> Realizacja</>
                                         : <><HelpCircle size={13} /> {depth === 0 && hasChildren ? 'Q&A gałęzi' : 'Pytania i odpowiedzi'}</>}
                                 </span>
                                 <span className="text-[13px] text-gray-500 truncate">{node.name}</span>
@@ -2974,6 +2988,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             <div className="px-3 pt-2 pb-3">
                                 {drawerTab === 'tasks' ? (
                                     <WbsTasksDrawer wbsNodeId={node.id} processNodeId={processNodeId} onChanged={loadTaskSummary} />
+                                ) : drawerTab === 'real' ? (
+                                    <WbsRealizationDrawer wbsNode={node} processNodeId={processNodeId} realization={realization} />
                                 ) : drawerTab === 'chat' ? (
                                     <WbsChatDrawer
                                         wbsNodeId={node.id} processNodeId={processNodeId} onChanged={loadChatSummary}

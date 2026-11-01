@@ -2104,7 +2104,7 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-funkcja | axisStageOf (stan pozycji na osi) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-axis-stage |
 | ui-stala | rozkład osi w kwotach wyceny (pustyRozklad / zaokraglijRozklad) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-stage-dist |
 | ui-funkcja | axisDisplay (etykieta osi: bramka albo status) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-axis-display |
-| ui-funkcja | rowOf (komplet liczb jednej pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-row-of |
+| ui-funkcja | rowOf (komplet liczb jednej pozycji) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-new-row-of |
 | ui-panel | BranchTree (panel 1 — gałęzie zamówienia) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-branch-tree |
 | ui-kolumna | kolumny kwotowe drzewa gałęzi (wycena / zakup — ADMIN, MANAGER, LOGISTYK) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-branch-money |
 | ui-stala | visibleTypes (typy liści wg roli — poza managerem tylko materiał i sprzęt) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-visible-types |
@@ -2126,15 +2126,21 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-stan | stanZamowienia (plakietka „Zamówienie zamknięte” w Realizacja_new) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-order-closed |
 | ui-funkcja | liczBilansWykonania (podział zamówienia wg statusu wykonania) | apps/frontend/src/components/shared/wbs/realizationBilans.js | @anchor realization-bilans-wykonania |
 | ui-tabela | BilansZamkniete (bilans kwotowy pozycji domkniętych) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-bilans-zamkniete |
-| ui-funkcja | fetchActuals (przeładowanie samych wpisów po zapisie) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-fetch-actuals |
-| ui-funkcja | fetchCards (przeładowanie samych kart produktowych) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-fetch-cards |
-| ui-funkcja | saveOwner (WbsNode.owner z tabeli pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-save-owner |
-| ui-stan | ownerUsers / ownerContacts (źródła listy osób odpowiedzialnych) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-owner-options |
+| ui-funkcja | fetchActuals (przeładowanie samych wpisów po zapisie) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-new-fetch-actuals |
+| ui-funkcja | fetchCards (przeładowanie samych kart produktowych) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-new-fetch-cards |
+| ui-funkcja | saveOwner (WbsNode.owner z tabeli pozycji) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-new-save-owner |
+| ui-stan | ownerUsers / ownerContacts (źródła listy osób odpowiedzialnych) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-new-owner-options |
 | ui-dropdown | OwnerCell (osoba odpowiedzialna edytowalna w tabeli pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-owner-cell |
-| ui-funkcja | saveComment (WbsNode.comment + wbs-comment-changed) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-save-comment |
-| ui-funkcja | saveAxis (osie realizacji, cofnięcie zakupu cofa wykonanie) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-save-axis |
-| ui-funkcja | addActual (nowy wpis LeafActual) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-add-actual |
-| ui-funkcja | setClosed (znacznik „rozliczone" na pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-set-closed |
+| ui-funkcja | saveComment (WbsNode.comment + wbs-comment-changed) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-new-save-comment |
+| ui-funkcja | saveAxis (osie realizacji, cofnięcie zakupu cofa wykonanie) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-new-save-axis |
+| ui-funkcja | addActual (nowy wpis LeafActual) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-new-add-actual |
+| ui-funkcja | setClosed (znacznik „rozliczone" na pozycji) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-new-set-closed |
+| ui-hook | useRealizationData (dane i zapisy realizacji zamówienia — wspólne dla zakładki Realizacja i szuflady w WBS) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor use-realization-data |
+| ui-hook | useRealizationFilters (filtry kolumn tabeli pozycji realizacji) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor use-realization-filters |
+| ui-panel | WbsRealizationDrawer (szuflada „Realizacja” w wierszu WBS — tabela pozycji + zakupy) | apps/frontend/src/components/shared/wbs/WbsRealizationDrawer.jsx | @anchor wbs-realization-drawer |
+| ui-ikona | PickaxeIcon (kilof — realizacja, ścieżki z lucide) | apps/frontend/src/components/shared/wbs/WbsRealizationDrawer.jsx | @anchor pickaxe-icon |
+| ui-przycisk | kilof w wierszu WBS (otwiera szufladę realizacji) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-realization-icon |
+| ui-stan | realizationForWbs (wersja planu realizacji + role podane do Struktury projektu) | apps/frontend/src/DashboardPage.jsx | @anchor realization-for-wbs |
 | ui-dropdown | AxisSelect (oś realizacji jako select, bramka jako plakietka) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-axis-select |
 | ui-input | CommentCell (komentarz pozycji edytowalny w miejscu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-comment-cell |
 | ui-funkcja | entryField (jedno pole wpisu LeafActual) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-field |
