@@ -39,6 +39,13 @@ export class CommentsController {
         return this.comments.getMyChatOrders(req.user.userId);
     }
 
+    // @anchor get-my-chat-nodes-endpoint
+    // Węzły WBS ze wszystkich zamówień użytkownika — wyszukiwarka gałęzi przed wyborem zamówienia.
+    @Get('my-chat-nodes')
+    getMyChatNodes(@Request() req) {
+        return this.comments.getMyChatNodes(req.user.userId, req.user?.roles);
+    }
+
     // @anchor get-chat-nodes-endpoint
     // Węzły WBS aktywnej wersji zamówienia (płasko, z depth) — wybór gałęzi dla nowego wątku.
     @Get('order/:orderId/chat-nodes')

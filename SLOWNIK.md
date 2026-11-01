@@ -548,6 +548,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-endpoint | GET /comments/my-orders | apps/backend/src/comments/comments.controller.ts | @anchor get-my-chat-orders-endpoint |
 | back-funkcja | getChatNodes | apps/backend/src/comments/comments.service.ts | @anchor get-chat-nodes |
 | back-endpoint | GET /comments/order/:orderId/chat-nodes | apps/backend/src/comments/comments.controller.ts | @anchor get-chat-nodes-endpoint |
+| back-funkcja | getMyChatNodes | apps/backend/src/comments/comments.service.ts | @anchor get-my-chat-nodes |
+| back-endpoint | GET /comments/my-chat-nodes | apps/backend/src/comments/comments.controller.ts | @anchor get-my-chat-nodes-endpoint |
 | back-stala | CHAT_IMAGE_DIR | apps/backend/src/comments/chat-image.storage.ts | @anchor chat-image-dir |
 | back-stala | CHAT_IMAGE_MAX_BYTES | apps/backend/src/comments/chat-image.storage.ts | @anchor chat-image-max-bytes |
 | back-stala | CHAT_IMAGE_NAME_RE | apps/backend/src/comments/chat-image.storage.ts | @anchor chat-image-name-re |
@@ -1064,6 +1066,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-sekcja | MobileChatNewThread | apps/frontend/src/components/Mobile/MobileChat.jsx | @anchor mobile-chat-new-thread |
 | ui-input | mobile-chat-photo-source | apps/frontend/src/components/Mobile/MobileChat.jsx | @anchor mobile-chat-photo-source |
 | ui-input | mobile-chat-node-filter | apps/frontend/src/components/Mobile/MobileChat.jsx | @anchor mobile-chat-node-filter |
+| ui-input | mobile-chat-global-node-filter | apps/frontend/src/components/Mobile/MobileChat.jsx | @anchor mobile-chat-global-node-filter |
 | ui-widok | MobileOrdersTree | apps/frontend/src/components/Mobile/MobileOrdersTree.jsx | @anchor mobile-orders-tree |
 | ui-sekcja | TreeNode | apps/frontend/src/components/Mobile/MobileOrdersTree.jsx | @anchor mobile-tree-node |
 | ui-panel | mobile-tree-schematic-panel | apps/frontend/src/components/Mobile/MobileOrdersTree.jsx | @anchor mobile-tree-schematic-panel |
