@@ -157,8 +157,10 @@ export default function QaTreeView({ nodeId, versionId, onClose, initialFilter =
         dirtyRef.current.delete(wbsNodeId);
         const row = rowsRef.current.find(r => r.id === wbsNodeId);
         if (!row) return;
+        // Para zachowuje `id` (cel znacznika `{{q:id}}` w strategii) i powiązania (zadanie, mail, czat) — bez nich
+        // backend nada nowe id i strategia pokaże „brak pytania”. `_k` to tylko klucz Reacta.
         const cleaned = row.qa
-            .map(p => ({ question: String(p.question || '').trim(), answer: String(p.answer || '').trim() }))
+            .map(({ _k, ...p }) => ({ ...p, question: String(p.question || '').trim(), answer: String(p.answer || '').trim() }))
             .filter(p => p.question || p.answer);
 
         // Write-through do cache, żeby offline'owe ponowne otwarcie widziało edycję
