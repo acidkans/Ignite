@@ -4,15 +4,16 @@ import AutoResizeTextarea from './AutoResizeTextarea';
 import { newQaId, ensureQaIds, strategyHasTokens, strategyTokenIds, buildQaIndex, resolveStrategyText, pendingStrategyQuestions, splitStrategyTokens } from './strategyQuestions';
 import TaskModal from './TaskModal';
 import QaMailModal from './QaMailModal';
+import QaMailRepliesModal from './QaMailRepliesModal';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
-import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Link, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, MessageCircle, Send, ArrowRight, ArrowLeft, Check, Loader2, Calendar, Repeat, ImagePlus, Archive, RotateCcw, EyeOff, Mail } from 'lucide-react';
+import { Inbox, Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Link, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, MessageCircle, Send, ArrowRight, ArrowLeft, Check, Loader2, Calendar, Repeat, ImagePlus, Archive, RotateCcw, EyeOff, Mail } from 'lucide-react';
 import { CyclicAlarmEditor } from '../MyTasksModal';
 import { useDevice } from '../../../hooks/useDevice';
 
 // @anchor normalize-lower-text
-// Tekst Q&A i zadań (tytuł, komentarz) zapisujemy małymi literami — ujednolica wpisy pisane
-// CAPS LOCKIEM. Wołane na blur / przy zapisie, nie przy każdym klawiszu.
+// Odpowiedzi Q&A zapisujemy małymi literami — ujednolica wpisy pisane CAPS LOCKIEM.
+// Pytań NIE normalizujemy (zostają tak, jak je wpisano). Wołane na blur / przy zapisie.
 const normalizeLowerText = (s) => String(s || '').trim().toLocaleLowerCase('pl-PL');
 
 // ── Q&A cell — zagnieżdżona tabela Pytanie / Odpowiedź per WBS node ───────────
@@ -46,7 +47,7 @@ function QaPairRow({ p, idx, onUpdate, onRemove, onPersist, linked = false }) {
                     rows={1}
                     value={p.question || ''}
                     onChange={e => { onUpdate(idx, 'question', e.target.value); syncHeights(); }}
-                    onBlur={() => { onUpdate(idx, 'question', normalizeLowerText(p.question)); onPersist?.(); }}
+                    onBlur={() => { onUpdate(idx, 'question', String(p.question || '').trim()); onPersist?.(); }}
                     onFocus={syncHeights}
                     placeholder="Pytanie…"
                     title={linked ? 'Pytanie wstawione w strategię — odpowiedź uzupełni strategię' : undefined}
@@ -71,6 +72,11 @@ function QaPairRow({ p, idx, onUpdate, onRemove, onPersist, linked = false }) {
                     className="bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[15px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 text-gray-200"
                     style={{ overflow: 'hidden', minHeight: '1.4em', resize: 'none' }}
                 />
+                {p.answerSource === 'mail' && String(p.answer || '').trim() && (
+                    <div className="flex items-center gap-1 text-[12px] text-emerald-300/70" title="Odpowiedź wpisana z maila klienta (Odpowiedzi z maila)">
+                        <Mail size={11} /> odpowiedź mailem{p.mailReplyAt ? ` ${new Date(p.mailReplyAt).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' })}` : ''}
+                    </div>
+                )}
             </td>
             <td className="py-0.5 border-t border-white/5">
                 <button
@@ -97,7 +103,7 @@ function QaCell({ pairs, onChange, onPersist, autoFocusNew = false, linkedIds = 
     // nie lądują puste pary. `autoFocusNew` — kursor w polu od razu po otwarciu szuflady liścia.
     const [newQ, setNewQ] = useState('');
     const commitNew = () => {
-        const q = normalizeLowerText(newQ);
+        const q = newQ.trim();
         if (!q) return;
         onChange([...list, { id: newQaId(), question: q, answer: '' }]);
         setNewQ('');
@@ -235,7 +241,7 @@ function LeafStrategyCell({ node, qaIndex, fieldClass, onChange, onSave, onAddQu
     const pending = hasTokens ? pendingStrategyQuestions(value, qaIndex).length : 0;
 
     const submit = async () => {
-        const q = normalizeLowerText(question);
+        const q = question.trim();
         if (!q || busy) return;
         setBusy(true);
         try { await onAddQuestion(q, withTask); } finally { setBusy(false); }
@@ -1632,6 +1638,23 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     const [nodeDrawerTab, setNodeDrawerTab] = useState({});
     // @anchor qa-mail-node — węzeł, dla którego otwarte jest okno wysyłki pytań mailem (QaMailModal).
     const [qaMailNode, setQaMailNode] = useState(null);
+    // @anchor mail-replies — odpowiedzi klientów na maile z pytaniami (QaMailRepliesModal); licznik NEW przy Q&A.
+    const [mailReplies, setMailReplies] = useState(null);
+    const [mailRepliesLoading, setMailRepliesLoading] = useState(false);
+    const [mailRepliesOpen, setMailRepliesOpen] = useState(false);
+    const loadMailReplies = useCallback(async () => {
+        if (!processNodeId) return;
+        setMailRepliesLoading(true);
+        try {
+            const r = await fetch(`/api/qa-mail/replies/${processNodeId}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token') || localStorage.getItem('token')}` } });
+            if (r.ok) setMailReplies(await r.json());
+        } catch { /* licznik bez odświeżenia */ } finally {
+            setMailRepliesLoading(false);
+        }
+    }, [processNodeId]);
+    useEffect(() => { loadMailReplies(); }, [loadMailReplies]);
+    const newMailReplies = (mailReplies || []).filter(r => r.status === 'NEW').length;
+    const openMailReplies = () => { setMailRepliesOpen(true); loadMailReplies(); };
     // @anchor wbs-task-summary
     // { [wbsNodeId]: { open, overdue, done } } — z GET /my-tasks/wbs-summary/:processNodeId; koloruje ikonę Zadania.
     const [taskSummary, setTaskSummary] = useState({});
@@ -1962,7 +1985,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         if (!n) return;
         const nextQa = qaId
             ? (n.qa || []).map(p => p.id === qaId ? { ...p, askedMessageId: messageId } : p)
-            : [...ensureQaIds(n.qa), { id: newQaId(), question: normalizeLowerText(text), answer: '', askedMessageId: messageId }];
+            : [...ensureQaIds(n.qa), { id: newQaId(), question: String(text || '').trim(), answer: '', askedMessageId: messageId }];
         handleQaChange(n.id, nextQa);
         persistQa(n.id, nextQa);
     };
@@ -2008,6 +2031,38 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             });
             handleField(upd.id, 'qa', next);
         }
+    };
+
+    // @anchor answer-questions-from-mail
+    // Zatwierdzone odpowiedzi z maila klienta → pary Q&A (tak jak odpowiedź z czatu: zamyka zadanie
+    // „Wyjaśnić czy…”, uzupełnia `{{q:id}}` w strategii). Para szukana po id, potem po treści pytania.
+    // Zwraca liczbę pytań, których nie ma już w Q&A.
+    const answerQuestionsFromMail = (reply, rows) => {
+        const norm = t => String(t || '').trim().toLowerCase();
+        let itemsNow = items;
+        let missing = 0;
+        const byNode = new Map();
+        rows.forEach(r => byNode.set(r.wbsNodeId, [...(byNode.get(r.wbsNodeId) || []), r]));
+        for (const [nodeId, list] of byNode) {
+            const n = findNode(itemsNow, nodeId);
+            if (!n) { missing += list.length; continue; }
+            let qa = ensureQaIds(n.qa);
+            for (const r of list) {
+                const idx = qa.findIndex(p => p.id === r.qaId) >= 0 ? qa.findIndex(p => p.id === r.qaId) : qa.findIndex(p => norm(p.question) === norm(r.question));
+                if (idx < 0) { missing++; continue; }
+                qa = qa.map((p, i) => i === idx ? { ...p, answer: normalizeLowerText(r.answer), answerSource: 'mail', mailReplyId: reply.id, mailReplyAt: reply.receivedAt } : p);
+            }
+            itemsNow = handleQaChange(nodeId, qa);
+            persistQa(nodeId, qa);
+            recomposeRootFor(nodeId, itemsNow);
+        }
+        return missing;
+    };
+    // Bieżąca odpowiedź pary w Q&A (podgląd w oknie odpowiedzi z maila).
+    const currentQaAnswer = (nodeId, qaId, question) => {
+        const qa = findNode(items, nodeId)?.qa || [];
+        const p = qa.find(x => x.id === qaId) || qa.find(x => String(x.question || '').trim().toLowerCase() === String(question || '').trim().toLowerCase());
+        return String(p?.answer || '').trim();
     };
 
     // @anchor copy-comment-strategy
@@ -3353,8 +3408,17 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 <span className="text-[13px] text-gray-500 truncate">{node.name}</span>
                                 {drawerTab === 'qa' && processNodeId && (
                                     <button
+                                        onClick={openMailReplies}
+                                        className={`ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-[13px] transition-all ${newMailReplies ? 'text-amber-300 bg-amber-500/10 hover:bg-amber-500/20' : 'text-gray-400 hover:text-gray-200 hover:bg-white/10'}`}
+                                        title="Odpowiedzi klienta na maile z pytaniami"
+                                    >
+                                        <Inbox size={13} /> Odpowiedzi z maila{newMailReplies ? ` (${newMailReplies})` : ''}
+                                    </button>
+                                )}
+                                {drawerTab === 'qa' && processNodeId && (
+                                    <button
                                         onClick={() => setQaMailNode({ id: node.id, branch: depth === 0 && hasChildren })}
-                                        className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-[13px] text-sky-300 hover:text-sky-200 hover:bg-sky-500/15 transition-all"
+                                        className="flex items-center gap-1 px-2 py-0.5 rounded text-[13px] text-sky-300 hover:text-sky-200 hover:bg-sky-500/15 transition-all"
                                         title="Wyślij pytania bez odpowiedzi mailem do klienta"
                                     >
                                         <Mail size={13} /> Wyślij mailem
@@ -3598,6 +3662,18 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     />
                 );
             })()}
+
+            {mailRepliesOpen && (
+                <QaMailRepliesModal
+                    processNodeId={processNodeId}
+                    replies={mailReplies}
+                    loading={mailRepliesLoading}
+                    onReload={loadMailReplies}
+                    onApply={answerQuestionsFromMail}
+                    currentAnswer={currentQaAnswer}
+                    onClose={() => setMailRepliesOpen(false)}
+                />
+            )}
         </div>
     );
 }

@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { SmtpService, SMTP_PROFILES } from '../smtp/smtp.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailboxesService } from '../mailboxes/mailboxes.service';
 
 const COMPANY_SINGLETON_ID = 'singleton';
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
@@ -101,6 +102,7 @@ export class MailService {
   constructor(
     private smtpService: SmtpService,
     private prisma: PrismaService,
+    private mailboxes: MailboxesService,
   ) {}
 
   // @anchor mail-send-user-confirmation
@@ -459,18 +461,37 @@ export class MailService {
 
   // @anchor mail-send-export
   // Wysyła DOKŁADNIE ten sam plik, który front pobiera lokalnie — jako załącznik.
+  // Zasada kont firmowych (`MailboxesService.orderSender`): zamówienie z domeną poczty → nadawcą
+  // jest skrzynka użytkownika w tej domenie (podpis + kopia w „Wysłanych”); bez skrzynki wysyłka
+  // jest blokowana. Zamówienie bez domeny / węzeł spoza zamówienia → konto systemowe jak dotąd.
   async sendExport(
+    userId: string,
     file: Express.Multer.File,
     body: { to?: any; cc?: any; subject?: string; message?: string; nodeId?: string },
   ) {
     if (!file) throw new BadRequestException('Brak pliku do wysłania.');
     const to = parseList(body?.to);
     if (!to.length) throw new BadRequestException('Podaj co najmniej jednego odbiorcę.');
-    const cc = parseList(body?.cc);
+    const cc = parseList(body?.cc).filter(e => !to.includes(e));
     // multer dostarcza originalname w latin1 — przywróć UTF-8 dla polskich znaków
     const filename = Buffer.from(file.originalname || 'eksport', 'latin1').toString('utf8');
     const subject = (body?.subject || `Eksport: ${filename}`).slice(0, 250);
     const message = body?.message || '';
+    const attachments = [{ filename, content: file.buffer, contentType: file.mimetype }];
+
+    const { domain, mailbox, senderError } = await this.mailboxes.orderSender(userId, body?.nodeId);
+    if (domain && !mailbox) throw new BadRequestException(senderError || `Brak skrzynki w domenie ${domain.domain}.`);
+    if (mailbox) {
+      const font = 'font-family:Calibri,Arial,sans-serif;font-size:11pt';
+      const html = message
+        ? `<div style="white-space:pre-wrap;${font}">${escapeHtml(message)}</div>`
+        : `<p style="${font}">W załączniku przesyłamy: <strong>${escapeHtml(filename)}</strong>.</p>`;
+      const { sentCopyError } = await this.mailboxes.sendFromMailbox(mailbox, {
+        to, cc, subject, html, text: message || `W załączniku przesyłamy: ${filename}.`, attachments,
+      });
+      return { ok: true, sentTo: to, cc, from: mailbox.email, sentCopyError };
+    }
+
     await this.smtpService.sendMail({
       to,
       cc: cc.length ? cc : undefined,
@@ -478,9 +499,17 @@ export class MailService {
       html: message
         ? `<div style="white-space:pre-wrap;font-family:Arial,sans-serif">${escapeHtml(message)}</div>`
         : `<p style="font-family:Arial,sans-serif">W załączniku przesyłamy: <strong>${escapeHtml(filename)}</strong>.</p>`,
-      attachments: [{ filename, content: file.buffer, contentType: file.mimetype }],
+      attachments,
     });
-    return { ok: true, sentTo: to, cc };
+    return { ok: true, sentTo: to, cc, from: null, sentCopyError: null };
+  }
+
+  // @anchor mail-export-sender
+  // Nadawca maila z eksportem dla okna wysyłki: skrzynka firmowa (z podpisem), błąd (zamówienie
+  // ma domenę, a użytkownik nie ma w niej skrzynki) albo konto systemowe (`domain: null`).
+  async exportSender(userId: string, nodeId: string) {
+    const { domain, sender, senderError } = await this.mailboxes.orderSender(userId, nodeId);
+    return { domain: domain ? { domain: domain.domain, label: domain.label } : null, sender, senderError };
   }
 
   // @anchor mail-get-recipients

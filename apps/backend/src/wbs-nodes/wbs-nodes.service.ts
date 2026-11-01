@@ -22,6 +22,8 @@ export interface QaPair {
     mailId?: string | null;
     mailSentAt?: string | null;
     mailTo?: string | null;
+    mailReplyId?: string | null;
+    mailReplyAt?: string | null;
 }
 
 // @anchor clean-qa-pair
@@ -29,7 +31,7 @@ export interface QaPair {
 // w strategii) dopisywane, gdy brak — znacznik musi wskazywać stałą parę. `taskId` = zadanie
 // „Wyjaśnić czy…”, `chatMessageId` = wiadomość czatu z odpowiedzią, `askedMessageId` = wiadomość czatu,
 // która zadała pytanie, `answerSource` = skąd odpowiedź. `mailId` / `mailSentAt` / `mailTo` = ostatni
-// mail do klienta z tym pytaniem (`QaMail`).
+// mail do klienta z tym pytaniem (`QaMail`), `mailReplyId` / `mailReplyAt` = odpowiedź klienta (`QaMailReply`), z której wpisano `answer`, i data jej odbioru.
 export function cleanQaPair(p: any): QaPair {
     const out: QaPair = {
         id: /^[\w-]{1,40}$/.test(String(p?.id ?? '')) ? String(p.id) : 'q' + randomBytes(5).toString('hex'),
@@ -43,6 +45,8 @@ export function cleanQaPair(p: any): QaPair {
     if (p?.mailId) out.mailId = String(p.mailId);
     if (p?.mailSentAt) out.mailSentAt = String(p.mailSentAt);
     if (p?.mailTo) out.mailTo = String(p.mailTo);
+    if (p?.mailReplyId) out.mailReplyId = String(p.mailReplyId);
+    if (p?.mailReplyAt) out.mailReplyAt = String(p.mailReplyAt);
     return out;
 }
 
