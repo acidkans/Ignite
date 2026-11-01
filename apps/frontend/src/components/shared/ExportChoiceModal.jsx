@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { X, Download, Mail, Send, Loader2, CheckCircle, ArrowLeft, Cloud } from 'lucide-react';
+import { X, Download, Mail, Send, Loader2, CheckCircle, ArrowLeft, Cloud, AlertTriangle } from 'lucide-react';
 import RecipientInput from './RecipientInput';
-import { resolveArtifact, downloadBlob, sendExport, uploadToOneDrive } from '../../utils/exportMail';
+import { resolveArtifact, downloadBlob, sendExport, uploadToOneDrive, fetchExportSender } from '../../utils/exportMail';
 import { useOneDriveFolders, resolveOneDriveFolder } from '../../utils/oneDriveFolders';
 
 // @anchor export-choice-modal
@@ -29,6 +29,9 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
   const [cc, setCc] = useState([]);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
+  // @anchor export-choice-sender — nadawca wg zasady kont firmowych: skrzynka użytkownika w domenie
+  // zamówienia (z podpisem), błąd (brak skrzynki → wysyłka zablokowana) albo konto systemowe.
+  const [senderInfo, setSenderInfo] = useState(undefined);
   const folders = useOneDriveFolders();
   const target = resolveOneDriveFolder(folders, { folderKey: oneDriveFolderKey, documentCategory: oneDriveDocumentCategory });
   const sciezka = [oneDriveFolderName, target.path, oneDriveSubfolder].filter(Boolean).join(' → ');
@@ -43,9 +46,14 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
       setCc(defaultCc?.length ? [...defaultCc] : []);
       setSubject(defaultSubject || title || defaultFilename || 'Eksport');
       setMessage(defaultMessage || '');
+      setSenderInfo(undefined);
+      let alive = true;
+      fetchExportSender(nodeId).then(s => { if (alive) setSenderInfo(s); });
+      return () => { alive = false; };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+  const senderBlocked = !!senderInfo?.senderError;
 
   if (!open) return null;
 
@@ -88,7 +96,9 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
     setBusy(true); setError('');
     try {
       const art = await resolveArtifact(await makeArtifact());
-      await sendExport({ blob: art.blob, filename: art.filename, to, cc, subject: subject || title, message, nodeId });
+      const sent = await sendExport({ blob: art.blob, filename: art.filename, to, cc, subject: subject || title, message, nodeId });
+      const fromInfo = sent?.from ? ` z ${sent.from}` : '';
+      if (sent?.sentCopyError) setError(`Mail wysłany, ale bez kopii w „Wysłanych”: ${sent.sentCopyError}`);
       // Archiwizacja na OneDrive z TEGO SAMEGO artefaktu — plik w teczce jest bit w bit tym,
       // co poszło mailem. Jej błąd nie unieważnia wysyłki: mail już wyszedł, więc mówimy
       // o nim wprost i dopisujemy, czego nie udało się odłożyć.
@@ -105,9 +115,9 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
         }
       }
       await onExported?.();
-      setDone(`Wysłano do: ${to.join(', ')}${cc.length ? ` (DW: ${cc.join(', ')})` : ''}${odInfo}`);
+      setDone(`Wysłano${fromInfo} do: ${to.join(', ')}${cc.length ? ` (DW: ${cc.join(', ')})` : ''}${odInfo}`);
       setBusy(false);
-      setTimeout(onClose, odInfo ? 2400 : 1600);
+      if (!sent?.sentCopyError) setTimeout(onClose, odInfo ? 2400 : 1600);
     } catch (e) {
       setError(e?.message || 'Błąd wysyłki maila');
       setBusy(false);
@@ -157,6 +167,24 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
           ) : (
             <div className="flex flex-col gap-3">
               <div>
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Od</label>
+                {senderInfo === undefined ? (
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500"><Loader2 size={12} className="animate-spin" /> Sprawdzam skrzynkę…</div>
+                ) : senderInfo?.sender ? (
+                  <div className="text-sm text-gray-200">
+                    {senderInfo.sender.name} <span className="text-gray-500">&lt;{senderInfo.sender.email}&gt;</span>
+                    <div className="text-[11px] text-gray-500">
+                      {senderInfo.sender.hasSignature ? 'Podpis skrzynki zostanie doklejony. ' : 'Skrzynka nie ma podpisu (ustawisz go w „Moim koncie”). '}
+                      {senderInfo.sender.sentFolder ? 'Kopia trafi do „Wysłanych”.' : 'Skrzynka nieprzetestowana — bez kopii w „Wysłanych”.'}
+                    </div>
+                  </div>
+                ) : senderInfo?.senderError ? (
+                  <div className="flex items-start gap-1.5 text-xs text-amber-300"><AlertTriangle size={13} className="mt-0.5 shrink-0" /> {senderInfo.senderError}</div>
+                ) : (
+                  <div className="text-xs text-gray-400">Konto systemowe Ignite — zamówienie nie ma ustawionej domeny poczty.</div>
+                )}
+              </div>
+              <div>
                 <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Do</label>
                 <RecipientInput value={to} onChange={setTo} nodeId={nodeId} />
               </div>
@@ -174,7 +202,7 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
                 </label>
                 <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={defaultMessage ? 10 : 3} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-y custom-scrollbar" placeholder="Treść wiadomości…" />
               </div>
-              <button onClick={handleSend} disabled={busy} className={`${btnBase} bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white mt-1`}>
+              <button onClick={handleSend} disabled={busy || senderBlocked} title={senderBlocked ? senderInfo.senderError : undefined} className={`${btnBase} bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white mt-1`}>
                 {busy ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {busy ? 'Wysyłanie…' : (oneDriveFolderName ? 'Wyślij załącznik i zapisz na OneDrive' : 'Wyślij załącznik')}
               </button>
               {/* @anchor export-choice-mail-na-od — wysyłka ZAWSZE archiwizuje ten sam plik

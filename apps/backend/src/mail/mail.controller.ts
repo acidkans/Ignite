@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Req,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -21,8 +22,15 @@ export class MailController {
 
   @Post('send-export')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
-  sendExport(@UploadedFile() file: Express.Multer.File, @Body() body: any) {
-    return this.mailService.sendExport(file, body);
+  sendExport(@Req() req: any, @UploadedFile() file: Express.Multer.File, @Body() body: any) {
+    return this.mailService.sendExport(req.user.userId, file, body);
+  }
+
+  // @anchor get-mail-export-sender
+  // Z jakiego konta pójdzie mail z eksportem dla tego węzła (skrzynka firmowa / błąd / systemowe).
+  @Get('export-sender/:nodeId')
+  exportSender(@Req() req: any, @Param('nodeId') nodeId: string) {
+    return this.mailService.exportSender(req.user.userId, nodeId);
   }
 
   @Get('recipients/:nodeId')

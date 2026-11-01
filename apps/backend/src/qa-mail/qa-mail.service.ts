@@ -1,6 +1,5 @@
 import { randomBytes } from 'crypto';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailboxesService } from '../mailboxes/mailboxes.service';
 import { cleanQaPair } from '../wbs-nodes/wbs-nodes.service';
@@ -28,6 +27,25 @@ export const normalizeMailList = (v: any): string[] => {
 const KEY_CHARS = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 const newQaMailKey = () => 'IGN-' + Array.from(randomBytes(6), b => KEY_CHARS[b % KEY_CHARS.length]).join('');
 
+// @anchor qa-mail-texts
+// Stałe teksty maila z pytaniami w dwóch językach (`dto.lang` = 'pl' | 'en').
+const QA_MAIL_TEXTS = {
+  pl: {
+    subject: 'Pytania do zamówienia',
+    greeting: 'Dzień dobry,',
+    intro: (order: string) => `w związku z zamówieniem „${order}” prosimy o odpowiedź na poniższe pytania.`,
+    closing: 'Prosimy o odpowiedź na tego maila — najlepiej pod każdym pytaniem, z zachowaniem numeracji.',
+    regards: 'Pozdrawiam',
+  },
+  en: {
+    subject: 'Questions regarding order',
+    greeting: 'Hello,',
+    intro: (order: string) => `With regard to the order "${order}", we kindly ask you to answer the questions below.`,
+    closing: 'Please reply to this email — ideally below each question, keeping the numbering.',
+    regards: 'Kind regards',
+  },
+};
+
 // @anchor qa-mail-service
 // Pytania z Q&A węzłów WBS wysłane mailem do klienta ze skrzynki firmowej użytkownika
 // (domena zamówienia → `UserMailbox`). Kopia idzie do „Wysłane” skrzynki; pary Q&A dostają
@@ -38,29 +56,11 @@ export class QaMailService {
 
   constructor(private readonly prisma: PrismaService, private readonly mailboxes: MailboxesService) {}
 
-  // Węzeł procesu zamówienia (type = 'order') nad podanym — jak w OrderRequirementsService.
-  private async orderNodeId(nodeId: string) {
-    let id: string | null = nodeId;
-    for (let i = 0; i < 20 && id; i++) {
-      const n = await this.prisma.processNode.findUnique({ where: { id }, select: { id: true, type: true, parentId: true } });
-      if (!n) break;
-      if (String(n.type || '').toLowerCase() === 'order') return n.id;
-      id = n.parentId;
-    }
-    return nodeId;
-  }
-
+  // Zamówienie nad węzłem i jego „Informacje o zamówieniu” (wspólne z eksportami — MailboxesService).
   private async orderInfo(processNodeId: string) {
-    const orderId = await this.orderNodeId(processNodeId);
-    const node = await this.prisma.processNode.findUnique({ where: { id: orderId }, select: { id: true, name: true } });
-    if (!node) throw new NotFoundException('Nie ma takiego zamówienia.');
-    const req = await this.prisma.orderRequirements.findFirst({
-      where: { nodeId: orderId, versionId: null },
-      include: { mailDomain: true },
-    }) || await this.prisma.orderRequirements.findFirst({
-      where: { nodeId: orderId }, orderBy: { updatedAt: 'desc' }, include: { mailDomain: true },
-    });
-    return { orderId, orderName: node.name, req };
+    const info = await this.mailboxes.orderInfo(processNodeId);
+    if (!info) throw new NotFoundException('Nie ma takiego zamówienia.');
+    return info;
   }
 
   // @anchor qa-mail-context
@@ -68,18 +68,8 @@ export class QaMailService {
   // podpowiedzi odbiorców (kontakty klienta + PM z „Informacji o zamówieniu”) i dotychczasowe maile.
   async context(userId: string, processNodeId: string) {
     const { orderId, orderName, req } = await this.orderInfo(processNodeId);
-    const domain = req?.mailDomain || null;
-    let sender: any = null;
-    let senderError: string | null = null;
-    if (!domain) senderError = 'Zamówienie nie ma ustawionej domeny poczty — wybierz ją w „Informacjach o zamówieniu” (Kontakty).';
-    else {
-      try {
-        const m = await this.mailboxes.senderFor(userId, domain.id);
-        sender = { email: m.email, name: await this.mailboxes.senderName(m), verified: !!m.verifiedAt, sentFolder: m.sentFolder, hasSignature: !!m.signatureHtml };
-      } catch (e: any) {
-        senderError = e?.message || String(e);
-      }
-    }
+    const { domain, sender, senderError: err } = await this.mailboxes.orderSender(userId, orderId);
+    const senderError = domain ? err : 'Zamówienie nie ma ustawionej domeny poczty — wybierz ją w „Informacjach o zamówieniu” (Kontakty).';
     const recipients: { name: string; email: string; company?: string; role?: string }[] = [];
     const push = (r: any) => {
       const email = String(r?.email || '').trim().toLowerCase();
@@ -102,7 +92,7 @@ export class QaMailService {
   }
 
   // @anchor qa-mail-send
-  // dto: { processNodeId, to, cc?, intro?, questions: [{ wbsNodeId, qaId, question }] }. Pytania czytane
+  // dto: { processNodeId, to, cc?, intro?, lang? ('pl' | 'en'), questions: [{ wbsNodeId, qaId, question }] }. Pytania czytane
   // z bazy (nie z body) — wysyła się to, co zapisane. Starsze pary nie mają w bazie `id` (cleanQaPair
   // nadaje je losowo przy każdym odczycie), więc gdy id się nie zgadza, para szukana jest po treści pytania;
   // przy zapisie znacznika mailowego taka para dostaje w bazie stałe id. Raw MIME budowany raz (streamTransport, obrazki podpisu
@@ -138,33 +128,21 @@ export class QaMailService {
     const multiNode = new Set(items.map(i => i.wbsNodeId)).size > 1;
     const short = (t: string) => (t.length > 60 ? t.slice(0, 57).trimEnd() + '…' : t);
     const topic = multiNode || !items[0].nodeName ? '' : ` — ${short(items[0].nodeName)}`;
-    const subject = `[${key}] Pytania do zamówienia ${orderName}${topic}`;
-    const intro = String(dto?.intro ?? '').trim()
-      || `w związku z zamówieniem „${orderName}” prosimy o odpowiedź na poniższe pytania.`;
+    // Język stałych tekstów maila (temat, powitanie, zamknięcie). Pytania idą tak, jak je wpisano.
+    const t = QA_MAIL_TEXTS[dto?.lang === 'en' ? 'en' : 'pl'];
+    const subject = `${t.subject} ${orderName}${topic} Ref number [${key}]`;
+    const intro = String(dto?.intro ?? '').trim() || t.intro(orderName);
     const label = (it: typeof items[number]) => (multiNode && it.nodeName ? it.nodeName + ': ' : '');
 
     const font = 'font-family:Calibri,Arial,sans-serif;font-size:11pt';
-    const closing = 'Prosimy o odpowiedź na tego maila — najlepiej pod każdym pytaniem, z zachowaniem numeracji.';
-    const html = `<div style="${font}"><p>Dzień dobry,</p><p>${esc(intro).replace(/\n/g, '<br>')}</p>`
+    const html = `<div style="${font}"><p>${t.greeting}</p><p>${esc(intro).replace(/\n/g, '<br>')}</p>`
       + `<ol>${items.map(it => `<li style="margin-bottom:6px">${label(it) ? `<b>${esc(label(it))}</b>` : ''}${esc(it.question)}</li>`).join('')}</ol>`
-      + `<p>${closing}</p><p>Pozdrawiam</p></div>`
-      + (m.signatureHtml ? `<br><div style="${font}">${m.signatureHtml}</div>` : '');
-    const text = `Dzień dobry,\n\n${intro}\n\n`
+      + `<p>${t.closing}</p><p>${t.regards}</p></div>`;
+    const text = `${t.greeting}\n\n${intro}\n\n`
       + items.map((it, i) => `${i + 1}. ${label(it)}${it.question}`).join('\n')
-      + `\n\n${closing}\n\nPozdrawiam`;
+      + `\n\n${t.closing}\n\n${t.regards}`;
 
-    const name = await this.mailboxes.senderName(m);
-    const built = await nodemailer.createTransport({ streamTransport: true, buffer: true }).sendMail({
-      from: { name, address: m.email }, to, cc: cc.length ? cc : undefined,
-      subject, html, text, messageId: `<${messageId}>`, attachDataUrls: true,
-    });
-    const raw = built.message as Buffer;
-    try {
-      await this.mailboxes.smtpTransport(m).sendMail({ envelope: { from: m.email, to: [...to, ...cc] }, raw });
-    } catch (e: any) {
-      throw new BadRequestException(`Nie udało się wysłać: ${e?.message || e}`);
-    }
-    const sentCopyError = await this.mailboxes.appendToSent(m, raw);
+    const { sentCopyError } = await this.mailboxes.sendFromMailbox(m, { to, cc, subject, html, text, messageId: `<${messageId}>` });
 
     const mail = await this.prisma.qaMail.create({
       data: {

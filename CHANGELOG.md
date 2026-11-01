@@ -1,3 +1,58 @@
+## 2026-11-01 — feat(poczta): wysyłka eksportów mailem ze skrzynki firmowej użytkownika (domena zamówienia, podpis, kopia w „Wysłanych”)
+
+### architektura / API
+- zmieniono `back-endpoint` `POST /mail/send-export` — gdy zamówienie węzła ma domenę poczty, mail idzie ze skrzynki zalogowanego użytkownika w tej domenie (podpis skrzynki, obrazki jako CID, kopia w „Wysłanych”); bez skrzynki → 400 z powodem. Zamówienie bez domeny / węzeł spoza zamówienia → konto systemowe jak dotąd. Odpowiedź ma nowe pola `from` i `sentCopyError`
+- dodano `back-endpoint` `GET /mail/export-sender/:nodeId` → `{ domain, sender, senderError }` (`back-funkcja` `MailService.exportSender`)
+- dodano `back-funkcja` `MailboxesService.orderInfo`, `orderSender`, `sendFromMailbox` — wspólna zasada wysyłki z kont firmowych dla eksportów i pytań Q&A (`QaMailService` korzysta z nich zamiast własnej kopii)
+- `MailModule` importuje `MailboxesModule`
+- `ui-modal` `ExportChoiceModal` — w formularzu maila pole „Od”: skrzynka z informacją o podpisie i kopii w „Wysłanych”, ostrzeżenie i zablokowany przycisk, gdy brak skrzynki w domenie zamówienia, albo „Konto systemowe Ignite”
+
+### słownik
+- dodano `mailboxes-order-info`, `mailboxes-order-sender`, `mailboxes-send-from-mailbox` — mailboxes.service.ts; `mail-export-sender` — mail.service.ts; `get-mail-export-sender` — mail.controller.ts; `fetch-export-sender` — exportMail.js; `export-choice-sender` — ExportChoiceModal.jsx
+
+### wytyczne
+- `back-funkcja` `MailboxesService.orderSender` — każda nowa wysyłka maila „w imieniu zamówienia” ma przez nią przechodzić: zamówienie z domeną = tylko skrzynka firmowa użytkownika, nigdy cicho konto systemowe
+- `back-funkcja` `MailboxesService.sendFromMailbox` — `html` podaje się BEZ podpisu; podpis dokleja funkcja
+
+## 2026-11-01 — feat(qa): odbiór odpowiedzi klienta na maile z pytaniami (IMAP co 5 min, dopasowanie po nagłówkach i Ref number, propozycje AI do zatwierdzenia w Q&A)
+
+### schema.prisma
+- dodano `schema-model` `QaMailReply` (tabela `qa_mail_replies`) — odebrana odpowiedź klienta: `qaMailId`, `processNodeId` (kopia z QaMail), `messageId` (unikalny — ten sam mail nie zapisze się drugi raz), `matchedBy` (`header` | `subject`), `fromEmail`, `fromName`, `subject`, `text`, `receivedAt`, `proposals` (`schema-json` `[{ wbsNodeId, qaId, question, nodeName, answer }]`), `aiError`, `status` (`NEW` | `DONE` | `IGNORED`), `handledById`, `handledAt`
+- dodano `schema-relacja` `QaMail.replies` (Cascade)
+- migracja `20261101160000_qa_mail_replies`
+- `schema-json` `WbsNode.qa` — para dostaje `mailReplyId`, `mailReplyAt` i `answerSource: 'mail'`; `cleanQaPair` je zachowuje
+
+### architektura / API
+- dodano `back-serwis` `QaMailRepliesService` — IMAP INBOX skrzynki nadawcy tylko do odczytu, od `UserMailbox.imapLastUid` (reset przy zmianie `imapUidValidity`); dopasowanie In-Reply-To/References = `QaMail.messageId`, potem `[IGN-…]` w temacie; treść przez `mailparser` (`simpleParser`); AI (`VectorService.generateRaw`) dopasowuje odpowiedzi do pytań
+- dodano `back-serwis` `QaMailRepliesCronService` — co 5 min skrzynki z mailami z ostatnich 120 dni; `back-env` `QA_MAIL_REPLY_CRON=false` wyłącza (na dev wyłączone w `docker-compose.override.yml`)
+- dodano `back-endpoint` `GET /qa-mail/replies/:processNodeId`, `POST /qa-mail/replies/check` `{ processNodeId }`, `POST /qa-mail/replies/:id/analyze`, `POST /qa-mail/replies/:id/resolve` `{ status }`
+- dodano zależność `mailparser` 3.9.8 w `apps/backend/package.json` (była tylko pośrednio)
+- `ui-modal` `QaMailRepliesModal` — odpowiedzi z treścią maila, propozycje AI do poprawienia, „Wpisz do Q&A”, „Pomiń mail”, „Podpowiedz AI”, „Sprawdź pocztę”, lista obsłużonych z „Przywróć”; `ui-przycisk` „Odpowiedzi z maila (N)” w nagłówku szuflady Q&A; przy odpowiedzi znacznik „odpowiedź mailem dd.mm”
+
+### słownik
+- dodano `qa-mail-reply*`, `qa-mail-replies` — schema.prisma; `qa-mail-replies-*`, `qa-mail-reply-key-re` — qa-mail-replies(.cron).service.ts; `get-qa-mail-replies`, `post-qa-mail-replies-check`, `post-qa-mail-reply-analyze`, `post-qa-mail-reply-resolve` — qa-mail.controller.ts; `qa-mail-replies-modal`, `qa-mail-reply-card` — QaMailRepliesModal.jsx; `mail-replies`, `answer-questions-from-mail` — WBSHybridTable.jsx
+
+### wytyczne
+- `back-serwis` `QaMailRepliesService.pollMailbox` — INBOX zawsze `readOnly`, żeby odbiór nie oznaczał maili klienta jako przeczytanych w skrzynce użytkownika
+- `ui-funkcja` `answerQuestionsFromMail` — odpowiedzi zapisuje front przez `handleQaChange` + `persistQa` (jak czat), żeby zamykało się zadanie „Wyjaśnić czy…” i odświeżała strategia; backend tylko zmienia status odpowiedzi
+- `back-env` `QA_MAIL_REPLY_CRON` — na produkcji po deployu sprawdzić `npm ls mailparser` w kontenerze (wolumen `node_modules`)
+
+## 2026-11-01 — feat(qa): mail z pytaniami po angielsku (przełącznik PL/EN), klucz „Ref number [IGN-…]” na końcu tematu, pytania bez zamiany na małe litery
+
+### architektura / API
+- zmieniono `back-endpoint` `POST /qa-mail/send` — nowe opcjonalne pole `lang` (`'pl'` | `'en'`, domyślnie `'pl'`): język tematu, powitania, domyślnego wstępu i zamknięcia maila
+- zmieniono temat maila: `<Pytania do zamówienia | Questions regarding order> <zamówienie>[ — element] Ref number [IGN-XXXXXX]` (klucz na końcu zamiast na początku)
+- `ui-modal` `QaMailModal` — przełącznik Polski / English nad treścią; wybór pamiętany w `localStorage` (`qaMailLang`)
+- `ui-funkcja` Q&A w `WBSHybridTable` — pytania zapisywane tak, jak wpisano (tylko trim); odpowiedzi dalej małymi literami (`normalizeLowerText`)
+
+### słownik
+- dodano `QA_MAIL_TEXTS` (`qa-mail-texts`) — qa-mail.service.ts; `MAIL_TEXTS` (`qa-mail-lang-texts`), `lang` (`qa-mail-lang`) — QaMailModal.jsx
+- dodano `wbs-outside-click-close` — WBSHybridTable.jsx (klik poza szufladą zamyka wszystkie szuflady)
+
+### wytyczne
+- `back-stala` `QA_MAIL_TEXTS` / `ui-stala` `MAIL_TEXTS` — domyślny wstęp musi być identyczny w obu miejscach, inaczej przełączenie języka w oknie nie podmieni wstępu
+- `schema-json` `WbsNode.qa` — `question` nie jest normalizowane do małych liter; `answer` jest
+
 ## 2026-11-01 — feat(qa): wysyłka pytań z Q&A mailem do klienta ze skrzynki firmowej (klucz [IGN-…] w temacie, kopia w „Wysłanych”)
 
 ### schema.prisma

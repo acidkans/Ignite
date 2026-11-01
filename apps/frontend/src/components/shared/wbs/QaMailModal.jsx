@@ -6,6 +6,14 @@ const API_URL = '/api';
 const authJson = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token') || localStorage.getItem('token')}`, 'Content-Type': 'application/json' });
 const fmtDate = (iso) => { try { return new Date(iso).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' }); } catch { return ''; } };
 
+// @anchor qa-mail-lang-texts — podgląd stałych tekstów maila; te same co `QA_MAIL_TEXTS` w qa-mail.service.ts.
+const MAIL_TEXTS = {
+    pl: { greeting: 'Dzień dobry,', intro: (o) => `w związku z zamówieniem „${o}” prosimy o odpowiedź na poniższe pytania.` },
+    en: { greeting: 'Hello,', intro: (o) => `With regard to the order "${o}", we kindly ask you to answer the questions below.` },
+};
+const LANG_KEY = 'qaMailLang';
+const readLang = () => { try { return localStorage.getItem(LANG_KEY) === 'en' ? 'en' : 'pl'; } catch { return 'pl'; } };
+
 // @anchor qa-mail-modal
 // Wysyłka pytań z Q&A mailem do klienta (POST /qa-mail/send) ze skrzynki firmowej użytkownika
 // w domenie zamówienia. `questions` = [{ wbsNodeId, nodeName, pair }] — otwarte pytania węzła/gałęzi;
@@ -18,6 +26,8 @@ export default function QaMailModal({ processNodeId, title, questions, onClose, 
     const [toExtra, setToExtra] = useState('');
     const [cc, setCc] = useState('');
     const [intro, setIntro] = useState('');
+    // @anchor qa-mail-lang — język stałych tekstów maila (temat, powitanie, zamknięcie); pytania idą tak, jak wpisano.
+    const [lang, setLang] = useState(readLang);
     const [sending, setSending] = useState(false);
     const [error, setError] = useState(null);
     const [done, setDone] = useState(null);
@@ -29,7 +39,7 @@ export default function QaMailModal({ processNodeId, title, questions, onClose, 
             .then(j => {
                 if (!alive) return;
                 setCtx(j);
-                setIntro(`w związku z zamówieniem „${j.orderName}” prosimy o odpowiedź na poniższe pytania.`);
+                setIntro(MAIL_TEXTS[readLang()].intro(j.orderName));
                 // Domyślnie adresaci ostatniego maila z pytaniami, inaczej pierwszy kontakt.
                 const last = j.mails?.[0]?.toEmails || [];
                 const known = new Set((j.recipients || []).map(r => r.email));
@@ -43,6 +53,13 @@ export default function QaMailModal({ processNodeId, title, questions, onClose, 
     }, [processNodeId]);
 
     const multiNode = useMemo(() => new Set(questions.map(q => q.wbsNodeId)).size > 1, [questions]);
+    // Zmiana języka podmienia wstęp tylko, gdy to wciąż domyślny tekst — własnego wstępu nie ruszamy.
+    const changeLang = (next) => {
+        if (next === lang) return;
+        if (ctx && intro.trim() === MAIL_TEXTS[lang].intro(ctx.orderName)) setIntro(MAIL_TEXTS[next].intro(ctx.orderName));
+        setLang(next);
+        try { localStorage.setItem(LANG_KEY, next); } catch { /* bez pamięci wyboru */ }
+    };
     const toggle = (set, setter, key) => setter(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
     const send = async () => {
@@ -56,7 +73,7 @@ export default function QaMailModal({ processNodeId, title, questions, onClose, 
         try {
             const r = await fetch(`${API_URL}/qa-mail/send`, {
                 method: 'POST', headers: authJson(),
-                body: JSON.stringify({ processNodeId, to, cc, intro, questions: qs }),
+                body: JSON.stringify({ processNodeId, to, cc, intro, lang, questions: qs }),
             });
             const j = await r.json().catch(() => ({}));
             if (!r.ok) throw new Error(j?.message || `HTTP ${r.status}`);
@@ -136,8 +153,16 @@ export default function QaMailModal({ processNodeId, title, questions, onClose, 
                             </div>
 
                             <div>
-                                <div className="text-[12px] uppercase tracking-wider text-gray-500 mb-1">Treść</div>
-                                <div className="text-gray-400 text-[13px] mb-1">Dzień dobry,</div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <div className="text-[12px] uppercase tracking-wider text-gray-500">Treść</div>
+                                    <div className="flex rounded border border-white/10 overflow-hidden text-[12px]" title="Język maila — pytania zostają tak, jak je wpisano">
+                                        {[['pl', 'Polski'], ['en', 'English']].map(([k, l]) => (
+                                            <button key={k} type="button" onClick={() => changeLang(k)}
+                                                className={`px-2 py-0.5 ${lang === k ? 'bg-sky-600 text-white' : 'text-gray-400 hover:bg-white/10'}`}>{l}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="text-gray-400 text-[13px] mb-1">{MAIL_TEXTS[lang].greeting}</div>
                                 <AutoResizeTextarea value={intro} onChange={e => setIntro(e.target.value)}
                                     className="w-full px-2 py-1 rounded bg-black/30 border border-white/10 focus:outline-none focus:border-sky-400/50 resize-none" />
                             </div>
@@ -158,7 +183,7 @@ export default function QaMailModal({ processNodeId, title, questions, onClose, 
                                     ))}
                                 </div>
                             </div>
-                            <div className="text-gray-500 text-[13px]">Temat dostanie klucz [IGN-…] — po nim Ignite rozpozna odpowiedź klienta.{sender?.hasSignature ? ' Podpis skrzynki zostanie doklejony.' : ''}</div>
+                            <div className="text-gray-500 text-[13px]">Na końcu tematu pojawi się „Ref number [IGN-…]” — po nim Ignite rozpozna odpowiedź klienta.{sender?.hasSignature ? ' Podpis skrzynki zostanie doklejony.' : ''}</div>
                         </>
                     )}
                     {error && <div className="text-red-300">{error}</div>}

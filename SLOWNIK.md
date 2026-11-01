@@ -1158,10 +1158,13 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-modul | PdfModule | apps/backend/src/pdf/pdf.module.ts | @anchor pdf-module |
 | back-funkcja | MailService.sendUserConfirmation | apps/backend/src/mail/mail.service.ts | @anchor mail-send-user-confirmation |
 | back-funkcja | MailService.sendExport | apps/backend/src/mail/mail.service.ts | @anchor mail-send-export |
+| back-funkcja | MailService.exportSender | apps/backend/src/mail/mail.service.ts | @anchor mail-export-sender |
 | back-funkcja | MailService.getRecipients | apps/backend/src/mail/mail.service.ts | @anchor mail-get-recipients |
 | back-controller | MailController | apps/backend/src/mail/mail.controller.ts | @anchor mail-controller |
+| back-endpoint | GET /mail/export-sender/:nodeId | apps/backend/src/mail/mail.controller.ts | @anchor get-mail-export-sender |
 | back-modul | MailModule | apps/backend/src/mail/mail.module.ts | @anchor mail-module |
 | ui-funkcja | exportMail (moduł) | apps/frontend/src/utils/exportMail.js | @anchor export-mail-util |
+| ui-funkcja | fetchExportSender | apps/frontend/src/utils/exportMail.js | @anchor fetch-export-sender |
 | ui-funkcja | downloadBlob | apps/frontend/src/utils/exportMail.js | @anchor download-blob |
 | ui-funkcja | renderHtmlToPdf | apps/frontend/src/utils/exportMail.js | @anchor render-html-to-pdf |
 | ui-funkcja | resolveArtifact | apps/frontend/src/utils/exportMail.js | @anchor resolve-artifact |
@@ -1171,6 +1174,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-input | RecipientInput | apps/frontend/src/components/shared/RecipientInput.jsx | @anchor recipient-input |
 | ui-modal | ExportChoiceModal | apps/frontend/src/components/shared/ExportChoiceModal.jsx | @anchor export-choice-modal |
 | ui-stan | cc (DW w mailu) | apps/frontend/src/components/shared/ExportChoiceModal.jsx | @anchor export-choice-cc |
+| ui-stan | senderInfo (nadawca maila) | apps/frontend/src/components/shared/ExportChoiceModal.jsx | @anchor export-choice-sender |
 | ui-sekcja | archiwizacja maila na OneDrive | apps/frontend/src/components/shared/ExportChoiceModal.jsx | @anchor export-choice-mail-na-od |
 | ui-widok | SmtpSettingsPage | apps/frontend/src/SmtpSettingsPage.jsx | @anchor smtp-settings-page |
 | ui-sekcja | SmtpSettingsPanel | apps/frontend/src/components/shared/SmtpSettingsPanel.jsx | @anchor smtp-settings-panel |
@@ -3389,14 +3393,27 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | schema-pole | QaMail.toEmails | apps/backend/prisma/schema.prisma | @anchor qa-mail-to-emails |
 | schema-json | QaMail.items | apps/backend/prisma/schema.prisma | @anchor qa-mail-items |
 | schema-pole | QaMail.sentCopyError | apps/backend/prisma/schema.prisma | @anchor qa-mail-sent-copy-error |
+| schema-relacja | QaMail.replies | apps/backend/prisma/schema.prisma | @anchor qa-mail-replies |
+| schema-model | QaMailReply | apps/backend/prisma/schema.prisma | @anchor qa-mail-reply |
+| schema-pole | QaMailReply.processNodeId | apps/backend/prisma/schema.prisma | @anchor qa-mail-reply-process-node-id |
+| schema-pole | QaMailReply.messageId | apps/backend/prisma/schema.prisma | @anchor qa-mail-reply-message-id |
+| schema-pole | QaMailReply.matchedBy | apps/backend/prisma/schema.prisma | @anchor qa-mail-reply-matched-by |
+| schema-pole | QaMailReply.text | apps/backend/prisma/schema.prisma | @anchor qa-mail-reply-text |
+| schema-json | QaMailReply.proposals | apps/backend/prisma/schema.prisma | @anchor qa-mail-reply-proposals |
+| schema-pole | QaMailReply.aiError | apps/backend/prisma/schema.prisma | @anchor qa-mail-reply-ai-error |
+| schema-pole | QaMailReply.status | apps/backend/prisma/schema.prisma | @anchor qa-mail-reply-status |
 | schema-relacja | ProcessNode.qaMails | apps/backend/prisma/schema.prisma | @anchor process-node-qa-mails |
 | schema-relacja | UserMailbox.qaMails | apps/backend/prisma/schema.prisma | @anchor user-mailbox-qa-mails |
 | back-funkcja | MailboxesService.senderFor | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-sender-for |
+| back-funkcja | MailboxesService.orderInfo | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-order-info |
+| back-funkcja | MailboxesService.orderSender | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-order-sender |
+| back-funkcja | MailboxesService.sendFromMailbox | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-send-from-mailbox |
 | back-funkcja | MailboxesService.senderName | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-sender-name |
 | back-funkcja | MailboxesService.smtpTransport | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-smtp-transport |
 | back-funkcja | MailboxesService.appendToSent | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-append-to-sent |
 | back-modul | QaMailModule | apps/backend/src/qa-mail/qa-mail.module.ts | @anchor qa-mail-module |
 | back-serwis | QaMailService | apps/backend/src/qa-mail/qa-mail.service.ts | @anchor qa-mail-service |
+| back-stala | QA_MAIL_TEXTS | apps/backend/src/qa-mail/qa-mail.service.ts | @anchor qa-mail-texts |
 | back-funkcja | QaMailService.context | apps/backend/src/qa-mail/qa-mail.service.ts | @anchor qa-mail-context |
 | back-funkcja | QaMailService.send | apps/backend/src/qa-mail/qa-mail.service.ts | @anchor qa-mail-send |
 | back-funkcja | normalizeMailList | apps/backend/src/qa-mail/qa-mail.service.ts | @anchor normalize-mail-list |
@@ -3404,8 +3421,28 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-controller | QaMailController | apps/backend/src/qa-mail/qa-mail.controller.ts | @anchor qa-mail-controller |
 | back-endpoint | GET /qa-mail/order/:processNodeId | apps/backend/src/qa-mail/qa-mail.controller.ts | @anchor get-qa-mail-context |
 | back-endpoint | POST /qa-mail/send | apps/backend/src/qa-mail/qa-mail.controller.ts | @anchor post-qa-mail-send |
+| back-endpoint | GET /qa-mail/replies/:processNodeId | apps/backend/src/qa-mail/qa-mail.controller.ts | @anchor get-qa-mail-replies |
+| back-endpoint | POST /qa-mail/replies/check | apps/backend/src/qa-mail/qa-mail.controller.ts | @anchor post-qa-mail-replies-check |
+| back-endpoint | POST /qa-mail/replies/:id/analyze | apps/backend/src/qa-mail/qa-mail.controller.ts | @anchor post-qa-mail-reply-analyze |
+| back-endpoint | POST /qa-mail/replies/:id/resolve | apps/backend/src/qa-mail/qa-mail.controller.ts | @anchor post-qa-mail-reply-resolve |
+| back-stala | KEY_RE | apps/backend/src/qa-mail/qa-mail-replies.service.ts | @anchor qa-mail-reply-key-re |
+| back-serwis | QaMailRepliesService | apps/backend/src/qa-mail/qa-mail-replies.service.ts | @anchor qa-mail-replies-service |
+| back-funkcja | QaMailRepliesService.pollActive | apps/backend/src/qa-mail/qa-mail-replies.service.ts | @anchor qa-mail-replies-poll-active |
+| back-funkcja | QaMailRepliesService.checkOrder | apps/backend/src/qa-mail/qa-mail-replies.service.ts | @anchor qa-mail-replies-check-order |
+| back-funkcja | QaMailRepliesService.pollMailbox | apps/backend/src/qa-mail/qa-mail-replies.service.ts | @anchor qa-mail-replies-poll-mailbox |
+| back-funkcja | QaMailRepliesService.analyze | apps/backend/src/qa-mail/qa-mail-replies.service.ts | @anchor qa-mail-replies-analyze |
+| back-funkcja | QaMailRepliesService.list | apps/backend/src/qa-mail/qa-mail-replies.service.ts | @anchor qa-mail-replies-list |
+| back-funkcja | QaMailRepliesService.resolve | apps/backend/src/qa-mail/qa-mail-replies.service.ts | @anchor qa-mail-replies-resolve |
+| back-serwis | QaMailRepliesCronService | apps/backend/src/qa-mail/qa-mail-replies-cron.service.ts | @anchor qa-mail-replies-cron-service |
+| back-funkcja | QaMailRepliesCronService.tick | apps/backend/src/qa-mail/qa-mail-replies-cron.service.ts | @anchor qa-mail-replies-cron-run |
 | ui-modal | QaMailModal | apps/frontend/src/components/shared/wbs/QaMailModal.jsx | @anchor qa-mail-modal |
+| ui-stala | MAIL_TEXTS | apps/frontend/src/components/shared/wbs/QaMailModal.jsx | @anchor qa-mail-lang-texts |
+| ui-stan | lang | apps/frontend/src/components/shared/wbs/QaMailModal.jsx | @anchor qa-mail-lang |
 | ui-stan | qaMailNode | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-mail-node |
+| ui-stan | mailReplies / mailRepliesOpen / loadMailReplies | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mail-replies |
+| ui-funkcja | answerQuestionsFromMail | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor answer-questions-from-mail |
+| ui-karta | ReplyCard | apps/frontend/src/components/shared/wbs/QaMailRepliesModal.jsx | @anchor qa-mail-reply-card |
+| ui-modal | QaMailRepliesModal | apps/frontend/src/components/shared/wbs/QaMailRepliesModal.jsx | @anchor qa-mail-replies-modal |
 | ui-funkcja | collectMailQuestions | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor collect-mail-questions |
 | ui-funkcja | applyQaMailSent | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor apply-qa-mail-sent |
 | ui-stan | mailDomains | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-domains |

@@ -131,3 +131,16 @@ export async function sendExport({ blob, filename, to, cc, subject, message, nod
   }
   return await res.json();
 }
+
+// @anchor fetch-export-sender
+// Z jakiego konta pójdzie mail z eksportem: { domain, sender, senderError } — patrz MailService.exportSender.
+// Błąd sieci = null (okno pokazuje wtedy tylko formularz, backend i tak pilnuje zasady).
+export async function fetchExportSender(nodeId) {
+  if (!nodeId) return { domain: null, sender: null, senderError: null };
+  try {
+    const res = await fetch(`${API_URL}/mail/export-sender/${nodeId}`, { headers: { Authorization: `Bearer ${token()}` } });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}

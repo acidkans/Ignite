@@ -297,6 +297,66 @@ export class MailboxesService {
     return m;
   }
 
+  // @anchor mailboxes-order-info
+  // Zamówienie (ProcessNode type='order') nad podanym węzłem i jego „Informacje o zamówieniu”
+  // z domeną poczty. Węzeł spoza drzewa procesów (np. lokalizacja) → null.
+  async orderInfo(nodeId: string) {
+    let id: string | null = nodeId;
+    let orderId: string | null = null;
+    let name = '';
+    for (let i = 0; i < 20 && id; i++) {
+      const n = await this.prisma.processNode.findUnique({ where: { id }, select: { id: true, name: true, type: true, parentId: true } });
+      if (!n) break;
+      if (!orderId) { orderId = n.id; name = n.name; } // bez węzła 'order' wyżej zostaje sam podany węzeł
+      if (String(n.type || '').toLowerCase() === 'order') { orderId = n.id; name = n.name; break; }
+      id = n.parentId;
+    }
+    if (!orderId) return null;
+    const req = await this.prisma.orderRequirements.findFirst({ where: { nodeId: orderId, versionId: null }, include: { mailDomain: true } })
+      || await this.prisma.orderRequirements.findFirst({ where: { nodeId: orderId }, orderBy: { updatedAt: 'desc' }, include: { mailDomain: true } });
+    return { orderId, orderName: name, req };
+  }
+
+  // @anchor mailboxes-order-sender
+  // Zasada wysyłki z konta firmowego: zamówienie z domeną poczty → mail idzie ze skrzynki
+  // użytkownika w tej domenie (podpis, kopia w „Wysłanych”). Bez skrzynki = błąd do pokazania,
+  // nie cicha wysyłka z systemu. Zamówienie bez domeny (albo węzeł spoza zamówienia) → `domain: null`,
+  // a wołający decyduje, czy wolno wysłać z konta systemowego.
+  async orderSender(userId: string, nodeId: string | null | undefined) {
+    const info = nodeId ? await this.orderInfo(nodeId).catch(() => null) : null;
+    const domain = info?.req?.mailDomain || null;
+    if (!domain) return { info, domain: null, mailbox: null, sender: null, senderError: null as string | null };
+    try {
+      const m = await this.senderFor(userId, domain.id);
+      const sender = { email: m.email, name: await this.senderName(m), verified: !!m.verifiedAt, sentFolder: m.sentFolder, hasSignature: !!m.signatureHtml };
+      return { info, domain, mailbox: m, sender, senderError: null as string | null };
+    } catch (e: any) {
+      return { info, domain, mailbox: null, sender: null, senderError: (e?.message || String(e)) as string | null };
+    }
+  }
+
+  // @anchor mailboxes-send-from-mailbox
+  // Wysyłka ze skrzynki firmowej: MIME budowany raz (obrazki podpisu jako CID), SMTP skrzynki,
+  // ten sam MIME do „Wysłane”. `html` to treść BEZ podpisu — podpis dokleja się tutaj.
+  async sendFromMailbox(m: any, mail: { to: string[]; cc?: string[]; subject: string; html: string; text?: string; attachments?: any[]; messageId?: string }) {
+    const font = 'font-family:Calibri,Arial,sans-serif;font-size:11pt';
+    const html = mail.html + (m.signatureHtml ? `<br><div style="${font}">${m.signatureHtml}</div>` : '');
+    const built = await nodemailer.createTransport({ streamTransport: true, buffer: true }).sendMail({
+      from: { name: await this.senderName(m), address: m.email },
+      to: mail.to, cc: mail.cc?.length ? mail.cc : undefined,
+      subject: mail.subject, html, text: mail.text,
+      attachments: mail.attachments, messageId: mail.messageId, attachDataUrls: true,
+    });
+    const raw = built.message as Buffer;
+    try {
+      await this.smtpTransport(m).sendMail({ envelope: { from: m.email, to: [...mail.to, ...(mail.cc || [])] }, raw });
+    } catch (e: any) {
+      throw new BadRequestException(`Nie udało się wysłać ze skrzynki ${m.email}: ${e?.message || e}`);
+    }
+    const sentCopyError = await this.appendToSent(m, raw);
+    return { raw, sentCopyError };
+  }
+
   // @anchor mailboxes-sender-name
   // Nazwa w „Od:”: nazwa skrzynki, inaczej imię i nazwisko właściciela, inaczej adres.
   async senderName(m: { userId: string; email: string; displayName: string | null }) {

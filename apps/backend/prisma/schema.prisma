@@ -697,10 +697,46 @@ model QaMail {
   sentAt        DateTime     @default(now())
   processNode   ProcessNode  @relation(fields: [processNodeId], references: [id], onDelete: Cascade)
   mailbox       UserMailbox? @relation(fields: [mailboxId], references: [id], onDelete: SetNull)
+  /// @anchor qa-mail-replies
+  replies       QaMailReply[]
 
   @@index([processNodeId])
   @@index([mailboxId])
   @@map("qa_mails")
+}
+
+/// @anchor qa-mail-reply
+/// Odpowiedź klienta na `QaMail`, odebrana z INBOX skrzynki nadawcy (cron IMAP albo „Sprawdź pocztę”).
+/// AI proponuje odpowiedzi na wysłane pytania (`proposals`); użytkownik je poprawia i wpisuje do Q&A.
+model QaMailReply {
+  id            String    @id @default(uuid())
+  qaMailId      String
+  /// @anchor qa-mail-reply-process-node-id
+  processNodeId String // zamówienie — kopia z QaMail, do listy odpowiedzi zamówienia
+  /// @anchor qa-mail-reply-message-id
+  messageId     String    @unique // Message-ID odpowiedzi bez <> — ten sam mail nie zapisze się drugi raz
+  /// @anchor qa-mail-reply-matched-by
+  matchedBy     String // 'header' (In-Reply-To/References) | 'subject' (Ref number [IGN-…])
+  fromEmail     String
+  fromName      String?
+  subject       String
+  /// @anchor qa-mail-reply-text
+  text          String // treść tekstowa (z HTML, gdy mail nie ma części text/plain)
+  receivedAt    DateTime
+  /// @anchor qa-mail-reply-proposals
+  proposals     String? // JSON: [{ wbsNodeId, qaId, question, answer }] — propozycje AI
+  /// @anchor qa-mail-reply-ai-error
+  aiError       String? // AI nie zadziałało — odpowiedzi wpisuje się ręcznie
+  /// @anchor qa-mail-reply-status
+  status        String    @default("NEW") // NEW | DONE (wpisane do Q&A) | IGNORED
+  handledById   String?
+  handledAt     DateTime?
+  createdAt     DateTime  @default(now())
+  qaMail        QaMail    @relation(fields: [qaMailId], references: [id], onDelete: Cascade)
+
+  @@index([processNodeId, status])
+  @@index([qaMailId])
+  @@map("qa_mail_replies")
 }
 
 /// Konfiguracja serwerów poczty wychodzącej (SMTP) — jeden wiersz na profil.
