@@ -27,28 +27,92 @@ const imageFileToDataUrl = (file) => new Promise((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 
+// @anchor clean-pasted-html
+// HTML wklejony z Outlooka/Worda: akapity <p class=MsoNormal> mają w Wordzie margines 0 z arkusza stylów,
+// który ginie przy kopiowaniu — w mailu dostają domyślny odstęp 1em. Wpisujemy margin:0 wprost
+// w akapit, wycinamy klasy Mso, <o:p>, komentarze i <style>. Kolory/czcionki inline zostają.
+const cleanPastedHtml = (html) => {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('style, meta, link, script, title, xml').forEach((n) => n.remove());
+  doc.querySelectorAll('*').forEach((n) => {
+    if (n.tagName.includes(':')) { n.replaceWith(...n.childNodes); return; } // <o:p>, <v:shape>…
+    n.removeAttribute('class');
+    if (n.tagName === 'P') n.style.margin = '0';
+  });
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_COMMENT);
+  const comments = []; while (walker.nextNode()) comments.push(walker.currentNode);
+  comments.forEach((c) => c.remove());
+  return doc.body.innerHTML.replace(/<!--StartFragment-->|<!--EndFragment-->/g, '').trim();
+};
+
 // @anchor signature-editor
 // Edytor podpisu (contentEditable): tekst z formatowaniem wklejonym np. z Outlooka, obrazek wklejony
 // ze schowka (Ctrl+V) albo z pliku. Niekontrolowany — HTML wczytany raz, zmiany idą przez onChange.
+// Klik w obrazek → suwak szerokości. Szerokość idzie w atrybut width i style (Outlook czyta atrybut).
 function SignatureEditor({ value, onChange }) {
   const ref = useRef(null);
   const fileRef = useRef(null);
+  const [selImg, setSelImg] = useState(null);   // zaznaczony <img> w edytorze
+  const [imgWidth, setImgWidth] = useState(0);
   useEffect(() => { if (ref.current) ref.current.innerHTML = value || ''; }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Znacznik zaznaczenia (data-sel) jest tylko do podświetlenia w edytorze — nie trafia do zapisu.
+  const emit = () => onChange(ref.current.innerHTML.replace(/\sdata-sel="1"/g, ''));
+
+  const selectImg = (img) => {
+    ref.current?.querySelectorAll('img[data-sel]').forEach((i) => i.removeAttribute('data-sel'));
+    setSelImg(img);
+    if (img) { img.setAttribute('data-sel', '1'); setImgWidth(Math.round(img.getBoundingClientRect().width)); }
+  };
+
+  // @anchor signature-set-image-width
+  const setWidth = (w) => {
+    if (!selImg) return;
+    const px = Math.max(20, Math.min(600, parseInt(w, 10) || 20));
+    setImgWidth(px);
+    selImg.setAttribute('width', px);
+    selImg.removeAttribute('height');
+    selImg.style.width = `${px}px`;
+    selImg.style.height = 'auto';
+    emit();
+  };
 
   const insertImages = async (files) => {
     ref.current?.focus();
     for (const f of files) {
       const src = await imageFileToDataUrl(f).catch(() => null);
-      if (src) document.execCommand('insertHTML', false, `<img src="${src}" alt="" style="max-width:100%;height:auto">`);
+      if (!src) continue;
+      // Startowo najwyżej 200 px — typowy rozmiar logo w stopce; suwakiem można powiększyć.
+      const w = await new Promise((r) => { const i = new Image(); i.onload = () => r(Math.min(200, i.width)); i.onerror = () => r(200); i.src = src; });
+      document.execCommand('insertHTML', false, `<img src="${src}" alt="" width="${w}" style="width:${w}px;height:auto;max-width:100%">`);
     }
-    onChange(ref.current.innerHTML);
+    emit();
   };
 
-  const onPaste = (e) => {
+  const onPaste = async (e) => {
     const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith('image/'));
-    if (!files.length) return; // tekst / HTML — wkleja przeglądarka
+    const html = e.clipboardData?.getData('text/html');
+    if (files.length && !html) { e.preventDefault(); insertImages(files); return; }
+    if (!html) return; // zwykły tekst — wkleja przeglądarka
     e.preventDefault();
-    insertImages(files);
+    // Obrazki z Outlooka mają w HTML ścieżkę file:// / cid: — podmieniamy je kolejno na pliki ze schowka.
+    const srcs = await Promise.all(files.map((f) => imageFileToDataUrl(f).catch(() => null)));
+    const doc = new DOMParser().parseFromString(cleanPastedHtml(html), 'text/html');
+    doc.querySelectorAll('img').forEach((img) => {
+      if (/^(data:|https?:)/i.test(img.getAttribute('src') || '')) return;
+      const src = srcs.shift();
+      if (src) img.setAttribute('src', src); else img.remove();
+    });
+    ref.current?.focus();
+    document.execCommand('insertHTML', false, doc.body.innerHTML);
+    emit();
+  };
+
+  // @anchor signature-compact-paragraphs
+  // Podpis wklejony przed czyszczeniem ma akapity z domyślnym odstępem — jednym klikiem zbijamy je.
+  const compactParagraphs = () => {
+    ref.current?.querySelectorAll('p').forEach((p) => { p.style.margin = '0'; });
+    emit();
   };
 
   return (
@@ -57,12 +121,26 @@ function SignatureEditor({ value, onChange }) {
         ref={ref}
         contentEditable
         suppressContentEditableWarning
-        onInput={() => onChange(ref.current.innerHTML)}
+        onInput={() => { if (selImg && !ref.current.contains(selImg)) setSelImg(null); emit(); }}
         onPaste={onPaste}
+        onClick={(e) => selectImg(e.target.tagName === 'IMG' ? e.target : null)}
         data-placeholder="Jan Kowalski · tel. … — wklej też logo (Ctrl+V)"
-        className="min-h-[70px] max-h-[260px] overflow-auto px-2.5 py-1.5 text-[13px] text-white focus:outline-none overflow-x-hidden [&_img]:!max-w-full [&_img]:!h-auto [&_img]:inline-block empty:before:content-[attr(data-placeholder)] empty:before:text-gray-600"
+        className="min-h-[70px] max-h-[320px] overflow-auto rounded-t-lg bg-white px-3 py-2 text-[11pt] leading-normal text-black [font-family:Calibri,Arial,sans-serif] focus:outline-none overflow-x-hidden [&_p]:my-[1em] [&_a]:text-blue-700 [&_a]:underline [&_img]:!max-w-full [&_img]:!h-auto [&_img]:inline-block [&_img]:cursor-pointer [&_img[data-sel]]:outline [&_img[data-sel]]:outline-2 [&_img[data-sel]]:outline-blue-500 empty:before:content-[attr(data-placeholder)] empty:before:text-gray-400"
       />
-      <div className="flex justify-end border-t border-white/5 px-1.5 py-1">
+      <div className="flex items-center gap-2 border-t border-white/5 px-1.5 py-1">
+        {selImg ? (
+          <>
+            <span className="text-[11px] text-gray-400 shrink-0">Szerokość obrazka</span>
+            <input type="range" min={20} max={600} step={5} value={imgWidth} onChange={(e) => setWidth(e.target.value)} className="flex-1 accent-teal-500" />
+            <input type="number" min={20} max={600} value={imgWidth} onChange={(e) => setWidth(e.target.value)} className="w-14 bg-black/40 border border-white/10 rounded px-1 py-0.5 text-[11px] text-white" />
+            <span className="text-[11px] text-gray-500">px</span>
+          </>
+        ) : (
+          <span className="text-[11px] text-gray-600 flex-1">Kliknij obrazek, żeby zmienić jego wielkość.</span>
+        )}
+        <button type="button" onClick={compactParagraphs} title="Usuwa odstęp pod każdym akapitem (jak w Outlooku)" className="px-1.5 py-0.5 text-[11px] rounded text-gray-400 hover:text-white hover:bg-white/10 shrink-0">
+          Zbij odstępy
+        </button>
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { insertImages([...e.target.files]); e.target.value = ''; }} />
         <button type="button" onClick={() => fileRef.current?.click()} className="flex items-center gap-1 px-1.5 py-0.5 text-[11px] rounded text-gray-400 hover:text-white hover:bg-white/10">
           <ImagePlus size={12} /> Wstaw obrazek

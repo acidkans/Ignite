@@ -1382,6 +1382,10 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | orderTeam (RequirementsTab) | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-order-team |
 | ui-funkcja | removeFromTeam | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-remove-from-team |
 | ui-funkcja | renderContactTeamStatus | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor contact-team-status |
+| ui-funkcja | suggestUsers | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor suggest-users |
+| ui-funkcja | handlePmNameChange | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor handle-pm-name-change |
+| ui-funkcja | selectUserForPm | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor select-user-for-pm |
+| ui-funkcja | renderUserSuggest | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor render-user-suggest |
 | ui-sekcja | pasek zespołu zamówienia w Kontaktach | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor order-team-bar |
 | back-endpoint | PATCH /my-tasks/:id | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-update-endpoint |
 | back-endpoint | DELETE /my-tasks/:id | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-delete-endpoint |
@@ -3374,6 +3378,9 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-funkcja | MyMailboxesPanel.save | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor my-mailboxes-save |
 | ui-funkcja | imageFileToDataUrl | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor image-file-to-data-url |
 | ui-sekcja | SignatureEditor | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor signature-editor |
+| ui-funkcja | SignatureEditor.setWidth | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor signature-set-image-width |
+| ui-funkcja | cleanPastedHtml | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor clean-pasted-html |
+| ui-przycisk | SignatureEditor „Zbij odstępy” (compactParagraphs) | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor signature-compact-paragraphs |
 | ui-stan | mailDomains | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-domains |
 | ui-stan | mailCoverage | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-coverage |
 | ui-dropdown | requirements-mail-domain-bar | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-domain-bar |
