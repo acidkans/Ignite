@@ -1472,6 +1472,19 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // Kontener tabeli — zawęża zapytania nawigacji klawiaturowej (grid-nav) do tego drzewa,
     // zamiast przeszukiwać cały document (poprzednia wersja gubiła fokus poza tabelą).
     const tableWrapperRef = useRef(null);
+    // @anchor wbs-view-width
+    // Widoczna szerokość obszaru tabeli → CSS `--wbs-view-w`. Szuflada (colSpan na wszystkie kolumny)
+    // bez tego miała szerokość całej tabeli — przy węższym oknie tabela przewija się w poziomie
+    // i prawa część szuflady była poza ekranem.
+    useEffect(() => {
+        const wrap = tableWrapperRef.current;
+        if (!wrap || typeof ResizeObserver === 'undefined') return;
+        const set = () => wrap.style.setProperty('--wbs-view-w', `${wrap.clientWidth}px`);
+        set();
+        const ro = new ResizeObserver(set);
+        ro.observe(wrap);
+        return () => ro.disconnect();
+    }, []);
 
     // @anchor start-col-resize — przeciąganie szerokości kolumny: zdarzenia wskaźnika (mysz, palec,
     // rysik). Uchwyt ma `touch-action: none` i przechwytuje wskaźnik, więc gest palcem nie przewija
@@ -2270,7 +2283,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     </td>
                 ) : (
                     <td
-                        className="px-2 py-2.5 min-w-[96px] w-[96px]"
+                        className="px-2 py-2.5"
                         onClick={e => { e.stopPropagation(); setSelectedNodeId(node.id); }}
                     >
                         {/* Kropki = tylko przeniesienie, żółta strzałka = tylko rozwinięcie. */}
@@ -2901,7 +2914,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     style={drawerSpine ? { '--wbs-spine': drawerSpine } : undefined}
                 >
                     <td colSpan={TOTAL_COLS} className={`px-2 pb-2 ${DRAWER.accent.task.cell}`}>
-                        <div data-chat-drawer={drawerTab === 'chat' ? node.id : undefined} className={`${DRAWER.card} ${DRAWER.accent.task.card} ${drawerTab === 'chat' ? DRAWER.chatBar : ''}`}>
+                        {/* Sticky + szerokość widocznego obszaru — szuflada zawsze mieści się w oknie, także gdy tabela przewija się w poziomie */}
+                        <div
+                            data-chat-drawer={drawerTab === 'chat' ? node.id : undefined}
+                            className={`${DRAWER.card} ${DRAWER.accent.task.card} ${drawerTab === 'chat' ? DRAWER.chatBar : ''}`}
+                            style={{ position: 'sticky', left: 8, maxWidth: 'calc(var(--wbs-view-w, 100%) - 16px)' }}
+                        >
                             <div className={`${DRAWER.cardHead} border-b border-emerald-400/20`}>
                                 <span className={`${DRAWER.cardTitle} text-[13px] ${DRAWER.accent.task.title} flex items-center gap-1.5`}>
                                     {drawerTab === 'tasks'
@@ -2993,8 +3011,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 <table className={`text-base border-collapse ${Object.values(nodeDrawerTab).some(Boolean) ? 'wbs-focus' : ''}`} style={{ tableLayout: 'fixed', width: '100%' }}>
                     <colgroup>
                         {/* Kolumna uchwytu/rozwijania — na dotyku mieści uchwyt przeniesienia (36 px)
-                            i przycisk rozwijania (48 px), oba w rozmiarze pod palec */}
-                        <col style={{ width: isTouch ? 84 : 32 }} />
+                            i przycisk rozwijania (48 px), oba w rozmiarze pod palec. Mysz: kropki + strzałka
+                            (~56 px) — węższa kolumna wypychała strzałkę pod komórkę nazwy i klik w nią nie działał */}
+                        <col style={{ width: isTouch ? 84 : 56 }} />
                         <col style={{ width: colWidths.nazwa }} />
                         <col style={{ width: colWidths.typ }} />
                         <col style={{ width: colWidths.ilosc }} />

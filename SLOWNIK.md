@@ -1349,6 +1349,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | orderTeamMembers | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor wbs-order-team-members |
 | ui-stala | DRAWER.accent.task | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor drawer-accent-task |
 | ui-stan | colWidths (localStorage wbs-hybrid-col-widths) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-col-widths-storage |
+| ui-funkcja | --wbs-view-w (ResizeObserver szerokości obszaru tabeli) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-view-width |
 | ui-funkcja | startColResize | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor start-col-resize |
 | ui-dropdown | TaskTimePicker | apps/frontend/src/components/shared/wbs/TaskTimePicker.jsx | @anchor task-time-picker |
 | ui-modal | TaskModal | apps/frontend/src/components/shared/wbs/TaskModal.jsx | @anchor task-modal |
