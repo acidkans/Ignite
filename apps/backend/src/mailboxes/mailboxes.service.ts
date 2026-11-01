@@ -11,6 +11,21 @@ export const normalizeMailDomain = (v: any) => String(v || '').trim().toLowerCas
 const toPort = (v: any) => (v === '' || v == null ? null : parseInt(String(v), 10) || null);
 const toBool = (v: any) => v === true || v === 'true';
 
+// @anchor clean-mail-signature
+// Podpis z edytora: bez skryptów, ramek i handlerów on*; obrazki zostają jako data:URI (wklejone
+// z schowka). Pusty edytor („<br>”, same spacje) = brak podpisu.
+export const cleanMailSignature = (v: any) => {
+  let html = String(v || '')
+    .replace(/<(script|style|iframe|object|embed)[\s\S]*?<\/\1>/gi, '')
+    .replace(/<(script|iframe|object|embed|link|meta)\b[^>]*>/gi, '')
+    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(href|src)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, '$1="#"')
+    .trim();
+  if (!html.replace(/<br\s*\/?>|&nbsp;|<\/?(div|p|span)[^>]*>/gi, '').trim() && !/<img\b/i.test(html)) html = '';
+  if (html.length > 3_000_000) throw new BadRequestException('Podpis jest za duży (obrazki łącznie do ~2 MB).');
+  return html || null;
+};
+
 // @anchor mailboxes-service
 // Domeny pocztowe (ADMIN) i skrzynki użytkowników w tych domenach. Hasła tylko w jedną stronę:
 // zapis szyfruje, odczyt zwraca flagę hasPassword. Test łączy się z SMTP i IMAP i wykrywa „Wysłane”.
@@ -121,6 +136,7 @@ export class MailboxesService {
         displayName: String(dto?.displayName || '').trim() || null,
         username: String(dto?.username || '').trim() || null,
         password: dto?.password ? encryptSecret(String(dto.password)) : null,
+        signatureHtml: cleanMailSignature(dto?.signatureHtml),
       },
       include: { domain: { select: { id: true, domain: true, label: true, isActive: true } } },
     });
@@ -137,6 +153,7 @@ export class MailboxesService {
     if ('displayName' in (dto || {})) data.displayName = String(dto.displayName || '').trim() || null;
     if ('username' in (dto || {})) data.username = String(dto.username || '').trim() || null;
     if (dto?.password) data.password = encryptSecret(String(dto.password));
+    if ('signatureHtml' in (dto || {})) data.signatureHtml = cleanMailSignature(dto.signatureHtml);
     if (data.email !== undefined || data.username !== undefined || data.password) {
       Object.assign(data, { verifiedAt: null, lastError: null, sentFolder: null, imapLastUid: null, imapUidValidity: null });
     }
