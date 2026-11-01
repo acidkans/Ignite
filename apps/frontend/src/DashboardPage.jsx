@@ -6,7 +6,6 @@ import SiteInfoTab from './components/shared/SiteInfoTab';
 import NodeInfoTab from './components/shared/NodeInfoTab';
 import SchematTab from './components/shared/SchematTab';
 import LogistykaMaterialListsTab from './components/shared/LogistykaMaterialListsTab';
-import RealizationTab from './components/shared/RealizationTab';
 import RealizationNewTab from './components/shared/RealizationNewTab';
 import MaterialDatabaseTab from './components/shared/MaterialDatabaseTab';
 import OffersTab from './components/shared/OffersTab';
@@ -85,6 +84,8 @@ export default function DashboardPage() {
 
     const [activeTab, _setActiveTab] = useState(() => {
         const saved = sessionStorage.getItem('erp_activeTab');
+        // Stara zakładka „Realizacja” usunięta — zapamiętany wybór przechodzi na nowy układ.
+        if (saved === 'realization') return 'realizationNew';
         if (saved) return saved;
         return isWorker ? 'unified' : 'files';
     });
@@ -93,7 +94,7 @@ export default function DashboardPage() {
         _setActiveTab(tab);
     };
     const [tabOrder, setTabOrder] = useState(() => {
-        const ALL_TABS = ['files', 'financialFiles', 'unified', 'realization', 'realizationNew', 'schematics', 'materialDatabase'];
+        const ALL_TABS = ['files', 'financialFiles', 'unified', 'realizationNew', 'schematics', 'materialDatabase'];
         try {
             const saved = JSON.parse(localStorage.getItem('tabOrder') || 'null');
             if (!saved) return ALL_TABS;
@@ -599,7 +600,7 @@ export default function DashboardPage() {
         ? 'Szukaj w strukturze, budżecie, materiałach…'
         : activeTab === 'materialDatabase'
         ? 'Szukaj w materiałach i kartach katalogowych…'
-        : activeTab === 'realization' || activeTab === 'realizationNew'
+        : activeTab === 'realizationNew'
         // Wyszukiwarka nagłówka filtruje tabelę realizacji także po treści WPISÓW —
         // pozycję najczęściej szuka się po numerze faktury albo dostawcy, nie po nazwie.
         ? 'Szukaj po pozycji, produkcie, dostawcy, nr FV…'
@@ -1031,18 +1032,9 @@ export default function DashboardPage() {
                         unified: baselineAccepted
                             ? { label: 'planowanie', color: 'green', activeColor: 'text-green-400', idleColor: 'text-green-400/60 hover:text-green-300', bar: 'bg-green-500', shadow: '34,197,94', cond: isOrder }
                             : { label: 'planowanie', color: 'cyan',  activeColor: 'text-cyan-400',  bar: 'bg-cyan-500',  shadow: '6,182,212',  cond: isOrder },
-                        // @anchor tab-realization — rozliczenie zakupów i wykonania wobec wyceny.
-                        // Pracownik nie dopisuje wpisów (backend puszcza ADMIN/MANAGER/LOGISTYK),
-                        // więc zakładki nie widzi; wewnątrz liście inne niż materiał i sprzęt
-                        // filtruje sam `RealizationTab` po roli.
-                        realization: baselineAccepted
-                            ? { label: 'Realizacja', color: 'orange', activeColor: 'text-orange-400', idleColor: 'text-orange-400/60 hover:text-orange-300', bar: 'bg-orange-500', shadow: '249,115,22', cond: isOrder && !isWorker }
-                            : { label: 'Realizacja', color: 'teal',   activeColor: 'text-teal-400',   bar: 'bg-teal-500',   shadow: '20,184,166', cond: isOrder && !isWorker },
                         // @anchor tab-realization-new — nowy układ Realizacji (trzy panele, 14 kolumn,
-                        // szuflada zakupów). Stoi obok dzisiejszej zakładki, żeby dało się porównać oba
-                        // układy na tym samym zamówieniu. Podgląd po e-mailu został zdjęty — zakładkę
-                        // widzi KAŻDY, kto widzi zamówienie, także pracownik (dzisiejsza „Realizacja"
-                        // jest przed nim schowana). Zapis i tak ogranicza rola: `RealizationNewTab`
+                        // szuflada zakupów). Jedyna zakładka realizacji — stara „Realizacja” usunięta 2026-11-01.
+                        // Widzi ją KAŻDY, kto widzi zamówienie, także pracownik. Zapis ogranicza rola: `RealizationNewTab`
                         // wpuszcza do edycji ADMIN/MANAGER/LOGISTYK, a analizę kwotową pokazuje
                         // wyłącznie ADMIN i MANAGER.
                         realizationNew:  { label: 'Realizacja_new',   color: 'fuchsia', activeColor: 'text-fuchsia-400', idleColor: 'text-fuchsia-400/50 hover:text-fuchsia-300', bar: 'bg-fuchsia-500', shadow: '217,70,239', cond: isOrder },
@@ -1141,21 +1133,6 @@ export default function DashboardPage() {
                                     onWbsDataLoad={(data) => setWbsDataCache(prev => ({ ...prev, [activeAreaId]: data }))}
                                     setLeftVisible={setLeftVisible}
                                     setAiVisible={setAiVisible}
-                                    oneDriveFolderName={activeNode?.oneDriveFolderName || null}
-                                />
-                            </div>
-                        )}
-                        {activeTab === 'realization' && isOrder && (
-                            <div className="absolute inset-0 overflow-hidden">
-                                <RealizationTab
-                                    key={`realization-${activeAreaId}-${realizationVersionId}`}
-                                    nodeId={activeAreaId}
-                                    versionId={realizationVersionId}
-                                    planLabel={realizationPlanLabel}
-                                    searchQuery={searchQuery}
-                                    userRoles={currentRoles}
-                                    orderName={activeNode?.name || ''}
-                                    accepted={baselineAccepted}
                                     oneDriveFolderName={activeNode?.oneDriveFolderName || null}
                                 />
                             </div>
@@ -1352,7 +1329,7 @@ export default function DashboardPage() {
             `realization-baseline-version`), więc wybranie starej wersji w nagłówku nie ma
             czego na nich blokować — dane pod spodem i tak są z baselinu. */}
         <SnapshotEditGuard
-            inactive={isInactiveSnapshot && activeTab !== 'realization' && activeTab !== 'realizationNew'}
+            inactive={isInactiveSnapshot && activeTab !== 'realizationNew'}
             versionLabel={currentVersion?.label}
             containerRef={contentRef}
         />

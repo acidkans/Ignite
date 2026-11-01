@@ -193,7 +193,15 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // z powiadomienia, dopóki użytkownik nie opuści zamówienia.
     useEffect(() => {
         if (!initialSection) return;
-        setExpandedSection(initialSection);
+        // 'all-tasks' (widok startowy aplikacji) = Struktura projektu + okno „Zadania”; auto-Q&A
+        // tego zamówienia oznaczamy jako pokazane, żeby nie przykryło okna zadań.
+        if (initialSection === 'all-tasks') {
+            if (nodeId) sessionStorage.setItem(`wbsQaAutoShown:${nodeId}`, '1');
+            setExpandedSection('wbs-hybrid');
+            setAllTasksOpen(true);
+        } else {
+            setExpandedSection(initialSection);
+        }
         onInitialSectionApplied?.();
     }, [initialSection]); // eslint-disable-line react-hooks/exhaustive-deps
     // @anchor wbs-qa-tree-open

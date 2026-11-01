@@ -203,6 +203,28 @@ export default function MainLayout({ onLogout }) {
         window.history.replaceState({}, '', window.location.pathname);
     }, []);
 
+    // @anchor default-start-view — świeże otwarcie aplikacji (brak węzła w sessionStorage, brak celu
+    // z powiadomienia) startuje na zamówieniu DURR → Planowanie → okno „Zadania”. Odświeżenie strony
+    // zostaje na bieżącym węźle; kto nie widzi DURR w drzewie, startuje jak dotąd.
+    const startViewDoneRef = useRef(!!activeAreaId || new URLSearchParams(window.location.search).has('orderId'));
+    useEffect(() => {
+        if (startViewDoneRef.current || loadingMenu) return;
+        startViewDoneRef.current = true;
+        const findOrder = (nodes) => {
+            for (const n of nodes || []) {
+                if (n.type === 'order' && (n.name || '').trim().toUpperCase() === 'DURR') return n;
+                const found = findOrder(n.children);
+                if (found) return found;
+            }
+            return null;
+        };
+        const durr = findOrder(menuTree);
+        if (!durr) return;
+        pendingTabRef.current = 'unified';
+        pendingSectionRef.current = 'all-tasks';
+        handleNodeChange(durr.id);
+    }, [loadingMenu, menuTree]); // eslint-disable-line react-hooks/exhaustive-deps
+
     // --- 4. Node Management Handlers ---
     const handleAddNode = (parentNode) => {
         setSelectedParent(parentNode);
