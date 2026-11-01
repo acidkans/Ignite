@@ -911,7 +911,8 @@ function WbsChatDrawer({ wbsNodeId, processNodeId, onChanged, branchNames, nodeN
 }
 
 // @anchor wbs-tasks-drawer
-function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
+// `branch` — gałąź główna: zadania całego poddrzewa (jak eksport PDF strategii), z nazwą pozycji przy zadaniu.
+function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged, branch = false }) {
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     const currentUserId = token ? (() => { try { return JSON.parse(atob(token.split('.')[1])).sub; } catch { return null; } })() : null;
     const [tasks, setTasks] = useState(null);
@@ -923,14 +924,14 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
 
     const load = useCallback(async () => {
         try {
-            const res = await fetch(`/api/my-tasks/by-wbs-node/${wbsNodeId}`, { headers: { Authorization: `Bearer ${token}` } });
+            const res = await fetch(`/api/my-tasks/by-wbs-node/${wbsNodeId}${branch ? '?subtree=1' : ''}`, { headers: { Authorization: `Bearer ${token}` } });
             if (!res.ok) throw new Error('Błąd pobierania zadań');
             setTasks(await res.json());
         } catch (err) {
             setError(err.message);
             setTasks([]);
         }
-    }, [wbsNodeId, token]);
+    }, [wbsNodeId, token, branch]);
     useEffect(() => { load(); }, [load]);
 
     const toggleDone = async (t) => {
@@ -969,7 +970,7 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
             {tasks === null ? (
                 <p className="text-gray-500 text-[14px] flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Wczytywanie…</p>
             ) : tasks.length === 0 ? (
-                <p className="text-gray-600 text-[14px] italic">Brak zadań przypiętych do tej pozycji.</p>
+                <p className="text-gray-600 text-[14px] italic">{branch ? 'Brak zadań w tej gałęzi.' : 'Brak zadań przypiętych do tej pozycji.'}</p>
             ) : (
                 <ul className="flex flex-col">
                     {tasks.map(t => {
@@ -993,6 +994,7 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
                                     title="Otwórz zadanie"
                                     className={`flex-1 min-w-0 text-left text-[15px] break-words hover:underline ${done ? 'line-through text-gray-500' : 'text-gray-200'}`}
                                 >
+                                    {branch && t.wbsNodeId !== wbsNodeId && t.wbsNode?.name && <span className="block text-[12px] text-gray-500 uppercase tracking-wide no-underline">{t.wbsNode.name}</span>}
                                     {t.title}
                                     {t.description && <span className="block text-[13px] text-gray-500 italic whitespace-pre-wrap no-underline">{t.description}</span>}
                                 </button>
@@ -2843,7 +2845,15 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             </button>
                         )}
                         {(() => {
-                            const ts = taskSummary[node.id];
+                            // Gałąź główna: suma zadań całego poddrzewa (szuflada pokazuje je wszystkie).
+                            const ts = depth === 0 && hasChildren
+                                ? [node.id, ...Object.keys(collectBranchNames(node))].reduce((acc, id) => {
+                                    const s = taskSummary[id];
+                                    if (!s) return acc;
+                                    const a = acc || { open: 0, overdue: 0, done: 0 };
+                                    return { open: a.open + s.open, overdue: a.overdue + s.overdue, done: a.done + s.done };
+                                }, null)
+                                : taskSummary[node.id];
                             const key = drawerStatusKey(ts);
                             const n = ts ? (ts.open || ts.done) : 0;
                             return (
@@ -3430,7 +3440,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             </div>
                             <div className="px-3 pt-2 pb-3">
                                 {drawerTab === 'tasks' ? (
-                                    <WbsTasksDrawer wbsNodeId={node.id} processNodeId={processNodeId} onChanged={loadTaskSummary} />
+                                    <WbsTasksDrawer wbsNodeId={node.id} processNodeId={processNodeId} onChanged={loadTaskSummary} branch={depth === 0 && hasChildren} />
                                 ) : drawerTab === 'real' ? (
                                     <WbsRealizationDrawer wbsNode={node} processNodeId={processNodeId} realization={realization} />
                                 ) : drawerTab === 'chat' ? (
