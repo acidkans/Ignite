@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
-import { X, HelpCircle, Plus, Search, CloudOff, ChevronLeft } from 'lucide-react';
+import { X, HelpCircle, Plus, Search, CloudOff, ChevronLeft, Mail } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { enqueueWbsQa, getPendingByType } from '../../../services/repos/outboxRepo';
 import { getMeta, setMeta } from '../../../services/db';
+import { ensureQaIds } from './strategyQuestions';
+import QaMailModal from './QaMailModal';
 
 // Wspólny edytowalny widok Q&A całego drzewa WBS — jeden komponent dla mobile
 // (pełny ekran) i desktopu (modal 3/4). Zapis per węzeł: PATCH /wbs-nodes/:id,
@@ -20,6 +22,7 @@ let pairSeq = 0;
 const withPairKey = (p) => ({ ...p, _k: ++pairSeq });
 
 const isUnanswered = (p) => (p.question || '').trim() && !(p.answer || '').trim();
+const fmtDay = (iso) => { try { return new Date(iso).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' }); } catch { return ''; } };
 
 // Spłaszcza drzewo do wierszy { id, name, path, depth, topId, topName, qa }
 function flattenRows(nodes, prefix = '', top = null, acc = []) {
@@ -84,6 +87,8 @@ export default function QaTreeView({ nodeId, versionId, onClose, initialFilter =
     // @anchor qa-queued-ids
     const [queuedIds, setQueuedIds] = useState(new Set()); // węzły z zapisem czekającym w outboxie
     const dirtyRef = useRef(new Set());
+    // @anchor qa-tree-mail-questions — pytania bez odpowiedzi całego zamówienia w oknie wysyłki mailem (QaMailModal)
+    const [mailQuestions, setMailQuestions] = useState(null);
     const rowsRef = useRef([]);
     useEffect(() => { rowsRef.current = rows || []; }, [rows]);
 
@@ -191,6 +196,37 @@ export default function QaTreeView({ nodeId, versionId, onClose, initialFilter =
         window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
     }, [nodeId, versionId]);
 
+    // @anchor open-qa-tree-mail
+    // Wysyłka mailem pytań z całego drzewa — ten sam QaMailModal co w gałęziach. Niezapisane edycje idą
+    // najpierw na serwer; pary bez `id` dostają je lokalnie (backend zapisze je pod `qaId` przy wysyłce).
+    const openMail = async () => {
+        await Promise.all([...dirtyRef.current].map(id => persistNodeQa(id)));
+        const next = rowsRef.current.map(r => {
+            const withIds = ensureQaIds(r.qa);
+            return withIds === r.qa ? r : { ...r, qa: withIds };
+        });
+        setRows(next);
+        setMailQuestions(next.flatMap(r => r.qa.filter(isUnanswered)
+            .map(p => ({ wbsNodeId: r.id, nodeName: `${r.path} ${r.name}`, pair: p }))));
+    };
+    // @anchor apply-qa-tree-mail-sent
+    // Znacznik wysyłki z backendu nakładany na pary po id (backend już zapisał — bez PATCH).
+    const applyMailSent = (result) => {
+        const upd = new Map((result?.nodes || []).map(n => [n.id, n]));
+        setRows(prev => prev.map(r => {
+            const u = upd.get(r.id);
+            if (!u) return r;
+            const byId = new Map(u.qa.map(p => [p.id, p]));
+            const idFor = new Map((u.sent || []).map(x => [x.clientQaId, x.qaId]));
+            return { ...r, qa: r.qa.map(p => {
+                const id = idFor.get(p.id) || p.id;
+                const s = byId.get(id);
+                return s?.mailId ? { ...p, id, mailId: s.mailId, mailSentAt: s.mailSentAt, mailTo: s.mailTo } : p;
+            }) };
+        }));
+        window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
+    };
+
     const updatePair = (wbsNodeId, idx, field, value) => {
         dirtyRef.current.add(wbsNodeId);
         setRows(prev => prev.map(r => r.id === wbsNodeId
@@ -270,6 +306,12 @@ export default function QaTreeView({ nodeId, versionId, onClose, initialFilter =
                             <CloudOff size={12} /> {queuedIds.size} w kolejce
                         </div>
                     )}
+                    {rows !== null && !loadError && !fromCache && openPairs > 0 && (
+                        <button onClick={openMail} title="Wyślij pytania bez odpowiedzi mailem do klienta — domyślnie zaznaczone jeszcze niewysłane"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-300 hover:bg-sky-500/25 text-[11px] font-bold transition-all flex-shrink-0">
+                            <Mail size={12} /> Wyślij mailem
+                        </button>
+                    )}
                     {!isMobile && (
                         <button onClick={onClose} className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all flex-shrink-0">
                             <X size={18} />
@@ -330,10 +372,17 @@ export default function QaTreeView({ nodeId, versionId, onClose, initialFilter =
                                     </div>
                                     {row.qa.map((p, idx) => isPairVisible(p) && (
                                         <div key={p._k} className={`gap-2 ${isMobile ? 'flex flex-col' : 'grid grid-cols-[1fr_1fr_auto] items-start'}`}>
-                                            <GrowingTextarea value={p.question || ''} placeholder="Pytanie…"
-                                                onChange={e => updatePair(row.id, idx, 'question', e.target.value)}
-                                                onBlur={() => persistNodeQa(row.id)}
-                                                className="w-full resize-none overflow-hidden bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm text-gray-200 placeholder-gray-700 focus:outline-none focus:border-amber-500/50" />
+                                            <div className="min-w-0">
+                                                <GrowingTextarea value={p.question || ''} placeholder="Pytanie…"
+                                                    onChange={e => updatePair(row.id, idx, 'question', e.target.value)}
+                                                    onBlur={() => persistNodeQa(row.id)}
+                                                    className="w-full resize-none overflow-hidden bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm text-gray-200 placeholder-gray-700 focus:outline-none focus:border-amber-500/50" />
+                                                {p.mailSentAt && (
+                                                    <span className="flex items-center gap-1 mt-0.5 pl-1 text-[10px] text-sky-300/70" title={`Wysłane do ${p.mailTo || ''}`}>
+                                                        <Mail size={10} /> wysłane mailem {fmtDay(p.mailSentAt)}
+                                                    </span>
+                                                )}
+                                            </div>
                                             <div className={isMobile ? 'flex gap-2' : 'contents'}>
                                                 <GrowingTextarea value={p.answer || ''} placeholder="Odpowiedź…"
                                                     onChange={e => updatePair(row.id, idx, 'answer', e.target.value)}
@@ -351,6 +400,15 @@ export default function QaTreeView({ nodeId, versionId, onClose, initialFilter =
                     ))}
                 </div>
             </div>
+            {mailQuestions && (
+                <QaMailModal
+                    processNodeId={nodeId}
+                    title="Całe zamówienie"
+                    questions={mailQuestions}
+                    onClose={() => setMailQuestions(null)}
+                    onSent={applyMailSent}
+                />
+            )}
         </div>
     );
 }
