@@ -589,6 +589,15 @@ export default function DashboardPage() {
             ? `Plan z baselinu: ${realizationVersion.label || 'zaakceptowana wersja'}`
             : `Brak baselinu — plan z aktywnego snapszotu: ${realizationVersion.label || 'aktywna wersja'}`)
         : '';
+    // @anchor realization-for-wbs — to samo źródło planu co zakładka Realizacja, podane do Struktury
+    // projektu: kilof w wierszu WBS otwiera szufladę realizacji (`wbs-realization-drawer`). Tylko zamówienie.
+    const realizationForWbs = useMemo(() => (isOrder ? {
+        versionId: realizationVersionId,
+        acceptedAt: realizationVersion?.source === 'baseline' ? (acceptance?.acceptedAt ?? null) : null,
+        planLabel: realizationPlanLabel,
+        userRoles: currentRoles,
+        orderName: activeNode?.name || '',
+    } : null), [isOrder, realizationVersionId, realizationVersion?.source, acceptance?.acceptedAt, realizationPlanLabel, currentRoles, activeNode?.name]);
     // @anchor is-inactive-snapshot — czy oglądany snapszot NIE jest aktywny (blokada edycji z ostrzeżeniem)
     const isInactiveSnapshot = !!currentVersion && currentVersion.isActive === false;
     // @anchor dashboard-content-ref — kontener treści zakładek, do capture-guardu edycji snapszota
@@ -1037,7 +1046,7 @@ export default function DashboardPage() {
                         // Widzi ją KAŻDY, kto widzi zamówienie, także pracownik. Zapis ogranicza rola: `RealizationNewTab`
                         // wpuszcza do edycji ADMIN/MANAGER/LOGISTYK, a analizę kwotową pokazuje
                         // wyłącznie ADMIN i MANAGER.
-                        realizationNew:  { label: 'Realizacja_new',   color: 'fuchsia', activeColor: 'text-fuchsia-400', idleColor: 'text-fuchsia-400/50 hover:text-fuchsia-300', bar: 'bg-fuchsia-500', shadow: '217,70,239', cond: isOrder },
+                        realizationNew:  { label: 'Realizacja',       color: 'fuchsia', activeColor: 'text-fuchsia-400', idleColor: 'text-fuchsia-400/50 hover:text-fuchsia-300', bar: 'bg-fuchsia-500', shadow: '217,70,239', cond: isOrder },
                         schematics:      { label: 'Schemat',          color: 'orange', activeColor: 'text-orange-400', bar: 'bg-orange-500', shadow: '249,115,22',  cond: isOrder },
                         materialDatabase:{ label: 'Baza Materiałów',  color: 'purple', activeColor: 'text-purple-400', bar: 'bg-purple-500', shadow: '168,85,247',  cond: isOrder },
                     };
@@ -1134,6 +1143,7 @@ export default function DashboardPage() {
                                     setLeftVisible={setLeftVisible}
                                     setAiVisible={setAiVisible}
                                     oneDriveFolderName={activeNode?.oneDriveFolderName || null}
+                                    realization={realizationForWbs}
                                 />
                             </div>
                         )}

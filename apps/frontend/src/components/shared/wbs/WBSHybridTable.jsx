@@ -4,7 +4,7 @@ import AutoResizeTextarea from './AutoResizeTextarea';
 import TaskModal from './TaskModal';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
-import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Link, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, MessageCircle, Send, ArrowRight, ArrowLeft, Check, Loader2, Calendar, Repeat, ImagePlus, Archive, RotateCcw } from 'lucide-react';
+import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Link, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, MessageCircle, Send, ArrowRight, ArrowLeft, Check, Loader2, Calendar, Repeat, ImagePlus, Archive, RotateCcw, EyeOff } from 'lucide-react';
 import { CyclicAlarmEditor } from '../MyTasksModal';
 import { useDevice } from '../../../hooks/useDevice';
 
@@ -836,10 +836,12 @@ function WbsTasksDrawer({ wbsNodeId, processNodeId, onChanged }) {
 
 import { UNIT_OPTIONS, sanitizeQtyInput, evalQtyFormula, suggestDefaultUnit, getLeafDefaultFrom, DRAWER } from './wbsConstants';
 import { ProductCard } from './WbsMaterialsPanel';
+import WbsRealizationDrawer, { PickaxeIcon } from './WbsRealizationDrawer';
 import { offerLockInputProps } from '../OfferLockGuard';
 
 const API_URL = '/api';
 const WBS_COL_WIDTHS_KEY = 'wbs-hybrid-col-widths';
+const WBS_HIDDEN_COLS_KEY = 'wbs-hybrid-hidden-cols';
 
 // ─── MaterialReqExpandPanel ───────────────────────────────────────────────────
 
@@ -1352,7 +1354,7 @@ function TagChips({ tags = [], tagColor, onRemove, onTagClick }) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 // @anchor wbs-hybrid-table
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null, onApplyLeafDefaults = null, leafDefaults = null, offerLocked = false }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null, onApplyLeafDefaults = null, leafDefaults = null, offerLocked = false, realization = null }) {
     // @anchor wbs-hybrid-offer-lock — po akceptacji baseline kolumny Ilość / Koszt jedn. / Narzut %
     // przestają przyjmować wpis (każdy typ liścia); kliknięcie otwiera modal `OfferLockGuard`.
     const offerLockProps = offerLockInputProps(offerLocked);
@@ -1458,7 +1460,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // @anchor wbs-col-widths-storage — szerokości kolumn zapamiętane w tej przeglądarce (per urządzenie);
     // brak/zepsuty wpis albo zablokowany storage = szerokości domyślne.
     const [colWidths, setColWidths] = useState(() => {
-        const defaults = { nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, narzut: 90, cena_ofert: 110, status: 152, wlasciciel: 128, komentarz: 200, strategia: 220, zalaczniki: 44 };
+        const defaults = { nazwa: 320, typ: 120, ilosc: 80, jednostka: 90, cena_netto: 100, koszt_calk: 120, narzut: 90, cena_ofert: 110, status: 152, wlasciciel: 128, komentarz: 200, strategia: 220, zalaczniki: 44 };
         try {
             const saved = JSON.parse(localStorage.getItem(WBS_COL_WIDTHS_KEY) || 'null');
             if (saved && typeof saved === 'object') {
@@ -1467,6 +1469,22 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         } catch { /* domyślne */ }
         return defaults;
     });
+    // @anchor wbs-hidden-cols — kolumny ukryte przez użytkownika (per przeglądarka). Ukrycie przez
+    // `visibility: collapse` na <col> — komórki zostają w DOM, więc colSpan szuflad i kolejność
+    // komórek w wierszach się nie zmieniają.
+    const [hiddenCols, setHiddenCols] = useState(() => {
+        try {
+            const saved = JSON.parse(localStorage.getItem(WBS_HIDDEN_COLS_KEY) || '[]');
+            return new Set(Array.isArray(saved) ? saved : []);
+        } catch { return new Set(); }
+    });
+    const toggleHiddenCol = (key) => setHiddenCols(prev => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key); else next.add(key);
+        try { localStorage.setItem(WBS_HIDDEN_COLS_KEY, JSON.stringify([...next])); } catch { /* bez zapamiętania */ }
+        return next;
+    });
+    const [colsMenuOpen, setColsMenuOpen] = useState(false);
     const resizeDrag = useRef(null);
     // @anchor grid-nav-table-ref
     // Kontener tabeli — zawęża zapytania nawigacji klawiaturowej (grid-nav) do tego drzewa,
@@ -2072,9 +2090,16 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // + kolumna domykajaca. Wiersze rozpiete na calej szerokosci (szuflada karty produktu,
     // listwa domykajaca, pusty stan) MUSZA uzywac tej wartosci — zaszyty colSpan=12 obcinal
     // szuflade przed ostatnimi kolumnami, przez co karta byla wezsza niz wiersz drzewa.
-    const TOTAL_COLS = isManager ? 13 : 10;
-    // @anchor grid-nav-column-order
-    const GRID_COLUMN_ORDER = ['nazwa', 'typ', 'ilosc', 'jednostka', ...(isManager ? ['cena_netto', 'narzut'] : []), 'status', 'wlasciciel', 'komentarz', 'strategia'];
+    const TOTAL_COLS = isManager ? 14 : 10;
+    // @anchor wbs-data-columns — kolumny danych w kolejności komórek wiersza: [klucz, nagłówek, wyrównanie].
+    // Z tej listy powstają <col>, nagłówek i menu ukrywania kolumn.
+    const DATA_COLUMNS = [
+        ['nazwa', 'Nazwa', 'text-left'], ['typ', 'Typ', 'text-left'], ['ilosc', 'Ilość', 'text-right'], ['jednostka', 'Jedn.', 'text-left'],
+        ...(isManager ? [['cena_netto', 'Koszt jedn.', 'text-right'], ['koszt_calk', 'Koszt całk.', 'text-right'], ['narzut', 'Narzut %', 'text-right'], ['cena_ofert', 'Cena ofert.', 'text-right']] : []),
+        ['status', 'Status', 'text-left'], ['wlasciciel', 'Właściciel', 'text-left'], ['komentarz', 'Komentarz', 'text-left'], ['strategia', 'Strategia', 'text-left'],
+    ];
+    // @anchor grid-nav-column-order — ukryte kolumny wypadają z nawigacji klawiaturą
+    const GRID_COLUMN_ORDER = ['nazwa', 'typ', 'ilosc', 'jednostka', ...(isManager ? ['cena_netto', 'narzut'] : []), 'status', 'wlasciciel', 'komentarz', 'strategia'].filter(k => !hiddenCols.has(k));
     // @anchor handle-grid-key-down
     // Enter/strzałki nawigują między edytowalnymi komórkami jak w arkuszu kalkulacyjnym:
     // Enter/Dół/Góra = ta sama kolumna, sąsiedni wiersz; Lewo/Prawo = sąsiednia kolumna w wierszu.
@@ -2158,6 +2183,10 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
             <td className="px-3 py-3" />
+            {isManager && (
+                <td className="px-3 py-3 text-right font-bold text-white text-base" onClick={e => e.stopPropagation()}>
+                </td>
+            )}
             {isManager && (
                 <td className="px-3 py-3 text-right font-bold text-white text-base" onClick={e => e.stopPropagation()}>
                     {fmtPLN(items.reduce((a, n) => a + sumChildrenCost(n), 0))}
@@ -2448,6 +2477,17 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 </button>
                             );
                         })()}
+                        {/* @anchor wbs-realization-icon — kilof: szuflada realizacji (zakupy i wykonanie) tej
+                            pozycji albo całej gałęzi; tylko w zamówieniu (`realization` z DashboardPage). */}
+                        {realization && (
+                            <button
+                                onClick={e => { e.stopPropagation(); toggleDrawerTab(node.id, 'real'); }}
+                                className={`p-1 rounded transition-all ${drawerTab === 'real' ? 'text-teal-300 bg-teal-500/15' : 'text-teal-500/50 hover:text-teal-300 hover:bg-white/10'}`}
+                                title={hasChildren ? 'Realizacja gałęzi — zakupy i wykonanie pozycji' : 'Realizacja — zakupy i wykonanie'}
+                            >
+                                <PickaxeIcon size={19} />
+                            </button>
+                        )}
                         <button
                             onClick={e => handleDelete(node.id, e)}
                             className="p-1 hover:bg-red-500/10 rounded text-gray-600 hover:text-red-500 transition-all"
@@ -2596,17 +2636,9 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 {/* @anchor wbs-unit-price-input */}
                 {isManager && (
                     <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                        {depth === 0 ? (
-                            <div title="Suma kosztów gałęzi" className={`text-base w-full text-right font-semibold ${d.fieldClass}`}>
-                                {fmtPLN(sumChildrenCost(node)) || '0,00'}
-                            </div>
-                        ) : node.type === 'group' ? (
-                            <div
-                                title="Suma kosztów dzieci"
-                                className={`text-base w-full text-right text-gray-400 ${d.fieldClass}`}
-                            >
-                                {fmtPLN(sumChildrenCost(node)) || '0,00'}
-                            </div>
+                        {(depth === 0 || node.type === 'group') ? (
+                            // Suma gałęzi jest w kolumnie „Koszt całk.” — tu tylko koszt jednostkowy pozycji
+                            <div className={`text-base w-full text-right text-gray-600 ${d.fieldClass}`}>—</div>
                         ) : (
                             <div className="relative">
                                 <input
@@ -2642,6 +2674,24 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 )}
                             </div>
                         )}
+                    </td>
+                )}
+
+                {/* Koszt całkowity = ilość × koszt jedn.; na gałęziach suma poddrzewa (tylko manager) */}
+                {/* @anchor wbs-total-cost-cell */}
+                {isManager && (
+                    <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                        {(() => {
+                            const total = sumChildrenCost(node);
+                            return (
+                                <div
+                                    title={hasChildren ? 'Suma kosztów gałęzi' : 'Koszt całkowity = ilość × koszt jedn.'}
+                                    className={`text-base w-full text-right font-semibold ${total > 0 ? 'text-gray-200' : 'text-gray-600'}`}
+                                >
+                                    {total > 0 ? fmtPLN(total) : '—'}
+                                </div>
+                            );
+                        })()}
                     </td>
                 )}
 
@@ -2926,6 +2976,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                         ? <><ListTodo size={13} /> Zadania</>
                                         : drawerTab === 'chat'
                                         ? <><MessageCircle size={13} /> Czat gałęzi</>
+                                        : drawerTab === 'real'
+                                        ? <><PickaxeIcon size={13} /> Realizacja</>
                                         : <><HelpCircle size={13} /> {depth === 0 && hasChildren ? 'Q&A gałęzi' : 'Pytania i odpowiedzi'}</>}
                                 </span>
                                 <span className="text-[13px] text-gray-500 truncate">{node.name}</span>
@@ -2936,6 +2988,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             <div className="px-3 pt-2 pb-3">
                                 {drawerTab === 'tasks' ? (
                                     <WbsTasksDrawer wbsNodeId={node.id} processNodeId={processNodeId} onChanged={loadTaskSummary} />
+                                ) : drawerTab === 'real' ? (
+                                    <WbsRealizationDrawer wbsNode={node} processNodeId={processNodeId} realization={realization} />
                                 ) : drawerTab === 'chat' ? (
                                     <WbsChatDrawer
                                         wbsNodeId={node.id} processNodeId={processNodeId} onChanged={loadChatSummary}
@@ -3014,23 +3068,26 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             i przycisk rozwijania (48 px), oba w rozmiarze pod palec. Mysz: kropki + strzałka
                             (~56 px) — węższa kolumna wypychała strzałkę pod komórkę nazwy i klik w nią nie działał */}
                         <col style={{ width: isTouch ? 84 : 56 }} />
-                        <col style={{ width: colWidths.nazwa }} />
-                        <col style={{ width: colWidths.typ }} />
-                        <col style={{ width: colWidths.ilosc }} />
-                        <col style={{ width: colWidths.jednostka }} />
-                        {isManager && <col style={{ width: colWidths.cena_netto }} />}
-                        {isManager && <col style={{ width: colWidths.narzut }} />}
-                        {isManager && <col style={{ width: colWidths.cena_ofert }} />}
-                        <col style={{ width: colWidths.status }} />
-                        <col style={{ width: colWidths.wlasciciel }} />
-                        <col style={{ width: colWidths.komentarz }} />
-                        <col style={{ width: colWidths.strategia }} />
+                        {(() => {
+                            // Szerokość ukrytych kolumn przechodzi na Komentarz i Strategię (po równo,
+                            // na te z nich, które są widoczne) — tabela nie kurczy się po ukryciu kolumny.
+                            const growKeys = ['komentarz', 'strategia'].filter(k => !hiddenCols.has(k));
+                            const freed = DATA_COLUMNS.reduce((a, [k]) => a + (hiddenCols.has(k) && !growKeys.includes(k) ? (colWidths[k] || 0) : 0), 0);
+                            const bonus = growKeys.length ? freed / growKeys.length : 0;
+                            return DATA_COLUMNS.map(([key]) => (
+                                // Ukryta: szerokość 0 + collapse — inaczej przeglądarka rezerwuje jej miejsce
+                                // przy rozkładzie 100% i po zwinięciu zostaje pusty pas z prawej.
+                                hiddenCols.has(key)
+                                    ? <col key={key} style={{ width: 0, visibility: 'collapse' }} />
+                                    : <col key={key} style={{ width: (colWidths[key] || 0) + (growKeys.includes(key) ? bonus : 0) }} />
+                            ));
+                        })()}
                         <col style={{ width: 48 }} />
                     </colgroup>
                     <thead className="sticky top-0 z-10 bg-[#0b0f17]">
                         <tr className="border-b border-white/10">
                             <th className="px-1 py-2.5 text-base font-bold uppercase tracking-widest text-white" />
-                            {[['nazwa','Nazwa','text-left'],['typ','Typ','text-left'],['ilosc','Ilość','text-right'],['jednostka','Jedn.','text-left'],...(isManager ? [['cena_netto','Koszt jedn.','text-right'],['narzut','Narzut %','text-right'],['cena_ofert','Cena ofert.','text-right']] : []),['status','Status','text-left'],['wlasciciel','Właściciel','text-left'],['komentarz','Komentarz','text-left'],['strategia','Strategia','text-left']].map(([key, label, align]) => (
+                            {DATA_COLUMNS.map(([key, label, align]) => (
                                 <th key={key} className={`px-3 py-2.5 text-base font-bold uppercase tracking-widest text-white ${align} relative select-none`}>
                                     {label}
                                     {/* Uchwyt szerokości — na dotyku szerszy i widoczny (palcem 6 px nie da się trafić) */}
@@ -3042,7 +3099,31 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     />
                                 </th>
                             ))}
-                            <th className="w-12" />
+                            {/* @anchor wbs-cols-menu — wybór widocznych kolumn (Nazwa zawsze widoczna) */}
+                            <th className="w-12 relative">
+                                <button
+                                    type="button"
+                                    onClick={() => setColsMenuOpen(o => !o)}
+                                    title="Pokaż / ukryj kolumny"
+                                    className={`p-1.5 rounded hover:bg-white/10 transition-colors ${hiddenCols.size ? 'text-blue-400' : 'text-gray-500 hover:text-white'}`}
+                                >
+                                    <EyeOff size={14} />
+                                </button>
+                                {colsMenuOpen && (
+                                    <>
+                                        <div className="fixed inset-0 z-30" onClick={() => setColsMenuOpen(false)} />
+                                        <div className="absolute right-1 top-full mt-1 z-40 w-52 rounded-lg border border-white/10 bg-[#111827] shadow-xl py-1 text-left normal-case tracking-normal font-normal">
+                                            <div className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-gray-500">Widoczne kolumny</div>
+                                            {DATA_COLUMNS.filter(([key]) => key !== 'nazwa').map(([key, label]) => (
+                                                <label key={key} className="flex items-center gap-2 px-3 py-1.5 text-[13px] text-gray-200 hover:bg-white/5 cursor-pointer">
+                                                    <input type="checkbox" checked={!hiddenCols.has(key)} onChange={() => toggleHiddenCol(key)} className="accent-blue-500" />
+                                                    {label}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+                            </th>
                         </tr>
                     </thead>
                     <tbody>{rows}</tbody>

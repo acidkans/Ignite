@@ -137,7 +137,7 @@ function BranchStrategyField({ name, value, onSave }) {
     );
 }
 
-export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsDataLoad, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible, oneDriveFolderName = null, initialSection = null, onInitialSectionApplied }) {
+export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsDataLoad, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible, oneDriveFolderName = null, initialSection = null, onInitialSectionApplied, realization = null }) {
     const [wbsData, setWbsData] = useState([]);
     // @anchor budget-scope-data — `wbsData` BEZ pozycji odrzuconych (i bez ich poddrzew).
     // Czyta z niego WSZYSTKO, co liczy pieniądze: tabela Budżet, kafle koszt/przychód/zysk,
@@ -6805,6 +6805,7 @@ ${ganttSectionHtml}
                                 onNodeExpand={handleNodeExpand}
                                 onApplyLeafDefaults={applyLeafDefaults}
                                 leafDefaults={leafDefaults}
+                                realization={realization}
                             />
                         </div>
                     ), null, isManagerOrAdmin ? (
