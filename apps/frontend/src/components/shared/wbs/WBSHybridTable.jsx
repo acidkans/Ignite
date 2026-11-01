@@ -197,7 +197,7 @@ function collectBranchStrategyEntries(node) {
 // eksporty PDF/Excel). Format: `nazwa:` a strategia od nowego wiersza; wpisy rozdzielone
 // pustą linią.
 // @anchor compose-branch-strategy
-// Pytania do klienta (`{{q:id}}`) w złożeniu są rozwiązane: odpowiedź albo „[do ustalenia z klientem: …]”.
+// Pytania do klienta (`{{q:id}}`) w złożeniu są rozwiązane: odpowiedź albo „[wyjaśnić: …]”.
 function composeBranchStrategy(node) {
     const qaIndex = buildQaIndex(node);
     return collectBranchStrategyEntries(node)

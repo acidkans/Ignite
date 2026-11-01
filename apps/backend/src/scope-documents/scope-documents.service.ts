@@ -55,7 +55,7 @@ export class ScopeDocumentsService {
         const select = { id: true, parentId: true, name: true, type: true, quantity: true, unit: true, strategy: true, qa: true, showInScope: true, sortOrder: true };
         let rows: WbsRow[] = vId ? await this.prisma.wbsNode.findMany({ where: { nodeId, versionId: vId }, select, orderBy: { sortOrder: 'asc' } }) as any : [];
         if (!rows.length) rows = await this.prisma.wbsNode.findMany({ where: { nodeId, versionId: null }, select, orderBy: { sortOrder: 'asc' } }) as any;
-        // Strategia z pytaniami do klienta (`{{q:id}}`) → odpowiedzi / „do ustalenia z klientem”.
+        // Strategia z pytaniami do klienta (`{{q:id}}`) → odpowiedzi / „wyjaśnić”.
         const qaIndex = buildQaIndexFromRows(rows as any);
         for (const r of rows as any[]) { r.strategy = resolveStrategyTokens(r.strategy, qaIndex); delete r.qa; }
         const byId = new Map(rows.map(r => [r.id, r]));
