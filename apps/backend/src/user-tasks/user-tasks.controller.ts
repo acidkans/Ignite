@@ -20,8 +20,8 @@ export class UserTasksController {
 
   // @anchor user-tasks-by-wbs-node-endpoint
   @Get('by-wbs-node/:wbsNodeId')
-  listForWbsNode(@Req() req: any, @Param('wbsNodeId') wbsNodeId: string) {
-    return this.userTasks.listForWbsNode(wbsNodeId, req.user);
+  listForWbsNode(@Req() req: any, @Param('wbsNodeId') wbsNodeId: string, @Query('subtree') subtree?: string) {
+    return this.userTasks.listForWbsNode(wbsNodeId, req.user, subtree === '1');
   }
 
   // @anchor user-tasks-project-endpoint

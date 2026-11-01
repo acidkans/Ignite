@@ -1,3 +1,9 @@
+## 2026-11-01 — fix(zadania): szuflada Zadania gałęzi głównej pokazuje zadania całego poddrzewa (jak PDF strategii)
+
+### architektura / API
+- zmieniono `back-endpoint` `GET /my-tasks/by-wbs-node/:wbsNodeId` — nowy parametr `?subtree=1`: zadania węzła z całym poddrzewem
+- `ui-panel` `WbsTasksDrawer` — nowe `ui-propsy` `branch` (gałąź główna z dziećmi): pobiera poddrzewo, przy zadaniu nazwa pozycji; licznik ikony Zadania na gałęzi sumuje poddrzewo
+
 ## 2026-11-01 — feat(poczta): wysyłka eksportów mailem ze skrzynki firmowej użytkownika (domena zamówienia, podpis, kopia w „Wysłanych”)
 
 ### architektura / API

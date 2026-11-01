@@ -190,9 +190,19 @@ export class UserTasksService {
   // @anchor user-tasks-list-for-wbs-node
   // Zadania przypięte do węzła WBS (szuflada „Zadania" w Planowanie/WBS), widoczne wg `visibilityWhere` oglądającego.
   // Otwarte najpierw, w grupie wg Od; `plannedStart` potrzebny szufladzie (Od–Do) i TaskModal przy edycji z listy.
-  async listForWbsNode(wbsNodeId: string, viewer?: TaskViewer) {
+  // `subtree` — węzeł z całym poddrzewem (szuflada gałęzi głównej, jak „Q&A gałęzi" i eksport PDF strategii).
+  async listForWbsNode(wbsNodeId: string, viewer?: TaskViewer, subtree = false) {
+    const ids = [wbsNodeId];
+    if (subtree) {
+      let frontier = [wbsNodeId];
+      for (let guard = 0; frontier.length && guard < 20; guard++) {
+        const rows = await this.prisma.wbsNode.findMany({ where: { parentId: { in: frontier } }, select: { id: true } });
+        frontier = rows.map(r => r.id);
+        ids.push(...frontier);
+      }
+    }
     const tasks = await this.prisma.userTask.findMany({
-      where: { wbsNodeId, deletedAt: null, ...visibilityWhere(viewer) },
+      where: { wbsNodeId: { in: ids }, deletedAt: null, ...visibilityWhere(viewer) },
       orderBy: [{ plannedEnd: 'asc' }, { createdAt: 'asc' }],
       select: {
         id: true, title: true, description: true, status: true, plannedStart: true, plannedEnd: true, createdAt: true, userId: true, createdById: true,
