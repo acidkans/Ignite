@@ -289,6 +289,8 @@ model ProcessNode {
   hardware                  Hardware[]
   permissions               NodePermission[]           @relation("NodeACL")
   orderRequirements         OrderRequirements[]
+  /// @anchor process-node-qa-mails
+  qaMails                   QaMail[]
   ancestors                 ProcessNodeClosure[]       @relation("NodeAncestors")
   descendants               ProcessNodeClosure[]       @relation("NodeDescendants")
   owner                     User?                      @relation("OwnedProcessNodes", fields: [ownerId], references: [id])
@@ -662,10 +664,43 @@ model UserMailbox {
   updatedAt       DateTime   @updatedAt
   user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   domain          MailDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  /// @anchor user-mailbox-qa-mails
+  qaMails         QaMail[]
 
   @@unique([userId, domainId])
   @@index([domainId])
   @@map("user_mailboxes")
+}
+
+/// @anchor qa-mail
+/// Mail z pytaniami do klienta wysłany ze skrzynki firmowej (`UserMailbox`). Klucz `[IGN-…]`
+/// w temacie i `messageId` (In-Reply-To odpowiedzi) wiążą odpowiedź z wysłanymi pytaniami.
+model QaMail {
+  id            String       @id @default(uuid())
+  /// @anchor qa-mail-key
+  key           String       @unique // „IGN-7K3QF2” — w temacie maila w nawiasie kwadratowym
+  /// @anchor qa-mail-message-id
+  messageId     String       @unique // nagłówek Message-ID bez nawiasów <>
+  processNodeId String
+  mailboxId     String?
+  /// @anchor qa-mail-sent-by-id
+  sentById      String? // użytkownik, który wysłał (bez relacji — zostaje po usunięciu konta)
+  fromEmail     String
+  /// @anchor qa-mail-to-emails
+  toEmails      String // JSON: ["a@firma.pl", …]
+  ccEmails      String? // JSON jak toEmails
+  subject       String
+  /// @anchor qa-mail-items
+  items         String // JSON: [{ wbsNodeId, qaId, question, nodeName }] — wysłane pytania
+  /// @anchor qa-mail-sent-copy-error
+  sentCopyError String? // nie udało się dołożyć kopii do „Wysłane” (mail i tak poszedł)
+  sentAt        DateTime     @default(now())
+  processNode   ProcessNode  @relation(fields: [processNodeId], references: [id], onDelete: Cascade)
+  mailbox       UserMailbox? @relation(fields: [mailboxId], references: [id], onDelete: SetNull)
+
+  @@index([processNodeId])
+  @@index([mailboxId])
+  @@map("qa_mails")
 }
 
 /// Konfiguracja serwerów poczty wychodzącej (SMTP) — jeden wiersz na profil.

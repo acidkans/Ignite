@@ -261,13 +261,8 @@ export class MailboxesService {
     const d = m.domain;
     if (!m.password) throw new BadRequestException('Najpierw wpisz hasło do skrzynki.');
     if (!d.smtpHost) throw new BadRequestException('Domena nie ma ustawionego serwera SMTP (uzupełnia administrator).');
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true } });
-    const name = m.displayName || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || m.email;
-    const transport = nodemailer.createTransport({
-      host: d.smtpHost, port: d.smtpPort || 587, secure: d.smtpSecure,
-      auth: { user: m.username || m.email, pass: decryptSecret(m.password) },
-      connectionTimeout: 15000, greetingTimeout: 15000,
-    });
+    const name = await this.senderName(m);
+    const transport = this.smtpTransport(m);
     const html = `<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">`
       + `<p>Dzień dobry,</p><p>to jest wiadomość testowa z Ignite wysłana ze skrzynki ${m.email}. `
       + `Poniżej podpis w takiej postaci, w jakiej zobaczy go odbiorca.</p><p>Pozdrawiam</p></div>`
@@ -283,5 +278,64 @@ export class MailboxesService {
       throw new BadRequestException(`Nie udało się wysłać: ${e?.message || e}`);
     }
     return { ok: true, to: m.email };
+  }
+
+  // ── Wysyłka z kodu (pytania do klienta) ─────────────────────────────────────
+
+  // @anchor mailboxes-sender-for
+  // Skrzynka użytkownika w domenie zamówienia — z niej idą maile zamówienia. Bez skrzynki,
+  // hasła albo SMTP domeny rzuca czytelny błąd do pokazania w UI.
+  async senderFor(userId: string, domainId: string) {
+    const m = await this.prisma.userMailbox.findUnique({
+      where: { userId_domainId: { userId, domainId } },
+      include: { domain: true },
+    });
+    if (!m) throw new BadRequestException('Nie masz skrzynki w domenie tego zamówienia — dodaj ją w „Moim koncie”.');
+    if (!m.domain.isActive) throw new BadRequestException(`Domena ${m.domain.domain} jest wyłączona.`);
+    if (!m.password) throw new BadRequestException('Twoja skrzynka nie ma hasła — uzupełnij je w „Moim koncie”.');
+    if (!m.domain.smtpHost) throw new BadRequestException('Domena nie ma ustawionego serwera SMTP (uzupełnia administrator).');
+    return m;
+  }
+
+  // @anchor mailboxes-sender-name
+  // Nazwa w „Od:”: nazwa skrzynki, inaczej imię i nazwisko właściciela, inaczej adres.
+  async senderName(m: { userId: string; email: string; displayName: string | null }) {
+    if (m.displayName) return m.displayName;
+    const user = await this.prisma.user.findUnique({ where: { id: m.userId }, select: { firstName: true, lastName: true } });
+    return [user?.firstName, user?.lastName].filter(Boolean).join(' ') || m.email;
+  }
+
+  // @anchor mailboxes-smtp-transport
+  smtpTransport(m: any) {
+    const d = m.domain;
+    return nodemailer.createTransport({
+      host: d.smtpHost, port: d.smtpPort || 587, secure: d.smtpSecure,
+      auth: { user: m.username || m.email, pass: decryptSecret(m.password) },
+      connectionTimeout: 15000, greetingTimeout: 15000,
+    });
+  }
+
+  // @anchor mailboxes-append-to-sent
+  // Kopia wysłanego maila (surowy MIME) w folderze „Wysłane” skrzynki — klient poczty pokaże go
+  // jak wysłany ręcznie. Zwraca tekst błędu albo null; błąd nie cofa wysyłki.
+  async appendToSent(m: any, raw: Buffer): Promise<string | null> {
+    const d = m.domain;
+    if (!d.imapHost) return 'Domena nie ma ustawionego serwera IMAP.';
+    if (!m.sentFolder) return 'Nie znam folderu „Wysłane” — przetestuj skrzynkę w „Moim koncie”.';
+    const client = new ImapFlow({
+      host: d.imapHost, port: d.imapPort || 993, secure: d.imapSecure,
+      auth: { user: m.username || m.email, pass: decryptSecret(m.password) }, logger: false, socketTimeout: 20000,
+    });
+    try {
+      await client.connect();
+      await client.append(m.sentFolder, raw, ['\\Seen']);
+      return null;
+    } catch (e: any) {
+      const err = e?.responseText || e?.message || String(e);
+      this.logger.warn(`Kopia do „Wysłane” (${m.email}) nieudana: ${err}`);
+      return err;
+    } finally {
+      await client.logout().catch(() => client.close());
+    }
   }
 }

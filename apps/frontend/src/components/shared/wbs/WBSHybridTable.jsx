@@ -3,9 +3,10 @@ import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, u
 import AutoResizeTextarea from './AutoResizeTextarea';
 import { newQaId, ensureQaIds, strategyHasTokens, strategyTokenIds, buildQaIndex, resolveStrategyText, pendingStrategyQuestions, splitStrategyTokens } from './strategyQuestions';
 import TaskModal from './TaskModal';
+import QaMailModal from './QaMailModal';
 import WbsNameAutocomplete from './WbsNameAutocomplete';
 import { buildNameSuggestionPool, pickTwinDefaults } from './wbsNameSuggest';
-import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Link, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, MessageCircle, Send, ArrowRight, ArrowLeft, Check, Loader2, Calendar, Repeat, ImagePlus, Archive, RotateCcw, EyeOff } from 'lucide-react';
+import { Plus, Trash2, ChevronRight, ChevronDown, GripVertical, Tag, X, ExternalLink, Link, FileDown, Package, Copy, Clipboard, HelpCircle, ListTodo, MessageCircle, Send, ArrowRight, ArrowLeft, Check, Loader2, Calendar, Repeat, ImagePlus, Archive, RotateCcw, EyeOff, Mail } from 'lucide-react';
 import { CyclicAlarmEditor } from '../MyTasksModal';
 import { useDevice } from '../../../hooks/useDevice';
 
@@ -52,6 +53,11 @@ function QaPairRow({ p, idx, onUpdate, onRemove, onPersist, linked = false }) {
                     className={`bg-black/20 border ${linked ? 'border-amber-400/50' : 'border-white/10'} rounded px-1.5 py-0.5 text-[15px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 text-gray-200`}
                     style={{ overflow: 'hidden', minHeight: '1.4em', resize: 'none' }}
                 />
+                {p.mailSentAt && !String(p.answer || '').trim() && (
+                    <div className="flex items-center gap-1 text-[12px] text-sky-300/70" title={`Wysłane mailem do ${p.mailTo || ''}`}>
+                        <Mail size={11} /> wysłane mailem {new Date(p.mailSentAt).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' })}
+                    </div>
+                )}
             </td>
             <td className="pr-1 py-0.5 border-t border-white/5">
                 <textarea
@@ -1486,7 +1492,8 @@ function getBranchStyle(rootIndex, depth) {
         // @anchor wbs-branch-spine — kolor kręgosłupa szuflady. Pełne nasycenie i stała
         // grubość niezależnie od głębokości: kręgosłup ma powiedzieć „to jest jeden blok",
         // a nie „to jest poziom N" (od poziomu jest tło i lewa krawędź wiersza).
-        spine: `hsla(${hue|0},72%,66%,0.9)`,
+        // Zawsze zielony, niezależnie od koloru gałęzi — szuflada ma być od razu rozpoznawalna.
+        spine: 'rgba(52,211,153,0.9)',
     };
 }
 // CSS wstrzyknięte raz — hover i kolory przez custom properties na <tr>
@@ -1498,12 +1505,14 @@ function getBranchStyle(rootIndex, depth) {
 // `has-open-branch-below`) — wszystkie kręgosłupy rysują się w tym samym miejscu (x=0
 // wiersza), więc dwa naraz i tak byłyby nie do odróżnienia.
 const WBS_BRANCH_CSS = `.wbs-br{background-color:var(--wbs-bg);border-left:var(--wbs-bw) solid var(--wbs-bc);transition:background-color .12s}.wbs-br:hover{background-color:var(--wbs-bgh)}.wbs-br .wbs-name{color:var(--wbs-nc)}.wbs-br .wbs-field{color:var(--wbs-fc)}`
-    + `.wbs-br.wbs-drawer,.wbs-drawer-row{border-left:3px solid var(--wbs-spine)}`
-    + `.wbs-br.wbs-drawer-head{background-color:var(--wbs-bgh);border-top:1px solid var(--wbs-spine)}`
+    // Cała szuflada (z gałęzią-nagłówkiem) to jedna zielona ramka 3 px z zielonym tłem.
+    + `.wbs-br.wbs-drawer,.wbs-drawer-row{border-left:3px solid var(--wbs-spine);border-right:3px solid var(--wbs-spine)}`
+    + `.wbs-br.wbs-drawer{background-color:rgba(16,185,129,0.10)}.wbs-br.wbs-drawer:hover{background-color:rgba(16,185,129,0.16)}`
+    + `.wbs-br.wbs-drawer-head,.wbs-br.wbs-drawer-head:hover{background-color:rgba(16,185,129,0.20);border-top:3px solid var(--wbs-spine)}`
     // Domknięcie szuflady to PEŁNA listwa w kolorze kręgosłupa, nie krawędź 2 px pod pustym
     // wierszem — ta ginęła między wierszami tabeli i nie było widać, gdzie gałąź się kończy.
     // Ta sama grubość i ten sam zabieg co `materials-group-cap` / `realization-drawer-cap`.
-    + `.wbs-drawer-end{border-left:3px solid var(--wbs-spine)}`
+    + `.wbs-drawer-end{border-left:3px solid var(--wbs-spine);border-right:3px solid var(--wbs-spine)}`
     + `.wbs-drawer-end td{height:4px;padding:0;background-color:var(--wbs-spine)}`
     // @anchor wbs-leaf-open-css — rozwinięty liść materiałowy i jego szuflada czytają się jako
     // JEDNA karta, tak samo jak w Realizacja_new: wiersz dostaje górną i boczne krawędzie
@@ -1621,6 +1630,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     // { [wbsNodeId]: 'tasks' | 'qa' | 'chat' } — otwarta zakładka szuflady pod wierszem. Jeden węzeł = jedna
     // szuflada: otwarcie zakładki zamyka kartę materiałową tego węzła i odwrotnie.
     const [nodeDrawerTab, setNodeDrawerTab] = useState({});
+    // @anchor qa-mail-node — węzeł, dla którego otwarte jest okno wysyłki pytań mailem (QaMailModal).
+    const [qaMailNode, setQaMailNode] = useState(null);
     // @anchor wbs-task-summary
     // { [wbsNodeId]: { open, overdue, done } } — z GET /my-tasks/wbs-summary/:processNodeId; koloruje ikonę Zadania.
     const [taskSummary, setTaskSummary] = useState({});
@@ -1966,6 +1977,38 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         return null;
     };
     const openQaDrawer = (nodeId) => setNodeDrawerTab(prev => ({ ...prev, [nodeId]: 'qa' }));
+
+    // @anchor collect-mail-questions
+    // Otwarte pytania do wysyłki mailem: sam węzeł albo (gałąź główna) węzeł z całym poddrzewem.
+    const collectMailQuestions = (node, branch) => {
+        const out = [];
+        const add = (n) => {
+            for (const p of ensureQaIds(n?.qa)) {
+                if (String(p.question || '').trim() && !String(p.answer || '').trim()) out.push({ wbsNodeId: n.id, nodeName: n.name || 'Element WBS', pair: p });
+            }
+        };
+        const walk = (n) => { add(n); if (branch) (n?.children || []).forEach(walk); };
+        walk(node);
+        return out;
+    };
+    // @anchor apply-qa-mail-sent
+    // Po wysyłce: znacznik mailowy z backendu nakładany na lokalne pary po id (bez zapisu — backend już zapisał),
+    // żeby nie nadpisać edycji, które użytkownik zrobił w międzyczasie.
+    const applyQaMailSent = (result) => {
+        for (const upd of result?.nodes || []) {
+            const n = findNode(items, upd.id);
+            if (!n) continue;
+            // Para mogła mieć w stanie frontu id nadane przy odczycie — backend zapisał ją pod `qaId`.
+            const byId = new Map(upd.qa.map(p => [p.id, p]));
+            const idFor = new Map((upd.sent || []).map(x => [x.clientQaId, x.qaId]));
+            const next = (n.qa || []).map(p => {
+                const id = idFor.get(p.id) || p.id;
+                const u = byId.get(id);
+                return u?.mailId ? { ...p, id, mailId: u.mailId, mailSentAt: u.mailSentAt, mailTo: u.mailTo } : p;
+            });
+            handleField(upd.id, 'qa', next);
+        }
+    };
 
     // @anchor copy-comment-strategy
     // Kopiowanie między kolumnami Komentarz ↔ Strategia (ikonki na styku kolumn). Pusty cel =
@@ -2368,6 +2411,24 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         return () => document.removeEventListener('mousedown', onDown);
     }, [nodeDrawerTab]);
 
+    // @anchor wbs-outside-click-close — klik poza szufladą (jak w czacie) zamyka WSZYSTKIE szuflady:
+    // zwija gałęzie, zamyka zakładki Zadania/Q&A/Czat/Realizacja i karty materiałowe.
+    // Modale i nakładki (`fixed`, `role=dialog`) pomijamy — to nie jest klik „poza”, tylko w okno nad tabelą.
+    const anyDrawerOpen = expanded.size > 1 || expandedMaterialIds.size > 0 || Object.keys(nodeDrawerTab).length > 0;
+    useEffect(() => {
+        if (!anyDrawerOpen) return;
+        const onDown = (e) => {
+            const t = e.target;
+            if (!(t instanceof Element) || !t.isConnected) return;
+            if (t.closest('.wbs-drawer, .wbs-drawer-row, .wbs-drawer-end, .wbs-leaf-open, .wbs-focus-keep, [data-wbs-card], .fixed, [role="dialog"]')) return;
+            setExpanded(prev => (prev.size > 1 ? new Set(['root']) : prev));
+            setExpandedMaterialIds(prev => (prev.size ? new Set() : prev));
+            setNodeDrawerTab(prev => (Object.keys(prev).length ? {} : prev));
+        };
+        document.addEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
+    }, [anyDrawerOpen]);
+
     // @anchor toggle-drawer-tab
     const toggleDrawerTab = (id, tab) => {
         setNodeDrawerTab(prev => {
@@ -2572,7 +2633,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         ? { ...d.trStyle, '--wbs-drawer-edge': DRAWER.accent.task.edge, '--wbs-drawer-fill': DRAWER.accent.task.fill, '--wbs-drawer-bw': DRAWER.accent.task.width }
                         : { ...d.trStyle, '--wbs-drawer-edge': DRAWER.accent.offer.edge, '--wbs-drawer-fill': DRAWER.accent.offer.fill })
                     : d.trStyle}
-                className={`border-b border-white/5 cursor-pointer group/node transition-opacity wbs-br ${drawerClass} ${leafOpen ? 'wbs-leaf-open' : ''} ${drawerTab ? 'wbs-focus-keep' : ''} ${isDragging ? 'opacity-25' : ''} ${dropBorder} ${reqDropHighlight} ${selectedNodeId === node.id ? 'outline outline-1 outline-blue-500/40 !bg-blue-500/5' : ''}`}
+                className={`border-b border-white/5 cursor-pointer group/node transition-opacity wbs-br ${drawerClass} ${leafOpen ? 'wbs-leaf-open' : ''} ${drawerTab ? 'wbs-focus-keep' : ''} ${isDragging ? 'opacity-25' : ''} ${dropBorder} ${reqDropHighlight} ${selectedNodeId === node.id ? (drawerSpine ? 'outline outline-1 outline-emerald-400/40' : 'outline outline-1 outline-blue-500/40 !bg-blue-500/5') : ''}`}
                 onClick={e => { setSelectedNodeId(node.id); hasChildren && toggle(rowId, e); }}
             >
                 {/* WBS ID — uchwyt drag (mysz) / pełnokomórkowy przycisk rozwijania (dotyk).
@@ -3217,6 +3278,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             rows.push(
                 <tr
                     key={`mat-req-${node.id}`}
+                    data-wbs-card
                     className={drawerSpine ? 'wbs-drawer-row' : ''}
                     style={drawerSpine ? { '--wbs-spine': drawerSpine } : undefined}
                 >
@@ -3289,7 +3351,16 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                         : <><HelpCircle size={13} /> {depth === 0 && hasChildren ? 'Q&A gałęzi' : 'Pytania i odpowiedzi'}</>}
                                 </span>
                                 <span className="text-[13px] text-gray-500 truncate">{node.name}</span>
-                                <button onClick={() => toggleDrawerTab(node.id, drawerTab)} className="ml-auto p-1 rounded hover:bg-white/10 text-gray-500 hover:text-white transition-all" title="Zamknij">
+                                {drawerTab === 'qa' && processNodeId && (
+                                    <button
+                                        onClick={() => setQaMailNode({ id: node.id, branch: depth === 0 && hasChildren })}
+                                        className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-[13px] text-sky-300 hover:text-sky-200 hover:bg-sky-500/15 transition-all"
+                                        title="Wyślij pytania bez odpowiedzi mailem do klienta"
+                                    >
+                                        <Mail size={13} /> Wyślij mailem
+                                    </button>
+                                )}
+                                <button onClick={() => toggleDrawerTab(node.id, drawerTab)} className={`${drawerTab === 'qa' && processNodeId ? '' : 'ml-auto '}p-1 rounded hover:bg-white/10 text-gray-500 hover:text-white transition-all`} title="Zamknij">
                                     <X size={13} />
                                 </button>
                             </div>
@@ -3514,7 +3585,19 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 </div>
             )}
 
-
+            {qaMailNode && (() => {
+                const n = findNode(items, qaMailNode.id);
+                if (!n) return null;
+                return (
+                    <QaMailModal
+                        processNodeId={processNodeId}
+                        title={n.name || 'Element WBS'}
+                        questions={collectMailQuestions(n, qaMailNode.branch)}
+                        onClose={() => setQaMailNode(null)}
+                        onSent={applyQaMailSent}
+                    />
+                );
+            })()}
         </div>
     );
 }

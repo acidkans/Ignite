@@ -1,3 +1,25 @@
+## 2026-11-01 — feat(qa): wysyłka pytań z Q&A mailem do klienta ze skrzynki firmowej (klucz [IGN-…] w temacie, kopia w „Wysłanych”)
+
+### schema.prisma
+- dodano `schema-model` `QaMail` (tabela `qa_mails`) — wysłany mail z pytaniami: `key` (`IGN-XXXXXX` w temacie), `messageId` (Message-ID, cel In-Reply-To odpowiedzi), `processNodeId`, `mailboxId`, `sentById`, `fromEmail`, `toEmails`/`ccEmails` (JSON), `subject`, `items` (`schema-json` `[{ wbsNodeId, qaId, question, nodeName }]`), `sentCopyError`, `sentAt`
+- dodano `schema-relacja` `ProcessNode.qaMails` (Cascade), `UserMailbox.qaMails` (SetNull)
+- migracja `20261101140000_qa_mails`
+
+### architektura / API
+- dodano `back-modul` `QaMailModule` z `back-serwis` `QaMailService`
+- dodano `back-endpoint` `GET /qa-mail/order/:processNodeId` — nadawca (skrzynka użytkownika w domenie zamówienia albo powód braku), podpowiedzi odbiorców (PM + kontakty klienta z „Informacji o zamówieniu”), dotychczasowe maile
+- dodano `back-endpoint` `POST /qa-mail/send` `{ processNodeId, to, cc?, intro?, questions: [{ wbsNodeId, qaId, question }] }` — buduje MIME raz (podpis skrzynki, obrazki jako CID), wysyła SMTP skrzynki, ten sam MIME dokłada przez IMAP do folderu „Wysłane”; zwraca `{ mail, nodes }`
+- `back-funkcja` `MailboxesService` — nowe `senderFor`, `senderName`, `smtpTransport`, `appendToSent` (wspólne z mailem testowym)
+- `schema-json` `WbsNode.qa` — para dostaje `mailId`, `mailSentAt`, `mailTo` (ostatni mail z tym pytaniem); `cleanQaPair` je zachowuje
+- `ui-modal` `QaMailModal` — wybór odbiorców (kontakty klienta + wolne adresy, DW), wstęp, lista otwartych pytań (domyślnie niewysłane); `ui-przycisk` „Wyślij mailem” w nagłówku szuflady Q&A (liść: jego pytania, gałąź główna: całe poddrzewo); przy pytaniu znacznik „wysłane mailem dd.mm”
+
+### słownik
+- dodano `qa-mail*`, `process-node-qa-mails`, `user-mailbox-qa-mails` — schema.prisma; `mailboxes-sender-for`, `mailboxes-sender-name`, `mailboxes-smtp-transport`, `mailboxes-append-to-sent` — mailboxes.service.ts; `qa-mail-module`, `qa-mail-service`, `qa-mail-context`, `qa-mail-send`, `normalize-mail-list`, `new-qa-mail-key`, `qa-mail-controller`, `get-qa-mail-context`, `post-qa-mail-send` — qa-mail/; `qa-mail-modal`, `qa-mail-node`, `collect-mail-questions`, `apply-qa-mail-sent` — frontend
+
+### wytyczne
+- `back-funkcja` `QaMailService.send` — starsze pary Q&A nie mają w bazie `id` (`cleanQaPair` nadaje losowe przy każdym odczycie), więc para szukana jest po `id`, a potem po treści pytania; przy zapisie znacznika dostaje stałe id. Front podmienia id pary wg `nodes[].sent` (`clientQaId` → `qaId`)
+- `schema-model` `QaMail` — błąd kopii do „Wysłane” nie cofa wysyłki (mail już poszedł); zapisywany w `sentCopyError` i pokazywany w oknie
+
 ## 2026-11-01 — feat(poczta): mail testowy z podpisem ze skrzynki firmowej na jej własny adres; przy edycji skrzynki widać tylko ją
 
 ### architektura / API
