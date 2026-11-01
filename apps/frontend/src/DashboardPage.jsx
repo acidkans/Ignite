@@ -1037,7 +1037,7 @@ export default function DashboardPage() {
                         // Widzi ją KAŻDY, kto widzi zamówienie, także pracownik. Zapis ogranicza rola: `RealizationNewTab`
                         // wpuszcza do edycji ADMIN/MANAGER/LOGISTYK, a analizę kwotową pokazuje
                         // wyłącznie ADMIN i MANAGER.
-                        realizationNew:  { label: 'Realizacja_new',   color: 'fuchsia', activeColor: 'text-fuchsia-400', idleColor: 'text-fuchsia-400/50 hover:text-fuchsia-300', bar: 'bg-fuchsia-500', shadow: '217,70,239', cond: isOrder },
+                        realizationNew:  { label: 'Realizacja',       color: 'fuchsia', activeColor: 'text-fuchsia-400', idleColor: 'text-fuchsia-400/50 hover:text-fuchsia-300', bar: 'bg-fuchsia-500', shadow: '217,70,239', cond: isOrder },
                         schematics:      { label: 'Schemat',          color: 'orange', activeColor: 'text-orange-400', bar: 'bg-orange-500', shadow: '249,115,22',  cond: isOrder },
                         materialDatabase:{ label: 'Baza Materiałów',  color: 'purple', activeColor: 'text-purple-400', bar: 'bg-purple-500', shadow: '168,85,247',  cond: isOrder },
                     };
