@@ -224,7 +224,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         const hasUnanswered = wbsData.some(n =>
             Array.isArray(n.qa) && n.qa.some(p => (p?.question || '').trim() && !(p?.answer || '').trim())
         );
-        if (hasUnanswered) setQaTreeOpen(true);
+        if (hasUnanswered) setQaTreeOpen('unanswered');
     }, [nodeId, wbsData]);
     const [sectionOrder, setSectionOrder] = useState(() => {
         try {
@@ -6966,7 +6966,7 @@ ${ganttSectionHtml}
             )}
 
             {qaTreeOpen && (
-                <QaTreeView nodeId={nodeId} versionId={versionId} onClose={() => setQaTreeOpen(false)} />
+                <QaTreeView nodeId={nodeId} versionId={versionId} onClose={() => setQaTreeOpen(false)} initialFilter={qaTreeOpen === 'unanswered' ? 'unanswered' : 'withQa'} />
             )}
 
             {allTasksOpen && (
