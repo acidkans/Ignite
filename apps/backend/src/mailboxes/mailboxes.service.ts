@@ -271,7 +271,9 @@ export class MailboxesService {
     const html = `<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">`
       + `<p>Dzień dobry,</p><p>to jest wiadomość testowa z Ignite wysłana ze skrzynki ${m.email}. `
       + `Poniżej podpis w takiej postaci, w jakiej zobaczy go odbiorca.</p><p>Pozdrawiam</p></div>`
-      + (m.signatureHtml ? `<br>${m.signatureHtml}` : '<p style="color:#888">(skrzynka nie ma jeszcze podpisu)</p>');
+      + (m.signatureHtml
+        ? `<br><div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">${m.signatureHtml}</div>`
+        : '<p style="color:#888">(skrzynka nie ma jeszcze podpisu)</p>');
     try {
       await transport.sendMail({
         from: { name, address: m.email }, to: m.email,
