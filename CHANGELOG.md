@@ -1,3 +1,19 @@
+## 2026-11-01 — feat(poczta): podpis HTML skrzynki firmowej z wklejanym obrazkiem; formularz skrzynki dokleja domenę do adresu i kopiuje adres jako login
+
+### schema.prisma
+- dodano pole `schema-pole` `UserMailbox.signatureHtml` — podpis doklejany do maili z tej skrzynki, obrazki inline jako data:URI
+- migracja `20261101123000_user_mailbox_signature`
+
+### architektura / API
+- `back-endpoint` `POST /mailboxes/me`, `PATCH /mailboxes/me/:id` — przyjmują `signatureHtml` (czyszczony przez `back-funkcja` `cleanMailSignature`: bez skryptów/ramek/on*, limit ~2 MB); zmiana podpisu nie unieważnia testu skrzynki
+- `ui-formularz` skrzynki w „Moim koncie” — adres wpisuje się bez domeny (`@domena` dopisywana z wybranej domeny), login kopiuje adres, dopóki użytkownik nie wpisze własnego; `ui-sekcja` `SignatureEditor` — edytor podpisu z wklejaniem obrazka (Ctrl+V) i przyciskiem „Wstaw obrazek”
+
+### słownik
+- dodano `user-mailbox-signature-html` — schema.prisma; `clean-mail-signature` — mailboxes.service.ts; `image-file-to-data-url`, `signature-editor` — MyMailboxesPanel.jsx
+
+### wytyczne
+- `schema-pole` `UserMailbox.signatureHtml` — przy wysyłce maila ze skrzynki doklejać podpis do HTML i tworzyć transport nodemailera z `attachDataUrls: true` (data:URI → załączniki CID; Gmail/Outlook nie pokazują obrazków data:)
+
 ## 2026-11-01 — feat(wbs): pytania do klienta w strategii elementu WBS — znacznik {{q:id}} uzupełnia się odpowiedzią z Q&A albo z czatu, zadanie „Wyjaśnić czy…” zamyka się samo
 
 ### schema.prisma

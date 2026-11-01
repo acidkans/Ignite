@@ -3325,6 +3325,7 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | schema-pole | UserMailbox.displayName | apps/backend/prisma/schema.prisma | @anchor user-mailbox-display-name |
 | schema-pole | UserMailbox.username | apps/backend/prisma/schema.prisma | @anchor user-mailbox-username |
 | schema-pole | UserMailbox.password | apps/backend/prisma/schema.prisma | @anchor user-mailbox-password |
+| schema-pole | UserMailbox.signatureHtml | apps/backend/prisma/schema.prisma | @anchor user-mailbox-signature-html |
 | schema-pole | UserMailbox.sentFolder | apps/backend/prisma/schema.prisma | @anchor user-mailbox-sent-folder |
 | schema-pole | UserMailbox.verifiedAt | apps/backend/prisma/schema.prisma | @anchor user-mailbox-verified-at |
 | schema-pole | UserMailbox.lastError | apps/backend/prisma/schema.prisma | @anchor user-mailbox-last-error |
@@ -3337,6 +3338,7 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-funkcja | encryptSecret | apps/backend/src/common/secret-crypto.util.ts | @anchor encrypt-secret |
 | back-funkcja | decryptSecret | apps/backend/src/common/secret-crypto.util.ts | @anchor decrypt-secret |
 | back-funkcja | normalizeMailDomain | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor normalize-mail-domain |
+| back-funkcja | cleanMailSignature | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor clean-mail-signature |
 | back-serwis | MailboxesService | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-service |
 | back-funkcja | MailboxesService.listDomains | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-list-domains |
 | back-funkcja | MailboxesService.createDomain | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-create-domain |
@@ -3367,6 +3369,8 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-panel | MyMailboxesPanel | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor my-mailboxes-panel |
 | ui-funkcja | MyMailboxesPanel.test | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor my-mailboxes-test |
 | ui-funkcja | MyMailboxesPanel.save | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor my-mailboxes-save |
+| ui-funkcja | imageFileToDataUrl | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor image-file-to-data-url |
+| ui-sekcja | SignatureEditor | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor signature-editor |
 | ui-stan | mailDomains | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-domains |
 | ui-stan | mailCoverage | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-coverage |
 | ui-dropdown | requirements-mail-domain-bar | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-domain-bar |

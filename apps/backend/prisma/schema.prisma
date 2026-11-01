@@ -646,6 +646,8 @@ model UserMailbox {
   username        String? // login SMTP/IMAP; puste = adres e-mail
   /// @anchor user-mailbox-password
   password        String? // zaszyfrowane AES-256-CBC, nigdy nie wraca do frontu
+  /// @anchor user-mailbox-signature-html
+  signatureHtml   String? // podpis doklejany do maili z tej skrzynki; obrazki jako data:URI (przy wysyłce → CID przez attachDataUrls)
   /// @anchor user-mailbox-sent-folder
   sentFolder      String? // folder „Wysłane” wykryty testem IMAP (Sent / Wysłane / INBOX.Sent)
   /// @anchor user-mailbox-verified-at
