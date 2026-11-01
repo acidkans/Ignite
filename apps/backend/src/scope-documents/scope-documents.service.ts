@@ -10,6 +10,7 @@ import { groupMultiplierMap } from '../common/group-qty.util';
 import { uploadPath } from '../common/uploads.util';
 import { STANDARD_TAB_CATEGORIES } from '../onedrive/order-folders';
 import { buildScopeDocumentHtml, ScopeDocumentModel } from './scope-document-pdf';
+import { buildQaIndexFromRows, resolveStrategyTokens } from '../common/strategy-tokens.util';
 
 type WbsRow = { id: string; parentId: string | null; name: string; type: string; quantity: number; unit: string; strategy: string | null; showInScope: boolean; sortOrder: number };
 // @anchor scope-layout-type
@@ -51,9 +52,12 @@ export class ScopeDocumentsService {
 
     private async loadTree(nodeId: string, versionId?: string | null) {
         const vId = await resolveVersionId(this.prisma, nodeId, versionId);
-        const select = { id: true, parentId: true, name: true, type: true, quantity: true, unit: true, strategy: true, showInScope: true, sortOrder: true };
+        const select = { id: true, parentId: true, name: true, type: true, quantity: true, unit: true, strategy: true, qa: true, showInScope: true, sortOrder: true };
         let rows: WbsRow[] = vId ? await this.prisma.wbsNode.findMany({ where: { nodeId, versionId: vId }, select, orderBy: { sortOrder: 'asc' } }) as any : [];
         if (!rows.length) rows = await this.prisma.wbsNode.findMany({ where: { nodeId, versionId: null }, select, orderBy: { sortOrder: 'asc' } }) as any;
+        // Strategia z pytaniami do klienta (`{{q:id}}`) → odpowiedzi / „do ustalenia z klientem”.
+        const qaIndex = buildQaIndexFromRows(rows as any);
+        for (const r of rows as any[]) { r.strategy = resolveStrategyTokens(r.strategy, qaIndex); delete r.qa; }
         const byId = new Map(rows.map(r => [r.id, r]));
         const children = new Map<string | null, WbsRow[]>();
         for (const r of rows) {

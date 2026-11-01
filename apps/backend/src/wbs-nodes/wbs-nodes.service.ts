@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +13,30 @@ import { groupMultiplierMap } from '../common/group-qty.util';
 export interface QaPair {
     question: string;
     answer: string;
+    // Pola pytań wstawianych w strategię (`{{q:id}}`) — patrz `cleanQaPair`.
+    id?: string;
+    taskId?: string | null;
+    chatMessageId?: string | null;
+    askedMessageId?: string | null;
+    answerSource?: string | null;
+}
+
+// @anchor clean-qa-pair
+// Para Q&A do zapisu/odczytu: pytanie i odpowiedź zawsze, `id` (cel znacznika `{{q:id}}`
+// w strategii) dopisywane, gdy brak — znacznik musi wskazywać stałą parę. `taskId` = zadanie
+// „Wyjaśnić czy…”, `chatMessageId` = wiadomość czatu z odpowiedzią, `askedMessageId` = wiadomość czatu,
+// która zadała pytanie, `answerSource` = skąd odpowiedź.
+export function cleanQaPair(p: any): QaPair {
+    const out: QaPair = {
+        id: /^[\w-]{1,40}$/.test(String(p?.id ?? '')) ? String(p.id) : 'q' + randomBytes(5).toString('hex'),
+        question: String(p?.question ?? ''),
+        answer: String(p?.answer ?? ''),
+    };
+    if (p?.taskId) out.taskId = String(p.taskId);
+    if (p?.chatMessageId) out.chatMessageId = String(p.chatMessageId);
+    if (p?.askedMessageId) out.askedMessageId = String(p.askedMessageId);
+    if (p?.answerSource) out.answerSource = String(p.answerSource);
+    return out;
 }
 
 // @anchor wbs-tree-item
@@ -342,10 +367,7 @@ export class WbsNodesService {
         try {
             const parsed = JSON.parse(raw);
             if (!Array.isArray(parsed)) return [];
-            return parsed.map((p) => ({
-                question: String(p?.question ?? ''),
-                answer: String(p?.answer ?? ''),
-            }));
+            return parsed.map(cleanQaPair);
         } catch { return []; }
     }
 
@@ -622,12 +644,7 @@ export class WbsNodesService {
                 : null;
         }
         if (data.qa !== undefined) {
-            const cleaned = Array.isArray(data.qa)
-                ? data.qa.map((p: any) => ({
-                    question: String(p?.question ?? ''),
-                    answer: String(p?.answer ?? ''),
-                }))
-                : [];
+            const cleaned = Array.isArray(data.qa) ? data.qa.map(cleanQaPair) : [];
             allowed.qa = cleaned.length > 0 ? JSON.stringify(cleaned) : null;
         }
         // Gałąź grupująca nie trzyma własnej ceny — jej wartość to suma dzieci.

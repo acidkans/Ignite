@@ -1,3 +1,28 @@
+## 2026-11-01 — feat(wbs): pytania do klienta w strategii elementu WBS — znacznik {{q:id}} uzupełnia się odpowiedzią z Q&A albo z czatu, zadanie „Wyjaśnić czy…” zamyka się samo
+
+### schema.prisma
+- `schema-json` `WbsNode.qa` — para dostaje `id` (stały cel znacznika w strategii) oraz opcjonalnie `taskId` (zadanie „Wyjaśnić czy…”), `chatMessageId` (wiadomość czatu z odpowiedzią), `askedMessageId` (wiadomość czatu, która zadała pytanie), `answerSource` (`chat`); bez zmiany kolumny
+
+### architektura / API
+- `back-funkcja` `cleanQaPair` — odczyt i zapis `qa` (PATCH /wbs-nodes/:id, drzewo) zachowuje `id`/`taskId`/`chatMessageId`/`answerSource` (wcześniej obcinane do pytanie/odpowiedź) i dopisuje `id` parom bez niego
+- `back-funkcja` `resolveStrategyTokens` (`common/strategy-tokens.util.ts`) — opis zakresu (ScopeDocument) dostaje strategie ze znacznikami zamienionymi na odpowiedzi / „[do ustalenia z klientem: …]”
+- `ui-sekcja` `LeafStrategyCell` — komórka Strategii liścia: przycisk „?” dopisuje pytanie w nowym wierszu na końcu strategii (para w Q&A + opcjonalne zadanie dla mnie); ze znacznikami podgląd ⏳/odpowiedź i licznik „czeka na odpowiedź” / „czeka na N odpowiedzi”, klik → edycja surowego tekstu
+- złożenie strategii gałęzi (`compose-branch-strategy`) zapisuje tekst z rozwiązanymi znacznikami; odpowiedź w Q&A lub z czatu przelicza złożenie (`recompose-root-strategy-for-qa`)
+- szuflada Czat — przy wiadomości „↳ to odpowiedź na pytanie…” wpisuje jej treść jako odpowiedź; wiadomość przypisana pokazuje „↳ odpowiedź na: …”
+- szuflada Czat — przycisk „?” przy polu wiadomości: „Nowe pytanie” (wiadomość typu `QUESTION` dopisuje parę do Q&A węzła wątku) albo wysłanie istniejącego pytania z Q&A; wiadomość-pytanie pokazuje „❓ pytanie · czeka na odpowiedź / odpowiedź: …”
+- eksporty PDF (Planowanie, „Strategia, zadania, Q&A”), arkusz Excel „Strategia” i analiza AI oferty dostają strategie liści z rozwiązanymi znacznikami
+
+### słownik
+- dodano `strategy-token-re`, `new-qa-id`, `ensure-qa-ids`, `strategy-has-tokens`, `strategy-token-ids`, `build-qa-index`, `resolve-strategy-text`, `pending-strategy-questions`, `split-strategy-tokens` — wbs/strategyQuestions.js
+- dodano `wbs-chat-ask-mode`, `wbs-chat-ask-button`, `ask-question-from-chat` — wbs/WBSHybridTable.jsx
+- dodano `strategy-tokens`, `leaf-strategy-cell`, `strategy-add-question-button`, `wbs-chat-answering`, `recompose-root-strategy-for-qa`, `handle-qa-change`, `add-strategy-question`, `answer-question-from-chat` — wbs/WBSHybridTable.jsx
+- dodano `clean-qa-pair` — wbs-nodes.service.ts; `build-qa-index-from-rows`, `resolve-strategy-tokens` — common/strategy-tokens.util.ts
+
+### wytyczne
+- `schema-pole` `WbsNode.strategy` — może zawierać `{{q:<id>}}` wskazujące parę z `WbsNode.qa` tego węzła; każdy NOWY odczyt strategii do eksportu/AI/dokumentu przepuszczać przez `resolveStrategyText` (front) / `resolveStrategyTokens` (backend), edycja zawsze na surowym tekście
+- `schema-json` `WbsNode.qa` — nie przebudowywać par bez zachowania `id` (spread `{...p}`), inaczej znaczniki w strategii tracą cel
+- `ui-funkcja` `handleQaChange` — para z `taskId`, która zyskała/straciła odpowiedź, ustawia zadanie DONE/TO_DO
+
 ## 2026-11-01 — feat(poczta): domeny pocztowe firm (Airtel, Europrim…), skrzynki firmowe użytkowników z testem SMTP/IMAP i domena nadawcy w „Informacjach o zamówieniu”
 
 ### schema.prisma

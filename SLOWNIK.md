@@ -3370,6 +3370,29 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-stan | mailDomains | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-domains |
 | ui-stan | mailCoverage | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-coverage |
 | ui-dropdown | requirements-mail-domain-bar | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-domain-bar |
+| ui-stala | STRATEGY_TOKEN_RE | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor strategy-token-re |
+| ui-funkcja | newQaId | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor new-qa-id |
+| ui-funkcja | ensureQaIds | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor ensure-qa-ids |
+| ui-funkcja | strategyHasTokens | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor strategy-has-tokens |
+| ui-funkcja | strategyTokenIds | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor strategy-token-ids |
+| ui-funkcja | buildQaIndex | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor build-qa-index |
+| ui-funkcja | resolveStrategyText | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor resolve-strategy-text |
+| ui-funkcja | pendingStrategyQuestions | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor pending-strategy-questions |
+| ui-funkcja | splitStrategyTokens | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor split-strategy-tokens |
+| ui-sekcja | StrategyTokens | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor strategy-tokens |
+| ui-sekcja | LeafStrategyCell | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor leaf-strategy-cell |
+| ui-przycisk | strategy-add-question-button | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor strategy-add-question-button |
+| ui-stan | answering | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-answering |
+| ui-funkcja | recomposeRootFor | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor recompose-root-strategy-for-qa |
+| ui-funkcja | handleQaChange | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor handle-qa-change |
+| ui-funkcja | addStrategyQuestion | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor add-strategy-question |
+| ui-funkcja | answerQuestionFromChat | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor answer-question-from-chat |
+| ui-stan | askMode | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-ask-mode |
+| ui-przycisk | wbs-chat-ask-button | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-ask-button |
+| ui-funkcja | askQuestionFromChat | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor ask-question-from-chat |
+| back-funkcja | cleanQaPair | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor clean-qa-pair |
+| back-funkcja | buildQaIndexFromRows | apps/backend/src/common/strategy-tokens.util.ts | @anchor build-qa-index-from-rows |
+| back-funkcja | resolveStrategyTokens | apps/backend/src/common/strategy-tokens.util.ts | @anchor resolve-strategy-tokens |
 
 <!-- Następne moduły do dodania:
 - offers (apps/backend/src/offers/)
