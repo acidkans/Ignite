@@ -2852,7 +2852,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                     if (!s) return acc;
                                     const a = acc || { open: 0, overdue: 0, done: 0 };
                                     return { open: a.open + s.open, overdue: a.overdue + s.overdue, done: a.done + s.done };
-                                }, null)
+                                }, undefined) // undefined, nie null — drawerStatusKey ma domyślny argument tylko dla undefined
                                 : taskSummary[node.id];
                             const key = drawerStatusKey(ts);
                             const n = ts ? (ts.open || ts.done) : 0;
