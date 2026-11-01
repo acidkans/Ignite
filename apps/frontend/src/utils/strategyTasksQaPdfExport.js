@@ -88,7 +88,7 @@ export async function buildStrategyTasksQaPdfArtifact({ wbsData, processNodeId, 
         processNodeId ? fetchProjectTasks(processNodeId) : Promise.resolve([]),
         fetchLogoDataUrl(),
     ]);
-    // Pytania do klienta w strategii (`{{q:id}}`) → odpowiedź albo „do ustalenia z klientem”.
+    // Pytania do klienta w strategii (`{{q:id}}`) → odpowiedź albo „wyjaśnić”.
     const qaIndex = buildQaIndex(flat.map(n => ({ id: n.id, qa: parseQa(n.qa) })));
     const tasksByNode = new Map();
     for (const t of tasks) {

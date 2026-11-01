@@ -1,6 +1,6 @@
 // Pytania do klienta wstawiane w strategię węzła WBS.
 // Strategia trzyma znacznik `{{q:<id>}}`, który wskazuje parę z `WbsNode.qa` (tego samego węzła).
-// Bez odpowiedzi znacznik to „do ustalenia z klientem”, z odpowiedzią — sama treść odpowiedzi.
+// Bez odpowiedzi znacznik to „wyjaśnić”, z odpowiedzią — sama treść odpowiedzi.
 // Edycja zawsze na surowym tekście; eksporty i złożenie gałęzi dostają tekst rozwiązany.
 
 // @anchor strategy-token-re
@@ -40,13 +40,13 @@ export function buildQaIndex(nodes) {
 const isAnswered = (p) => !!String(p?.answer || '').trim();
 
 // @anchor resolve-strategy-text
-// Tekst do eksportu / złożenia gałęzi: odpowiedź w miejscu znacznika albo „[do ustalenia z klientem: …]”.
+// Tekst do eksportu / złożenia gałęzi: odpowiedź w miejscu znacznika albo „[wyjaśnić: …]”.
 // Znacznik usuniętego pytania znika.
 export function resolveStrategyText(text, qaIndex) {
     return String(text || '').replace(STRATEGY_TOKEN_RE, (_, id) => {
         const p = qaIndex?.get(id);
         if (!p) return '';
-        return isAnswered(p) ? String(p.answer).trim() : `[do ustalenia z klientem: ${String(p.question || '').trim()}]`;
+        return isAnswered(p) ? String(p.answer).trim() : `[wyjaśnić: ${String(p.question || '').trim()}]`;
     });
 }
 

@@ -20,12 +20,12 @@ export function buildQaIndexFromRows(rows: Array<{ qa?: string | null }>) {
 }
 
 // @anchor resolve-strategy-tokens
-// Odpowiedź w miejscu znacznika albo „[do ustalenia z klientem: …]”; znacznik usuniętego pytania znika.
+// Odpowiedź w miejscu znacznika albo „[wyjaśnić: …]”; znacznik usuniętego pytania znika.
 export function resolveStrategyTokens(text: string | null | undefined, qa: Map<string, { question: string; answer: string }>) {
   if (!text) return text ?? null;
   return String(text).replace(TOKEN_RE, (_, id) => {
     const p = qa.get(id);
     if (!p) return '';
-    return p.answer.trim() ? p.answer.trim() : `[do ustalenia z klientem: ${p.question.trim()}]`;
+    return p.answer.trim() ? p.answer.trim() : `[wyjaśnić: ${p.question.trim()}]`;
   });
 }
