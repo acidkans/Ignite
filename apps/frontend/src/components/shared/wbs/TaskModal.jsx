@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ListTodo, Calendar, Trash2, Loader2, GitBranch } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { TASK_CATEGORIES, TASK_STATUS_CODES, EXEC_STATUS_META } from './wbsConstants';
@@ -198,8 +199,20 @@ export default function TaskModal({ task = null, processNodeId, defaults = {}, l
     const label = 'text-[11px] text-gray-400 font-medium';
     const statusColor = EXEC_STATUS_META[status]?.color || 'text-gray-300';
 
-    return (
-        <div className="fixed inset-0 z-[10060] flex items-center justify-center p-0 md:p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+    // Portal do body — modal bywa renderowany wewnątrz wiersza/szuflady WBS (inny kontekst stackingu),
+    // przez co kontrolki tabeli (np. select jednostki) leżały nad nim i przechwytywały kliknięcia.
+    // stopPropagation: zdarzenia React z portalu nie mogą bąbelkować do handlerów wiersza WBS.
+    const stop = e => e.stopPropagation();
+    return createPortal(
+        <div
+            className="fixed inset-0 z-[10060] flex items-center justify-center p-0 md:p-4 bg-black/70 backdrop-blur-sm"
+            onClick={e => { e.stopPropagation(); onClose(); }}
+            onMouseDown={stop}
+            onPointerDown={stop}
+            onDoubleClick={stop}
+            onKeyDown={stop}
+            onContextMenu={stop}
+        >
             <div className="w-full h-full md:h-auto md:max-w-lg md:max-h-[92vh] flex flex-col md:rounded-2xl border-0 md:border-2 border-emerald-400/60 bg-[#05130d] shadow-2xl" onClick={e => e.stopPropagation()}>
                 <div className="flex items-start justify-between px-5 py-4 border-b border-emerald-400/20 shrink-0">
                     <div className="min-w-0">
@@ -338,6 +351,7 @@ export default function TaskModal({ task = null, processNodeId, defaults = {}, l
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
