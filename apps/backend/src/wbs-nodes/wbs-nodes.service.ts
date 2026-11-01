@@ -19,13 +19,17 @@ export interface QaPair {
     chatMessageId?: string | null;
     askedMessageId?: string | null;
     answerSource?: string | null;
+    mailId?: string | null;
+    mailSentAt?: string | null;
+    mailTo?: string | null;
 }
 
 // @anchor clean-qa-pair
 // Para Q&A do zapisu/odczytu: pytanie i odpowiedź zawsze, `id` (cel znacznika `{{q:id}}`
 // w strategii) dopisywane, gdy brak — znacznik musi wskazywać stałą parę. `taskId` = zadanie
 // „Wyjaśnić czy…”, `chatMessageId` = wiadomość czatu z odpowiedzią, `askedMessageId` = wiadomość czatu,
-// która zadała pytanie, `answerSource` = skąd odpowiedź.
+// która zadała pytanie, `answerSource` = skąd odpowiedź. `mailId` / `mailSentAt` / `mailTo` = ostatni
+// mail do klienta z tym pytaniem (`QaMail`).
 export function cleanQaPair(p: any): QaPair {
     const out: QaPair = {
         id: /^[\w-]{1,40}$/.test(String(p?.id ?? '')) ? String(p.id) : 'q' + randomBytes(5).toString('hex'),
@@ -36,6 +40,9 @@ export function cleanQaPair(p: any): QaPair {
     if (p?.chatMessageId) out.chatMessageId = String(p.chatMessageId);
     if (p?.askedMessageId) out.askedMessageId = String(p.askedMessageId);
     if (p?.answerSource) out.answerSource = String(p.answerSource);
+    if (p?.mailId) out.mailId = String(p.mailId);
+    if (p?.mailSentAt) out.mailSentAt = String(p.mailSentAt);
+    if (p?.mailTo) out.mailTo = String(p.mailTo);
     return out;
 }
 

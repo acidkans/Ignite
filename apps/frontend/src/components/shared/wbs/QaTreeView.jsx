@@ -72,12 +72,14 @@ function GrowingTextarea({ value, ...props }) {
 }
 
 // @anchor qa-tree-view
-export default function QaTreeView({ nodeId, versionId, onClose }) {
+// `initialFilter` — „Z pytaniami” po kliknięciu przycisku Q&A (widać wszystkie pytania), „Bez odpowiedzi”
+// przy automatycznym otwarciu na wejściu w WBS (`wbs-qa-tree-open`).
+export default function QaTreeView({ nodeId, versionId, onClose, initialFilter = 'withQa' }) {
     const [rows, setRows] = useState(null); // null = ładowanie
     const [loadError, setLoadError] = useState(false);
     const [fromCache, setFromCache] = useState(false);
     // @anchor qa-tree-filter
-    const [qaFilter, setQaFilter] = useState('unanswered');
+    const [qaFilter, setQaFilter] = useState(initialFilter);
     const [search, setSearch] = useState('');
     // @anchor qa-queued-ids
     const [queuedIds, setQueuedIds] = useState(new Set()); // węzły z zapisem czekającym w outboxie
@@ -234,6 +236,7 @@ export default function QaTreeView({ nodeId, versionId, onClose }) {
     }, [rows, qaFilter, q, unansweredKeys]);
 
     const totalPairs = useMemo(() => (rows || []).reduce((s, r) => s + r.qa.filter(p => (p.question || '').trim() || (p.answer || '').trim()).length, 0), [rows]);
+    const openPairs = useMemo(() => (rows || []).reduce((s, r) => s + r.qa.filter(isUnanswered).length, 0), [rows]);
 
     const FILTERS = [
         ['all', 'Wszystkie'],
@@ -258,7 +261,7 @@ export default function QaTreeView({ nodeId, versionId, onClose }) {
                     </div>
                     <div className="flex-1 min-w-0">
                         <h3 className="font-black text-sm text-white truncate">Q&A — całe drzewo</h3>
-                        <p className="text-[10px] text-gray-500">{totalPairs} pytań{fromCache ? ' · dane z pamięci offline' : ''}</p>
+                        <p className="text-[10px] text-gray-500">{totalPairs} pytań · {openPairs} bez odpowiedzi{fromCache ? ' · dane z pamięci offline' : ''}</p>
                     </div>
                     {queuedIds.size > 0 && (
                         <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-400 text-[10px] font-bold flex-shrink-0" title="Zapisy czekają na synchronizację — wyślą się automatycznie po odzyskaniu sieci">

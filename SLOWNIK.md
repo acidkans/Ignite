@@ -511,6 +511,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-sekcja | WbsTasksDrawer | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-tasks-drawer |
 | ui-stan | nodeDrawerTab | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor node-drawer-tab |
 | ui-funkcja | toggleDrawerTab | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor toggle-drawer-tab |
+| ui-hook | zamykanie szuflad klikiem poza (useEffect) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-outside-click-close |
 | ui-funkcja | toggleMaterialCard | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor toggle-material-card |
 | ui-stala | DRAWER_STATUS_COLOR / drawerStatusKey / qaSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor drawer-status-color |
 | ui-stan | taskSummary | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-task-summary |
@@ -3381,6 +3382,32 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-funkcja | SignatureEditor.setWidth | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor signature-set-image-width |
 | ui-funkcja | cleanPastedHtml | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor clean-pasted-html |
 | ui-przycisk | SignatureEditor „Zbij odstępy” (compactParagraphs) | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor signature-compact-paragraphs |
+| schema-model | QaMail | apps/backend/prisma/schema.prisma | @anchor qa-mail |
+| schema-pole | QaMail.key | apps/backend/prisma/schema.prisma | @anchor qa-mail-key |
+| schema-pole | QaMail.messageId | apps/backend/prisma/schema.prisma | @anchor qa-mail-message-id |
+| schema-pole | QaMail.sentById | apps/backend/prisma/schema.prisma | @anchor qa-mail-sent-by-id |
+| schema-pole | QaMail.toEmails | apps/backend/prisma/schema.prisma | @anchor qa-mail-to-emails |
+| schema-json | QaMail.items | apps/backend/prisma/schema.prisma | @anchor qa-mail-items |
+| schema-pole | QaMail.sentCopyError | apps/backend/prisma/schema.prisma | @anchor qa-mail-sent-copy-error |
+| schema-relacja | ProcessNode.qaMails | apps/backend/prisma/schema.prisma | @anchor process-node-qa-mails |
+| schema-relacja | UserMailbox.qaMails | apps/backend/prisma/schema.prisma | @anchor user-mailbox-qa-mails |
+| back-funkcja | MailboxesService.senderFor | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-sender-for |
+| back-funkcja | MailboxesService.senderName | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-sender-name |
+| back-funkcja | MailboxesService.smtpTransport | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-smtp-transport |
+| back-funkcja | MailboxesService.appendToSent | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-append-to-sent |
+| back-modul | QaMailModule | apps/backend/src/qa-mail/qa-mail.module.ts | @anchor qa-mail-module |
+| back-serwis | QaMailService | apps/backend/src/qa-mail/qa-mail.service.ts | @anchor qa-mail-service |
+| back-funkcja | QaMailService.context | apps/backend/src/qa-mail/qa-mail.service.ts | @anchor qa-mail-context |
+| back-funkcja | QaMailService.send | apps/backend/src/qa-mail/qa-mail.service.ts | @anchor qa-mail-send |
+| back-funkcja | normalizeMailList | apps/backend/src/qa-mail/qa-mail.service.ts | @anchor normalize-mail-list |
+| back-funkcja | newQaMailKey | apps/backend/src/qa-mail/qa-mail.service.ts | @anchor new-qa-mail-key |
+| back-controller | QaMailController | apps/backend/src/qa-mail/qa-mail.controller.ts | @anchor qa-mail-controller |
+| back-endpoint | GET /qa-mail/order/:processNodeId | apps/backend/src/qa-mail/qa-mail.controller.ts | @anchor get-qa-mail-context |
+| back-endpoint | POST /qa-mail/send | apps/backend/src/qa-mail/qa-mail.controller.ts | @anchor post-qa-mail-send |
+| ui-modal | QaMailModal | apps/frontend/src/components/shared/wbs/QaMailModal.jsx | @anchor qa-mail-modal |
+| ui-stan | qaMailNode | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor qa-mail-node |
+| ui-funkcja | collectMailQuestions | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor collect-mail-questions |
+| ui-funkcja | applyQaMailSent | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor apply-qa-mail-sent |
 | ui-stan | mailDomains | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-domains |
 | ui-stan | mailCoverage | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-coverage |
 | ui-dropdown | requirements-mail-domain-bar | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-domain-bar |
