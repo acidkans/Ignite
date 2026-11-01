@@ -252,4 +252,34 @@ export class MailboxesService {
     if (!ok) this.logger.warn(`Test skrzynki ${m.email} nieudany: ${lastError}`);
     return { ok, smtp, imap, mailbox: this.publicMailbox(updated) };
   }
+
+  // @anchor mailboxes-send-test-mine
+  // Mail testowy ze skrzynki na jej własny adres — podgląd podpisu tak, jak zobaczy go odbiorca.
+  // attachDataUrls: obrazki data:URI z podpisu idą jako załączniki CID (Outlook/Gmail nie pokazują data:).
+  async sendTestMine(userId: string, id: string) {
+    const m = await this.getOwned(userId, id);
+    const d = m.domain;
+    if (!m.password) throw new BadRequestException('Najpierw wpisz hasło do skrzynki.');
+    if (!d.smtpHost) throw new BadRequestException('Domena nie ma ustawionego serwera SMTP (uzupełnia administrator).');
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, lastName: true } });
+    const name = m.displayName || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || m.email;
+    const transport = nodemailer.createTransport({
+      host: d.smtpHost, port: d.smtpPort || 587, secure: d.smtpSecure,
+      auth: { user: m.username || m.email, pass: decryptSecret(m.password) },
+      connectionTimeout: 15000, greetingTimeout: 15000,
+    });
+    const html = `<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">`
+      + `<p>Dzień dobry,</p><p>to jest wiadomość testowa z Ignite wysłana ze skrzynki ${m.email}. `
+      + `Poniżej podpis w takiej postaci, w jakiej zobaczy go odbiorca.</p><p>Pozdrawiam</p></div>`
+      + (m.signatureHtml ? `<br>${m.signatureHtml}` : '<p style="color:#888">(skrzynka nie ma jeszcze podpisu)</p>');
+    try {
+      await transport.sendMail({
+        from: { name, address: m.email }, to: m.email,
+        subject: 'Ignite — test podpisu', html, attachDataUrls: true,
+      });
+    } catch (e: any) {
+      throw new BadRequestException(`Nie udało się wysłać: ${e?.message || e}`);
+    }
+    return { ok: true, to: m.email };
+  }
 }

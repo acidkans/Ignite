@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../../config';
-import { Mail, Plus, Trash2, Loader2, CheckCircle2, AlertTriangle, PlugZap, ImagePlus } from 'lucide-react';
+import { Mail, Plus, Trash2, Loader2, CheckCircle2, AlertTriangle, PlugZap, ImagePlus, Send } from 'lucide-react';
 
 const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('token')}`, 'Content-Type': 'application/json' });
 
@@ -84,6 +84,7 @@ export default function MyMailboxesPanel() {
   const [busy, setBusy] = useState(null);       // id skrzynki w trakcie testu / 'save'
   const [error, setError] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [notice, setNotice] = useState(null);
 
   const load = async () => {
     try {
@@ -109,6 +110,21 @@ export default function MyMailboxesPanel() {
       const d = await res.json().catch(() => ({}));
       if (!res.ok) { setError(d.message || `Błąd (${res.status})`); return; }
       setBoxes((p) => p.map((b) => (b.id === id ? d.mailbox : b)));
+    } catch {
+      setError('Błąd połączenia z serwerem.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // @anchor my-mailboxes-send-test
+  const sendTest = async (id) => {
+    setBusy(`send:${id}`); setError(null); setNotice(null);
+    try {
+      const res = await fetch(`${API_URL}/mailboxes/me/${id}/send-test`, { method: 'POST', headers: authHeaders() });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(d.message || `Błąd (${res.status})`); return; }
+      setNotice(`Wysłano mail testowy na ${d.to} — sprawdź skrzynkę odbiorczą.`);
     } catch {
       setError('Błąd połączenia z serwerem.');
     } finally {
@@ -179,7 +195,8 @@ export default function MyMailboxesPanel() {
       {!domains.length && <p className="text-[12px] text-amber-300/80">Administrator nie dodał jeszcze domen pocztowych (Poczta SMTP → Domeny).</p>}
       {domains.length > 0 && !boxes.length && !form && <p className="text-[12px] text-gray-500 italic">Nie masz jeszcze żadnej skrzynki.</p>}
 
-      {boxes.map((b) => (
+      {/* Przy otwartym formularzu widać tylko edytowaną skrzynkę (przy dodawaniu — żadnej), żeby podpis się nie mieszał. */}
+      {boxes.filter((b) => !form || b.id === form.id).map((b) => (
         <div key={b.id} className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
           <div className="flex items-center gap-2">
             {b.verifiedAt ? <CheckCircle2 size={14} className="text-emerald-400 shrink-0" /> : <AlertTriangle size={14} className="text-amber-400 shrink-0" />}
@@ -193,6 +210,9 @@ export default function MyMailboxesPanel() {
             </div>
             <button onClick={() => test(b.id)} disabled={busy === b.id || !b.hasPassword} title="Sprawdź logowanie SMTP i IMAP" className="flex items-center gap-1 px-2 py-1 text-[11px] rounded border border-white/10 text-gray-300 hover:bg-white/10 disabled:opacity-40">
               {busy === b.id ? <Loader2 size={12} className="animate-spin" /> : <PlugZap size={12} />} Testuj
+            </button>
+            <button onClick={() => sendTest(b.id)} disabled={busy === `send:${b.id}` || !b.hasPassword} title="Wyślij mail testowy z podpisem na ten adres" className="flex items-center gap-1 px-2 py-1 text-[11px] rounded border border-white/10 text-gray-300 hover:bg-white/10 disabled:opacity-40">
+              {busy === `send:${b.id}` ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Mail testowy
             </button>
             <button onClick={() => { setForm({ id: b.id, domainId: b.domainId, local: b.email.split('@')[0], username: b.username || b.email, password: '', signatureHtml: b.signatureHtml || '' }); setError(null); }} className="px-2 py-1 text-[11px] rounded border border-white/10 text-gray-300 hover:bg-white/10">Edytuj</button>
             {confirmDelete === b.id ? (
@@ -249,6 +269,7 @@ export default function MyMailboxesPanel() {
         </div>
       )}
       {!form && error && <p className="text-[11px] text-red-400">{error}</p>}
+      {!form && notice && <p className="text-[11px] text-emerald-400">{notice}</p>}
     </div>
   );
 }

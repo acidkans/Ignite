@@ -3350,6 +3350,7 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-funkcja | MailboxesService.deleteMine | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-delete-mine |
 | back-funkcja | MailboxesService.coverage | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-coverage |
 | back-funkcja | MailboxesService.testMine | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-test-mine |
+| back-funkcja | MailboxesService.sendTestMine | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-send-test-mine |
 | back-controller | MailDomainsController | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor mail-domains-controller |
 | back-endpoint | GET /mail-domains | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor get-mail-domains |
 | back-endpoint | GET /mail-domains/:id/coverage | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor get-mail-domain-coverage |
@@ -3362,12 +3363,14 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-endpoint | PATCH /mailboxes/me/:id | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor patch-my-mailbox |
 | back-endpoint | DELETE /mailboxes/me/:id | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor delete-my-mailbox |
 | back-endpoint | POST /mailboxes/me/:id/test | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor post-my-mailbox-test |
+| back-endpoint | POST /mailboxes/me/:id/send-test | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor post-my-mailbox-send-test |
 | back-modul | MailboxesModule | apps/backend/src/mailboxes/mailboxes.module.ts | @anchor mailboxes-module |
 | back-dto | UpsertOrderRequirementsDto.mailDomainId | apps/backend/src/order-requirements/dto/order-requirements.dto.ts | @anchor upsert-order-requirements-mail-domain-id |
 | ui-sekcja | MailDomainsPanel | apps/frontend/src/components/shared/MailDomainsPanel.jsx | @anchor mail-domains-panel |
 | ui-funkcja | MailDomainsPanel.save | apps/frontend/src/components/shared/MailDomainsPanel.jsx | @anchor mail-domains-save |
 | ui-panel | MyMailboxesPanel | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor my-mailboxes-panel |
 | ui-funkcja | MyMailboxesPanel.test | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor my-mailboxes-test |
+| ui-funkcja | MyMailboxesPanel.sendTest | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor my-mailboxes-send-test |
 | ui-funkcja | MyMailboxesPanel.save | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor my-mailboxes-save |
 | ui-funkcja | imageFileToDataUrl | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor image-file-to-data-url |
 | ui-sekcja | SignatureEditor | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor signature-editor |
