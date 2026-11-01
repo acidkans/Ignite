@@ -1,3 +1,12 @@
+## 2026-11-01 — feat(poczta): mail testowy z podpisem ze skrzynki firmowej na jej własny adres; przy edycji skrzynki widać tylko ją
+
+### architektura / API
+- dodano `back-endpoint` `POST /mailboxes/me/:id/send-test` (`back-funkcja` `MailboxesService.sendTestMine`) — wysyła ze skrzynki (SMTP domeny) mail testowy z podpisem na jej własny adres; obrazki podpisu jako załączniki CID (`attachDataUrls`)
+- `ui-sekcja` `MyMailboxesPanel` — przycisk „Mail testowy” w wierszu skrzynki; przy otwartym formularzu lista pokazuje tylko edytowaną skrzynkę
+
+### słownik
+- dodano `mailboxes-send-test-mine` — mailboxes.service.ts; `post-my-mailbox-send-test` — mailboxes.controller.ts; `my-mailboxes-send-test` — MyMailboxesPanel.jsx
+
 ## 2026-11-01 — feat(poczta): podpis HTML skrzynki firmowej z wklejanym obrazkiem; formularz skrzynki dokleja domenę do adresu i kopiuje adres jako login
 
 ### schema.prisma

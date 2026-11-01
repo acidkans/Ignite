@@ -82,4 +82,10 @@ export class MailboxesController {
   test(@Req() req: any, @Param('id') id: string) {
     return this.mailboxes.testMine(req.user.userId, id);
   }
+
+  // @anchor post-my-mailbox-send-test
+  @Post(':id/send-test')
+  sendTest(@Req() req: any, @Param('id') id: string) {
+    return this.mailboxes.sendTestMine(req.user.userId, id);
+  }
 }
